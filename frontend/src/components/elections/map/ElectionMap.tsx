@@ -22,7 +22,9 @@ import {
   footerText,
   legendCells,
   mapCounts,
-  marginLabel,
+  pollSourceSentence,
+  formatAsOf,
+  racePageHref,
   nationalSentence,
   rangeLabel,
   seatAriaLabel,
@@ -64,6 +66,44 @@ function fillFor(bin: MapBin | null, hatch: string): string {
   return bin === "close" ? `url(#${hatch})` : binFill(bin);
 }
 
+const NO_POLL_STROKE = "#CDC7BC";
+
+/** A tile's fill and outline in a view. A seat with no poll of its own
+ * (usual vote and national swing only) is outlined in dashes in the Polls
+ * view as in the Difference view, so it is never drawn as if polled; a
+ * seat with no usual-vote figure is an empty dashed square, never the "no
+ * contest" fill. */
+function tileStyle(s: MapSeat, view: MapView, bin: MapBin | null, hatch: string, width: number) {
+  const ranged = s.status === "range";
+  if (s.status === "no_lean")
+    return {
+      fill: "transparent",
+      stroke: NO_POLL_STROKE,
+      strokeWidth: width * 2,
+      strokeDasharray: "0.8 0.8",
+    };
+  if (view === "diff")
+    return {
+      fill: "transparent",
+      stroke: s.usualBin ? binFill(s.usualBin) : NO_POLL_STROKE,
+      strokeWidth: width * 2,
+      strokeDasharray: ranged && s.difference.seatPolls ? undefined : "0.6 0.6",
+    };
+  if (view === "polls" && ranged && !s.difference.seatPolls)
+    return {
+      fill: fillFor(bin, hatch),
+      stroke: NO_POLL_STROKE,
+      strokeWidth: width * 3,
+      strokeDasharray: "0.9 0.7",
+    };
+  return {
+    fill: ranged || view === "usual" ? fillFor(bin, hatch) : NO_CONTEST_FILL,
+    stroke: "rgba(255,255,255,0.18)",
+    strokeWidth: width,
+    strokeDasharray: undefined,
+  };
+}
+
 /** The national tile map: one tile per state, a seat's tile split in two
  * where a state has two contests. `mini` draws a thumbnail with no labels
  * and no interaction. */
@@ -72,12 +112,14 @@ function TileMap({
   view,
   selected,
   onSelect,
+  onState,
   mini = false,
 }: {
   data: ElectionMapData;
   view: MapView;
   selected?: string | null;
   onSelect?: (seatId: string) => void;
+  onState?: (state: string) => void;
   mini?: boolean;
 }) {
   const hatch = `hatch-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
@@ -130,41 +172,41 @@ function TileMap({
                 ? undefined
                 : "cursor-pointer outline-none [&:focus-visible>rect.frame]:stroke-ink-hi"
             }
-            onClick={mini ? undefined : () => onSelect?.(seats[0].id)}
+            onClick={
+              mini
+                ? undefined
+                : (e) => {
+                    // A click on one half of a two-race state opens that race.
+                    const hit = (e.target as Element).getAttribute("data-seat");
+                    if (hit) onSelect?.(hit);
+                    else if (seats.length > 1) onState?.(state);
+                    else onSelect?.(seats[0].id);
+                  }
+            }
             onKeyDown={
               mini
                 ? undefined
                 : (e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
-                      onSelect?.(seats[0].id);
+                      // Two races: the keyboard gets a chooser listing both.
+                      if (seats.length > 1) onState?.(state);
+                      else onSelect?.(seats[0].id);
                     }
                   }
             }
           >
             {seats.map((s, i) => {
               const bin = seatBin(s, view);
-              const diff = view === "diff";
-              const ranged = s.status === "range";
               return (
                 <rect
                   key={s.id}
+                  data-seat={mini ? undefined : s.id}
                   x={x + i * part}
                   y={y}
                   width={part}
                   height={TILE}
-                  fill={
-                    diff
-                      ? "transparent"
-                      : ranged || view === "usual"
-                        ? fillFor(bin, hatch)
-                        : NO_CONTEST_FILL
-                  }
-                  stroke={diff ? binFill(s.usualBin) : "rgba(255,255,255,0.18)"}
-                  strokeWidth={diff ? 0.5 : 0.25}
-                  strokeDasharray={
-                    diff && !(ranged && s.difference.seatPolls) ? "0.6 0.6" : undefined
-                  }
+                  {...tileStyle(s, view, bin, hatch, 0.25)}
                   className="transition-[fill] duration-150 motion-reduce:transition-none"
                 />
               );
@@ -218,6 +260,76 @@ function TileMap({
   );
 }
 
+/** A state's seats as a list: the keyboard's (and a two-race state's) way
+ * to a seat. */
+function StateSheet({
+  data,
+  state,
+  onSelect,
+  onClose,
+}: {
+  data: ElectionMapData;
+  state: string;
+  onSelect: (seatId: string) => void;
+  onClose: () => void;
+}) {
+  const seats = data.seats.filter((s) => s.state === state);
+  return (
+    <div className="space-y-3 text-sm text-ink-lo">
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="font-mono text-xs uppercase tracking-[0.14em] text-ink-hi">
+          {seats[0]?.stateName} · {seats.length} {seats.length === 1 ? "seat" : "seats"}
+        </h3>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close the state's seats"
+          className="min-h-11 min-w-11 border border-white/20 px-3 font-mono text-xs text-ink-lo hover:text-ink-hi"
+        >
+          ✕
+        </button>
+      </div>
+      <ul className="divide-y divide-white/[0.07]">
+        {seats.map((s) => (
+          <li key={s.id}>
+            <button
+              type="button"
+              onClick={() => onSelect(s.id)}
+              className="flex min-h-11 w-full flex-wrap items-baseline justify-between gap-x-3 py-2 text-left hover:text-ink-hi"
+            >
+              <span className="text-ink-hi">{seatName(s)}</span>
+              <span className="font-mono text-xs">
+                usual {s.leanLabel ?? "–"}
+                {s.status === "range"
+                  ? ` · polls ${rangeLabel(s)}${crossesEven(s) ? " · close" : ""}`
+                  : " · no range"}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">Not a race call.</p>
+    </div>
+  );
+}
+
+function DashedKey() {
+  return (
+    <svg viewBox="0 0 10 6" className="inline-block h-3 w-4 align-middle" aria-hidden="true">
+      <rect
+        x="0.5"
+        y="0.5"
+        width="9"
+        height="5"
+        fill="none"
+        stroke={NO_POLL_STROKE}
+        strokeWidth="0.8"
+        strokeDasharray="1.2 0.9"
+      />
+    </svg>
+  );
+}
+
 function Legend({ data, view }: { data: ElectionMapData; view: MapView }) {
   const hatch = `lg-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   if (view === "diff") {
@@ -226,7 +338,9 @@ function Legend({ data, view }: { data: ElectionMapData; view: MapView }) {
         <li>
           <span style={{ color: DEM }}>« ‹</span> polls point toward D
         </li>
-        <li>· · no seat poll, national swing only</li>
+        <li>
+          <DashedKey /> no seat poll, national swing only
+        </li>
         <li>
           polls point toward R <span style={{ color: REP }}>› »</span>
         </li>
@@ -258,6 +372,16 @@ function Legend({ data, view }: { data: ElectionMapData; view: MapView }) {
           </li>
         ))}
       </ul>
+      {view === "polls" && (
+        <p className="mt-2 flex items-center gap-2 font-mono text-[10px] text-ink-lo sm:text-xs">
+          <DashedKey /> no poll of this seat: the usual vote and the national swing only
+        </p>
+      )}
+      {data.seats.some((s) => s.status === "no_lean") && (
+        <p className="mt-1 font-mono text-[10px] text-ink-lo sm:text-xs">
+          Empty dashed square: Civitas has no usual-vote figure for that seat.
+        </p>
+      )}
       <p className="mt-1 font-mono text-[10px] text-ink-min sm:text-xs">
         {view === "usual"
           ? "Points more Republican (R) or Democratic (D) than the nation, in the last two presidential elections."
@@ -345,7 +469,8 @@ function SeatDetail({
         <div>
           <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">Usual vote</dt>
           <dd className="text-ink-hi">
-            {seat.leanLabel} <span className="text-ink-min">(Cook PVI {seat.leanLabel})</span>
+            {seat.leanLabel ?? "No figure"}{" "}
+            <span className="text-ink-min">(Civitas, from official returns)</span>
           </dd>
         </div>
         {seat.status === "range" ? (
@@ -354,14 +479,14 @@ function SeatDetail({
               Polls suggest
             </dt>
             <dd>
-              <span className="text-ink-hi">a margin from {rangeLabel(seat.range80)}</span>
+              <span className="text-ink-hi">a margin from {rangeLabel(seat)}</span>
               {crossesEven(seat) && (
                 <span className="ml-2 font-mono text-xs">TOO CLOSE TO TELL</span>
               )}
               <RangeBar seat={seat} />
               <p className="mt-1 text-xs text-ink-min">
-                Bar: the 80% range; block: its middle ({marginLabel(seat.mean)}); dashed line: the
-                usual vote with incumbency and the national swing ({seat.priorLabel}).
+                Bar: the 80% range; block: its middle ({seat.meanLabel}); dashed line: the usual
+                vote with incumbency and the national swing ({seat.priorLabel}).
               </p>
             </dd>
           </div>
@@ -375,11 +500,7 @@ function SeatDetail({
       {seat.status === "range" && (
         <>
           <p className="text-xs">{coverageSentence(data.calibration)}</p>
-          <p className="text-xs">
-            {seat.polls.used
-              ? `${seat.polls.used} ${seat.polls.used === 1 ? "poll" : "polls"} in the average (the latest from each pollster in the last 45 days, newest ${seat.polls.latest}); they carry ${Math.round(seat.pollShare * 100)}% of the range's weight, the usual vote the rest.`
-              : "No poll of this race in the last 45 days: the range is the usual vote with incumbency and the national swing alone, which is why it is wide."}
-          </p>
+          <p className="text-xs">{pollSourceSentence(seat, data.pollWindowDays)}</p>
           {seat.polls.list.length > 0 && (
             <ul className="space-y-1 border-t border-white/[0.07] pt-2 text-xs">
               {seat.polls.list.slice(0, 6).map((p, i) => (
@@ -426,7 +547,7 @@ function SeatDetail({
       )}
       <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">Not a race call.</p>
       <Link
-        href={`/elections/${seat.id}`}
+        href={racePageHref(seat)}
         className="inline-flex min-h-11 items-center font-mono text-xs text-ink-hi underline"
       >
         → Race page
@@ -445,7 +566,7 @@ function SeatTable({ data, onSelect }: { data: ElectionMapData; onSelect: (id: s
         case "seat":
           return seatName(s);
         case "usual":
-          return s.lean;
+          return s.lean ?? Number.POSITIVE_INFINITY;
         case "range":
           return s.status === "range" ? s.mean : Number.POSITIVE_INFINITY;
         case "polls":
@@ -480,7 +601,7 @@ function SeatTable({ data, onSelect }: { data: ElectionMapData; onSelect: (id: s
     </th>
   );
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Every seat, as a table">
       <table className="w-full min-w-[40rem] border-collapse text-sm text-ink-lo">
         <caption className="sr-only">
           Every 2026 Senate seat: usual vote, poll range, polls used and difference
@@ -495,7 +616,7 @@ function SeatTable({ data, onSelect }: { data: ElectionMapData; onSelect: (id: s
               scope="col"
               className="px-2 py-1 text-left font-mono text-xs uppercase tracking-[0.12em]"
             >
-              As of
+              Latest poll
             </th>
             {th("diff", "Difference")}
           </tr>
@@ -512,16 +633,20 @@ function SeatTable({ data, onSelect }: { data: ElectionMapData; onSelect: (id: s
                   {seatName(s)}
                 </button>
               </th>
-              <td className="px-2 py-1 font-mono">{s.leanLabel}</td>
+              <td className="px-2 py-1 font-mono">{s.leanLabel ?? "–"}</td>
               <td className="px-2 py-1 font-mono">
                 {s.status === "range" ? (
                   <>
-                    {rangeLabel(s.range80)}
+                    {rangeLabel(s)}
                     {crossesEven(s) ? " · close" : ""}
                   </>
                 ) : (
                   <span className="font-sans text-xs">
-                    {s.status === "not_contested" ? "No D-vs-R contest" : "Not a D-vs-R race"}
+                    {s.status === "not_contested"
+                      ? "No D-vs-R contest"
+                      : s.status === "no_lean"
+                        ? "No usual-vote figure"
+                        : "Not a D-vs-R race"}
                   </span>
                 )}
               </td>
@@ -557,34 +682,98 @@ function SeatTable({ data, onSelect }: { data: ElectionMapData; onSelect: (id: s
 export default function ElectionMap({
   data,
   initialView,
+  initialSeat = null,
 }: {
   data: ElectionMapData;
   initialView: MapView;
+  /** A seat to open on arrival (?seat=, from a race page's map link). */
+  initialSeat?: string | null;
 }) {
   const [view, setView] = useState<MapView>(initialView);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(() =>
+    initialSeat && data.seats.some((s) => s.id === initialSeat) ? initialSeat : null
+  );
+  const [sheetState, setSheetState] = useState<string | null>(null);
   const [tableOpen, setTableOpen] = useState(false);
   const detailRef = useRef<HTMLDivElement>(null);
-  const counts = useMemo(() => mapCounts(data.seats, data.bins), [data.seats, data.bins]);
+  // Where focus was when the detail opened, to return it there on close.
+  const openerRef = useRef<HTMLElement | null>(null);
+  const counts = useMemo(() => mapCounts(data.seats), [data.seats]);
   const hasPolls = counts.ranged > 0;
   const seat = data.seats.find((s) => s.id === selected) ?? null;
+  const open = seat !== null || sheetState !== null;
+  // Under the desktop layout the detail is a bottom sheet over the page: a
+  // modal dialog, focus kept inside it until it closes.
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia?.("(max-width: 1023px)");
+    if (!mq) return;
+    const update = () => setNarrow(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  const modal = open && narrow;
 
   useEffect(() => {
     const url = new URL(window.location.href);
     url.searchParams.set("chamber", "senate");
     url.searchParams.set("view", view);
+    url.searchParams.delete("seat");
     window.history.replaceState(null, "", url.toString());
   }, [view]);
 
+  const close = () => {
+    setSelected(null);
+    setSheetState(null);
+    const opener = openerRef.current;
+    openerRef.current = null;
+    requestAnimationFrame(() => opener?.focus());
+  };
+
   useEffect(() => {
-    if (!seat) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setSelected(null);
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        close();
+        return;
+      }
+      // The sheet is modal on a phone: Tab cycles inside it.
+      if (e.key !== "Tab" || !modal || !detailRef.current) return;
+      const focusable = [
+        ...detailRef.current.querySelectorAll<HTMLElement>(
+          "a[href], button:not([disabled]), select, [tabindex='0']"
+        ),
+      ];
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [seat]);
+  }, [open, modal]);
 
+  const remember = () => {
+    const active = document.activeElement as HTMLElement | null;
+    if (active && !detailRef.current?.contains(active)) openerRef.current = active;
+  };
   const select = (id: string) => {
+    remember();
     setSelected(id);
+    setSheetState(null);
+    requestAnimationFrame(() => detailRef.current?.focus());
+  };
+  const openState = (state: string) => {
+    remember();
+    setSelected(null);
+    setSheetState(state);
     requestAnimationFrame(() => detailRef.current?.focus());
   };
 
@@ -630,7 +819,7 @@ export default function ElectionMap({
           </p>
         )}
         <p className="min-w-0 break-words font-mono text-xs text-ink-lo">
-          {changedLine(view, counts, data.national)}
+          {changedLine(view, counts, data.national, data.bins)}
           {view !== "diff" && counts.differ > 0 && (
             <>
               {" "}
@@ -687,8 +876,20 @@ export default function ElectionMap({
               anchor="general-map"
             />
           </div>
+          {data.stale && (
+            <p className="mt-2 font-mono text-xs text-signal-amber">
+              NOT UPDATED SINCE {formatAsOf(data.asOf).toUpperCase()}: the latest refreshes failed,
+              so these figures are older than usual.
+            </p>
+          )}
           <div className="mx-auto mt-3 max-w-[38rem]">
-            <TileMap data={data} view={view} selected={selected} onSelect={select} />
+            <TileMap
+              data={data}
+              view={view}
+              selected={selected}
+              onSelect={select}
+              onState={openState}
+            />
           </div>
           <div className="mt-3">
             <Legend data={data} view={view} />
@@ -703,19 +904,25 @@ export default function ElectionMap({
           </p>
         </section>
 
+        {modal && (
+          <div aria-hidden="true" className="fixed inset-0 z-30 bg-black/60" onClick={close} />
+        )}
         <aside
           ref={detailRef}
           tabIndex={-1}
           aria-label="Seat detail"
+          {...(modal ? { role: "dialog", "aria-modal": true } : {})}
           {...{ [SHARE_EXCLUDE_ATTR]: "" }}
           className={`border border-white/[0.07] bg-surface-raised p-4 outline-none ${
-            seat
+            open
               ? "fixed inset-x-0 bottom-0 z-40 max-h-[75vh] overflow-y-auto lg:static lg:max-h-none"
               : "hidden lg:block"
           }`}
         >
           {seat ? (
-            <SeatDetail data={data} seat={seat} onClose={() => setSelected(null)} />
+            <SeatDetail data={data} seat={seat} onClose={close} />
+          ) : sheetState ? (
+            <StateSheet data={data} state={sheetState} onSelect={select} onClose={close} />
           ) : (
             <p className="text-sm text-ink-lo">
               Choose a state for its usual vote, its poll range, the polls behind it and a link to

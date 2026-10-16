@@ -1,4 +1,4 @@
-import { coverageSentence, formatAsOf, marginLabel } from "@/lib/electionMap";
+import { coverageSentence, formatAsOf } from "@/lib/electionMap";
 import type { ElectionMapData } from "@/types/electionMap";
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
@@ -58,9 +58,9 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
         </li>
         <li>
           <strong className="text-ink">Poll average.</strong> Each pollster&apos;s latest poll from
-          the last 45 days, weighted by recency (half-life {data.model.halfLife} days) and the
-          square root of its sample, after removing the pollster&apos;s measured house effect, or
-          for a pollster with no record, the measured lean of polls the source marks as
+          the last {data.pollWindowDays} days, weighted by recency (half-life {data.model.halfLife}{" "}
+          days) and the square root of its sample, after removing the pollster&apos;s measured house
+          effect, or for a pollster with no record, the measured lean of polls the source marks as
           party-sponsored. Sponsored polls are flagged, not hidden.
         </li>
         <li>
@@ -88,7 +88,12 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
         chance reads as a call. This table is how those chances were checked: of the races the
         method put in each band, how many went to the Democratic candidate.
       </p>
-      <div className="overflow-x-auto">
+      <div
+        className="overflow-x-auto"
+        tabIndex={0}
+        role="region"
+        aria-label="Held-out calibration table"
+      >
         <table className="w-full min-w-[30rem] border-collapse font-mono text-sm">
           <caption className="sr-only">
             Held-out calibration of the implied chances, {c.races} races
@@ -161,7 +166,7 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
         </li>
         <li>
           Generic ballot: the average of the published averages Wikipedia lists (now{" "}
-          {marginLabel(data.national.margin)},{" "}
+          {data.national.label},{" "}
           <a
             href={data.national.url}
             className="underline decoration-white/30 hover:text-ink-hi"

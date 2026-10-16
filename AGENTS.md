@@ -1561,6 +1561,15 @@ it keeps, each enforced by a test (`tests/test_forecast_model.py`,
   listed twice, nominee columns ambiguous); a rejected revision keeps the
   previous good one's polls. Everything poll-derived (API, CSV, share images)
   is CC BY-SA 4.0, "Wikipedia contributors", and says so.
+- **Outage is not "no data".** Each seat's `pollSource` names what the
+  poll source did (read / no table / no article / rejected / unreachable,
+  with the kept revision's date); a seat with no lean is `no_lean`; a
+  failed refresh alerts; a map past `STALE_AFTER` is marked stale. The page
+  words each state; it never prints "no poll" for a failure.
+- **One figure per seat across pages.** The race page's `usualVote` and the
+  map's `leanLabel` come from `district_lean.lean_label`; labels, ranges and
+  `close` are written by the backend on the rounded value, and the frontend
+  never re-rounds them.
 - **Wording.** Ranges and frequencies, never "wins", "favored" or
   "projected". The implied chances exist only for the method section's
   calibration table.

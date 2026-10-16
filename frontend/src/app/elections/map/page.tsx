@@ -71,7 +71,11 @@ export default async function ElectionMapPage({
                 asOf: state.data.asOf,
               }}
             >
-              <ElectionMap data={state.data} initialView={view} />
+              <ElectionMap
+                data={state.data}
+                initialView={view}
+                initialSeat={typeof params.seat === "string" ? params.seat : null}
+              />
               <div className="mt-12 max-w-3xl">
                 <ElectionMapMethod data={state.data} />
               </div>

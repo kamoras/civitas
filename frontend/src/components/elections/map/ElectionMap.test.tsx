@@ -13,7 +13,7 @@ import {
   VIEW_LABEL,
   VIEW_STAMP,
 } from "@/lib/electionMap";
-import type { ElectionMapData, MapSeat } from "@/types/electionMap";
+import type { ElectionMapData, MapSeat, RangedSeat } from "@/types/electionMap";
 
 const ranged = (over: Partial<MapSeat> = {}): MapSeat =>
   ({
@@ -31,7 +31,11 @@ const ranged = (over: Partial<MapSeat> = {}): MapSeat =>
     prior: 14.6,
     priorLabel: "R+15",
     mean: -1.7,
+    meanLabel: "D+2",
     range80: [-8.7, 5.3],
+    range80Label: "D+9 to R+5",
+    close: true,
+    pollSource: { state: "ok", revisionDate: "2026-10-15" },
     range95: [-13.0, 9.6],
     pollsBin: "close",
     pollAverage: -4.0,
@@ -63,6 +67,7 @@ const ranged = (over: Partial<MapSeat> = {}): MapSeat =>
 
 const data: ElectionMapData = {
   schemaVersion: 1,
+  pollWindowDays: 45,
   asOf: "2026-10-15T16:00:00Z",
   electionDay: "2026-11-03",
   daysToElection: 19,
@@ -70,7 +75,10 @@ const data: ElectionMapData = {
   chamber: "senate",
   national: {
     margin: -8.2,
+    label: "D+8",
     shift: -7.2,
+    shiftLabel: "D+7",
+    updated: "2026-10-14",
     averages: [],
     article: "a",
     revid: 1,
@@ -208,11 +216,14 @@ describe("election map", () => {
   it("keeps a range that crosses even neutral, and parses only known views", () => {
     expect(seatBin(data.seats[0], "polls")).toBe("close");
     expect(seatBin(data.seats[1], "polls")).toBeNull();
-    expect(rangeLabel([-8.7, 5.3])).toBe("D+9 to R+5");
+    expect(rangeLabel(data.seats[0] as RangedSeat)).toBe("D+9 to R+5");
     expect(parseView("diff")).toBe("diff");
     expect(parseView("odds")).toBe("usual");
-    const counts = mapCounts(data.seats, data.bins);
-    expect(changedLine("diff", counts, data.national)).toBe(
+    const counts = mapCounts(data.seats);
+    expect(changedLine("usual", counts, data.national, data.bins)).toBe(
+      "0 seats within 5 points of even in the usual vote."
+    );
+    expect(changedLine("diff", counts, data.national, data.bins)).toBe(
       "1 seat where polls disagree with the usual vote · 1 toward D · 0 toward R"
     );
   });
@@ -235,5 +246,93 @@ describe("election map", () => {
     expect(await run()).toEqual([]);
     fireEvent.click(screen.getByRole("button", { name: /DIFFERENCE/ }));
     expect(await run()).toEqual([]);
+  });
+
+  it("says when a poll table failed its checks, never that there was no poll", () => {
+    const rejected = ranged({
+      polls: { count: 0, used: 0, latest: null, list: [] },
+      difference: { strength: 0, direction: null, seatPolls: false },
+      pollSource: { state: "rejected", detail: "shares sum to 110.0", checkedOn: "2026-10-16" },
+    });
+    render(<ElectionMap data={{ ...data, seats: [rejected] }} initialView="polls" />);
+    fireEvent.click(screen.getByRole("button", { name: /^Ohio:/ }));
+    const detail = screen.getByRole("complementary", { name: "Seat detail" });
+    expect(detail.textContent).toContain(
+      "failed Civitas's checks on 16 Oct 2026 (shares sum to 110.0)"
+    );
+    expect(detail.textContent).not.toContain("No poll of this race");
+  });
+
+  it("dates a kept national figure and marks a stale map", () => {
+    render(
+      <ElectionMap
+        data={{ ...data, stale: true, national: { ...data.national, status: "kept" } }}
+        initialView="polls"
+      />
+    );
+    expect(screen.getByText(/last good reading, updated 14 Oct 2026/)).toBeInTheDocument();
+    expect(screen.getAllByText(/NOT UPDATED SINCE 15 OCT 2026/).length).toBeGreaterThan(0);
+  });
+
+  it("opens either race of a two-race state, and returns focus on close", () => {
+    const special = ranged({
+      id: "2026-SEN-OH-SPECIAL",
+      special: true,
+      range80Label: "R+1 to R+9",
+      close: false,
+    });
+    render(<ElectionMap data={{ ...data, seats: [ranged(), special] }} initialView="polls" />);
+    const ohio = screen.getByRole("button", { name: /^Ohio:/ });
+    ohio.focus();
+    fireEvent.keyDown(ohio, { key: "Enter" });
+    const sheet = screen.getByRole("complementary", { name: "Seat detail" });
+    fireEvent.click(within(sheet).getByRole("button", { name: /Ohio \(special\)/ }));
+    expect(sheet.textContent).toContain("a margin from R+1 to R+9");
+    // A click on the special's half of the tile opens it directly.
+    fireEvent.click(document.querySelector("[data-seat='2026-SEN-OH-SPECIAL']") as Element);
+    expect(sheet.textContent).toContain("Ohio (special)");
+  });
+
+  it("draws a seat with no poll of its own with a dashed outline in the Polls view", () => {
+    const unpolled = ranged({ difference: { strength: 0, direction: null, seatPolls: false } });
+    render(<ElectionMap data={{ ...data, seats: [unpolled] }} initialView="polls" />);
+    expect(
+      document.querySelector("[data-seat='2026-SEN-OH']")?.getAttribute("stroke-dasharray")
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/no poll of this seat: the usual vote and the national swing only/)
+    ).toBeInTheDocument();
+  });
+
+  it("links the race's place on its ballot page, and opens a seat named in the link", () => {
+    render(<ElectionMap data={data} initialView="usual" initialSeat="2026-SEN-OH" />);
+    expect(screen.getByRole("link", { name: /Race page/ })).toHaveAttribute(
+      "href",
+      "/elections/states/OH#race-2026-SEN-OH"
+    );
+  });
+
+  it("is a modal dialog on a phone: Escape closes it and focus goes back", async () => {
+    const original = window.matchMedia;
+    window.matchMedia = ((q: string) => ({
+      matches: q.includes("max-width"),
+      media: q,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia;
+    try {
+      render(<ElectionMap data={data} initialView="polls" />);
+      const ohio = screen.getByRole("button", { name: /^Ohio:/ });
+      ohio.focus();
+      fireEvent.click(ohio);
+      const dialog = screen.getByRole("dialog", { name: "Seat detail" });
+      expect(dialog).toHaveAttribute("aria-modal", "true");
+      fireEvent.keyDown(window, { key: "Escape" });
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+      expect(document.activeElement).toBe(ohio);
+    } finally {
+      window.matchMedia = original;
+    }
   });
 });

@@ -19,6 +19,15 @@ export interface MapPoll {
   usedInAverage?: boolean;
 }
 
+export interface PollSource {
+  state: "ok" | "no_table" | "no_article" | "rejected" | "unreachable";
+  detail?: string;
+  checkedOn?: string;
+  revisionDate?: string;
+  /** The date of the last good revision whose polls are used instead. */
+  keptFrom?: string;
+}
+
 export interface MapSeatArticle {
   title: string;
   revid?: number;
@@ -32,9 +41,10 @@ interface MapSeatBase {
   state: string;
   stateName: string;
   special: boolean;
-  lean: number;
-  leanLabel: string;
-  usualBin: MapBin;
+  /** Null (status "no_lean") when Civitas has no usual-vote figure. */
+  lean: number | null;
+  leanLabel: string | null;
+  usualBin: MapBin | null;
   dem: string | null;
   rep: string | null;
   incumbentParty: "D" | "R" | null;
@@ -46,7 +56,13 @@ export interface RangedSeat extends MapSeatBase {
   prior: number;
   priorLabel: string;
   mean: number;
+  meanLabel: string;
   range80: [number, number];
+  /** "D+8 to R+2", written by the backend. */
+  range80Label: string;
+  /** The range, as written, reaches even: the backend's call, never re-derived. */
+  close: boolean;
+  pollSource: PollSource;
   range95: [number, number];
   pollsBin: MapBin;
   pollAverage: number | null;
@@ -56,7 +72,7 @@ export interface RangedSeat extends MapSeatBase {
 }
 
 export interface UnrangedSeat extends MapSeatBase {
-  status: "not_contested" | "not_two_party";
+  status: "not_contested" | "not_two_party" | "no_lean";
   reason: string;
   polls?: { count: number; list: MapPoll[] };
 }
@@ -80,9 +96,16 @@ export interface ElectionMapData {
   daysToElection: number;
   horizon: number;
   chamber: "senate";
+  /** True when the map is older than the backend's stale threshold. */
+  stale?: boolean;
+  pollWindowDays: number;
   national: {
     margin: number;
+    label: string;
     shift: number;
+    shiftLabel: string;
+    updated: string;
+    statusDetail?: string;
     averages: { source: string; updated: string; dem: number; rep: number; url: string | null }[];
     article: string;
     revid: number;

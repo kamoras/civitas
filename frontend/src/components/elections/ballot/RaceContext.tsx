@@ -5,7 +5,6 @@ import { displayScore } from "@/lib/formatting";
 import {
   COMPUTED_LEAN_HREF,
   candidateName,
-  formatComputedLean,
   formatPvi,
   houseSeatLabel,
   incumbencyLabel,
@@ -71,6 +70,14 @@ function LeanSquares({ context }: { context: LeanContext }) {
   );
 }
 
+/** The signed points of a lean label ("R+3" 3, "D+2" -2, "EVEN" 0), so
+ * the sentence and the label are the same number. */
+export function usualPoints(label: string): number {
+  if (label === "EVEN") return 0;
+  const n = Number(label.slice(2));
+  return label.startsWith("D") ? -n : n;
+}
+
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="border-b border-white/[0.07] py-3 last:border-b-0">
@@ -99,7 +106,8 @@ export default function RaceContext({
   newLines?: boolean;
   resultsMode?: boolean;
 }) {
-  const lean = !resultsMode && race.pvi != null ? race.leanContext : null;
+  const usual = !resultsMode ? (race.usualVote ?? null) : null;
+  const lean = !resultsMode && (usual || race.pvi != null) ? race.leanContext : null;
   const incumbent = race.candidates.find(
     (c) => isActiveCandidate(c) && c.incumbentChallenge === "I" && c.incumbentRecord
   );
@@ -170,7 +178,7 @@ export default function RaceContext({
             The 2026 Senate map shows the range polls suggest for its margin, beside how the state
             usually votes.{" "}
             <Link
-              href={mapHref("polls")}
+              href={mapHref("polls", "senate", race.id)}
               className="whitespace-nowrap font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
               {...{ [SHARE_EXCLUDE_ATTR]: "" }}
             >
@@ -180,21 +188,34 @@ export default function RaceContext({
         )}
       </p>
       <dl>
-        {lean && race.pvi != null && (
-          <Row label={`The seat · ${formatPvi(race.pvi)}`}>
+        {lean && usual && (
+          <Row label={`The seat · ${usual.label}`}>
+            {leanSentence(usualPoints(usual.label), lean.unit)} {leanCountsSentence(lean)}
+            <LeanSquares context={lean} />
+            <p className="mt-2 text-[13px]">
+              {usual.source === "computed"
+                ? "Computed by Civitas from open precinct returns, on this election's district lines: the figure the 2026 map shows, used in no score."
+                : "Computed by Civitas from each state's official presidential returns: the figure the 2026 map shows."}{" "}
+              {race.pvi != null &&
+                race.pviLevel === (race.district == null ? "state" : "district") && (
+                  <>
+                    Cook PVI, as a cross-check:{" "}
+                    <span className="font-mono text-ink">{formatPvi(race.pvi)}</span>.{" "}
+                  </>
+                )}
+              <Link href={COMPUTED_LEAN_HREF} className="text-signal-cyan hover:text-phos">
+                How it is computed
+              </Link>
+            </p>
+          </Row>
+        )}
+        {lean && !usual && race.pvi != null && (
+          <Row label={`The seat · Cook PVI ${formatPvi(race.pvi)}`}>
             {leanSentence(race.pvi, lean.unit)} {leanCountsSentence(lean)}
             <LeanSquares context={lean} />
-            {race.computedLean != null && (
-              <p className="mt-2 text-[13px]">
-                Civitas-computed lean{" "}
-                <span className="font-mono text-ink">{formatComputedLean(race.computedLean)}</span>:
-                the same formula, worked out by Civitas from open precinct returns, shown beside
-                Cook&apos;s figure and used in no score.{" "}
-                <Link href={COMPUTED_LEAN_HREF} className="text-signal-cyan hover:text-phos">
-                  How it is computed
-                </Link>
-              </p>
-            )}
+            <p className="mt-2 text-[13px]">
+              Cook&apos;s figure: Civitas has no computed lean for this seat on these lines.
+            </p>
           </Row>
         )}
         {incumbent?.incumbentRecord && (

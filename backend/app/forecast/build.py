@@ -26,11 +26,13 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session, selectinload
 
+from app import district_lean
 from app.atomic_write import runtime_data_path, write_text_atomic
 from app.election_phase import CAMPAIGN, active_election
 from app.forecast import model
 from app.forecast import polls as wiki
 from app.models import Race
+from app.ops_alerts import resolve_ops_alert, send_ops_alert
 from app.state_names import STATE_NAMES
 from app.time_utils import utcnow
 
@@ -48,6 +50,7 @@ GENERIC_ARTICLE = "2026 United States House of Representatives elections"
 LEANS_MAX = 5.0
 USUALLY_MAX = 15.0
 SCHEMA_VERSION = 1
+ALERT_CONDITION = "election-map-refresh"
 
 
 def map_path() -> str:
@@ -71,32 +74,38 @@ def _lean_table() -> tuple[dict[str, float], dict]:
     return leans, {"source": spvi["_source"], "window": spvi["_window"], "file": "app/data/state_pvi.json"}
 
 
-def lean_label(lean: float) -> str:
-    r = round(lean)
-    return "EVEN" if r == 0 else f"{'R' if r > 0 else 'D'}+{abs(r)}"
+lean_label = margin_label = district_lean.lean_label
 
 
-def margin_label(margin: float) -> str:
-    r = round(margin)
-    return "EVEN" if r == 0 else f"{'R' if r > 0 else 'D'}+{abs(r)}"
-
-
-def bin_of(value: float, close: bool) -> str:
-    """'close', or '<side>_<leans|usually|strongly>' for a signed value."""
-    if close:
+def bin_of(value: float) -> str:
+    """'close', or '<side>_<leans|usually|strongly>', decided on the value as
+    it is written (rounded to a whole point), so a label and its colour can
+    never disagree: "R+5" is never drawn in the "R <5" colour, nor "EVEN" in
+    a party's."""
+    r = round(value)
+    if r == 0:
         return "close"
-    side = "R" if value > 0 else "D"
-    size = abs(value)
-    return f"{side}_{'leans' if size < LEANS_MAX else 'usually' if size < USUALLY_MAX else 'strongly'}"
+    side = "R" if r > 0 else "D"
+    return f"{side}_{'leans' if abs(r) < LEANS_MAX else 'usually' if abs(r) < USUALLY_MAX else 'strongly'}"
+
+
+def range_close(low: float, high: float) -> bool:
+    """Whether a range, as written, reaches even: "D+3 to EVEN" does."""
+    return round(low) <= 0 <= round(high)
 
 
 def range_bin(low: float, high: float) -> str:
     """A range is binned by its edge nearest even, so a wide range reads
     paler and one that crosses even is 'close' (value-suppressing
     uncertainty; Correll, Moritz & Heer 2018)."""
-    if low <= 0 <= high:
+    if range_close(low, high):
         return "close"
-    return bin_of(low if low > 0 else high, False)
+    return bin_of(low if round(low) > 0 else high)
+
+
+def range_label(low: float, high: float) -> str:
+    """"D+8 to R+2", the Democratic side first."""
+    return f"{margin_label(low)} to {margin_label(high)}"
 
 
 def _nominee(cands: list, party: str):
@@ -118,8 +127,13 @@ def _national(rev: dict | None, as_of: date) -> dict:
         raise wiki.GateFailure("Wikipedia could not be reached")
     rows = wiki.generic_ballot(rev["content"], as_of)
     margin = sum(r["rep"] - r["dem"] for r in rows) / len(rows)
-    return {"margin": round(margin, 2), "averages": rows, "article": rev["title"], "revid": rev["revid"],
+    return {"margin": round(margin, 2), "label": margin_label(margin), "averages": rows,
+            "updated": max(r["updated"] for r in rows), "article": rev["title"], "revid": rev["revid"],
             "timestamp": rev["timestamp"], "url": wiki.revision_url(rev["title"], rev["revid"])}
+
+
+class _Unreachable(Exception):
+    """Wikipedia didn't answer (fetch_current returned None, not {})."""
 
 
 def _previous() -> dict:
@@ -151,23 +165,26 @@ def build(db: Session, revisions: dict[str, dict] | None, today: date | None = N
     except wiki.GateFailure as exc:
         if not prev_national:
             raise
-        national = dict(prev_national, status=f"kept the previous revision: {exc}")
+        # The page shows this: the figure is the last good revision's, and
+        # its date ("updated") says how old.
+        national = dict(prev_national, status="kept", statusDetail=str(exc))
     shift = params["beta"][3] * national["margin"]
 
     races = (db.query(Race).options(selectinload(Race.candidates))
              .filter(Race.cycle_year == election.cycle, Race.office == "S").order_by(Race.id).all())
     seats = []
     for race in races:
-        seats.append(_seat(race, leans, params, national, revisions, previous.get(race.id), today,
-                           election.election_day))
+        seats.append(_seat(race, leans.get(race.state), params, national, revisions, previous.get(race.id),
+                           today, election.election_day))
     return {
         "schemaVersion": SCHEMA_VERSION,
         "asOf": utcnow().isoformat(timespec="seconds") + "Z",
         "electionDay": election.election_day.isoformat(),
         "daysToElection": days_left,
         "horizon": horizon,
+        "pollWindowDays": model.WINDOW_DAYS,
         "chamber": "senate",
-        "national": dict(national, shift=round(shift, 2)),
+        "national": dict(national, shift=round(shift, 2), shiftLabel=margin_label(shift)),
         "bins": {"leansMax": LEANS_MAX, "usuallyMax": USUALLY_MAX},
         "calibration": {
             "cycles": [evaluation["cycles"][0], evaluation["cycles"][-1]],
@@ -204,17 +221,23 @@ def build(db: Session, revisions: dict[str, dict] | None, today: date | None = N
     }
 
 
-def _seat(race, leans, params, national, revisions, previous, today: date, election_day: date) -> dict:
-    lean = leans[race.state]
+def _seat(race, lean: float | None, params, national, revisions, previous, today: date,
+          election_day: date) -> dict:
     dem, rep = _nominee(race.candidates, "DEM"), _nominee(race.candidates, "REP")
     seat = {
         "id": race.id, "state": race.state, "stateName": STATE_NAMES[race.state], "special": race.is_special,
-        "lean": round(lean, 2), "leanLabel": lean_label(lean),
-        "usualBin": "close" if round(lean) == 0 else bin_of(lean, False),
+        "lean": None if lean is None else round(lean, 2),
+        "leanLabel": None if lean is None else lean_label(lean),
+        "usualBin": None if lean is None else bin_of(lean),
         "dem": _display_name(dem) if dem else None, "rep": _display_name(rep) if rep else None,
         "incumbentParty": ("R" if rep and rep.incumbent_challenge == "I" else
                            "D" if dem and dem.incumbent_challenge == "I" else None),
     }
+    if lean is None:
+        logger.warning("Election map: no lean for %s", race.id)
+        return dict(seat, status="no_lean",
+                    reason="Civitas has no usual-vote figure for this seat, so it can show neither its usual "
+                           "vote nor a range.")
     if dem is None or rep is None:
         missing = "Democratic" if dem is None else "Republican"
         return dict(seat, status="not_contested",
@@ -224,22 +247,39 @@ def _seat(race, leans, params, national, revisions, previous, today: date, elect
     rev = (revisions or {}).get(title)
     article = {"title": title}
     parsed: list[dict] = []
+    # What the poll source said, for the page to word: "ok" (the article was
+    # read; its table had these polls, maybe none recent), "no_table" (read,
+    # but it lists no poll of these two nominees), "no_article", "rejected"
+    # (the table failed a gate) or "unreachable" (Wikipedia didn't answer).
+    # A failure with the previous good revision's polls kept adds "keptFrom".
+    source: dict = {}
     try:
+        if revisions is None:
+            raise _Unreachable("Wikipedia could not be reached")
         if rev is None:
-            raise wiki.GateFailure("Wikipedia could not be reached" if revisions is None else "no such article")
-        as_of = wiki.revision_date(rev)
-        table = wiki.poll_table(rev["content"], _display_name(dem), _display_name(rep), as_of,
-                                wiki.named_refs(rev["content"]))
-        parsed = [p.as_dict() for p in (table.polls if table else [])]
-        article.update(revid=rev["revid"], timestamp=rev["timestamp"],
-                       url=wiki.revision_url(rev["title"], rev["revid"]), status="ok")
-    except wiki.GateFailure as exc:
+            source = {"state": "no_article"}
+        else:
+            as_of = wiki.revision_date(rev)
+            table = wiki.poll_table(rev["content"], _display_name(dem), _display_name(rep), as_of,
+                                    wiki.named_refs(rev["content"]))
+            parsed = [p.as_dict() for p in (table.polls if table else [])]
+            article.update(revid=rev["revid"], timestamp=rev["timestamp"],
+                           url=wiki.revision_url(rev["title"], rev["revid"]), status="ok")
+            source = {"state": "ok" if table is not None else "no_table", "revisionDate": as_of.isoformat()}
+    except (wiki.GateFailure, _Unreachable) as exc:
+        source = {"state": "unreachable" if isinstance(exc, _Unreachable) else "rejected", "detail": str(exc),
+                  "checkedOn": today.isoformat()}
+        if rev is not None:
+            source["revisionDate"] = wiki.revision_date(rev).isoformat()
         kept = (previous or {}).get("article", {})
         if previous and kept.get("revid") and previous.get("dem") == seat["dem"] and previous.get("rep") == seat["rep"]:
             parsed = previous.get("polls", {}).get("all", [])
             article.update({k: kept[k] for k in ("revid", "timestamp", "url") if k in kept})
-        article["status"] = f"rejected: {exc}" + ("; the previous good revision's polls are kept" if parsed else "")
+            if parsed and kept.get("timestamp"):
+                source["keptFrom"] = kept["timestamp"][:10]
+        article["status"] = f"{source['state']}: {exc}"
         logger.warning("Election map: %s %s", title, article["status"])
+    seat["pollSource"] = source
     seat["article"] = article
 
     others = [p["other"] for p in parsed if p.get("other") is not None]
@@ -275,8 +315,12 @@ def _seat(race, leans, params, national, revisions, previous, today: date, elect
         seat, status="range",
         prior=round(r["prior"], 1), priorLabel=margin_label(r["prior"]),
         mean=round(r["mean"], 1),
+        meanLabel=margin_label(r["mean"]),
         range80=[round(r["low80"], 1), round(r["high80"], 1)],
         range95=[round(r["low95"], 1), round(r["high95"], 1)],
+        range80Label=range_label(r["low80"], r["high80"]),
+        # Decided here on the range as written, never re-derived by the page.
+        close=range_close(r["low80"], r["high80"]),
         pollsBin=range_bin(r["low80"], r["high80"]),
         pollAverage=None if r["pollAverage"] is None else round(r["pollAverage"], 1),
         pollShare=round(poll_share, 2),
@@ -293,28 +337,41 @@ def _seat(race, leans, params, national, revisions, previous, today: date, elect
 
 
 async def refresh(db: Session) -> dict | None:
-    """Fetch the current revisions, build, and write the map's file."""
+    """Fetch the current revisions, build, and write the map's file. An
+    unreachable Wikipedia (None, never an empty result) still builds, every
+    seat saying its polls could not be read, and raises an ops alert."""
     election = active_election(db)
     if election.phase != CAMPAIGN:
         return None
     races = db.query(Race).filter(Race.cycle_year == election.cycle, Race.office == "S").all()
     titles = sorted({article_title(r) for r in races}) + [GENERIC_ARTICLE]
     revisions = await wiki.fetch_current(titles)
+    if revisions is None:
+        send_ops_alert("Election map: Wikipedia unreachable",
+                       "The election map's refresh could not read Wikipedia's race articles; seats keep their "
+                       "previous polls and say so.",
+                       dedupe_key=f"election-map-wikipedia-{utcnow():%Y-%m-%d}", condition=ALERT_CONDITION)
     data = build(db, revisions)
     if data is not None:
         write_text_atomic(map_path(), json.dumps(data, separators=(",", ":")))
         logger.info("Election map: %d seats written", len(data["seats"]))
+        if revisions is not None:
+            resolve_ops_alert(ALERT_CONDITION)
     return data
 
 
 def run_refresh() -> None:
-    """The scheduled job's body (its own session and event loop)."""
+    """The scheduled job's body (its own session and event loop). A failed
+    refresh raises an ops alert (once a day); the page shows the map's age
+    and marks it stale (api/election_map.STALE_AFTER)."""
     from app.database import SessionLocal
 
     db = SessionLocal()
     try:
         asyncio.run(refresh(db))
-    except Exception:
+    except Exception as exc:
         logger.exception("Election map refresh failed")
+        send_ops_alert("Election map refresh failed", f"{type(exc).__name__}: {exc}",
+                       dedupe_key=f"election-map-refresh-{utcnow():%Y-%m-%d}", condition=ALERT_CONDITION)
     finally:
         db.close()

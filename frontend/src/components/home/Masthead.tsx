@@ -95,7 +95,8 @@ export default function Masthead() {
 
           <p className="mt-4 max-w-xl font-display text-base leading-relaxed text-ink-lo sm:text-[17px]">
             Scored nightly from federal and state filings. Every number traces back to the document
-            it came from. Nothing here is an estimate.
+            it came from. Where a figure is a range, as on the election map, the page says how it
+            was made.
           </p>
 
           {/* The voter's way in, in the first screen: who represents me,
@@ -199,7 +200,7 @@ export default function Masthead() {
                   [ PULL THE FILE ]
                 </button>
                 {/* No count here on purpose. This read "535 on file", a
-                    literal, three lines under "Nothing here is an estimate" —
+                    literal, three lines under "Every number traces back to the document it came from" —
                     and wrong twice over: it excludes the presidents and
                     justices the directory also holds, and the House is only
                     momentarily at 435 between vacancies. The real number needs

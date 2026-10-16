@@ -40,8 +40,13 @@ function race(over: Partial<RaceWithCandidates> = {}): RaceWithCandidates {
 
 describe("RaceContext", () => {
   it("puts the lean into words and among every seat, one square each", () => {
-    const { container } = render(<RaceContext race={race()} />);
-    expect(screen.getByText("The seat · R+5")).toBeInTheDocument();
+    const { container } = render(
+      <RaceContext race={race({ usualVote: { lean: 3.4, label: "R+3", source: "computed" } })} />
+    );
+    // The map's figure leads, Cook's is the cross-check.
+    expect(screen.getByText("The seat · R+3")).toBeInTheDocument();
+    expect(screen.getByText(/about 3 points more Republican/)).toBeInTheDocument();
+    expect(screen.getByText(/Cook PVI, as a cross-check/)).toBeInTheDocument();
     expect(
       screen.getByRole("img", {
         name: "236 of 435 districts lean more Democratic, 187 more Republican, 11 the same.",
@@ -50,19 +55,20 @@ describe("RaceContext", () => {
     expect(container.querySelectorAll("[role=img] .aspect-square")).toHaveLength(435);
   });
 
-  it("shows Civitas's computed lean beside Cook's, with its method", () => {
-    render(<RaceContext race={race({ computedLean: 5.34 })} />);
-    expect(screen.getByText("R+5.3")).toBeInTheDocument();
-    expect(screen.getByText(/used in no score/)).toBeInTheDocument();
+  it("says the lead figure is Civitas's computed lean, with its method", () => {
+    render(
+      <RaceContext race={race({ usualVote: { lean: 5.34, label: "R+5", source: "computed" } })} />
+    );
+    expect(screen.getByText(/the figure the 2026 map shows, used in no score/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "How it is computed" })).toHaveAttribute(
       "href",
       "/about/data#computed-lean"
     );
   });
 
-  it("has no computed-lean line without a computed figure", () => {
-    render(<RaceContext race={race({ computedLean: null })} />);
-    expect(screen.queryByText(/Civitas-computed lean/)).not.toBeInTheDocument();
+  it("falls back to Cook's figure, labelled as Cook's, without a computed one", () => {
+    render(<RaceContext race={race({ usualVote: null })} />);
+    expect(screen.getByText("The seat · Cook PVI R+5")).toBeInTheDocument();
   });
 
   it("says plainly it is not a forecast, and offers the data", () => {

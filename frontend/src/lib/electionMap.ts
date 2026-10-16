@@ -25,8 +25,41 @@ export type MapChamber = (typeof MAP_CHAMBERS)[number];
  */
 export const ELECTION_MAP_HREF = "/elections/map?chamber=senate&view=usual";
 
-export function mapHref(view: MapView, chamber: MapChamber = "senate"): string {
-  return `/elections/map?chamber=${chamber}&view=${view}`;
+export function mapHref(view: MapView, chamber: MapChamber = "senate", seat?: string): string {
+  const base = `/elections/map?chamber=${chamber}&view=${view}`;
+  return seat ? `${base}&seat=${encodeURIComponent(seat)}` : base;
+}
+
+/** The race's own place on its state's ballot page (what /elections/{id}
+ * redirects to), linked directly. */
+export function racePageHref(seat: MapSeat): string {
+  return `/elections/states/${seat.state}#race-${seat.id}`;
+}
+
+/** How the seat's poll source answered, in words (pollSource from the
+ * backend). An outage or a rejected table never reads as "no poll". */
+export function pollSourceSentence(seat: RangedSeat, windowDays: number): string {
+  const src = seat.pollSource;
+  const kept = src.keptFrom
+    ? ` Polls from the last good revision (${formatAsOf(src.keptFrom)}) are used.`
+    : "";
+  const alone = src.keptFrom
+    ? ""
+    : " The range is the usual vote with incumbency and the national swing alone.";
+  switch (src.state) {
+    case "unreachable":
+      return `Wikipedia couldn't be reached when this was built (${formatAsOf(src.checkedOn ?? "")}).${kept || alone}`;
+    case "rejected":
+      return `Wikipedia's poll table for this race failed Civitas's checks on ${formatAsOf(src.checkedOn ?? "")} (${src.detail}).${kept || alone}`;
+    case "no_article":
+      return `Wikipedia has no article for this race to read polls from.${alone}`;
+    case "no_table":
+      return `Wikipedia's article for this race lists no poll of these two nominees.${alone}`;
+    default:
+      return seat.polls.used
+        ? `${seat.polls.used} ${seat.polls.used === 1 ? "poll" : "polls"} in the average (the latest from each pollster in the last ${windowDays} days, newest ${seat.polls.latest}); they carry ${Math.round(seat.pollShare * 100)}% of the range's weight, the usual vote the rest.`
+        : `No poll of this race in the last ${windowDays} days: the range is the usual vote with incumbency and the national swing alone, which is why it is wide.`;
+  }
 }
 
 export function parseView(value: string | string[] | undefined | null): MapView {
@@ -94,7 +127,7 @@ export function binFill(bin: MapBin): string {
 /** The bin a seat shows in a view; null where it has none (no
  * Democrat-versus-Republican contest, or the Difference view). */
 export function seatBin(seat: MapSeat, view: MapView): MapBin | null {
-  if (view === "usual") return seat.usualBin;
+  if (view === "usual") return seat.usualBin ?? null;
   if (view === "polls") return seat.status === "range" ? seat.pollsBin : null;
   return null;
 }
@@ -119,20 +152,17 @@ export function legendCells(
 
 /* ── Words ─────────────────────────────────────────────────────────── */
 
-/** "R+6" / "D+3" / "EVEN" for a signed margin in points. */
-export function marginLabel(margin: number): string {
-  const r = Math.round(margin);
-  if (r === 0) return "EVEN";
-  return `${r > 0 ? "R" : "D"}+${Math.abs(r)}`;
-}
+/* Every label and every "too close" below is the backend's (build.py):
+   the page never re-rounds a number, so a label can't disagree with the
+   colour the backend chose for it. */
 
-/** "D+8 to R+2": a range, D side first. */
-export function rangeLabel([low, high]: [number, number]): string {
-  return `${marginLabel(low)} to ${marginLabel(high)}`;
+/** "D+8 to R+2": the seat's 80% range, D side first. */
+export function rangeLabel(seat: RangedSeat): string {
+  return seat.range80Label;
 }
 
 export function crossesEven(seat: RangedSeat): boolean {
-  return seat.range80[0] <= 0 && seat.range80[1] >= 0;
+  return seat.close;
 }
 
 /** The seat's name on the map: "Ohio", "Florida (special)". */
@@ -149,7 +179,11 @@ export function coverageSentence(c: ElectionMapData["calibration"]): string {
 /** The national line in the legend: what the generic ballot does to every
  * seat at once. */
 export function nationalSentence(n: ElectionMapData["national"]): string {
-  return `Nationally, the generic-ballot average is ${marginLabel(n.margin)}; in the method that moves every seat about ${marginLabel(n.shift)} at once.`;
+  const when =
+    n.status === "ok"
+      ? `updated ${formatAsOf(n.updated)}`
+      : `last good reading, updated ${formatAsOf(n.updated)}: the latest could not be read`;
+  return `Nationally, the generic-ballot average is ${n.label} (${when}); in the method that moves every seat about ${n.shiftLabel} at once.`;
 }
 
 export interface MapCounts {
@@ -161,7 +195,7 @@ export interface MapCounts {
   usualClose: number;
 }
 
-export function mapCounts(seats: MapSeat[], bins: ElectionMapData["bins"]): MapCounts {
+export function mapCounts(seats: MapSeat[]): MapCounts {
   const ranged = seats.filter((s): s is RangedSeat => s.status === "range");
   const differ = ranged.filter((s) => s.difference.strength > 0);
   return {
@@ -170,17 +204,25 @@ export function mapCounts(seats: MapSeat[], bins: ElectionMapData["bins"]): MapC
     differ: differ.length,
     towardD: differ.filter((s) => s.difference.direction === "D").length,
     towardR: differ.filter((s) => s.difference.direction === "R").length,
-    usualClose: seats.filter((s) => Math.abs(s.lean) < bins.leansMax).length,
+    usualClose: seats.filter(
+      (s) => s.usualBin === "close" || s.usualBin === "D_leans" || s.usualBin === "R_leans"
+    ).length,
   };
 }
 
 /** The "what changed" line for a view — counts of seats that differ or
  * are close, never of seats a party is ahead in. */
-export function changedLine(view: MapView, c: MapCounts, n: ElectionMapData["national"]): string {
+export function changedLine(
+  view: MapView,
+  c: MapCounts,
+  n: ElectionMapData["national"],
+  bins: ElectionMapData["bins"]
+): string {
   const seats = (k: number) => `${k} ${k === 1 ? "seat" : "seats"}`;
-  if (view === "usual") return `${seats(c.usualClose)} within 5 points of even in the usual vote.`;
+  if (view === "usual")
+    return `${seats(c.usualClose)} within ${bins.leansMax} points of even in the usual vote.`;
   if (view === "polls")
-    return `vs usual vote: ${seats(c.differ)} look different · national swing ${marginLabel(n.shift)} · ${seats(c.close)} too close to tell`;
+    return `vs usual vote: ${seats(c.differ)} look different · national swing ${n.shiftLabel} · ${seats(c.close)} too close to tell`;
   return `${seats(c.differ)} where polls disagree with the usual vote · ${c.towardD} toward D · ${c.towardR} toward R`;
 }
 
@@ -204,7 +246,7 @@ export function formatAsOf(iso: string): string {
 
 /** The footer every view and every share image carries. */
 export function footerText(data: ElectionMapData): string {
-  return `Usual vote: Civitas, from official returns (MEDSL, FEC). Polls: ${data.sources.polls.attribution}, ${data.sources.polls.license}. As of ${formatAsOf(data.asOf)}. Ranges, not results. Not a race call.`;
+  return `${data.stale ? "NOT UPDATED SINCE " + formatAsOf(data.asOf) + ". " : ""}Usual vote: Civitas, from official returns (MEDSL, FEC). Polls: ${data.sources.polls.attribution}, ${data.sources.polls.license}. As of ${formatAsOf(data.asOf)}. Ranges, not results. Not a race call.`;
 }
 
 /** The Difference view's glyph for a seat: « ‹ toward D, › » toward R. */
@@ -216,9 +258,9 @@ export function differenceGlyph(seat: MapSeat): string | null {
 
 /** One seat's accessible name on the map. */
 export function seatAriaLabel(seat: MapSeat, view: MapView): string {
-  const usual = `usual vote ${seat.leanLabel}`;
+  const usual = seat.leanLabel ? `usual vote ${seat.leanLabel}` : "no usual-vote figure";
   if (seat.status !== "range") return `${seatName(seat)}: ${usual}. ${seat.reason}`;
-  const polls = `polls suggest ${rangeLabel(seat.range80)}${crossesEven(seat) ? ", too close to tell" : ""}`;
+  const polls = `polls suggest ${rangeLabel(seat)}${crossesEven(seat) ? ", too close to tell" : ""}${seat.difference.seatPolls ? "" : " (no poll of this seat: usual vote and national swing only)"}`;
   const diff =
     seat.difference.strength > 0
       ? `, polls point toward ${seat.difference.direction}`
