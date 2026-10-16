@@ -54,7 +54,7 @@ from app.database import SessionLocal
 from app.election_calendar import last_certified_general
 from app.election_phase import active_election
 from app.file_cache import Uncached, files_stamp, read_json_preferring
-from app.forecast import training_polls
+from app.forecast import model, training_polls
 from app.ops_alerts import resolve_ops_alert, send_ops_alert
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.state_names import STATE_NAMES
@@ -587,23 +587,55 @@ def _forecast_gate(new: dict, old: dict) -> list[str]:
     return failures
 
 
+# Familywise error rate of the forward check's alert.
+FORWARD_ALPHA = 0.05
+
+
 def _forward_finding(docs: dict[str, dict]) -> str | None:
     """Each chamber's forward check (its newest cycle, predicted by a fit on
-    the cycles before it only): 80% ranges whose share holding the result
-    falls outside the binomial 95% band for that many races. Published
-    anyway, so the page's figures match the fit; the alert asks for a look."""
-    off = []
+    the cycles before it only), as an alert only when it is actionable.
+
+    Every horizon of every chamber is tested in both directions
+    (model.coverage_test: too narrow against 0.80, far too wide against
+    model.WIDE_COVERAGE), and Holm's step-down procedure holds the chance
+    of any false alert across all of those hypotheses to FORWARD_ALPHA.
+    Holm rather than one pre-registered horizon: the live map uses every
+    horizon in turn, so each is a claim the page makes, and Holm is never
+    less powerful than Bonferroni over the same family. The horizons score
+    the same races, so the correction is conservative; it errs toward
+    silence, which suits an alert a person has to act on.
+
+    Too narrow is the harmful direction (overconfident ranges) and alerts.
+    Far too wide alerts naming the knob; a range a little wide in one
+    cycle (2024's Senate: 31 of 32 at one and two weeks out) does not, and
+    the page shows the figure either way. The fit is published regardless,
+    so the page's figures match its inputs."""
+    checks, pvalues = {}, {}
     for chamber, name in (("Senate", "forecast_model.json"), ("House", "forecast_house_model.json")):
-        for h, ev in sorted(((docs.get(name) or {}).get("evaluation") or {}).items(), key=lambda kv: int(kv[0])):
+        for h, ev in ((docs.get(name) or {}).get("evaluation") or {}).items():
             fw = ev.get("forward")
-            if fw and not fw["coverage80Band"][0] <= fw["coverage80"] <= fw["coverage80Band"][1]:
-                off.append(f"{chamber} {fw['cycle']}, {h} days out: 80% ranges held {fw['coverage80']:.0%} of "
-                           f"{fw['races']} races, outside {fw['coverage80Band'][0]:.0%}-{fw['coverage80Band'][1]:.0%}")
-    if not off:
+            if not fw or "coverage80Test" not in fw:
+                continue
+            checks[(chamber, int(h))] = fw
+            for direction in ("under", "over"):
+                pvalues[(chamber, int(h), direction)] = fw["coverage80Test"][direction]
+    rejected = model.holm(pvalues, FORWARD_ALPHA)
+    if not rejected:
         return None
-    return ("the forward check (each chamber's newest cycle, fitted on earlier cycles only) is outside the "
-            "binomial 95% band: " + "; ".join(off) + ". The refit is published, and the map shows this "
-            "figure; look at whether the spread needs another term.")
+    lines = []
+    for chamber, h, direction in sorted(rejected):
+        fw = checks[(chamber, h)]
+        t = fw["coverage80Test"]
+        what = (f"too narrow: 80% ranges held {t['held']} of {t['n']} results ({fw['coverage80']:.0%}), "
+                f"p={t['under']:.2g} against 80%" if direction == "under" else
+                f"far too wide: 80% ranges held {t['held']} of {t['n']} ({fw['coverage80']:.0%}), "
+                f"p={t['over']:.2g} against {model.WIDE_COVERAGE:.0%}; the knob is the spread's scale factor "
+                f"(model.fit_scale, `scale` in the fit), fitted on all training cycles alike")
+        lines.append(f"{chamber} {fw['cycle']}, {h} days out (fitted on {fw['trainedOn'][0]}-{fw['trainedOn'][1]}): "
+                     f"{what}")
+    return ("the forward check (each chamber's newest cycle, fitted on earlier cycles only) fails at familywise "
+            f"{FORWARD_ALPHA:.0%} (Holm, {len(pvalues)} hypotheses): " + "; ".join(lines) + ". The refit is published "
+            "and the map shows these figures.")
 
 
 DATA_FILES: list[DataFile] = [

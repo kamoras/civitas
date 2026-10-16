@@ -455,6 +455,8 @@ def forward(rows: list[dict], generic: dict, horizon: int, national_coef_for=Non
     out["cycle"] = year
     out["trainedOn"] = [cycles[0], cycles[-2]]
     out["coverage80Band"] = coverage_band(len(preds), 0.8)
+    held = sum(1 for p in preds if p["low80"] <= p["margin"] <= p["high80"])
+    out["coverage80Test"] = coverage_test(held, len(preds))
     return out
 
 
@@ -473,6 +475,41 @@ def coverage_band(n: int, p: float, level: float = 0.95) -> list[float]:
             hi = k
             break
     return [round(lo / n, 3), round(hi / n, 3)]
+
+
+# The forward check's two hypotheses about the 80% ranges, each one-sided:
+# - too narrow (overconfident, the harmful direction): coverage below the
+#   stated 0.80;
+# - far too wide: coverage above WIDE_COVERAGE, i.e. the 80% ranges
+#   behaving like 90% ranges, which takes them 28% wider than they should
+#   be (Z90 / Z80). Ranges a little too wide in one cycle cost the reader
+#   nothing but some caution, and over a few dozen races one result more
+#   or less moves coverage by three points, so only "far" is tested; the
+#   page shows the measured figure either way. A stated convention.
+WIDE_COVERAGE = 0.90
+
+
+def coverage_test(held: int, n: int) -> dict:
+    """Exact one-sided binomial p-values for `held` of n results inside
+    their 80% ranges: "under" (as few or fewer, if the ranges were honest
+    80% ranges) and "over" (as many or more, if they were 90% ranges)."""
+    def pmf(p):
+        return [math.comb(n, k) * p ** k * (1 - p) ** (n - k) for k in range(n + 1)]
+    return {"held": held, "n": n, "under": round(min(1.0, sum(pmf(0.8)[:held + 1])), 6),
+            "over": round(min(1.0, sum(pmf(WIDE_COVERAGE)[held:])), 6)}
+
+
+def holm(pvalues: dict, alpha: float) -> set:
+    """The keys Holm's step-down procedure rejects at familywise `alpha`
+    (Holm 1979): sorted ascending, the i-th smallest (from 0) is tested at
+    alpha / (m - i), stopping at the first that is not rejected."""
+    out = set()
+    m = len(pvalues)
+    for i, (key, pv) in enumerate(sorted(pvalues.items(), key=lambda kv: kv[1])):
+        if pv > alpha / (m - i):
+            break
+        out.add(key)
+    return out
 
 
 def summarize(preds: list[dict]) -> dict:

@@ -297,19 +297,72 @@ def test_outputs_are_installed_together_only_when_the_gate_passes(alerts_fixture
     assert dr.read("t_side.json")["races"] == [1] and dr.read("t_main.json")["fits"] == {"0": 1}
 
 
-def test_the_forward_check_outside_its_band_alerts_but_publishes(alerts_fixture):
-    model_doc = {"fits": {"0": 1}, "evaluation": {"0": {"forward": {
-        "cycle": 2024, "races": 32, "coverage80": 0.969, "coverage80Band": [0.656, 0.938]}}}}
+def _forward_docs(*checks):
+    """{model file: doc} with forward checks (chamber, horizon, held, n, cycle)."""
+    docs = {"forecast_model.json": {"evaluation": {}}, "forecast_house_model.json": {"evaluation": {}}}
+    for chamber, h, held, n, cycle in checks:
+        name = "forecast_model.json" if chamber == "Senate" else "forecast_house_model.json"
+        docs[name]["evaluation"][str(h)] = {"forward": {
+            "cycle": cycle, "trainedOn": [1998, cycle - 2], "races": n, "coverage80": held / n,
+            "coverage80Band": model.coverage_band(n, 0.8), "coverage80Test": model.coverage_test(held, n)}}
+    return docs
+
+
+SENATE_2024 = [("Senate", 0, 30, 32, 2024), ("Senate", 7, 31, 32, 2024), ("Senate", 14, 31, 32, 2024)]
+HOUSE_2022 = [("House", 0, 332, 386, 2022), ("House", 7, 336, 386, 2022), ("House", 14, 333, 386, 2022)]
+
+
+def test_one_race_of_32_too_wide_does_not_alert():
+    # 31 of 32 is one race past the 95% band's edge (30): not actionable.
+    assert model.coverage_band(32, 0.8)[1] == 0.938
+    assert dr._forward_finding(_forward_docs(*SENATE_2024, *HOUSE_2022)) is None
+    assert dr._forward_finding(_forward_docs(("Senate", 0, 31, 32, 2024))) is None
+
+
+def test_the_checked_in_fits_raise_no_forward_alert():
+    docs = {name: json.loads((DATA / name).read_text()) for name in ("forecast_model.json", "forecast_house_model.json")}
+    assert dr._forward_finding(docs) is None
+
+
+def test_ranges_too_narrow_alert_after_the_correction():
+    finding = dr._forward_finding(_forward_docs(*SENATE_2024[:2], ("Senate", 14, 18, 32, 2024), *HOUSE_2022))
+    assert finding == (
+        "the forward check (each chamber's newest cycle, fitted on earlier cycles only) fails at familywise 5% "
+        "(Holm, 12 hypotheses): Senate 2024, 14 days out (fitted on 1998-2022): too narrow: 80% ranges held 18 of "
+        "32 results (56%), p=0.002 against 80%. The refit is published and the map shows these figures.")
+
+
+def test_ranges_far_too_wide_alert_naming_the_knob():
+    finding = dr._forward_finding(_forward_docs(("House", 0, 384, 386, 2022)))
+    assert "House 2022, 0 days out" in finding and "far too wide: 80% ranges held 384 of 386 (99%)" in finding
+    assert "the knob is the spread's scale factor (model.fit_scale, `scale` in the fit)" in finding
+
+
+def test_a_borderline_miss_survives_one_test_but_not_the_family():
+    # 20 of 32 (p=0.017) is flagged as the only check (two hypotheses); among
+    # the twelve a full refit tests it is not.
+    assert 0.05 / 12 < model.coverage_test(20, 32)["under"] < 0.05 / 2
+    assert dr._forward_finding(_forward_docs(("Senate", 0, 20, 32, 2024))) is not None
+    assert dr._forward_finding(_forward_docs(("Senate", 0, 20, 32, 2024), *SENATE_2024[1:], *HOUSE_2022)) is None
+
+
+def test_holm_steps_down():
+    assert model.holm({"a": 0.01, "b": 0.02, "c": 0.04}, 0.05) == {"a", "b", "c"}
+    assert model.holm({"a": 0.01, "b": 0.03, "c": 0.04}, 0.05) == {"a"}
+    assert model.holm({"a": 0.02, "b": 0.03}, 0.05) == {"a", "b"}
+    assert model.holm({"a": 0.03, "b": 0.04}, 0.05) == set()
+
+
+def test_the_forward_check_alert_is_raised_after_install_and_publishes(alerts_fixture):
+    model_doc = _forward_docs(("Senate", 0, 18, 32, 2024))["forecast_model.json"]
+    model_doc["fits"] = {"0": 1}
     writer = [sys.executable, "-c", f"import json,sys; open(sys.argv[1],'w').write(json.dumps({model_doc!r}))",
               "{out}"]
     spec = dr.DataFile("forecast_model.json", command=lambda ctx: writer, check=dr._forward_finding)
     assert dr.refresh_one(spec, dr.Context("forecast_model.json", {}, None, None)) == "refreshed"
-    assert dr.read("forecast_model.json")["evaluation"]["0"]["forward"]["coverage80"] == 0.969
-    body = alerts_fixture.send.call_args.args[1]
+    assert dr.read("forecast_model.json")["evaluation"]["0"]["forward"]["coverage80Test"]["held"] == 18
     assert alerts_fixture.send.call_args.kwargs["condition"] == "data-check-forecast-model"
-    assert ("the forward check (each chamber's newest cycle, fitted on earlier cycles only) is outside the binomial "
-            "95% band: Senate 2024, 0 days out: 80% ranges held 97% of 32 races, outside 66%-94%. The refit is "
-            "published") in body
+    assert "too narrow" in alerts_fixture.send.call_args.args[1]
 
 
 def test_the_refit_gate_never_drops_a_cycle():

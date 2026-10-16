@@ -1678,7 +1678,11 @@ it keeps, each enforced by a test (`tests/test_forecast_model.py`,
   `app/data/forecast_model.json`. `app/data_refresh.py` reruns it when the
   training polls change and monthly, into `/data/forecast_*.json` (the
   checked-in files are the fallback), and alerts, without holding the fit
-  back, when the forward 80% coverage is outside its band. The poll window
+  back, only when the forward check fails at familywise 5% (Holm over every
+  horizon, chamber and direction, `data_refresh._forward_finding`): ranges
+  too narrow against 80%, or far too wide against `model.WIDE_COVERAGE`
+  (naming the scale factor). A width calibrated from leave-one-out coverage
+  was measured and rejected (it moved every forward figure the wrong way). The poll window
   is the training polls' own reach (`model.poll_window`), never typed;
   beyond it every range is the structural line's, labelled fundamentals only.
 - **Training polls: Silver Bulletin, gated, attributed.**
