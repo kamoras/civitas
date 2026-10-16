@@ -1,5 +1,5 @@
 """One live figure for each section page: what the site's section hubs and
-the homepage's "Sections" band show beside each link (frontend
+the homepage's index show beside each link (frontend
 `SECTIONS`, lib/routes.ts).
 
 Every figure is a count or a rate over what the site already stores, read
@@ -66,6 +66,7 @@ def congress(db: Session) -> dict:
             "month": {"month": f"{day:%Y-%m}", "recordVotes": _votes_between(db, first, last)},
         }
         week_start = monday.isoformat()
+    out["recess"] = _recess(db, day)
     committees = committee_record.committees(db)
     out["committees"] = {
         "count": len(committees),
@@ -75,6 +76,21 @@ def congress(db: Session) -> dict:
     out["bills"] = {"inMotion": get_bills_in_flight(db, per_page=1).in_motion}
     out["president"] = {c: _president(db, c) for c in ("house", "senate")}
     return out
+
+
+def _recess(db: Session, day: date | None) -> dict | None:
+    """When the latest day Congress met had no business (/congress's own
+    `recess`), one line for the three report figures, which would each read
+    "None": when the last business was, and the week to open. None when
+    there was business, or before any day is on record."""
+    if day is None:
+        return None
+    r = congress_service.recess(db, congress_service.day_report(db, day))
+    if r is None:
+        return None
+    last = r["lastBusinessDay"]
+    since = f"since {congress_service.long_date(date.fromisoformat(last))}" if last else "on record"
+    return {"line": f"No record votes or floor business {since}", "lastBusinessDay": last, "week": r["week"]}
 
 
 def _president(db: Session, chamber: str) -> dict | None:

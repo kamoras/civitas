@@ -135,8 +135,11 @@ export default function Masthead({
               page's one index, with the source ledger beside them. */}
           <nav
             aria-label="For voters"
-            className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-xs tracking-[0.1em]"
+            className="mt-5 flex flex-col items-start gap-2 font-mono text-xs tracking-[0.1em]"
           >
+            {/* The picker on its own line, the links in one row under it:
+                beside the picker they broke into two rows of the same kind
+                at 1280 px. */}
             <label className="inline-flex max-w-full flex-wrap items-center gap-2 text-ink-min">
               YOUR STATE:
               <select
@@ -154,23 +157,28 @@ export default function Masthead({
                 ))}
               </select>
             </label>
-            <Link
-              href={state ? `/politicians?state=${state}` : "/politicians"}
-              className={VOTER_LINK}
-            >
-              YOUR MEMBERS
-            </Link>
-            <Link href={state ? `/elections/states/${state}` : "/elections"} className={VOTER_LINK}>
-              YOUR BALLOT
-            </Link>
-            {electionLinks(electionPhase).map(({ href, label }) => (
-              <Link key={label} href={href} className={VOTER_LINK}>
-                {label}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <Link
+                href={state ? `/politicians?state=${state}` : "/politicians"}
+                className={VOTER_LINK}
+              >
+                YOUR MEMBERS
               </Link>
-            ))}
-            <Link href="/congress" className={VOTER_LINK}>
-              CONGRESS THIS WEEK
-            </Link>
+              <Link
+                href={state ? `/elections/states/${state}` : "/elections"}
+                className={VOTER_LINK}
+              >
+                YOUR BALLOT
+              </Link>
+              {electionLinks(electionPhase).map(({ href, label }) => (
+                <Link key={label} href={href} className={VOTER_LINK}>
+                  {label}
+                </Link>
+              ))}
+              <Link href="/congress" className={VOTER_LINK}>
+                CONGRESS THIS WEEK
+              </Link>
+            </div>
           </nav>
         </div>
 

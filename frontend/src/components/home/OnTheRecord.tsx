@@ -2,6 +2,7 @@ import Link from "next/link";
 import { connection } from "next/server";
 import type { Notable, NotableEntry } from "@/types/notable";
 import { rollCallHref, shortDate, weekHref } from "@/lib/congress";
+import { fetchSectionFigures } from "@/components/sections/SectionCards";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
@@ -22,15 +23,27 @@ const REVALIDATE_S = 300;
  */
 export default async function OnTheRecord() {
   await connection();
-  let data: Notable | null = null;
+  const [data, figures] = await Promise.all([fetchNotable(), fetchSectionFigures()]);
+  if (!data?.weekStart || data.entries.length === 0) return null;
+  // On a day Congress is out (the backend's `recess`, the one /congress
+  // leads with), the heading says these are the last week of business's
+  // votes, not this week's: "On the record" over a weeks-old list read as
+  // current.
+  return (
+    <OnTheRecordList
+      data={data as Notable & { weekStart: string }}
+      recess={Boolean(figures?.congress.recess)}
+    />
+  );
+}
+
+async function fetchNotable(): Promise<Notable | null> {
   try {
     const res = await fetch(`${BACKEND}/api/notable`, { next: { revalidate: REVALIDATE_S } });
-    if (res.ok) data = (await res.json()) as Notable;
+    return res.ok ? ((await res.json()) as Notable) : null;
   } catch {
-    data = null;
+    return null;
   }
-  if (!data?.weekStart || data.entries.length === 0) return null;
-  return <OnTheRecordList data={data as Notable & { weekStart: string }} />;
 }
 
 const KIND: Record<NotableEntry["kind"], { tag: string; tone: string }> = {
@@ -97,19 +110,28 @@ function Entry({ entry }: { entry: NotableEntry }) {
   );
 }
 
-export function OnTheRecordList({ data }: { data: Notable & { weekStart: string } }) {
+export function OnTheRecordList({
+  data,
+  recess = false,
+}: {
+  data: Notable & { weekStart: string };
+  recess?: boolean;
+}) {
   return (
     <section aria-labelledby="on-the-record" className="mx-auto mt-8 max-w-7xl px-4 sm:px-6">
       <h2
         id="on-the-record"
         className="flex flex-wrap items-baseline justify-between gap-x-4 border-b border-white/15 pb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
       >
-        <span>On the record</span>
+        <span>
+          {recess ? `Last week of business: ${shortDate(data.weekStart)}` : "On the record"}
+        </span>
         <Link
           href={weekHref(data.weekStart)}
           className="normal-case tracking-[0.06em] underline decoration-white/30 underline-offset-4 hover:text-phos"
         >
-          Week of {shortDate(data.weekStart)}: every roll call &rarr;
+          {recess ? "Every roll call" : `Week of ${shortDate(data.weekStart)}: every roll call`}{" "}
+          &rarr;
         </Link>
       </h2>
       <ul>

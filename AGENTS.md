@@ -2340,7 +2340,8 @@ the pending list).
 - **A new page goes in `SECTIONS`** (`src/lib/routes.ts`): that one table is
   the main navigation (a disclosure button per section on desktop, two
   levels on a phone), the footer, each section's tab bar, its hub's cards and
-  the homepage's index, so a page that isn't in it is reachable
+  the homepage's index (which is why the footer on `/` drops its section
+  columns, `Footer omit`), so a page that isn't in it is reachable
   only by an inline link. `routes.test.ts` fails on a page route in no
   section (records with a `[segment]`, the footer's own pages and the admin
   aside). A page with a live figure gets it from `GET /api/sections`

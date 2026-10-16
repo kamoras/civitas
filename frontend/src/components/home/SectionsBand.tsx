@@ -3,26 +3,50 @@ import { connection } from "next/server";
 import { SECTIONS, type SectionKey } from "@/lib/routes";
 import { sectionPreview } from "@/lib/sectionPreviews";
 import { fetchSectionFigures } from "@/components/sections/SectionCards";
+import type { SectionFigures } from "@/types/sections";
 
-/** The sections the band lists: every one with a figure to show. About is
- * the methods, one link away in the menu and the footer. */
-const BAND: SectionKey[] = [
+/** Every section, About's chapters (the methods) included: the homepage
+ * index is the one list of the site's pages, and the footer on `/` leaves
+ * its section columns out (`Footer omit`). */
+export const BAND: SectionKey[] = [
   "congress",
   "elections",
   "agencies",
   "action",
   "politicians",
   "explore",
+  "about",
 ];
 
-/** The researcher's way in: the methods, the API and the scoring changelog
- * (the sources are the ledger beside the index). They were a second line
- * of links in the masthead; one index holds every way in now. */
-const METHODS_LINKS: readonly { href: string; label: string }[] = [
-  { href: "/about/scores", label: "How scores are computed" },
-  { href: "/developers", label: "Data & API" },
-  { href: "/changelog", label: "Scoring changelog" },
-];
+/** The three Congress reports, which on a day without business would each
+ * read "None" with near-identical captions. */
+const REPORT_TABS = new Set(["reports", "week", "month"]);
+
+/** A day without business: the three reports as one line, the backend's
+ * (sections.py `recess`), when none of them has a vote to count. */
+export function reportsRecess(figures: SectionFigures | null) {
+  const c = figures?.congress;
+  return c?.recess && [c.reports, c.week, c.month].every((r) => !r || r.recordVotes === 0)
+    ? c.recess
+    : null;
+}
+
+function ReportsInRecess({ line }: { line: string }) {
+  const reports = SECTIONS.congress.tabs.filter((t) => REPORT_TABS.has(t.key));
+  return (
+    <li className="py-1">
+      <p className="flex flex-wrap gap-x-3">
+        {reports.map((t) => (
+          <Link key={t.key} href={t.href} className={PAGE_LINK}>
+            {t.label}
+          </Link>
+        ))}
+      </p>
+      {/* Shown at every width: it stands in for three figures. */}
+      <p className="text-xs leading-snug text-ink-min">{line}</p>
+    </li>
+  );
+}
 
 const SECTION_LINK =
   "inline-flex min-h-6 items-center font-mono text-sm uppercase tracking-[0.14em] text-ink-hi hover:text-phos";
@@ -30,9 +54,8 @@ const PAGE_LINK =
   "inline-flex min-h-6 items-center text-sm text-ink underline decoration-white/20 underline-offset-4 hover:text-phos";
 
 /**
- * The homepage's one index: every way into the site, gathered at the foot
- * of the page, after the day's record. The homepage's directory of the site: each section and every one of its
- * pages, with the page's live figure beside it (GET /api/sections, the same
+ * The homepage's one index: every section and every one of its pages,
+ * after the day's record, with the page's live figure beside it (GET /api/sections, the same
  * figures the section hubs' cards show). A page added to SECTIONS appears
  * here with no change to this file. Rendered on the server with the page;
  * when the backend can't answer, the links stand without figures.
@@ -40,6 +63,10 @@ const PAGE_LINK =
  * On a phone each page shows its figure without its caption (kept for
  * screen readers): the list reads in one screen and a half rather than
  * two, and the captions return from 640 px up.
+ *
+ * The homepage's footer leaves out its section columns (`Footer omit`):
+ * the two lists were the same links a screen apart. The API and the
+ * changelog stay in the footer's own row of site pages.
  */
 export default async function SectionsBand() {
   // Per request, never prerendered: `next build` can't reach the backend.
@@ -56,6 +83,7 @@ export default async function SectionsBand() {
       <div className="grid grid-cols-1 gap-x-9 gap-y-6 pt-4 sm:grid-cols-2 xl:grid-cols-3">
         {BAND.map((key) => {
           const { label, href, tabs } = SECTIONS[key];
+          const recess = key === "congress" ? reportsRecess(figures) : null;
           return (
             <div key={key}>
               <h3>
@@ -64,7 +92,9 @@ export default async function SectionsBand() {
                 </Link>
               </h3>
               <ul className="mt-1 border-l border-white/15 pl-3">
+                {recess && <ReportsInRecess line={recess.line} />}
                 {tabs.map((t) => {
+                  if (recess && REPORT_TABS.has(t.key)) return null;
                   const p = sectionPreview(figures, key, t.key);
                   return (
                     <li key={t.key} className="py-1">
@@ -90,20 +120,6 @@ export default async function SectionsBand() {
             </div>
           );
         })}
-        <div>
-          <h3 className="inline-flex min-h-6 items-center font-mono text-sm uppercase tracking-[0.14em] text-ink-hi">
-            Methods &amp; data
-          </h3>
-          <ul className="mt-1 border-l border-white/15 pl-3">
-            {METHODS_LINKS.map(({ href, label }) => (
-              <li key={href} className="py-1">
-                <Link href={href} className={PAGE_LINK}>
-                  {label}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
       </div>
     </section>
   );
