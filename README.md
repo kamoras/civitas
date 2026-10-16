@@ -403,7 +403,7 @@ Classification decisions — what industry a donor belongs to, which direction a
 | 1 | FEC metadata / learning store exact match | Instant | Donor types, previously classified bills and donors |
 | 2 | Sentence-transformer embeddings (cosine similarity) | Fast | Bill policy areas, industry, party alignment, donor types, stance direction, procedural detection, commemorative detection, skip entity detection, employer filtering, memo transfer detection, whether two Action Center claims restate one fact (`claims.distinct_claims`) |
 | 2b | SVD / PageRank on cosponsorship matrix | Fast | Ideology scoring (Tauberer 2012), legislative leadership (Brin & Page 1998) |
-| 3 | k-Nearest Neighbor in embedding space | Fast | Remaining unclassified donors, bill classification from reference corpus, whether a claim's actor span the capitalised-word rule refuses is a party that can act (`post_composer.is_acting_party`). A donor's industry is taken from the neighbours only when all seven agree (2026-10-09: on 177 record-labelled PAC sponsors the prototype tier abstains on, a plurality vote was right 29% of the time at every similarity floor; unanimous neighbours 8 of 8); otherwise the donor stays unclassified |
+| 3 | k-Nearest Neighbor in embedding space | Fast | Remaining unclassified donors, bill classification from reference corpus, Action Center relevance (against feed articles their publishers filed, refit daily), whether a claim's actor span the capitalised-word rule refuses is a party that can act (`post_composer.is_acting_party`). A donor's industry is taken from the neighbours only when all seven agree (2026-10-09: on 177 record-labelled PAC sponsors the prototype tier abstains on, a plurality vote was right 29% of the time at every similarity floor; unanimous neighbours 8 of 8); otherwise the donor stays unclassified |
 | 4 | LLM (LFM2.5-1.2B-Instruct via llama.cpp) | Slow | Natural-language text only: Action Center claim location, monitor decisions, timeline summaries, race-post spans, Explore summaries — never a classification feeding a score |
 
 Key embedding-based classification features:
@@ -417,6 +417,7 @@ Key embedding-based classification features:
 - **Stance direction** is derived primarily from embedding similarity against pro/anti/neutral action prototypes — see the disclosed exception below.
 - **Procedural bill detection** uses embedding similarity against a procedural prototype instead of substring matching.
 - **Claim actors** (`post_composer.is_acting_party`): a claim the Action Center or an election post composes must name a party that can act — a person, institution, official body or group of officials. A span with a capitalised word passes (see the disclosed exception below); one the rule refuses, unless a pronoun leads it, is compared with natural-language descriptions of an acting party and of what is not one (`ACTOR_PROTOTYPES`, `NON_ACTOR_PROTOTYPES`; a possessive is judged by its head), and passes when its margin reaches the lowest value no data-supplied non-actor reaches: the claim calls' own predicates and the sums and percentages in their sources. The threshold is refit daily from the recorded calls (`refit_actor_threshold`; `app/data/claim_actor_threshold.json` until the first refit). No span is labelled by hand. Replayed on the 328 recorded claim calls it composes every claim the kNN vote over 970 hand-labelled spans did, and one more.
+- **Action Center relevance** (`app/policy_relevance.py`) labels its own reference: every feed article it judges is stored with the label its publisher's filing gives it (a politics-only feed or a politics desk's URL section = relevant; a world feed or a foreign or arts desk = not) or that naming a sitting member, justice, the president or a federal agency gives it (relevant). The vote is the similarity-weighted share of relevant articles among the k nearest, with k and the threshold refit once a day by leave-one-out F0.5. No hand labels.
 - **Commemorative bill detection** (`analyze/commemorative.py`) gives Legislative Effectiveness Volden & Wiseman's 1x tier for bills like post-office namings and Gold Medals: the margin between commemorative and substantive prototypes on the similarity model, over a threshold calibrated against V&W's own per-member commemorative counts (`scripts/calibrate_commemorative.py`, written to `app/data/commemorative_calibration.json`).
 
 ### Disclosed exceptions
@@ -489,13 +490,14 @@ Every hour at :15
        │         listing unrelated stories, or a headline and body telling
        │         the same unrelated stories one item each — "<A>. And, <B>":
        │         5 of 1,473 stored articles, all briefings), then a kNN
-       │         vote: each article's 41 nearest of 827 hand-labelled feed
-       │         articles, weighted by similarity; keep it if >= 80% of the
-       │         weight is relevant (app/data/policy_relevance_*.json).
-       │         Measured on articles 1-6 weeks past the reference set:
-       │         precision 0.89-0.97, recall
-       │         0.76-0.87, where the 24 policy prototypes it replaced kept
-       │         0.61-0.67 relevant and found 0.73-0.77
+       │         vote among the k nearest feed articles already judged
+       │         (feed_articles), each labelled by its publisher's filing
+       │         (politics feed or desk = yes, world feed or desk = no)
+       │         or by naming a sitting official or federal agency (yes);
+       │         k and the vote threshold refit daily, nothing labelled by
+       │         hand (app/policy_relevance.py). Precision 0.88-0.96
+       │         against the hand-label vote it replaced (0.89-0.98), and
+       │         one more issue than it over 2026-10-02..15
        │         (docs/research/action-center-relevance.md)
        ▼
   3. CLUSTER ─── Complete linkage on headline + first 200 characters of

@@ -77,6 +77,7 @@ from app.pipeline.analyze.grounding import (
     proposal_stated_as_fact,
 )
 from app.pipeline.analyze import claims as claim_layer
+from app import policy_relevance
 from app.pipeline.analyze import story_actor
 from app.pipeline.analyze.post_composer import CLAIM_TASK, compose, refit_actor_threshold
 from app.pipeline.analyze.ollama_client import call_llm, extract_json
@@ -181,69 +182,28 @@ _POLICY_PROTOTYPES = [
 # there, unmeasured. See docs/research/action-center-relevance.md.
 POLICY_RELEVANCE_THRESHOLD = 0.20
 
-# The article relevance gate: a similarity-weighted vote among the
-# POLICY_RELEVANCE_K nearest hand-labelled feed articles in
-# app/data/policy_relevance_examples.json (kNN, Cover & Hart 1967; the
-# labelled set plays the part prototypes play elsewhere — the human
-# knowledge that seeds the classifier). k and the vote threshold come from
-# app/data/policy_relevance_calibration.json, written by
-# scripts/calibrate_policy_relevance.py, which also records the held-out
-# measurement. Measured 2026-10-10 (k=41, vote >= 0.80), with the reference
-# set cut at a date and tested on feed articles a week or more after it (so
-# one story can't sit on both sides), against the prototype gate on the
-# same articles, at three cuts: precision 0.89-0.97 vs 0.61-0.67, recall
-# 0.76-0.87 vs 0.73-0.77, McNemar p = 1e-12, 1e-10, 3e-5 — the test sets
-# run one to six weeks past their reference set, so that much topic drift
-# is inside the measurement. Its known weakness is a new U.S. story whose
-# nearest examples are foreign coverage of the same place (the first day of
-# a U.S.-Russia deal read like Ukraine-war coverage). Rerun the script when
-# examples are added (test_policy_relevance_calibration_matches_examples
-# fails until you do).
+# The article relevance gate lives in policy_relevance.py: a kNN vote over
+# feed articles labelled by their publishers' own filing, refit daily, never
+# by hand (see its docstring).
+#
+# The relevance seed's categories (app/data/policy_relevance_examples.json)
+# still label the principal-actor class vote (story_actor, _principal_actor).
 _DATA_DIR = pathlib.Path(__file__).resolve().parents[2] / "data"
-_RELEVANCE_EXAMPLES_PATH = _DATA_DIR / "policy_relevance_examples.json"
-_RELEVANCE_CALIBRATION_PATH = _DATA_DIR / "policy_relevance_calibration.json"
+_STORY_CLASS_EXAMPLES_PATH = _DATA_DIR / "policy_relevance_examples.json"
 _relevance_examples_cache: list[dict] | None = None
-_relevance_calibration_cache: dict | None = None
 _relevance_reference_cache: dict[int, np.ndarray] = {}
 
 
 def relevance_examples() -> list[dict]:
+    """The seed's rows, for story_actor's class vote (their `category`)."""
     global _relevance_examples_cache
     if _relevance_examples_cache is None:
-        _relevance_examples_cache = json.loads(_RELEVANCE_EXAMPLES_PATH.read_text())["examples"]
+        _relevance_examples_cache = json.loads(_STORY_CLASS_EXAMPLES_PATH.read_text())["examples"]
     return _relevance_examples_cache
 
 
-def relevance_calibration() -> dict:
-    global _relevance_calibration_cache
-    if _relevance_calibration_cache is None:
-        _relevance_calibration_cache = json.loads(_RELEVANCE_CALIBRATION_PATH.read_text())
-    return _relevance_calibration_cache
-
-
-def relevance_examples_hash() -> str:
-    """Identifies the labelled set a calibration was fitted to."""
-    payload = json.dumps([[e["text"], e["relevant"]] for e in relevance_examples()])
-    return hashlib.sha256(payload.encode()).hexdigest()[:16]
-
-
-def relevance_votes(
-    article_embeddings: np.ndarray, reference: np.ndarray, labels: np.ndarray, k: int,
-) -> np.ndarray:
-    """Similarity-weighted share of relevant examples among each article's k
-    nearest (unit vectors, so the dot product is the cosine). Negative
-    similarities weigh nothing; an article with no positive neighbour
-    scores 0."""
-    sims = article_embeddings @ reference.T
-    k = min(k, reference.shape[0])
-    nearest = np.argpartition(-sims, k - 1, axis=1)[:, :k]
-    weights = np.take_along_axis(sims, nearest, axis=1).clip(min=0.0)
-    relevant = labels[nearest]
-    return (weights * relevant).sum(axis=1) / np.maximum(weights.sum(axis=1), 1e-9)
-
-
 def _relevance_reference() -> np.ndarray:
-    """The labelled examples' embeddings, once per similarity model."""
+    """The seed rows' embeddings, once per similarity model."""
     key = id(get_similarity_model())
     if key not in _relevance_reference_cache:
         _relevance_reference_cache[key] = _embed_texts_sim([e["text"] for e in relevance_examples()])
@@ -1543,8 +1503,9 @@ def _digest_reason(article: NewsArticle) -> str | None:
     return None
 
 
-def _filter_policy_relevant(articles: list[NewsArticle]) -> list[tuple[NewsArticle, np.ndarray]]:
-    """Keep only articles about US policy/legislation; drop digest articles."""
+def _filter_policy_relevant(db: Session, articles: list[NewsArticle]) -> list[tuple[NewsArticle, np.ndarray]]:
+    """Keep only articles about US policy/legislation (policy_relevance.judge);
+    drop digest articles."""
     if not articles:
         return []
 
@@ -1572,24 +1533,12 @@ def _filter_policy_relevant(articles: list[NewsArticle]) -> list[tuple[NewsArtic
     if not specific:
         return []
 
-    texts = [f"{a.title}. {a.summary[:200]}" for a in specific]
-    article_embeddings = _embed_texts_sim(texts)
-    labels = np.array([e["relevant"] for e in relevance_examples()], dtype=float)
-    calibration = relevance_calibration()
-    k = int(calibration["k"])
-    threshold = float(calibration["threshold"])
-    votes = relevance_votes(article_embeddings, _relevance_reference(), labels, k)
-    calibration_drift.observe("policy_relevance", votes, threshold)
-
-    relevant = [
-        (article, article_embeddings[i])
-        for i, (article, vote) in enumerate(zip(specific, votes))
-        if vote >= threshold
-    ]
+    judged, fitted = policy_relevance.judge(db, specific)
+    relevant = [(article, embedding) for article, embedding, _ in judged]
     logger.info(
         "Policy relevance filter: %d/%d articles passed "
-        "(%d digests dropped, kNN k=%d, vote threshold=%.2f)",
-        len(relevant), len(articles), n_digests, k, threshold,
+        "(%d digests dropped, kNN k=%s, vote threshold=%s)",
+        len(relevant), len(articles), n_digests, fitted.get("k"), fitted.get("threshold"),
     )
     return relevant
 
@@ -5066,7 +5015,7 @@ def _run_refresh(db: Session) -> int:
 
     # 2. Filter for policy relevance
     _set_refresh_state(stage="filter")
-    relevant = _filter_policy_relevant(articles)
+    relevant = _filter_policy_relevant(db, articles)
     if not relevant:
         logger.warning("No policy-relevant articles found")
         action_metrics.increment("refresh_aborted_no_relevant_articles")

@@ -22,7 +22,7 @@ flowchart TB
     FETCH["<b>1. FETCH</b><br/>7 RSS feeds across 6 newsrooms<br/>+ Google Trends + Bluesky trending<br/>48h article window · direct URLs only"]
     FETCH --> FILTER
 
-    FILTER["<b>2. FILTER</b><br/>drop digests · kNN vote among the<br/>41 nearest of 827 labelled feed articles"]
+    FILTER["<b>2. FILTER</b><br/>drop digests · kNN vote among stored<br/>feed articles their publishers filed"]
     FILTER --> RELCHECK{"relevant share ≥ 0.80?"}
     RELCHECK -->|no| DROP(["Discard — off topic"])
     RELCHECK -->|yes| CLUSTER
@@ -80,14 +80,17 @@ within minutes. Rank first and every "top issue" is the same story from AP,
 NPR, BBC and PBS. Clustering first, then ranking by source breadth, surfaces
 *distinct* stories.
 
-**Relevance is a vote among labelled articles, not a similarity bar.** The 24
+**Relevance is a vote among publisher-filed articles, not a similarity bar.** The 24
 policy prototypes and their 0.20 bar were meant to be permissive, on the theory
 that extraction catches false positives. Measured on 602 labelled feed articles
 they kept 62% relevant and still missed a fifth of the relevant ones: disasters,
 foreign politics, crime and markets passed (extraction can find a verbatim
 claim in any of them) while campaign coverage fell under the bar. The kNN vote
 keeps 89-97% relevant articles and finds 76-87%, on articles one to six weeks
-past its reference set (`docs/research/action-center-relevance.md`). The
+past its reference set (`docs/research/action-center-relevance.md`). Since
+2026-10-16 the reference labels itself: each judged article is stored with
+the label its publisher's filing, or a named official or agency, gives it,
+and k and the threshold are refit daily (`app/policy_relevance.py`). The
 prototypes still mask trending topics, unmeasured there.
 
 **The full story is claims, not prose.** Built in the rank loop while the
@@ -275,7 +278,7 @@ list, not a neutral sample of all coverage.
 |---|---|
 | Whole pipeline | `backend/app/pipeline/analyze/action_center.py` |
 | Ranking | `action_center.py::_rank_clusters` |
-| Article relevance gate (kNN) | `action_center.py::relevance_votes`, `app/data/policy_relevance_examples.json`, `app/data/policy_relevance_calibration.json`, `scripts/calibrate_policy_relevance.py` |
+| Article relevance gate (kNN) | `app/policy_relevance.py` (`judge`, `fit`), `feed_articles` table, `news_feeds.publisher_scope` (`NEWS_FEEDS` scope/sections), seed `app/data/policy_relevance_examples.json` |
 | Trending-topic mask prototypes | `action_center.py::_POLICY_PROTOTYPES` |
 | Feed list | `backend/app/pipeline/fetch/news_feeds.py::NEWS_FEEDS` |
 | Trending | `backend/app/pipeline/fetch/trending.py` |
