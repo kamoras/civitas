@@ -65,6 +65,7 @@ locally on a single self-hosted device with zero cloud AI calls.
 - **Branches covered**: Senate (100 senators), House (435 representatives), Presidents (historical + modern), Supreme Court (9 justices)
 - **News Feeds**: RSS parsing (NPR, PBS, BBC, The Hill, Politico, Roll Call) + Google Trends + Bluesky trending for Action Center; 41 per-state newsrooms for election races
 - **Action Center**: Three tabs — Today (the day's issues, what a reader can do about each, open comment periods), Ongoing (national monitors: auto-detected ongoing concerns, and those closed in the last 60 days), Archive (year-in-review timeline). Elections live on `/elections`, find-your-members on `/politicians`
+- **Nominations**: every presidential nomination this Congress from Congress.gov (daily, `fetch/nominations.py`), with status, committee, hearings, time to confirm and each roll call that names it (`/congress/nominations`)
 - **Elections**: State index → per-state ballot page (federal contests + statewide ballot measures, quoted verbatim) → race/candidate detail with FEC financials
 
 All services, models, and data run on-device. No data leaves the server.
@@ -2043,6 +2044,7 @@ the pending list).
 | Public API v1 + its MCP server (spec generated from the routes, rendered at `/developers`) | `backend/app/api/public.py`, `backend/app/api/public_mcp.py`, `app/schemas.py` ("Public API v1"), `tests/test_public_api_contract.py`, `frontend/src/app/developers/page.tsx`, `frontend/src/lib/openapi.ts` |
 | Votes with the president's stated positions (OMB SAPs, matching, per-member rate, expected rate by seat; informational, not scored) | `backend/app/pipeline/fetch/omb_statements.py`, `analyze/sap_position.py`, `analyze/presidential_support.py`, `services/presidential_support_service.py`, `frontend/src/components/presidentialSupport/`, `frontend/src/app/congress/president/` |
 | Federal agencies: weekly Register list + USAspending budgets, name crosswalk, agency pages | `backend/app/pipeline/fetch/agencies.py`, `backend/app/api/agencies.py`, `backend/scripts/calibrate_agency_crosswalk.py` (`app/data/agency_crosswalk.json`), `frontend/src/app/agencies/` |
+| Presidential nominations (daily Congress.gov sync, FJC join, list/stats/detail, roll-call links) | `backend/app/pipeline/fetch/nominations.py`, `backend/app/services/nomination_service.py`, `services/nomination_links.py`, `backend/app/api/nominations.py`, `frontend/src/app/congress/nominations/` |
 | Explore hybrid search ranking (RRF fusion, priors, dedup, diversity) | `backend/app/services/explore_search.py` |
 | Explore keyword index (FTS5 + BM25F) | `backend/app/pipeline/lexical_index.py` |
 | Document citation graph + PageRank authority | `backend/app/pipeline/analyze/document_authority.py` |

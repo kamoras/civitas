@@ -76,6 +76,7 @@ export const SECTIONS = {
       { key: "reports", label: "Reports", href: "/congress" },
       { key: "bills", label: "Bills", href: "/congress/bills" },
       { key: "committees", label: "Committees", href: "/congress/committees" },
+      { key: "nominations", label: "Nominations", href: "/congress/nominations" },
       // "Votes with the president", not "With the president": the page is
       // how often members voted with the president's stated positions.
       { key: "president", label: "Votes with the president", href: "/congress/president/house" },

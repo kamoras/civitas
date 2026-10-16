@@ -15,6 +15,7 @@ from app.api.feedback import router as feedback_router
 from app.api.health import router as health_router
 from app.api.justices import router as justices_router
 from app.api.leaderboard import router as leaderboard_router
+from app.api.nominations import router as nominations_router
 from app.api.notable import router as notable_router
 from app.api.pipeline import router as pipeline_router
 from app.api.photos import router as photos_router
@@ -49,6 +50,7 @@ api_router.include_router(elections_router, tags=["elections"])
 api_router.include_router(redistricting_router, tags=["elections"])
 api_router.include_router(bills_router, tags=["bills"])
 api_router.include_router(congress_router, tags=["congress"])
+api_router.include_router(nominations_router, tags=["nominations"])
 api_router.include_router(cards_router, tags=["cards"])
 api_router.include_router(compare_router, tags=["compare"])
 api_router.include_router(this_week_router, tags=["this-week"])
