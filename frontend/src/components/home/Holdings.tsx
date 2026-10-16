@@ -94,8 +94,8 @@ export default async function Holdings() {
       </dl>
 
       <p className="mt-4 font-display text-base leading-relaxed text-ink-lo">
-        Civitas is an open source, volunteer-run project, not a registered organization of any kind.
-        It takes no money from parties, candidates or PACs, requires no account, and sells nothing.
+        Civitas is run by volunteers. It is not a company, a charity or any kind of registered
+        group. It sells nothing.
       </p>
     </aside>
   );

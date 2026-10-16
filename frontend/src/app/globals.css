@@ -40,6 +40,12 @@
 }
 
 /* ===== BASE STYLES ===== */
+/* The header is fixed: a control reached by keyboard (or a #fragment)
+   scrolls to below it, never under it (WCAG 2.2 2.4.11). */
+html {
+  scroll-padding-top: var(--header-clearance);
+}
+
 body {
   color: var(--foreground);
   background: var(--background);
@@ -410,38 +416,6 @@ a[target="_blank"] {
   .overprint::before,
   .overprint::after {
     display: none;
-  }
-}
-
-/* Rubber stamp — the governance disclosure, asserted rather than murmured.
-
-   The double ring is one box-shadow rather than a wrapper element: an inset
-   of the page colour, then the outer halo, which reads as ink bleed around
-   a stamped border. The rotation is deliberate and small; anything past
-   ~3deg starts to read as a sticker. */
-.stamp {
-  /* A rubber stamp, in stamp ink.
-
-     It was magenta with a magenta glow, which made a compliance notice the
-     most saturated thing on the homepage and read as a sticker rather than an
-     impression. Real stamps are red, sit flat on the page, and are slightly
-     off-register — the tilt below is the only part of that worth keeping.
-     The glow is gone; a stamp does not emit light. */
-  display: inline-block;
-  border: 2px solid var(--signal-red);
-  color: var(--signal-red);
-  font-family: var(--font-share-tech), ui-monospace, monospace;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  padding: 8px 13px;
-  transform: rotate(-2.5deg);
-}
-
-/* The tilt is decoration, not information — straighten it when a reader has
-   asked for less visual noise. The stamp still reads as a stamp. */
-@media (prefers-reduced-motion: reduce) {
-  .stamp {
-    transform: none;
   }
 }
 

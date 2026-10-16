@@ -51,7 +51,7 @@ const KIND: Record<NotableEntry["kind"], { tag: string; tone: string }> = {
   loneBreak: { tag: "LONE BREAK", tone: "text-signal-cyan" },
 };
 
-// The masthead's own command style ("[ PULL THE FILE ]"), sized to a 32px
+// The site's bracketed command style (the header search's "[ SEARCH ]"), sized to a 32px
 // touch target.
 const COMMAND =
   "inline-flex min-h-[32px] items-center font-mono text-xs tracking-[0.12em] text-phos-mid hover:text-phos";

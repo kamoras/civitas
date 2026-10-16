@@ -9,6 +9,35 @@ vi.mock("./RecordsBand", () => ({ default: () => null }));
 
 const KEYS = Object.keys(SECTIONS) as SectionKey[];
 
+describe("Navbar search", () => {
+  it("opens a plain labelled GET form to /search?q=, focused", () => {
+    render(<Navbar />);
+    const [toggle] = screen.getAllByRole("button", { name: "SEARCH" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    const box = screen.getByLabelText("Search the record");
+    expect(box).toHaveFocus();
+    expect(box).toHaveAttribute("name", "q");
+    const form = box.closest("form")!;
+    expect(form).toHaveAttribute("action", "/search");
+    expect(form).toHaveAttribute("method", "get");
+    expect(within(form).getByRole("button", { name: "[ SEARCH ]" })).toHaveAttribute(
+      "type",
+      "submit"
+    );
+  });
+
+  it("closes on Escape and gives focus back to its button", () => {
+    render(<Navbar />);
+    const [toggle] = screen.getAllByRole("button", { name: "SEARCH" });
+    fireEvent.click(toggle);
+    fireEvent.keyDown(screen.getByLabelText("Search the record"), { key: "Escape" });
+    expect(screen.queryByLabelText("Search the record")).toBeNull();
+    expect(toggle).toHaveFocus();
+  });
+});
+
 describe("Navbar", () => {
   it("discloses a section's pages with a button, not a menu, and Escape closes it", () => {
     render(<Navbar />);
@@ -103,9 +132,9 @@ describe("Navbar row overflow guard", () => {
   it("keeps the row where it fits with the gap to spare", () => {
     const row = measured(900, 116, 599);
     expect(row.className).toContain("min-[56rem]:flex");
-    expect(screen.getByRole("button", { name: "Open navigation menu" }).className).toContain(
-      "min-[56rem]:hidden"
-    );
+    // MENU and the MENU layout's SEARCH share one wrapper, hidden with the row shown.
+    const menu = screen.getByRole("button", { name: "Open navigation menu" });
+    expect(menu.parentElement!.className).toContain("min-[56rem]:hidden");
     vi.unstubAllGlobals();
   });
 
@@ -116,7 +145,7 @@ describe("Navbar row overflow guard", () => {
     expect(row.className).toContain("invisible");
     expect(row).toHaveAttribute("inert");
     const menu = screen.getByRole("button", { name: "Open navigation menu" });
-    expect(menu.className).not.toContain("min-[56rem]:hidden");
+    expect(menu.parentElement!.className).not.toContain("min-[56rem]:hidden");
     fireEvent.click(menu);
     expect(document.getElementById("mobile-menu")!.className).not.toContain("min-[56rem]:hidden");
     vi.unstubAllGlobals();
