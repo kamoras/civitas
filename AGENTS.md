@@ -1147,7 +1147,16 @@ the admin status keeps `check-and-deploy.sh` from restarting between two
 links. `ops_alerts.check_pipeline_staleness` still watches for a pipeline
 with no successful completion in `PIPELINE_STALE_ALERT_DAYS`;
 `check_pipeline_overrun` watches the opposite case of a run that started
-and is taking too long.
+and is taking too long; its alert names the active step, that step's
+detail and how long ago the run last wrote progress, so a slow step that is
+working reads differently from a hung one. A step that loops over thousands
+of upstream reads reports through `ProgressTracker.heartbeat` (written at
+most every `HEARTBEAT_INTERVAL_S`, with the step's request count and
+rate-limit wait appended, each write one short commit): the House
+sponsorship step once spent six hours on a cache warm-up of about 19,000
+bills with an empty detail and a frozen elapsed time (2026-10-16). The
+admin status computes a running row's elapsed time from its start, never
+from the stored value.
 
 Outside the chain, the **agency sync** (`fetch/agencies.py`,
 `scheduler._agency_sync`, `AGENCY_SYNC` lease) reads the Federal Register's

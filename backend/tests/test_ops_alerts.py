@@ -5,6 +5,7 @@ Confirmed live as contributing to stock-trades data going stale 4+ days
 and supplementary data 1+ day with nothing telling an operator to look.
 """
 
+import json
 from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -65,6 +66,33 @@ class TestCheckPipelineOverrunAllFourPipelines:
         mock_alert = _check(db_session)
         mock_alert.assert_called_once()
         assert label in mock_alert.call_args[0][0]
+
+    def test_the_alert_names_the_active_step_and_how_long_it_has_been_quiet(self, db_session):
+        """A cache warm-up night overruns while working: the alert says
+        where the run is and that it wrote progress minutes ago."""
+        steps = [
+            {"key": "fetch_members", "label": "Fetch members", "status": "done"},
+            {"key": "sponsorship", "label": "Sponsorship", "status": "active", "total": 9, "done": 4,
+             "detail": "member 4 of 9 · 12,000 sponsored bills read"},
+        ]
+        db_session.add(HousePipelineRun(
+            started_at=utcnow() - timedelta(hours=9), status=PipelineStatus.RUNNING,
+            progress_detail=json.dumps(steps), elapsed_seconds=9 * 3600 - 120,
+        ))
+        db_session.commit()
+        body = _check(db_session).call_args[0][1]
+        assert "In step 'sponsorship' (Sponsorship), 4 of 9: member 4 of 9 · 12,000 sponsored bills read" in body
+        assert "Last progress written 2 min ago." in body
+        assert "hang" not in body
+
+    def test_the_alert_points_at_a_hang_when_progress_stopped(self, db_session):
+        steps = [{"key": "sponsorship", "label": "Sponsorship", "status": "active"}]
+        db_session.add(HousePipelineRun(
+            started_at=utcnow() - timedelta(hours=9), status=PipelineStatus.RUNNING,
+            progress_detail=json.dumps(steps), elapsed_seconds=149,
+        ))
+        db_session.commit()
+        assert "check the pipeline service log for a hang" in _check(db_session).call_args[0][1]
 
     @pytest.mark.parametrize("model, hours_ago", [
         pytest.param(SupplementaryPipelineRun, 5, id="supplementary_within_its_8h_budget"),

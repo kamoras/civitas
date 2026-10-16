@@ -330,3 +330,38 @@ def test_a_failed_step_is_resolved_when_it_next_completes(monkeypatch, db_sessio
     tracker.complete("fetch_a")
     assert sent == ["step-failed-PipelineRun-fetch_a"]
     assert resolved == sent
+
+
+def test_heartbeat_persists_a_hot_loops_progress_at_most_every_interval(db_session, monkeypatch):
+    """A step reading thousands of bills shows its count and keeps the
+    run's elapsed time moving, without a commit per bill."""
+    run = HousePipelineRun(status="running")
+    tracker = _tracker(db_session, run)
+    clock = [1000.0]
+    monkeypatch.setattr(progress_tracker.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(progress_tracker.time, "time", lambda: clock[0])
+    tracker.begin("fetch_a", total=10)
+
+    tracker.heartbeat("fetch_a", done=1, detail="1 bills read")
+    clock[0] += 1
+    tracker.heartbeat("fetch_a", done=2, detail="2 bills read")  # inside the interval: not written
+    step = json.loads(run.progress_detail)[0]
+    assert (step["done"], step["detail"]) == (1, "1 bills read")
+    assert run.elapsed_seconds == 1000.0
+
+    clock[0] += progress_tracker.HEARTBEAT_INTERVAL_S
+    tracker.heartbeat("fetch_a", done=3, detail="3 bills read")
+    step = json.loads(run.progress_detail)[0]
+    assert (step["done"], step["detail"]) == (3, "3 bills read")
+    assert run.elapsed_seconds == 1000.0 + 1 + progress_tracker.HEARTBEAT_INTERVAL_S
+
+
+def test_heartbeat_appends_the_steps_upstream_requests_and_wait(db_session, monkeypatch):
+    run = HousePipelineRun(status="running")
+    tracker = _tracker(db_session, run)
+    snapshots = iter([{"congress": (100, 30.0)}, {"congress": (2600, 3630.0)}])
+    monkeypatch.setattr(progress_tracker.rate_limiter, "snapshot", lambda: next(snapshots))
+    tracker.begin("fetch_a")
+    tracker.heartbeat("fetch_a", detail="member 3 of 9")
+    step = json.loads(run.progress_detail)[0]
+    assert step["detail"] == "member 3 of 9 · 2,500 upstream requests, 60m rate-limit wait"

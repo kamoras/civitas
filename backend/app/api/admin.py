@@ -114,8 +114,9 @@ def require_admin(authorization: str | None = Header(default=None)) -> None:
 def _live_elapsed(run) -> float | None:
     """Elapsed seconds for a pipeline run row, computed live if still running.
 
-    A "running" row's stored elapsed_seconds is stale (only written on
-    completion), so while it's in flight we compute it against now instead.
+    A "running" row's stored elapsed_seconds is as old as its last progress
+    write (a step that writes none for hours freezes it), so while it's in
+    flight we compute it against now instead.
     """
     if run.status == PipelineStatus.RUNNING and run.started_at:
         return round((utcnow() - run.started_at).total_seconds(), 1)
@@ -140,7 +141,7 @@ def _history_entry(run, pipeline_type: str, extra: dict) -> dict:
         "startedAt": run.started_at.isoformat() if run.started_at else None,
         "completedAt": run.completed_at.isoformat() if run.completed_at else None,
         "status": run.status,
-        "elapsedSeconds": run.elapsed_seconds,
+        "elapsedSeconds": _live_elapsed(run),
         "errorMessage": run.error_message,
         "errorDetail": run.error_detail,
         **extra,
@@ -929,7 +930,7 @@ async def admin_dashboard(request: Request, db: Session = Depends(get_db)):
             "llmCalls": last_run.llm_calls,
             "cacheHits": last_run.cache_hits,
             "cacheMisses": last_run.cache_misses,
-            "elapsedSeconds": last_run.elapsed_seconds,
+            "elapsedSeconds": _live_elapsed(last_run),
             "errorMessage": last_run.error_message,
             "errorDetail": last_run.error_detail,
             "progressSteps": dash_progress_steps,

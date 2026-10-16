@@ -707,12 +707,39 @@ def check_pipeline_overrun() -> None:
                 f"{label} pipeline overrunning",
                 f"{label} pipeline run #{run.id} has been running for "
                 f"{hours:.1f}h (budget {budget.total_seconds() / 3600:.0f}h). "
-                f"Started {run.started_at.isoformat()}. Check the admin dashboard; "
-                f"a run past 12h will be marked stale and the next attempt of "
+                f"Started {run.started_at.isoformat()}. {_active_step_line(run)}"
+                f"A run past 12h will be marked stale and the next attempt of "
                 f"this pipeline may start concurrently.",
                 dedupe_key=f"overrun-{label.lower().replace(' ', '-')}-{run.id}",
                 condition=condition,
             )
+
+
+def _active_step_line(run) -> str:
+    """Where an overrunning run is, from its progress row, so the alert
+    tells a slow step that is working (a cache warm-up after a change to
+    what is cached: tens of thousands of rate-limited reads, counted in the
+    step's detail) from one that has stopped. Its elapsed time advances
+    with each progress write, so the time since the last one is how long
+    the step has gone quiet."""
+    try:
+        steps = json.loads(run.progress_detail or "[]")
+    except (TypeError, ValueError):
+        steps = []
+    step = next((s for s in steps if isinstance(s, dict) and s.get("status") == "active"), None)
+    if step is None:
+        return "No step is recorded as active; check the admin dashboard. "
+    where = f"In step '{step.get('key')}' ({step.get('label', '')})"
+    if step.get("total") is not None:
+        where += f", {step.get('done', 0)} of {step['total']}"
+    if step.get("detail"):
+        where += f": {step['detail']}"
+    if run.elapsed_seconds is not None:
+        quiet_min = ((utcnow() - run.started_at).total_seconds() - run.elapsed_seconds) / 60
+        where += f". Last progress written {quiet_min:.0f} min ago"
+        if quiet_min >= 30:
+            where += " (no progress since: check the pipeline service log for a hang)"
+    return where + ". "
 
 
 # How long the scheduler's heartbeat (scheduler._record_next_run, every 5
