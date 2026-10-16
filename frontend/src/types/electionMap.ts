@@ -257,3 +257,28 @@ export interface ElectionMapData {
   };
   seats: MapSeat[];
 }
+
+/** GET /api/elections/map/seats: one seat of the map in a line, for the
+ * pages that link to it (a state's ballot, a member's profile). Every
+ * label is the map build's own. */
+export interface MapSeatLine {
+  id: string;
+  chamber: MapChamberKey;
+  state: string;
+  district: number | null;
+  special: boolean;
+  leanLabel: string | null;
+  status: MapSeat["status"];
+  /** "D+8 to R+2" for a seat with a range; null otherwise. */
+  range80Label: string | null;
+  close: boolean | null;
+  reason: string | null;
+}
+
+export interface MapSeatLines {
+  cycle: number;
+  asOf: string;
+  stale: boolean;
+  seats: MapSeatLine[];
+  pollSource: { attribution: string; license: string; url: string };
+}

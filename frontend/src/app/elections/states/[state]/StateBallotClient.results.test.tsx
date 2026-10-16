@@ -11,6 +11,8 @@ import type { LiveResults, RaceWithCandidates, StateBallot } from "@/types/elect
 
 const fetchLiveResults = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/api", () => ({
+  // The seat map is not shown (out of the campaign, or not built): no lines.
+  fetchMapSeats: vi.fn().mockResolvedValue(null),
   fetchTownsForState: vi.fn().mockResolvedValue([]),
   fetchTownBallot: vi.fn(),
   fetchLiveResults,
