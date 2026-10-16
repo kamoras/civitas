@@ -45,6 +45,12 @@ statewide measures on every pass until the results
 window closes. After that nothing rewrites it, and `/elections/{cycle}`
 serves it for good.
 
+The archive page also checks that frozen map against the count
+(`app/forecast/accountability.grade`, read on request from the archive row):
+each seat whose count its source lists official is checked against the 80%
+and 95% ranges it was published with, and its swing from its usual vote is
+mapped. A count not yet official is waiting, never graded.
+
 ## The run
 
 Phases are `ELECTION_PIPELINE_STEPS` in `election_pipeline.py`. Each one

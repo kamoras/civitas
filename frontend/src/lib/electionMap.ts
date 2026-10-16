@@ -77,6 +77,11 @@ export function chamberView(r: ElectionMapResponse, chamber: MapChamber): Electi
  * statically prerendered routes"), which could open the Difference view
  * on a reader who asked for the map. Do not "tidy" the query away.
  */
+/** The source line of the held election's check and swing map (archive
+ * page and the hub's card), inside every share image of them. */
+export const ACCOUNTABILITY_SOURCE =
+  "Civitas: the pre-election map as frozen on election day; counts from each state's own results system, used once the state lists them official; usual vote from official returns (MEDSL, FEC, VEST, Census); polls: Wikipedia contributors, CC BY-SA 4.0";
+
 export const ELECTION_MAP_HREF = "/elections/map?chamber=senate&view=usual";
 
 export function mapHref(view: MapView, chamber: MapChamber = "senate", seat?: string): string {
@@ -397,13 +402,20 @@ export function stateAriaLabel(
 /* ── House tile layout: equal-size tiles, one per seat, each state a
    near-square block, the blocks in rows by STATE_TILES' rough geography. ─ */
 
-export interface HouseBlock {
+/** What the House layout needs of a seat: where it is. The swing map
+ * (archive) lays out its own seat rows with it too. */
+export interface TileSeat {
+  state: string;
+  district?: number | null;
+}
+
+export interface HouseBlock<T extends TileSeat = MapSeat> {
   state: string;
   x: number;
   y: number;
   cols: number;
   rows: number;
-  seats: MapSeat[];
+  seats: T[];
 }
 
 export const HOUSE_TILE = 10;
@@ -414,12 +426,14 @@ const ROW_GAP = 4;
 
 /** Block positions (SVG units) and the canvas size. Pure layout: the same
  * seats always give the same picture. */
-export function houseLayout(seats: MapSeat[]): {
-  blocks: HouseBlock[];
+export function houseLayout<T extends TileSeat = MapSeat>(
+  seats: T[]
+): {
+  blocks: HouseBlock<T>[];
   width: number;
   height: number;
 } {
-  const byState = new Map<string, MapSeat[]>();
+  const byState = new Map<string, T[]>();
   for (const s of seats) byState.set(s.state, [...(byState.get(s.state) ?? []), s]);
   for (const list of byState.values()) list.sort((a, b) => (a.district ?? 0) - (b.district ?? 0));
   const step = HOUSE_TILE + HOUSE_GAP;
@@ -429,14 +443,14 @@ export function houseLayout(seats: MapSeat[]): {
     if (!pos) continue;
     rows.set(pos[1], [...(rows.get(pos[1]) ?? []), { state: st, col: pos[0] }]);
   }
-  const placed: HouseBlock[] = [];
+  const placed: HouseBlock<T>[] = [];
   let y = 0;
   let width = 0;
-  const rowBlocks: HouseBlock[][] = [];
+  const rowBlocks: HouseBlock<T>[][] = [];
   for (const r of [...rows.keys()].sort((a, b) => a - b)) {
     let x = 0;
     let tallest = 0;
-    const line: HouseBlock[] = [];
+    const line: HouseBlock<T>[] = [];
     for (const { state } of rows.get(r)!.sort((a, b) => a.col - b.col)) {
       const list = byState.get(state)!;
       const cols = Math.ceil(Math.sqrt(list.length));

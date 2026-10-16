@@ -10,6 +10,7 @@ import { absoluteUrl, notFoundMetadata, pageMetadata } from "@/lib/site";
 import { describeElectionArchive } from "@/lib/seo";
 import type { ArchiveRecord } from "@/types/electionArchive";
 import type { ElectionMapResponse } from "@/types/electionMap";
+import type { MapAccountability } from "@/types/mapAccountability";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
@@ -40,6 +41,14 @@ function fetchArchive(cycle: number): Promise<ArchiveRecord | null> {
 function fetchArchiveMap(cycle: number, chamber: string): Promise<ElectionMapResponse | null> {
   return fetchRecord<ElectionMapResponse>(
     `${BACKEND}/api/elections/archive/${cycle}/map?chamber=${chamber}`,
+    { next: { revalidate: 300 } },
+    "chambers"
+  );
+}
+
+function fetchAccountability(cycle: number): Promise<MapAccountability | null> {
+  return fetchRecord<MapAccountability>(
+    `${BACKEND}/api/elections/archive/${cycle}/accountability`,
     { next: { revalidate: 300 } },
     "chambers"
   );
@@ -110,7 +119,9 @@ async function ArchivePage({
   const record = await fetchArchive(cycle);
   if (!record) notFound();
   const chamber = parseChamber(query.chamber);
-  const map = record.hasMap ? await fetchArchiveMap(cycle, chamber) : null;
+  const [map, accountability] = record.hasMap
+    ? await Promise.all([fetchArchiveMap(cycle, chamber), fetchAccountability(cycle)])
+    : [null, null];
   return (
     <div className="min-h-screen bg-surface-base font-sans text-ink-hi">
       <Navbar />
@@ -121,10 +132,10 @@ async function ArchivePage({
             eyebrow={`Elections · Archive · ${longDate(record.electionDay)}`}
             title={`The ${cycle} general election`}
           >
-            What Civitas recorded: the seat map as it stood before election day, each Senate and
-            House race&apos;s count as its state reported it, and the whole ballot the site showed
-            (federal, statewide, legislative and judicial contests, and statewide measures), quoted
-            from their sources.{" "}
+            What Civitas recorded: the seat map as it stood before election day and how its ranges
+            held against the official count, each Senate and House race&apos;s count as its state
+            reported it, and the whole ballot the site showed (federal, statewide, legislative and
+            judicial contests, and statewide measures), quoted from their sources.{" "}
             <Link href={ELECTIONS_ARCHIVE_HREF} className="text-ink-hi underline">
               Every archived election →
             </Link>
@@ -132,6 +143,7 @@ async function ArchivePage({
           <CycleArchive
             record={record}
             map={map}
+            accountability={accountability}
             initialView={parseView(query.view)}
             initialChamber={chamber}
             pageUrl={absoluteUrl(electionArchiveHref(cycle))}

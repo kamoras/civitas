@@ -1698,6 +1698,15 @@ wrong number on election night is worse than none:
   `/elections/{raceId}` link goes there once the site's election is a later
   one (`race_detail`'s `archiveCycle`). The same §7 rules hold there:
   quoted, and no race called.
+- The archive page checks the frozen map against the count
+  (`app/forecast/accountability.py`): a seat is graded only once its count
+  is official by the source's own flag, only against the archive's frozen
+  ranges (never the live file or a refit: no look-ahead), and in the map's
+  units (two-party margin, top two D and R, as the fit's training results).
+  Shares inside the 80% and 95% ranges carry exact binomial intervals,
+  per chamber and range basis, beside the coverage the map promised, and
+  the misses are listed. The swing map is the official margin minus twice
+  the lean. Every figure is the backend's; nothing is graded early.
 - A data reset inside the results window keeps the held election's ballot and
   count (`database.RESET_KEEPS_WHILE_RESULTS`) and the coverage markers its
   pages read beside them (statewide, judicial and ballot-basis `api_cache`
@@ -2064,6 +2073,7 @@ the pending list).
 | Election phase (campaign / election day / results) + results grace period | `backend/app/election_phase.py` |
 | Senate and House map: usual vote and poll ranges (pre-election; separate from scoring) | `backend/app/forecast/` (`model.py`, `polls.py`, `training_polls.py`, `build.py`), `backend/scripts/fit_forecast_model.py`, `backend/scripts/fetch_silver_bulletin_polls.py`, `backend/scripts/build_house_lean_history.py`, `app/data/forecast_model.json`, `forecast_house_model.json`, `forecast_house_lean.json`, `backend/app/api/election_map.py`, `frontend/src/components/elections/map/`, `frontend/src/lib/electionMap.ts` |
 | Live election-night results (vendor readers, sync, trust gates, events) | `backend/app/pipeline/fetch/election_results.py`, `backend/app/live_results/sync.py`, `fetch/poll_close.py`, each vendor's `fetch_general_results` |
+| The map's ranges against the official count, and the swing map (archive page, hub card) | `backend/app/forecast/accountability.py`, `backend/app/api/election_archive.py` (`/{cycle}/accountability`, `/{cycle}/swing.csv`), `frontend/src/components/elections/archive/MapAccountability.tsx`, `AccountabilityCard.tsx` |
 | Archive of each held election (frozen pre-election map, ballot, counts, measures) | `backend/app/election_archive.py`, `backend/app/api/election_archive.py`, `frontend/src/app/elections/[raceId]/page.tsx` (a year is an archive, anything else an old race link), `frontend/src/app/elections/archive/page.tsx`, `frontend/src/components/elections/archive/CycleArchive.tsx` |
 | Seat-flip DEVELOPING issues + election-night posts (feed, then Bluesky) | `backend/app/live_results/signals.py`, `live_results/bluesky.py` |
 | Results UI (map colouring, live updates, state results) | `frontend/src/lib/results.ts`, `frontend/src/hooks/useLiveResults.ts`, `frontend/src/components/elections/results/` |

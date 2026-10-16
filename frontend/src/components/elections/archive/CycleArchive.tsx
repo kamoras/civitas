@@ -1,5 +1,6 @@
 import Link from "next/link";
 import ElectionMap from "@/components/elections/map/ElectionMap";
+import MapAccountability from "@/components/elections/archive/MapAccountability";
 import BallotMeasureCard from "@/components/elections/BallotMeasureCard";
 import { statusTag } from "@/components/elections/results/RaceResult";
 import { candidateName, PRIMARY_RESULTS_CAVEAT } from "@/lib/elections";
@@ -15,6 +16,7 @@ import {
 import type { ArchiveRecord, ArchivedRace, ArchivedStateContests } from "@/types/electionArchive";
 import type { StatewideNominee } from "@/types/election";
 import type { ElectionMapResponse } from "@/types/electionMap";
+import type { MapAccountability as Accountability } from "@/types/mapAccountability";
 
 /** Whose list a race's candidates are, in words (candidateSource, decided
  * by the backend when the record was copied). */
@@ -235,6 +237,7 @@ function RaceEntry({ race, record }: { race: ArchivedRace; record: ArchiveRecord
 export default function CycleArchive({
   record,
   map,
+  accountability = null,
   initialView,
   initialChamber,
   pageUrl,
@@ -242,6 +245,9 @@ export default function CycleArchive({
   record: ArchiveRecord;
   /** The frozen map's first chamber; null when none was kept. */
   map: ElectionMapResponse | null;
+  /** The frozen map's ranges against the official counts, and the swing
+   * map; null when no map was kept. */
+  accountability?: Accountability | null;
   initialView: Parameters<typeof ElectionMap>[0]["initialView"];
   initialChamber: Parameters<typeof ElectionMap>[0]["initialChamber"];
   pageUrl: string;
@@ -302,6 +308,10 @@ export default function CycleArchive({
           />
         )}
       </section>
+
+      {accountability && (
+        <MapAccountability data={accountability} pageUrl={`${pageUrl}#map-check`} />
+      )}
 
       <section
         id="by-state"

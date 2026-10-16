@@ -21,6 +21,7 @@ from app.api.elections import phase_cache_s
 from app.api.response_helpers import CACHE_TTL_LIST_S, cached_json
 from app.database import get_db
 from app.election_phase import active_election
+from app.forecast import accountability
 from app.models import ElectionArchive
 
 router = APIRouter(prefix="/elections/archive")
@@ -73,6 +74,10 @@ def archive_index(db: Session = Depends(get_db)):
             "cycle": row.cycle, "electionDay": row.election_day,
             "recordAsOf": _iso(row.record_as_of), "mapAsOf": _iso(row.map_as_of),
             "hasMap": row.map_json is not None,
+            # The map's ranges against the official counts, in a line
+            # (null with no map kept).
+            "accountability": (accountability.summary(accountability.grade(
+                json.loads(row.map_json), json.loads(row.record_json))) if row.map_json else None),
             # Still being copied: the site is on this election's count.
             "stillCounting": election.cycle == row.cycle and election.shows_results,
             **_counts(json.loads(row.record_json)),
@@ -131,4 +136,37 @@ def archive_map_csv(cycle: int = CYCLE, db: Session = Depends(get_db)):
         content=csv_text(data), media_type="text/csv; charset=utf-8",
         headers={"Cache-Control": f"public, max-age={CACHE_TTL_LIST_S}, stale-while-revalidate={CACHE_TTL_LIST_S}",
                  "Content-Disposition": f'attachment; filename="civitas-{cycle}-election-map-final.csv"'},
+    )
+
+
+def _graded(db: Session, cycle: int) -> dict:
+    row = _row(db, cycle)
+    if row.map_json is None:
+        raise HTTPException(status_code=404, detail="No pre-election map was kept for that election")
+    return accountability.grade(json.loads(row.map_json), json.loads(row.record_json))
+
+
+@router.get("/{cycle}/accountability")
+def archive_accountability(cycle: int = CYCLE, db: Session = Depends(get_db)):
+    """How the frozen map's 80% and 95% ranges held against the counts their
+    states list as official, per chamber and range basis (exact binomial
+    intervals, beside the coverage the map promised), and each seat's swing:
+    its official margin minus its usual vote on the margin's scale. A count
+    not yet official is counted as waiting, never graded."""
+    graded = _graded(db, cycle)
+    election = active_election(db)
+    return cached_json(dict(graded, stillCounting=election.cycle == cycle and election.shows_results),
+                       max_age=phase_cache_s(election))
+
+
+@router.get("/{cycle}/swing.csv")
+def archive_swing_csv(cycle: int = CYCLE, db: Session = Depends(get_db)):
+    """The check and the swing map as a table, one row per seat."""
+    graded = _graded(db, cycle)
+    election = active_election(db)
+    max_age = phase_cache_s(election)
+    return Response(
+        content=accountability.csv_text(graded), media_type="text/csv; charset=utf-8",
+        headers={"Cache-Control": f"public, max-age={max_age}, stale-while-revalidate={max_age}",
+                 "Content-Disposition": f'attachment; filename="civitas-{cycle}-swing-and-ranges.csv"'},
     )
