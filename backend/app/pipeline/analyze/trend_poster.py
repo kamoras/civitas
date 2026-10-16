@@ -7,8 +7,8 @@ Hourly, from the Action Center's scheduler job (scheduler._hourly_action_refresh
  1. Read Bluesky's public getTrends (fetch/trending.fetch_bluesky_trends)
     and keep each listing as TrendObservation rows. A failed read is an
     outage, not an empty list: nothing is recorded, dropped or posted.
- 2. Score each trend (trend_relevance): Bluesky's category, the tragedy and
-    political-violence votes, and the neutrality gate on its display name
+ 2. Score each trend (trend_relevance): Bluesky's category, the tragedy
+    vote, and the neutrality gate on its display name
     (the only words a post quotes from Bluesky).
  3. Find its record on a pinned match only (trend_evidence: an issue,
     an Act's title, a nominee, or a named member's own bill).
@@ -30,9 +30,11 @@ ops alert fires on a divergence (check_party_balance).
 
 Every word of a post is template text, a stored record field, or Bluesky's
 trend name in quotation marks attributed to Bluesky. No model writes any
-of it. A tragedy is eligible only when its political-violence vote is high
-and the record is an official one (a vote, a bill, the day's record, an
-agency's document), and the post states only what that record says.
+of it. A tragedy is eligible only when the record is an official one (a
+vote, a bill, the day's record, an agency's document) or a confirmed,
+multi-outlet Action Center issue (tragedy_issue_refusal), and the post
+states only what that record says: for an issue, its verified lede, credited
+to its outlet.
 
 The picture is the record's card (services/record_cards, rendered by the
 frontend's /api/og): for the first TRIAL_DAYS of trend posts Bluesky gets
@@ -107,6 +109,48 @@ def record_sentences(card: RecordCard) -> list[str]:
 
 def issue_sentence(issue: ActionIssue) -> str:
     return f"Civitas Action Center, {long_date(issue.date)}: {issue.title.rstrip('.')}."
+
+
+def tragedy_issue_sentence(issue: ActionIssue) -> str:
+    """A tragedy's issue record in the post: the issue's lede, the one claim
+    compose() verified verbatim in its source and attributed to the party
+    the source says acted, credited to that outlet. Never the headline,
+    which no check verified."""
+    return (f"Civitas Action Center, {long_date(issue.date)}, quoting {issue.summary_source}: "
+            f"{(issue.summary or '').strip().rstrip('.')}.")
+
+
+# A tragedy needs an official record behind it, or a confirmed Action Center
+# issue (tragedy_issue_refusal): reported by at least this many outlets, with
+# a lede compose() verified in its source. The user's call (2026-10-16):
+# political violence (agents' shootings, deaths in detention, attacks on the
+# Capitol) is in scope, and is answered by the news before any vote or
+# document exists. Its political reading is data the trend and the record
+# already carry: Bluesky filed the trend under politics (evaluate's first
+# gate), and the record is an issue the Action Center's U.S.-policy gate
+# admitted. A tragedy the record matches only through an unconfirmed,
+# developing or single-outlet issue still does not post.
+MIN_TRAGEDY_ISSUE_OUTLETS = 2
+
+
+def tragedy_issue_refusal(db: Session, issue_id: int | None) -> str | None:
+    """Why this issue can't be a tragedy's record, or None when it can."""
+    issue = db.get(ActionIssue, issue_id) if issue_id is not None else None
+    if issue is None:
+        return "issue gone"
+    if issue.source_type is not None or issue.status != "confirmed":
+        return "a tragedy's issue must be a confirmed news issue, not a developing one"
+    if issue.duplicate_of_id is not None:
+        return "a duplicate issue"
+    try:
+        outlets = {n for n in json.loads(issue.source_names or "[]") if n}
+    except ValueError:
+        outlets = set()
+    if len(outlets) < MIN_TRAGEDY_ISSUE_OUTLETS:
+        return f"a tragedy's issue needs {MIN_TRAGEDY_ISSUE_OUTLETS} outlets, it has {len(outlets)}"
+    if not (issue.summary_source and issue.summary_source_url and (issue.summary or "").strip()):
+        return "a tragedy's issue needs a verified lede"
+    return None
 
 
 def compose_text(trend_name: str, sentences: list[str], url: str) -> str | None:
@@ -189,8 +233,10 @@ class Draft:
         return self.card.alt[:MAX_ALT_CHARS] if self.card else None
 
 
-def _draft(db: Session, trend: BlueskyTrend, ev: Evidence) -> tuple[Draft | None, str]:
-    """The post for this evidence, or None and why not."""
+def _draft(db: Session, trend: BlueskyTrend, ev: Evidence, tragedy: bool = False) -> tuple[Draft | None, str]:
+    """The post for this evidence, or None and why not. A tragedy's issue
+    record is shown by its verified lede (tragedy_issue_sentence), held to
+    the neutrality gate and the loaded-language vote."""
     record = ev.record
     card = None
     show_title = True
@@ -198,7 +244,13 @@ def _draft(db: Session, trend: BlueskyTrend, ev: Evidence) -> tuple[Draft | None
         issue = db.get(ActionIssue, record.issue_id)
         if issue is None:
             return None, "issue gone"
-        sentences = [issue_sentence(issue)]
+        if tragedy:
+            lede = (issue.summary or "").strip()
+            if neutrality_problems(lede, loaded_vote=(loaded_votes([lede]) or [0.0])[0]):
+                return None, "issue lede fails the neutrality check"
+            sentences = [tragedy_issue_sentence(issue)]
+        else:
+            sentences = [issue_sentence(issue)]
         if neutrality_problems(issue.title):
             return None, "issue headline fails the neutrality check"
     else:
@@ -238,20 +290,21 @@ def evaluate(
         return "ineligible", f"Bluesky category {trend.category or 'none'}, not {POLITICS_CATEGORY}", None, None
     if not evidence:
         return "ineligible", "no pinned record", None, None
-    if scores.is_tragedy and not scores.political_tragedy:
-        return "skipped", f"tragedy without a political reading (vote {scores.political_violence:.2f})", evidence[0], None
     reasons = []
     for ev in evidence:
         if scores.is_tragedy and ev.record.kind not in OFFICIAL_KINDS:
-            reasons.append(f"{ev.record.key}: a tragedy needs an official record")
-            continue
+            why = (tragedy_issue_refusal(db, ev.record.issue_id) if ev.record.kind == "issue"
+                   else "a tragedy needs an official record or a confirmed issue")
+            if why:
+                reasons.append(f"{ev.record.key}: {why}")
+                continue
         if _record_posted_recently(db, ev.record.key, now):
             reasons.append(f"{ev.record.key}: posted in the last {RECORD_COOLDOWN.days} days")
             continue
         if _issue_post_covers(db, ev, now):
             reasons.append(f"{ev.record.key}: an issue post already covers it")
             continue
-        draft, why = _draft(db, trend, ev)
+        draft, why = _draft(db, trend, ev, tragedy=scores.is_tragedy)
         if draft is None:
             reasons.append(f"{ev.record.key}: {why}")
             continue
@@ -314,7 +367,9 @@ def _upsert(db: Session, trend: BlueskyTrend, scores: TrendScores, now: datetime
     row.last_seen_at = now
     row.rank = trend.rank
     row.relevance, row.tragedy = scores.relevance, scores.tragedy
-    row.political_violence, row.loaded = scores.political_violence, scores.loaded
+    # political_violence is no longer measured (the vote was removed
+    # 2026-10-16); the NOT NULL column is dropped in a later release.
+    row.political_violence, row.loaded = 0.0, scores.loaded
     return row
 
 

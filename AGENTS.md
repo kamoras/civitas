@@ -1321,8 +1321,13 @@ votes (`trend_relevance.py`, `political_violence_examples.json`/`loaded_language
 are calibrated by `scripts/calibrate_trend_gates.py` into
 `trend_gates_calibration.json`. The trend's name must pass a neutrality gate
 (`grounding`'s electioneering, editorializing and advocacy-as-fact checks plus a
-loaded-language vote); a tragedy is eligible only with a high political-violence
-vote and an official record (not an issue). Every word is template text, a
+loaded-language vote); a tragedy (the tragedy vote) is eligible with an
+official record, or with a confirmed Action Center issue reported by two or
+more outlets whose lede compose() verified (`trend_poster.tragedy_issue_refusal`;
+the post quotes that lede, credited to its outlet, under the neutrality gate
+and the loaded-language vote). The political-violence vote was removed
+2026-10-16: agents' shootings, deaths in detention and attacks on the
+Capitol are in scope, and the news answers them before any vote or document. Every word is template text, a
 stored record field, or the trend's name quoted and attributed to Bluesky — no
 model. Selection is party-blind (rank weight × match strength); each trend gets
 one `TrendCandidate` audit row with the parties of the members it names and of
