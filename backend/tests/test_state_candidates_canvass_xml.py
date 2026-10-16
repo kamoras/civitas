@@ -6,10 +6,21 @@ contests (each a real multi-candidate field) plus District 3's Green
 contest, which is a write-in-only race with no real nominee."""
 
 import os
+from datetime import datetime
 
 import pytest
 
 from app.pipeline.fetch import state_candidates_canvass_xml as cx
+from app.time_utils import utcnow
+
+
+@pytest.fixture(autouse=True)
+def _fixture_era(freeze_utcnow):
+    """The fixtures are 2026 primaries, read in September 2026: run as of
+    then, never the real clock (AGENTS.md, Testing). Before it, no primary
+    has been held, let alone settled."""
+    freeze_utcnow(datetime(2026, 10, 1, 16))
+
 
 _FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures_az_canvass_summary.xml")
 _SOURCE = {
@@ -93,9 +104,8 @@ class TestFetchConfirmedCandidates:
         # the real, long-past 2026-07-21 — must still settle, because a
         # file's own regeneration time says nothing about the election.
         import re
-        from datetime import UTC, datetime
 
-        today = datetime.now(UTC).date().isoformat()
+        today = utcnow().date().isoformat()
         republished = re.sub(rb"<resultsTimestamp>[^<]+</resultsTimestamp>",
                               f"<resultsTimestamp>{today}T00:00:00</resultsTimestamp>".encode(), _raw())
         monkeypatch.setattr(cx, "_ftp_list", lambda url: ["2026 Primary Election"])

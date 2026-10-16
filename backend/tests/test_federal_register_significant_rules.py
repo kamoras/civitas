@@ -4,6 +4,7 @@ early-signal source for Federal Register final rules. Filters to OMB's own
 raw final-rule volume (~12/day, confirmed live) is overwhelmingly routine
 administrative matters unusable as an early-signal feed."""
 
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -67,13 +68,16 @@ def _mock_client(results: list[dict]):
 
 
 class TestFetchRecentSignificantRules:
+    @pytest.fixture(autouse=True)
+    def _fixture_era(self, freeze_utcnow):
+        # The sample rules were published 2026-08-31: a day later, they are
+        # published and within the lookback.
+        freeze_utcnow(datetime(2026, 9, 1, 16))
+
     @pytest.mark.asyncio
-    async def test_leaves_out_a_rule_not_yet_published(self, db_session, monkeypatch):
+    async def test_leaves_out_a_rule_not_yet_published(self, db_session):
         """On public inspection, a rule carries a publication date days
         ahead; until that day it has not been published."""
-        monkeypatch.setattr(
-            "app.pipeline.fetch.federal_register.comment_period_today", lambda: "2026-09-01",
-        )
         scheduled = {**SAMPLE_RULE, "document_number": "2026-99999", "publication_date": "2026-09-04"}
         client = _mock_client([SAMPLE_RULE, scheduled])
         results = await fetch_recent_significant_rules(client, db_session)

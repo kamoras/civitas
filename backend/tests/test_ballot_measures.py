@@ -462,8 +462,10 @@ class _TlsLab:
 
     # A valid certificate's window is wide: OpenSSL checks it against the
     # machine's real clock, while self.now is Python's, which the suite moves
-    # when it runs at another date (scripts/frozen_clock_plugin.py).
+    # when it runs at another date (scripts/frozen_clock_plugin.py). An
+    # expired one ended long enough ago to be expired by either clock.
     VALID = (-3650, 3650)
+    EXPIRED = (-7300, -3651)
 
     def _cert(self, subject, key, issuer, issuer_key, *, ca=False, host=None, aia=None, days=VALID):
         import datetime
@@ -615,7 +617,7 @@ async def test_a_complete_chain_still_verifies(monkeypatch, tmp_path, tls_lab):
 @pytest.mark.asyncio
 async def test_an_expired_certificate_fails(monkeypatch, tmp_path, tls_lab):
     assert not await _check_link(
-        monkeypatch, tmp_path, tls_lab, lambda: tls_lab.leaf(days=(-30, -1)), chain=(tls_lab.inter,),
+        monkeypatch, tmp_path, tls_lab, lambda: tls_lab.leaf(days=tls_lab.EXPIRED), chain=(tls_lab.inter,),
     )
 
 
