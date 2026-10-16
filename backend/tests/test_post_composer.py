@@ -7,6 +7,7 @@ filter-the-output approach could not hold.
 """
 
 import json
+from datetime import datetime
 
 import numpy as np
 import pytest
@@ -446,71 +447,113 @@ def test_a_predicate_copied_with_its_period_does_not_run_into_the_next_sentence(
                    "$1.2 billion for violating sanctions laws.")
 
 
-class TestTheActingPartyVote:
-    """The capitalised-word rule admits named parties; what it refuses gets
-    the labelled spans' vote (post_composer's comment above
-    ACTOR_EXAMPLES_PATH has the measurement)."""
+class TestTheActingPartyTier:
+    """The capitalised-word rule admits named parties; what it refuses is
+    judged by its prototype margin against a threshold no data-supplied
+    non-actor reaches (post_composer's comment above ACTOR_PROTOTYPES)."""
 
-    def test_the_calibration_matches_its_examples(self):
-        """Rerun scripts/calibrate_claim_actor.py after editing
-        app/data/claim_actor_examples.json."""
-        assert post_composer.actor_calibration()["examples_hash"] == post_composer.actor_examples_hash()
+    def test_the_bundled_threshold_says_where_it_came_from(self):
+        data = json.loads(post_composer.ACTOR_THRESHOLD_PATH.read_text())
+        assert data["_source"] and 0.0 < data["threshold"] < 1.0 and data["negatives"] >= 50
 
-    def test_the_examples_say_where_they_came_from_and_how_they_were_labelled(self):
-        data = json.loads(post_composer.ACTOR_EXAMPLES_PATH.read_text())
-        assert data["_source"] and data["_rubric"]
-        examples = data["examples"]
-        assert {e["origin"] for e in examples} == {"replay", "variation"}
-        assert all(isinstance(e["actor"], bool) and e["text"].strip() for e in examples)
-        assert any(e["actor"] for e in examples) and not all(e["actor"] for e in examples)
-
-    def test_a_named_party_never_consults_the_vote(self, monkeypatch):
+    def test_a_named_party_never_consults_the_margin(self, monkeypatch):
         consulted = []
-        monkeypatch.setattr(post_composer, "_actor_vote", lambda span: consulted.append(span) or 1.0)
+        monkeypatch.setattr(post_composer, "_actor_margin", lambda span: consulted.append(span) or 1.0)
         assert compose("Sen. Jane Roe", "slammed the agency's new fee rule",
                        "Sen. Jane Roe on Sunday slammed the agency's new fee rule.") is not None
         assert consulted == []
 
-    def test_a_pronoun_led_party_never_reaches_the_vote(self, monkeypatch):
+    @pytest.mark.parametrize("actor,src,predicate", [
+        ("its spokesman", "The agency declined to comment, but its spokesman denied the report on Friday.",
+         "denied the report on Friday"),
+        ("your representatives", "On Monday your representatives voted to approve the new fee rule.",
+         "voted to approve the new fee rule"),
+    ])
+    def test_a_pronoun_led_party_never_reaches_the_margin(self, monkeypatch, actor, src, predicate):
         """"its spokesman" points at a party only through someone the span
-        doesn't name; the embedding reads "spokesman" and would vote actor."""
+        doesn't name; the embedding reads "spokesman" and would admit it."""
         consulted = []
-        monkeypatch.setattr(post_composer, "_actor_vote", lambda span: consulted.append(span) or 1.0)
-        src = "The agency declined to comment, but its spokesman denied the report on Friday."
-        assert compose("its spokesman", "denied the report on Friday", src) is None
+        monkeypatch.setattr(post_composer, "_actor_margin", lambda span: consulted.append(span) or 1.0)
+        assert compose(actor, predicate, src) is None
         assert consulted == []
 
-    def test_a_failed_vote_refuses_the_span_not_the_run(self, monkeypatch):
+    def test_a_failed_margin_refuses_the_span_not_the_run(self, monkeypatch):
         def broken(span):
             raise RuntimeError("similarity model unavailable")
-        monkeypatch.setattr(post_composer, "_actor_vote", broken)
+        monkeypatch.setattr(post_composer, "_actor_margin", broken)
         src = "A federal judge on Sunday blocked the agency's new fee rule."
         assert compose("A federal judge", "blocked the agency's new fee rule", src) is None
 
-    def test_the_vote_decides_what_the_rule_refuses(self, monkeypatch):
+    def test_the_margin_decides_what_the_rule_refuses(self, monkeypatch):
         src = "A federal judge on Sunday blocked the agency's new fee rule."
-        threshold = post_composer.actor_calibration()["threshold"]
-        monkeypatch.setattr(post_composer, "_actor_vote", lambda span: threshold)
+        monkeypatch.setattr(post_composer, "actor_threshold", lambda: 0.2)
+        monkeypatch.setattr(post_composer, "_actor_margin", lambda span: 0.2)
         assert compose("A federal judge", "blocked the agency's new fee rule", src) == (
             "A federal judge on Sunday blocked the agency's new fee rule."
         )
-        monkeypatch.setattr(post_composer, "_actor_vote", lambda span: threshold - 0.01)
+        monkeypatch.setattr(post_composer, "_actor_margin", lambda span: 0.19)
         assert compose("A federal judge", "blocked the agency's new fee rule", src) is None
 
-    def test_votes_weigh_neighbours_by_similarity(self):
-        reference = np.array([[1.0, 0.0], [0.0, 1.0], [0.6, 0.8]])
-        labels = np.array([1.0, 0.0, 1.0])
-        span = np.array([[1.0, 0.0]])
-        # k=2: neighbours 0 (sim 1.0, actor) and 2 (sim 0.6, actor).
-        assert post_composer.actor_votes(span, reference, labels, 2)[0] == pytest.approx(1.0)
-        # k=3 adds neighbour 1 at similarity 0, which weighs nothing.
-        assert post_composer.actor_votes(span, reference, labels, 3)[0] == pytest.approx(1.0)
-        assert post_composer.actor_votes(np.array([[0.0, 1.0]]), reference, labels, 2)[0] == pytest.approx(0.8 / 1.8)
+    def test_a_possessive_is_judged_by_its_head(self):
+        assert post_composer._head("the court’s ruling") == "ruling"
+        assert post_composer._head("the senator's lawyer") == "lawyer"
+        assert post_composer._head("federal agents") == "federal agents"
+
+    def test_the_non_actors_are_the_calls_predicates_and_stated_sums(self):
+        prompt = ("rules...\n\nNOW DO THIS ONE\nSource:\nThe board approved nearly $22 million in taxpayer funds "
+                  "and a 3.6 percent raise, and 20,000 voters signed a petition.\n\nRules:\n- copy exactly")
+        answer = json.dumps({"actor": "The board", "predicate": "approved nearly $22 million in taxpayer funds."})
+        negatives = post_composer.actor_negatives([(prompt, answer), ("no source marker", "not json")])
+        assert "approved nearly $22 million in taxpayer funds" in negatives
+        assert "nearly $22 million in taxpayer funds" in negatives
+        assert "3.6 percent raise" in negatives
+        assert not any("voters" in n for n in negatives)  # a number of people can act
+        assert all(post_composer._in_vote_domain(n) for n in negatives)
+
+    def test_the_threshold_is_the_lowest_no_negative_reaches(self, monkeypatch):
+        monkeypatch.setattr(post_composer, "actor_margins", lambda spans: np.array([0.05] * (len(spans) - 1) + [0.123]))
+        assert post_composer.fit_actor_threshold(["x"] * post_composer._MIN_NEGATIVES) == 0.13
+        assert post_composer.fit_actor_threshold(["x"] * (post_composer._MIN_NEGATIVES - 1)) is None
+
+    def test_the_refit_runs_once_a_day_in_a_savepoint(self, db_session, freeze_utcnow, monkeypatch):
+        from app.models import LlmGenerationSample, Senator
+        from app.pipeline.cache import api_cache_get
+
+        monkeypatch.setattr(post_composer, "_threshold_cache", {})
+        monkeypatch.setattr(post_composer, "actor_negatives", lambda calls: ["x"] * 60)
+        fits = []
+        monkeypatch.setattr(post_composer, "fit_actor_threshold", lambda negs: fits.append(1) or 0.17)
+        db_session.add(LlmGenerationSample(task=post_composer.CLAIM_TASK, rank=1, attempt=1, input_text="p",
+                                           output_json="{}", passed=True))
+        db_session.commit()
+        db_session.add(Senator(id="pending-one", name="Pending One", state="ZZ", party="I", is_current=True))
+        db_session.flush()  # the refresh's own pending work
+        freeze_utcnow(datetime(2028, 3, 1, 9))
+        assert post_composer.refit_actor_threshold(db_session) == 0.17
+        assert post_composer.actor_threshold() == 0.17  # used in this process at once
+        assert api_cache_get(db_session, "claim-actor", "threshold", max_age_hours=24)["threshold"] == 0.17
+        freeze_utcnow(datetime(2028, 3, 1, 20))
+        post_composer.refit_actor_threshold(db_session)
+        assert len(fits) == 1
+        db_session.rollback()  # the refit committed nothing of the caller's
+        assert db_session.query(Senator).count() == 0
+
+    def test_without_a_stored_refit_the_bundled_threshold_is_used(self, monkeypatch):
+        monkeypatch.setattr(post_composer, "_threshold_cache", {})
+        monkeypatch.setattr(post_composer, "api_cache_get", lambda *a, **k: None)
+        bundled = json.loads(post_composer.ACTOR_THRESHOLD_PATH.read_text())["threshold"]
+        assert post_composer.actor_threshold() == bundled
 
 
 @pytest.mark.slow
-class TestTheActingPartyVoteOnTheModel:
-    """The real vote, on the similarity model."""
+class TestTheActingPartyTierOnTheModel:
+    """The real prototype margin, on the similarity model, at the bundled
+    threshold."""
+
+    @pytest.fixture(autouse=True)
+    def _bundled_threshold(self, monkeypatch):
+        bundled = json.loads(post_composer.ACTOR_THRESHOLD_PATH.read_text())["threshold"]
+        monkeypatch.setattr(post_composer, "actor_threshold", lambda: bundled)
 
     @pytest.mark.parametrize("actor,source,want", [
         # Parties a story describes rather than names: the rule refused all
@@ -546,23 +589,3 @@ class TestTheActingPartyVoteOnTheModel:
     ])
     def test_a_non_actor_is_still_refused(self, actor, predicate, source):
         assert compose(actor, predicate, source) is None
-
-    def test_no_labelled_non_actor_the_rule_refused_clears_the_vote_left_out(self):
-        """The calibration's hard constraint, re-measured: leave one out, the
-        vote admits no labelled non-actor the capitalised-word rule refused
-        (a pronoun-led span never reaches the vote)."""
-        examples = post_composer.actor_examples()
-        texts = [e["text"] for e in examples]
-        labels = np.array([float(e["actor"]) for e in examples])
-        keys = np.array([t.lower() for t in texts])
-        embeddings = post_composer.embed_spans(texts)
-        calibration = post_composer.actor_calibration()
-        admitted = []
-        for i, e in enumerate(examples):
-            if e["actor"] or post_composer._looks_like_an_actor(e["text"]) or post_composer._names_no_one(e["text"]):
-                continue
-            others = keys != keys[i]
-            vote = post_composer.actor_votes(embeddings[i:i + 1], embeddings[others], labels[others], calibration["k"])[0]
-            if vote >= calibration["threshold"]:
-                admitted.append(e["text"])
-        assert admitted == []
