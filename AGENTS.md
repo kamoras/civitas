@@ -1565,6 +1565,20 @@ posted still keeps its page: the issue cleanup deletes only developing
 issues nobody confirmed (`_cleanup_old_unposted_issues`), since the sitemap
 lists every confirmed issue.
 
+**A user-facing feature ships with its changelog entry.** A PR that adds a
+page or a feature a reader would notice adds one entry to
+`backend/app/data/whats_new.json` (its `_contract` names the fields: a
+stable id, the UTC release date, a title, one plain sentence, the page's
+path). That one entry is `/changelog`'s "New on the site" list, the What's
+new feed and one Bluesky post (`app/whats_new.py`, kind `feature`): no post
+is ever written by hand, and no code is written per feature. The posting
+rule (at most one a day, in the posting window, never on a day busier than
+the median of the fortnight before, never an entry over 28 days old, never
+a page that doesn't load) is in the module's docstring with the replay
+behind it. Write the sentence to stay true: no named politicians, no
+pronouns, no em dashes, no emoji, no year or Congress number
+(`tests/test_whats_new.py`). Changing an entry's id posts it again.
+
 **Ahead of each election** a nightly pre-check (`ops_alerts.check_election_readiness`)
 compares each cycle-specific data file with the election the calendar says
 is next and alerts, once its lead time begins, for what is missing: the

@@ -22,3 +22,4 @@
 - [ ] No secrets, API keys, or `.db` files committed
 - [ ] Score changes: ran the audit skill and reviewed output
 - [ ] Pipeline changes: tested against a real API response, not just mocks
+- [ ] New page or feature: entry added to `backend/app/data/whats_new.json` (it is the changelog line, the feed entry and the Bluesky post)
