@@ -22,7 +22,7 @@ flowchart TB
         S4 --> DOC
         S5 --> DOC
 
-        DOC["ExploreDocument row<br/>doc_type · source · title · summary · body<br/>date · politician_name/id · chamber<br/>agency_name · comment_url · comments_close_on<br/>identifiers"]
+        DOC["ExploreDocument row<br/>doc_type · source · title · summary · body<br/>date · politician_name/id · chamber<br/>agency_name · agency_slug · comment_url · comments_close_on<br/>identifiers"]
 
         DOC --> EMB["Embed title + summary + body<br/><b>in windows of the encoder's context length</b>"]
         DOC --> FTS["Tokenise title · summary · body<br/><b>external content — text not duplicated</b>"]

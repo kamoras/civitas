@@ -48,6 +48,7 @@ from app.pipeline.fetch.presidential_actions import (
 from app.pipeline.fetch.fr_rulemaking import (
     PAGE_MARKER_RE,
     fetch_fr_metadata,
+    issuing_agency,
     fetch_fr_rulemaking,
     _fetch_body_text as _fetch_rulemaking_body_text,
 )
@@ -186,6 +187,11 @@ def _president_id_for(db: Session, name: str, on_date: str) -> str | None:
 # a 30-day extension. Every stale value found on 2026-10-09 (41 of 4,251
 # documents checked) was on a document inside it.
 FR_REFRESH_DAYS = 90
+# Older rulemaking documents whose issuing agency hasn't been read yet
+# (stored before explore_documents.agency_slug), read by the same refresh a
+# batch a night: about 9,400 in 2026-10, so a week of nights at this size,
+# 100 requests each.
+AGENCY_BACKFILL_PER_RUN = 2000
 
 
 async def _refresh_federal_register(db: Session, client: httpx.AsyncClient) -> dict[str, int]:
@@ -198,11 +204,12 @@ async def _refresh_federal_register(db: Session, client: httpx.AsyncClient) -> d
     number the Register says it has no document for is removed; nothing is
     touched when it can't be asked."""
     today = utcnow().date()
-    rows = db.query(ExploreDocument).filter(
-        ExploreDocument.source == "Federal Register",
-        or_(ExploreDocument.date >= (today - timedelta(days=FR_REFRESH_DAYS)).isoformat(),
-            ExploreDocument.comments_close_on >= today.isoformat()),
-    ).all()
+    recent = or_(ExploreDocument.date >= (today - timedelta(days=FR_REFRESH_DAYS)).isoformat(),
+                 sa_func.coalesce(ExploreDocument.comments_close_on, "") >= today.isoformat())
+    rows = db.query(ExploreDocument).filter(ExploreDocument.source == "Federal Register", recent).all()
+    rows += db.query(ExploreDocument).filter(
+        ExploreDocument.chamber == "Regulatory", ExploreDocument.agency_slug.is_(None), ~recent,
+    ).order_by(ExploreDocument.date.desc()).limit(AGENCY_BACKFILL_PER_RUN).all()
     by_number = {
         r.external_id.removeprefix("fr-reg-") if r.external_id.startswith("fr-reg-")
         else r.external_id.removeprefix("fr-"): r
@@ -234,6 +241,8 @@ async def _refresh_federal_register(db: Session, client: httpx.AsyncClient) -> d
                 # link still names the docket, so only a new one replaces it.
                 comment_url=doc.get("comment_url") or row.comment_url,
             )
+            if "agencies" in doc:
+                fresh["agency_name"], fresh["agency_slug"] = issuing_agency(doc["agencies"] or [])
         else:
             fresh["date"] = doc.get("signing_date") or doc.get("publication_date") or row.date
         changed = {k: v for k, v in fresh.items() if getattr(row, k) != v}
@@ -976,6 +985,7 @@ async def run_explore_pipeline() -> dict:
                         politician_id=None,
                         chamber="Regulatory",
                         agency_name=fr_doc.get("agency_name"),
+                        agency_slug=fr_doc.get("agency_slug"),
                         comment_url=fr_doc.get("comment_url"),
                         comments_close_on=fr_doc.get("comments_close_on"),
                         external_id=ext_id,

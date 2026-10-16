@@ -357,6 +357,7 @@ def search_lexical(
     chamber: str | None = None,
     politician_id: str | None = None,
     commentable_after: str | None = None,
+    agency_slugs: list[str] | None = None,
 ) -> list[dict]:
     """BM25F keyword search, best first.
 
@@ -404,6 +405,9 @@ def search_lexical(
     if politician_id:
         sql += " AND d.politician_id = :politician_id"
         params["politician_id"] = politician_id
+    if agency_slugs:
+        sql += " AND d.agency_slug IN (" + ", ".join(f":a{i}" for i in range(len(agency_slugs))) + ")"
+        params.update({f"a{i}": s for i, s in enumerate(agency_slugs)})
     if commentable_after is not None:
         sql += (
             " AND d.comment_url IS NOT NULL AND d.comment_url != ''"

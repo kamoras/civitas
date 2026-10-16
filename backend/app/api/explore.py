@@ -23,7 +23,8 @@ from app.api.response_helpers import (
 )
 from app.database import get_db, off_loop
 from app.member_ids import resolve_member_id
-from app.models import ExploreDocument
+from app.api.agencies import agency_options, children_of, descendants
+from app.models import Agency, ExploreDocument
 from app.pipeline.analyze.document_authority import declared_identifiers
 from app.pipeline.fetch.fr_rulemaking import MAX_BODY_LEN
 from app.services.explore_matches import explore_matches
@@ -42,14 +43,21 @@ VALID_DOC_TYPES = frozenset(EXPLORE_DOC_TYPES)
 VALID_SORTS = {"relevance", "date"}
 
 
+def _agency_slugs(db: Session, agency: str | None) -> list[str] | None:
+    """The agency and every agency under it, or None for no filter."""
+    if not agency:
+        return None
+    return descendants(children_of(db.query(Agency).all()), agency)
+
+
 @router.get("")
 async def search_explore(
     _rl: PublicReadLimit,
     q: str | None = Query(
         None, min_length=2, max_length=200,
         description=(
-            "Search query. Optional with politician_id (that member's documents, newest first) "
-            "or with commentable=true (every open comment period, closing soonest first)"
+            "Search query. Optional with politician_id or agency (that member's or agency's documents, "
+            "newest first) or with commentable=true (every open comment period, closing soonest first)"
         ),
     ),
     doc_type: str | None = Query(None, description="Filter by document type"),
@@ -58,6 +66,9 @@ async def search_explore(
     sort: str = Query("relevance", description="Sort order: relevance or date"),
     limit: int = Query(20, ge=1, le=50),
     politician_id: str | None = Query(None, description="Filter by politician ID (exact match)"),
+    agency: str | None = Query(None, max_length=200, description=(
+        "Filter by issuing agency: its Federal Register slug, as in /agencies/{slug}; "
+        "its sub-agencies' documents are included")),
     db: Session = Depends(get_db),
 ):
     """Hybrid search over government activity documents.
@@ -90,11 +101,12 @@ async def search_explore(
         # A profile's "view all documents" link: the member's whole record,
         # not a search of it. Or "every open comment period" (the homepage's
         # and the Action Center's link): a list, which needs no query.
-        if not politician_id and not commentable:
-            raise HTTPException(status_code=422, detail="q is required without politician_id or commentable")
+        if not politician_id and not commentable and not agency:
+            raise HTTPException(status_code=422, detail="q is required without politician_id, agency or commentable")
         outcome = await off_loop(db, lambda session: browse_documents(
             session, resolve_member_id(session, politician_id) if politician_id else None,
             limit=limit, doc_type=doc_type, chamber=canonical_chamber, commentable=commentable,
+            agency_slugs=_agency_slugs(session, agency),
         ))
         return JSONResponse(
             content={"query": "", "results": outcome["results"], "count": outcome["count"],
@@ -113,6 +125,7 @@ async def search_explore(
         politician_id=resolve_member_id(session, politician_id) if politician_id else None,
         commentable=commentable,
         sort=sort,
+        agency_slugs=_agency_slugs(session, agency),
     ))
 
     # indexReady is False only when neither channel could answer: the
@@ -185,12 +198,15 @@ def _explore_counts(db: Session) -> tuple[int, dict[str, int], dict[str, int], i
 async def explore_stats(db: Session = Depends(get_db)):
     """Return counts of explore documents by type and chamber."""
     total, type_counts, chamber_counts, open_for_comment = await off_loop(db, _explore_counts)
+    agencies = await off_loop(db, agency_options)
     return JSONResponse(
         content={
             "totalDocuments": total,
             "byType": type_counts,
             "byChamber": chamber_counts,
             "openForComment": open_for_comment,
+            # The agency filter's options (agencies.agency_options).
+            "agencies": agencies,
         },
         headers={"Cache-Control": "public, max-age=300, stale-while-revalidate=300"},
     )
@@ -281,6 +297,7 @@ async def get_explore_document(doc_id: int, db: Session = Depends(get_db)):
             "politicianId": doc.politician_id or "",
             "chamber": doc.chamber or "",
             "agencyName": doc.agency_name or "",
+            "agencySlug": doc.agency_slug or "",
             "commentUrl": doc.comment_url or "",
             "commentsCloseOn": doc.comments_close_on or "",
             # A floor speech's bill, from the Record heading it was given under.

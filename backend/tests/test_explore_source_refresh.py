@@ -100,12 +100,42 @@ class TestRefreshFederalRegister:
         assert db_session.query(ExploreDocument).count() == 3
 
     def test_old_closed_documents_are_not_asked_for(self, db_session):
-        db_session.add(_fr_doc("fr-reg-2025-00001", "Old notice", "2025-01-02", "Regulatory", "Notice",
-                               close="2025-02-01"))
+        old = _fr_doc("fr-reg-2025-00001", "Old notice", "2025-01-02", "Regulatory", "Notice", close="2025-02-01")
+        old.agency_slug = "labor-department"
+        db_session.add(old)
         db_session.commit()
         asked = []
         self._run(db_session, lambda req: asked.append(req) or httpx.Response(200, json={"results": []}))
         assert asked == []
+
+    def test_an_old_document_is_read_once_for_its_issuing_agency(self, db_session):
+        db_session.add(_fr_doc("fr-reg-2025-00001", "Old notice", "2025-01-02", "Regulatory", "Notice",
+                               close="2025-02-01"))
+        db_session.commit()
+        answer = {"document_number": "2025-00001", "title": "Old notice", "publication_date": "2025-01-02",
+                  "agencies": [
+                      {"name": "Labor Department", "id": 271, "parent_id": None, "slug": "labor-department"},
+                      {"name": "Occupational Safety and Health Administration", "id": 377, "parent_id": 271,
+                       "slug": "occupational-safety-and-health-administration"}]}
+        asked = []
+        self._run(db_session, lambda req: asked.append(req) or httpx.Response(200, json=answer))
+        doc = db_session.query(ExploreDocument).one()
+        assert (doc.agency_name, doc.agency_slug) == (
+            "Occupational Safety and Health Administration", "occupational-safety-and-health-administration")
+        assert "agencies" in str(asked[0].url)
+        self._run(db_session, lambda req: asked.append(req) or httpx.Response(200, json=answer))
+        assert len(asked) == 1
+
+    def test_the_backfill_batch_is_older_documents_not_the_refreshed_window(self, db_session, monkeypatch):
+        monkeypatch.setattr(explore_pipeline, "AGENCY_BACKFILL_PER_RUN", 1)
+        db_session.add_all([
+            _fr_doc("fr-reg-2026-15646", "Recent", "2026-10-01", "Regulatory", "Notice"),
+            _fr_doc("fr-reg-2025-00001", "Old", "2025-01-02", "Regulatory", "Notice", close="2025-02-01"),
+        ])
+        db_session.commit()
+        asked = []
+        self._run(db_session, lambda req: asked.append(str(req.url)) or httpx.Response(200, json={"results": []}))
+        assert "2026-15646" in asked[0] and "2025-00001" in asked[0]
 
 
 def test_memoranda_are_requested_by_the_apis_own_value():

@@ -8,7 +8,7 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-from app.models import ActionIssue, ActionIssueStatus, Senator, SponsoredBill
+from app.models import ActionIssue, ActionIssueStatus, RetiredReason, Senator, SponsoredBill
 from app.pipeline.analyze import early_signal as es
 from app.pipeline.analyze.action_center import mark_recent_duplicates
 from app.time_utils import utcnow
@@ -340,6 +340,56 @@ class TestStaleVotes:
         assert es.retire_stale_vote_drafts(db_session, "2026-10-15") == 1
         assert stale.is_current is False and stale.status == ActionIssueStatus.DEVELOPING
         assert fresh.is_current is True and confirmed.is_current is True
+
+    _AWAITING = "This is from the record; news coverage of the {} has not appeared yet."
+    _DID_NOT = "news coverage of the {} did not appear while it was on the Action Center."
+
+    def _awaiting(self, row, kind="vote"):
+        row.summary = "The House voted 401 to 14. " + self._AWAITING.format(kind)
+        return row
+
+    def test_a_stale_draft_stops_saying_coverage_has_not_appeared_yet(self, db_session):
+        live = self._awaiting(self._draft(db_session, "2026-10-14"))
+        stale = self._awaiting(self._draft(db_session, "2026-09-16", url="u2"))
+        assert es.retire_stale_vote_drafts(db_session, "2026-10-15") == 1
+        assert stale.retired_reason == RetiredReason.UNCONFIRMED
+        db_session.flush()
+        assert es.reword_retired_drafts(db_session) == 1
+        assert stale.summary.endswith("This is from the record; " + self._DID_NOT.format("vote"))
+        assert live.summary.endswith(self._AWAITING.format("vote"))
+        assert es.reword_retired_drafts(db_session) == 0
+
+    def test_a_covered_draft_keeps_its_summary(self, db_session):
+        """Coverage did appear: it is why the draft was retired. Saying it
+        didn't would be false, and the rewrite can't be undone."""
+        draft = self._awaiting(self._draft(db_session, "2026-10-14"))
+        draft.related_bill_ids = json.dumps([{"id": "S.2403"}])
+        covering = ActionIssue(date="2026-10-15", rank=1, title="House passes Senate retirement bill", summary="s",
+                               is_current=True, status=ActionIssueStatus.CONFIRMED,
+                               related_bill_ids=json.dumps([{"id": "S.2403"}]))
+        db_session.add(covering)
+        db_session.flush()
+        assert es.retire_covered_developing_issues(db_session) == 1
+        assert draft.retired_reason == RetiredReason.COVERED and draft.duplicate_of_id == covering.id
+        db_session.flush()
+        assert es.reword_retired_drafts(db_session) == 0
+        assert draft.summary.endswith(self._AWAITING.format("vote"))
+
+    def test_a_draft_retired_before_reasons_were_kept_gets_one_from_the_record(self, db_session):
+        # Retired by #997 with no reason: covered if a reported issue, current
+        # or not, covers its bill; otherwise unconfirmed.
+        covered = self._awaiting(self._draft(db_session, "2026-09-16"))
+        covered.related_bill_ids = json.dumps([{"id": "S.2403"}])
+        rule = self._awaiting(self._draft(db_session, "2026-09-16", url="u2"), "rule")
+        covered.is_current = rule.is_current = False
+        db_session.add(ActionIssue(date="2026-09-17", rank=1, title="Reporting", summary="s", is_current=False,
+                                   status=ActionIssueStatus.CONFIRMED, related_bill_ids=json.dumps([{"id": "S.2403"}])))
+        db_session.flush()
+        assert es.reword_retired_drafts(db_session) == 1
+        assert covered.retired_reason == RetiredReason.COVERED
+        assert covered.summary.endswith(self._AWAITING.format("vote"))
+        assert rule.retired_reason == RetiredReason.UNCONFIRMED
+        assert rule.summary.endswith(self._DID_NOT.format("rule"))
 
     def test_a_current_draft_is_reworded_from_its_record(self, db_session):
         # "S 2403" was the Clerk's file spelling, stored before the template
