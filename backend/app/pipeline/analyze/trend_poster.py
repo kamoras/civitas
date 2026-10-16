@@ -365,7 +365,7 @@ def run_trend_posts(db: Session, now: datetime | None = None) -> dict:
             index = index or RecordIndex(db, now)
             emb = _embed_texts_sim([trend_text(trend.display_name, trend.description)])[0]
             evidence, named = find_evidence(index, trend.display_name, trend.description,
-                                            trend.started_at or now, emb, about_appointment=sc.about_appointment)
+                                            trend.started_at or now, emb)
         decision, reason, ev, draft = evaluate(db, trend, sc, evidence, now)
         _set_match(row, ev, [m["party"] for m in named if m.get("party")],
                    selection_score(trend.rank, ev.strength) if draft else None)
