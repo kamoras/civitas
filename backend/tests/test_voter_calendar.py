@@ -261,3 +261,73 @@ def test_the_bundled_calendar_covers_every_state_from_its_own_sources():
             if item.get("daysBefore") is not None:
                 assert item["countedDate"]
             assert item["rule"]
+
+
+# ── The next election, without anyone editing the sources ────────
+
+def _carry_sources():
+    return {"electionDate": "2026-11-03", "states": {
+        "WA": {"timeZone": "America/Los_Angeles", "items": [
+            # A count from election day, cited from a statute: carries.
+            {"kind": "registration", "method": "online", "rule": "8 days before.", "daysBefore": 8,
+             "date": "2026-10-26", "source": {"type": "statute", "publisher": "RCW", "url": "https://law.example.gov/a",
+                                              "quote": "at least eight days before the election"}},
+            # A state page printing this election's date: re-dated.
+            {"kind": "ballot_return", "method": "mail", "basis": "received", "rule": "By noon on Election Day.",
+             "date": "2026-11-03", "time": "12:00",
+             "source": {"type": "official", "publisher": "SOS", "url": "https://sos.example.gov/b",
+                        "quote": "must be received by noon on election day, tuesday, november 3, 2026."}},
+            # A rule written as a calendar date: never carried.
+            {"kind": "absentee_request", "method": "any", "rule": "Request by October 27.", "date": "2026-10-27",
+             "source": {"type": "official", "publisher": "SOS", "url": "https://sos.example.gov/c", "quote": "q"}},
+        ]},
+        # 29 days before 2028-11-07 is Monday, October 9, 2028: Columbus Day.
+        "AZ": {"timeZone": "America/Phoenix", "items": [
+            {"kind": "registration", "method": "any", "rule": "29 days before.", "daysBefore": 29,
+             "date": "2026-10-05", "source": {"type": "statute", "publisher": "ARS", "url": "https://law.example.gov/z",
+                                              "quote": "the twenty-ninth day preceding the date of the election"}},
+        ]},
+    }}
+
+
+def test_rules_carry_to_the_next_election_by_whole_weeks(generator):
+    out, dropped = generator.carry(_carry_sources(), date(2028, 11, 7))
+    wa = out["states"]["WA"]
+    assert [i["date"] for i in wa["items"]] == ["2028-10-30", "2028-11-07"]
+    assert wa["items"][1]["source"]["quote"] == "must be received by noon on election day, tuesday, november 7, 2028."
+    assert wa["incomplete"] is True and "calendar date" in dropped["WA"][0]
+    # A count that would land on a federal holiday is left to the state.
+    assert "unread" in out["states"]["AZ"] and "federal holiday" in dropped["AZ"][0]
+    with pytest.raises(ValueError):
+        generator.carry(_carry_sources(), date(2028, 11, 8))
+
+
+def test_a_carried_item_is_kept_only_where_its_page_says_it_for_the_new_election(generator):
+    sources, _ = generator.carry(_carry_sources(), date(2028, 11, 7))
+    pages = _Pages({
+        "https://law.example.gov/a": (200, "<p>At least eight days before the election.</p>"),
+        # The state's page still shows the old election: not verified for the new one.
+        "https://sos.example.gov/b": (200, "<p>Must be received by noon on Election Day, Tuesday, November 3, 2026.</p>"),
+    })
+    out = generator.build({**sources, "states": {"WA": sources["states"]["WA"]}}, pages, None, strict=False)
+    assert out["electionDate"] == "2028-11-07"
+    assert [i["date"] for i in out["states"]["WA"]["items"]] == ["2028-10-30"]
+    assert out["states"]["WA"]["incomplete"] is True
+
+
+def test_a_calendar_missing_some_deadlines_says_so(calendar):
+    calendar({"WA": {**WA, "incomplete": True}})
+    note = voter_calendar.calendar_for_state("WA", ELECTION, _utc(2026, 10, 1, 12))["note"]
+    assert "Not every one of Washington's deadlines is confirmed" in note
+
+
+def test_the_refreshed_calendar_wins_over_the_bundled_one(calendar):
+    from app import voter_calendar as vc
+
+    calendar({"WA": WA})
+    refreshed = pathlib.Path(vc.runtime_data_path(vc._PATH.name))
+    refreshed.parent.mkdir(parents=True, exist_ok=True)
+    refreshed.write_text(json.dumps({"electionDate": "2028-11-07", "states": {"OR": {**WA}}}))
+    assert voter_calendar.calendar_for_state("WA", ELECTION) is None
+    assert voter_calendar.calendar_for_state("OR", date(2028, 11, 7), _utc(2028, 10, 1, 12)) is not None
+    refreshed.unlink()

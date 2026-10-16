@@ -8,7 +8,10 @@ Green), and a code the table doesn't define is one a filer typed, shown as
 filed. Rerun when the FEC adds a party.
 
 Run from the repo (network required):
-    cd backend && PYTHONPATH=. python3 scripts/fetch_fec_party_codes.py
+    cd backend && PYTHONPATH=. python3 scripts/fetch_fec_party_codes.py [output.json]
+
+Also run monthly by app/data_refresh.py, which gates the result and keeps
+the copy in use when it fails.
 """
 
 import datetime
@@ -16,6 +19,7 @@ import html
 import json
 import pathlib
 import re
+import sys
 import urllib.request
 
 from app.contact import CONTACT_EMAIL
@@ -35,16 +39,17 @@ def parse(page: str) -> dict[str, str]:
 
 
 def main() -> None:
+    out = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else OUT
     req = urllib.request.Request(URL, headers={"User-Agent": f"Civitas ({CONTACT_EMAIL})"})
     with urllib.request.urlopen(req, timeout=60) as resp:
         codes = parse(resp.read().decode("utf-8", errors="replace"))
     if len(codes) < 50:
         raise SystemExit(f"Only {len(codes)} codes parsed; the page layout may have changed")
-    OUT.write_text(json.dumps({
+    out.write_text(json.dumps({
         "_source": f"{URL}, read {datetime.date.today().isoformat()} by scripts/fetch_fec_party_codes.py",
         "codes": dict(sorted(codes.items())),
     }, indent=2) + "\n")
-    print(f"wrote {OUT} ({len(codes)} codes)")
+    print(f"wrote {out} ({len(codes)} codes)")
 
 
 if __name__ == "__main__":
