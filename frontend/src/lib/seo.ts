@@ -370,7 +370,7 @@ export function describeElectionMap(cycle?: number): {
   const year = cycle ? `${cycle} ` : "";
   return {
     title: `${year}Senate and House Map: Usual Vote and Poll Ranges`,
-    description: `How each ${year}Senate and House seat usually votes, the range this year's polls suggest for the margin, and where the two disagree. Ranges, not results; not a race call. Method and held-out calibration shown.`,
+    description: `How each ${year}Senate and House seat usually votes, a range for the margin (from this year's polls where a seat has any), and where the two disagree. Ranges, not results; not a race call. Method and held-out calibration shown.`,
   };
 }
 

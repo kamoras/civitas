@@ -565,9 +565,62 @@ def test_beyond_the_poll_window_the_range_is_the_structural_lines_alone(db_sessi
     assert oh["status"] == "range" and oh["fundamentalsOnly"]
     assert oh["mean"] == oh["prior"] and oh["pollAverage"] is None and oh["pollShare"] == 0
     assert oh["polls"]["list"] and not any(p["usedInAverage"] for p in oh["polls"]["list"])
+    assert oh["rangeBasis"] == "before_window" and "from polls" not in oh["rangeBasisLabel"]
     params = build.data_refresh.read("forecast_model.json")["fits"]["14"]
     half = model.Z80 * params["priorScale"] * params["priorSd"]
     assert abs(oh["range80"][1] - oh["range80"][0] - 2 * half) < 0.2
+
+
+def test_every_seats_range_basis_matches_whether_a_poll_is_in_it(db_session, freeze_utcnow):
+    """A range is labelled "from polls" exactly when the seat's own polls are
+    in it, never on a seat whose range is the usual vote and swing alone."""
+    db_session.add(Race(id="2026-SEN-NY", cycle_year=2026, office="S", state="NY", is_special=False))
+    for i, (party, name) in enumerate((("DEM", "Kim Park"), ("REP", "Lou Ford"))):
+        db_session.add(Candidate(id=f"NY{i}", race_id="2026-SEN-NY", name=name, ballot_name=name, party=party,
+                                 incumbent_challenge="O", confirmed_general=True))
+    data = _built(db_session, freeze_utcnow)
+    ranged = [s for s in _seats(data) if s["status"] == "range"]
+    assert {s["rangeBasis"] for s in ranged} == {"polls", "no_poll"}
+    for s in ranged:
+        polled = s["polls"]["used"] > 0 and not s["fundamentalsOnly"]
+        assert (s["rangeBasis"] == "polls") == polled == s["difference"]["seatPolls"], s["id"]
+        assert ("from polls" in s["rangeBasisLabel"]) == polled, s["id"]
+        assert s["rangeBasisLabel"] == build.RANGE_BASIS[s["rangeBasis"]]["label"]
+    # The lean and the margin are both written "D+N"; the map names each unit.
+    assert set(data["units"]) == {"lean", "margin"}
+
+
+def test_one_poll_asked_two_ways_is_listed_once(db_session, freeze_utcnow):
+    """An article prints a poll with and without leaners as two rows under one
+    pollster and one set of dates. The average counts it once, and so does
+    the list: one entry, both questions, matching "used"."""
+    two = """|-
+|rowspan="2"|Two Question Polling
+|rowspan="2"|October 7–9, 2026
+|rowspan="2"|400 (RV)
+|rowspan="2"|±{{nbsp}}4.0%
+|40%
+|49%
+|–
+|11%
+|-
+|42%
+|51%
+|–
+|7%
+"""
+    freeze_utcnow(datetime(2026, 10, 15, 16, 0))
+    _seed(db_session)
+    revisions = _revisions()
+    senate = revisions[senate_ohio()]
+    senate["content"] = article(ROW + two)
+    data = build.build(db_session, revisions, house_titles=[house_ohio()])
+    oh = next(s for s in _seats(data) if s["id"] == "2026-SEN-OH")
+    assert oh["polls"]["count"] == 3 and oh["polls"]["used"] == 2
+    assert len(oh["polls"]["list"]) == oh["polls"]["used"]
+    entry = next(p for p in oh["polls"]["list"] if p["pollster"] == "Two Question Polling")
+    assert entry["questions"] == [{"dem": 40.0, "rep": 49.0}, {"dem": 42.0, "rep": 51.0}]
+    assert "questions" not in next(p for p in oh["polls"]["list"] if p["pollster"] == "Example Polling")
 
 
 def test_a_new_cycle_never_keeps_the_last_cycles_figures(db_session, freeze_utcnow, monkeypatch, tmp_path):

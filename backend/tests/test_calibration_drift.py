@@ -105,5 +105,5 @@ def test_the_gates_report_what_they_decide(monkeypatch):
     monkeypatch.setattr(cd, "observe", lambda gate, scores, threshold: seen.append((gate, list(scores), threshold)))
     monkeypatch.setattr(trend_relevance, "relevance_votes", lambda *a: np.array([0.2, 0.9]))
     monkeypatch.setattr(trend_relevance, "_reference", lambda gate: None)
-    trend_relevance.gate_votes("relevance", np.zeros((2, 3)))
-    assert seen[0][0] == "trend_relevance" and seen[0][1] == [0.2, 0.9]
+    trend_relevance.gate_votes("tragedy", np.zeros((2, 3)))
+    assert seen[0][0] == "trend_tragedy" and seen[0][1] == [0.2, 0.9]
