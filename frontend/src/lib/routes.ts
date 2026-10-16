@@ -57,3 +57,39 @@ export function agencyHref(slug: string): string {
 export function agencyExploreHref(slug: string): string {
   return `/explore?agency=${encodeURIComponent(slug)}`;
 }
+
+/**
+ * Each section's sub-pages, in the order its tab bar lists them: the one
+ * table `SectionTabs` reads, so a page added here appears in every bar of its
+ * section. Every tab is a page of its own (a link with `aria-current`, not an
+ * in-page ARIA tab), and none is ever dropped for the election phase: a page
+ * out of its phase (the seat map from election day on) says so itself, so
+ * the tab still leads somewhere that explains. The hrefs repeat
+ * `ELECTION_MAP_HREF`, `REDISTRICTING_HREF` and `presidentSupportHref("house")`
+ * as literals because those modules import this one; `routes.test.ts` holds
+ * them equal.
+ */
+export const SECTIONS = {
+  congress: {
+    label: "Congress",
+    tabs: [
+      { key: "reports", label: "Reports", href: "/congress" },
+      { key: "bills", label: "Bills", href: "/congress/bills" },
+      { key: "committees", label: "Committees", href: "/congress/committees" },
+      // "Votes with the president", not "With the president": the page is
+      // how often members voted with the president's stated positions.
+      { key: "president", label: "Votes with the president", href: "/congress/president/house" },
+    ],
+  },
+  elections: {
+    label: "Elections",
+    tabs: [
+      { key: "ballots", label: "Ballots by state", href: "/elections" },
+      { key: "map", label: "Seat map", href: "/elections/map?chamber=senate&view=usual" },
+      { key: "redistricting", label: "New House maps", href: "/elections/redistricting" },
+    ],
+  },
+} as const;
+
+export type SectionKey = keyof typeof SECTIONS;
+export type SectionTabKey<S extends SectionKey> = (typeof SECTIONS)[S]["tabs"][number]["key"];

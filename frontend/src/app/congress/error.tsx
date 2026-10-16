@@ -4,7 +4,7 @@ import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
-import { CongressTabs } from "@/components/congress/CongressNav";
+import SectionTabs from "@/components/layout/SectionTabs";
 import { BOXED_CONTROL } from "@/lib/controlStyles";
 
 /** A report that could not be fetched (congressServer.ts throws for it).
@@ -15,7 +15,7 @@ export default function CongressError({ retry }: { retry: () => void }) {
       <Navbar />
       <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
         <div className="mx-auto max-w-6xl">
-          <CongressTabs active="reports" />
+          <SectionTabs section="congress" active="reports" />
           <PageMasthead eyebrow="What happened in Congress" title="Congress">
             <p>
               The record of Congress could not be reached just now. This is an outage on this site,

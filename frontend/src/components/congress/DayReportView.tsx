@@ -7,7 +7,8 @@ import FollowFeed from "@/components/shared/FollowFeed";
 import { TOPIC_FEEDS } from "@/lib/site";
 import type { ChamberDay, CongressEvent, DayReport } from "@/types/congress";
 import { CHAMBER_NAME, dayHref, longDate, monthHref, shortDate, weekHref } from "@/lib/congress";
-import { CongressTabs, PeriodNav } from "./CongressNav";
+import { PeriodNav } from "./CongressNav";
+import SectionTabs from "@/components/layout/SectionTabs";
 import { Empty, EventList, Figure, FigureGroup, MeasureRow, Section, VoteRow } from "./ReportParts";
 
 const STATUS_LINE: Record<ChamberDay["status"], string> = {
@@ -215,7 +216,7 @@ export default function DayReportView({
       <Navbar />
       <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
         <div className="mx-auto max-w-6xl">
-          <CongressTabs active="reports" />
+          <SectionTabs section="congress" active="reports" />
           <PageMasthead
             className="mb-6"
             eyebrow="What happened in Congress"

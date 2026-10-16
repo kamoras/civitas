@@ -5,6 +5,7 @@ import { pageMetadata } from "@/lib/site";
 import { describeRedistrictingIndex } from "@/lib/seo";
 import { REDISTRICTING_HREF, netWord, redistrictingHref } from "@/lib/redistricting";
 import { safeHref } from "@/lib/formatting";
+import SectionTabs from "@/components/layout/SectionTabs";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
@@ -41,6 +42,7 @@ export default async function RedistrictingIndexPage() {
       <Navbar />
       <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
         <div className="mx-auto max-w-4xl">
+          <SectionTabs section="elections" active="redistricting" />
           <PageMasthead eyebrow={`Elections · ${index?.cycle ?? ""}`} title="New House maps">
             <p>
               {states.length} states {index?.upcoming === false ? "voted" : "vote"} on new U.S.
@@ -49,6 +51,26 @@ export default async function RedistrictingIndexPage() {
               blocks; every figure downloads.
             </p>
           </PageMasthead>
+
+          {/* Every redrawn state in one row, so a reader who knows their
+              state goes straight to it rather than scrolling the list. */}
+          {states.length > 0 && (
+            <nav aria-label="Redrawn states" className="mt-6">
+              <ul className="flex flex-wrap gap-2">
+                {states.map((s) => (
+                  <li key={s.state}>
+                    <Link
+                      href={redistrictingHref(s.state)}
+                      className="flex min-h-11 min-w-11 items-center justify-center border border-white/15 px-3 font-mono text-sm tracking-[0.12em] text-ink-lo transition-colors hover:border-phos/40 hover:text-phos"
+                    >
+                      {s.state}
+                      <span className="sr-only"> {s.stateName}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          )}
 
           <ul className="mt-6">
             {states.map((s) => (

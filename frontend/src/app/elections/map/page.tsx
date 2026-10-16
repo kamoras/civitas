@@ -4,6 +4,7 @@ import type { ElectionMapResponse } from "@/types/electionMap";
 import { absoluteUrl, pageMetadata } from "@/lib/site";
 import { describeElectionMap } from "@/lib/seo";
 import { ELECTION_MAP_HREF, parseChamber, parseView, type MapChamber } from "@/lib/electionMap";
+import SectionTabs from "@/components/layout/SectionTabs";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
@@ -58,6 +59,7 @@ export default async function ElectionMapPage({
       <Navbar />
       <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
         <div className="mx-auto max-w-6xl space-y-8">
+          <SectionTabs section="elections" active="map" className="" />
           <PageMasthead
             eyebrow={`${state.kind === "map" ? `${state.data.cycle} general` : "General"} election · Senate and House`}
             title="Where seats lean"
