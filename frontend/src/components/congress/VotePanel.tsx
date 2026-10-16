@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
-import type { BillRecordVote, VoteDetail } from "@/types/congress";
+import type { BillRecordVote, CoveragePart, VoteDetail } from "@/types/congress";
 import { CHAMBER_NAME, resultTone, rollCallHref, shortDate } from "@/lib/congress";
 import VoteMembers, { PartyBar } from "./VoteMembers";
 
@@ -18,9 +18,25 @@ function voteKey(v: { chamber: string; session: number; number: number }) {
 export default function VotePanel({
   votes,
   congress,
+  unreadable = false,
+  coverage,
+  named = [],
 }: {
   votes: BillRecordVote[];
   congress: number;
+  /** The bill's record couldn't be read: the votes are unknown, not none. */
+  unreadable?: boolean;
+  /** Whether Civitas holds the bill's Congress's roll calls (bill_coverage). */
+  coverage?: CoveragePart;
+  /** The roll calls the bill's history names, each linked to the chamber's
+   * own record: what a reader follows when the votes aren't held here. */
+  named?: {
+    chamber: string;
+    number: number;
+    session: number;
+    sourceUrl?: string | null;
+    date: string;
+  }[];
 }) {
   const [chosen, setChosen] = useState<string | null>(null);
   // Each vote's members, fetched once: a vote never changes after it is taken.
@@ -59,6 +75,35 @@ export default function VotePanel({
   }, [vote, congress, selected, loaded]);
 
   if (!votes.length) {
+    if (unreadable)
+      return <p className="text-[15px] text-ink-lo">The votes could not be loaded just now.</p>;
+    if (coverage && !coverage.held) {
+      const linked = named.filter((rc) => rc.sourceUrl);
+      return (
+        <div className="flex flex-col gap-3 text-[15px] text-ink-lo">
+          <p>{coverage.sentence}</p>
+          {linked.length > 0 && (
+            <ul className="flex flex-col">
+              {linked.map((rc) => (
+                <li
+                  key={`${rc.chamber}-${rc.session}-${rc.number}`}
+                  className="border-b border-white/[0.09] py-2"
+                >
+                  <a
+                    href={rc.sourceUrl ?? undefined}
+                    className="inline-flex min-h-6 items-center underline decoration-white/30 underline-offset-4 hover:text-phos"
+                  >
+                    {CHAMBER_NAME[rc.chamber as keyof typeof CHAMBER_NAME] ?? rc.chamber} roll call{" "}
+                    {rc.number}
+                  </a>
+                  <span className="ml-2 font-mono text-xs text-ink-min">{shortDate(rc.date)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      );
+    }
     return (
       <p className="text-[15px] text-ink-lo">No recorded votes on this bill in either chamber.</p>
     );

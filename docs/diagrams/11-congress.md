@@ -24,6 +24,22 @@ flowchart TB
 the current session's roll calls, and only then the back-fill, so a fresh
 database shows this week before the Congress's first months.
 
+**What isn't held is said, never shown as none** (`congress_service.coverage`,
+`bill_coverage`). The record starts with the back-fill's first day, the
+roll calls with the Congresses `roll_calls` holds, and Explore keeps the
+sitting Congress's floor speeches only. A bill of an earlier Congress says
+which of its votes, floor debate and Record days aren't held (and links
+each roll call its Congress.gov history names to the chamber's own record),
+the public API's `/bills/{id}/votes` carries `covered` and `heldCongresses`,
+and a `/congress` day, week, month or roll call outside the record is a 404
+that states where the record starts (`GET /api/congress/coverage`). Before this,
+a bill of an earlier Congress that the House passed on a roll call read "No
+recorded votes on this bill in either chamber", and a day before the record
+began said neither chamber met. Fetching past Congresses'
+roll calls on demand was considered and not done: stored, they would also
+reach the day and week reports and `record_span`, which would then claim
+days the Digest back-fill never read.
+
 **The Digest's own words.** Every event keeps the record's wording. Parsing
 only decides which heading an entry sits under ("Measures Passed:",
 "Nominations Confirmed:", a House measure's own heading, "Suspensions:") and

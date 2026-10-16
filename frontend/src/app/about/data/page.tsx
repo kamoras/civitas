@@ -74,7 +74,10 @@ export default function DataChapter() {
             <Fact label="Senate.gov & House Clerk">
               Roll-call votes with every member&apos;s position, each shown on its own page
               (nominations included) and linked to the chamber&apos;s record, and each
-              chamber&apos;s live floor log.
+              chamber&apos;s live floor log. Held from the first day of Civitas&apos;s record of
+              Congress, as are the Daily Digest&apos;s days, and a page outside it says where the
+              record starts; a bill of an earlier Congress says its votes aren&apos;t held and links
+              each roll call to the chamber&apos;s record.
             </Fact>
             <Fact label="unitedstates/congress-legislators">
               Committee seats and party leadership titles, an open dataset refreshed weekly. It

@@ -90,7 +90,9 @@ def test_record_shapes_every_part(senate, monkeypatch):
     # The latest summary, as plain paragraphs (no markup from another site).
     assert r["summary"]["actionDesc"] == "Reported to Senate"
     assert r["summary"]["paragraphs"][1].startswith("This bill establishes requirements for name, image, or likeness (NIL) agreements & more.")
-    assert r["actions"][0]["rollCalls"] == [{"chamber": "senate", "number": 243, "session": 2}]
+    assert r["actions"][0]["rollCalls"] == [{
+        "chamber": "senate", "number": 243, "session": 2,
+        "sourceUrl": "https://www.senate.gov/legislative/LIS/roll_call_votes/vote1192/vote_119_2_00243.xml"}]
     assert r["votes"][0]["parties"] == [
         {"party": "R", "yea": 1, "nay": 0, "present": 0, "notVoting": 1},
         {"party": "D", "yea": 1, "nay": 1, "present": 0, "notVoting": 0},
