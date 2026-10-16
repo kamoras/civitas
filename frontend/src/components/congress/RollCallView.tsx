@@ -79,7 +79,7 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
               {...{ [SHARE_SECTION_ATTR]: "vote" }}
               id="vote"
               aria-labelledby="vote-title"
-              className="flex scroll-mt-28 flex-col gap-6"
+              className="flex flex-col gap-6"
             >
               <header className="flex flex-col gap-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -142,10 +142,7 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
             </section>
 
             <section aria-labelledby="members" className="flex flex-col gap-4">
-              <h2
-                id="members"
-                className="scroll-mt-28 font-display text-2xl font-extrabold text-ink-hi"
-              >
+              <h2 id="members" className="font-display text-2xl font-extrabold text-ink-hi">
                 How each {MEMBERS[vote.chamber]} voted
                 <span className="ml-2 font-mono text-sm font-normal text-ink-min">
                   {vote.members.length}
@@ -158,10 +155,7 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
               aria-labelledby="sources"
               className="flex flex-col gap-6 border border-white/25 bg-surface p-5"
             >
-              <h2
-                id="sources"
-                className="scroll-mt-28 font-display text-2xl font-extrabold text-ink-hi"
-              >
+              <h2 id="sources" className="font-display text-2xl font-extrabold text-ink-hi">
                 Source and citation
               </h2>
               <div className="grid gap-8 lg:grid-cols-2">

@@ -70,7 +70,7 @@ export default async function SectionCards({
         aria-labelledby={headingId}
         data-share-section={`${section}-pages`}
         {...shareMetaAttrs({ source: SOURCES[section] ?? "Civitas", asOf: null })}
-        className={`${className} scroll-mt-28`}
+        className={`${className} `}
       >
         <div className="flex items-baseline justify-between gap-3 border-b border-white/15 pb-2">
           <h2 id={headingId} className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">

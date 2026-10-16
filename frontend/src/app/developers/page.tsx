@@ -146,7 +146,7 @@ function EndpointBlock({ endpoint, spec }: { endpoint: Endpoint; spec: Spec }) {
   // Paths with nothing to fill in can be opened as they are.
   const openable = !path.includes("{");
   return (
-    <article id={op.operationId} className="scroll-mt-24 space-y-3">
+    <article id={op.operationId} className="space-y-3">
       <h4 className="font-display text-lg font-semibold text-ink-hi">{op.summary}</h4>
       <div className="space-y-0.5 font-mono">
         <p className="break-all text-sm">

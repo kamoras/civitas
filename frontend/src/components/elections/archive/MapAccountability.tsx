@@ -12,7 +12,7 @@ import {
   formatAsOf,
   houseLayout,
 } from "@/lib/electionMap";
-import { raceLabel } from "@/lib/results";
+import { MAP_LABEL_HALO, raceLabel } from "@/lib/results";
 import type { MapBin, MapChamberKey } from "@/types/electionMap";
 import type {
   AccountabilitySeat,
@@ -293,7 +293,7 @@ function SenateSwing({ seats }: { seats: AccountabilitySeat[] }) {
               y={y + TILE / 2 + 1.2}
               textAnchor="middle"
               fontSize="3"
-              className={`pointer-events-none font-mono ${list.length ? "fill-ink-hi" : "fill-ink-min/50"}`}
+              className={`pointer-events-none font-mono ${MAP_LABEL_HALO} ${list.length ? "fill-ink-hi" : "fill-ink-min/75"}`}
             >
               {state}
             </text>
@@ -457,7 +457,7 @@ export default function MapAccountability({ data, pageUrl }: { data: Data; pageU
       <section
         id="map-check"
         aria-labelledby="map-check-title"
-        className="scroll-mt-[var(--header-clearance)] space-y-4 border border-phos/20 bg-surface-base p-3 sm:p-4"
+        className="space-y-4 border border-phos/20 bg-surface-base p-3 sm:p-4"
         {...{ [SHARE_SECTION_ATTR]: "map-check" }}
         {...shareMetaAttrs({ source: ACCOUNTABILITY_SOURCE, asOf: data.mapAsOf })}
       >
@@ -496,7 +496,7 @@ export default function MapAccountability({ data, pageUrl }: { data: Data; pageU
       <section
         id="swing-map"
         aria-labelledby="swing-map-title"
-        className="scroll-mt-[var(--header-clearance)] space-y-4 border border-phos/20 bg-surface-base p-3 sm:p-4"
+        className="space-y-4 border border-phos/20 bg-surface-base p-3 sm:p-4"
         {...{ [SHARE_SECTION_ATTR]: "swing-map" }}
         data-share-fixed-layout=""
         {...shareMetaAttrs({ source: ACCOUNTABILITY_SOURCE, asOf: data.mapAsOf })}

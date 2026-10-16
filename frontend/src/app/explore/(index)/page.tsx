@@ -482,11 +482,7 @@ function ExplorePageInner() {
           </PageMasthead>
 
           {/* Search form */}
-          <form
-            ref={formRef}
-            onSubmit={handleSubmit}
-            className="mb-6 scroll-mt-[var(--header-clearance)]"
-          >
+          <form ref={formRef} onSubmit={handleSubmit} className="mb-6 ">
             <div className="panel">
               <TerminalTitlebar title="Query" />
               <div className="p-4">

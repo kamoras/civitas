@@ -159,7 +159,7 @@ export default async function CommitteesPage({
           <section aria-labelledby="committee-results" className="flex flex-col gap-3">
             <h2
               id="committee-results"
-              className="scroll-mt-[var(--header-clearance)] flex flex-wrap items-baseline justify-between gap-x-4 border-b border-white/15 pb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
+              className="flex flex-wrap items-baseline justify-between gap-x-4 border-b border-white/15 pb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
             >
               <span>
                 {total.toLocaleString("en-US")} {total === 1 ? "entry" : "entries"}

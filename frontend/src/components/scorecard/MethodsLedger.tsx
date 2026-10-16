@@ -203,11 +203,7 @@ export default function MethodsLedger({
   const version = scoredOn?.algorithmVersion ? `, scoring method ${scoredOn.algorithmVersion}` : "";
 
   return (
-    <section
-      ref={ref}
-      id="methods"
-      className="scroll-mt-[var(--header-clearance)] border border-white/25 bg-surface font-sans"
-    >
+    <section ref={ref} id="methods" className="border border-white/25 bg-surface font-sans">
       {/* The toggle inside the heading, as CollapsibleSection does it: a
           heading inside a button drops out of the heading list. */}
       <h2 className="text-[19px] font-bold leading-tight text-ink-hi">

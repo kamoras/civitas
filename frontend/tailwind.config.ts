@@ -29,15 +29,15 @@ const config: Config = {
            still measure. Targets: 90+ fluent body, 75 secondary, 60 the floor
            for short non-fluent labels.
 
-           Both are computed rather than estimated, and quoted against the
-           LIGHTEST background any text in the app is actually composited on — which is not `surface.raised`
-           (#191512) but #262010, a 10% amber wash sitting on top of it. That
-           distinction cost two tokens: measured against `raised` the floor
-           read 4.74:1 and axe still failed it, because a tinted badge is a
-           surface too. Measure the composite, not the token. Anything added must clear
-           4.5:1 there. Re-measured in a browser after the ground was warmed;
-           the whole ramp moved by roughly a tenth and nothing crossed the
-           floor.
+           The ratios quoted beside each token are against `surface.raised`
+           (#191512). The lightest ground any text in the app is actually
+           composited on is lighter still: a 10% amber wash over `raised`,
+           #302818 (a tinted badge is a surface too; measuring the token alone
+           is how an earlier floor passed its own check and failed in axe).
+           Every text token clears 4.5:1 there, and
+           src/lib/wcagContrast.test.ts computes all of this from this file
+           and fails the build below WCAG 2.2 AA, so a number here that drifts
+           from the hex is caught rather than trusted.
 
            This is the whole palette. The legacy matrix-green, neon-cyan,
            neon-pink, neon-yellow, terminal-bg, terminal-border and crt-black
@@ -77,7 +77,6 @@ const config: Config = {
         phos: {
           DEFAULT: "#00FF41", // 13.29:1
           mid: "#04B831", //  6.83:1
-          dim: "#059A2A", //  9.74:1
         },
 
         // Score tiers and categorical tags. `magenta` doubles as the second
@@ -94,7 +93,7 @@ const config: Config = {
           cyan: "#4DE3E8", // 11.64:1
           amber: "#FFD84D", // 13.12:1
           orange: "#FF8A3D", //  7.74:1
-          red: "#FF8989", // Lc 56 ·  9.02:1
+          red: "#FF8989", // Lc 56 ·  7.94:1
           magenta: "#FF6BD6", //  7.19:1
         },
 
@@ -112,9 +111,9 @@ const config: Config = {
           raised: "#191512",
         },
 
-        "dem-blue": "#82acff", // Lc 56 ·  9.06:1 — was #0066ff (4.22:1), which failed even at full opacity
-        "rep-red": "#ff8989", // Lc 56 ·  9.02:1 — matches signal.red; kept as an alias for party call sites
-        "ind-purple": "#c995ff", // Lc 56 ·  9.06:1 — lightened twice; see the composite note above
+        "dem-blue": "#82acff", // Lc 56 ·  8.03:1 — was #0066ff (4.22:1), which failed even at full opacity
+        "rep-red": "#ff8989", // Lc 56 ·  7.94:1 — matches signal.red; kept as an alias for party call sites
+        "ind-purple": "#c995ff", // Lc 56 ·  7.97:1 — lightened twice; see the composite note above
       },
       fontFamily: {
         /* Three faces, one job each. `display` and `sans` are both Archivo:

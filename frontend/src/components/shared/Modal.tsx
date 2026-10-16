@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { inOtherDialog } from "@/lib/focusedDialog";
+import { inOtherDialog, trapTab } from "@/lib/focusedDialog";
 
 interface ModalProps {
   open: boolean;
@@ -30,23 +30,13 @@ export default function Modal({ open, onClose, title, children }: ModalProps) {
         return;
       }
       // Focus trap: keep Tab cycling within the dialog instead of
-      // leaking out to whatever's behind the backdrop. Content here is
-      // simple (a close button plus static text), so a fresh query on
-      // every keypress is cheap and always current — no need to cache it.
-      if (e.key !== "Tab" || !dialogRef.current) return;
-      const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'
-      );
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
+      // leaking out to whatever's behind the backdrop.
+      if (!dialogRef.current) return;
+      trapTab(e, [
+        ...dialogRef.current.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'
+        ),
+      ]);
     }
     document.addEventListener("keydown", handleKeyDown);
     const previouslyFocused = document.activeElement as HTMLElement | null;
@@ -80,7 +70,7 @@ export default function Modal({ open, onClose, title, children }: ModalProps) {
               type="button"
               onClick={onClose}
               aria-label="Close"
-              className="text-ink-lo hover:text-phos transition-colors text-lg leading-none px-1 shrink-0"
+              className="-my-2 inline-flex h-8 w-8 shrink-0 items-center justify-center text-lg leading-none text-ink-lo transition-colors hover:text-phos"
             >
               ×
             </button>

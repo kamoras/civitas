@@ -13,6 +13,9 @@ interface MetricTooltipProps {
 const EDGE_PADDING_PX = 8;
 // Gap between the trigger and the tooltip along the vertical axis.
 const TRIGGER_GAP_PX = 6;
+// How long a bubble opened by hover outlives the pointer leaving: long enough
+// to cross TRIGGER_GAP_PX onto it, short enough to read as "it closed".
+const HOVER_CLOSE_DELAY_MS = 200;
 
 interface Coords {
   left: number;
@@ -25,6 +28,21 @@ export default function MetricTooltip({ text, children }: MetricTooltipProps) {
   const ref = useRef<HTMLSpanElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const tooltipId = useId();
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // Hover opens it and leaving closes it, after a beat: the pointer has to be
+  // able to cross the gap onto the bubble and rest there (WCAG 1.4.13,
+  // Hoverable). It closed the moment the pointer left the [?], and the bubble
+  // ignored the pointer altogether.
+  const show = useCallback(() => {
+    clearTimeout(closeTimer.current);
+    setOpen(true);
+  }, []);
+  const hideSoon = useCallback(() => {
+    clearTimeout(closeTimer.current);
+    closeTimer.current = setTimeout(() => setOpen(false), HOVER_CLOSE_DELAY_MS);
+  }, []);
+  useEffect(() => () => clearTimeout(closeTimer.current), []);
 
   // Position the tooltip in viewport coordinates (position: fixed) rather
   // than as an absolutely-positioned child of the trigger. The trigger
@@ -87,11 +105,18 @@ export default function MetricTooltip({ text, children }: MetricTooltipProps) {
       if (tooltipRef.current?.contains(target)) return;
       setOpen(false);
     }
+    // Escape dismisses it wherever focus is, so a bubble opened by hover can
+    // be closed without moving the pointer (WCAG 1.4.13, Dismissible).
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
     document.addEventListener("mousedown", handleOutside);
     document.addEventListener("touchstart", handleOutside);
+    document.addEventListener("keydown", handleEscape);
     return () => {
       document.removeEventListener("mousedown", handleOutside);
       document.removeEventListener("touchstart", handleOutside);
+      document.removeEventListener("keydown", handleEscape);
     };
   }, [open]);
 
@@ -109,14 +134,10 @@ export default function MetricTooltip({ text, children }: MetricTooltipProps) {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        onMouseEnter={() => setOpen(true)}
-        onMouseLeave={() => setOpen(false)}
-        onFocus={() => setOpen(true)}
+        onMouseEnter={show}
+        onMouseLeave={hideSoon}
+        onFocus={show}
         onBlur={() => setOpen(false)}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") setOpen(false);
-        }}
-        title={text}
         // A real 24x24 box (WCAG 2.2 SC 2.5.8), with the extra height taken
         // straight back out again by `-my-1.5`. The glyph was 19-21px x 12px.
         //
@@ -150,11 +171,13 @@ export default function MetricTooltip({ text, children }: MetricTooltipProps) {
             ref={tooltipRef}
             role="tooltip"
             aria-hidden="true"
+            onMouseEnter={show}
+            onMouseLeave={hideSoon}
             style={{
               left: coords ? `${coords.left}px` : "-9999px",
               top: coords ? `${coords.top}px` : "-9999px",
             }}
-            className={`fixed z-[100] w-48 sm:w-56 max-w-[calc(100vw-16px)] px-2.5 py-2 text-xs leading-snug text-ink-hi bg-black/95 border border-white/15 shadow-lg pointer-events-none transition-opacity ${
+            className={`fixed z-[100] w-48 sm:w-56 max-w-[calc(100vw-16px)] px-2.5 py-2 text-xs leading-snug text-ink-hi bg-black/95 border border-white/15 shadow-lg transition-opacity ${
               coords ? "opacity-100" : "opacity-0"
             }`}
           >

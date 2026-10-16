@@ -91,14 +91,15 @@ describe("HouseResultRow", () => {
     expect(row).toHaveTextContent("TIED");
   });
 
-  it("lands a #race- link clear of the fixed header, and can take focus", () => {
+  // Clear of the fixed header when a #race- link lands on it: globals.css's
+  // scroll-padding-top, for every target at once (layoutStability.test.ts).
+  it("can take focus when a #race- link lands on it", () => {
     render(
       <ol>
         <HouseResultRow result={race()} />
       </ol>
     );
     const row = screen.getByRole("listitem");
-    expect(row).toHaveClass("scroll-mt-[var(--header-clearance)]");
     expect(row).toHaveAttribute("tabindex", "-1");
   });
 });
@@ -109,11 +110,6 @@ describe("RaceResultCard", () => {
     const name = screen.getByText("Ray Jones");
     expect(name.className).not.toMatch(/truncate/);
     expect(name.className).toContain("break-words");
-  });
-
-  it("lands a #race- link clear of the fixed header", () => {
-    render(<RaceResultCard result={race({ office: "S", district: null })} />);
-    expect(screen.getByRole("article")).toHaveClass("scroll-mt-[var(--header-clearance)]");
   });
 
   it("says a tie is tied, not led", () => {

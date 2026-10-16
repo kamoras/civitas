@@ -92,7 +92,7 @@ export default function RaceFullDetail({
   const { leaders, tail } = tiered ? tierCandidates(active) : { leaders: active, tail: [] };
 
   return (
-    <div id={`race-${race.id}`} className="scroll-mt-24">
+    <div id={`race-${race.id}`}>
       {active.length === 0 ? (
         <p className="text-xs text-ink-lo">No candidates on record for this race yet.</p>
       ) : (
