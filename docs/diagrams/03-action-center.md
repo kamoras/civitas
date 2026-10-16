@@ -152,11 +152,12 @@ centroid merge from 0.20 chained stories that only share a theme: on
 2026-09-27 one issue carried a Bangkok-floods title, a Hawaii-hurricane lede
 and facts about a nor'easter and an HIV epidemic in Fiji. What is compared is
 the headline plus the first 200 characters of the description, day-centred,
-and the cut is the lowest at which none of the hand-judged different-event
-pairs in `app/data/cluster_pair_judgments.json` merges
-(`scripts/calibrate_cluster_pairs.py`, 0.71 on 530 pairs, merging 17 of 114
-same-event pairs; headlines alone merged 6 on the same rule, and the 0.57 a
-self-labelled daily fit had reached merged 22 different-event pairs). So
+and since 2026-10-16 the cut is refit daily from the stored articles
+(`action_center.refit_cuts`): the lowest no pair about one actor whose own
+text dates the event two or more days apart reaches, plus a stated 0.10 for
+same-day different acts (0.60 + 0.10 on 2026-09-28..10-15, where hand-judged
+pairs had put it at 0.71). Two articles whose stated days differ by two or
+more are never joined. So
 clustering errs toward splitting: a split story costs source
 breadth (its second cluster is dropped as a duplicate in the same run, or
 matched to the same issue in a later one), a wrong merge publishes a chimera.

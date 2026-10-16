@@ -1344,11 +1344,12 @@ sitting official or a federal agency, with k and the threshold refit once a
 day and nothing labelled by hand (`app/policy_relevance.py`, stored in
 `feed_articles`; `docs/research/action-center-relevance.md`),
 clusters articles reporting the same event (complete linkage on headline plus
-description start, cut where no hand-judged different-event pair merges:
-`app/data/cluster_pair_judgments.json`, `scripts/calibrate_cluster_pairs.py`;
-a missed merge costs a story a source, a wrong one publishes a chimera, so
-the cut is precision-first and is never refitted from the pipeline's own
-label of shared names), incorporates trending topics from Google Trends and Bluesky,
+description start; two articles whose own text dates the event days apart
+are never joined; the cut is refit once a day as the lowest no stored pair
+of articles about one actor on stated days apart reaches, plus a stated
+margin, `action_center.refit_cuts`, `CUT_MARGIN`; a missed merge costs a
+story a source, a wrong one publishes a chimera, so the cut is
+precision-first and is never refitted from a label of shared names alone), incorporates trending topics from Google Trends and Bluesky,
 and uses the LLM only to *locate* attributable claims in the articles: the
 summary and facts are the sources' own words, checked verbatim
 (`post_composer.py`), and the recommended actions are built from real bill and
