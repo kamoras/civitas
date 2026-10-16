@@ -177,6 +177,7 @@ class TestNightlyPipelineIndependentLinks:
              patch("app.ops_alerts.check_current_congress_staleness"), \
              patch("app.ops_alerts.check_feedback_token_expiration"), \
              patch("app.ops_alerts.check_state_pvi_staleness"), \
+             patch("app.calibration_drift.check_all"), \
              patch("app.ops_alerts.check_election_readiness"), \
              patch("app.ops_alerts.check_sitting_president"), \
              patch("app.scheduler.check_election_map_training_staleness"), \
@@ -235,6 +236,7 @@ class TestNightlyPipelineIndependentLinks:
              patch("app.ops_alerts.check_current_congress_staleness"), \
              patch("app.ops_alerts.check_feedback_token_expiration"), \
              patch("app.ops_alerts.check_state_pvi_staleness"), \
+             patch("app.calibration_drift.check_all"), \
              patch("app.ops_alerts.check_election_readiness"), \
              patch("app.ops_alerts.check_sitting_president"), \
              patch("app.scheduler.check_election_map_training_staleness"), \

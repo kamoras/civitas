@@ -27,6 +27,7 @@ from app.pipeline.analyze.action_center import get_action_refresh_state, refresh
 from app.pipeline.congress_activity import congress_sync_age, eastern_today, is_congress_sync_running, run_congress_sync
 from app.pipeline.analyze.congress_bluesky import post_congress_lookahead, post_daily_congress, post_weekly_congress
 from app.time_utils import utcnow
+from app import calibration_drift
 from app import data_refresh
 from app.background import WritesHeld, start_writer
 from app.broadcast import deliver_pending, refresh_engagement
@@ -278,6 +279,9 @@ def _nightly_pipeline() -> None:
             # self-advance (see the check's own docstring for why), so the
             # alert is the only signal that a manual refresh is due.
             check_state_pvi_staleness,
+            # Each hand-labelled calibration against the stream it gates
+            # (pass rates since it was fitted).
+            calibration_drift.check_all,
             # The coming election's cycle-specific data (maps, district
             # lean, voter calendar, poll closing times, town sample
             # ballots), each alerted once its lead time begins.
@@ -374,6 +378,8 @@ def _hourly_action_refresh() -> None:
         except Exception:
             logger.exception("Action center refresh failed")
         _post_trends()
+        # The calibrated gates' decisions this hour (calibration_drift).
+        calibration_drift.flush()
 
     _start_job(_run, name="action-refresh")
 

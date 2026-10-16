@@ -576,6 +576,20 @@ bar is specifically about **calculated** values — anything a regression, an av
 which must trace back to a generating script and a data file, not a
 comment asserting "trust me, I ran a script once."
 
+A calibration fitted to **hand labels** (the Action Center's relevance,
+clustering, claim and actor gates, the trend-post gates, committee routing,
+the member-photo check) can't regenerate itself, and doesn't need to when
+its labels change: each records the hash of its labels and a test fails
+until it is refit. What it can't see is the stream moving away from its
+labels. Each such gate reports what it decides (`calibration_drift.observe`,
+counted in memory and written after each hourly refresh), and a nightly
+check compares the gate's pass rate over the last four weeks with its own
+first four weeks under the calibration in use, alerting
+(`calibration-drift-<gate>`) when it has moved by 15 points or more and far
+outside sampling noise: the cue to label a fresh sample and refit. A new
+calibrated gate is added to `calibration_drift.GATES` and observes its
+decisions.
+
 ### 3b. Search ranking is measured, not asserted
 
 Explore search combines four rankers — semantic kNN, BM25F keyword, recency,

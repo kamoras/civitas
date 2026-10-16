@@ -57,6 +57,7 @@ from typing import NamedTuple
 
 import numpy as np
 
+from app import calibration_drift
 from app import data_refresh
 
 CHAMBERS = ("house", "senate")
@@ -216,6 +217,9 @@ def route_committees(title: str, summary: str) -> list[dict]:
     routed = []
     for ch, s in shares(x, _reference, cal["k"], cal["alpha"], cal["temperature"]).items():
         col = int(decide(s, cal["threshold"])[0])
+        # Routed (1) or abstained (0): the share of issues routed is what
+        # drifts when the stream moves away from the labelled issues.
+        calibration_drift.observe("committee_routing", [float(col >= 0)], 0.5)
         if col >= 0:
             code = _reference.codes[ch][col]
             routed.append({"code": code, "name": committees[code]["name"], "chamber": ch,

@@ -41,6 +41,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import calibration_drift
 from app.models import ApiCache, MemberPhoto, Representative, Senator
 from app.photos import bioguide_portrait_url, credited_depiction, photo_source_allowed
 from app.pipeline.fetch.congress import member_detail_cache_key
@@ -104,7 +105,9 @@ def prefers_bioguide(bioguide_share: float | None, depiction_share: float | None
     if bioguide_share is None or depiction_share is None:
         return False
     cal = calibration()
-    return depiction_share < cal["depiction_ceiling"] and bioguide_share >= cal["margin"] * depiction_share
+    prefers = depiction_share < cal["depiction_ceiling"] and bioguide_share >= cal["margin"] * depiction_share
+    calibration_drift.observe("member_photo", [float(prefers)], 0.5)
+    return prefers
 
 
 class _FetchFailed(Exception):

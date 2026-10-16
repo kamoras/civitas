@@ -44,6 +44,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from app import calibration_drift
 from app.pipeline.analyze.action_center import _embed_texts_sim, relevance_votes
 from app.pipeline.analyze.grounding import (
     editorializing_language,
@@ -109,7 +110,9 @@ def gate_votes(gate: str, embeddings: np.ndarray) -> np.ndarray:
     """Each row's kNN vote for `gate`, from unit embeddings."""
     _, label, _ = GATES[gate]
     labels = np.array([bool(e[label]) for e in gate_examples(gate)], dtype=float)
-    return relevance_votes(embeddings, _reference(gate), labels, calibration()[gate]["k"])
+    votes = relevance_votes(embeddings, _reference(gate), labels, calibration()[gate]["k"])
+    calibration_drift.observe(f"trend_{gate}", votes, threshold(gate))
+    return votes
 
 
 def threshold(gate: str) -> float:
