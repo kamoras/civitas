@@ -9,7 +9,11 @@ const SEATS = {
   cycle: 2026,
   asOf: "2026-10-16T12:00:00Z",
   stale: false,
-  pollSource: { attribution: "Wikipedia contributors", license: "CC BY-SA 4.0", url: "" },
+  pollSource: {
+    attribution: "Wikipedia contributors",
+    license: "CC BY-SA 4.0",
+    url: "https://creativecommons.org/licenses/by-sa/4.0/",
+  },
   seats: [
     {
       id: "2026-SEN-ZZ",
@@ -60,7 +64,12 @@ describe("StateAtAGlance", () => {
       "href",
       "/elections/redistricting/ZZ"
     );
-    expect(screen.getByText(/CC BY-SA 4.0/)).toBeInTheDocument();
+    // A range shown carries its source and licence beside it.
+    expect(screen.getByText(/Wikipedia contributors/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "CC BY-SA 4.0" })).toHaveAttribute(
+      "href",
+      "https://creativecommons.org/licenses/by-sa/4.0/"
+    );
     expect(fetchMapSeats).toHaveBeenCalledWith({ state: "ZZ" });
   });
 

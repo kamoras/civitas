@@ -43,7 +43,7 @@ describe("OnBallotLine", () => {
     expect(screen.getByText(/U\.S\. HOUSE, AT-LARGE, WYOMING/)).toBeInTheDocument();
   });
 
-  it("adds the seat's usual vote and poll range from the map, linking its place there", async () => {
+  it("adds the seat's usual vote from the map and links its place there, never a poll range", async () => {
     fetchMapSeats.mockResolvedValueOnce({
       cycle: 2026,
       asOf: "2026-10-16T12:00:00Z",
@@ -69,11 +69,14 @@ describe("OnBallotLine", () => {
         race={{ raceId: "2026-SEN-GA", cycleYear: 2026, state: "GA", office: "S", district: null }}
       />
     );
-    const link = await screen.findByRole("link", { name: /USUAL VOTE R\+2.*POLLS D\+6 TO R\+3/ });
+    const link = await screen.findByRole("link", { name: /ON THE MAP.*USUAL VOTE R\+2/ });
     expect(link).toHaveAttribute(
       "href",
-      "/elections/map?chamber=senate&view=polls&seat=2026-SEN-GA"
+      "/elections/map?chamber=senate&view=usual&seat=2026-SEN-GA"
     );
+    // The profile shows the member's Representation Score: no range beside it
+    // (AGENTS.md, the Senate and House map, "Separate from scoring").
+    expect(document.body).not.toHaveTextContent(/POLLS|D\+6 TO R\+3/i);
     expect(fetchMapSeats).toHaveBeenCalledWith({ seat: "2026-SEN-GA" });
   });
 });
