@@ -12,16 +12,11 @@ twice) dropped too, so a repeat can't vote for itself. k is the grid value
 with the best leave-one-out AUC. Each threshold is chosen for what its
 mistake costs:
 
-  - relevance: 0.5, a decision (the trend-post design), not a fit; the
-    measurement at it is reported.
   - tragedy: the highest threshold that still flags 90% of labelled
     tragedies. A missed tragedy goes down the ordinary path, which needs an
     official record anyway; a false flag only demands more of a record.
   - political_violence: the lowest threshold with 90% precision: a tragedy
     posted on a weak political reading is the costly mistake.
-  - appointment: the lowest threshold with 90% precision: a nominee
-    anchor on a trend that isn't about the nomination attaches a standing
-    record to unrelated news.
   - loaded: the threshold with the best F2 (recall weighted twice
     precision): quoting a loaded name is the costlier mistake, a false flag
     only skips one trend. A recall target was tried first and rejected:
@@ -59,7 +54,6 @@ K_GRID = (5, 9, 15, 25)
 THRESHOLDS = np.round(np.arange(0.05, 0.951, 0.05), 2)
 NEAR_DUPLICATE = 0.95
 TARGET = 0.90
-RELEVANCE_THRESHOLD = 0.5
 BOOTSTRAP = 2000
 
 
@@ -99,9 +93,7 @@ def interval(fn, scores: np.ndarray, labels: np.ndarray) -> list[float]:
 
 
 def choose(gate: str, scores: np.ndarray, labels: np.ndarray) -> float:
-    if gate == "relevance":
-        return RELEVANCE_THRESHOLD
-    if gate in ("political_violence", "appointment"):
+    if gate == "political_violence":
         ok = [t for t in THRESHOLDS if pr(scores, labels, t)[0] >= TARGET]
         return float(min(ok)) if ok else float(THRESHOLDS[-1])
     if gate == "loaded":
@@ -122,7 +114,6 @@ def main() -> None:
             "[value, 2.5%, 97.5%] bootstrap."
         ),
         "_as_of": datetime.date.today().isoformat(),
-        "_why_relevance_threshold": "0.5 is the trend-post design's decision; the measurement at it is reported.",
     }
     for gate, (path, label, subset) in GATES.items():
         examples = gate_examples(gate)

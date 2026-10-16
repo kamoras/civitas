@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
+import SectionTabs from "@/components/layout/SectionTabs";
 import Navbar from "@/components/layout/Navbar";
 import StateAtAGlance from "@/components/elections/ballot/StateAtAGlance";
 import Footer from "@/components/layout/Footer";
@@ -1883,6 +1884,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
         <Navbar />
         <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
           <div className="mx-auto max-w-[1400px]">
+            <SectionTabs section="elections" active="ballots" className="mb-4" />
             <Link
               href="/elections"
               className="inline-block mb-4 font-mono text-xs text-ink-lo hover:text-phos transition-colors"

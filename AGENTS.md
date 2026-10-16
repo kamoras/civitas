@@ -218,9 +218,9 @@ the residual.
 | Tier | Technique | Used For |
 |------|-----------|----------|
 | 1 | FEC structured metadata / SEC SIC / learning store | Unambiguous entity types, a PAC's industry where its registration or its sponsor's SEC record states it (`fec.structured_industry`), previously classified entities |
-| 2 | Sentence-transformer cosine similarity | Industry, donor type, bill policy, party alignment, stance direction, procedural detection, commemorative detection, skip entity detection, employer filtering, memo transfer detection, category normalization, whether two Action Center claims restate one fact (calibrated on labelled pairs, `claim_restatement_*.json`) |
+| 2 | Sentence-transformer cosine similarity | Whether a claim's actor span the capitalised-actor rule refuses is a party that can act (`post_composer.ACTOR_PROTOTYPES`, threshold refit daily on data-supplied non-actors), industry, donor type, bill policy, party alignment, stance direction, procedural detection, commemorative detection, skip entity detection, employer filtering, memo transfer detection, category normalization, whether two Action Center claims restate one fact (calibrated on labelled pairs, `claim_restatement_*.json`) |
 | 2b | SVD / PageRank on cosponsorship matrix | Ideology scoring (Tauberer 2012), legislative leadership (Brin & Page 1998) |
-| 3 | k-Nearest Neighbor in embedding space | Remaining unclassified donors and bills; Action Center relevance and committee routing (against hand-labelled issues, blended with tier-2 jurisdiction prototypes for routing); whether a claim's actor span is a party that can act, for spans the capitalised-actor rule refuses (against hand-labelled spans, `claim_actor_examples.json`) |
+| 3 | k-Nearest Neighbor in embedding space | Remaining unclassified donors and bills; Action Center relevance and committee routing (against hand-labelled issues, blended with tier-2 jurisdiction prototypes for routing) |
 | 4 | LLM (LFM2.5-1.2B-Instruct) | Natural-language text only — Action Center claims, monitor titles and period summaries, race-post spans, Explore document summaries (full list in the bullet above) |
 
 When FEC metadata is ambiguous (e.g., entity_type "COM" could be a corporate
@@ -1308,15 +1308,17 @@ the trend's own name (described trends only); an Act's full title (the whole
 capitalised run must be the record's title, or the trend gives the bill
 number — a shorter name inside a longer title, or a qualifier like "EU" in
 front, is another act); a nominee's confirmation vote, only when the
-appointment kNN vote says the trend is about the nomination; or a named
+trend began within a day of the vote (`trend_evidence.NOMINEE_WINDOW`); or a named
 member's own recent bill on the topic — never a person alone. Records must be
 dated on or before the trend's start plus two days, and a record more than 30
 days older than the trend counts only when the trend's name names it; a vote
-with no measure title and no bill is never a record. All of this sits on
-top of a kNN relevance vote ≥ 0.5 over labelled trends (`trend_relevance.py`,
-`app/data/trend_*`/`political_violence_examples.json`/`loaded_language_examples.json`/`appointment_examples.json`,
-calibrated by `scripts/calibrate_trend_gates.py` into
-`trend_gates_calibration.json`). The trend's name must pass a neutrality gate
+with no measure title and no bill is never a record. Only a trend Bluesky's
+getTrends files under "politics" goes to matching (its own category, read as
+published: `trend_relevance.POLITICS_CATEGORY`; the kNN relevance vote over
+350 hand-labelled topics it replaced was removed 2026-10-16). The other
+votes (`trend_relevance.py`, `political_violence_examples.json`/`loaded_language_examples.json`)
+are calibrated by `scripts/calibrate_trend_gates.py` into
+`trend_gates_calibration.json`. The trend's name must pass a neutrality gate
 (`grounding`'s electioneering, editorializing and advocacy-as-fact checks plus a
 loaded-language vote); a tragedy is eligible only with a high political-violence
 vote and an official record (not an issue). Every word is template text, a
@@ -2022,7 +2024,7 @@ the pending list).
 | Multi-word last name extraction + vote matching | `backend/app/pipeline/transform/normalize_members.py` |
 | Lobbying match + key vote selection (deterministic, no LLM) | `backend/app/pipeline/analyze/cross_reference.py` |
 | Action Center analysis (news → issues → monitors → timeline) | `backend/app/pipeline/analyze/action_center.py` |
-| Claim composer (verbatim spans, actor check: capitalised rule + kNN vote over labelled spans) | `backend/app/pipeline/analyze/post_composer.py`, `backend/app/data/claim_actor_examples.json`, `backend/scripts/calibrate_claim_actor.py` |
+| Claim composer (verbatim spans, actor check: capitalised rule + prototype margin, threshold refit daily) | `backend/app/pipeline/analyze/post_composer.py`, `backend/app/data/claim_actor_threshold.json`, `backend/scripts/calibrate_claim_actor.py` |
 | Committee routing for issues (rules' jurisdictions + labelled issues) | `backend/app/committee_routing.py`, `backend/app/data/committee_*.json`, `backend/scripts/fetch_committee_jurisdictions.py`, `backend/scripts/calibrate_committee_routing.py` |
 | Issue principal actor + weekly actor concentration (admin) | `backend/app/pipeline/analyze/story_actor.py`, `GET /api/admin/actor-concentration`, `frontend/src/components/admin/ActionCenterDashboard.tsx` |
 | Justice record and appointer estimate (not scored, justice v3) | `backend/app/pipeline/justice_pipeline.py`, `backend/app/pipeline/analyze/justice_loyalty.py` |

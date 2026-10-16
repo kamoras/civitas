@@ -20,7 +20,7 @@ reader can check by eye, so a trend posts only on one of four matches:
 |---|---|
 | issue | an Action Center issue (headline and lede) at cosine >= 0.5 to the trend, that names a distinctive entity from the trend's own name (an entity in few stored issues, the national monitors' test), for a trend Bluesky describes. The post shows the official record the issue already links (a vote on its bill, a Federal Register document, the bill) when it has a recent one |
 | act | the trend names a statute's full title: the whole capitalised run before "Act" is a record's title (a trailing "of <year>" aside), or the trend also gives the record's bill number |
-| nominee | a nominee a roll call names, named in full, by a trend the appointment vote finds is about the nomination itself |
+| nominee | a nominee a roll call names, named in full, by a trend that began within a day of the vote (until 2026-10-16: that an appointment vote found about the nomination itself) |
 | member | a member named in the trend (in full, or by a surname under the Action Center's collision safeguards), and a recent bill that member sponsored at cosine >= 0.5, for a described trend |
 
 Every record has to be dated no later than two days after the trend began,
@@ -56,13 +56,13 @@ with near-duplicates (cosine > 0.95) excluded and 95% bootstrap intervals.
 
 | Gate | Examples (positive) | k | Threshold | LOO AUC | Precision | Recall |
 |---|---|---|---|---|---|---|
-| relevance (U.S. policy story) | 350 (93) | 15 | 0.5 (design decision) | 0.91 [0.88, 0.94] | 0.74 [0.64, 0.83] | 0.61 [0.51, 0.70] |
+| relevance (U.S. policy story), removed 2026-10-16 | 350 (93) | 15 | 0.5 (design decision) | 0.91 [0.88, 0.94] | 0.74 [0.64, 0.83] | 0.61 [0.51, 0.70] |
 | tragedy | 501 (143) | 25 | 0.5 (90% recall) | 0.97 [0.96, 0.99] | 0.84 | 0.90 |
 | political violence (among tragedies) | 143 (45) | 5 | 0.8 (90% precision) | 0.91 [0.85, 0.96] | 0.93 [0.80, 1.00] | 0.56 [0.40, 0.70] |
 | loaded language (trend name) | 759 (145) | 25 | 0.3 (best F2) | 0.89 [0.86, 0.92] | 0.54 [0.47, 0.60] | 0.79 [0.72, 0.86] |
-| appointment (nominee anchor) | 549 (31) | 15 | 0.55 (90% precision) | 0.99 [0.98, 0.99] | 0.91 [0.77, 1.00] | 0.61 [0.44, 0.79] |
+| appointment (nominee anchor), removed 2026-10-16 | 549 (31) | 15 | 0.55 (90% precision) | 0.99 [0.98, 0.99] | 0.91 [0.77, 1.00] | 0.61 [0.44, 0.79] |
 
-On its own the relevance vote only keeps out off-topic trends. The pinned
+On its own the relevance vote only kept out off-topic trends. The pinned
 match is what makes a post. The loaded-language vote reads topic as much as
 framing. A recall target of 90% flagged a third of plainly named topics
 (precision 0.34 at threshold 0.2), so its threshold is the F2 point instead:
@@ -106,6 +106,48 @@ The template has no slot for victims or perpetrators. No record, no post.
   the eligible pool's, using an exact two-sided binomial test.
   `check_party_balance` raises an ops alert at p < 0.01 once 10 leaning
   trends have posted.
+
+## 2026-10-16: Bluesky's category replaces the relevance vote
+
+The relevance vote was the one gate whose labels Bluesky already publishes:
+getTrends files every trend under a category (politics, entertainment,
+sports, science-tech, culture, business, other). The vote is gone, and only
+a trend filed under "politics" goes to record matching
+(`trend_relevance.POLITICS_CATEGORY`). The pinned record stays the
+precision guarantee.
+
+- **The backtest's 3,084 trends** come from the trending account's topic
+  history, which carries no category, so the replay measures the vote's
+  removal (every trend treated as politics, the most a category gate could
+  let through), on today's records and the same caps: 4 posts against 3.
+  The fourth is an "Insurrection Act" trend, matched to the bill of that
+  title, that the vote had scored 0.28. Of the 2,725 trends that reach
+  matching without the vote, 2,686 find no pinned record.
+- **The 106 trends production has recorded with their category**
+  (2026-10-15/16): the vote passed 20, and Bluesky filed 19 of those under
+  politics (the 20th, business). Replayed, the category gate changes no
+  post; one decision moves from ineligible to skipped (a foreign election
+  whose issue record a later check refuses). The vote refused 58 of the 59
+  trends Bluesky filed outside politics.
+
+`trend_relevance_examples.json` is removed. Its 350 names still serve as
+mostly neutral examples in the loaded-language set (see above).
+
+## 2026-10-16: the nominee anchor's window replaces the appointment vote
+
+A nominee anchors a trend only when the trend began within a day of the
+nomination vote (`trend_evidence.NOMINEE_WINDOW`; a record may already be
+dated up to two days after a trend began). The appointment vote over 549
+hand-labelled topics is removed.
+
+Every trend in the 2026-09-12..10-15 backtest that names a nominee of the
+sitting Congress in full (16, against 218 nomination votes) began at least
+51 days after the vote, and none was about the nomination: an official's
+remarks, a board's letter to three officials, a central bank decision under
+its new chair. The vote scored two of them at 0.57 and 0.59, over its 0.55
+threshold; only RECORD_RECENCY kept their confirmations from anchoring.
+The window refuses all 16. The full backtest decision posts the same 3
+trends before and after.
 
 ## Backtest
 

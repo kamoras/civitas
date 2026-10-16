@@ -17,6 +17,9 @@ export interface MapPoll {
   partisan: "" | "D" | "R";
   url: string | null;
   usedInAverage?: boolean;
+  /** One poll the article prints asked two ways (with and without leaners,
+   * say): every question's shares, the entry counted once (backend poll_list). */
+  questions?: { dem: number; rep: number }[];
 }
 
 export interface PollSource {
@@ -74,6 +77,14 @@ export interface RangedSeat extends MapSeatBase {
   /** Further out than the training polls reach: the range is the usual
    * vote, incumbency and the national swing alone; polls are listed beside it. */
   fundamentalsOnly?: boolean;
+  /** What the range rests on, decided by the backend: the seat's own polls,
+   * no poll of the seat (usual vote and national swing alone), or a date
+   * further out than polls count. */
+  rangeBasis: "polls" | "no_poll" | "before_window";
+  /** "Margin range, from polls" and the like, written by the backend. */
+  rangeBasisLabel: string;
+  /** "from polls" / "no poll" / "polls not counted yet". */
+  rangeBasisShort: string;
 }
 
 export interface UnrangedSeat extends MapSeatBase {
@@ -178,6 +189,13 @@ export interface PollLicence {
   notice: string;
 }
 
+/** The two units a seat's numbers come in, both written "D+N", each named
+ * in one sentence by the backend. */
+export interface MapUnits {
+  lean: string;
+  margin: string;
+}
+
 /** GET /api/elections/map as the backend sends it. */
 export interface ElectionMapResponse {
   schemaVersion: number;
@@ -194,6 +212,7 @@ export interface ElectionMapResponse {
   pollsInRange?: boolean;
   national: NationalInput;
   bins: { leansMax: number; usuallyMax: number };
+  units?: MapUnits;
   sources: {
     lean: Record<MapChamberKey, LeanSource>;
     training: Record<MapChamberKey, string>;
@@ -227,6 +246,7 @@ export interface ElectionMapData {
   pollWindowDays: number;
   pollsInRange: boolean;
   bins: { leansMax: number; usuallyMax: number };
+  units?: MapUnits;
   calibration: ChamberCalibration;
   model: ChamberModel;
   sources: {

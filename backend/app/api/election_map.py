@@ -127,7 +127,7 @@ def election_map_seats(
 
 CSV_COLUMNS = (
     "chamber", "seat", "state", "district", "special", "democrat", "republican", "incumbent_party",
-    "usual_vote_lean", "usual_vote_label", "status", "structural_margin", "range80_low", "range80_high",
+    "usual_vote_lean", "usual_vote_label", "status", "range_basis", "structural_margin", "range80_low", "range80_high",
     "range95_low", "range95_high", "poll_average", "polls_used", "polls_listed", "latest_poll", "poll_source",
     "differs_from_usual", "difference_direction",
 )
@@ -137,7 +137,11 @@ def csv_text(data: dict) -> str:
     out = io.StringIO()
     out.write(f"# Civitas {data['cycle']} general-election map, as of {data['asOf']}. Ranges, not results. "
               "Not a race call.\n")
-    out.write("# Margins are Republican minus Democratic share of the two-party vote, in points (negative = D).\n")
+    out.write("# Margins are Republican minus Democratic share of the two-party vote, in points (negative = D). "
+              "The usual-vote lean is the seat's Democratic two-party share minus the nation's (negated, so "
+              "positive = R): a different unit, half a margin's scale.\n")
+    out.write("# range_basis: polls (the seat's polls are in the range), no_poll (none in the poll window: usual "
+              "vote, incumbency and national swing alone), before_window (no poll enters any range yet).\n")
     out.write("# Usual vote: Civitas's computed lean from official returns (Senate: app/data/state_pvi.json; "
               f"House: app/data/district_lean.json, {ordinal(data['sources']['lean']['house']['congress'])} "
               "Congress lines).\n")
@@ -156,7 +160,7 @@ def _row(w, chamber: str, s: dict) -> None:
     w.writerow([
         chamber, s["id"], s["state"], "" if s.get("district") is None else s["district"], s["special"],
         s.get("dem") or "", s.get("rep") or "", s.get("incumbentParty") or "",
-        s["lean"], s["leanLabel"], s["status"],
+        s["lean"], s["leanLabel"], s["status"], s.get("rangeBasis", "") if ranged else "",
         s.get("prior", "") if ranged else "",
         *(s["range80"] if ranged else ("", "")), *(s["range95"] if ranged else ("", "")),
         s.get("pollAverage") if ranged and s.get("pollAverage") is not None else "",
