@@ -170,6 +170,32 @@ const PREVIEWS: Record<string, Record<string, (f: SectionFigures) => Preview>> =
             caption: `${plural(r.states, "state")} ${r.upcoming ? "vote" : "voted"} on new House lines${r.cycle ? ` in ${r.cycle}` : ""}`,
           }
         : { figure: "None", caption: "no state has new House lines this cycle" },
+    // The archive's card leads with the public check of the map: how many
+    // official margins fell inside its ranges. Before the first archive, or
+    // before any count is official, it says so, never a bare 0.
+    archive: ({ elections: { archive, ballots } }) => {
+      if (archive === undefined) throw new Error("older backend");
+      if (!archive)
+        return {
+          figure: "Not yet",
+          caption: `the ${ballots.date.slice(0, 4)} election is kept here from its day, its map's ranges checked against the count`,
+        };
+      const a = archive.accountability;
+      if (!a)
+        return {
+          figure: String(archive.cycle),
+          caption: "the election as recorded; no pre-election map was kept to check",
+        };
+      if (a.graded === 0)
+        return {
+          figure: "Counting",
+          caption: `${archive.cycle}: 0 of ${n(a.ranged)} seats with a range official yet; each is checked against the map once official`,
+        };
+      return {
+        figure: n(a.held80),
+        caption: `of ${n(a.graded)} official ${archive.cycle} margins inside the map's 80% ranges · ${n(a.held95)} inside the 95% · swing map${archive.stillCounting ? " · still counting" : ""}`,
+      };
+    },
   },
   explore: {
     search: ({ explore: { search } }) =>

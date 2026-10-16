@@ -3,6 +3,8 @@
  *  Every count and rate is the backend's; the frontend only words it. A
  *  null is a figure the site can't give yet, never a zero. */
 
+import type { AccountabilitySummary } from "@/types/mapAccountability";
+
 export interface SectionFigures {
   action: {
     today: { issues: number; date: string | null };
@@ -29,6 +31,14 @@ export interface SectionFigures {
       | { available: true; seats: number; withPolls: number; pollsDiffer: number }
       | { available: false; reason: string };
     redistricting: { states: number; cycle: string | null; upcoming: boolean };
+    /** The newest archived election and how its map's ranges held against
+     *  the official count; null before the first archive. Optional: an
+     *  older backend's answer has none. */
+    archive?: {
+      cycle: number;
+      stillCounting: boolean;
+      accountability: AccountabilitySummary | null;
+    } | null;
   };
   explore: { search: { documents: number } };
 }

@@ -775,6 +775,27 @@ export default async function ElectionsChapter() {
             shows as leading still only leads, official or not: Civitas calls no race there either.
           </P>
         </Sub>
+        <Sub title="Checking the map against the count" id="election-night-map-check">
+          <P>
+            The archive page checks the seat map in public. Once a state lists a race&apos;s count
+            as official, and never before, Civitas works out the margin the same way the map
+            measured it (the gap between the Democrat and the Republican, in points of their two
+            votes) and checks whether it fell inside the 80% and 95% ranges the map showed before
+            the election. It uses the map exactly as it was frozen on election day, never a version
+            rebuilt after the result. For each chamber it shows the share that fell inside, with the
+            range of shares that luck alone could give (an exact binomial interval), beside what the
+            map promised: 80% and 95%, and how its ranges did on past elections it never saw. The
+            seats that missed are listed by name. A race whose top two were not a Democrat and a
+            Republican is not graded, because the map never measured one.
+          </P>
+          <P>
+            Beside it, a swing map shows how far each seat&apos;s official margin ran from its usual
+            vote. A usual vote is a lean, which runs on half a margin&apos;s scale, so it is doubled
+            first: the margin the seat gives when the country splits evenly. The table and a CSV
+            list every seat. While counts are still coming in, the page says how many are official
+            so far. It measures the map and the count; it calls no race.
+          </P>
+        </Sub>
       </Section>
 
       <Section id="measures" title="Ballot measures: quoted, never rewritten">

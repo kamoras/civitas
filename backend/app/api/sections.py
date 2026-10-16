@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.api.action import _latest_current_issues, _latest_issue_date
 from app.api.agencies import _budget_row
+from app.api.election_archive import latest_check
 from app.api.election_map import current_map
 from app.api.explore import _explore_counts
 from app.api.response_helpers import cached_json
@@ -118,6 +119,10 @@ def elections(db: Session) -> dict:
             # Said as past once that election is held (api/redistricting.py).
             "upcoming": bool(cycle) and election_today() < next_election_day(date(int(cycle), 1, 1)),
         },
+        # The newest archived election and how its map's ranges held against
+        # the official count; null before the first archive (the card then
+        # names the election it starts with, from `ballots`).
+        "archive": latest_check(db),
     }
 
 
