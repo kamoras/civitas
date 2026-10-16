@@ -440,6 +440,9 @@ def _house_amendment_vote() -> str:
 def test_a_house_amendment_vote_is_titled_by_its_amendment(db_session, monkeypatch):
     """90 House amendment votes were titled only "H R 4776" (2026-10-11)."""
     monkeypatch.setattr(ca, "_get", _fake_get({"roll309.xml": _house_amendment_vote().encode()}))
+    # The day it was found: roll 308 is past the gap-retry window, so the
+    # run reads onward from it rather than retrying the numbers below.
+    monkeypatch.setattr(ca, "eastern_today", lambda: date(2026, 10, 11))
     db_session.add(RollCall(chamber="house", congress=119, session=2, number=308, date="2026-09-16",
                             source_url="https://clerk.house.gov/evs/2026/roll308.xml", majority_requirement="1/2"))
     db_session.commit()

@@ -25,12 +25,22 @@ session could.
 """
 
 import io
+from datetime import datetime
 from pathlib import Path
 
 import pdfplumber
 import pytest
 
 from app.pipeline.fetch import state_candidates_or as orm
+
+
+@pytest.fixture(autouse=True)
+def _fixture_era(freeze_utcnow):
+    """The fixtures are 2026 primaries, read in September 2026: run as of
+    then, never the real clock (AGENTS.md, Testing). Before it, no primary
+    has been held, let alone settled."""
+    freeze_utcnow(datetime(2026, 10, 1, 16))
+
 
 FIXTURES = Path(__file__).parent
 PDF_BYTES = (FIXTURES / "fixtures_or_primary_results.pdf").read_bytes()

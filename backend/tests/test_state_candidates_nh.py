@@ -23,12 +23,22 @@ same candidate's correctly-suffixed column in the real Democratic
 file's own cross-tabulation.
 """
 
+from datetime import datetime
 from pathlib import Path
 
 import pytest
 
 from app.pipeline.fetch import state_candidates_nh as nh
 from tests.xlsx_helpers import _workbook
+
+
+@pytest.fixture(autouse=True)
+def _fixture_era(freeze_utcnow):
+    """The fixtures are 2026 primaries, read in September 2026: run as of
+    then, never the real clock (AGENTS.md, Testing). Before it, no primary
+    has been held, let alone settled."""
+    freeze_utcnow(datetime(2026, 10, 1, 16))
+
 
 FIXTURES = Path(__file__).parent
 ROOT_HTML = (FIXTURES / "fixtures_nh_elections_root.html").read_text()

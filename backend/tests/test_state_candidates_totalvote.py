@@ -45,12 +45,22 @@ loads fine but there is genuinely nothing federal to confirm" case,
 distinct from a fetch failure or a wrong-cycle miss.
 """
 
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 
 import pytest
 
 from app.pipeline.fetch import state_candidates_totalvote as tv
+from app.time_utils import utcnow
+
+
+@pytest.fixture(autouse=True)
+def _fixture_era(freeze_utcnow):
+    """The fixtures are 2026 primaries, read in September 2026: run as of
+    then, never the real clock (AGENTS.md, Testing). Before it, no primary
+    has been held, let alone settled."""
+    freeze_utcnow(datetime(2026, 10, 1, 16))
+
 
 FIXTURES = Path(__file__).parent
 MT_HTML = (FIXTURES / "fixtures_mt_federal_results.html").read_text()
@@ -232,7 +242,7 @@ class TestFetchConfirmedCandidatesMontana:
         # future-proof relative construction) is never far enough past
         # for _settled to clear, regardless of the real fixture's actual
         # 2026-06-02 date.
-        today = datetime.now(UTC).date()
+        today = utcnow().date()
         recent_html = MT_HTML.replace(
             "Primary Election - June 2, 2026",
             f"Primary Election - {today.strftime('%B %-d, %Y')}",

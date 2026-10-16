@@ -42,6 +42,7 @@ races. Every one of them must parse as non-federal.
 """
 
 import json
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -51,6 +52,15 @@ from app.pipeline.fetch.state_candidates_common import (
     STATE_LEG_CHAMBER_LABELS,
     STATEWIDE_OFFICE_LABELS,
 )
+
+
+@pytest.fixture(autouse=True)
+def _fixture_era(freeze_utcnow):
+    """The fixtures are 2026 primaries, read in September 2026: run as of
+    then, never the real clock (AGENTS.md, Testing). Before it, no primary
+    has been held, let alone settled."""
+    freeze_utcnow(datetime(2026, 10, 1, 16))
+
 
 FIXTURES = Path(__file__).parent
 INDEX = json.loads((FIXTURES / "fixtures_ri_elections_index.json").read_text())

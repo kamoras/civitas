@@ -137,6 +137,10 @@ def test_bill_label():
 
 
 class TestRoutes:
+    @pytest.fixture(autouse=True)
+    def today(self, freeze_utcnow):
+        freeze_utcnow(datetime(2026, 9, 28, 16))
+
     def test_day(self, client):
         r = client.get("/api/congress/day/2026-09-24")
         assert r.status_code == 200

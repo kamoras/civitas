@@ -4,6 +4,7 @@ lobbying matches (each with the client it was filed for).
 Shared by senate_pipeline.py and house_pipeline.py.
 """
 
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -113,9 +114,11 @@ class TestEnrich:
         assert matches == []
 
     @pytest.mark.asyncio
-    async def test_a_failed_current_year_counts_toward_the_outage_alert(self, db_session):
+    async def test_a_failed_current_year_counts_toward_the_outage_alert(self, db_session, freeze_utcnow):
         # The finished year can come from the 30-day cache while every live
-        # request fails; that must still look like an outage.
+        # request fails; that must still look like an outage. In 2026, the
+        # 119th Congress's second year has filings to ask for.
+        freeze_utcnow(datetime(2026, 10, 1, 16))
         matches = [{"lobbyistOrg": "Pfizer", "description": ""}]
         mock = AsyncMock(side_effect=lambda c, d, org, year: _activity(9.0) if year == 2025 else None)
         with patch.object(lda, "fetch_lobbying_activity", new=mock):
@@ -530,7 +533,8 @@ class TestClientMatching:
 
 
 @pytest.mark.asyncio
-async def test_the_spend_year_failing_keeps_the_other_years_bills(db_session):
+async def test_the_spend_year_failing_keeps_the_other_years_bills(db_session, freeze_utcnow):
+    freeze_utcnow(datetime(2026, 10, 1, 16))  # 2026's filings exist to name the bill
     text = ", to equalize the negotiation period between small-molecule and biologic candidates"
     matches = [{"lobbyistOrg": "Pfizer", "description": "", "billsInfluenced": []}]
     mock = AsyncMock(side_effect=lambda c, d, org, year: None if year == 2025 else _activity(1.0, [_mention("HR.1492", text, year=2026)]))

@@ -2465,15 +2465,20 @@ text or a visitor's input (§7, §8).
   freezes the clock inside it. To check a change, run the fast suite with
   the whole process on another date — `scripts/frozen_clock_plugin.py`
   (time-machine, from `scripts/requirements-research.txt`; its docstring
-  has the details) — on both sides of noon ET on an odd year's Jan 3 and
-  on election night. The clock runs on from `FREEZE_AT` while the suite
-  runs (about ten minutes), so an instant meant to be *before* a hand-over
-  needs more margin than that: 15:00Z is 10:00 ET, after the old midnight
-  trap and two hours short of noon:
+  has the details) — on both sides of noon ET on an odd year's Jan 3, on
+  election night, and *before* the fixtures' era (a spring before the
+  cycle's primaries, a year before the Congress): a test that assumes
+  "now" is after its fixture's dates (a primary settled, a rule
+  published, a vote held) passes on today's clock and breaks on an
+  earlier one, so pin its clock to the fixture's era. The clock runs on
+  from `FREEZE_AT` while the suite runs (about ten minutes), so an instant
+  meant to be *before* a hand-over needs more margin than that: 15:00Z is
+  10:00 ET, after the old midnight trap and two hours short of noon:
 
   ```bash
   cd backend
-  for at in 2027-01-03T15:00Z 2027-01-03T17:01Z 2026-11-04T02:00Z; do
+  for at in 2025-07-01T15:00Z 2026-04-08T02:00Z \
+            2027-01-03T15:00Z 2027-01-03T17:01Z 2026-11-04T02:00Z; do
     FREEZE_AT=$at PYTHONPATH="$PWD" PYTEST_PLUGINS=scripts.frozen_clock_plugin \
       .venv/bin/python -m pytest tests/ -m "not slow" -q -p no:cacheprovider
   done
