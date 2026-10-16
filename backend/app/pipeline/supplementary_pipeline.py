@@ -128,6 +128,17 @@ async def run_supplementary_pipeline() -> dict:
         ).first() is not None
         run_justices = justices_missing or unmeasured or utcnow().weekday() == 6
         if not run_justices:
+            # A confirmation or a departure is picked up the night Oyez
+            # lists it, not on the next weekly day (one request).
+            from app.pipeline.justice_pipeline import court_roster_changed
+
+            try:
+                run_justices = await court_roster_changed(db)
+            except Exception:
+                logger.warning("Court roster check failed — weekly cadence stands", exc_info=True)
+            if run_justices:
+                logger.info("The Court's sitting justices changed: refreshing off the weekly cadence")
+        if not run_justices:
             logger.info("Justice refresh skipped (weekly cadence; next on Sunday UTC)")
             run.justices_skipped = True
             progress.skip("justice_scorecards", detail="weekly cadence")

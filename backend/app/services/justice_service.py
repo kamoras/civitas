@@ -188,3 +188,38 @@ def upsert_justice(db: Session, data: dict, votes: list[dict]) -> None:
         db.add(vote)
 
     db.flush()
+
+
+# The Court cannot act with fewer than six justices (28 U.S.C. § 1: "any
+# six of whom shall constitute a quorum"), and has never had fewer sitting.
+# A source listing fewer is broken or cut short, not a Court that lost
+# several justices overnight, so no one is retired on its word.
+QUORUM = 6
+
+
+def retire_departed_justices(db: Session, sitting: set[str], ended: dict[str, str | None]) -> list[str]:
+    """Mark each stored sitting justice who is no longer on the Court's
+    current list inactive, with the day their service ended where the
+    source gives it. Kept, not deleted: a former justice's record stays
+    readable, as a former president's does. Returns the ids retired; none
+    (and an ops alert) when the list is too short to trust."""
+    gone = [j for j in db.query(Justice).filter(Justice.is_active.is_(True)).all() if j.id not in sitting]
+    if not gone:
+        return []
+    if len(sitting) < QUORUM:
+        from app.ops_alerts import send_ops_alert
+
+        send_ops_alert(
+            "Supreme Court list too short to trust",
+            f"Oyez listed {len(sitting)} sitting justices, fewer than the Court's quorum of {QUORUM}; "
+            f"{len(gone)} stored justices were left as sitting rather than retired on that list.",
+            dedupe_key=f"justice-list-short-{len(sitting)}",
+            condition="justice-list-short",
+        )
+        return []
+    for j in gone:
+        j.is_active = False
+        j.date_end = ended.get(j.id) or j.date_end
+        logger.info("Justice %s is no longer on the Court's current list: marked inactive (%s)", j.id, j.date_end)
+    db.commit()
+    return [j.id for j in gone]

@@ -15,12 +15,21 @@ from sqlalchemy.orm import Session
 
 from app.contact import BOT_USER_AGENT
 from app.http_client import make_async_client
-from app.models import President
+from app.models import Justice, President
 from app.pipeline.analyze.justice_analyzer import analyze_justice_votes
 from app.pipeline.analyze.justice_loyalty import Estimate, Vote, estimates_by_justice, label, president_on
 from app.pipeline.fetch.justice_records import RECENT_TERMS, fetch_fjc, fetch_martin_quinn, fetch_scdb
-from app.pipeline.fetch.justice_votes import fetch_case_votes, fetch_current_justices
-from app.services.justice_service import group_votes_by_case_and_justice, upsert_justice
+from app.pipeline.fetch.justice_votes import (
+    fetch_case_votes,
+    fetch_current_justices,
+    fetch_justice_list,
+    service_ended,
+)
+from app.services.justice_service import (
+    group_votes_by_case_and_justice,
+    retire_departed_justices,
+    upsert_justice,
+)
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -192,7 +201,8 @@ async def run_justice_pipeline(db: Session) -> dict:
         headers={"User-Agent": BOT_USER_AGENT},
         follow_redirects=True,
     ) as client:
-        justices = await fetch_current_justices(client)
+        listed = await fetch_justice_list(client)
+        justices = await fetch_current_justices(client, listed or [])
         if not justices:
             logger.warning("No justices found, aborting pipeline")
             return {"justices": 0, "votes": 0, "loyalty_unmeasured": "Oyez listed no sitting justices"}
@@ -260,5 +270,24 @@ async def run_justice_pipeline(db: Session) -> dict:
                     analysis["cases_decided"])
 
     db.commit()
+    # Who has left the Court since the last run (a retirement, a death):
+    # detected from the same list, never typed in.
+    retired = retire_departed_justices(db, active_ids, service_ended(listed or []))
     logger.info("=== Justice pipeline complete: %d justices, %d votes ===", len(justices), len(all_votes))
-    return {"justices": len(justices), "votes": len(all_votes), "loyalty_unmeasured": unmeasured_why}
+    return {"justices": len(justices), "votes": len(all_votes), "loyalty_unmeasured": unmeasured_why,
+            **({"retired": retired} if retired else {})}
+
+
+async def court_roster_changed(db: Session) -> bool:
+    """Whether Oyez's sitting justices differ from those stored as sitting:
+    a confirmation or a departure. One request, so the Supplementary run
+    asks every night and refreshes the Court the night it changes rather
+    than on its weekly day. False when the list can't be read (the weekly
+    refresh still runs)."""
+    async with make_async_client(headers={"User-Agent": BOT_USER_AGENT}, follow_redirects=True) as client:
+        listed = await fetch_justice_list(client)
+    if not listed:
+        return False
+    sitting = {j["id"] for j in await fetch_current_justices(None, listed)}
+    stored = {jid for (jid,) in db.query(Justice.id).filter(Justice.is_active.is_(True))}
+    return bool(sitting) and sitting != stored
