@@ -10,7 +10,7 @@ import type { VoteDetail } from "@/types/congress";
 import { CHAMBER_NAME, billHref, dayHref, longDate } from "@/lib/congress";
 import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import { absoluteUrl } from "@/lib/site";
-import { CongressTabs } from "./CongressNav";
+import SectionTabs from "@/components/layout/SectionTabs";
 import { ResultLabel } from "./ReportParts";
 import VoteMembers, { PartyBar } from "./VoteMembers";
 
@@ -57,7 +57,7 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
         <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
           <div className="mx-auto flex max-w-6xl flex-col gap-10">
             <div>
-              <CongressTabs active="reports" />
+              <SectionTabs section="congress" active="reports" />
               <nav aria-label="Breadcrumb" className="text-sm text-ink-lo">
                 <Link href="/congress" className="hover:text-phos">
                   Congress

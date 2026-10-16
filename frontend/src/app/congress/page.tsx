@@ -10,7 +10,7 @@ import FollowFeed from "@/components/shared/FollowFeed";
 import DayReportView from "@/components/congress/DayReportView";
 import PeriodReportView from "@/components/congress/PeriodReportView";
 import ThisWeekStrip from "@/components/shared/ThisWeekStrip";
-import { CongressTabs } from "@/components/congress/CongressNav";
+import SectionTabs from "@/components/layout/SectionTabs";
 
 export const metadata = pageMetadata({
   title: "What Happened in Congress Today",
@@ -67,7 +67,7 @@ export default async function CongressPage() {
       <Navbar />
       <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
         <div className="mx-auto max-w-6xl">
-          <CongressTabs active="reports" />
+          <SectionTabs section="congress" active="reports" />
           <PageMasthead eyebrow="What happened in Congress" title="Congress">
             <p>
               No day of Congress has been recorded yet. The{" "}
