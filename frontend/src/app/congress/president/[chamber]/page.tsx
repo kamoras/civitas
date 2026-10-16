@@ -1,11 +1,12 @@
 import Link from "next/link";
+import { congressOrdinal } from "@/lib/sources";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import PageMasthead from "@/components/layout/PageMasthead";
-import { CongressTabs } from "@/components/congress/CongressNav";
+import SectionTabs from "@/components/layout/SectionTabs";
 import ChamberView from "@/components/presidentialSupport/ChamberView";
 import { pageMetadata } from "@/lib/site";
 import { fetchRecord } from "@/lib/ssrPayload";
@@ -58,9 +59,9 @@ export default async function PresidentSupportPage({
       <Navbar />
       <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
         <div className="mx-auto max-w-6xl">
-          <CongressTabs active="president" />
+          <SectionTabs section="congress" active="president" />
           <PageMasthead
-            eyebrow={`${CHAMBERS[chamber]} · ${view ? `${view.congress}th Congress` : "This Congress"}`}
+            eyebrow={`${CHAMBERS[chamber]} · ${view ? `${congressOrdinal(view.congress)} Congress` : "This Congress"}`}
             title="Votes with the president"
             aside={
               <nav aria-label="Chamber" className="grid grid-cols-2">

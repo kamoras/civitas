@@ -344,11 +344,20 @@ describe("DistrictMap", () => {
     // A redrawn state whose new lines have a table on file: the API serves
     // each race the lean of the district on the ballot.
     const races = [1, 2, 3, 4, 5].map((d) => race(d, d === 2 ? -15 : 6));
-    render(<DistrictMap state="CT" newLines races={races} picked={null} onPick={vi.fn()} />);
+    render(
+      <DistrictMap
+        state="CT"
+        newLines
+        cycleYear={2030}
+        races={races}
+        picked={null}
+        onPick={vi.fn()}
+      />
+    );
 
     const shape = await screen.findByRole("button", { name: "CT-2" });
     expect(
-      screen.getByText(/the new 2026 districts · redder = safer R · bluer = safer D/)
+      screen.getByText(/the new 2030 districts · redder = safer R · bluer = safer D/)
     ).toBeInTheDocument();
     expect(screen.queryByText(/no per-district lean published/)).not.toBeInTheDocument();
     expect(shape.getAttribute("style")).not.toBe(
@@ -365,7 +374,7 @@ describe("DistrictMap", () => {
 
     const shape = await screen.findByRole("button", { name: "CT-2" });
     expect(
-      screen.getByText(/the new 2026 districts · no per-district lean published here yet/)
+      screen.getByText(/the new districts · no per-district lean published here yet/)
     ).toBeInTheDocument();
     expect(screen.queryByText(/redder = safer R/)).not.toBeInTheDocument();
     const style = shape.getAttribute("style") ?? "";

@@ -5,6 +5,7 @@ import { pageMetadata } from "@/lib/site";
 import { describeRedistrictingIndex } from "@/lib/seo";
 import { REDISTRICTING_HREF, netWord, redistrictingHref } from "@/lib/redistricting";
 import { safeHref } from "@/lib/formatting";
+import SectionTabs from "@/components/layout/SectionTabs";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
@@ -22,7 +23,11 @@ export async function generateMetadata() {
   // Rendered per request (below), so this reads the backend, not a build.
   const index = await fetchIndex().catch(() => null);
   return pageMetadata({
-    ...describeRedistrictingIndex(index?.cycle ?? null, index?.states.length ?? 0),
+    ...describeRedistrictingIndex(
+      index?.cycle ?? null,
+      index?.states.length ?? 0,
+      index?.upcoming ?? true
+    ),
     path: REDISTRICTING_HREF,
   });
 }
@@ -37,13 +42,35 @@ export default async function RedistrictingIndexPage() {
       <Navbar />
       <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
         <div className="mx-auto max-w-4xl">
+          <SectionTabs section="elections" active="redistricting" />
           <PageMasthead eyebrow={`Elections · ${index?.cycle ?? ""}`} title="New House maps">
             <p>
-              {states.length} states vote on new U.S. House district lines in {index?.cycle}. Pick a
-              state to see whether your district changed, where its residents lived before, and how
-              its lean moved. Counted from Census blocks; every figure downloads.
+              {states.length} states {index?.upcoming === false ? "voted" : "vote"} on new U.S.
+              House district lines in {index?.cycle}. Pick a state to see whether your district
+              changed, where its residents lived before, and how its lean moved. Counted from Census
+              blocks; every figure downloads.
             </p>
           </PageMasthead>
+
+          {/* Every redrawn state in one row, so a reader who knows their
+              state goes straight to it rather than scrolling the list. */}
+          {states.length > 0 && (
+            <nav aria-label="Redrawn states" className="mt-6">
+              <ul className="flex flex-wrap gap-2">
+                {states.map((s) => (
+                  <li key={s.state}>
+                    <Link
+                      href={redistrictingHref(s.state)}
+                      className="flex min-h-11 min-w-11 items-center justify-center border border-white/15 px-3 font-mono text-sm tracking-[0.12em] text-ink-lo transition-colors hover:border-phos/40 hover:text-phos"
+                    >
+                      {s.state}
+                      <span className="sr-only"> {s.stateName}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          )}
 
           <ul className="mt-6">
             {states.map((s) => (
@@ -112,8 +139,8 @@ export default async function RedistrictingIndexPage() {
 
           <p className="mt-8 max-w-2xl text-xs leading-relaxed text-ink-min">
             Lean is Cook PVI: how a district voted for president relative to the nation, on the same
-            2020 + 2024 window before and after, so a change in lean is a change in the lines. It is
-            not a forecast. Each state page explains the method and lists every source.
+            presidential elections before and after, so a change in lean is a change in the lines.
+            It is not a forecast. Each state page explains the method and lists every source.
           </p>
         </div>
       </main>

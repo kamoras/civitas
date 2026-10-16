@@ -24,10 +24,18 @@ from sqlalchemy.orm import Session
 
 from app.error_utils import record_exception
 from app.ops_alerts import resolve_ops_alert, send_ops_alert
-from app.pipeline import rate_limiter
+from app.pipeline import rate_limiter, run_tracker
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
+
+# How often heartbeat() persists. A step that makes thousands of upstream
+# reads (the House sponsorship step's first night after a cache change:
+# about 38,000 Congress.gov reads, 3,000 an hour) would otherwise show an
+# empty detail and a frozen elapsed time for hours, which an operator
+# can't tell from a hang (House run 90, 2026-10-16). Each persist is one
+# short commit, so this bounds the write traffic, not the freshness.
+HEARTBEAT_INTERVAL_S = 15.0
 
 
 class ProgressTracker:
@@ -42,6 +50,7 @@ class ProgressTracker:
         # Rate-limiter counter snapshots taken at each step's begin(), so a
         # terminal transition can persist the delta over that step's window.
         self._rl_baselines: dict[str, dict] = {}
+        self._last_heartbeat = 0.0
         for key, phase, label in steps:
             self._steps[key] = {
                 "key": key,
@@ -75,6 +84,32 @@ class ProgressTracker:
         if detail is not None:
             step["detail"] = detail
         self._flush()
+
+    def heartbeat(self, key: str, *, done: int | None = None, detail: str) -> None:
+        """update() for a hot loop: persists at most every
+        HEARTBEAT_INTERVAL_S, with the step's upstream requests and
+        rate-limit wait so far appended to `detail`. Advances the run's
+        elapsed_seconds like every flush. Never call it while holding
+        uncommitted writes the step means to keep together: it commits."""
+        now = time.monotonic()
+        if now - self._last_heartbeat < HEARTBEAT_INTERVAL_S:
+            return
+        self._last_heartbeat = now
+        self.update(key, done=done, detail=detail + self._upstream_so_far(key))
+
+    def _upstream_so_far(self, key: str) -> str:
+        """The step's upstream requests and rate-limit wait since it
+        began, as a detail suffix; empty before any request (a cache hit
+        makes none)."""
+        baseline = self._rl_baselines.get(key)
+        if baseline is None:
+            return ""
+        deltas = rate_limiter.diff_snapshots(baseline, rate_limiter.snapshot())
+        requests = sum(r for r, _ in deltas.values())
+        if not requests:
+            return ""
+        blocked_min = sum(b for _, b in deltas.values()) / 60
+        return f" · {requests:,} upstream requests, {blocked_min:.0f}m rate-limit wait"
 
     def complete(self, key: str, *, detail: str | None = None) -> None:
         step = self._steps.get(key)
@@ -156,7 +191,10 @@ class ProgressTracker:
     def _flush(self) -> None:
         ordered = [self._steps[k] for k, _, _ in self._steps_def]
         self._run.progress_detail = json.dumps(ordered)
+        # Also the run's progress mark: started_at + elapsed_seconds is when
+        # it last wrote progress (run_tracker.row_is_stale).
         self._run.elapsed_seconds = round(time.time() - self._start_time, 1)
+        run_tracker.touch(type(self._run))
         try:
             self._db.commit()
         except Exception:

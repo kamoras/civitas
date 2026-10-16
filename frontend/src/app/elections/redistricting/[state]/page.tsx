@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { Metadata } from "next";
+import { congressOrdinal } from "@/lib/sources";
 import { notFound } from "next/navigation";
 import type { StateRedistricting } from "@/types/redistricting";
 import { fetchRecord } from "@/lib/ssrPayload";
@@ -6,6 +8,7 @@ import { absoluteUrl, notFoundMetadata, pageMetadata } from "@/lib/site";
 import { describeStateRedistricting } from "@/lib/seo";
 import { REDISTRICTING_HREF, redistrictingHref } from "@/lib/redistricting";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
+import SectionTabs from "@/components/layout/SectionTabs";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
@@ -78,8 +81,8 @@ export default async function StateRedistrictingPage({
         data={{
           "@context": "https://schema.org",
           "@type": "Dataset",
-          name: `${data.stateName} U.S. House districts, ${data.fromCongress}th to ${data.toCongress}th Congress lines: 2020 Census resident overlap`,
-          description: `2020 Census residents in each pair of an old and a new ${data.stateName} congressional district, with each district's Cook PVI on both maps.`,
+          name: `${data.stateName} U.S. House districts, ${congressOrdinal(data.fromCongress)} to ${congressOrdinal(data.toCongress)} Congress lines: Census resident overlap`,
+          description: `Census residents in each pair of an old and a new ${data.stateName} congressional district, with each district's Cook PVI on both maps.`,
           url: absoluteUrl(redistrictingHref(data.state)),
           isAccessibleForFree: true,
           distribution: [
@@ -99,6 +102,21 @@ export default async function StateRedistrictingPage({
       <Navbar />
       <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
         <div className="mx-auto max-w-4xl">
+          <SectionTabs section="elections" active="redistricting" className="mb-4" />
+          <nav aria-label="Breadcrumb" className="mb-6 text-sm text-ink-lo">
+            <Link href="/elections" className="inline-flex min-h-6 items-center hover:text-phos">
+              Elections
+            </Link>
+            {" / "}
+            <Link
+              href={REDISTRICTING_HREF}
+              className="inline-flex min-h-6 items-center hover:text-phos"
+            >
+              New House maps
+            </Link>
+            {" / "}
+            <span aria-current="page">{data.stateName}</span>
+          </nav>
           <PageMasthead
             eyebrow={`New House maps · ${data.cycle} · ${data.state}`}
             title={`${data.stateName}'s new map`}

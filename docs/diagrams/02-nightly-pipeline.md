@@ -35,7 +35,7 @@ condition stays active until the code that raised it sees the condition gone
 flowchart TB
     START(["APScheduler cron tick"]) --> LOCK{"a running row in<br/>this pipeline's run table?"}
     LOCK -->|yes, fresh| SKIP(["Skip this tick"])
-    LOCK -->|yes, older than 12h| MARK["Mark stale, proceed"]
+    LOCK -->|"yes, no progress for 6h<br/>or older than 24h"| MARK["Mark stale, proceed"]
     LOCK -->|no| FP
     MARK --> FP
 
@@ -53,7 +53,7 @@ flowchart TB
         P1 --> P2 --> P2B --> P3 --> P7
     end
 
-    P7 --> SUPP["<b>Supplementary pipeline</b><br/>EXPLORE: speeches, presidential actions,<br/>SCOTUS opinions, FR rulemaking → sqlite-vec + FTS5<br/>JUSTICES (weekly, Sunday; duplicate Oyez vote rows collapsed) · committee leadership<br/>district PVI (pinned per Congress) · PRESIDENTS<br/>VOTES WITH THE PRESIDENT: new OMB statements → matched roll calls → rates + expected by seat"]
+    P7 --> SUPP["<b>Supplementary pipeline</b><br/>EXPLORE: speeches, presidential actions,<br/>SCOTUS opinions, FR rulemaking → sqlite-vec + FTS5<br/>JUSTICES (weekly, Sunday, or the night Oyez's sitting list changes; duplicate Oyez vote rows collapsed) · committee leadership<br/>district PVI (pinned per Congress) · PRESIDENTS<br/>VOTES WITH THE PRESIDENT: new OMB statements → matched roll calls → rates + expected by seat"]
     SUPP --> HOUSE["<b>House pipeline</b><br/>the same phases for 435 members<br/>no LLM call"]
     HOUSE --> STOCK["<b>Stock trades pipeline</b><br/>STOCK Act PTR ingestion<br/>House Clerk + Senate eFD + OGE 278-T and 278e"]
     STOCK --> ELECT["<b>Election pipeline</b><br/>roster → financials → ballots → coverage"]
@@ -96,8 +96,9 @@ Swarm rollout can't both start the same pipeline
 so a restart kills them without letting them record it; on startup the backend
 marks every pipeline's leftover `running` row `stale`
 (`main._invalidate_orphaned_pipelines`), sparing only a Senate run whose
-lease still holds (it may be live in the other task), and a row older than 12 hours is
-cleared at the next acquisition. `check-and-deploy.sh` does not deploy while
+lease still holds (it may be live in the other task), and a row that has written
+no progress for 6 hours, or is older than 24, is cleared at the next acquisition
+(`run_tracker.row_is_stale`). `check-and-deploy.sh` does not deploy while
 any pipeline runs.
 
 ## The fingerprint gate

@@ -47,15 +47,20 @@ failing.
 """
 
 import functools
-import hashlib
 import json
 import logging
+import math
 import pathlib
 import re
+from datetime import timedelta
 
 import numpy as np
 
+from app.database import SessionLocal
+from app.models import LlmGenerationSample
 from app.pipeline import vector_store
+from app.pipeline.cache import api_cache_get, api_cache_set
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -74,121 +79,226 @@ MIN_PREDICATE_CHARS = 12
 #    also refused every party a story DESCRIBES rather than names — "a
 #    federal judge", "federal agents", "a bipartisan group of senators": 33
 #    of the 136 claims compose() rejected in a live sample (2026-10-11..15).
-# 2. What the rule refuses gets a similarity-weighted vote among its nearest
-#    hand-labelled spans (app/data/claim_actor_examples.json, labelled per
-#    its _rubric; kNN, Cover & Hart 1967) on the similarity model, with k
-#    and the threshold fitted by scripts/calibrate_claim_actor.py
-#    (claim_actor_calibration.json) under one hard constraint: leave one
-#    out, it admits no labelled non-actor the rule refused, so the two tiers
-#    are at least as precise as the rule was alone.
+# 2. What the rule refuses, unless a pronoun leads it, is compared with
+#    natural-language descriptions of an acting party and of what is not one
+#    (ACTOR_PROTOTYPES, NON_ACTOR_PROTOTYPES; zero-shot, Yin, Hay & Roth 2019)
+#    on the similarity model, and admitted when its margin (best actor
+#    description minus best non-actor one) reaches actor_threshold(). For a
+#    possessive ("the court's ruling") the margin reads what follows the
+#    last "'s": the owner names a party, the head says what the span is.
 #
-#    Measured leave one out on the labelled set (970 spans): precision 0.80
-#    against the rule's 0.77, recall 0.85 against 0.71; on the replayed
-#    production spans alone 0.89 against 0.88, and 0.96 against 0.86.
-#    Replayed through compose() on the 264 recorded claim calls, each span's
-#    vote leaving its own spelling out, 15 of the rule's 33 rejections
-#    compose and nothing the rule admitted is lost; every new claim names
-#    the party its source says acted, in the same clause.
+#    The threshold is the lowest margin no data-supplied non-actor reaches
+#    (fit_actor_threshold): every predicate the claim calls returned (a verb
+#    phrase, by the prompt's own contract) and every sum of money or
+#    percentage in their sources, among those the rule refuses. Refit once
+#    a UTC day by the Action Center refresh from its recorded calls
+#    (refit_actor_threshold, stored in api_cache), with
+#    app/data/claim_actor_threshold.json (scripts/calibrate_claim_actor.py,
+#    the same fit on a production snapshot) for a database with none. No
+#    span is labelled by hand.
 #
-# The vote does not replace the rule, because measured alone it cannot. The
-# best vote-only setting meeting the same constraint refuses 233 of the 401
-# labelled actors the rule admits — the feed's most frequent actor among
-# them — and on the same replay it composed 82 claims to the rule's 128
-# (13 gained, 59 lost). The calibration file's "vote_alone" holds that
-# measurement. Named parties are exactly where a short span's embedding says
-# least: a surname, an acronym or an organisation called "Common Cause" sits
-# nearer the things it does than the people who do them.
+#    Measured 2026-10-16 against the kNN vote over 970 hand-labelled spans
+#    it replaced (873 of them phrases written for that set): replayed
+#    through compose() on all 328 recorded claim calls, the 168 claims the
+#    vote composed all still compose, and one more does (a described group
+#    of residents the vote refused). On the 14 replayed production spans the
+#    rule refuses, it admits 11 of the 12 hand-labelled actors against the
+#    vote's 10, and no non-actor under either.
+#
+# The tier does not replace the rule: named parties are exactly where a
+# short span's embedding says least (a surname, an acronym or an
+# organisation called "Common Cause" sits nearer the things it does than the
+# people who do them). Every span that resolves to a tracked official or a
+# federal agency (31 of the 112 distinct actor spans in the recorded calls)
+# is one the rule already admits, so no separate records tier is kept.
+ACTOR_PROTOTYPES = (
+    "a person, named or described by their role",
+    "a group of officials or lawmakers",
+    "several senators, representatives or other officials",
+    "state or local government officials",
+    "a judge or a court",
+    "a government agency or its agents and officers",
+    "a company, organisation or institution",
+    "a government or a country acting",
+)
+NON_ACTOR_PROTOTYPES = (
+    "an amount of money or a number of things",
+    "a law, bill, document or report",
+    "an event, election or meeting",
+    "a place or a date",
+    "an action, decision or policy",
+    "what someone said or did",
+    "a court ruling, verdict, order or sentence",
+    "a legal case, trial, hearing or arrest",
+)
 _DATA_DIR = pathlib.Path(__file__).resolve().parents[2] / "data"
-ACTOR_EXAMPLES_PATH = _DATA_DIR / "claim_actor_examples.json"
-ACTOR_CALIBRATION_PATH = _DATA_DIR / "claim_actor_calibration.json"
-_actor_examples_cache: list[dict] | None = None
-_actor_calibration_cache: dict | None = None
-_actor_reference_cache: dict[int, np.ndarray] = {}
+ACTOR_THRESHOLD_PATH = _DATA_DIR / "claim_actor_threshold.json"
 
-
-def actor_examples() -> list[dict]:
-    global _actor_examples_cache
-    if _actor_examples_cache is None:
-        _actor_examples_cache = json.loads(ACTOR_EXAMPLES_PATH.read_text())["examples"]
-    return _actor_examples_cache
-
-
-def actor_calibration() -> dict:
-    global _actor_calibration_cache
-    if _actor_calibration_cache is None:
-        _actor_calibration_cache = json.loads(ACTOR_CALIBRATION_PATH.read_text())
-    return _actor_calibration_cache
-
-
-def actor_examples_hash() -> str:
-    """Identifies the labelled set a calibration was fitted to."""
-    payload = json.dumps([[e["text"], e["actor"]] for e in actor_examples()])
-    return hashlib.sha256(payload.encode()).hexdigest()[:16]
+# The Action Center's claim calls, as llm_generation_samples records them.
+CLAIM_TASK = "action_center_claim"
+# The claim calls' recorded prompt marks where the source begins and ends.
+_CLAIM_SOURCE_START = "NOW DO THIS ONE\nSource:\n"
+_CLAIM_SOURCE_END = "\n\nRules:"
+# A sum of money or a percentage, with up to two words after it ("$22
+# million in taxpayer funds", "3.6 percent"): a quantity the source states,
+# never a party. A count of people ("20,000 voters") is not one of these: a
+# number of people can act.
+_QUANTITY_RE = re.compile(
+    r"(?:(?:nearly|about|more than|over|at least|some|almost|roughly)\s+)?"
+    r"(?:\$(?:\d[\d,.]*\d|\d)(?:\s+(?:million|billion|trillion|thousand))?"
+    r"|(?:\d[\d,.]*\d|\d)(?:\s*%|\s+percent))"
+    r"(?:\s+(?:of|in|for)?\s*[a-z][a-z'-]+){0,2}"
+)
+# How many recent claim calls a refit reads, and the fewest non-actors it
+# needs to set a threshold at all (below that, the stored one stands).
+_REFIT_CALLS = 2000
+_MIN_NEGATIVES = 50
+_THRESHOLD_TIER = "claim-actor"
+_THRESHOLD_KEY = "threshold"
+_THRESHOLD_TTL_HOURS = 24 * 400
+_threshold_cache: dict = {}
+_prototype_cache: dict[int, tuple[np.ndarray, np.ndarray]] = {}
 
 
 def embed_spans(spans: list[str]) -> np.ndarray:
     return vector_store.get_similarity_model().encode(spans, show_progress_bar=False, normalize_embeddings=True)
 
 
-def actor_votes(span_embeddings: np.ndarray, reference: np.ndarray, labels: np.ndarray, k: int) -> np.ndarray:
-    """Similarity-weighted share of actors among each span's k nearest
-    labelled spans (unit vectors, so the dot product is the cosine).
-    Negative similarities weigh nothing."""
-    sims = span_embeddings @ reference.T
-    k = min(k, reference.shape[0])
-    nearest = np.argpartition(-sims, k - 1, axis=1)[:, :k]
-    weights = np.take_along_axis(sims, nearest, axis=1).clip(min=0.0)
-    return (weights * labels[nearest]).sum(axis=1) / np.maximum(weights.sum(axis=1), 1e-9)
+def _head(span: str) -> str:
+    """What a possessive span is: the words after its last "'s"."""
+    text = (span or "").replace("’", "'")
+    return text.rsplit("'s ", 1)[1] if "'s " in text else span
 
 
-def _actor_reference() -> np.ndarray:
-    """The labelled spans' embeddings, once per similarity model."""
+def _prototypes() -> tuple[np.ndarray, np.ndarray]:
     key = id(vector_store.get_similarity_model())
-    if key not in _actor_reference_cache:
-        _actor_reference_cache[key] = embed_spans([e["text"] for e in actor_examples()])
-    return _actor_reference_cache[key]
+    if key not in _prototype_cache:
+        _prototype_cache[key] = (embed_spans(list(ACTOR_PROTOTYPES)), embed_spans(list(NON_ACTOR_PROTOTYPES)))
+    return _prototype_cache[key]
+
+
+def actor_margins(spans: list[str]) -> np.ndarray:
+    """Best actor description's cosine minus the best non-actor one's, per
+    span (its possessive head)."""
+    if not spans:
+        return np.zeros(0)
+    actor, non_actor = _prototypes()
+    vectors = embed_spans([_head(s) for s in spans])
+    return (vectors @ actor.T).max(axis=1) - (vectors @ non_actor.T).max(axis=1)
+
+
+def _in_vote_domain(span: str) -> bool:
+    return len(span) >= MIN_ACTOR_CHARS and not _looks_like_an_actor(span) and not _names_no_one(span)
+
+
+def actor_negatives(calls: list[tuple[str, str]]) -> list[str]:
+    """The data-supplied non-actors among (prompt, model answer) claim calls,
+    in the second tier's domain: each call's predicate as compose() reads it,
+    and the sums and percentages in its source (comment above)."""
+    out: set[str] = set()
+    for prompt, answer in calls:
+        source = prompt.split(_CLAIM_SOURCE_START, 1)[-1].rsplit(_CLAIM_SOURCE_END, 1)[0]
+        try:
+            parsed = json.loads(answer or "{}")
+        except ValueError:
+            parsed = {}
+        predicate = str(parsed.get("predicate") or "").strip().strip(",;:").rstrip(".") if isinstance(parsed, dict) else ""
+        if predicate:
+            out.add(_source_spelling(predicate, source))
+        out.update(m.group(0).strip() for m in _QUANTITY_RE.finditer(source))
+    return sorted(s for s in out if _in_vote_domain(s))
+
+
+def fit_actor_threshold(negatives: list[str]) -> float | None:
+    """The lowest margin, on a 0.01 grid, that no negative reaches; None
+    when there are too few negatives to say."""
+    if len(negatives) < _MIN_NEGATIVES:
+        return None
+    return round(math.floor(float(actor_margins(negatives).max()) * 100 + 1) / 100, 2)
+
+
+def refit_actor_threshold(db) -> float | None:
+    """Refit from the newest recorded claim calls, once a UTC day, inside a
+    savepoint of the caller's session (the caller commits). The fitted
+    value is used in this process at once."""
+    today = utcnow().date().isoformat()
+    if _threshold_cache.get("refit_on") == today:
+        return _threshold_cache.get("value")
+    calls = (db.query(LlmGenerationSample.input_text, LlmGenerationSample.output_json)
+             .filter(LlmGenerationSample.task == CLAIM_TASK)
+             .order_by(LlmGenerationSample.id.desc()).limit(_REFIT_CALLS).all())
+    negatives = actor_negatives([(c.input_text, c.output_json) for c in calls])
+    value = fit_actor_threshold(negatives)
+    _threshold_cache["refit_on"] = today
+    if value is None:
+        return actor_threshold()
+    stored = {"threshold": value, "date": today, "negatives": len(negatives), "calls": len(calls)}
+    try:
+        with db.begin_nested():
+            api_cache_set(db, _THRESHOLD_TIER, _THRESHOLD_KEY, stored, normal_ttl_hours=_THRESHOLD_TTL_HOURS,
+                          commit=False)
+    except Exception:
+        logger.warning("Actor threshold not stored; used in this process only", exc_info=True)
+    _threshold_cache.update(value=value, read_at=utcnow())
+    logger.info("Actor threshold refit: %s", stored)
+    return value
+
+
+def actor_threshold() -> float:
+    """The stored refit (re-read hourly), else the bundled fallback."""
+    read_at = _threshold_cache.get("read_at")
+    if read_at is not None and utcnow() - read_at < timedelta(hours=1):
+        return _threshold_cache["value"]
+    value = None
+    try:
+        with SessionLocal() as db:
+            stored = api_cache_get(db, _THRESHOLD_TIER, _THRESHOLD_KEY, max_age_hours=_THRESHOLD_TTL_HOURS)
+        value = float(stored["threshold"]) if stored else None
+    except Exception:
+        logger.warning("Stored actor threshold unreadable; using the bundled one", exc_info=True)
+    if value is None:
+        value = float(json.loads(ACTOR_THRESHOLD_PATH.read_text())["threshold"])
+    _threshold_cache.update(value=value, read_at=utcnow())
+    return value
 
 
 def is_acting_party(span: str) -> bool:
     """True when SPAN names or describes a party that can act or speak:
-    the rule's verdict, or else — unless a pronoun leads it — the labelled
-    spans' vote."""
+    the rule's verdict, or else, unless a pronoun leads it, the prototype
+    margin's."""
     if _looks_like_an_actor(span):
         return True
     if _names_no_one(span):
         return False
     try:
-        return _actor_vote(span) >= actor_calibration()["threshold"]
+        return _actor_margin(span) >= actor_threshold()
     except Exception:
-        # The vote only ever admits what the rule refused, so failing closed
-        # leaves the rule's verdict: the claim is refused, not the run.
-        logger.exception("Actor vote failed for %r — refused, as the rule alone would", span)
+        # The second tier only ever admits what the rule refused, so failing
+        # closed leaves the rule's verdict: the claim is refused, not the run.
+        logger.exception("Actor margin failed for %r — refused, as the rule alone would", span)
         return False
 
 
 @functools.lru_cache(maxsize=4096)
-def _actor_vote(span: str) -> float:
+def _actor_margin(span: str) -> float:
     """Cached: a claim's spans are composed more than once a run (the call
     that records the model's answer, then extraction)."""
-    labels = np.array([float(e["actor"]) for e in actor_examples()])
-    return float(actor_votes(embed_spans([span]), _actor_reference(), labels, actor_calibration()["k"])[0])
+    return float(actor_margins([span])[0])
 
 
 # Tier 1 of is_acting_party. Anything starting with a pronoun or bare
 # determiner and going on in lowercase is the model summarising rather than
 # pointing at someone ("This coverage", "The race", "It") — the empty-post
-# shape — unless the vote finds a party there ("a federal judge").
+# shape — unless the second tier finds a party there ("a federal judge").
 #
-# A pronoun-led span never goes to the vote. Grammatical function words, not
-# a classification (as _RELATIVE_PRONOUNS below): "its spokesman" or "their
-# lawyers" points at a party only through someone the span doesn't name, so
-# the rendered claim could not say whose. The embedding can't see that — it
-# reads "spokesman" and votes actor (0.89 left out, higher than any other
-# non-actor the rule refuses; claim_actor_examples.json labels them
-# non-actors per its rubric).
+# A pronoun-led span never goes to the second tier. Grammatical function
+# words, not a classification (as _RELATIVE_PRONOUNS below): "its
+# spokesman", "their lawyers" or "your representatives" points at a party
+# only through someone the span doesn't name, so the rendered claim could
+# not say whose. The embedding can't see that: it reads "spokesman".
 _PRONOUN_OPENERS = frozenset({
     "this", "that", "these", "those", "it", "they", "he", "she", "we",
-    "there", "his", "her", "their", "its",
+    "there", "his", "her", "their", "its", "our", "your", "my",
 })
 _NON_ACTOR_OPENERS = _PRONOUN_OPENERS | {
     "the", "a", "an", "coverage",

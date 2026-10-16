@@ -5,6 +5,7 @@ are replaced per test; the record matching, templates, caps, holds, audit
 and publishing run for real against an in-memory database.
 """
 
+import dataclasses
 import json
 import re
 from datetime import datetime, timedelta
@@ -39,9 +40,9 @@ NOW = datetime(2026, 10, 14, 18, 0)  # 14:00 Eastern, inside the posting window
 RELEVANT = TrendScores(relevance=0.9, tragedy=0.0, political_violence=0.0, loaded=0.0)
 
 
-def trend(name, topic="t1", rank=0, description="", started=NOW - timedelta(hours=3)):
+def trend(name, topic="t1", rank=0, description="", started=NOW - timedelta(hours=3), category="politics"):
     return BlueskyTrend(topic=topic, display_name=name, description=description, rank=rank,
-                        status="trending", category="politics", started_at=started, post_count=100)
+                        status="trending", category=category, started_at=started, post_count=100)
 
 
 def fake_embed(texts):
@@ -99,8 +100,9 @@ def world(db_session, monkeypatch, freeze_utcnow):
     monkeypatch.setattr(trend_poster, "resolve_ops_alert", lambda *a, **k: None)
     state = {"trends": [], "scores": {}}
     monkeypatch.setattr(trend_poster, "fetch_bluesky_trends", lambda: state["trends"])
-    monkeypatch.setattr(trend_poster, "score_trends",
-                        lambda pairs: [state["scores"].get(n, RELEVANT) for n, _ in pairs])
+    monkeypatch.setattr(trend_poster, "score_trends", lambda triples: [
+        state["scores"].get(n, dataclasses.replace(RELEVANT, relevance=1.0 if c == "politics" else 0.0))
+        for n, _, c in triples])
     state["db"], state["alerts"] = db, alerts
     return state
 
@@ -177,12 +179,22 @@ def test_a_record_dated_after_the_trend_plus_two_days_is_not_evidence(world):
     assert row.record_kind != "vote"
 
 
-def test_an_irrelevant_trend_is_never_matched(world):
-    world["trends"] = [trend("Example Tariff Relief Act")]
-    world["scores"]["Example Tariff Relief Act"] = TrendScores(0.2, 0, 0, 0)
+def test_a_trend_bluesky_files_outside_politics_is_never_matched(world):
+    world["trends"] = [trend("Example Tariff Relief Act", category="sports")]
     run(world)
     row = world["db"].query(TrendCandidate).one()
-    assert row.decision == "ineligible" and row.reason.startswith("relevance vote")
+    assert row.decision == "ineligible" and row.reason.startswith("Bluesky category sports")
+    assert row.record_key is None
+
+
+def test_relevance_is_bluesky_politics_category(monkeypatch):
+    """Whether a trend is a policy story is Bluesky's filing, not a vote."""
+    monkeypatch.setattr(trend_relevance, "_embed_texts_sim", lambda texts: np.zeros((len(texts), 3)))
+    monkeypatch.setattr(trend_relevance, "gate_votes", lambda gate, emb: np.zeros(len(emb)))
+    scores = trend_relevance.score_trends([("A", "", "politics"), ("B", None, "Politics "), ("C", "", "sports"),
+                                           ("D", "", None)])
+    assert [s.relevant for s in scores] == [True, True, False, False]
+    assert "relevance" not in trend_relevance.GATES
 
 
 # -- the neutrality gate ------------------------------------------------------
@@ -580,7 +592,7 @@ def test_trend_gates_calibration_matches_examples():
         assert cal[gate]["examples_hash"] == trend_relevance.gate_examples_hash(gate), (
             f"{gate}: rerun backend/scripts/calibrate_trend_gates.py")
         assert cal[gate]["examples"] == len(trend_relevance.gate_examples(gate))
-    assert cal["relevance"]["threshold"] == 0.5
+    assert "relevance" not in cal
     assert cal["_source"]
 
 
@@ -628,21 +640,29 @@ def test_a_nominee_named_in_a_story_is_not_an_anchor(world):
     assert world["db"].query(TrendCandidate).one().decision == "ineligible"
 
 
-def test_a_trend_about_the_nomination_anchors_on_the_vote(world):
-    _nomination(world["db"])
+def test_a_trend_that_began_with_the_vote_anchors_on_it(world):
+    _nomination(world["db"], date="2026-10-13")
     name = "Jordan Vale confirmation"
-    world["trends"] = [trend(name, description="The Senate confirmed Jordan Vale.")]
-    world["scores"][name] = TrendScores(0.9, 0, 0, 0, appointment=0.95)
+    world["trends"] = [trend(name, description="The Senate confirmed Jordan Vale.")]  # began 10-14
     run(world)
     row = world["db"].query(TrendCandidate).one()
     assert (row.match_type, row.record_key) == ("nominee", "vote:senate/119/2/302")
+
+
+def test_a_trend_days_after_the_vote_is_not_about_it(world):
+    """Past NOMINEE_WINDOW a trend naming the nominee is about what they did
+    since, whatever it is called."""
+    _nomination(world["db"], date="2026-10-11")
+    name = "Jordan Vale confirmation"
+    world["trends"] = [trend(name, description="The Senate confirmed Jordan Vale.")]
+    run(world)
+    assert world["db"].query(TrendCandidate).one().decision == "ineligible"
 
 
 def test_an_old_confirmation_is_not_a_record_of_new_news(world):
     _nomination(world["db"], date="2026-03-01")
     name = "Jordan Vale confirmation"
     world["trends"] = [trend(name, description="The Senate confirmed Jordan Vale.")]
-    world["scores"][name] = TrendScores(0.9, 0, 0, 0, appointment=0.95)
     run(world)
     assert world["db"].query(TrendCandidate).one().decision == "ineligible"
 

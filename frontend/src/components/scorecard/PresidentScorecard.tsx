@@ -312,9 +312,9 @@ function LegacyColumn({
       method={dim && <ComponentBars components={dim.components} />}
     >
       <Measures>
-        How historians rank the presidency: C-SPAN&apos;s 2021 survey of about 140 historians,
-        rating ten areas of leadership such as crisis leadership, economic management and moral
-        authority.
+        How historians rank the presidency: C-SPAN&apos;s Presidential Historians Survey, in which
+        historians rate ten areas of leadership such as crisis leadership, economic management and
+        moral authority.
       </Measures>
       {f?.points != null && f.pointsMean != null ? (
         <Lede>
@@ -324,8 +324,8 @@ function LegacyColumn({
       ) : (
         score == null && (
           <Lede>
-            Not rated. C-SPAN&apos;s Presidential Historians Survey rates completed terms, and its
-            2025 survey was postponed.
+            Not rated. C-SPAN&apos;s Presidential Historians Survey rates only completed terms, and
+            the newest edition published does not rate this presidency.
           </Lede>
         )
       )}

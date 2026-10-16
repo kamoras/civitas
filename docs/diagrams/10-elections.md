@@ -364,6 +364,34 @@ Rhode Island draws at 4×5 pixels on a phone — also get a labelled box off
 the coast joined to the state by a leader line, placed from the map's own
 path generator.
 
+## The 2026 Senate and House map (before election day)
+
+```mermaid
+flowchart LR
+    SB["Silver Bulletin raw polls<br/>fetch_silver_bulletin_polls.py, gated<br/>forecast_polls.json"] --> FIT
+    FIT["fit_forecast_model.py (data_refresh, on new polls + monthly)<br/>Senate: MEDSL + FEC + Silver Bulletin, from 1998<br/>House: FEC compilations + rebuilt lean, from 2018"] --> MODEL["/data/forecast_model.json<br/>forecast_house_model.json<br/>parameters + leave-one-out + forward check"]
+    HIST["build_house_lean_history.py<br/>VEST 2016/2020 on Census blocks"] --> FIT
+    WIKI["Wikipedia race articles<br/>(current revision, gated)"] --> BUILD
+    DB["races + confirmed nominees"] --> BUILD
+    PVI["state_pvi.json + district_lean.json<br/>(usual vote)"] --> BUILD
+    MODEL --> BUILD["forecast/build.py<br/>every 3 h, campaign only"]
+    BUILD --> FILE["/data/election_map.json"]
+    FILE --> API["GET /api/elections/map<br/>404 from election day"]
+    API --> PAGE["/elections/map<br/>Usual vote · Polls · Difference"]
+```
+
+Each seat: its usual vote, and where both parties have a nominee an 80%
+range for the margin (structural line + poll average, inverse variance,
+one fitted scale). Ranges, never a winner; no seat total, because the
+held-out seat counts missed by more than independent races allow. The
+whole package (`app/forecast/`) is outside `app/pipeline/` and imports
+nothing from scoring. Further out than the training polls reach (their
+own oldest poll, 21 days), every range is the structural line's alone,
+labelled fundamentals only. The training polls are refreshed and gated by
+`app/data_refresh.py`; a refused file or an outage keeps the last
+accepted copy and alerts. Poll-derived output is CC BY-SA 4.0, "Wikipedia
+contributors". README "The 2026 Senate and House map" has the numbers.
+
 ## Election night: the live count
 
 From election day (Eastern date) the site's subject stays on the election

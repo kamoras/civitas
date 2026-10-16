@@ -129,8 +129,9 @@ export default function DataChapter() {
             </Fact>
             <Fact label="Partisan lean">
               State and district Cook PVI. A state&apos;s is computed from its certified
-              presidential returns (the FEC&apos;s 2020 compilation, the MIT Election Lab&apos;s for
-              2024); a district&apos;s is Cook&apos;s published figure, shown beside a{" "}
+              presidential returns for the two elections in Cook&apos;s window (the FEC&apos;s
+              compilation or the MIT Election Lab&apos;s official state file); a district&apos;s is
+              Cook&apos;s published figure, shown beside a{" "}
               <A href="#computed-lean">lean Civitas computes</A> from precinct returns.
             </Fact>
           </Facts>
@@ -193,6 +194,13 @@ export default function DataChapter() {
               Each state&apos;s own voter lookup, linked after a nightly check that it still opens,
               or, where the state&apos;s site turns the check away, linked as unconfirmed beside
               USAGov&apos;s directory of election offices; otherwise USAGov&apos;s directory alone.
+            </Fact>
+            <Fact label="Silver Bulletin · Wikipedia">
+              The election map&apos;s past polls, which its ranges are fitted and checked on, come
+              from Silver Bulletin&apos;s raw poll file (every rated poll since 1998 with its
+              result), used free of charge as its terms allow and attributed to Silver Bulletin as
+              they ask; a new copy is used only after it passes Civitas&apos;s checks. This
+              year&apos;s polls come from Wikipedia&apos;s race articles (CC BY-SA 4.0).
             </Fact>
             <Fact label="News & trends">
               RSS feeds from six newsrooms, Google Trends and Bluesky, for the Action Center.
@@ -370,31 +378,35 @@ export default function DataChapter() {
         </P>
         <P>
           The formula is Cook&apos;s: the district&apos;s Democratic share of the two-party
-          presidential vote minus the nation&apos;s, weighted 75% to 2024 and 25% to 2020, with a
-          Republican lean written R+. For 2020, each precinct&apos;s votes, from the Voting and
-          Election Science Team&apos;s precinct results and maps (CC BY 4.0), are shared among the
-          Census blocks inside it by population. For 2024, the MIT Election Data and Science
-          Lab&apos;s precinct returns (CC0) record the House district each precinct voted in, which
-          were the 119th Congress&apos;s lines. For the nine states that redrew for 2026, the 2024
-          vote is carried onto the new lines through each county&apos;s and state house
-          district&apos;s change from 2020. Census block files place every block in its district on
-          both maps.
+          presidential vote minus the nation&apos;s, weighted 75% to the most recent presidential
+          election and 25% to the one before, with a Republican lean written R+. For the earlier
+          election, each precinct&apos;s votes, from precinct results published with their maps (the
+          Voting and Election Science Team&apos;s, CC BY 4.0), are shared among the Census blocks
+          inside it by population. For the later one, precinct returns that record the House
+          district each precinct voted in (the MIT Election Data and Science Lab&apos;s, CC0) are
+          counted on the lines that election was held on. For each state that has redrawn since,
+          that vote is carried onto the new lines through each county&apos;s and state house
+          district&apos;s change between the two elections. Census block files place every block in
+          its district on every map. The data file names each input, with its election year and
+          license.
         </P>
         <P>
-          Where the 2024 precinct file is wrong (counties counted twice, precincts missing, early
-          votes reported only county-wide), the state&apos;s or county&apos;s own certified count
-          replaces it, and every correction is listed with its source in the data file. A district
-          whose correction could only come from behind a login or a bot wall would be marked
-          unavailable rather than filled in from anywhere else; none is.
+          Where the later election&apos;s precinct file is wrong (counties counted twice, precincts
+          missing, early votes reported only county-wide), the state&apos;s or county&apos;s own
+          certified count replaces it, and every correction is listed with its source in the data
+          file. A district whose correction could only come from behind a login or a bot wall would
+          be marked unavailable rather than filled in from anywhere else; none is.
         </P>
         <P>
-          Against Cook&apos;s published figures the result differs by 0.27 points on average on the
-          119th Congress&apos;s lines (423 of 435 districts round to the same number, all within one
-          point) and by 0.28 on the 2026 lines (403 the same, 432 within one). The Texas Legislative
-          Council&apos;s official per-district tables match the 2024 counts on the lines they were
+          Measured in October 2026, on the 2020 and 2024 elections: against Cook&apos;s published
+          figures the result differed by 0.27 points on average on the 119th Congress&apos;s lines
+          (423 of 435 districts rounded to the same number, all within one point) and by 0.28 on the
+          120th Congress&apos;s lines (403 the same, 432 within one). The Texas Legislative
+          Council&apos;s official per-district tables matched the 2024 counts on the lines they were
           cast on to within 0.01 point, and the 2020 allocation on both maps to within about a
-          tenth; California&apos;s 2024 counts are taken from its own per-district table. Cook
-          publishes whole numbers; this figure keeps one decimal.
+          tenth; California&apos;s counts are taken from its own per-district table. The data
+          file&apos;s validation section carries the current figures. Cook publishes whole numbers;
+          this figure keeps one decimal.
         </P>
         <ComputedLeanData />
       </Section>

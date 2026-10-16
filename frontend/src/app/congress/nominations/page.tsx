@@ -4,7 +4,7 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import PageMasthead from "@/components/layout/PageMasthead";
-import { CongressTabs } from "@/components/congress/CongressNav";
+import SectionTabs from "@/components/layout/SectionTabs";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import ConfirmTimeChart from "@/components/nominations/ConfirmTimeChart";
@@ -111,7 +111,7 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
         <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
           <div className="mx-auto flex max-w-6xl flex-col gap-10">
             <div>
-              <CongressTabs active="nominations" />
+              <SectionTabs section="congress" active="nominations" />
               <PageMasthead eyebrow={`The Senate · ${congress}`} title="Nominations">
                 <p>
                   The president nominates; the Senate confirms.{" "}

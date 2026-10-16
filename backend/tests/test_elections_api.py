@@ -146,6 +146,27 @@ class TestListRaces:
         senate = _body(elections.race_detail("2026-SEN-GA", db_session))
         assert senate["computedLean"] is None
 
+    def test_race_page_leads_with_the_maps_own_lean(self, db_session, on_date):
+        """usualVote is the figure the election map shows for the seat,
+        written by the same function, and the seat's place among its kind
+        is counted on the same figures."""
+        from app import district_lean
+        from app.forecast import build
+
+        on_date(datetime(2026, 10, 1))
+        _race(db_session, "2026-HOUSE-TN-9", "TN", office="H", district=9)
+        _race(db_session, "2026-SEN-GA", "GA")
+        db_session.commit()
+        house = _body(elections.race_detail("2026-HOUSE-TN-9", db_session))
+        lean = district_lean.computed_lean(120)["TN-9"]
+        assert house["usualVote"] == {"lean": round(lean, 2), "label": district_lean.lean_label(lean),
+                                      "source": "computed"}
+        table = [round(v) for v in district_lean.computed_lean(120).values()]
+        assert house["leanContext"]["moreRepublican"] == sum(v > round(lean) for v in table)
+        senate = _body(elections.race_detail("2026-SEN-GA", db_session))
+        leans, _ = build._lean_table()
+        assert senate["usualVote"]["label"] == build.lean_label(leans["GA"])
+
     def test_2026_house_race_uses_the_lines_on_the_ballot(self, db_session, on_date):
         """TN redrew for 2026: the race is on the new TN-9 (R+9), while the
         sitting member — scored separately, from the bundled file's 119th-

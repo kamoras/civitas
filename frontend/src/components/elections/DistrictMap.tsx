@@ -40,9 +40,9 @@ import {
  * they live — which is both more fun and strictly less data than asking.
  *
  * Geometry is the lines each state votes on this cycle — the Census
- * cartographic file for the 119th Congress, and for the nine states that
- * redrew for 2026 (backend/app/data/redrawn_congressional_maps.json) their
- * new lines, dissolved from Census blocks — split per state and vendored
+ * cartographic file for the sitting Congress, and for each state that
+ * redrew for the cycle (backend/app/data/redrawn_congressional_maps.json)
+ * its new lines, dissolved from Census blocks — split per state and vendored
  * under public/data/cd/ by backend/scripts/build_district_topology.py.
  * Each file carries its own
  * bbox, so fitting the projection is the few lines of Mercator arithmetic
@@ -147,6 +147,7 @@ export default function DistrictMap({
   results,
   feedAnswered,
   newLines = false,
+  cycleYear,
   showLean = true,
   stale = false,
   pickCounts = false,
@@ -169,6 +170,9 @@ export default function DistrictMap({
    * districts. Their leans are the new lines' (pviLevel says when one is
    * only the statewide stand-in). */
   newLines?: boolean;
+  /** The ballot's cycle (StateBallot.cycleYear), named in the new-lines
+   * caption; without it the caption names no year. */
+  cycleYear?: number;
   races: RaceWithCandidates[];
   picked: string | null;
   onPick: (raceId: string) => void;
@@ -332,14 +336,14 @@ export default function DistrictMap({
           </ul>
         ) : unshaded ? (
           <p className="font-mono text-[10px] text-ink-min">
-            {newLines ? "the new 2026 districts · " : ""}
+            {newLines ? `the new ${cycleYear ? `${cycleYear} ` : ""}districts · ` : ""}
             {showLean
               ? "no per-district lean published here yet"
               : "no lean shown from election day"}
           </p>
         ) : (
           <p className="font-mono text-[10px] text-ink-min">
-            {newLines ? "the new 2026 districts · " : ""}
+            {newLines ? `the new ${cycleYear ? `${cycleYear} ` : ""}districts · ` : ""}
             redder = safer R · bluer = safer D · fainter = closer
             {stateLevel > 0 && " · grey = no district lean yet"}
             {unknownShown && " · dark = no lean on file"}

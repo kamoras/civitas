@@ -5,12 +5,36 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { billPageHref } from "@/lib/congress";
 import { STATE_CODES, STATE_NAMES } from "@/lib/stateCodes";
+import { ELECTION_MAP_HREF } from "@/lib/electionMap";
+import { REDISTRICTING_HREF } from "@/lib/redistricting";
+import type { ElectionPhase } from "@/types/election";
 
 // Listed by name, as a reader looks for their state ("Alabama, Alaska…"),
 // not by postal code ("AK, AL…").
 const STATES_BY_NAME = [...STATE_CODES].sort((a, b) =>
   (STATE_NAMES[a] ?? a).localeCompare(STATE_NAMES[b] ?? b)
 );
+
+const VOTER_LINK =
+  "inline-flex min-h-[24px] items-center border-b border-phos-mid/40 text-phos-mid hover:text-phos";
+
+/** The election pages the "For voters" line adds, by the election's phase
+ * (the backend's, as ElectionNight reads it): the seat map and the new
+ * House maps through the campaign; from election day the results, and the
+ * new maps, which stay up. Nothing extra when the phase can't be read. */
+export function electionLinks(phase: ElectionPhase | null): { href: string; label: string }[] {
+  if (phase === "campaign")
+    return [
+      { href: ELECTION_MAP_HREF, label: "SEAT MAP" },
+      { href: REDISTRICTING_HREF, label: "NEW HOUSE MAPS" },
+    ];
+  if (phase === "election_day" || phase === "results")
+    return [
+      { href: "/elections", label: "RESULTS" },
+      { href: REDISTRICTING_HREF, label: "NEW HOUSE MAPS" },
+    ];
+  return [];
+}
 
 const RESEARCH_LINKS: readonly { href: string; label: string }[] = [
   { href: "/about/scores", label: "METHODS" },
@@ -29,7 +53,11 @@ const RESEARCH_LINKS: readonly { href: string; label: string }[] = [
  * document header: what the record is, who keeps it, and how to pull
  * something out of it.
  */
-export default function Masthead() {
+export default function Masthead({
+  electionPhase = null,
+}: {
+  electionPhase?: ElectionPhase | null;
+}) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   // A navigation choice only, never kept (AGENTS.md §8): it fills in two
@@ -95,7 +123,14 @@ export default function Masthead() {
 
           <p className="mt-4 max-w-xl font-display text-base leading-relaxed text-ink-lo sm:text-[17px]">
             Scored nightly from federal and state filings. Every number traces back to the document
-            it came from. Nothing here is an estimate.
+            it came from. Where a figure is a range, as on the{" "}
+            <Link
+              href={ELECTION_MAP_HREF}
+              className="underline decoration-white/30 underline-offset-4 hover:text-phos"
+            >
+              election map
+            </Link>
+            , the page says how it was made.
           </p>
 
           {/* The voter's way in, in the first screen: who represents me,
@@ -136,10 +171,12 @@ export default function Masthead() {
             >
               YOUR BALLOT
             </Link>
-            <Link
-              href="/congress"
-              className="inline-flex min-h-[24px] items-center border-b border-phos-mid/40 text-phos-mid hover:text-phos"
-            >
+            {electionLinks(electionPhase).map(({ href, label }) => (
+              <Link key={label} href={href} className={VOTER_LINK}>
+                {label}
+              </Link>
+            ))}
+            <Link href="/congress" className={VOTER_LINK}>
               CONGRESS THIS WEEK
             </Link>
           </nav>
@@ -199,7 +236,7 @@ export default function Masthead() {
                   [ PULL THE FILE ]
                 </button>
                 {/* No count here on purpose. This read "535 on file", a
-                    literal, three lines under "Nothing here is an estimate" —
+                    literal, three lines under "Every number traces back to the document it came from" —
                     and wrong twice over: it excludes the presidents and
                     justices the directory also holds, and the House is only
                     momentarily at 435 between vacancies. The real number needs

@@ -22,7 +22,6 @@ whole grace period. Presidents are never removed by any of that.
 """
 import json
 import logging
-import pathlib
 import re
 import statistics
 from difflib import SequenceMatcher
@@ -36,7 +35,7 @@ from app.api.elections import member_on_ballot
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, PARTY_QUERY_PATTERN, cached_json
 from app.config import settings
 from app.database import get_db
-from app.district_places import places_on_lines_of
+from app.district_places import counties_on_lines_of, places_on_lines_of
 from app.member_ids import resolve_member_id
 from app.issue_ids import to_public_id
 from app.models import ActionIssue, ExploreDocument, Justice, President, Representative, ScoreSnapshot, Senator
@@ -508,29 +507,6 @@ def _get_gov_record(politician_id: str, db: Session) -> dict:
 # House districts by county, on the lines sitting members were elected on
 # ---------------------------------------------------------------------------
 
-_DATA_DIR = pathlib.Path(__file__).resolve().parent.parent / "data"
-# Each declares the Congress whose lines it holds: the sitting Congress's
-# (scripts/build_county_district_crosswalk.py --sitting) and the coming
-# election's, which becomes the sitting map once that Congress convenes.
-_CROSSWALK_FILES = ("county_district_crosswalk_sitting.json", "county_district_crosswalk.json")
-_crosswalks: dict[int, dict[str, list[str]]] | None = None
-
-
-def counties_on_lines_of(congress: int) -> dict[str, list[str]] | None:
-    """"ST-N" -> county names on the district lines of `congress`, or None
-    when no bundled file holds that Congress's lines (never another
-    Congress's map in its place: in a redrawn state the district of the
-    same number is a different district)."""
-    global _crosswalks
-    if _crosswalks is None:
-        _crosswalks = {}
-        for name in _CROSSWALK_FILES:
-            try:
-                doc = json.loads((_DATA_DIR / name).read_text())
-                _crosswalks[int(doc["congress"])] = doc["districts"]
-            except Exception:
-                logger.exception("%s unavailable", name)
-    return _crosswalks.get(congress)
 
 
 @router.get("/politicians/house-districts")
@@ -563,7 +539,10 @@ def house_districts_by_county(
         if lines is not None
         else []
     )
-    return _cached_json({"state": st, "congress": congress, "available": lines is not None, "districts": districts})
+    # Available when some map on file describes this state's lines; a
+    # table carried from an earlier Congress holds only the states whose
+    # map didn't change (district_lines), so a redrawn state isn't.
+    return _cached_json({"state": st, "congress": congress, "available": bool(districts), "districts": districts})
 
 
 # How alike a mistyped address must be to a politician's id, or to one word

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { issuesUrl, monitorHref } from "./routes";
+import { issuesUrl, monitorHref, SECTIONS } from "./routes";
+import { ELECTION_MAP_HREF } from "./electionMap";
+import { REDISTRICTING_HREF } from "./redistricting";
+import { presidentSupportHref } from "./presidentialSupport";
+import { NOMINATIONS_HREF } from "./nominations";
 
 describe("issuesUrl", () => {
   it("is bare /action for the live view with nothing expanded", () => {
@@ -23,5 +27,16 @@ describe("monitorHref", () => {
     expect(monitorHref("government-funding")).toBe(
       "/action?tab=monitors&monitor=government-funding"
     );
+  });
+});
+
+describe("SECTIONS", () => {
+  it("names the same pages as the modules that own them", () => {
+    const href = (section: keyof typeof SECTIONS, key: string) =>
+      SECTIONS[section].tabs.find((t) => t.key === key)?.href;
+    expect(href("elections", "map")).toBe(ELECTION_MAP_HREF);
+    expect(href("elections", "redistricting")).toBe(REDISTRICTING_HREF);
+    expect(href("congress", "president")).toBe(presidentSupportHref("house"));
+    expect(href("congress", "nominations")).toBe(NOMINATIONS_HREF);
   });
 });

@@ -16,11 +16,14 @@ with no existing mocked-harness test file, and the lock returns before
 any of them run, so testing it doesn't require building one.
 """
 
+import asyncio
+import logging
 from datetime import timedelta
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from app.models import HousePipelineRun, PipelineStatus
-from app.pipeline import house_pipeline
+from app.pipeline import house_pipeline, progress_tracker
+from app.pipeline.progress_tracker import ProgressTracker
 from app.time_utils import utcnow
 
 
@@ -185,3 +188,63 @@ def test_a_failed_run_keeps_its_exception_on_the_run_row(db_session):
     assert "Traceback (most recent call last)" in run.error_detail and "SECRET" not in run.error_detail
     assert "SECRET" not in run.error_message
     assert result == {"status": PipelineStatus.FAILED, "error": run.error_detail.split("\n", 1)[0]}
+
+
+def test_the_sponsorship_step_reports_its_progress_as_it_reads(db_session, monkeypatch, caplog):
+    """A cache warm-up night spends hours here: the step's detail must count
+    members and bills as they go, and the log must say so every
+    SPONSORSHIP_LOG_EVERY bills (House run 90, 2026-10-16, showed neither
+    for six hours). Fake fetchers, three members of three bills each."""
+    from app.config import settings
+
+    reps = [{"bioguideId": f"R00000{i}", "party": "D"} for i in range(1, 4)]
+    sponsored = [
+        {"congress": settings.CURRENT_CONGRESS, "type": "HR", "number": str(n), "title": "", "latestAction": {}}
+        for n in range(1, 4)
+    ]
+    written = []
+    update = ProgressTracker.update
+
+    def record(self, key, *, done=None, detail=None):
+        if key == "sponsorship":
+            written.append((done, detail))
+        update(self, key, done=done, detail=detail)
+
+    class _Stop(Exception):
+        pass
+
+    monkeypatch.setattr(progress_tracker, "HEARTBEAT_INTERVAL_S", 0.0)
+    monkeypatch.setattr(house_pipeline, "SPONSORSHIP_LOG_EVERY", 2)
+    monkeypatch.setattr(ProgressTracker, "update", record)
+    with (
+        patch("app.pipeline.house_pipeline.SessionLocal", return_value=db_session),
+        patch("app.pipeline.house_pipeline.initialize_platform_embeddings"),
+        patch("app.pipeline.house_pipeline.fetch_representatives", new_callable=AsyncMock, return_value=reps),
+        patch("app.pipeline.house_pipeline.fetch_member_detail", new_callable=AsyncMock, return_value={}),
+        patch("app.pipeline.house_pipeline.normalize_house_members", return_value=reps),
+        patch("app.pipeline.house_pipeline.fetch_house_sworn_dates", new_callable=AsyncMock, return_value={}),
+        patch("app.pipeline.house_pipeline.fetch_house_caucuses", new_callable=AsyncMock, return_value={}),
+        patch("app.pipeline.house_pipeline.fetch_significant_bills", new_callable=AsyncMock, return_value=[]),
+        patch("app.pipeline.house_pipeline.fetch_recent_house_roll_calls", new_callable=AsyncMock, return_value=[]),
+        patch("app.pipeline.house_pipeline.classify_all_bills", new_callable=AsyncMock, return_value=[]),
+        patch("app.pipeline.house_pipeline.fetch_member_sponsored", new_callable=AsyncMock, return_value=sponsored),
+        patch("app.pipeline.house_pipeline.fetch_bill_actions", new_callable=AsyncMock, return_value=[]),
+        patch("app.pipeline.house_pipeline.fetch_bill_cosponsors", new_callable=AsyncMock, return_value=[]),
+        patch("app.pipeline.house_pipeline.refresh_member_ideal_points", new_callable=AsyncMock),
+        # The step is done once the scores are carried forward: stop there.
+        patch("app.pipeline.house_pipeline.carry_forward_sponsored_bills", side_effect=_Stop),
+        caplog.at_level(logging.INFO, logger="app.pipeline.house_pipeline"),
+    ):
+        asyncio.run(house_pipeline.run_house_pipeline())
+
+    details = [detail for _done, detail in written]
+    assert details[0] == "member 0 of 3 · 1 sponsored bills read"
+    assert "member 1 of 3 · 3 sponsored bills read" in details
+    assert "member 3 of 3 · 9 sponsored bills read" in details
+    assert written[-1] == (3, "9 sponsored bills read; analyzing")
+    dones = [done for done, _detail in written]
+    assert dones == sorted(dones)
+    logged = [r.getMessage() for r in caplog.records if r.getMessage().startswith("Sponsorship:")]
+    assert logged == [
+        f"Sponsorship: {n} sponsored bills read (member {(n - 1) // 3 + 1} of 3)" for n in (2, 4, 6, 8)
+    ]

@@ -130,6 +130,7 @@ import fetch_state_leg_crosswalk as sl  # noqa: E402
 import fetch_state_pvi as sp  # noqa: E402
 from app.contact import BOT_USER_AGENT  # noqa: E402  (cw put backend/ on sys.path)
 from app.pipeline.fetch.state_candidates_tabular import _xlsx_rows  # noqa: E402
+from app.pipeline.fetch.state_candidates_tabular import xlsx_sheet_as_first as _as_first_sheet  # noqa: E402
 
 try:  # research-only dependency (scripts/requirements-research.txt)
     from pyproj import CRS, Transformer
@@ -209,6 +210,10 @@ def read_dbf(raw: bytes, fields: tuple[str, ...]) -> list[dict[str, str]]:
         width = raw[i + 16]
         layout[name] = (offset, width)
         offset += width
+    # Column names matched case-insensitively: one VEST 2016 state spells
+    # them G16PREDCli where every other writes G16PREDCLI.
+    upper = {name.upper(): name for name in layout}
+    layout.update({f: layout[upper[f.upper()]] for f in fields if f not in layout and f.upper() in upper})
     missing = [f for f in fields if f not in layout]
     if missing:
         raise ValueError(f"DBF has no column {missing}; columns: {sorted(layout)}")
@@ -400,8 +405,16 @@ def votes_2020(st: str, cache: Path, files: dict, lonlat: np.ndarray, pop: np.nd
     """(blocks x [D, R] 2020 votes, stats)."""
     name = f"{st.lower()}_2020.zip"
     fid, md5 = files[name]
-    shapes, records, prj = read_shapefile(fetch(VEST_FILE_URL.format(id=fid), cache / name, md5), (VEST_D, VEST_R))
-    votes = np.array([[float(r[VEST_D] or 0), float(r[VEST_R] or 0)] for r in records])
+    return votes_vest(fetch(VEST_FILE_URL.format(id=fid), cache / name, md5), VEST_D, VEST_R, lonlat, pop)
+
+
+def votes_vest(zip_path: Path, d_field: str, r_field: str, lonlat: np.ndarray,
+               pop: np.ndarray) -> tuple[np.ndarray, dict]:
+    """(blocks x [D, R] votes, stats) from one VEST precinct shapefile: each
+    precinct's votes shared among the block points inside it by population
+    (any VEST year; scripts/build_house_lean_history.py reads 2016's)."""
+    shapes, records, prj = read_shapefile(zip_path, (d_field, r_field))
+    votes = np.array([[float(r[d_field] or 0), float(r[r_field] or 0)] for r in records])
     to_shape = Transformer.from_crs(CRS.from_epsg(4269), CRS.from_wkt(prj), always_xy=True)
     x, y = to_shape.transform(lonlat[:, 0], lonlat[:, 1])
     pts = np.column_stack([x, y])
@@ -665,20 +678,6 @@ def _scale_to_municipalities(units: list[Unit], county: str,
         out.append(Unit(county, list(table[m]), spread=True))
         notes.append(f"{county} {m}: official county-wide row spread over the county's districts")
     return out
-
-
-def _as_first_sheet(xlsx: bytes, sheet: str) -> bytes:
-    """The workbook with `sheet` moved into sheet1's place, for the
-    first-sheet reader the app already has."""
-    src = zipfile.ZipFile(io.BytesIO(xlsx))
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w") as dst:
-        for name in src.namelist():
-            if name == "xl/worksheets/sheet1.xml":
-                dst.writestr(name, src.read(f"xl/worksheets/{sheet}.xml"))
-            else:
-                dst.writestr(name, src.read(name))
-    return buf.getvalue()
 
 
 class Official:

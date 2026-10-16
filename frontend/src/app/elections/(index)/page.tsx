@@ -2,16 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import SectionTabs from "@/components/layout/SectionTabs";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
 import BackToTop from "@/components/BackToTop";
 import Link from "next/link";
-import { REDISTRICTING_HREF } from "@/lib/redistricting";
 import RaceMap, { FIPS_TO_STATE } from "@/components/elections/RaceMap";
 import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
 import ResultsOverview from "@/components/elections/results/ResultsOverview";
-import { formatPvi, pviColor, stateBallotHref } from "@/lib/elections";
+import { electionTitle, formatPvi, pviColor, stateBallotHref } from "@/lib/elections";
 import { formatUtcDate } from "@/lib/formatting";
 import {
   countReadRange,
@@ -286,6 +286,7 @@ export default function ElectionsPage() {
               page left open as polls close, or as results start) is
               usually not announced, which is exactly the moment worth
               announcing. */}
+          <SectionTabs section="elections" active="ballots" />
           <PageMasthead
             eyebrow={
               stillVoting && results
@@ -306,22 +307,18 @@ export default function ElectionsPage() {
             }
             title={
               stillVoting && results
-                ? `${results.cycleYear} midterms: election day`
+                ? electionTitle(results.cycleYear, "election_day")
                 : resultsMode && results
-                  ? `${results.cycleYear} midterm results`
+                  ? electionTitle(results.cycleYear, "results")
                   : serverMode === "election_day" && initial?.phase
-                    ? `${initial.phase.cycleYear} midterms: election day`
+                    ? electionTitle(initial.phase.cycleYear, "election_day")
                     : serverMode === "results" && initial?.phase
-                      ? `${initial.phase.cycleYear} midterm results`
+                      ? electionTitle(initial.phase.cycleYear, "results")
                       : campaignMode
-                        ? pvi?.cycleYear
-                          ? `${pvi.cycleYear} midterm ballot`
-                          : "Midterm ballot"
+                        ? electionTitle(pvi?.cycleYear, "ballot")
                         : // Phase not known yet: say nothing either mode would
                           // contradict.
-                          pvi?.cycleYear
-                          ? `${pvi.cycleYear} midterm elections`
-                          : "Midterm elections"
+                          electionTitle(pvi?.cycleYear, "elections")
             }
             aside={
               <div className="flex flex-col items-end gap-3">
@@ -382,13 +379,7 @@ export default function ElectionsPage() {
             ) : campaignMode ? (
               <>
                 Pick a state for its candidates, their filings, statewide ballot measures, and the
-                coverage we have ingested. Shading is partisan lean, not a forecast.{" "}
-                <Link
-                  href={REDISTRICTING_HREF}
-                  className="whitespace-nowrap font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
-                >
-                  [ NEW HOUSE MAPS: WHAT CHANGED → ]
-                </Link>
+                coverage we have ingested. Shading is partisan lean, not a forecast.
               </>
             ) : null}
           </PageMasthead>

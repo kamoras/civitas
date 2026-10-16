@@ -38,6 +38,7 @@ from scipy.spatial.distance import squareform
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
+from app import calibration_drift
 from app.contact import BOT_USER_AGENT
 from app.config import settings
 from app.config_definitions import RECENT_FEED_MAX_LIMIT, RECENT_FEED_POOL_MULTIPLIER
@@ -77,7 +78,7 @@ from app.pipeline.analyze.grounding import (
 )
 from app.pipeline.analyze import claims as claim_layer
 from app.pipeline.analyze import story_actor
-from app.pipeline.analyze.post_composer import compose
+from app.pipeline.analyze.post_composer import CLAIM_TASK, compose, refit_actor_threshold
 from app.pipeline.analyze.ollama_client import call_llm, extract_json
 from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.pipeline import lease
@@ -1072,7 +1073,7 @@ def locate_claim(
         str(located.get("actor") or ""), str(located.get("predicate") or ""), source_material,
     ))
     _record_generation_sample(
-        db, "action_center_claim", rank, 1, user_prompt, located or {},
+        db, CLAIM_TASK, rank, 1, user_prompt, located or {},
         passed=verified,
         violations=None if verified else ["spans not found verbatim and together in the source"],
         once_per_day=True,
@@ -1578,6 +1579,7 @@ def _filter_policy_relevant(articles: list[NewsArticle]) -> list[tuple[NewsArtic
     k = int(calibration["k"])
     threshold = float(calibration["threshold"])
     votes = relevance_votes(article_embeddings, _relevance_reference(), labels, k)
+    calibration_drift.observe("policy_relevance", votes, threshold)
 
     relevant = [
         (article, article_embeddings[i])
@@ -1650,6 +1652,7 @@ def _cluster_articles(
     centered = _center_titles(embeddings, embeddings.mean(axis=0))
     distance = np.clip(1.0 - centered @ centered.T, 0.0, None)
     threshold = float(cluster_calibration()["threshold"])
+    calibration_drift.observe("cluster_pairs", (1.0 - distance)[np.triu_indices(len(items), 1)], threshold)
     labels = fcluster(
         linkage(squareform(distance, checks=False), method="complete"),
         t=1.0 - threshold, criterion="distance",
@@ -4987,7 +4990,7 @@ def _commit_stage(db: Session, stage: str) -> None:
 
 def _run_refresh(db: Session) -> int:
     t0 = time.perf_counter()
-    today = datetime.now(_US_EAST).strftime("%Y-%m-%d")
+    today = eastern_date(utcnow()).isoformat()
 
     logger.info("Action center refresh starting for %s", today)
     action_metrics.reset()
@@ -5053,6 +5056,13 @@ def _run_refresh(db: Session) -> int:
     # that can be compared against yesterday's, not an inference drawn
     # from the absence of posts.
     action_metrics.increment("articles_fetched", len(articles))
+
+    # The actor tier's threshold, refit once a day from the recorded claim
+    # calls before any claim is composed (post_composer.refit_actor_threshold).
+    try:
+        refit_actor_threshold(db)
+    except Exception:
+        logger.warning("Actor threshold refit failed; the stored one stands", exc_info=True)
 
     # 2. Filter for policy relevance
     _set_refresh_state(stage="filter")

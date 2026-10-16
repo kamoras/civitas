@@ -13,6 +13,7 @@ import {
   A,
 } from "@/components/about/AboutPage";
 import { ACTION_CENTER_HREF } from "@/lib/routes";
+import { ELECTION_MAP_HREF } from "@/lib/electionMap";
 import {
   countWord,
   fetchLiveStates,
@@ -94,23 +95,27 @@ export default async function ElectionsChapter() {
         </P>
       </Section>
 
-      <Section id="race-context" title="What shapes a race (and why there is no forecast)">
+      <Section id="race-context" title="What shapes a race">
         <P>
           Each federal contest&apos;s research opens with what shapes the race. Civitas publishes no
-          prediction, odds or rating for any race, and calls none; these figures describe a race,
-          they don&apos;t forecast it.
+          odds or rating for any race, and calls none; these figures describe a race. The one place
+          this year&apos;s polls appear is the <A href="#election-map">Senate and House map</A>, as
+          a range for the margin, kept apart from this block because the block shows the
+          incumbent&apos;s Representation Score.
         </P>
         <P>
-          <strong>The seat.</strong> Its lean is the Cook-PVI-style figure: how much more Republican
-          or Democratic it voted than the nation in the last two presidential elections. Beside it,
-          one square for every seat of its kind, from the most Democratic-leaning to the most
-          Republican: every U.S. House district on the lines this election is fought on, or the 50
-          states for a Senate race. The count of seats leaning further each way is worked out on the
-          server from the same table the lean comes from. A district that only has its state&apos;s
-          figure is not placed among districts, and from election day the lean is not shown at all,
-          so that it can&apos;t be read as a call on the count. A House district also shows the lean
-          Civitas computes from precinct returns with the same formula, beside Cook&apos;s and used
-          in no score (<A href="/about/data#computed-lean">how it is computed</A>).
+          <strong>The seat.</strong> Its lean is the figure the election map shows, computed by
+          Civitas with Cook&apos;s formula (Cook&apos;s own PVI is shown beside it as a
+          cross-check): how much more Republican or Democratic it voted than the nation in the last
+          two presidential elections. Beside it, one square for every seat of its kind, from the
+          most Democratic-leaning to the most Republican: every U.S. House district on the lines
+          this election is fought on, or the 50 states for a Senate race. The count of seats leaning
+          further each way is worked out on the server from the same table the lean comes from. A
+          district that only has its state&apos;s figure is not placed among districts, and from
+          election day the lean is not shown at all, so that it can&apos;t be read as a call on the
+          count. A House district&apos;s figure is computed from precinct returns and used in no
+          score (<A href="/about/data#computed-lean">how it is computed</A>); where Civitas has
+          none, the page shows Cook&apos;s, labelled as Cook&apos;s.
         </P>
         <P>
           <strong>The money.</strong> Each candidate&apos;s contributions are split into the
@@ -128,6 +133,45 @@ export default async function ElectionsChapter() {
           dates they are as of, the seat&apos;s lean and the FEC link. The{" "}
           <span className="font-mono text-ink-hi">[ JSON ]</span> link is the race as the page reads
           it.
+        </P>
+      </Section>
+
+      <Section id="election-map" title="The Senate and House map: usual vote and poll ranges">
+        <P>
+          <A href={ELECTION_MAP_HREF}>The map</A> covers every Senate and House seat, in three
+          views. <strong>Usual vote</strong> is each state&apos;s or district&apos;s lean from the
+          last two presidential elections, computed by Civitas from official returns; no model is
+          involved. <strong>Polls</strong> is a range for the margin: that lean, plus incumbency and
+          the national generic-ballot average, combined with the race&apos;s own polls where it has
+          any; each range says whether it comes from polls or has no poll behind it. A lean and a
+          margin are both written like D+8, but a margin counts the gap between two candidates, so
+          it runs twice a lean: a seat that leans D+8 has a margin of D+16 when the country splits
+          evenly. A range that crosses even is grey and says too close to tell.{" "}
+          <strong>Difference</strong> marks the seats whose polls pull the range clear of where the
+          lean, incumbency and the national swing alone would put it.
+        </P>
+        <P>
+          It is not a prediction and calls no race: it shows no chance of anyone winning and no seat
+          total by party. Every number in the method is fitted by a script on official results and
+          Silver Bulletin&apos;s archive of final-weeks polls (from 1998, used free of charge and
+          attributed to Silver Bulletin as its terms ask), refitted automatically when a new copy of
+          that archive passes Civitas&apos;s checks, and checked on election cycles the fit never
+          saw, including the newest cycle predicted from the earlier ones alone; the map&apos;s own
+          method section shows how often its ranges held the result, and why there is no seat total.
+          The archive&apos;s polls reach only the final weeks before election day, so further out
+          the map shows each seat&apos;s structural range alone, labelled fundamentals only, with
+          its polls listed beside it. It has nothing to do with Representation Scores, which measure
+          a member&apos;s record, not an election. Only Democrat-versus-Republican races whose
+          November ballot Civitas has confirmed get a range. The House fit covers every cycle from
+          2018 whose House results the FEC has compiled, with each district&apos;s lean rebuilt from
+          precinct returns as it stood before each election, on the lines it was held on.
+        </P>
+        <P>
+          This year&apos;s polls come from Wikipedia&apos;s race articles. The poll figures and the
+          ranges built on them are shared under Wikipedia&apos;s licence, CC BY-SA 4.0, with
+          attribution to Wikipedia contributors: reuse them under the same licence. Each seat links
+          the article revision its polls were read from. From election day the map is withdrawn and
+          the results map takes its place.
         </P>
       </Section>
 
@@ -189,22 +233,22 @@ export default async function ElectionsChapter() {
           Pick your county and the page narrows to the district covering it. About 13% of counties
           span more than one district; those offer the two or three as a second tap. Where a county
           isn&apos;t enough, a map of the districts lets you click yours. It draws the lines the
-          ballot&apos;s House seats are contested on: the Census Bureau&apos;s 119th-Congress
-          boundaries, and for the nine states that redrew for 2026 their new lines, built from
-          Census blocks. Districts are shaded by partisan lean, and in the redrawn states that is
-          the lean of the new district on the ballot (Cook&apos;s 2026 figures for the new lines),
-          not of the old seat with the same number. A district with no lean of its own on file is
-          left unshaded rather than given its state&apos;s colour. A text filter works too: type
-          your city, town or county, a candidate&apos;s name or a district number. Each district
-          lists the cities, towns and communities in it, from the same Census block files as the
-          state legislative lists below (a place with fewer than 50 residents inside a district is
-          left off it), and a district that matches what you typed lists the matching place or
-          county first, by its full name: a city can share its name with a county elsewhere in the
-          state, and the label shows which one matched. Type a place&apos;s full name and the page
-          says which districts it is in; a city split between districts says so, since there your
-          street decides which one is yours. On the map, Tab reaches one district and the arrow keys
-          move between them. All of it runs on data already on the page: nothing is typed into a
-          lookup, sent or stored.
+          ballot&apos;s House seats are contested on: the Census Bureau&apos;s boundaries for the
+          sitting Congress, and for each state that redrew for the election its new lines, built
+          from Census blocks. Districts are shaded by partisan lean, and in the redrawn states that
+          is the lean of the new district on the ballot (Cook&apos;s figures for the new lines), not
+          of the old seat with the same number. A district with no lean of its own on file is left
+          unshaded rather than given its state&apos;s colour. A text filter works too: type your
+          city, town or county, a candidate&apos;s name or a district number. Each district lists
+          the cities, towns and communities in it, from the same Census block files as the state
+          legislative lists below (a place with fewer than 50 residents inside a district is left
+          off it), and a district that matches what you typed lists the matching place or county
+          first, by its full name: a city can share its name with a county elsewhere in the state,
+          and the label shows which one matched. Type a place&apos;s full name and the page says
+          which districts it is in; a city split between districts says so, since there your street
+          decides which one is yours. On the map, Tab reaches one district and the arrow keys move
+          between them. All of it runs on data already on the page: nothing is typed into a lookup,
+          sent or stored.
         </P>
         <P>
           In a state whose lines were redrawn after its members were elected (those going into the
@@ -228,22 +272,22 @@ export default async function ElectionsChapter() {
           answers whether your district is different and by how much: for each new district, the
           share of its residents who were in each old one and how its lean moved, and for each old
           district, where its residents went. Find yours by city, town or county. The counts are
-          2020 Census residents, joined block by block to the old and new district files, so
-          everyone is counted once; both leans are Cook&apos;s on the same presidential elections,
-          so a change in lean comes from the lines alone. The page leads with how many seats lean
-          each way before and after; how many districts lean differently from the old district most
-          of their residents came from is a separate count, shown with the method. Each page links
-          the act or court order behind the map, explains the method and offers the whole table as
-          CSV and JSON. It describes who is in which district; it says nothing about why a line was
-          drawn.
+          Census residents, joined block by block to the old and new district files, so everyone is
+          counted once; both leans are Cook&apos;s on the same presidential elections, so a change
+          in lean comes from the lines alone. The page leads with how many seats lean each way
+          before and after; how many districts lean differently from the old district most of their
+          residents came from is a separate count, shown with the method. Each page links the act or
+          court order behind the map, explains the method and offers the whole table as CSV and
+          JSON. It describes who is in which district; it says nothing about why a line was drawn.
         </P>
         <P>
           To find who represents you today, use the Politicians directory instead: pick your state,
           then type your city, town or county. It uses the districts as of the current Congress, the
-          lines today&apos;s members were elected on (the Census Bureau&apos;s 119th-Congress file),
-          not the 2026 lines. In the nine redrawn states the two give different answers, and each
-          page says which map it shows. When the new Congress is sworn in on January 3, the
-          directory moves to the 2026 lines on its own.
+          lines today&apos;s members were elected on (the Census Bureau&apos;s file for that
+          Congress), not the lines of the next election. In a state that has redrawn since, the two
+          give different answers, and each page says which map it shows. From the day a new Congress
+          is sworn in (January 3 of an odd year), the directory moves to the lines that Congress was
+          elected on, on its own.
         </P>
         <P>
           State legislative districts are far smaller than a county, so each one lists the places it
@@ -251,12 +295,12 @@ export default async function ElectionsChapter() {
           England, New York, New Jersey, Pennsylvania, Michigan, Minnesota, Wisconsin), every city
           and every unincorporated community Census names (Silver Spring, The Woodlands), and every
           county it touches. Type any of them, or a candidate&apos;s name or the district number,
-          and the list narrows. The places come from the Census Bureau&apos;s 2026 state legislative
-          district files joined block by block to the 2020 census, so a place is listed for a
-          district only where people in it actually live inside that district; a sliver with fewer
-          than 50 residents (about one census block) is left off. A city split between districts is
-          listed under each, and your street decides which: the state&apos;s own voter lookup gives
-          the exact answer.
+          and the list narrows. The places come from the Census Bureau&apos;s state legislative
+          district files for the election, joined block by block to the decennial census, so a place
+          is listed for a district only where people in it actually live inside that district; a
+          sliver with fewer than 50 residents (about one census block) is left off. A city split
+          between districts is listed under each, and your street decides which: the state&apos;s
+          own voter lookup gives the exact answer.
         </P>
         <Sub title="The optional town selector">
           <P>
@@ -374,13 +418,13 @@ export default async function ElectionsChapter() {
             </Item>
             <Item label="Special elections and runoffs">
               A legislative seat with a special election for the rest of its term beside its regular
-              contest is shown as two contests. Louisiana&apos;s House contests on 3 November are an
-              all-party primary with a 12 December runoff, and Georgia requires a majority in
-              November with a 1 December runoff; both pages now say so above the ballot. So do
-              California and Washington, whose top-two primaries can send two candidates of one
-              party to November, and Alaska, whose top-four primary sends four. Maine and Alaska
-              rank candidates in their federal contests, and their pages now say so before election
-              day, not only on election night.
+              contest is shown as two contests. Where general-election day is an all-party primary
+              (Louisiana&apos;s House contests, in the years its law makes them one) or a majority
+              is required (Georgia), the page now says so above the ballot, with the runoff date the
+              state set. So do California and Washington, whose top-two primaries can send two
+              candidates of one party to November, and Alaska, whose top-four primary sends four.
+              Maine and Alaska rank candidates in their federal contests, and their pages now say so
+              before election day, not only on election night.
             </Item>
             <Item label="Finding your district">
               The filter ignores accents and punctuation, so &ldquo;dona ana&rdquo;, &ldquo;st
@@ -616,6 +660,12 @@ export default async function ElectionsChapter() {
               &ldquo;leads&rdquo; once it has, and never &ldquo;wins&rdquo;: an official
               count&apos;s leader can still face a runoff (Georgia requires a majority), a recount
               or a court.
+            </Item>
+            <Item label="Before election day">
+              This rule is about the count. Before election day the{" "}
+              <A href="#election-map">Senate and House map</A> shows a range for each margin and how
+              often such ranges held the result, never a winner; it is withdrawn when the count
+              begins.
             </Item>
             <Item label="A seat changing party">
               A seat is only described as changing party once half its reporting areas are in. Where

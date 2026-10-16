@@ -456,3 +456,27 @@ a[target="_blank"] {
 [data-share-capturing] [data-share-exclude] {
   display: none !important;
 }
+/* The election map's share image: drawn at one layout width with its tile
+   map on any screen, so a phone's capture is the same near-square picture
+   (with its legend, source line and date) as a desktop's, never the phone
+   layout's tall state list. */
+[data-share-capturing] [data-share-show] {
+  display: block !important;
+}
+[data-share-capturing][data-share-fixed-layout] {
+  width: 900px !important;
+  max-width: none !important;
+}
+
+/* The election map's Difference view: a seat that moved pulses twice when
+   the view opens (an attention cue against change blindness). The class
+   that uses it is motion-safe only. */
+@keyframes map-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}

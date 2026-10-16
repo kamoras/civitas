@@ -9,22 +9,26 @@ from apscheduler.triggers.cron import CronTrigger
 from app.config import settings
 from app.database import SessionLocal
 from app.error_utils import exception_summary
+from app.forecast.build import check_training_staleness as check_election_map_training_staleness
+from app.forecast.build import run_refresh as election_map_refresh
 from app.pipeline.senate_pipeline import run_senate_pipeline
-from app.pipeline.house_pipeline import run_house_pipeline, is_house_pipeline_running, house_pipeline_age
+from app.pipeline.house_pipeline import run_house_pipeline, is_house_pipeline_running, house_pipeline_hung
 from app.pipeline.supplementary_pipeline import (
-    run_supplementary_pipeline, is_supplementary_pipeline_running, supplementary_pipeline_age,
+    run_supplementary_pipeline, is_supplementary_pipeline_running, supplementary_pipeline_hung,
 )
 from app.pipeline.stock_pipeline import (
-    run_stock_trades_pipeline, is_stock_pipeline_running, stock_pipeline_age,
+    run_stock_trades_pipeline, is_stock_pipeline_running, stock_pipeline_hung,
 )
 from app.pipeline.election_pipeline import (
-    run_election_pipeline, is_election_pipeline_running, election_pipeline_age,
+    run_election_pipeline, is_election_pipeline_running, election_pipeline_hung,
     run_ballot_sync, ballot_tracker,
 )
 from app.pipeline.analyze.action_center import get_action_refresh_state, refresh_action_issues
 from app.pipeline.congress_activity import congress_sync_age, eastern_today, is_congress_sync_running, run_congress_sync
 from app.pipeline.analyze.congress_bluesky import post_congress_lookahead, post_daily_congress, post_weekly_congress
 from app.time_utils import utcnow
+from app import calibration_drift
+from app import data_refresh
 from app.background import WritesHeld, start_writer
 from app.broadcast import deliver_pending, refresh_engagement
 from app.pipeline.analyze.trend_poster import run_trend_posts
@@ -137,18 +141,18 @@ def pipelines_running() -> bool:
     Supplementary, Stock trades and Election count by their in-process flag
     (a RUNNING row with the flag down is a dead run's leftover — the admin
     status calls it stuck), and the Senate by a row its live lease speaks
-    for (run_tracker.senate_run_state). Each only until its run is past
-    STALE_PIPELINE_TIMEOUT: hung, its lock taken over from then — a wait on
-    it must end."""
-    from app.pipeline.run_tracker import STALE_PIPELINE_TIMEOUT, senate_run_state
+    for (run_tracker.senate_run_state). Each only until its run is stale
+    (no progress for run_tracker.QUIET_PIPELINE_TIMEOUT, or past the age
+    ceiling): hung, its lock taken over from then — a wait on it must end."""
+    from app.pipeline.run_tracker import senate_run_state
 
-    for running, age in (
-        (is_house_pipeline_running, house_pipeline_age),
-        (is_supplementary_pipeline_running, supplementary_pipeline_age),
-        (is_stock_pipeline_running, stock_pipeline_age),
-        (is_election_pipeline_running, election_pipeline_age),
+    for running, hung in (
+        (is_house_pipeline_running, house_pipeline_hung),
+        (is_supplementary_pipeline_running, supplementary_pipeline_hung),
+        (is_stock_pipeline_running, stock_pipeline_hung),
+        (is_election_pipeline_running, election_pipeline_hung),
     ):
-        if running() and not _is_stale(age(), STALE_PIPELINE_TIMEOUT):
+        if running() and not hung():
             return True
     db = SessionLocal()
     try:
@@ -252,7 +256,9 @@ def _nightly_pipeline() -> None:
     """
     from app.ops_alerts import (
         check_current_congress_staleness,
+        check_election_readiness,
         check_feedback_token_expiration,
+        check_sitting_president,
         check_state_pvi_staleness,
         resolve_ops_alert,
         send_ops_alert,
@@ -274,6 +280,20 @@ def _nightly_pipeline() -> None:
             # self-advance (see the check's own docstring for why), so the
             # alert is the only signal that a manual refresh is due.
             check_state_pvi_staleness,
+            # Each hand-labelled calibration against the stream it gates
+            # (pass rates since it was fitted).
+            calibration_drift.check_all,
+            # The coming election's cycle-specific data (maps, district
+            # lean, voter calendar, poll closing times, town sample
+            # ballots), each alerted once its lead time begins.
+            check_election_readiness,
+            # The presidents table's sitting president against the Federal
+            # Register's newest presidential document (an inauguration the
+            # roster hasn't caught up with).
+            check_sitting_president,
+            # The election map's fits stop at their newest trained cycle;
+            # like state_pvi.json, nothing refits them on its own.
+            check_election_map_training_staleness,
         )
         for check in pre_checks:
             try:
@@ -359,6 +379,8 @@ def _hourly_action_refresh() -> None:
         except Exception:
             logger.exception("Action center refresh failed")
         _post_trends()
+        # The calibrated gates' decisions this hour (calibration_drift).
+        calibration_drift.flush()
 
     _start_job(_run, name="action-refresh")
 
@@ -423,7 +445,10 @@ def _hourly_bill_status_refresh() -> None:
             if running:
                 logger.info("Bill status refresh skipped — nightly pipeline is running")
                 return
-            if is_house_pipeline_running() and not _is_stale(house_pipeline_age(), timedelta(hours=8)):
+            # Quiet for eight hours, not merely running that long: a House
+            # run on a cache warm-up night runs well past that while it
+            # works, and rewrites the rows this refresh updates.
+            if is_house_pipeline_running() and not house_pipeline_hung(timedelta(hours=8)):
                 logger.info("Bill status refresh skipped — house pipeline is running")
                 return
 
@@ -466,13 +491,12 @@ def _election_coverage_refresh() -> None:
         )
 
         if is_election_pipeline_running():
-            age = election_pipeline_age()
-            if not _is_stale(age, timedelta(hours=2)):
+            if not election_pipeline_hung(timedelta(hours=2)):
                 logger.info("Election coverage refresh skipped — election pipeline is running")
                 return
             logger.warning(
-                "Election pipeline has been running for %s — treating as hung "
-                "and proceeding with coverage refresh anyway", age,
+                "Election pipeline has written no progress for %dh — treating as hung "
+                "and proceeding with coverage refresh anyway", 2,
             )
         # Self-overlap guard: the PREVIOUS 15-minute refresh may still be
         # mid-flight (degraded LLM, slow network) — overlapping passes
@@ -535,13 +559,12 @@ def _election_ballot_sync() -> None:
 
     def _run():
         if is_election_pipeline_running():
-            age = election_pipeline_age()
-            if not _is_stale(age, timedelta(hours=6)):
+            if not election_pipeline_hung(timedelta(hours=6)):
                 logger.info("Ballot sync skipped — the nightly election pipeline is running")
                 return
             logger.warning(
-                "Election pipeline has been running for %s — treating as hung "
-                "and proceeding with the ballot sync anyway", age,
+                "Election pipeline has written no progress for %dh — treating as hung "
+                "and proceeding with the ballot sync anyway", 6,
             )
         # Under its tracker and lease (lease.run_tracked), shared with the
         # nightly pipeline's ballot step, taken only now, past the check
@@ -639,6 +662,21 @@ def _election_results_readiness() -> None:
             logger.exception("Live results readiness check failed")
 
     _start_job(_run, name="election-results-readiness")
+
+
+def _data_refresh() -> None:
+    """The generated data files (app/data_refresh.py): each regenerated by
+    its own script on its own cadence, gated, the last good copy kept on a
+    failure. Daily; the files that load the embedding model or are
+    CPU-bound wait while a pipeline runs."""
+    def _run():
+        with lease.job(lease.DATA_REFRESH, who="Data file refresh") as held:
+            if not held:
+                return
+            outcomes = data_refresh.run_refreshes(pipeline_busy=pipelines_running())
+            logger.info("Data file refresh: %s", outcomes)
+
+    _start_job(_run, name="data-refresh")
 
 
 def _congress_activity_sync() -> None:
@@ -832,13 +870,39 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
+    # The election map's data (app/forecast/build.py) — every three
+    # hours at :55, and once at start, a no-op outside the campaign. Not
+    # through _start_job: it reads the database and writes only its own
+    # file on the data volume, so it is no database writer for a data
+    # reset to wait on, and a reset under it only shortens one build.
+    scheduler.add_job(
+        election_map_refresh,
+        CronTrigger(hour="*/3", minute="55", timezone="UTC"),
+        id="election_map_refresh",
+        replace_existing=True,
+        next_run_time=datetime.now(timezone.utc),
+    )
+
     # Agency list and budgets — hourly at :30, clear of the :10/:40 Congress
     # sync, the :15 action refresh and the :25 dead-run tidy; a no-op unless
-    # a source is a week old (checked inside).
+    # a source is a week old or was never read (checked inside). And once at
+    # start, so a deploy that brings the agency pages, or a fresh database,
+    # fills them as the pipeline process comes up rather than at the next :30.
     scheduler.add_job(
         _agency_sync,
         CronTrigger(minute="30", timezone="UTC"),
         id="agency_sync",
+        replace_existing=True,
+        next_run_time=datetime.now(timezone.utc),
+    )
+
+    # Generated data files — daily at 15:40, clear of the :45 bill refresh
+    # and after the nightly chain has usually finished (the heavy ones wait
+    # for it anyway).
+    scheduler.add_job(
+        _data_refresh,
+        CronTrigger(hour="15", minute="40", timezone="UTC"),
+        id="data_refresh",
         replace_existing=True,
     )
 

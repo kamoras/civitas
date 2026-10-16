@@ -1470,15 +1470,41 @@ class TestSyncConfirmedCandidates:
         from app.api.elections import _statewide_marker
 
         source = {
-            "strategy": "tx_civix", "source_name": "TX SoS", "statewide_offices": True,
+            "strategy": "tx_civix", "source_name": "VA SoS", "statewide_offices": True,
             "statewide_offices_basis": "Elects its executive officers in odd years.",
         }
-        monkeypatch.setattr(sc, "source_for_state", lambda state: source)
+        monkeypatch.setattr(sc, "source_for_state", lambda state: source if state == "VA" else None)
         monkeypatch.setitem(sc.STRATEGIES, "tx_civix", AsyncMock(return_value=[]))
+        monkeypatch.setattr(sc, "configured_states", lambda: {"VA"})
         await sc.sync_confirmed_candidates(db_session, None, 2026)
 
-        marker = _statewide_marker(db_session, "TX", 2026)
+        marker = _statewide_marker(db_session, "VA", 2026)
         assert marker and marker["count"] == 0
+        assert marker["basis"] == source["statewide_offices_basis"]
+
+    @pytest.mark.asyncio
+    async def test_a_calendar_none_is_not_claimed_in_a_cycle_the_state_elects_them(self, db_session, monkeypatch):
+        """Montana elects its executive officers in presidential years: its
+        "none on this ballot" holds in 2026 and not in 2028, when an empty
+        feed is a feed with nothing in it yet, not a confirmed absence."""
+        from app.api.elections import _statewide_marker
+
+        source = {
+            "strategy": "tx_civix", "source_name": "MT SoS", "statewide_offices": True,
+            "statewide_offices_basis": "Elects its executive officers in presidential-election years.",
+        }
+        monkeypatch.setattr(sc, "source_for_state", lambda state: source if state == "MT" else None)
+        monkeypatch.setattr(sc, "configured_states", lambda: {"MT"})
+        monkeypatch.setitem(sc.STRATEGIES, "tx_civix", AsyncMock(return_value=[]))
+        await sc.sync_confirmed_candidates(db_session, None, 2026)
+        assert _statewide_marker(db_session, "MT", 2026)["basis"] == source["statewide_offices_basis"]
+        await sc.sync_confirmed_candidates(db_session, None, 2028)
+        assert _statewide_marker(db_session, "MT", 2028) is None
+        assert sc.statewide_none_basis(source, "MT", 2032) is None
+        assert sc.statewide_none_basis(source, "MT", 2030) == source["statewide_offices_basis"]
+
+
+
 
 
 class TestFecPartyCodes:
@@ -1548,3 +1574,13 @@ class TestSpecialSenateRace:
         _race(db_session, "2026-SEN-GA-SPECIAL", "GA", office="S")
         db_session.commit()
         assert sc._race_id_for(db_session, 2026, "GA", "S", None) == "2026-SEN-GA"
+
+
+def test_a_results_url_names_its_own_decade():
+    """Kentucky files each decade's results under a folder of their own: the
+    next decade's address is built from the cycle, not typed."""
+    from app.pipeline.fetch.state_candidates_ky import DISCOVERY
+    from app.pipeline.fetch.state_candidates_tabular import with_year
+
+    assert with_year(DISCOVERY["page_url"], 2026) == "https://elect.ky.gov/results/2020-2029/Pages/2026.aspx"
+    assert with_year(DISCOVERY["page_url"], 2030) == "https://elect.ky.gov/results/2030-2039/Pages/2030.aspx"

@@ -22,6 +22,7 @@ Run from the repo (network required):
 Exits 1 if any state fails to parse.
 """
 
+import datetime
 import json
 import pathlib
 import re
@@ -53,6 +54,10 @@ STATE_NAMES = {
 UA = {"User-Agent": f"CivitasCivicPlatform/1.0 (state population ingestion; contact: {CONTACT_EMAIL})"}
 SOURCE_URL = "https://en.wikipedia.org/wiki/List_of_states_and_territories_of_the_United_States_by_population"
 
+# The census whose comparison table _ROW_RE_TEMPLATE was verified against
+# (a historical fact about this parser, not the census in use).
+VERIFIED_CENSUS = 2020
+
 DEFAULT_OUTPUT = pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "state_population.json"
 
 # Wikipedia disambiguates these three against a country/city of the same
@@ -80,10 +85,17 @@ _ROW_RE_TEMPLATE = (
 )
 
 
-def fetch_state_populations() -> dict[str, float]:
+def latest_census(html: str) -> int | None:
+    """The newest decennial census the page reports (a year ending in 0)."""
+    years = [int(y) for y in re.findall(r"\b(\d{3}0) census\b", html, re.IGNORECASE)]
+    return max(years) if years else None
+
+
+def fetch_state_populations() -> tuple[dict[str, float], int | None]:
     req = urllib.request.Request(SOURCE_URL, headers=UA)
     with urllib.request.urlopen(req, timeout=20) as resp:
         html = resp.read().decode("utf-8")
+    census = latest_census(html)
 
     result: dict[str, float] = {}
     missing = []
@@ -100,22 +112,30 @@ def fetch_state_populations() -> dict[str, float]:
     if missing:
         print(f"FAILED to parse {len(missing)} states: {', '.join(missing)}")
 
-    return result
+    return result, census
 
 
 def main() -> int:
     output = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_OUTPUT
 
-    result = fetch_state_populations()
-    print(f"parsed {len(result)}/{len(STATE_NAMES)} states")
+    result, census = fetch_state_populations()
+    print(f"parsed {len(result)}/{len(STATE_NAMES)} states ({census} census)")
 
     if len(result) != len(STATE_NAMES):
+        return 1
+    if census != VERIFIED_CENSUS:
+        # A newer census restructures the page's comparison table, and this
+        # parser must be checked against the new table before its figures
+        # are trusted (the automatic refresh alerts on this exit).
+        print(f"the page reports the {census} census; update the parser for its table")
         return 1
 
     json.dump(
         {
-            "_source": "Wikipedia 2020 Census population by state, retrieved 2026-07-19; "
-                       "regenerate with backend/scripts/fetch_state_population.py",
+            "_source": f"Wikipedia {census} Census population by state, retrieved {datetime.date.today()}; "
+                       "regenerate with backend/scripts/fetch_state_population.py (app/data_refresh.py "
+                       "re-reads it every 90 days)",
+            "census": census,
             "_unit": "millions, rounded to 1 decimal",
             "states": result,
         },

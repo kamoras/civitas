@@ -57,6 +57,9 @@ from typing import NamedTuple
 
 import numpy as np
 
+from app import calibration_drift
+from app import data_refresh
+
 CHAMBERS = ("house", "senate")
 # CSLS's neighbourhood size, as in the paper (k = 10). Not fitted.
 HUB_K = 10
@@ -76,7 +79,9 @@ def _load(path: pathlib.Path) -> dict:
 
 
 def jurisdictions() -> dict[str, dict]:
-    return _load(JURISDICTIONS_PATH)["committees"]
+    # The refreshed copy when there is one (data_refresh: the chambers'
+    # rules are re-read each Congress), else the bundled one.
+    return data_refresh.read(JURISDICTIONS_PATH.name)["committees"]
 
 
 def examples() -> list[dict]:
@@ -84,7 +89,9 @@ def examples() -> list[dict]:
 
 
 def calibration() -> dict:
-    return _load(CALIBRATION_PATH)
+    # Refit automatically when its inputs change (data_refresh), so the
+    # refreshed copy wins.
+    return data_refresh.read(CALIBRATION_PATH.name)
 
 
 def data_hash() -> str:
@@ -210,6 +217,9 @@ def route_committees(title: str, summary: str) -> list[dict]:
     routed = []
     for ch, s in shares(x, _reference, cal["k"], cal["alpha"], cal["temperature"]).items():
         col = int(decide(s, cal["threshold"])[0])
+        # Routed (1) or abstained (0): the share of issues routed is what
+        # drifts when the stream moves away from the labelled issues.
+        calibration_drift.observe("committee_routing", [float(col >= 0)], 0.5)
         if col >= 0:
             code = _reference.codes[ch][col]
             routed.append({"code": code, "name": committees[code]["name"], "chamber": ch,

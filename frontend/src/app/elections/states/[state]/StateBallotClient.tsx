@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
+import SectionTabs from "@/components/layout/SectionTabs";
 import Navbar from "@/components/layout/Navbar";
+import StateAtAGlance from "@/components/elections/ballot/StateAtAGlance";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import CoverageFeed from "@/components/elections/CoverageFeed";
@@ -1212,6 +1214,7 @@ function HouseDetail({
       <DistrictMap
         state={ballot.state}
         newLines={newLines}
+        cycleYear={ballot.cycleYear}
         races={houseRaces}
         picked={null}
         onPick={(id) => onPick(id)}
@@ -1881,6 +1884,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
         <Navbar />
         <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
           <div className="mx-auto max-w-[1400px]">
+            <SectionTabs section="elections" active="ballots" className="mb-4" />
             <Link
               href="/elections"
               className="inline-block mb-4 font-mono text-xs text-ink-lo hover:text-phos transition-colors"
@@ -2000,6 +2004,12 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
               />
             )}
 
+            <StateAtAGlance
+              state={ballot.state}
+              stateName={stateName}
+              redrawn={ballot.houseRaces.some((r) => r.redistricting)}
+            />
+
             {resultsMode && (
               <>
                 <StateResults
@@ -2025,7 +2035,10 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
               ballot, not under it: in a state still on FEC filers after its
               primary, a reader who only sees a footnote has been misled. */}
             <BallotBasisNotice basis={ballot.ballotBasis} />
-            <GeneralRunoffNotice runoffs={ballot.generalRunoffs} />
+            <GeneralRunoffNotice
+              runoffs={ballot.generalRunoffs}
+              electionDate={ballot.electionDate}
+            />
             <TopPrimaryNotice rules={ballot.topPrimary} stateName={stateName} />
             <RankedChoiceNotice rankedChoice={ballot.rankedChoice} stateName={stateName} />
 

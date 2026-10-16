@@ -9,7 +9,7 @@ import CiteThis from "@/components/shared/CiteThis";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
-import { CongressTabs } from "@/components/congress/CongressNav";
+import SectionTabs from "@/components/layout/SectionTabs";
 import VoteMembers, { PartyBar } from "@/components/congress/VoteMembers";
 import AgencyLink from "@/components/agencies/AgencyLink";
 import { StatusBadge } from "@/components/nominations/NominationRow";
@@ -163,7 +163,7 @@ export default async function NominationPage({ params }: PageProps) {
         <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
           <div className="mx-auto flex max-w-6xl flex-col gap-10">
             <div>
-              <CongressTabs active="nominations" />
+              <SectionTabs section="congress" active="nominations" />
               <nav aria-label="Breadcrumb" className="text-sm text-ink-lo">
                 <Link href={NOMINATIONS_HREF} className="hover:text-phos">
                   Nominations

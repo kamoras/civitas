@@ -89,6 +89,8 @@ civitas/
 │   │   │   ├── stock_pipeline.py  # STOCK Act trade-disclosure ingestion (sibling phase)
 │   │   │   ├── vector_store.py  # sqlite-vec + sentence-transformer model management
 │   │   │   └── lexical_index.py # SQLite FTS5 keyword index (BM25F) over explore docs
+│   │   ├── forecast/            # The pre-election map's poll ranges — outside pipeline/ and
+│   │   │                        #   apart from scoring (see "The Senate and House map")
 │   │   ├── live_results/        # Election-night count sync, seat-flip issues, results posts — outside
 │   │   │                        #   pipeline/ so it never moves the analysis-code fingerprint
 │   │   ├── models.py            # SQLAlchemy ORM (Senator, Representative, KeyVote, Justice, NationalMonitor, TimelineEntry, etc.)
@@ -217,9 +219,9 @@ the residual.
 | Tier | Technique | Used For |
 |------|-----------|----------|
 | 1 | FEC structured metadata / SEC SIC / learning store | Unambiguous entity types, a PAC's industry where its registration or its sponsor's SEC record states it (`fec.structured_industry`), previously classified entities |
-| 2 | Sentence-transformer cosine similarity | Industry, donor type, bill policy, party alignment, stance direction, procedural detection, commemorative detection, skip entity detection, employer filtering, memo transfer detection, category normalization, whether two Action Center claims restate one fact (calibrated on labelled pairs, `claim_restatement_*.json`) |
+| 2 | Sentence-transformer cosine similarity | Whether a claim's actor span the capitalised-actor rule refuses is a party that can act (`post_composer.ACTOR_PROTOTYPES`, threshold refit daily on data-supplied non-actors), industry, donor type, bill policy, party alignment, stance direction, procedural detection, commemorative detection, skip entity detection, employer filtering, memo transfer detection, category normalization, whether two Action Center claims restate one fact (calibrated on labelled pairs, `claim_restatement_*.json`) |
 | 2b | SVD / PageRank on cosponsorship matrix | Ideology scoring (Tauberer 2012), legislative leadership (Brin & Page 1998) |
-| 3 | k-Nearest Neighbor in embedding space | Remaining unclassified donors and bills; Action Center relevance and committee routing (against hand-labelled issues, blended with tier-2 jurisdiction prototypes for routing); whether a claim's actor span is a party that can act, for spans the capitalised-actor rule refuses (against hand-labelled spans, `claim_actor_examples.json`) |
+| 3 | k-Nearest Neighbor in embedding space | Remaining unclassified donors and bills; Action Center relevance and committee routing (against hand-labelled issues, blended with tier-2 jurisdiction prototypes for routing) |
 | 4 | LLM (LFM2.5-1.2B-Instruct) | Natural-language text only — Action Center claims, monitor titles and period summaries, race-post spans, Explore document summaries (full list in the bullet above) |
 
 When FEC metadata is ambiguous (e.g., entity_type "COM" could be a corporate
@@ -365,10 +367,32 @@ The correct pattern, established by `_district_pvi()` /
 3. Any other file that needs the same underlying data (an audit script,
    a different scoring dimension) reads the same JSON file or calls the
    same loader — never a second hardcoded copy of the same numbers.
-4. Rerun the generating script and commit the refreshed JSON when the
-   underlying data goes stale (a new census, a population audit finding
-   drift) — this is normal, expected maintenance, not a one-time setup
-   step to forget about.
+4. The data refreshes itself. Register the file in `app/data_refresh.py`'s
+   `DATA_FILES`: a daily job (`scheduler._data_refresh`, lease
+   `DATA_REFRESH`, outside the nightly chain) runs the generating script
+   itself as a low-priority subprocess on the file's cadence (`due`),
+   writes the candidate to a scratch file, gates it (`gate`: shape,
+   plausibility, drift against the copy in use), and only a candidate that
+   passes replaces the copy in use, on the data volume (`/data/<name>`,
+   provenance in `_refreshed`: when, the command, the content's sha256). A
+   failure keeps the last good copy and opens an ops alert for that file
+   (`data-refresh-<file>`), resolved by its next good refresh. Readers go
+   through `data_refresh.read(name)` (refreshed copy, else the bundled one,
+   re-read when either changes, from either process); the bundled file in
+   git stays the pre-first-refresh fallback and the reproducible baseline,
+   and committing a regenerated one is still how a method change ships. A
+   script the job runs takes an output path and reads no `/data` copy of
+   its own output. Files a script can't regenerate unattended — a new
+   survey whose question ids change, a model-selection refit that is a
+   method decision, a source behind research-only dependencies, a source
+   that needs hand-researched corrections — get a `stale` check instead,
+   which alerts (`data-stale-<file>`) when a newer version should exist and
+   says what a person has to do. A refresh that moves scores is a data
+   refresh within the same method (announced by an ops notice and recorded
+   in `_refreshed`), not a new `ALGORITHM_VERSION`; a refit that changes a
+   method's structure or a classifier's threshold is a version change and
+   goes through review, which is why those calibrations alert rather than
+   refit themselves.
 
    `district_pvi.json` is fetched by the pipeline, not only by the
    script, but from **pinned** sources (2026-09):
@@ -552,6 +576,20 @@ counts stored beside the figures so a test recomputes every one). The
 bar is specifically about **calculated** values — anything a regression, an average, or a percentile produced —
 which must trace back to a generating script and a data file, not a
 comment asserting "trust me, I ran a script once."
+
+A calibration fitted to **hand labels** (the Action Center's relevance,
+clustering, claim and actor gates, the trend-post gates, committee routing,
+the member-photo check) can't regenerate itself, and doesn't need to when
+its labels change: each records the hash of its labels and a test fails
+until it is refit. What it can't see is the stream moving away from its
+labels. Each such gate reports what it decides (`calibration_drift.observe`,
+counted in memory and written after each hourly refresh), and a nightly
+check compares the gate's pass rate over the last four weeks with its own
+first four weeks under the calibration in use, alerting
+(`calibration-drift-<gate>`) when it has moved by 15 points or more and far
+outside sampling noise: the cue to label a fresh sample and refit. A new
+calibrated gate is added to `calibration_drift.GATES` and observes its
+decisions.
 
 ### 3b. Search ranking is measured, not asserted
 
@@ -760,6 +798,46 @@ own raw data (rank consistency against FEC/roll-call metrics, point-mass and
 snapshot-history distribution checks — no named reference members, no
 hand-typed score ranges, per principle 1/3a), so the identical checks run
 for both chambers in `senate_pipeline.py` and `house_pipeline.py`.
+
+### 6a. Evergreen: no code is about this cycle, this Congress, this president or this Court
+
+The site has to keep working, unedited, through the next election, the next
+Congress (noon ET, Jan 3 of every odd year), the next president (noon ET,
+Jan 20 after a presidential election), a vacancy on the Court, a special
+election, a party switch and a mid-decade redistricting. Every new feature
+answers these before it merges:
+
+- **Which Congress?** `settings.CURRENT_CONGRESS` (from the clock, held per
+  job by `scoring_congress`), or `congress_for_election(cycle)` for the
+  Congress an election seats. Never a literal `119`, never a default
+  argument naming one, never "119th" in copy (the frontend's
+  `currentCongress()` / `congressOrdinal`, or the API's own field).
+- **Which election?** `election_phase.active_election()` (its `.cycle`,
+  `.election_day`, phase), never `next_election_day()` directly and never a
+  year or "November 3" literal. Cycle-specific external names (an article
+  title, a results URL, an FEC cycle) are built from the cycle by rule.
+- **Who holds office?** Read from the official source every run: members
+  from Congress.gov's current roster (`member_lifecycle` for departures),
+  the president from the roster with the Federal Register cross-check
+  (`check_sitting_president`), justices from Oyez's sitting list
+  (`retire_departed_justices`, `court_roster_changed`), leadership and
+  committees from congress-legislators. Never a typed name, majority party
+  or count ("the nine justices").
+- **A fact that is law, not a cycle:** store the rule (`{"every": 4,
+  "from": ...}`, "28 days after the general"), not this cycle's date, so the
+  next cycle computes its own.
+- **Data that genuinely needs a new source each cycle** (a calendar, poll
+  closing times, a new map's lines): regenerate it automatically on its
+  cadence where the source can be found by rule, gate it, keep the last good
+  copy, and alert ahead of the cycle when it can't — a file keyed to one
+  cycle must never go quietly empty or quietly reuse the last cycle's values.
+- **Copy:** labels come from the API or the clock helpers; a measured
+  number in prose is dated ("measured October 2026"), which keeps it true.
+- **Prove it at future dates:** tests at the next hand-over instants
+  (`freeze_utcnow`, and the full fast suite under
+  `scripts/frozen_clock_plugin.py`, see Testing): Jan 3 of the next odd year
+  either side of noon ET, the next primary and general season, election
+  night, Jan 20 after a presidential election, and a Court vacancy.
 
 ### 7. Ballot content is quoted, never generated
 
@@ -1090,7 +1168,10 @@ is going, and a nightly run that finds a triggered chain going leaves the
 night to it. A link skipped because another run holds the machine (another
 run of that pipeline, or a member pipeline holding Stock trades off) waits
 until no pipeline run is live (`scheduler.pipelines_running`, which stops
-counting a run once it is past `STALE_PIPELINE_TIMEOUT`), then is tried once
+counting a run once it is stale: no progress for `QUIET_PIPELINE_TIMEOUT`,
+6h, or older than `STALE_PIPELINE_TIMEOUT`, 24h — `run_tracker.row_is_stale`
+for run rows and run locks, `PipelineRunTracker.hung` for the in-process
+flags, both reading the same progress writes), then is tried once
 more and that attempt is what gets reported: the other run may have been a
 single senator, or have failed, so it never stands in for the link. The one
 skip that ends a chain is a data reset holding the database, which every
@@ -1106,7 +1187,24 @@ the admin status keeps `check-and-deploy.sh` from restarting between two
 links. `ops_alerts.check_pipeline_staleness` still watches for a pipeline
 with no successful completion in `PIPELINE_STALE_ALERT_DAYS`;
 `check_pipeline_overrun` watches the opposite case of a run that started
-and is taking too long.
+and is taking too long; its alert names the active step, that step's
+detail and how long ago the run last wrote progress, so a slow step that is
+working reads differently from a hung one. A step that loops over thousands
+of upstream reads reports through `ProgressTracker.heartbeat` (written at
+most every `HEARTBEAT_INTERVAL_S`, with the step's request count and
+rate-limit wait appended, each write one short commit): the House
+sponsorship step once spent six hours on a cache warm-up of about 19,000
+bills with an empty detail and a frozen elapsed time (2026-10-16). The
+admin status computes a running row's elapsed time from its start, never
+from the stored value. Staleness is progress, not age (2026-10): a run that
+has written nothing for six hours (the longest step measured to write
+nothing until it ends took 102 minutes) is hung or dead, and its lock is
+taken over; one still writing keeps it until the 24h ceiling. The jobs that
+step aside for a pipeline (the bill refresh for House, the election syncs
+for Election) and the chain's liveness (`pipeline_chain`, which counts any
+run's progress write) use the same rule with their own windows. A new long
+step that writes nothing until it ends must heartbeat, or past six hours it
+reads as hung.
 
 Outside the chain, the **agency sync** (`fetch/agencies.py`,
 `scheduler._agency_sync`, `AGENCY_SYNC` lease) reads the Federal Register's
@@ -1186,7 +1284,12 @@ Between TRANSFORM and the rest, both chamber pipelines run
 
 **Presidents are never reconciled or removed, and neither is the Court** —
 both functions take an explicit chamber and reject anything but
-`senate`/`house`. A former president is permanent site content. Relatedly,
+`senate`/`house`. A former president is permanent site content. The Court
+has its own, narrower reconciliation: the justice step marks a justice no
+longer on Oyez's sitting list inactive (`retire_departed_justices`, never a
+delete, refused below the Court's quorum of six) and the Supplementary run
+checks that list nightly so a confirmation or departure doesn't wait for the
+weekly refresh (`court_roster_changed`). Relatedly,
 the Senate/House leaderboards rank only currently-serving members, while the
 presidential leaderboard ranks the *historical* field and excludes the
 sitting president (see `president_service.get_president_leaderboard`) — for
@@ -1206,15 +1309,17 @@ the trend's own name (described trends only); an Act's full title (the whole
 capitalised run must be the record's title, or the trend gives the bill
 number — a shorter name inside a longer title, or a qualifier like "EU" in
 front, is another act); a nominee's confirmation vote, only when the
-appointment kNN vote says the trend is about the nomination; or a named
+trend began within a day of the vote (`trend_evidence.NOMINEE_WINDOW`); or a named
 member's own recent bill on the topic — never a person alone. Records must be
 dated on or before the trend's start plus two days, and a record more than 30
 days older than the trend counts only when the trend's name names it; a vote
-with no measure title and no bill is never a record. All of this sits on
-top of a kNN relevance vote ≥ 0.5 over labelled trends (`trend_relevance.py`,
-`app/data/trend_*`/`political_violence_examples.json`/`loaded_language_examples.json`/`appointment_examples.json`,
-calibrated by `scripts/calibrate_trend_gates.py` into
-`trend_gates_calibration.json`). The trend's name must pass a neutrality gate
+with no measure title and no bill is never a record. Only a trend Bluesky's
+getTrends files under "politics" goes to matching (its own category, read as
+published: `trend_relevance.POLITICS_CATEGORY`; the kNN relevance vote over
+350 hand-labelled topics it replaced was removed 2026-10-16). The other
+votes (`trend_relevance.py`, `political_violence_examples.json`/`loaded_language_examples.json`)
+are calibrated by `scripts/calibrate_trend_gates.py` into
+`trend_gates_calibration.json`. The trend's name must pass a neutrality gate
 (`grounding`'s electioneering, editorializing and advocacy-as-fact checks plus a
 loaded-language vote); a tragedy is eligible only with a high political-violence
 vote and an official record (not an issue). Every word is template text, a
@@ -1279,6 +1384,20 @@ backoff). This only works because a refused statement is always its
 transaction's first write, so retrying it loses nothing.
 `tests/test_write_lock_holds.py` makes a pipeline write at every slow call
 of the refresh's stages on a file-backed database.
+
+The pipeline holds itself to the same rule. **A learning-store write
+commits at once** (`bill_learning.record_classification`,
+`donor_classifier_ai._store_donor_learning`,
+`industry_classifier._store_classification`): every caller goes on to
+classify the next bill or donor (an encode, the kNN pass) before it would
+commit, and on 2026-10-16 the hold watcher caught the Senate run holding
+the lock 19 to 22 s that way, near the busy timeout everything else waits
+on. A commit per upsert costs about 0.1 ms, against tens of ms of
+classification per item, and keeps every later read in the run (the
+exact-match lookups, the kNN references) seeing the rows already written,
+which a buffer flushed at batch end would not. The same test file makes a
+second-connection write at each classification step of the bill, donor and
+industry classifiers.
 
 Each issue's actions are fixed templates around stored data:
 
@@ -1441,6 +1560,21 @@ posted still keeps its page: the issue cleanup deletes only developing
 issues nobody confirmed (`_cleanup_old_unposted_issues`), since the sitemap
 lists every confirmed issue.
 
+**Ahead of each election** a nightly pre-check (`ops_alerts.check_election_readiness`)
+compares each cycle-specific data file with the election the calendar says
+is next and alerts, once its lead time begins, for what is missing: the
+cycle's entry in `redrawn_congressional_maps.json` (from January 1; an empty
+entry when no state redrew), a computed district lean for every state on
+the seated Congress's lines (`district_lines.table_for_lines`, shared by the
+computed lean and the county and place crosswalks, carries the last table
+forward only for a state whose map didn't change, and only once the cycle
+is listed), the voter calendar (150 days out), the poll closing times
+(45 days) and towns' sample ballots (60 days; a town ballot from an earlier
+cycle is never served as this one's). Standing law is stored as law
+(`election_rules.json`'s `standing`, a runoff counted from the general;
+`office_terms.json`'s year rules; `state_ballot_scope.json`'s
+`statewide_executive`), so the next cycle computes its own.
+
 **Election night and after** (`election_phase.py`, `live_results/sync.py`).
 The site's election is not simply the *next* one: from election day (Eastern
 date) it stays on the election just held while any race's vote totals are
@@ -1526,11 +1660,112 @@ wrong number on election night is worse than none:
   bar gates only *raising* a flip: once said, a flip is undone only by the
   lead itself going back to the seat's party or tying (`lead_is_back`), never
   by the count dipping below the bar with the same challenger ahead.
+- "Civitas never calls a race" governs **election-night counts**: what a
+  count says, and when. It is not a ban on describing an election before
+  it. The pre-election map (below, `app/forecast/`) publishes a calibrated
+  range for each Senate and House margin with its method and held-out checks shown,
+  and stays inside the same spirit: ranges, never a winner, no chance of
+  winning on any surface, no seat tally by party, and it is withdrawn the
+  moment `active_election()` leaves the campaign phase, so no estimate ever
+  sits beside a live count.
 - A data reset inside the results window keeps the held election's ballot and
   count (`database.RESET_KEEPS_WHILE_RESULTS`) and the coverage markers its
   pages read beside them (statewide, judicial and ballot-basis `api_cache`
   tiers, `HELD_BALLOT_MARKER_TIERS`): after election day nothing rebuilds
   them — the roster and ballot syncs stand down (`election_is_held`).
+
+**The Senate and House map** (`app/forecast/`, `GET /api/elections/map`,
+`frontend/src/app/elections/map/`). Before election day each seat on the
+active election's ballot shows its usual vote (a state's lean,
+`state_pvi.json`; a district's computed lean on the lines of the Congress the
+election seats, `congress_for_election(cycle)`, the race page's lines,
+`district_lean.json`) and, where both
+parties have a nominee, an 80% range for the margin: a structural line
+(lean, incumbency, the generic-ballot average) combined by inverse variance
+with the race's own poll average, one calibration scale on the spread. Rules
+it keeps, each enforced by a test (`tests/test_forecast_model.py`,
+`ElectionMap.test.tsx`):
+
+- **Separate from scoring.** Nothing in `app/forecast/` imports scoring code
+  or references (`app/pipeline/analyze`, `config_definitions`), it is not in
+  `SCORE_WEIGHTS`, and no range is shown beside a Representation Score
+  (`RaceContext` links to the map; it does not show the range). It lives
+  outside `app/pipeline/`, so editing it never moves the analysis-code
+  fingerprint.
+- **Fitted, not typed (§3a), and refitted on its own.** `scripts/fit_forecast_model.py` builds
+  `app/data/forecast_training.json` (Senate generals from 1998: MEDSL results
+  and presidential returns, CC0, newest Dataverse version; FEC incumbency
+  codes; Silver Bulletin's raw polls) and writes every parameter, the
+  leave-one-cycle-out evaluation and the forward check (the newest cycle,
+  fitted on earlier cycles only, with its binomial band) to
+  `app/data/forecast_model.json`. `app/data_refresh.py` reruns it when the
+  training polls change and monthly, into `/data/forecast_*.json` (the
+  checked-in files are the fallback), and alerts, without holding the fit
+  back, only when the forward check fails at familywise 5% (Holm over every
+  horizon, chamber and direction, `data_refresh._forward_finding`): ranges
+  too narrow against 80%, or far too wide against `model.WIDE_COVERAGE`
+  (naming the scale factor). A width calibrated from leave-one-out coverage
+  was measured and rejected (it moved every forward figure the wrong way). The poll window
+  is the training polls' own reach (`model.poll_window`), never typed;
+  beyond it every range is the structural line's, labelled fundamentals only.
+- **Training polls: Silver Bulletin, gated, attributed.**
+  `app/forecast/training_polls.py` (fetched by
+  `scripts/fetch_silver_bulletin_polls.py` with `BOT_USER_AGENT` and no other
+  identifying header) refuses a whole file on a failed gate (terms sentence,
+  exact columns, append-only with bounded logged corrections, 0 to N days
+  with N the accepted file's reach, valid shares, a new cycle's Senate and
+  generic-ballot rows, stated results against MEDSL's certified margins) and
+  names the gate in the alert; an unreadable page is an outage alert. Results
+  always come from MEDSL and the FEC, never from the poll file; a race where
+  the two disagree is excluded from the fit. Its terms ask for attribution to
+  Silver Bulletin: keep it on the map, in `_source` and on `/about/data`.
+  The test refits from the training file and must match it within tolerance at write precision (10 significant digits; a different BLAS changes a least-squares solve's last bits). A race's
+  historical lean uses only the two presidential elections before it.
+- **The House fit's lean is rebuilt, not borrowed.** `scripts/
+  build_house_lean_history.py` makes each district's pre-election lean for
+  2018, 2020 and 2022 on the lines each was held on, with
+  `build_district_lean.py`'s own block method (VEST 2016/2020 on Census 2020
+  blocks; 116th lines from TIGER polygons, 118th from the BEF), into
+  `app/data/forecast_house_lean.json`; results and incumbency come from the
+  FEC's Federal Elections workbooks. Three cycles cannot identify the
+  generic-ballot coefficient, so the House takes the Senate fit's
+  (`model.fit(national_coef=)`), refitted without each held-out cycle. Don't
+  add a House cycle from a source behind a sign-in form (MEDSL's House file
+  is one: its guestbook) or a lean made another way; the fit takes every
+  FEC compilation the FEC's results index links.
+- **Polls from Wikipedia, gated, attributed.** `forecast/polls.py` reads each
+  race article's current revision (recorded per seat), parses the table whose
+  columns are the confirmed nominees, and rejects the whole table on a failed
+  gate (fieldwork after the revision or before January 1 of the year before
+  the election, `earliest_fieldwork(cycle)`, shares over 102, a poll
+  listed twice, nominee columns ambiguous); a rejected revision keeps the
+  previous good one's polls. A House seat's table is in the "District N"
+  section of its state's House article. A race whose ballot Civitas hasn't
+  confirmed is "unconfirmed", never shown as uncontested. Everything poll-derived (API, CSV, share images)
+  is CC BY-SA 4.0, "Wikipedia contributors", and says so.
+- **Outage is not "no data".** Each seat's `pollSource` names what the
+  poll source did (read / no table / no article / rejected / unreachable,
+  with the kept revision's date); a seat with no lean is `no_lean`; a
+  failed refresh alerts; a map past `STALE_AFTER` is marked stale. The page
+  words each state; it never prints "no poll" for a failure.
+- **One figure per seat across pages.** The race page's `usualVote` and the
+  map's `leanLabel` come from `district_lean.lean_label`; labels, ranges and
+  `close` are written by the backend on the rounded value, and the frontend
+  never re-rounds them.
+- **Wording.** Ranges and frequencies, never "wins", "favored" or
+  "projected". The implied chances exist only for the method section's
+  calibration table.
+- **No year in the code.** Article titles, the fieldwork floor, the House
+  lines and every label (CSV header and filename, page titles, the method's
+  presidential window) come from `active_election().cycle` and the data
+  files; a new cycle's first build never keeps the last cycle's file. No
+  table for the cycle's lines alerts (`election-map-house-lines`), and fits
+  that stop before the last certified general (sworn in each January 3)
+  alert from the nightly pre-checks (`election-map-training-stale`), naming
+  each missing input per chamber from the training files' `_coverage`.
+- **Hidden from election day.** The refresh job (`scheduler`, every three
+  hours) stops and the API answers 404 once `active_election()` leaves the
+  campaign phase; the results map takes over.
 
 After both member pipelines complete, `stock_pipeline.py` runs as a sibling
 phase — fetches House (PDF) and Senate (HTML) STOCK Act periodic transaction
@@ -1790,13 +2025,14 @@ the pending list).
 | Multi-word last name extraction + vote matching | `backend/app/pipeline/transform/normalize_members.py` |
 | Lobbying match + key vote selection (deterministic, no LLM) | `backend/app/pipeline/analyze/cross_reference.py` |
 | Action Center analysis (news → issues → monitors → timeline) | `backend/app/pipeline/analyze/action_center.py` |
-| Claim composer (verbatim spans, actor check: capitalised rule + kNN vote over labelled spans) | `backend/app/pipeline/analyze/post_composer.py`, `backend/app/data/claim_actor_examples.json`, `backend/scripts/calibrate_claim_actor.py` |
+| Claim composer (verbatim spans, actor check: capitalised rule + prototype margin, threshold refit daily) | `backend/app/pipeline/analyze/post_composer.py`, `backend/app/data/claim_actor_threshold.json`, `backend/scripts/calibrate_claim_actor.py` |
 | Committee routing for issues (rules' jurisdictions + labelled issues) | `backend/app/committee_routing.py`, `backend/app/data/committee_*.json`, `backend/scripts/fetch_committee_jurisdictions.py`, `backend/scripts/calibrate_committee_routing.py` |
 | Issue principal actor + weekly actor concentration (admin) | `backend/app/pipeline/analyze/story_actor.py`, `GET /api/admin/actor-concentration`, `frontend/src/components/admin/ActionCenterDashboard.tsx` |
 | Justice record and appointer estimate (not scored, justice v3) | `backend/app/pipeline/justice_pipeline.py`, `backend/app/pipeline/analyze/justice_loyalty.py` |
 | Election cycle pipeline (candidates, financials, ballot measures, coverage) | `backend/app/pipeline/election_pipeline.py` |
 | What shapes a race (seat lean among all seats, FEC contribution categories, state CSV; descriptive, no forecast) | `backend/app/race_context.py`, `frontend/src/components/elections/ballot/RaceContext.tsx`, `RaceMoneyBars.tsx` |
 | Election phase (campaign / election day / results) + results grace period | `backend/app/election_phase.py` |
+| Senate and House map: usual vote and poll ranges (pre-election; separate from scoring) | `backend/app/forecast/` (`model.py`, `polls.py`, `training_polls.py`, `build.py`), `backend/scripts/fit_forecast_model.py`, `backend/scripts/fetch_silver_bulletin_polls.py`, `backend/scripts/build_house_lean_history.py`, `app/data/forecast_model.json`, `forecast_house_model.json`, `forecast_house_lean.json`, `backend/app/api/election_map.py`, `frontend/src/components/elections/map/`, `frontend/src/lib/electionMap.ts` |
 | Live election-night results (vendor readers, sync, trust gates, events) | `backend/app/pipeline/fetch/election_results.py`, `backend/app/live_results/sync.py`, `fetch/poll_close.py`, each vendor's `fetch_general_results` |
 | Seat-flip DEVELOPING issues + election-night posts (feed, then Bluesky) | `backend/app/live_results/signals.py`, `live_results/bluesky.py` |
 | Results UI (map colouring, live updates, state results) | `frontend/src/lib/results.ts`, `frontend/src/hooks/useLiveResults.ts`, `frontend/src/components/elections/results/` |
@@ -1821,6 +2057,7 @@ the pending list).
 | Data validation | `backend/app/pipeline/assemble/validator.py` |
 | Civitas-computed district lean (display only, beside Cook) | `backend/scripts/build_district_lean.py`, `backend/app/data/district_lean.json`, `backend/app/data/district_lean_corrections.json`, `backend/app/district_lean.py` |
 | Ground-truth regression gate | `backend/app/pipeline/analyze/ground_truth.py` |
+| Generated data files' automatic refresh (cadence, gates, provenance, staleness alerts) | `backend/app/data_refresh.py` (`DATA_FILES`), `scheduler._data_refresh` |
 | Score/data-quality diagnostic playbook | `SCORE_AUDIT.md` |
 | Enums, weights, industry codes | `backend/app/config_definitions.py` |
 | Senator service + paginated votes | `backend/app/services/senator_service.py` |

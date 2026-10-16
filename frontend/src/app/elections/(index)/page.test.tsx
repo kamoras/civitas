@@ -119,6 +119,30 @@ afterEach(() => {
 });
 
 describe("ElectionsPage", () => {
+  it.each([
+    ["the campaign", CAMPAIGN],
+    ["election day", { ...RESULTS, phase: { ...RESULTS.phase, phase: "election_day" } }],
+    ["the results window", RESULTS],
+  ])("keeps every elections tab in every phase: %s", async (_label, live) => {
+    // The masthead's links to the map and the new House maps rendered in
+    // the campaign only, so from election day nothing on the page led to
+    // either; a tab bar never drops a tab, and an out-of-phase page says why.
+    fetchPviMap.mockResolvedValue({ states: { GA: 3 }, districts: {}, cycleYear: 2026 });
+    fetchLiveResults.mockResolvedValue(live);
+    render(<ElectionsPage />);
+    const nav = await screen.findByRole("navigation", { name: "Elections sections" });
+    const tabs = within(nav).getAllByRole("link");
+    expect(tabs.map((t) => t.textContent)).toEqual([
+      "Ballots by state",
+      "Seat map",
+      "New House maps",
+    ]);
+    expect(tabs[0]).toHaveAttribute("aria-current", "page");
+    expect(tabs[1]).toHaveAttribute("href", "/elections/map?chamber=senate&view=usual");
+    // The inline masthead links, which ran off a phone screen, are gone.
+    expect(screen.queryByText(/POLL RANGES →/)).not.toBeInTheDocument();
+  });
+
   it("still renders the directory when the payload carries no lean data", async () => {
     // A /pvi response missing `states` used to take the whole page down with
     // "Cannot read properties of undefined (reading 'AK')" — a white screen,
@@ -201,6 +225,21 @@ describe("ElectionsPage", () => {
     expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent(
       "2026 midterm ballot"
     );
+  });
+
+  it("names a presidential cycle as one, never a midterm", async () => {
+    fetchPviMap.mockResolvedValue({ states: {}, districts: {}, cycleYear: 2028 });
+    fetchLiveResults.mockResolvedValue({
+      ...CAMPAIGN,
+      cycleYear: 2028,
+      phase: { ...CAMPAIGN.phase, electionDate: "2028-11-07" },
+    });
+    render(<ElectionsPage />);
+
+    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent(
+      "2028 presidential election ballot"
+    );
+    expect(document.body).not.toHaveTextContent(/midterm/i);
   });
 
   it("holds the lean map back until it knows whether results are on", async () => {

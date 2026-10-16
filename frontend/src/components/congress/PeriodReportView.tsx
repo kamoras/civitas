@@ -17,7 +17,8 @@ import {
   shortDate,
   weekHref,
 } from "@/lib/congress";
-import { CongressTabs, PeriodNav } from "./CongressNav";
+import { PeriodNav } from "./CongressNav";
+import SectionTabs from "@/components/layout/SectionTabs";
 import { Empty, Figure, FigureGroup, Section, VoteRow } from "./ReportParts";
 
 function chamberCell(day: PeriodDay, chamber: "senate" | "house") {
@@ -150,7 +151,7 @@ export default function PeriodReportView({
       <Navbar />
       <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
         <div className="mx-auto max-w-6xl">
-          <CongressTabs active="reports" />
+          <SectionTabs section="congress" active="reports" />
           <PageMasthead
             className="mb-6"
             eyebrow="What happened in Congress"

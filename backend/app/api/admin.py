@@ -88,6 +88,7 @@ from app.pipeline.analyze.bill_learning import get_health_metrics
 from app.pipeline.analyze.ollama_client import get_llm_stats
 from app.pipeline.analyze.score_calibration import generate_calibration_report
 from app.pipeline.fetch import ballot_measure_pdf_sources, district_pvi
+from app.pipeline.fetch.agencies import run_agency_sync
 from app.pipeline_chain import chain_running
 from app.scheduler import get_next_run_time, triggered_chain
 from app.services import bill_service
@@ -114,8 +115,9 @@ def require_admin(authorization: str | None = Header(default=None)) -> None:
 def _live_elapsed(run) -> float | None:
     """Elapsed seconds for a pipeline run row, computed live if still running.
 
-    A "running" row's stored elapsed_seconds is stale (only written on
-    completion), so while it's in flight we compute it against now instead.
+    A "running" row's stored elapsed_seconds is as old as its last progress
+    write (a step that writes none for hours freezes it), so while it's in
+    flight we compute it against now instead.
     """
     if run.status == PipelineStatus.RUNNING and run.started_at:
         return round((utcnow() - run.started_at).total_seconds(), 1)
@@ -140,7 +142,7 @@ def _history_entry(run, pipeline_type: str, extra: dict) -> dict:
         "startedAt": run.started_at.isoformat() if run.started_at else None,
         "completedAt": run.completed_at.isoformat() if run.completed_at else None,
         "status": run.status,
-        "elapsedSeconds": run.elapsed_seconds,
+        "elapsedSeconds": _live_elapsed(run),
         "errorMessage": run.error_message,
         "errorDetail": run.error_detail,
         **extra,
@@ -929,7 +931,7 @@ async def admin_dashboard(request: Request, db: Session = Depends(get_db)):
             "llmCalls": last_run.llm_calls,
             "cacheHits": last_run.cache_hits,
             "cacheMisses": last_run.cache_misses,
-            "elapsedSeconds": last_run.elapsed_seconds,
+            "elapsedSeconds": _live_elapsed(last_run),
             "errorMessage": last_run.error_message,
             "errorDetail": last_run.error_detail,
             "progressSteps": dash_progress_steps,
@@ -1905,6 +1907,12 @@ async def admin_reset_data():
     # A database write in the pipeline process: off the event loop.
 
     await asyncio.to_thread(bill_service.warm_bill_collection_cache)
+    # The agency list costs one request and nothing else rebuilds it before
+    # the next :30: read it now, so /agencies isn't empty for up to an hour.
+    try:
+        background.start_writer(run_agency_sync, name="agency-sync")
+    except background.WritesHeld as held:
+        logger.info("%s", held)
     total_rows = sum(v for k, v in summary.items() if isinstance(v, int))
     return {
         "status": "reset_complete",
@@ -2073,7 +2081,7 @@ def admin_trend_posts(
         "candidates": [{
             "topic": r.topic, "name": r.display_name, "rank": r.rank,
             "firstSeen": r.first_seen_at.isoformat(), "decidedAt": r.decided_at.isoformat(),
-            "relevance": round(r.relevance, 3), "tragedy": round(r.tragedy, 3),
+            "category": r.category, "tragedy": round(r.tragedy, 3),
             "politicalViolence": round(r.political_violence, 3), "loaded": round(r.loaded, 3),
             "neutrality": json.loads(r.neutrality or "[]"),
             "matchType": r.match_type, "matchStrength": r.match_strength,

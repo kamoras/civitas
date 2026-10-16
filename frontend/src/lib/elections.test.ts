@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   candidateName,
   districtAreaLabel,
+  electionTitle,
+  leanWindowWords,
   formatComputedLean,
   formatPvi,
   isActiveCandidate,
@@ -610,5 +612,36 @@ describe("placeDistrictSummary", () => {
     expect(placeDistrictSummary([{ district: 0, places: ["Capitol city"] }], "capitol")).toEqual([
       "Capitol is in the at-large district.",
     ]);
+  });
+});
+
+describe("electionTitle", () => {
+  it("calls an even year off the presidential cycle a midterm", () => {
+    expect(electionTitle(2026, "ballot")).toBe("2026 midterm ballot");
+    expect(electionTitle(2030, "election_day")).toBe("2030 midterms: election day");
+  });
+
+  it("never calls a presidential year a midterm", () => {
+    expect(electionTitle(2028, "ballot")).toBe("2028 presidential election ballot");
+    expect(electionTitle(2028, "results")).toBe("2028 presidential election results");
+    expect(electionTitle(2028, "election_day")).toBe("2028 presidential election: election day");
+    expect(electionTitle(2028, "elections")).toBe("2028 elections");
+  });
+
+  it("names no cycle it hasn't been told", () => {
+    expect(electionTitle(null, "ballot")).toBe("General election ballot");
+    expect(electionTitle(undefined, "elections")).toBe("General elections");
+  });
+});
+
+describe("leanWindowWords", () => {
+  it("words the API's window", () => {
+    expect(leanWindowWords("2024+2028")).toBe("2024 and 2028");
+    expect(leanWindowWords("2020")).toBe("2020");
+  });
+
+  it("is null when the API gave no window", () => {
+    expect(leanWindowWords(null)).toBeNull();
+    expect(leanWindowWords("")).toBeNull();
   });
 });

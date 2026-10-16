@@ -11,6 +11,7 @@ racing ahead of one.
 
 from datetime import timedelta
 
+import pytest
 from sqlalchemy import text
 
 from app.models import ApiCache, PipelineRun, PipelineStatus
@@ -253,6 +254,32 @@ class TestAcquirePipelineLockGeneric:
         unchanged = db_session.query(HousePipelineRun).one()
         assert unchanged.status == PipelineStatus.RUNNING
 
+    @pytest.mark.parametrize("age_h, quiet_min, live", [
+        # A cache warm-up night: 20h in, progress five minutes ago. Under
+        # the old 12h age rule this run's lock was taken over while it read.
+        pytest.param(20, 5, True, id="long_run_still_writing_progress_stays_live"),
+        # Killed or wedged mid-step: nothing written for past the window.
+        pytest.param(7, 6 * 60 + 1, False, id="quiet_past_the_window_is_stale"),
+        pytest.param(25, 1, False, id="past_the_age_ceiling_is_stale_however_busy"),
+    ])
+    def test_staleness_comes_from_progress(self, db_session, age_h, quiet_min, live):
+        from app.models import HousePipelineRun
+        from app.pipeline.run_tracker import (
+            ALREADY_RUNNING, STALE_PIPELINE_TIMEOUT, acquire_pipeline_lock_why, live_run,
+        )
+
+        row = HousePipelineRun(started_at=utcnow() - timedelta(hours=age_h), status=PipelineStatus.RUNNING)
+        # What ProgressTracker writes: seconds from the start to its last write.
+        row.elapsed_seconds = age_h * 3600 - quiet_min * 60
+        db_session.add(row)
+        db_session.commit()
+
+        assert (live_run(db_session, HousePipelineRun) is not None) is live
+        taken = acquire_pipeline_lock_why(db_session, HousePipelineRun, STALE_PIPELINE_TIMEOUT)
+        assert (taken == (None, ALREADY_RUNNING)) is live
+        db_session.refresh(row)
+        assert row.status == (PipelineStatus.RUNNING if live else PipelineStatus.STALE)
+
     def test_integrity_error_on_commit_yields_gracefully(self, db_session, monkeypatch):
         from sqlalchemy.exc import IntegrityError
 
@@ -390,3 +417,49 @@ def test_a_tracked_run_raises_its_flag_before_its_row_commits_and_drops_it_on_re
     assert acquire_tracked_run(db_session, HousePipelineRun, STALE_PIPELINE_TIMEOUT, fresh)[0] is None
     monkeypatch.undo()
     assert raised == [True] and not fresh.is_running  # up for the commit, down once it failed
+
+
+def test_a_tracked_run_is_hung_only_once_its_progress_stops(db_session, monkeypatch):
+    """The in-process flag a chain waits on (scheduler.pipelines_running)
+    and the hourly jobs step aside for: a run that keeps writing progress
+    is never presumed hung before the age ceiling, and one that stops is,
+    one quiet window after its last write."""
+    from app.models import HousePipelineRun
+    from app.pipeline import progress_tracker, run_tracker
+    from app.pipeline.progress_tracker import ProgressTracker
+    from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_tracked_run
+
+    clock = [1_000_000.0]
+    monkeypatch.setattr(run_tracker.time, "time", lambda: clock[0])
+    monkeypatch.setattr(run_tracker, "_TRACKERS", {})
+    tracker = PipelineRunTracker()
+    run, _token, _why = acquire_tracked_run(db_session, HousePipelineRun, STALE_PIPELINE_TIMEOUT, tracker)
+    progress = ProgressTracker(run, [("step", "fetch", "Step")], db_session, start_time=clock[0])
+    progress.begin("step")
+    monkeypatch.setattr(progress_tracker, "HEARTBEAT_INTERVAL_S", 0.0)
+
+    for _hour in range(15):  # a 15h warm-up, a heartbeat an hour
+        clock[0] += 3600
+        progress.heartbeat("step", detail="reading")
+    assert not tracker.hung()
+
+    clock[0] += run_tracker.QUIET_PIPELINE_TIMEOUT.total_seconds() - 60
+    assert not tracker.hung()
+    clock[0] += 60
+    assert tracker.hung()
+
+
+def test_a_chain_stays_live_while_its_link_writes_progress(monkeypatch):
+    """check-and-deploy.sh waits on a live chain; one link working longer
+    than the quiet window (a House warm-up night) must keep it live, and a
+    chain with no progress at all past it is wedged."""
+    from app import pipeline_chain
+    from app.pipeline import run_tracker
+
+    window = run_tracker.QUIET_PIPELINE_TIMEOUT.total_seconds()
+    now = 10 * window
+    monkeypatch.setattr(pipeline_chain, "_chains", {1: now - 2 * window})  # the link began long ago
+    monkeypatch.setattr(run_tracker, "_last_progress", now - 60)
+    assert pipeline_chain._any_live(now)
+    monkeypatch.setattr(run_tracker, "_last_progress", now - window - 1)
+    assert not pipeline_chain._any_live(now)

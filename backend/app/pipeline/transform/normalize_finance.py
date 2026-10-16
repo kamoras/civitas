@@ -11,12 +11,12 @@ not in the AI results (edge cases), it falls back to the embedding-based
 industry classifier.
 """
 
-import json
 import logging
 import re
 from difflib import SequenceMatcher
 from pathlib import Path
 
+from app import data_refresh
 from app.pipeline.fetch.fec import (
     committee_id_of,
     committee_industry,
@@ -601,14 +601,14 @@ def _name_casing() -> dict[str, str]:
     """{lower-case word: its written form} for the words usage writes in
     capitals or with an interior capital ("ucla": "UCLA"), from
     app/data/name_casing.json (scripts/build_name_casing.py)."""
-    global _name_casing_cache
-    if _name_casing_cache is None:
-        try:
-            _name_casing_cache = json.loads(_NAME_CASING_PATH.read_text())["forms"]
-        except (OSError, ValueError, KeyError):
-            logger.warning("name_casing.json unreadable: donor names keep first-letter capitals only")
-            _name_casing_cache = {}
-    return _name_casing_cache
+    if _name_casing_cache is not None:  # set only to stand in for the table
+        return _name_casing_cache
+    # Rebuilt yearly from the last year's issues (data_refresh), else the
+    # bundled file.
+    forms = data_refresh.read(_NAME_CASING_PATH.name).get("forms")
+    if forms is None:
+        logger.warning("name_casing.json unreadable: donor names keep first-letter capitals only")
+    return forms or {}
 
 
 # A run of letters, and what precedes it: a run after a digit or an

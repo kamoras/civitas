@@ -25,7 +25,7 @@ from app.database import get_db
 from app.issue_ids import to_public_id
 from app.models import ActionIssue, ActionIssueStatus, Agency, AgencyBudget, ExploreDocument
 from app.pipeline import lexical_index
-from app.pipeline.fetch.agencies import FR_SOURCE, USASPENDING_SOURCE
+from app.pipeline.fetch.agencies import FR_SOURCE, USASPENDING_SOURCE, linking_progress
 from app.pipeline.fetch.fr_rulemaking import FR_TYPE_LABELS
 from app.retractions import retraction_for_issue
 from app.time_utils import comment_period_today
@@ -211,6 +211,10 @@ def list_agencies(db: Session = Depends(get_db)):
         "budgetStatus": "read" if budgets else "not_read",
         "documentsSource": FR_SOURCE,
         "documentsAsOf": _register_as_of(db),
+        # Documents stored before agencies were read are still being linked
+        # to theirs ({"linked", "total"}), so a count of 0 is not "none";
+        # null once every one is.
+        "documentsLinking": linking_progress(db),
     }, max_age=CACHE_TTL_LIST_S)
 
 
@@ -242,6 +246,9 @@ def _documents(db: Session, slugs: list[str], today: str) -> dict:
         "openComments": [_doc(d, today) for d in open_q.order_by(
             ExploreDocument.comments_close_on.asc(), ExploreDocument.id.desc()).limit(SHOWN)],
         "openCommentsCount": open_q.count(),
+        # As in the directory: while documents are still being linked to
+        # their agency, every count here is a count so far.
+        "linking": linking_progress(db),
         "proposedRules": [_doc(d, today) for d in base.filter(
             ExploreDocument.doc_type == FR_TYPE_LABELS["Proposed Rule"]).order_by(*newest).limit(SHOWN)],
         "finalRules": [_doc(d, today) for d in base.filter(
