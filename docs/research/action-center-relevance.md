@@ -291,11 +291,29 @@ gate keeps 86 and the new 110: it drops 1 the old kept (the same foreign
 election) and adds 25, among them the jobs report, an FBI internal report,
 student-loan deadlines, deportation cases and the diesel deal, and also
 three Nobel-prize live streams, two features on GLP-1 drugs and an AI
-feature, which the vote takes for politics-desk video. On the seed alone
-(a fresh database's first hours) it drops 12 the old kept, among them an
-ICE policy memo and a new DHS fee; the store's first day of URL-section and
-agency labels brought those back, which is why the seed steps aside only
-once each label has 150 stored articles.
+feature, which the vote takes for politics-desk video.
+
+**The first days after deploy.** On the seed alone (a fresh store) the gate
+drops 11 items the old gate kept on that stream, among them an ICE policy
+memo, a new DHS fee and a Supreme Court preview. So the first run backfills
+the store from the national-feed articles the database already holds with
+their URLs (`backfill_from_history`, the election coverage's stored feed
+items): 443 labelled articles before 2026-10-02, 440 of them relevant.
+With the seed and that backfill as the reference the gate drops 2 of the
+old gate's items (the ICE memo, and a vice-president's remark on an
+execution) and adds 24; the run's own articles, voted on leaving each out,
+change nothing material (3 dropped, 22 added), so they are not used. The
+database holds almost no articles filed under another desk (3), because
+it kept only what the old gate passed; those come with the feeds, 48 in a
+first run's 48-hour window and about 31 a day after it, so both labels
+clear 150 stored articles three to four days after deploy, and the seed
+stays in the reference until then.
+
+Measured and not shipped: keeping an article whose own label is relevant
+whatever its vote. It drops none of the old gate's items and adds 43, among
+them four reports of an ICE officer's shooting in New York the old gate
+also missed, but also a space station landing, a missing flight and a
+celebrity's summons (agencies named in passing).
 
 ## 2026-10-16: the clustering and restatement cuts refit themselves
 
