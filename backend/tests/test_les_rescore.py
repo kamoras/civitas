@@ -2,9 +2,10 @@
 
 from sqlalchemy.orm import sessionmaker
 
-from app.models import PipelineRun, PipelineStatus, Senator, SponsoredBill
+from app.models import PipelineRun, PipelineStatus, ScoreSnapshot, Senator, SponsoredBill
 from app.pipeline.analyze.population_reference import LES_REFERENCE
 from app.pipeline.les_rescore import rescore_stale_legislative_effectiveness
+from app.score_keeping import hold_record
 
 
 def _factory(db_session):
@@ -85,14 +86,14 @@ def test_reference_is_persisted_only_after_the_scores_commit(db_session, pinned_
     _seed(db_session)
     import app.pipeline.analyze.score_calculator as sc
 
-    real, fail = sc._calc_legislative_effectiveness, [True]
+    real, fail = sc._legislative_effectiveness_core, [True]
 
     def flaky(*a, **k):
         if fail[0]:
             raise RuntimeError("scoring failed")
         return real(*a, **k)
 
-    monkeypatch.setattr(sc, "_calc_legislative_effectiveness", flaky)
+    monkeypatch.setattr(sc, "_legislative_effectiveness_core", flaky)
     assert les_rescore.rescore_stale_legislative_effectiveness(_factory(db_session)) == []
     # Still stale, so the next startup retries instead of stranding the scores.
     assert not LES_REFERENCE.load()["senate"].get("stage_totals")
@@ -110,3 +111,17 @@ def test_an_orphaned_run_does_not_block(db_session, pinned_population_references
     db_session.add(PipelineRun(status=PipelineStatus.RUNNING, started_at=utcnow() - timedelta(hours=13)))
     db_session.commit()
     assert rescore_stale_legislative_effectiveness(_factory(db_session)) == ["senate"]
+
+
+def test_a_held_member_is_left_and_the_others_get_a_snapshot(db_session, pinned_population_references):
+    _write_old_scale_reference()
+    _seed(db_session)
+    db_session.get(Senator, "S014").score_held = hold_record(RuntimeError("x"), "2026-10-15", None, None)
+    db_session.commit()
+
+    assert rescore_stale_legislative_effectiveness(_factory(db_session)) == ["senate"]
+    db_session.expire_all()
+    assert db_session.get(Senator, "S014").score_legislative_effectiveness == 50.0
+    snapped = {s.entity_id: s.score_5 for s in db_session.query(ScoreSnapshot)}
+    assert "S014" not in snapped and len(snapped) == 34
+    assert snapped["S022"] == db_session.get(Senator, "S022").score_legislative_effectiveness

@@ -149,6 +149,17 @@ class Senator(Base):
     # Per-dimension data-sufficiency ("high"/"medium"/"low") as JSON —
     # see score_calculator.calculate_confidence.
     score_confidence: Mapped[str] = mapped_column(Text, default="{}")
+    # The breakdown (score_calculator.explain_scores) of the scores above,
+    # as the run that stored them computed it: what "show the math" serves,
+    # so its arithmetic is the stored score's even after the hourly bill
+    # refresh or a later reference moves the inputs. Null for a score stored
+    # before it was kept (the breakdown is then recomputed).
+    score_breakdown: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Set when the latest run could not score the member, so the scores
+    # above are an earlier run's (run_checks.record_member_holds): JSON
+    # {failedOn, source, scoredOn, algorithmVersion}. Cleared when a run
+    # scores the member again.
+    score_held: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     total_raised: Mapped[float] = mapped_column(Float, default=0.0)
     # Contributions + candidate self-loans: the denominator funding shares
@@ -426,6 +437,17 @@ class Representative(Base):
     # Per-dimension data-sufficiency ("high"/"medium"/"low") as JSON —
     # see score_calculator.calculate_confidence.
     score_confidence: Mapped[str] = mapped_column(Text, default="{}")
+    # The breakdown (score_calculator.explain_scores) of the scores above,
+    # as the run that stored them computed it: what "show the math" serves,
+    # so its arithmetic is the stored score's even after the hourly bill
+    # refresh or a later reference moves the inputs. Null for a score stored
+    # before it was kept (the breakdown is then recomputed).
+    score_breakdown: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Set when the latest run could not score the member, so the scores
+    # above are an earlier run's (run_checks.record_member_holds): JSON
+    # {failedOn, source, scoredOn, algorithmVersion}. Cleared when a run
+    # scores the member again.
+    score_held: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     total_raised: Mapped[float] = mapped_column(Float, default=0.0)
     # Contributions + candidate self-loans: the denominator funding shares

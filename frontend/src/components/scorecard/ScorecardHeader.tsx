@@ -12,6 +12,7 @@ import ScoreTrendSection from "@/components/checker/ScoreTrendSection";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import Photo from "@/components/Photo";
+import { HeldScoreNote, ThinDataNote } from "@/components/scorecard/HeldScore";
 
 /**
  * `min-h-6` for WCAG 2.2 SC 2.5.8 (24x24 targets): the links sit in a
@@ -131,7 +132,7 @@ export default function ScorecardHeader({
 
       <div className="flex flex-col gap-2 border-t border-white/[0.12] pt-5 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
         <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-          <MetricTooltip text="The weighted average of the three scores below. 100 means full representation of the constituents by these measures; a score near 50 often means limited data.">
+          <MetricTooltip text="The weighted average of the three scores below. 100 means full representation of the constituents by these measures. 50 is not the middle member: see where this score sits in the chamber just below.">
             Representation Score
           </MetricTooltip>
         </p>
@@ -155,6 +156,8 @@ export default function ScorecardHeader({
             )}
           </div>
         </div>
+        <HeldScoreNote held={member.representationScore.held} />
+        <ThinDataNote dims={member.representationScore.thinData} />
         {glance}
         {standing}
         <ScoreTrendSection entityId={member.id} entityType={chamber} />

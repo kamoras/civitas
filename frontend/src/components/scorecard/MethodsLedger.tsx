@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import type { Senator } from "@/types/senator";
-import type { ScoreBreakdownComponent, RepresentationScoreBreakdown } from "@/types/scoreBreakdown";
+import type { RepresentationScoreBreakdown, ScoreBreakdownDimension } from "@/types/scoreBreakdown";
 import type { RefId } from "@/components/about/references";
 import { Cite } from "@/components/about/AboutPage";
 import CiteThis from "@/components/shared/CiteThis";
@@ -69,7 +69,14 @@ const GRADE_TEXT = {
 const TH =
   "py-2 pr-3 text-left font-mono text-xs font-normal uppercase tracking-[0.12em] text-ink-min";
 
-function Components({ components, name }: { components: ScoreBreakdownComponent[]; name: string }) {
+/** A signed number as the ledger prints it: one decimal, a true minus sign. */
+function signed(n: number): string {
+  return `${n < 0 ? "\u2212" : "+"}${Math.abs(n).toFixed(1)}`;
+}
+
+function Components({ dim, name }: { dim: ScoreBreakdownDimension; name: string }) {
+  const components = dim.components;
+  const hasPoints = components.some((c) => c.combines === "points" && c.points != null);
   // Focusable, so a keyboard can scroll a table wider than a phone.
   return (
     <div
@@ -85,7 +92,7 @@ function Components({ components, name }: { components: ScoreBreakdownComponent[
             <th scope="col" className={`${TH} w-[11rem]`}>
               Component
             </th>
-            <th scope="col" className={`${TH} w-[4.5rem] text-right`}>
+            <th scope="col" className={`${TH} w-[5.5rem] text-right`}>
               Weight
             </th>
             <th scope="col" className={`${TH} w-[4rem] text-right`}>
@@ -103,7 +110,22 @@ function Components({ components, name }: { components: ScoreBreakdownComponent[
                 {c.label}
               </th>
               <td className="py-2 pr-3 text-right font-mono tabular-nums text-ink-lo">
-                {c.weight != null ? `${Math.round(c.weight * 100)}%` : "—"}
+                {c.combines === "points" ? (
+                  c.points != null ? (
+                    <>
+                      {signed(c.points)} pts
+                      <span className="sr-only">
+                        , {Math.round((c.weight ?? 0) * 100)}% of the score&apos;s distance from 50
+                      </span>
+                    </>
+                  ) : (
+                    "\u00b1 pts"
+                  )
+                ) : c.weight != null ? (
+                  `${Math.round(c.weight * 100)}%`
+                ) : (
+                  "\u2014"
+                )}
               </td>
               <td className="py-2 pr-3 text-right font-mono tabular-nums text-ink-hi">
                 {c.score != null ? Math.round(c.score) : "n/a"}
@@ -112,9 +134,66 @@ function Components({ components, name }: { components: ScoreBreakdownComponent[
             </tr>
           ))}
         </tbody>
+        {dim.sum != null && (
+          <tfoot>
+            <tr className="align-top">
+              <th scope="row" className="py-2 pr-3 text-left font-normal text-ink">
+                Total
+              </th>
+              <td />
+              <td className="py-2 pr-3 text-right font-mono tabular-nums text-ink-hi">
+                {dim.score}
+              </td>
+              <td className="py-2 leading-relaxed text-ink-lo">
+                {hasPoints
+                  ? "The weighted average of the parts given in percent, plus the points shown: "
+                  : "The weighted average of the parts: "}
+                <span className="font-mono text-ink">
+                  {dim.sum < 0 ? `\u2212${Math.abs(dim.sum).toFixed(1)}` : dim.sum.toFixed(1)}
+                </span>
+                {dim.clamped
+                  ? `. Scores run from 0 to 100, so it is held at ${dim.score}.`
+                  : `, shown rounded as ${dim.score}.`}
+              </td>
+            </tr>
+          </tfoot>
+        )}
       </table>
     </div>
   );
+}
+
+/** Why the arithmetic above might not be the last word: today's records
+ *  would score the part differently (they changed after the run), or the
+ *  parts were recomputed for a score stored before they were kept. */
+function SinceScoredNote({ dim, shown }: { dim: ScoreBreakdownDimension; shown: number | null }) {
+  const since = dim.sinceScored;
+  if (since) {
+    const when = since.scoredAt ? since.scoredAt.replace("T", " ").replace("Z", " UTC") : null;
+    const what =
+      since.billsChanged != null && since.billsChanged > 0
+        ? `${since.billsChanged} ${since.billsChanged === 1 ? "bill" : "bills"} changed`
+        : "Records changed";
+    return (
+      <p className="border-l-2 border-signal-amber/60 pl-3 text-sm leading-relaxed text-ink-lo">
+        <span className="font-mono text-xs uppercase tracking-[0.12em] text-signal-amber">
+          Updated since this score
+        </span>{" "}
+        {what} after {when ? `the run of ${when}` : "the run"}. On today&apos;s records this part
+        would be {since.score}; the next nightly run includes them.
+      </p>
+    );
+  }
+  if (dim.basis === "recomputed" && shown != null && Math.round(dim.score) !== shown) {
+    return (
+      <p className="border-l-2 border-signal-amber/60 pl-3 text-sm leading-relaxed text-ink-lo">
+        These parts are worked out from today&apos;s records and give {dim.score}: the score shown
+        was stored before Civitas kept each run&apos;s own arithmetic. The next nightly run stores
+        both together.
+      </p>
+    );
+  }
+  return null;
 }
 
 /** The seat lean the score read (Cook's PVI) and, for a House seat,
@@ -233,7 +312,10 @@ export default function MethodsLedger({
           Each score is a deterministic formula over public records, with no model judging the
           member. &ldquo;Data behind it&rdquo; grades how much data the score rests on (high, medium
           or low, by fixed counts of votes, bills and donors): it is not a confidence interval, and
-          none is computed. A score with little data behind it is pulled toward 50.{" "}
+          none is computed. Where a part rests on little data, its method pulls it toward a middle
+          value, 50 or the party&apos;s typical score, and says which. Parts given in percent are
+          averaged by weight; a part given in points adds or takes that many points. Each total
+          shows the sum before rounding.{" "}
           <Link href="/about/scores" className="text-signal-cyan underline underline-offset-2">
             The full method
           </Link>
@@ -273,9 +355,14 @@ export default function MethodsLedger({
                 </p>
               </div>
               {dim?.components?.length ? (
-                <Components components={dim.components} name={m.name} />
+                <>
+                  <Components dim={dim} name={m.name} />
+                  <SinceScoredNote dim={dim} shown={shown} />
+                </>
               ) : (
-                <p className="text-sm text-ink-lo">No breakdown is available for this score.</p>
+                <p className="text-sm text-ink-lo">
+                  {dim?.note ?? "No breakdown is available for this score."}
+                </p>
               )}
               <dl className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[7rem_minmax(0,1fr)]">
                 <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
