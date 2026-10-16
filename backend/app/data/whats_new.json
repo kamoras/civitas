@@ -2,6 +2,27 @@
   "_contract": "One entry per user-facing feature, newest first; writing it is part of shipping the feature (AGENTS.md, 'What gets posted'). The same entry is the /changelog 'New on the site' list, the What's new feed and a Bluesky post (app/whats_new.py). id: a stable slug, never reused (it is the post's subject, so changing it posts again). date: the UTC day the feature reached main (git log --date=format-local:%Y-%m-%d with TZ=UTC). title: a name, no trailing period. summary: one plain sentence that stays true: no named politicians, no pronouns, no em dashes, no emoji, no year or Congress number. url: the page's path on the site. tests/test_whats_new.py checks each entry and that the post fits.",
   "entries": [
     {
+      "id": "site-navigation",
+      "date": "2026-10-16",
+      "title": "Every section, one menu",
+      "summary": "The main menu, the footer and each section's tabs now list every section and page the same way, with a live figure beside each section.",
+      "url": "/"
+    },
+    {
+      "id": "election-archive",
+      "date": "2026-10-16",
+      "title": "Election archive",
+      "summary": "Each general election stays on the site once held: its ballot, the candidates as printed, each race's count as the state reported it, and the measures, quoted.",
+      "url": "/elections/archive"
+    },
+    {
+      "id": "nominations",
+      "date": "2026-10-16",
+      "title": "Presidential nominations",
+      "summary": "Every presidential nomination sent to the Senate, with its status, how long confirmation took and the roll calls that name it.",
+      "url": "/congress/nominations"
+    },
+    {
       "id": "election-map",
       "date": "2026-10-16",
       "title": "Election map",
