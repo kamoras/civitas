@@ -6,9 +6,11 @@ from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import numpy as np
 import pytest
 
 from app import calibration_drift as cd
+from app.pipeline.analyze import trend_relevance
 
 
 @pytest.fixture
@@ -99,10 +101,6 @@ def test_every_gate_names_a_calibration_file_that_exists():
 
 def test_the_gates_report_what_they_decide(monkeypatch):
     """The instrumented gates count every decision they make."""
-    import numpy as np
-
-    from app.pipeline.analyze import trend_relevance
-
     seen = []
     monkeypatch.setattr(cd, "observe", lambda gate, scores, threshold: seen.append((gate, list(scores), threshold)))
     monkeypatch.setattr(trend_relevance, "relevance_votes", lambda *a: np.array([0.2, 0.9]))

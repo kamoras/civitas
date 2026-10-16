@@ -25,6 +25,7 @@ from app.pipeline.analyze.action_center import get_action_refresh_state, refresh
 from app.pipeline.congress_activity import congress_sync_age, eastern_today, is_congress_sync_running, run_congress_sync
 from app.pipeline.analyze.congress_bluesky import post_congress_lookahead, post_daily_congress, post_weekly_congress
 from app.time_utils import utcnow
+from app import calibration_drift
 from app.background import WritesHeld, start_writer
 from app.broadcast import deliver_pending, refresh_engagement
 from app.pipeline.analyze.trend_poster import run_trend_posts
@@ -256,7 +257,6 @@ def _nightly_pipeline() -> None:
         resolve_ops_alert,
         send_ops_alert,
     )
-    from app import calibration_drift
     from app.pipeline_chain import run_chain
 
     def _run():
@@ -363,7 +363,6 @@ def _hourly_action_refresh() -> None:
             logger.exception("Action center refresh failed")
         _post_trends()
         # The calibrated gates' decisions this hour (calibration_drift).
-        from app import calibration_drift
         calibration_drift.flush()
 
     _start_job(_run, name="action-refresh")
