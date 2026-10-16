@@ -258,3 +258,47 @@ def test_judge_never_commits_the_refreshs_pending_work(db_session, fake_embed, f
     db_session.rollback()
     assert db_session.query(Senator).filter_by(id="pending-two").count() == 0
     assert db_session.query(FeedArticle).count() == 0
+
+
+def _coverage(db, url, title, source, published=datetime(2028, 2, 20)):
+    from app.models import Race, RaceCoverageItem
+
+    if db.get(Race, "ZZ-S-2028") is None:
+        db.add(Race(id="ZZ-S-2028", cycle_year=2028, office="S", state="ZZ", district=None))
+        db.flush()
+    db.add(RaceCoverageItem(race_id="ZZ-S-2028", source_type="news", source_name=source, title=title, url=url,
+                            summary="", published_at=published))
+
+
+def test_a_first_run_backfills_the_store_from_stored_articles(db_session, fake_embed, freeze_utcnow):
+    """An empty store is filled from the national-feed articles the database
+    already holds, labelled by the same rules, before the first vote."""
+    freeze_utcnow(datetime(2028, 3, 1, 12))
+    politico = next(f["name"] for f in news_feeds.NEWS_FEEDS if f.get("scope") == POLITICS_SCOPE
+                    and sum(g["name"] == f["name"] for g in news_feeds.NEWS_FEEDS) == 1)
+    world = next(f["name"] for f in news_feeds.NEWS_FEEDS if f.get("scope") == OTHER_SCOPE
+                 and sum(g["name"] == f["name"] for g in news_feeds.NEWS_FEEDS) == 1)
+    _coverage(db_session, "https://example.org/h1", "Senate committee advances bill", politico)
+    _coverage(db_session, "https://example.org/h2", "Cup final ends level", world)
+    _coverage(db_session, "https://example.org/h3", "A state outlet's story", "Example State Outlet")
+    _coverage(db_session, "https://example.org/old", "Senate old story", politico,
+              published=datetime(2028, 3, 1) - timedelta(days=pr.REFERENCE_DAYS + 1))
+    db_session.commit()
+
+    pr.judge(db_session, [_article("Senate passes a budget", "https://example.org/p1", POLITICS_FEED)])
+
+    rows = {r.url: r for r in db_session.query(FeedArticle)}
+    assert rows["https://example.org/h1"].label == 1 and rows["https://example.org/h2"].label == 0
+    assert "https://example.org/h3" not in rows and "https://example.org/old" not in rows  # not a national feed; too old
+    assert rows["https://example.org/h1"].vote is None and rows["https://example.org/h1"].kept is False
+    assert rows["https://example.org/h1"].seen_at == datetime(2028, 2, 20)  # ages out on its own date
+
+
+def test_the_backfill_runs_only_on_an_empty_store(db_session, fake_embed, freeze_utcnow):
+    freeze_utcnow(datetime(2028, 3, 1, 12))
+    pr.judge(db_session, [_article("Senate passes a budget", "https://example.org/p1", POLITICS_FEED)])
+    _coverage(db_session, "https://example.org/late", "Senate later story",
+              next(f["name"] for f in news_feeds.NEWS_FEEDS if f.get("scope") == POLITICS_SCOPE))
+    db_session.commit()
+    assert pr.backfill_from_history(db_session, pr.OfficialNames([])) == 0
+    assert db_session.query(FeedArticle).filter_by(url="https://example.org/late").count() == 0

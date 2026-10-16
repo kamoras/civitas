@@ -34,6 +34,16 @@ is, not who is in it, and the masked and unmasked texts of one story sit far
 apart (until 2026-10-16 the reference was masked and the judged text was
 not).
 
+On its first run (an empty store) the gate backfills the store from the
+national-feed articles the database already holds with their URLs
+(backfill_from_history: the election coverage's race_coverage_items, read
+from the same feeds), labelled the same way. On 2026-10-16 that was 443
+labelled articles, 440 of them relevant: the database keeps what the old
+gate let through and the races matched, so it holds almost no articles
+filed under another desk. Those arrive with the feeds themselves, about 30
+a day (48 in a first run's 48-hour window), so the store clears
+MIN_CLASS_ROWS of both labels three to four days after deploy.
+
 Until the store holds MIN_CLASS_ROWS of each label, the seed — the texts of
 app/data/policy_relevance_examples.json, labelled the same way from their
 outlet and masked names, never from the hand labels they once carried —
@@ -52,15 +62,15 @@ import logging
 import pathlib
 import re
 from collections.abc import Iterable, Sequence
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import numpy as np
 from sqlalchemy.orm import Session
 
-from app.models import Agency, FeedArticle, Justice, President, Representative, Senator
+from app.models import Agency, FeedArticle, Justice, President, RaceCoverageItem, Representative, Senator
 from app.pipeline import vector_store
 from app.pipeline.cache import api_cache_get, api_cache_set
-from app.pipeline.fetch.news_feeds import OTHER_SCOPE, POLITICS_SCOPE, NewsArticle, publisher_scope
+from app.pipeline.fetch.news_feeds import NEWS_FEEDS, OTHER_SCOPE, POLITICS_SCOPE, NewsArticle, publisher_scope
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -317,6 +327,43 @@ def calibration(db: Session, vectors: np.ndarray, labels: np.ndarray, seeded: in
     return fitted
 
 
+def _feed_url_for(source_name: str) -> str:
+    """The NEWS_FEEDS url of a source with exactly one feed, else "" (NPR's
+    two desks share a name, so a stored NPR article's desk is unknown)."""
+    urls = [f["url"] for f in NEWS_FEEDS if f["name"] == source_name]
+    return urls[0] if len(urls) == 1 else ""
+
+
+def backfill_from_history(db: Session, names: OfficialNames) -> int:
+    """Fill an empty store from the national-feed articles the database
+    already holds (module docstring), inside a savepoint (the caller
+    commits). Returns how many were stored; a store that already has rows
+    is left alone."""
+    if db.query(FeedArticle.id).first() is not None:
+        return 0
+    sources = {f["name"] for f in NEWS_FEEDS}
+    rows = (db.query(RaceCoverageItem.url, RaceCoverageItem.title, RaceCoverageItem.summary,
+                     RaceCoverageItem.source_name, RaceCoverageItem.published_at, RaceCoverageItem.fetched_at)
+            .filter(RaceCoverageItem.source_name.in_(sources)).all())
+    since = utcnow() - timedelta(days=REFERENCE_DAYS)
+    articles, seen = [], {}
+    for r in rows:
+        when = r.published_at or r.fetched_at
+        if not r.url or r.url in seen or (when and when < since):
+            continue
+        a = NewsArticle(title=r.title or "", url=r.url, source_name=r.source_name, summary=r.summary or "",
+                        published=when, feed_url=_feed_url_for(r.source_name))
+        seen[r.url] = when
+        articles.append(a)
+    if not articles:
+        return 0
+    masked = [names.mask(gate_text(a)) for a in articles]
+    vectors = embed([m for m, _ in masked])
+    _store(db, articles, masked, vectors, None, None, seen_at={a.url: seen[a.url] for a in articles})
+    logger.info("Relevance store backfilled with %d stored national-feed articles", len(articles))
+    return len(articles)
+
+
 def judge(db: Session, articles: Sequence[NewsArticle]) -> tuple[list[tuple[NewsArticle, np.ndarray, float]], dict]:
     """((article, embedding, vote) for the articles the gate keeps, in input
     order; the fit it used). Every judged article is stored with its
@@ -324,6 +371,10 @@ def judge(db: Session, articles: Sequence[NewsArticle]) -> tuple[list[tuple[News
     if not articles:
         return [], {}
     names = OfficialNames.from_db(db)
+    try:
+        backfill_from_history(db, names)
+    except Exception:
+        logger.warning("Relevance store backfill failed; the seed covers the gap", exc_info=True)
     masked = [names.mask(gate_text(a)) for a in articles]
     vectors = embed([m for m, _ in masked])
     reference_vectors, reference_labels, seeded = reference(db, exclude_urls=[a.url for a in articles])
@@ -335,7 +386,8 @@ def judge(db: Session, articles: Sequence[NewsArticle]) -> tuple[list[tuple[News
 
 
 def _store(db: Session, articles: Sequence[NewsArticle], masked: Sequence[tuple[str, bool]],
-           vectors: np.ndarray, votes: np.ndarray, threshold: float) -> None:
+           vectors: np.ndarray, votes: np.ndarray | None, threshold: float | None,
+           seen_at: dict[str, datetime] | None = None) -> None:
     """Upsert each judged article by URL and prune past REFERENCE_DAYS,
     inside a savepoint of the caller's session: a failure here rolls back
     only these rows, never the refresh's own pending work, and costs the
@@ -346,11 +398,12 @@ def _store(db: Session, articles: Sequence[NewsArticle], masked: Sequence[tuple[
         with db.begin_nested():
             existing = {r.url: r for r in
                         db.query(FeedArticle).filter(FeedArticle.url.in_([a.url for a in articles]))}
-            for a, (text, named), vector, vote in zip(articles, masked, vectors, votes):
+            for i, (a, (text, named), vector) in enumerate(zip(articles, masked, vectors)):
+                vote = None if votes is None else float(votes[i])
                 scope = publisher_scope(a)
                 row = existing.get(a.url)
                 if row is None:
-                    row = FeedArticle(url=a.url, seen_at=now)
+                    row = FeedArticle(url=a.url, seen_at=(seen_at or {}).get(a.url) or now)
                     db.add(row)
                     existing[a.url] = row
                 row.source_name = a.source_name
@@ -360,8 +413,8 @@ def _store(db: Session, articles: Sequence[NewsArticle], masked: Sequence[tuple[
                 row.text = text
                 row.names_official = named
                 row.label = publisher_label(scope, named)
-                row.vote = float(vote)
-                row.kept = bool(vote >= threshold)
+                row.vote = vote
+                row.kept = vote is not None and vote >= threshold
                 row.embedding = np.asarray(vector, dtype=np.float32).tobytes()
                 row.model = model
                 row.published = a.published.replace(tzinfo=None) if a.published else None
