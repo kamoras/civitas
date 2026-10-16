@@ -70,6 +70,18 @@ describe("sitemap", () => {
     expect(urls.some(([u]) => u === "/agencies")).toBe(true);
   });
 
+  it("lists the elections archive and each archived election", async () => {
+    backend({
+      "/api/sitemap": { ...INDEX, electionArchives: [{ id: "2026", lastmod: "2026-11-20" }] },
+    });
+    const urls = (await sitemap()).map((e) => [
+      e.url.replace(/^https:\/\/[^/]+/, ""),
+      e.lastModified,
+    ]);
+    expect(urls).toContainEqual(["/elections/2026", "2026-11-20"]);
+    expect(urls.some(([u]) => u === "/elections/archive")).toBe(true);
+  });
+
   it("still serves a backend image that predates congressDays", async () => {
     backend({ "/api/sitemap": INDEX });
     const urls = (await sitemap()).map((e) => e.url);

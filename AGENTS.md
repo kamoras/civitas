@@ -65,6 +65,7 @@ locally on a single self-hosted device with zero cloud AI calls.
 - **Branches covered**: Senate (100 senators), House (435 representatives), Presidents (historical + modern), Supreme Court (9 justices)
 - **News Feeds**: RSS parsing (NPR, PBS, BBC, The Hill, Politico, Roll Call) + Google Trends + Bluesky trending for Action Center; 41 per-state newsrooms for election races
 - **Action Center**: Three tabs — Today (the day's issues, what a reader can do about each, open comment periods), Ongoing (national monitors: auto-detected ongoing concerns, and those closed in the last 60 days), Archive (year-in-review timeline). Elections live on `/elections`, find-your-members on `/politicians`
+- **Nominations**: every presidential nomination this Congress from Congress.gov (daily, `fetch/nominations.py`), with status, committee, hearings, time to confirm and each roll call that names it (`/congress/nominations`)
 - **Elections**: State index → per-state ballot page (federal contests + statewide ballot measures, quoted verbatim) → race/candidate detail with FEC financials
 
 All services, models, and data run on-device. No data leaves the server.
@@ -220,7 +221,7 @@ the residual.
 | 1 | FEC structured metadata / SEC SIC / learning store | Unambiguous entity types, a PAC's industry where its registration or its sponsor's SEC record states it (`fec.structured_industry`), previously classified entities |
 | 2 | Sentence-transformer cosine similarity | Whether a claim's actor span the capitalised-actor rule refuses is a party that can act (`post_composer.ACTOR_PROTOTYPES`, threshold refit daily on data-supplied non-actors), industry, donor type, bill policy, party alignment, stance direction, procedural detection, commemorative detection, skip entity detection, employer filtering, memo transfer detection, category normalization, whether two Action Center claims restate one fact (calibrated on labelled pairs, `claim_restatement_*.json`) |
 | 2b | SVD / PageRank on cosponsorship matrix | Ideology scoring (Tauberer 2012), legislative leadership (Brin & Page 1998) |
-| 3 | k-Nearest Neighbor in embedding space | Remaining unclassified donors and bills; Action Center relevance and committee routing (against hand-labelled issues, blended with tier-2 jurisdiction prototypes for routing) |
+| 3 | k-Nearest Neighbor in embedding space | Remaining unclassified donors and bills; Action Center relevance (against stored feed articles labelled by their publishers' own filing and by the officials and agencies they name, refit daily: `app/policy_relevance.py`); committee routing (against hand-labelled issues, blended with tier-2 jurisdiction prototypes) |
 | 4 | LLM (LFM2.5-1.2B-Instruct) | Natural-language text only — Action Center claims, monitor titles and period summaries, race-post spans, Explore document summaries (full list in the bullet above) |
 
 When FEC metadata is ambiguous (e.g., entity_type "COM" could be a corporate
@@ -1336,14 +1337,19 @@ Trends tab's comparison.
 
 In addition to the main pipeline, the **Action Center pipeline** runs hourly to
 surface trending civic issues. It fetches RSS feeds from low-bias news sources,
-filters articles for U.S. policy relevance by a kNN vote against hand-labelled
-feed articles (`relevance_votes`; `docs/research/action-center-relevance.md`),
+filters articles for U.S. policy relevance by a kNN vote against the feed
+articles it has already judged, each labelled by its publisher's own filing
+(a politics feed or desk, a world feed or desk) and by whether it names a
+sitting official or a federal agency, with k and the threshold refit once a
+day and nothing labelled by hand (`app/policy_relevance.py`, stored in
+`feed_articles`; `docs/research/action-center-relevance.md`),
 clusters articles reporting the same event (complete linkage on headline plus
-description start, cut where no hand-judged different-event pair merges:
-`app/data/cluster_pair_judgments.json`, `scripts/calibrate_cluster_pairs.py`;
-a missed merge costs a story a source, a wrong one publishes a chimera, so
-the cut is precision-first and is never refitted from the pipeline's own
-label of shared names), incorporates trending topics from Google Trends and Bluesky,
+description start; two articles whose own text dates the event days apart
+are never joined; the cut is refit once a day as the lowest no stored pair
+of articles about one actor on stated days apart reaches, plus a stated
+margin, `action_center.refit_cuts`, `CUT_MARGIN`; a missed merge costs a
+story a source, a wrong one publishes a chimera, so the cut is
+precision-first and is never refitted from a label of shared names alone), incorporates trending topics from Google Trends and Bluesky,
 and uses the LLM only to *locate* attributable claims in the articles: the
 summary and facts are the sources' own words, checked verbatim
 (`post_composer.py`), and the recommended actions are built from real bill and
@@ -1495,8 +1501,8 @@ precision. `articles_dropped_digest` is the counter to watch.
 Each published issue records its **principal actor** (`ActionIssue.principal_actor`,
 `pipeline/analyze/story_actor.py`). That is the official named earliest in the
 headline, as `_find_related_officials` matched them. When the headline names
-none, it is a class from a kNN vote over the relevance gate's labelled
-examples, whose categories say who acts. The admin's Action Center tab charts
+none, it is a class from a kNN vote over the relevance seed's examples
+(`policy_relevance_examples.json`), whose categories say who acts. The admin's Action Center tab charts
 the weekly Herfindahl index of those actors, the president's share and the
 share with no government actor (`GET /api/admin/actor-concentration`).
 This is measurement, not selection. On 2026-10-12, a replay of every run since
@@ -1681,6 +1687,17 @@ wrong number on election night is worse than none:
   winning on any surface, no seat tally by party, and it is withdrawn the
   moment `active_election()` leaves the campaign phase, so no estimate ever
   sits beside a live count.
+- The held election is archived before the site moves on
+  (`app/election_archive.py`, `ElectionArchive`, kept by every reset through
+  `RESET_KEEPS`): from election day each live-results pass copies the map's
+  file once (the campaign's last build: the build stops on election day) and
+  the ballot (federal, statewide, legislative and judicial contests), counts
+  and statewide measures on every pass until the
+  window closes; nothing rewrites it after, and a pass that finds no races
+  never replaces a record. `/elections/{cycle}` serves it, and an old
+  `/elections/{raceId}` link goes there once the site's election is a later
+  one (`race_detail`'s `archiveCycle`). The same §7 rules hold there:
+  quoted, and no race called.
 - A data reset inside the results window keeps the held election's ballot and
   count (`database.RESET_KEEPS_WHILE_RESULTS`) and the coverage markers its
   pages read beside them (statewide, judicial and ballot-basis `api_cache`
@@ -2047,6 +2064,7 @@ the pending list).
 | Election phase (campaign / election day / results) + results grace period | `backend/app/election_phase.py` |
 | Senate and House map: usual vote and poll ranges (pre-election; separate from scoring) | `backend/app/forecast/` (`model.py`, `polls.py`, `training_polls.py`, `build.py`), `backend/scripts/fit_forecast_model.py`, `backend/scripts/fetch_silver_bulletin_polls.py`, `backend/scripts/build_house_lean_history.py`, `app/data/forecast_model.json`, `forecast_house_model.json`, `forecast_house_lean.json`, `backend/app/api/election_map.py`, `frontend/src/components/elections/map/`, `frontend/src/lib/electionMap.ts` |
 | Live election-night results (vendor readers, sync, trust gates, events) | `backend/app/pipeline/fetch/election_results.py`, `backend/app/live_results/sync.py`, `fetch/poll_close.py`, each vendor's `fetch_general_results` |
+| Archive of each held election (frozen pre-election map, ballot, counts, measures) | `backend/app/election_archive.py`, `backend/app/api/election_archive.py`, `frontend/src/app/elections/[raceId]/page.tsx` (a year is an archive, anything else an old race link), `frontend/src/app/elections/archive/page.tsx`, `frontend/src/components/elections/archive/CycleArchive.tsx` |
 | Seat-flip DEVELOPING issues + election-night posts (feed, then Bluesky) | `backend/app/live_results/signals.py`, `live_results/bluesky.py` |
 | Results UI (map colouring, live updates, state results) | `frontend/src/lib/results.ts`, `frontend/src/hooks/useLiveResults.ts`, `frontend/src/components/elections/results/` |
 | Confirmed candidates — who is really on the November ballot, per state | `backend/app/pipeline/fetch/state_candidates.py` (`STRATEGIES` dispatch) + `backend/app/data/state_candidate_sources.json` (every URL/threshold; its `_contract` key documents the config shape). Adapters are per VENDOR, not per state — adding a state already on a supported vendor is a JSON entry, never new code, and no adapter branches on a state's name. Shared office/party/surname/winner parsing lives in `state_candidates_common.py`; that is what stops per-vendor decaying into per-state. |
@@ -2057,6 +2075,7 @@ the pending list).
 | Public API v1 + its MCP server (spec generated from the routes, rendered at `/developers`) | `backend/app/api/public.py`, `backend/app/api/public_mcp.py`, `app/schemas.py` ("Public API v1"), `tests/test_public_api_contract.py`, `frontend/src/app/developers/page.tsx`, `frontend/src/lib/openapi.ts` |
 | Votes with the president's stated positions (OMB SAPs, matching, per-member rate, expected rate by seat; informational, not scored) | `backend/app/pipeline/fetch/omb_statements.py`, `analyze/sap_position.py`, `analyze/presidential_support.py`, `services/presidential_support_service.py`, `frontend/src/components/presidentialSupport/`, `frontend/src/app/congress/president/` |
 | Federal agencies: weekly Register list + USAspending budgets, name crosswalk, agency pages | `backend/app/pipeline/fetch/agencies.py`, `backend/app/api/agencies.py`, `backend/scripts/calibrate_agency_crosswalk.py` (`app/data/agency_crosswalk.json`), `frontend/src/app/agencies/` |
+| Presidential nominations (daily Congress.gov sync, FJC join, list/stats/detail, roll-call links) | `backend/app/pipeline/fetch/nominations.py`, `backend/app/services/nomination_service.py`, `services/nomination_links.py`, `backend/app/api/nominations.py`, `frontend/src/app/congress/nominations/` |
 | Explore hybrid search ranking (RRF fusion, priors, dedup, diversity) | `backend/app/services/explore_search.py` |
 | Explore keyword index (FTS5 + BM25F) | `backend/app/pipeline/lexical_index.py` |
 | Document citation graph + PageRank authority | `backend/app/pipeline/analyze/document_authority.py` |
@@ -2093,6 +2112,7 @@ the pending list).
 | Detail pages' two layers: chamber strip, scorecard in short, methods ledger, bill stage ladder and sources, "cite this" | `frontend/src/components/scorecard/ChamberStrip.tsx`, `AtAGlance.tsx`, `MethodsLedger.tsx`, `frontend/src/components/congress/StageLadder.tsx`, `BillSources.tsx`, `frontend/src/components/shared/CiteThis.tsx`; data from `api/politicians.py` (`_chamber_field`, `_scored_on`) and `bill_service.stage_milestones` |
 | Action Center issue parts (shared with `/issue/[id]`: meta, tags, "What you can do", coverage, sources) | `frontend/src/components/action/IssueEnrichment.tsx` |
 | Leaderboard spread strip, ties and thin-data marks | `backend/app/api/leaderboard.py`, `backend/app/score_display.py` (`score_spread`, `thin_dimensions`), `frontend/src/components/leaderboard/ScoreSpreadStrip.tsx` |
+| Site navigation: sections, main menu, footer, section tabs, hub cards and the homepage "Sections" band | `frontend/src/lib/routes.ts` (`SECTIONS`), `frontend/src/components/layout/Navbar.tsx`, `Footer.tsx`, `SectionTabs.tsx`, `frontend/src/components/sections/SectionCards.tsx`, `frontend/src/components/home/SectionsBand.tsx`, `frontend/src/lib/sectionPreviews.ts`, `backend/app/api/sections.py` |
 
 | Homepage (masthead, on-the-record entries, record index, sources panel) | `frontend/src/components/home/Masthead.tsx`, `OnTheRecord.tsx` (from `backend/app/api/notable.py`), `RecordIndex.tsx`, `Holdings.tsx` |
 
@@ -2273,6 +2293,15 @@ the pending list).
   own with `shareMetaAttrs`), and the captured image carries the source
   line, the as-of date and the score scale under the picture, since a
   picture travels without its page.
+- **A new page goes in `SECTIONS`** (`src/lib/routes.ts`): that one table is
+  the main navigation (a disclosure button per section on desktop, two
+  levels on a phone), the footer, each section's tab bar, its hub's cards and
+  the homepage's "Sections" band, so a page that isn't in it is reachable
+  only by an inline link. `routes.test.ts` fails on a page route in no
+  section (records with a `[segment]`, the footer's own pages and the admin
+  aside). A page with a live figure gets it from `GET /api/sections`
+  (`app/api/sections.py`), worded in `lib/sectionPreviews.ts`; a figure not
+  read yet says so, never a bare zero.
 - Tabbed UIs follow the WAI-ARIA tabs pattern with a roving `tabindex`.
   Activating a tab must focus **the incoming tab**, not its panel — the
   Arrow/Home/End handler lives on the `role="tablist"` container, so moving

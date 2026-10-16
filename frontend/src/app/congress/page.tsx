@@ -11,6 +11,7 @@ import DayReportView from "@/components/congress/DayReportView";
 import PeriodReportView from "@/components/congress/PeriodReportView";
 import ThisWeekStrip from "@/components/shared/ThisWeekStrip";
 import SectionTabs from "@/components/layout/SectionTabs";
+import SectionCards from "@/components/sections/SectionCards";
 
 export const metadata = pageMetadata({
   title: "What Happened in Congress Today",
@@ -37,6 +38,7 @@ export default async function CongressPage() {
         report={week}
         kind="week"
         strip={<ThisWeekStrip variant="compact" pageDate={report.date} />}
+        hub={<SectionCards section="congress" current="reports" className="mt-6 mb-8" />}
         lead={{
           title: report.recess.headline,
           body: (
@@ -60,6 +62,7 @@ export default async function CongressPage() {
       <DayReportView
         report={report}
         strip={<ThisWeekStrip variant="compact" pageDate={report.date} />}
+        hub={<SectionCards section="congress" current="reports" className="mt-6 mb-8" />}
       />
     );
   return (
@@ -81,6 +84,7 @@ export default async function CongressPage() {
             </p>
             <FollowFeed className="mt-2" subject="Congress" feed={TOPIC_FEEDS.congress} />
           </PageMasthead>
+          <SectionCards section="congress" current="reports" />
         </div>
       </main>
       <Footer />

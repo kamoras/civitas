@@ -81,9 +81,11 @@ export default function AccessibilityPage() {
                 <Item label="Keyboard">
                   Everything works from the keyboard. A skip link at the top of each page jumps past
                   the navigation. In a set of tabs, the arrow keys, Home and End move between tabs
-                  and Tab moves into the content. The mobile menu and the scorecard and ballot
-                  drawers keep focus inside while open, close on Escape, and return focus to what
-                  opened them.
+                  and Tab moves into the content. In the main navigation, the button beside each
+                  section lists its pages as plain links; Escape closes the list and returns focus
+                  to the button, and moving focus away closes it too. The mobile menu and the
+                  scorecard and ballot drawers keep focus inside while open, close on Escape, and
+                  return focus to what opened them.
                 </Item>
                 <Item label="Focus">
                   The element with keyboard focus always shows a 2px cyan outline.

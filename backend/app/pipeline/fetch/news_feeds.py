@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from html import unescape
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 from xml.etree.ElementTree import Element
@@ -128,6 +129,10 @@ class NewsArticle:
     # Photographer/wire-service credit, shown alongside the image. Empty
     # string when the source didn't supply one.
     image_credit: str = ""
+    # The configured feed (NEWS_FEEDS "url") the item was read from: two
+    # feeds share a source name (NPR's politics and world desks), and which
+    # desk published an item is what publisher_scope reads.
+    feed_url: str = ""
 
 
 # Title prefixes for known multi-story digest segments — one feed item
@@ -171,7 +176,18 @@ def _is_multi_topic_digest(title: str) -> bool:
 # "timezone": Roll Call writes "2026-10-09 17:12:54" for an article its own
 # page dates 2026-10-09T17:12:54-04:00. Unreadable, those dates exempted every
 # Roll Call item from MAX_ARTICLE_AGE_HOURS.
-NEWS_FEEDS: list[dict[str, str]] = [
+#
+# "scope" and "sections" are the publisher's own filing of an item, read
+# by publisher_scope for the relevance gate's labels (policy_relevance.py):
+# which desk's feed carried it ("politics": NPR's politics feed, Politico's
+# Congress feed, Roll Call; "world": NPR's world feed, BBC World), or, for a
+# feed that mixes desks, the desk its URL is filed under ("sections": path
+# prefix -> scope). Only desks whose whole remit is one side are mapped;
+# everything else (PBS's nation, health and science desks, The Hill's video
+# clips) is left unfiled, and an unfiled item is not a label either way.
+# This is the outlet's taxonomy copied as it publishes it, a data-format
+# convention like an FEC form value, not a reading of the article.
+NEWS_FEEDS: list[dict] = [
     # Both NPR feeds share ONE source name (2026-07 fix): source-name
     # counts drive the action center's coverage-breadth ranking signal and
     # the National Monitor unique-source promotion bar, and two feeds from
@@ -181,33 +197,58 @@ NEWS_FEEDS: list[dict[str, str]] = [
     {
         "name": "NPR",
         "url": "https://feeds.npr.org/1014/rss.xml",
+        "scope": "politics",
     },
     {
         "name": "NPR",
         "url": "https://feeds.npr.org/1004/rss.xml",
+        "scope": "world",
     },
     {
         "name": "PBS NewsHour",
         "url": "https://www.pbs.org/newshour/feeds/rss/headlines",
+        "sections": {"/newshour/politics/": "politics", "/newshour/world/": "world", "/newshour/arts/": "world"},
     },
     {
         "name": "BBC World",
         "url": "https://feeds.bbci.co.uk/news/world/rss.xml",
+        "scope": "world",
     },
     {
         "name": "The Hill",
         "url": "https://thehill.com/rss/syndicator/19110",
+        "sections": {"/homenews/": "politics", "/regulation/": "politics", "/policy/": "politics"},
     },
     {
         "name": "Politico",
         "url": "https://rss.politico.com/congress.xml",
+        "scope": "politics",
     },
     {
         "name": "Roll Call",
         "url": "https://rollcall.com/feed/",
         "timezone": "America/New_York",
+        "scope": "politics",
     },
 ]
+
+# publisher_scope's answers. "world" covers every desk outside U.S.
+# government and politics that a feed files (foreign news, arts).
+POLITICS_SCOPE = "politics"
+OTHER_SCOPE = "world"
+
+
+def publisher_scope(article: NewsArticle) -> str | None:
+    """POLITICS_SCOPE or OTHER_SCOPE as the publisher filed ARTICLE (see
+    NEWS_FEEDS' "scope" and "sections"), or None where it didn't say."""
+    feed = next((f for f in NEWS_FEEDS if f["url"] == article.feed_url), None)
+    if feed is None:
+        return None
+    path = urlparse(article.url).path
+    for prefix, scope in (feed.get("sections") or {}).items():
+        if path.startswith(prefix):
+            return scope
+    return feed.get("scope")
 
 
 def _parse_pub_date(raw: str | None, naive_tz: timezone | ZoneInfo = timezone.utc) -> datetime | None:
@@ -555,6 +596,8 @@ def fetch_news_articles(
                 resp.content, name, ZoneInfo(feed_info.get("timezone", "UTC")), keep_old=True,
             )
             observed[url] = (name, [a.published for a in every_item if a.published])
+            for a in every_item:
+                a.feed_url = url
             articles = [a for a in every_item if not a.published or a.published >= cutoff]
             elapsed = time.perf_counter() - t0
             # Count empty descriptions, don't just fetch. A feed whose
@@ -595,7 +638,6 @@ def fetch_news_articles(
         "/column/", "/columns/", "/contributor/", "/contributors/",
     })
     def _is_opinion(url: str) -> bool:
-        from urllib.parse import urlparse
         path = urlparse(url).path.lower()
         return any(seg in path for seg in _OPINION_PATH_SEGMENTS)
 

@@ -212,6 +212,150 @@ labelled articles don't represent; Bluesky's trending feed needs
 credentials this measurement didn't have, and Google Trends returned ten
 topics, all correctly masked out. It is unmeasured.
 
+## 2026-10-16: the reference labels itself
+
+The labelled set above was drawn by one labeller, once, and could only go
+stale. The gate now votes over the feed articles it has already judged
+(`feed_articles`), each labelled by what the publisher and Civitas's own
+records state, never by hand (`app/policy_relevance.py`):
+
+- **relevant**: filed under U.S. politics by its publisher (NPR's politics
+  feed, Politico's Congress feed, Roll Call, or a politics desk's URL
+  section: PBS `/newshour/politics/`, The Hill `/homenews/`, `/regulation/`,
+  `/policy/`; `news_feeds.NEWS_FEEDS`), or naming a sitting member of
+  Congress or justice (full name), the sitting president (full name or
+  surname) or a federal agency (its Federal Register name, or its
+  all-capitals short name);
+- **not relevant**: filed under another desk (NPR's world feed, BBC World,
+  PBS's world and arts desks) and naming none of those;
+- **no label**: anything else (PBS's nation, health and science desks, The
+  Hill's video clips).
+
+k and the threshold are refit on the first run of each UTC day, leave one
+out, by F0.5, ties to the lower threshold. Officials' names are masked in
+what is embedded, in the reference and in what is judged alike; until now
+the reference was masked and the judged text was not. Until the store
+holds 150 articles of each label, the seed (the texts of
+`policy_relevance_examples.json`, labelled from their outlet and masked
+names, their hand labels removed) fills in.
+
+**Agreement with the labels it replaced.** On the 675 seed rows these
+labels cover (of 827), 91% agree with the hand labels (relevant labels
+0.90 precise, not-relevant labels 0.93). A kNN vote fitted on these labels
+alone, on the three temporal splits above, scored against the hand labels:
+
+| Split | Hand-label vote: precision, recall | Publisher-label vote: precision, recall |
+|---|---|---|
+| 2026-08-30 / 09-06 | 0.885, 0.880 | 0.883 [0.83, 0.93], 0.819 |
+| 2026-09-09 / 09-16 | 0.927, 0.850 | 0.938 [0.89, 0.98], 0.758 |
+| 2026-09-22 / 09-29 | 0.975, 0.839 | 0.963 [0.91, 1.00], 0.828 |
+
+Precision is the same within its intervals; recall is up to nine points
+lower on the seed alone (without the URL-section labels, which the seed
+has no URLs for).
+
+**Replay against what published, 2026-10-02 to 10-15.** The 27 issues
+published in the window, their 47 source articles (title and description
+from each page's own metadata; for 17 pages behind a bot wall, the lines
+the issue quotes from them), judged by the old gate and the new; an issue
+survives when every article its lines are quoted from passes. The new
+gate's reference is the seed plus the PBS and BBC items archived by the
+Wayback Machine before 2026-10-02 (94 labelled), standing in for the
+store's first day:
+
+| Date | Published | Old gate | New gate |
+|---|---|---|---|
+| 10-02 | 1 | 1 | 1 |
+| 10-03 | 1 | 0 | 0 |
+| 10-04 | 1 | 1 | 1 |
+| 10-05 | 5 | 5 | 4 |
+| 10-06 | 1 | 0 | 0 |
+| 10-07 | 4 | 3 | 3 |
+| 10-08 | 1 | 1 | 1 |
+| 10-09 | 3 | 2 | 2 |
+| 10-10 | 1 | 0 | 1 |
+| 10-11 | 2 | 1 | 2 |
+| 10-12 | 2 | 2 | 2 |
+| 10-13 | 3 | 3 | 3 |
+| 10-15 | 2 | 2 | 2 |
+| **Total** | **27** | **21** | **22** |
+
+(The old gate, as calibrated on 2026-10-10, no longer passes six issues
+that published before or during its first days.) The one issue the new gate
+loses is a foreign election with no U.S. actor, which the rubric above
+already excluded; it gains two days of the Russian diesel-deal story,
+whose first articles the old gate read as Ukraine-war coverage.
+
+On the whole archived PBS and BBC stream for the window (226 items), the old
+gate keeps 86 and the new 110: it drops 1 the old kept (the same foreign
+election) and adds 25, among them the jobs report, an FBI internal report,
+student-loan deadlines, deportation cases and the diesel deal, and also
+three Nobel-prize live streams, two features on GLP-1 drugs and an AI
+feature, which the vote takes for politics-desk video.
+
+**The first days after deploy.** On the seed alone (a fresh store) the gate
+drops 11 items the old gate kept on that stream, among them an ICE policy
+memo, a new DHS fee and a Supreme Court preview. So the first run backfills
+the store from the national-feed articles the database already holds with
+their URLs (`backfill_from_history`, the election coverage's stored feed
+items): 443 labelled articles before 2026-10-02, 440 of them relevant.
+With the seed and that backfill as the reference the gate drops 2 of the
+old gate's items (the ICE memo, and a vice-president's remark on an
+execution) and adds 24; the run's own articles, voted on leaving each out,
+change nothing material (3 dropped, 22 added), so they are not used. The
+database holds almost no articles filed under another desk (3), because
+it kept only what the old gate passed; those come with the feeds, 48 in a
+first run's 48-hour window and about 31 a day after it, so both labels
+clear 150 stored articles three to four days after deploy, and the seed
+stays in the reference until then.
+
+Measured and not shipped: keeping an article whose own label is relevant
+whatever its vote. It drops none of the old gate's items and adds 43, among
+them four reports of an ICE officer's shooting in New York the old gate
+also missed, but also a space station landing, a missing flight and a
+celebrity's summons (agencies named in passing).
+
+## 2026-10-16: the clustering and restatement cuts refit themselves
+
+Both cuts were fitted once to pairs one labeller judged (564 article pairs,
+204 claim pairs). Each is now refit once a day from the stored data
+(`action_center.refit_cuts`), as the lowest cut no pair the data itself
+says is two stories (or two facts) reaches, plus a stated margin
+(`CUT_MARGIN`, 0.10, a choice reported beside every fit):
+
+- **clustering**: pairs of stored feed articles that share a distinctive
+  entity and whose own text dates the event two or more days apart (a
+  weekday read against the publication date, or a month and day). On the
+  301 articles of 2026-09-28..10-15 (257 such pairs) the fit is 0.60, the
+  cut 0.70. Clustering also never joins two such articles.
+- **restatement**: pairs of lines from two issues published within a day
+  of each other as separate stories, sharing a distinctive entity, leaving
+  out any pair that quotes one sentence (five words in a row). On the
+  issues of the last three weeks (76 lines, 380 pairs) the fit is 0.69, the
+  cut 0.79. Lines of issues days apart were tried first and rejected: an
+  ongoing story's later issue restates the earlier one's facts, so that fit
+  read 0.94.
+
+The margin covers what no stated fact labels: one actor's different acts
+on the same day, and two facts of one event. The fits alone reach those
+pairs: at 0.60, on the same 301 articles, 50 pairs merge, 13 of them pairs
+the hand judgments called different events.
+
+| Cut | Article pairs over the cut (48 h) | [diag] hand: same / different |
+|---|---|---|
+| hand-judged 0.71 | 19 | 18 / 1 |
+| refit 0.60 + 0.10, with the day veto | 22 | 20 / 2 |
+| refit 0.60 alone, with the day veto | 50 | 36 / 13 |
+
+| Restatement cut | Claim pairs flagged (of 204) | [diag] hand precision / recall |
+|---|---|---|
+| hand-fitted 0.75 | 27 | 0.96 / 0.42 |
+| refit 0.69 + 0.10 = 0.79 | 18 | 0.94 / 0.27 |
+
+The restatement cut moves up, so fewer second claims are dropped as
+restatements: a missed restatement counts one fact twice toward the
+two-claim gate, a false one drops a real fact and often the issue with it.
+
 ## The digest filter
 
 `_digest_reason`'s body check drops an article whose description splits

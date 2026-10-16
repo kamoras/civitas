@@ -24,17 +24,28 @@ export interface ElectionsInitial {
 }
 
 const ElectionsInitialContext = createContext<ElectionsInitial | null>(null);
+// The section hub's cards, rendered on the server by the layout and handed
+// to the client page to place (components/sections/SectionCards.tsx).
+const ElectionsHubContext = createContext<React.ReactNode>(null);
 
 export function ElectionsInitialProvider({
   value,
+  hub,
   children,
 }: {
   value: ElectionsInitial;
+  hub?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
-    <ElectionsInitialContext.Provider value={value}>{children}</ElectionsInitialContext.Provider>
+    <ElectionsInitialContext.Provider value={value}>
+      <ElectionsHubContext.Provider value={hub}>{children}</ElectionsHubContext.Provider>
+    </ElectionsInitialContext.Provider>
   );
+}
+
+export function useElectionsHub(): React.ReactNode {
+  return useContext(ElectionsHubContext);
 }
 
 export function useElectionsInitial(): ElectionsInitial | null {
