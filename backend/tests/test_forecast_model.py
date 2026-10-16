@@ -5,7 +5,7 @@ win language and its licence, and the map hides from election day on."""
 import asyncio
 import json
 import math
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -63,7 +63,16 @@ def test_held_out_evaluation_reproduces():
     again = model.leave_one_cycle_out(TRAINING["races"], TRAINING["generic"], 14)
     # The evaluation is written already rounded for display (3-4 decimals),
     # so a last-bit difference in a fit can move a figure by one unit there.
-    assert_close(again, FITTED["evaluation"]["14"], abs_tol=1e-3)
+    written = {k: v for k, v in FITTED["evaluation"]["14"].items() if k != "forward"}
+    assert_close(again, written, abs_tol=1e-3)
+
+
+def test_the_forward_check_reproduces():
+    # The newest cycle, fitted on the cycles before it only.
+    again = model.forward(TRAINING["races"], TRAINING["generic"], 14)
+    assert_close(again, FITTED["evaluation"]["14"]["forward"], abs_tol=1e-3)
+    assert again["cycle"] == max(r["year"] for r in TRAINING["races"])
+    assert again["trainedOn"][1] < again["cycle"]
 
 
 @pytest.mark.parametrize("horizon", model.HORIZONS)
@@ -80,7 +89,8 @@ def test_house_held_out_evaluation_reproduces():
                          {y: v for y, v in TRAINING["generic"].items() if int(y) != year}, 14)["beta"][3]
 
     again = model.leave_one_cycle_out(HOUSE_TRAINING["races"], HOUSE_TRAINING["generic"], 14, coef_for)
-    assert_close(again, HOUSE_FITTED["evaluation"]["14"], abs_tol=1e-3)
+    written = {k: v for k, v in HOUSE_FITTED["evaluation"]["14"].items() if k != "forward"}
+    assert_close(again, written, abs_tol=1e-3)
 
 
 def test_house_training_leans_are_the_history_files_own():
@@ -88,7 +98,10 @@ def test_house_training_leans_are_the_history_files_own():
     cycle's lines, which uses only presidential votes cast before it."""
     for r in HOUSE_TRAINING["races"]:
         assert r["lean"] == HOUSE_LEAN["leans"][str(r["year"])][r["state"]]
-    assert {r["year"] for r in HOUSE_TRAINING["races"]} == {2018, 2020, 2022}
+    # Every cycle the FEC has published a compilation for and the lean
+    # history and the generic-ballot polls reach.
+    cov = HOUSE_TRAINING["_coverage"]
+    assert {r["year"] for r in HOUSE_TRAINING["races"]} == set(cov["results"]) & set(cov["lean"]) & set(cov["polls"])
     assert not any(r["year"] == 2020 and r["state"].startswith("NC-") for r in HOUSE_TRAINING["races"])
     assert all("2024" not in m for m in HOUSE_LEAN["_method"].values() if "2016" in m)
 
@@ -106,9 +119,14 @@ def test_house_history_lean_recomputes_from_its_counts():
 
 
 def test_training_rows_are_every_contested_cycle():
+    # Every cycle both the training polls and MEDSL's results reach.
     years = {r["year"] for r in TRAINING["races"]}
-    assert years == set(range(1998, 2023, 2))
+    cov = TRAINING["_coverage"]
+    assert years == set(cov["polls"]) & set(cov["results"])
     assert all(r["inc"] in (-1, 0, 1) for r in TRAINING["races"])
+    # A race whose two sources disagree is left out, never fitted on either.
+    left_out = {(e["year"], e["state"], e["special"]) for e in TRAINING["_excluded"]}
+    assert not left_out & {(r["year"], r["state"], r["special"]) for r in TRAINING["races"]}
 
 
 @pytest.mark.parametrize("fitted", [FITTED, HOUSE_FITTED], ids=["senate", "house"])
@@ -510,11 +528,14 @@ def test_a_future_campaign_reads_its_own_articles_and_lines(db_session, freeze_u
     election seats (the 121st Congress's), with no edit to the code."""
     monkeypatch.setattr(build, "map_path", lambda: str(tmp_path / "m.json"))
     assert build.generic_article(2028) == "2028 United States House of Representatives elections"
-    data = _built(db_session, freeze_utcnow, 2028)  # 2028-10-15, the campaign's final weeks
+    data = _built(db_session, freeze_utcnow, 2028)  # 2028-10-15, 23 days out
     assert data["cycle"] == 2028 and data["electionDay"] == "2028-11-07"
     assert data["national"]["article"] == build.generic_article(2028) and data["national"]["margin"] == -4.0
     oh = next(s for s in _seats(data) if s["id"] == "2028-SEN-OH")
-    assert oh["article"]["title"] == senate_ohio(2028) and oh["polls"]["used"] == 1
+    # Its poll is read and listed, but 23 days out is beyond the training
+    # polls' reach, so the range is the structural line's alone.
+    assert oh["article"]["title"] == senate_ohio(2028) and oh["polls"]["count"] == 1
+    assert oh["fundamentalsOnly"] and oh["polls"]["used"] == 0 and len(oh["polls"]["list"]) == 1
     assert data["sources"]["lean"]["house"]["congress"] == congress_for_election(2028) == 121
     (oh9,) = data["chambers"]["house"]["seats"]
     # No computed lean for the 121st Congress's lines yet: the seat says so
@@ -524,6 +545,29 @@ def test_a_future_campaign_reads_its_own_articles_and_lines(db_session, freeze_u
         assert oh9["status"] == "no_lean" and oh9["lean"] is None
     else:
         assert oh9["lean"] == expected
+
+
+def test_beyond_the_poll_window_the_range_is_the_structural_lines_alone(db_session, freeze_utcnow):
+    """Further out than the training polls reach, the method was never
+    checked with polls: the range is the fundamentals' (with their own
+    calibrated spread), labelled so, and the seat's polls are listed beside it."""
+    near = _built(db_session, freeze_utcnow)  # 19 days out
+    window = near["pollWindowDays"]
+    assert near["pollsInRange"] and window == build.data_refresh.read("forecast_model.json")["fits"]["14"]["windowDays"]
+    freeze_utcnow(datetime(2026, 11, 3) - timedelta(days=window + 1, hours=-16))
+    revisions = _revisions()
+    gen = revisions[build.generic_article(2026)]
+    gen["content"] = gen["content"].replace("October 13, 2026", "October 1, 2026").replace("October 14, 2026",
+                                                                                          "October 2, 2026")
+    far = build.build(db_session, revisions, house_titles=[house_ohio()])
+    assert far["daysToElection"] == window + 1 and not far["pollsInRange"]
+    oh = next(s for s in _seats(far) if s["id"] == "2026-SEN-OH")
+    assert oh["status"] == "range" and oh["fundamentalsOnly"]
+    assert oh["mean"] == oh["prior"] and oh["pollAverage"] is None and oh["pollShare"] == 0
+    assert oh["polls"]["list"] and not any(p["usedInAverage"] for p in oh["polls"]["list"])
+    params = build.data_refresh.read("forecast_model.json")["fits"]["14"]
+    half = model.Z80 * params["priorScale"] * params["priorSd"]
+    assert abs(oh["range80"][1] - oh["range80"][0] - 2 * half) < 0.2
 
 
 def test_a_new_cycle_never_keeps_the_last_cycles_figures(db_session, freeze_utcnow, monkeypatch, tmp_path):
@@ -580,7 +624,7 @@ def test_the_last_certified_general(today, due):
     assert build.last_certified_general(today) == due
 
 
-def test_fits_a_cycle_behind_raise_an_ops_alert_until_refitted(freeze_utcnow, monkeypatch, tmp_path):
+def test_fits_a_cycle_behind_raise_an_ops_alert_until_refitted(freeze_utcnow, monkeypatch):
     sent, resolved = [], []
     monkeypatch.setattr(build, "send_ops_alert", lambda subject, body, **kw: sent.append((kw["dedupe_key"], body)))
     monkeypatch.setattr(build, "resolve_ops_alert", resolved.append)
@@ -591,10 +635,49 @@ def test_fits_a_cycle_behind_raise_an_ops_alert_until_refitted(freeze_utcnow, mo
     build.check_training_staleness()
     assert sent and sent[0][0] == f"{build.TRAINING_CONDITION}-{min(newest, house_newest) + 2}"
     # Refitted on that election: resolved.
-    paths = {}
-    for chamber in ("senate", "house"):
-        paths[chamber] = tmp_path / f"{chamber}.json"
-        paths[chamber].write_text(json.dumps({"races": [{"year": min(newest, house_newest) + 2}]}))
-    monkeypatch.setattr(build, "TRAINING_PATHS", paths)
+    due = min(newest, house_newest) + 2
+    monkeypatch.setattr(build.data_refresh, "read", lambda name: {"races": [{"year": due}]})
     build.check_training_staleness()
     assert resolved == [build.TRAINING_CONDITION]
+
+
+def _staleness_alert(monkeypatch, freeze_utcnow, docs: dict, due: int) -> str:
+    sent = []
+    monkeypatch.setattr(build, "send_ops_alert", lambda subject, body, **kw: sent.append(body))
+    monkeypatch.setattr(build, "resolve_ops_alert", lambda c: None)
+    monkeypatch.setattr(build.data_refresh, "read", lambda name: docs.get(name, {}))
+    freeze_utcnow(datetime(due + 1, 1, 3, 12, 0))
+    build.check_training_staleness()
+    (body,) = sent
+    return body
+
+
+def test_the_staleness_alert_names_each_missing_input(freeze_utcnow, monkeypatch):
+    """Each chamber says which input stops it, never "add it to the script"."""
+    docs = {
+        "forecast_training.json": {"races": [{"year": 2026}], "_coverage": {"polls": [2026, 2028], "results": [2026]}},
+        "forecast_house_training.json": {"races": [{"year": 2022}],
+                                         "_coverage": {"polls": [2024, 2028], "results": [2022], "lean": [2022, 2024]}},
+        "forecast_polls.json": {"retrieved": "2029-01-02"},
+    }
+    body = _staleness_alert(monkeypatch, freeze_utcnow, docs, 2028)
+    assert "The 2028 general election's certified results are official" in body
+    assert "Senate (fit stops at 2026): MEDSL's U.S. Senate file (doi:10.7910/DVN/PEJ5QU) has no 2028 results yet" \
+        in body
+    assert ("House (fit stops at 2022): the FEC has not published its Federal Elections 2028 compilation (US House "
+            "Results by State); MEDSL's U.S. House file is behind a sign-in form Civitas does not answer; "
+            "app/data/forecast_house_lean.json has no 2028 district lean") in body
+    assert "Silver Bulletin" not in body  # both chambers' polls reach 2028
+    assert "fit_forecast_model.py and refit" not in body
+
+
+def test_the_staleness_alert_names_missing_polls(freeze_utcnow, monkeypatch):
+    docs = {
+        "forecast_training.json": {"races": [{"year": 2024}], "_coverage": {"polls": [2024], "results": [2024, 2026]}},
+        "forecast_house_training.json": {"races": [{"year": 2026}], "_coverage": {}},
+        "forecast_polls.json": {"retrieved": "2027-01-10"},
+    }
+    body = _staleness_alert(monkeypatch, freeze_utcnow, docs, 2026)
+    assert ("Senate (fit stops at 2024): Silver Bulletin's raw-poll file (app/data/forecast_polls.json, retrieved "
+            "2027-01-10) has no 2026 Senate polls yet.") in body
+    assert "House (fit" not in body
