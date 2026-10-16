@@ -68,7 +68,12 @@ function SectionHead({
       <h2 id={id} className="scroll-mt-28 font-display text-2xl font-extrabold text-ink-hi">
         {title}
         {count !== undefined && (
-          <span className="ml-2 font-mono text-sm font-normal text-ink-min">{count}</span>
+          // The comma is for a screen reader, which ran the two together
+          // ("Votesnot held"); on screen the gap separates them.
+          <span className="ml-2 font-mono text-sm font-normal text-ink-min">
+            <span className="sr-only">, </span>
+            {count}
+          </span>
         )}
       </h2>
       {shareable && <ShareSectionButton label={title} />}
@@ -109,7 +114,9 @@ export default function BillPageView({
   const shortTitleType = record?.shortTitle
     ? record.shortTitleType
     : (detail?.shortTitleType ?? null);
-  const title = shortTitle || listed;
+  // The bill's number when Congress.gov couldn't give its title just now:
+  // an empty h1 left the page with no heading to name it.
+  const title = shortTitle || listed || label;
   // Under a short title, the official one from Congress.gov's same list; the
   // listing title only when the list gives none (it can be a short title the
   // bill no longer goes by, so it is not called official).
@@ -124,7 +131,7 @@ export default function BillPageView({
   const lead = summary ? (summary.paragraphs[1] ?? summary.paragraphs[0]) : null;
   // What a shared image of any section says it is from.
   const shareSubject = {
-    title: title ? `${label}: ${title}` : label,
+    title: title && title !== label ? `${label}: ${title}` : label,
     subtitle: [
       record?.congress ? `${ordinal(record.congress)} Congress` : null,
       stageName ?? detail?.stage,
@@ -421,12 +428,23 @@ export default function BillPageView({
                   <SectionHead
                     id="votes"
                     title="Votes"
-                    count={record ? `${record.votes.length} recorded` : undefined}
+                    count={
+                      record
+                        ? record.coverage?.votes.held === false
+                          ? "not held"
+                          : `${record.votes.length} recorded`
+                        : undefined
+                    }
                     shareable
                   />
                   <VotePanel
                     votes={record?.votes ?? []}
                     congress={record?.congress ?? detail?.congress ?? 0}
+                    unreadable={!record}
+                    coverage={record?.coverage?.votes}
+                    named={record?.actions.flatMap((a) =>
+                      a.rollCalls.map((rc) => ({ ...rc, date: a.date }))
+                    )}
                   />
                 </section>
 
@@ -435,9 +453,15 @@ export default function BillPageView({
                     <SectionHead
                       id="floor"
                       title="Floor debate"
-                      count={`${record.floorSpeechCount ?? 0} speech${record.floorSpeechCount === 1 ? "" : "es"}`}
+                      count={
+                        record.coverage?.floor.held === false
+                          ? "not held"
+                          : `${record.floorSpeechCount ?? 0} speech${record.floorSpeechCount === 1 ? "" : "es"}`
+                      }
                     />
-                    {record.floorDebate.length > 0 ? (
+                    {record.coverage?.floor.held === false ? (
+                      <p className="text-ink-lo">{record.coverage.floor.sentence}</p>
+                    ) : record.floorDebate.length > 0 ? (
                       <ol className="flex flex-col">
                         {record.floorDebate.map((d) => (
                           <li
@@ -477,12 +501,14 @@ export default function BillPageView({
                         No floor speech on file names this bill in its Congressional Record heading.
                       </p>
                     )}
-                    <p className="text-xs text-ink-min">
-                      Speeches are matched by the bill number printed in the Congressional
-                      Record&apos;s heading, never by their words. Each name opens that
-                      member&apos;s first speech under the heading; a number is how many times they
-                      spoke.
-                    </p>
+                    {record.coverage?.floor.held !== false && (
+                      <p className="text-xs text-ink-min">
+                        Speeches are matched by the bill number printed in the Congressional
+                        Record&apos;s heading, never by their words. Each name opens that
+                        member&apos;s first speech under the heading; a number is how many times
+                        they spoke.
+                      </p>
+                    )}
                   </section>
                 )}
 
@@ -490,7 +516,11 @@ export default function BillPageView({
                   <SectionHead
                     id="history"
                     title="History"
-                    count={record ? `${record.actions.length} actions` : undefined}
+                    count={
+                      record && !unavailable.includes("actions")
+                        ? `${record.actions.length} actions`
+                        : undefined
+                    }
                   />
                   {record && record.actions.length > 0 ? (
                     <ol className="flex flex-col">
@@ -529,9 +559,17 @@ export default function BillPageView({
                   <SectionHead
                     id="committee"
                     title="In committee"
-                    count={committee ? `${committee.total} in the Daily Digest` : undefined}
+                    count={
+                      record?.coverage?.digest.held === false
+                        ? "not held"
+                        : committee
+                          ? `${committee.total} in the Daily Digest`
+                          : undefined
+                    }
                   />
-                  {committee && committee.entries.length > 0 ? (
+                  {record?.coverage?.digest.held === false ? (
+                    <p className="text-ink-lo">{record.coverage.digest.sentence}</p>
+                  ) : committee && committee.entries.length > 0 ? (
                     <CommitteeEntries entries={committee.entries} />
                   ) : (
                     <p className="text-ink-lo">

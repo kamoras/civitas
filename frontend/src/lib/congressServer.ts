@@ -1,6 +1,7 @@
 import type {
   BillRecord,
   CommitteeRecordPage,
+  CongressCoverage,
   CommitteeSummary,
   DayReport,
   MonthReport,
@@ -43,6 +44,21 @@ async function getJsonWith<T>(
   const record = usableRecord<T>(await res.json(), ...required);
   if (!record) throw new Error(`${path}: response without ${required.join(", ")}`);
   return record;
+}
+
+/** What Civitas's record of Congress holds, for a 404 to state; null when
+ * the backend can't say (the 404 then keeps its own wording). */
+export async function fetchCoverage(): Promise<CongressCoverage | null> {
+  try {
+    return await getJsonWith<CongressCoverage>(
+      "/api/congress/coverage",
+      { next: { revalidate: 3600 } },
+      "sentence",
+      "rollCallSentence"
+    );
+  } catch {
+    return null;
+  }
 }
 
 export function fetchLatestDay(): Promise<DayReport | null> {

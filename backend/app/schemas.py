@@ -957,9 +957,14 @@ class PublicBillRollCallSchema(PublicRollCallSchema):
 class PublicBillVotesSchema(_PublicModel):
     bill_id: str = Field(description="The bill, as Civitas names it (e.g. HR.1234)")
     congress: int
+    covered: bool = Field(description="Whether Civitas holds this Congress's roll calls. False: entries is empty "
+                                      "because the votes aren't held here, not because the bill had no recorded "
+                                      "vote; the chambers' own records (Senate.gov, the House Clerk) have them")
+    held_congresses: list[int] = Field(description="The Congresses whose roll calls Civitas holds, oldest first")
     site_url: str = _SITE_URL
     entries: list[PublicBillRollCallSchema] = Field(description="Every roll call on the bill Civitas holds, "
-                                                                "newest first; empty when none is recorded")
+                                                                "newest first. Empty with covered true: the "
+                                                                "bill has had no recorded vote")
 
 
 class PublicScoreSnapshotSchema(_PublicModel):

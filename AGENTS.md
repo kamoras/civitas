@@ -935,8 +935,25 @@ in `frontend/src/lib/elections.ts`).
 What this rules in and out:
 
 - **Out:** any field asking for a street address, ZIP, precinct, or
-  geolocation permission to personalise what's shown; any per-visitor
-  identifier retained across requests to remember such a choice.
+  geolocation permission to personalise what's shown (the one exception
+  is the state below); any per-visitor identifier retained across requests
+  to remember such a choice.
+- **In, exactly this:** the reader's state, asked once in the header
+  (`components/layout/YourStatePicker.tsx`, `hooks/useYourState.ts`) and
+  used by every page that needs a state (the member directory, an issue's
+  contact list, the calendar, compare, the homepage's links, `/elections`).
+  It is held for the open tab only, in `sessionStorage`; never
+  `localStorage`, a cookie or anything kept across visits; and it reaches
+  the server only as the `?state=` a page already puts in its own URL. Its
+  "Use my location" button never runs by itself: on a click it asks the
+  browser for a position and places it in a state on the device, against
+  the site's own state shapes (`lib/stateFromPoint.ts`, the election map's
+  `/data/states-10m.json`). The coordinates are not sent, logged or
+  stored; only the state is kept, as if picked from the list; a refusal
+  falls back to the list. On-click, on-device, state only, per tab:
+  nothing finer than a state (no county, district or town from a
+  position), and nothing kept past the tab. `YourStatePicker.test.tsx`
+  holds both (no request carries coordinates; session storage only).
 - **In:** filtering, maps, and drill-down over data the page already has;
   explicit, unremembered navigation choices (the town selector, the state
   picker); linking out to the official lookup for a reader who wants a
@@ -1142,8 +1159,8 @@ remember a "your state" pick in `localStorage` (also read by the compare
 page), a "log my action" diary with streaks, and which issues the browser had
 voted on; all three were removed in 2026-09, and `ForgetLegacyStorage` clears
 what earlier visits left behind. Browser storage is for a per-tab convenience
-at most (`sessionStorage`, as the admin token uses), never a record of the
-visitor.
+at most (`sessionStorage`, as the admin token and the header's state choice
+use), never a record of the visitor.
 
 A feature that can only work by asking where the visitor lives is a feature
 this project doesn't ship. State the resulting limitation as content (see

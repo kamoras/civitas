@@ -96,6 +96,8 @@ describe("Navbar", () => {
     render(<Navbar />);
     fireEvent.click(screen.getByRole("button", { name: "Open navigation menu" }));
     const menu = document.getElementById("mobile-menu")!;
+    // Focus starts on the panel's first control, the state picker.
+    expect(within(menu).getByLabelText("Your state")).toHaveFocus();
     for (const key of KEYS) {
       const subs = sectionSubpages(key);
       if (!subs.length) continue;

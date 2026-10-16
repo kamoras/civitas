@@ -15,7 +15,9 @@ from datetime import date, timedelta
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.models import CongressDay, CongressEvent, RepSponsoredBill, RollCall, SponsoredBill
+from app.ordinals import ordinal
 from app.pipeline.congress_activity import digest_cursor, eastern_today, last_run
 from app.pipeline.fetch.daily_digest import words_to_int
 from app.pipeline.analyze.bill_stage import became_law_action
@@ -355,6 +357,78 @@ def record_span(db: Session) -> tuple[date, date] | None:
     counted as a new visitor). None before anything is recorded."""
     days = session_days(db)
     return (date.fromisoformat(days[0]), eastern_today()) if days else None
+
+
+# ── What the record holds ─────────────────────────────────────────
+# Civitas's record of Congress starts where the Daily Digest back-fill and
+# the roll-call sync start (congress_activity._BACKFILL_START, the sitting
+# Congress's first day when the record began), and Explore keeps the
+# sitting Congress's floor speeches only (explore_pipeline.
+# _purge_out_of_scope_speeches). Outside those, an empty list is "not held
+# here", never "none": a bill of an earlier Congress the House passed on a
+# roll call read "No recorded votes on this bill in either chamber".
+
+_GOVINFO_CREC = "https://www.govinfo.gov/app/collection/crec"
+_ROLL_CALL_SOURCES = {"senate": "https://www.senate.gov/legislative/votes_new.htm",
+                      "house": "https://clerk.house.gov/Votes"}
+
+
+def _full_date(d: date) -> str:
+    """Month D, YYYY: a date that can be in any year needs its year."""
+    return f"{d:%B} {d.day}, {d.year}"
+
+
+def roll_call_congresses(db: Session) -> list[int]:
+    """The Congresses whose roll calls Civitas holds, oldest first."""
+    return sorted(c for (c,) in db.query(RollCall.congress).distinct() if c)
+
+
+def coverage(db: Session) -> dict:
+    """What Civitas's record of Congress holds, in figures and as one
+    sentence a page can state where something isn't held: the first day on
+    record, its Congress, and the Congresses whose roll calls are held."""
+    span = record_span(db)
+    first = span[0] if span else None
+    held = roll_call_congresses(db)
+    if first is None:
+        sentence = "Civitas's record of Congress hasn't been read yet."
+    else:
+        sentence = (f"Civitas's record of Congress starts {_full_date(first)}, in the "
+                    f"{ordinal(congress_of_date(first.isoformat()))} Congress.")
+    roll_calls = (f"Civitas holds roll calls from the {ordinal(held[0])} Congress on." if held
+                  else "Civitas holds no roll calls yet.")
+    return {"firstDay": first.isoformat() if first else None, "rollCallSentence": roll_calls,
+            "firstCongress": congress_of_date(first.isoformat()) if first else None,
+            "rollCallCongresses": held, "sentence": sentence,
+            "congressionalRecordUrl": _GOVINFO_CREC, "rollCallSources": _ROLL_CALL_SOURCES}
+
+
+def bill_coverage(db: Session, congress: int) -> dict:
+    """For a bill of `congress`, whether each part of its page that comes
+    from Civitas's own record is held: its roll calls, its floor debate and
+    its days in the Congressional Record (the daily reports and committee
+    entries). Each part: {"held", "sentence"}, the sentence null when held."""
+    held = roll_call_congresses(db)
+    span = record_span(db)
+    first = span[0] if span else None
+    first_congress = congress_of_date(first.isoformat()) if first else None
+    n = ordinal(congress)
+    votes = congress in held
+    floor = congress == settings.CURRENT_CONGRESS
+    digest = first_congress is not None and congress >= first_congress
+    return {
+        "votes": {"held": votes, "sentence": None if votes else (
+            f"Civitas holds roll calls from the {ordinal(held[0])} Congress on, so this {n} Congress bill's "
+            "votes aren't held here. The chambers' own records have them, at Senate.gov and the House Clerk."
+            if held else "Civitas holds no roll calls yet.")},
+        "floor": {"held": floor, "sentence": None if floor else (
+            f"Civitas keeps the sitting {ordinal(settings.CURRENT_CONGRESS)} Congress's floor speeches only, so "
+            f"this {n} Congress bill's floor debate isn't held here. The Congressional Record at GovInfo has it.")},
+        "digest": {"held": digest, "sentence": None if digest else (
+            f"Civitas's record of Congress starts {_full_date(first)}, so this {n} Congress bill's days in the "
+            "Congressional Record and its committee entries aren't held here."
+            if first else "Civitas's record of Congress hasn't been read yet.")},
+    }
 
 
 def latest_day(db: Session) -> date | None:

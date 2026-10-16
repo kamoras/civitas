@@ -26,14 +26,14 @@ from app.models import ExploreDocument, RepSponsoredBill, RollCall, RollCallPosi
 from app.config import settings
 from app.database import off_loop
 from app.pipeline.cache import api_cache_get, api_cache_set_async, api_cache_set_many_async
-from app.pipeline.fetch.congress import CONGRESS_API_BASE, congress_gov_bill_url, congress_of_date
+from app.pipeline.fetch.congress import CONGRESS_API_BASE, congress_first_year, congress_gov_bill_url, congress_of_date
 from app.pipeline.fetch.daily_digest import heading_bill_ids
 from app.pipeline.fetch import floor_logs
 from app.pipeline.fetch.bill_display_titles import cached_display_titles, titles_key
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 from app.pipeline.transform.normalize_votes import resolve_senate_lis_ids
-from app.services.congress_service import bill_days, bill_label
+from app.services.congress_service import bill_coverage, bill_days, bill_label
 from app.services.nomination_links import nomination_votes
 from app.services.roll_call_shape import candidate_of, shape
 
@@ -610,7 +610,8 @@ def shape_record(db: Session, congress: int, bill_id: str, raw: dict) -> dict:
         "actions": [
             {"date": a.get("actionDate"), "text": a.get("text"), "type": a.get("type"),
              "rollCalls": [{"chamber": (v.get("chamber") or "").lower(), "number": v.get("rollNumber"),
-                            "session": v.get("sessionNumber")} for v in a.get("recordedVotes") or []]}
+                            "session": v.get("sessionNumber"),
+                            "sourceUrl": _roll_call_source(congress, v)} for v in a.get("recordedVotes") or []]}
             for a in raw.get("actions") or []
         ],
         "textVersions": [
@@ -625,7 +626,26 @@ def shape_record(db: Session, congress: int, bill_id: str, raw: dict) -> dict:
             congress, _CONGRESS_GOV_TYPE.get(parse_bill_id(bill_id)[0], "bill"), parse_bill_id(bill_id)[1],
         ),
         "unavailable": raw.get("unavailable") or [],
+        # Which parts from Civitas's own record are held for this bill's
+        # Congress: an empty one outside it is "not held", not "none".
+        "coverage": bill_coverage(db, congress),
     }
+
+
+def _roll_call_source(congress: int, vote: dict) -> str | None:
+    """The chamber's own record of a roll call a Congress.gov action names
+    ({"chamber", "rollNumber", "sessionNumber"}): the link a reader follows
+    to a vote Civitas doesn't hold. None when the action doesn't say which."""
+    chamber = (vote.get("chamber") or "").lower()
+    try:
+        number, session = int(vote.get("rollNumber")), int(vote.get("sessionNumber"))
+    except (TypeError, ValueError):
+        return None
+    if chamber == "senate":
+        return floor_logs.senate_roll_call_url(congress, session, number)
+    if chamber == "house":
+        return floor_logs.house_roll_call_url(congress_first_year(congress) + session - 1, number)
+    return None
 
 
 _CONGRESS_GOV_TYPE = {

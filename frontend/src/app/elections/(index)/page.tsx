@@ -29,6 +29,8 @@ import { fetchPviMap } from "@/lib/api";
 import { describeInterval, useLiveResults } from "@/hooks/useLiveResults";
 import type { PviMap } from "@/types/election";
 import { useElectionsHub, useElectionsInitial } from "./ElectionsInitial";
+import { useYourState } from "@/hooks/useYourState";
+import { STATE_NAMES } from "@/lib/stateCodes";
 
 /*
   Second page onto the records palette, after the homepage. Same recipe:
@@ -109,6 +111,7 @@ export default function ElectionsPage() {
   // What the server already read (elections/layout.tsx), when it could.
   const initial = useElectionsInitial();
   const hub = useElectionsHub();
+  const yours = useYourState();
   const [pvi, setPvi] = useState<PviMap | null>(initial?.pvi ?? null);
   // The clock is read when the data lands, not on every render, so the
   // countdown is a function of what was fetched: the server's clock for
@@ -395,6 +398,19 @@ export default function ElectionsPage() {
               </>
             ) : null}
           </PageMasthead>
+
+          {/* The state chosen in the header, one tap from its ballot. */}
+          {yours.state && (
+            <p className="mb-6 font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
+              Your state:{" "}
+              <Link
+                href={stateBallotHref(yours.state)}
+                className="inline-flex min-h-6 items-center border-b border-phos-mid/40 text-phos-mid hover:text-phos"
+              >
+                {(STATE_NAMES[yours.state] ?? yours.state).toUpperCase()} BALLOT &rarr;
+              </Link>
+            </p>
+          )}
 
           {betweenCycles && initial?.specials && (
             <OffSeasonLead board={initial.specials} cal={initial.calendar} />

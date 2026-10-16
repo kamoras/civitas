@@ -235,6 +235,26 @@ export interface BillPerson {
   page: string | null;
 }
 
+/** Whether a part of a bill's page that comes from Civitas's own record is
+ * held for the bill's Congress (bill_record.bill_coverage): an empty part
+ * outside it is "not held", never "none". */
+export interface CoveragePart {
+  held: boolean;
+  /** What isn't held and where it is, worded by the backend; null when held. */
+  sentence: string | null;
+}
+
+/** What Civitas's record of Congress holds (GET /api/congress/coverage). */
+export interface CongressCoverage {
+  firstDay: string | null;
+  firstCongress: number | null;
+  rollCallCongresses: number[];
+  sentence: string;
+  rollCallSentence: string;
+  congressionalRecordUrl: string;
+  rollCallSources: Record<Chamber, string>;
+}
+
 export interface BillRecordVote extends RollCallShape {
   chamber: Chamber;
   session: number;
@@ -286,7 +306,9 @@ export interface BillRecord {
     date: string;
     text: string;
     type: string;
-    rollCalls: { chamber: string; number: number; session: number }[];
+    /** `sourceUrl`: the chamber's own record of the roll call (null when
+     * the action doesn't say which), the link for a vote Civitas doesn't hold. */
+    rollCalls: { chamber: string; number: number; session: number; sourceUrl?: string | null }[];
   }[];
   textVersions: { type: string; date: string; formats: Record<string, string> }[];
   votes: BillRecordVote[];
@@ -304,6 +326,9 @@ export interface BillRecord {
   congressGovUrl: string;
   /** Parts Congress.gov could not return this time: shown as unavailable, never as empty. */
   unavailable: string[];
+  /** Whether the votes, floor debate and Record days (Digest and committee
+   * entries) are held for the bill's Congress. Optional for an older backend. */
+  coverage?: { votes: CoveragePart; floor: CoveragePart; digest: CoveragePart };
 }
 
 /** A committee meeting or a report filed on a measure, as the Daily Digest
