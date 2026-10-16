@@ -111,12 +111,17 @@ async function fetchStateBallot(state: string): Promise<StateBallot | null> {
   }
 }
 
-function Header({ section }: { section: string }) {
+function Header({ section, date }: { section: string; date?: string }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 48 }}>
       <span style={{ color: INK_HI, fontSize: 18, letterSpacing: 6 }}>CIVITAS</span>
       <span style={{ color: INK_MIN, fontSize: 18 }}>|</span>
       <span style={{ color: INK_LO, fontSize: 14, letterSpacing: 4 }}>{section}</span>
+      {date && (
+        <span style={{ marginLeft: "auto", color: INK_MIN, fontSize: 18, letterSpacing: 2 }}>
+          {date}
+        </span>
+      )}
     </div>
   );
 }
@@ -138,9 +143,27 @@ function Footer({ label }: { label: string }) {
   );
 }
 
-async function issueImage(
-  issue: { title?: string; summary?: string; imageUrl?: string | null } | null
-) {
+export type OgIssue = {
+  publicId?: string;
+  title?: string;
+  summary?: string;
+  summarySource?: string | null;
+  date?: string;
+  status?: string;
+  sourceNames?: string[];
+  imageUrl?: string | null;
+  imageCredit?: string | null;
+};
+
+const MAX_NAMED_SOURCES = 3;
+
+/** Every string the issue card renders besides its title. A link preview
+ *  travels without the page around it, so the card carries what the page
+ *  says beside the story: whose words the summary is, who took the photo,
+ *  the day, which outlets (or record) it comes from and where it lives.
+ *  It used to carry none of these, and labelled every story, news ones
+ *  included, "PUBLIC FEDERAL DATA". */
+export function issueCardTexts(issue: OgIssue | null) {
   const title = issue?.title ?? "Civitas Action Center";
   const summary = !issue?.summary
     ? "Track what Congress is doing, and what you can do about it."
@@ -149,8 +172,27 @@ async function issueImage(
       : issue.summary.length > 140
         ? issue.summary.slice(0, 137) + "…"
         : issue.summary;
-  const section = "ACTION CENTER";
-  const footerLabel = "PUBLIC FEDERAL DATA";
+  const names = (issue?.sourceNames ?? []).filter(Boolean);
+  const named = names.slice(0, MAX_NAMED_SOURCES).join(", ");
+  const more = names.length - MAX_NAMED_SOURCES;
+  return {
+    title,
+    summary,
+    // The summary is a source's own words (post_composer), so it is quoted
+    // as theirs, as the issue page does.
+    summaryCredit: summary && issue?.summarySource ? `— ${issue.summarySource}` : "",
+    section: issue?.status === "developing" ? "ACTION CENTER · DEVELOPING" : "ACTION CENTER",
+    date: issue?.date ? calendarDate(issue.date) : "",
+    photoCredit: issue?.imageCredit ? `Photo: ${issue.imageCredit}` : "",
+    link: issue?.publicId ? `${DOMAIN}/issue/${issue.publicId}` : DOMAIN,
+    sources: named
+      ? `${names.length === 1 ? "Source" : "Sources"}: ${named}${more > 0 ? ` and ${more} more` : ""}`
+      : "PUBLIC RECORDS",
+  };
+}
+
+async function issueImage(issue: OgIssue | null) {
+  const t = issueCardTexts(issue);
 
   // Only ever set from a source article whose feed explicitly granted
   // redistribution rights (see backend news_feeds._rights_cleared_image)
@@ -164,9 +206,7 @@ async function issueImage(
   // default face instead of Archivo.
   let archivoBold: ArrayBuffer | null = null;
   try {
-    archivoBold = await loadArchivoBold(
-      `CIVITAS${section}${title}${summary}${DOMAIN}${footerLabel}|`
-    );
+    archivoBold = await loadArchivoBold(`CIVITAS|${Object.values(t).join("")}`);
   } catch {
     // fall through with archivoBold still null — degrade to Satori's
     // default face rather than fail the whole image over a font fetch.
@@ -185,34 +225,40 @@ async function issueImage(
         border: `1px solid ${HAIRLINE}`,
       }}
     >
-      <Header section={section} />
+      <Header section={t.section} date={t.date} />
       <div style={{ display: "flex", alignItems: "center", gap: 40, flex: 1, marginBottom: 32 }}>
         <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
           <div
             style={{
               color: INK_HI,
-              fontSize: title.length > 60 ? 38 : 46,
+              fontSize: t.title.length > 60 ? 38 : 46,
               fontWeight: 700,
               lineHeight: 1.2,
               marginBottom: 32,
             }}
           >
-            {title}
+            {t.title}
           </div>
-          <div style={{ color: INK, fontSize: 22, lineHeight: 1.5 }}>{summary}</div>
+          <div style={{ color: INK, fontSize: 22, lineHeight: 1.5 }}>{t.summary}</div>
+          {t.summaryCredit && (
+            <div style={{ color: INK_LO, fontSize: 18, marginTop: 10 }}>{t.summaryCredit}</div>
+          )}
         </div>
         {photoDataUri && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={photoDataUri}
-            alt=""
-            width={320}
-            height={320}
-            style={{ objectFit: "cover", border: `1px solid ${HAIRLINE}` }}
-          />
+          <div style={{ display: "flex", flexDirection: "column", width: 320, gap: 8 }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={photoDataUri}
+              alt=""
+              width={320}
+              height={320}
+              style={{ objectFit: "cover", border: `1px solid ${HAIRLINE}` }}
+            />
+            {t.photoCredit && <span style={{ color: INK_MIN, fontSize: 14 }}>{t.photoCredit}</span>}
+          </div>
         )}
       </div>
-      <Footer label={footerLabel} />
+      <IssueFooter link={t.link} sources={t.sources} />
     </div>,
     {
       width: 1200,
@@ -231,6 +277,24 @@ async function issueImage(
           }
         : {}),
     }
+  );
+}
+
+function IssueFooter({ link, sources }: { link: string; sources: string }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 24,
+        borderTop: `1px solid ${HAIRLINE}`,
+        paddingTop: 28,
+      }}
+    >
+      <span style={{ color: INK_LO, fontSize: 16, letterSpacing: 1 }}>{link}</span>
+      <span style={{ color: INK_LO, fontSize: 16 }}>{sources}</span>
+    </div>
   );
 }
 
