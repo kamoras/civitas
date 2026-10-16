@@ -70,7 +70,7 @@ logger = logging.getLogger(__name__)
 
 DISCOVERY = {
     "mode": "landing_page",
-    "page_url": "https://elect.ky.gov/results/2020-2029/Pages/{year}.aspx",
+    "page_url": "https://elect.ky.gov/results/{decade}/Pages/{year}.aspx",
     # The directory holding the file is NOT stable across cycles either
     # (2024's link is under /results/2020-2029/Documents/, 2026's under
     # /Documents/ at the site root) — [^"']*Documents/ captures whatever

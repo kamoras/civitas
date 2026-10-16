@@ -39,6 +39,34 @@ async def test_receipts_query_each_cycle_and_keep_the_largest_overall(db_session
     assert all("is_individual=true" in u for u in urls)
 
 
+async def test_receipts_cycle_that_times_out_is_read_with_a_halving_floor(db_session):
+    # The plain query fails (504 at the FEC); floors halve until a full page.
+    amounts = [5000, 4000, 3300, 3300, 2900, 100]
+    urls: list[str] = []
+
+    async def fake_fetch(client, url):
+        urls.append(url)
+        if "min_amount" not in url:
+            raise fec.FecUnavailable(url)
+        floor = int(url.rsplit("min_amount=", 1)[1])
+        return {"results": [{"contribution_receipt_amount": a} for a in amounts if a >= floor][:3]}
+
+    with patch.object(fec, "_fetch_or_raise", side_effect=fake_fetch), \
+         patch.object(fec, "_TOP_RECEIPTS", 3):
+        rows = await fec.fetch_committee_receipts(None, db_session, "C001", cycles=[2024])
+    assert [r["contribution_receipt_amount"] for r in rows] == [5000, 4000, 3300]
+    assert [u.rsplit("min_amount=", 1)[1] for u in urls[1:]] == ["10000", "5000", "2500"]
+
+
+async def test_receipts_floor_failing_too_raises(db_session):
+    with patch.object(fec, "_fetch_or_raise", AsyncMock(side_effect=fec.FecUnavailable("x"))):
+        try:
+            await fec.fetch_committee_receipts(None, db_session, "C001", cycles=[2024])
+        except fec.FecUnavailable:
+            return
+    raise AssertionError("expected FecUnavailable")
+
+
 async def test_receipts_unwindowed_is_one_query_with_no_period(db_session):
     fetch = AsyncMock(return_value={"results": []})
     with patch.object(fec, "_fetch_or_raise", fetch):

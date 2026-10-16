@@ -11,11 +11,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from app import ops_alerts
+from app.election_phase import ActiveElection
 from app.models import (
     ElectionPipelineRun, HousePipelineRun, PipelineRun, PipelineStatus, President,
     StockTradesPipelineRun, SupplementaryPipelineRun,
 )
-from app import ops_alerts
 from app.ops_alerts import (
     check_pipeline_overrun,
     check_sitting_president,
@@ -493,6 +494,53 @@ class TestEachAlertResolves:
             )
         resolve.assert_called_once_with("ground-truth-house")
         send.assert_not_called()
+
+
+class TestElectionReadiness:
+    """The coming election's cycle-specific data is flagged ahead of time,
+    each piece once its lead time begins, with nothing typed per cycle."""
+
+    ELECTION = date(2028, 11, 7)
+
+    def _gaps(self, today, maps=None):
+        maps = maps if maps is not None else {"2026": {}}
+        with patch("app.ops_alerts.utcnow", return_value=datetime.combine(today, datetime.min.time())), \
+             patch("app.live_results.sync._maps", return_value=maps), \
+             patch("app.district_lines._maps", return_value=maps):
+            return ops_alerts.election_readiness_gaps(self.ELECTION)
+
+    def test_nothing_is_asked_for_before_its_lead_time(self):
+        assert self._gaps(date(2027, 12, 1)) == {}
+
+    def test_the_cycles_maps_must_be_confirmed_from_january(self):
+        gaps = self._gaps(date(2028, 1, 5))
+        assert set(gaps) == {"election-ready-maps"}
+        assert "2028" in gaps["election-ready-maps"]
+
+    def test_confirmed_maps_with_no_redraw_carry_the_lean_forward(self):
+        # An empty 2028 entry: nobody redrew, so the 120th's computed lean
+        # describes the 121st's lines in every state.
+        assert self._gaps(date(2028, 1, 5), maps={"2026": {}, "2028": {}}) == {}
+
+    def test_a_state_that_redrew_needs_its_own_lean(self):
+        gaps = self._gaps(date(2028, 1, 5), maps={"2026": {}, "2028": {"OH": {"map": "CD121"}}})
+        assert set(gaps) == {"election-ready-district-lean"} and "OH" in gaps["election-ready-district-lean"]
+
+    def test_the_calendar_poll_closes_and_town_ballots_follow_in_turn(self):
+        maps = {"2026": {}, "2028": {}}
+        assert set(self._gaps(date(2028, 6, 20), maps)) == {"election-ready-calendar"}
+        assert set(self._gaps(date(2028, 9, 15), maps)) == {"election-ready-calendar", "election-ready-town-ballots"}
+        assert set(self._gaps(date(2028, 10, 1), maps)) == {
+            "election-ready-calendar", "election-ready-town-ballots", "election-ready-poll-close"}
+
+    def test_alerts_open_and_resolve_per_condition(self):
+        held = ActiveElection(election_day=self.ELECTION, phase="campaign", results_until=None, last_result_change=None)
+        with patch("app.ops_alerts.active_election", return_value=held), \
+             patch("app.ops_alerts.election_readiness_gaps", return_value={"election-ready-maps": "x"}), \
+             patch("app.ops_alerts.send_ops_alert") as alert, patch("app.ops_alerts.resolve_ops_alert") as resolve:
+            ops_alerts.check_election_readiness()
+        assert alert.call_args.kwargs["condition"] == "election-ready-maps"
+        assert "election-ready-calendar" in [c.args[0] for c in resolve.call_args_list]
 
 
 class TestCheckSittingPresident:

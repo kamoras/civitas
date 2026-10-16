@@ -19,6 +19,7 @@ import json
 import logging
 import pathlib
 
+from app.district_lines import table_for_lines
 from app.pipeline.fetch.district_pvi import district_pvi_for_congress
 
 logger = logging.getLogger(__name__)
@@ -55,6 +56,18 @@ def computed_lean(congress: int | None) -> dict[str, float]:
     return table if isinstance(table, dict) else {}
 
 
+def lines_table(state: str, congress: int | None) -> dict[str, float]:
+    """The computed-lean table for `state`'s districts on `congress`'s
+    lines: that Congress's own table, or the newest earlier one where the
+    state's map is unchanged and the cycle's maps are confirmed
+    (district_lines.table_for_lines); empty otherwise."""
+    if congress is None:
+        return {}
+    tables = {int(c): (t or {}).get("districts") or {} for c, t in (_file().get("congresses") or {}).items()}
+    table = table_for_lines(congress, tables) or {}
+    return {k: v for k, v in table.items() if k.split("-")[0] == state}
+
+
 def lean_label(lean: float) -> str:
     """How a lean is written wherever the site shows one beside the election
     map (the map, the race pages): rounded to a whole point, "R+3",
@@ -64,7 +77,7 @@ def lean_label(lean: float) -> str:
 
 
 def lean_for(state: str, district: int | None, congress: int | None) -> float | None:
-    return computed_lean(congress).get(f"{state}-{district if district is not None else 0}")
+    return lines_table(state, congress).get(f"{state}-{district if district is not None else 0}")
 
 
 def meta() -> dict | None:
