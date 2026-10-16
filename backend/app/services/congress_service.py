@@ -369,7 +369,7 @@ _ROLL_CALL_SOURCES = {"senate": "https://www.senate.gov/legislative/votes_new.ht
 
 
 def _full_date(d: date) -> str:
-    """"January 3, 2025": a date that can be in any year needs its year."""
+    """Month D, YYYY: a date that can be in any year needs its year."""
     return f"{d:%B} {d.day}, {d.year}"
 
 
