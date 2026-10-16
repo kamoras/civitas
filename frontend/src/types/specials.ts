@@ -132,6 +132,9 @@ export interface CalendarDeadline {
   daysLeft: number | null;
   source: { publisher: string | null; url: string; type: string };
   register?: RegisterLink | null;
+  /** Read from this county election office's printing (the state's own
+   *  source couldn't be read). */
+  republishedBy?: string | null;
 }
 
 export interface FecDeadline {

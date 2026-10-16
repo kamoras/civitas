@@ -465,9 +465,10 @@ export interface VoterDeadline {
   closesOn: string;
   source: { publisher: string | null; url: string; type: "official" | "statute" };
   verification: {
-    /** The generator refuses any item it could not verify, so there is no
-     * third state. */
-    status: "verified" | "statute";
+    /** The generator refuses any item it could not verify. "republished":
+     * read from a county election office's printing while the state's own
+     * source couldn't be read (labelled on the page). */
+    status: "verified" | "statute" | "republished";
     checkedOn?: string;
     detail?: string;
   };
@@ -502,6 +503,9 @@ export interface RegistrationLine {
 export interface VoterCalendar {
   /** Absent from an older API. */
   registration?: RegistrationLine | null;
+  /** Set when deadlines were read from a county election office's printing
+   *  because the state's own source couldn't be: whose, and why. */
+  republished?: string | null;
   register?: RegisterLink | null;
   electionDay?: string;
   timeZone: string;

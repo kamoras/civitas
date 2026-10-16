@@ -1,5 +1,5 @@
 {
- "_about": "Input to build_election_calendar.py: each state's (and D.C.'s) voter deadlines for the general election, as its election authority or its statute states them. Each item cites the page that says so, with a passage quoted verbatim (as the script's --text normalises it) so the script can confirm the page still says it. Sources are the state's own pages or statute, never an aggregator; a page behind a bot wall is never worked around (AGENTS.md section 7): cite the statute, or leave the item out, since the script refuses an item it cannot verify. A state with no readable official source carries `unread` (why, never served) and no items. Researched 2026-10-12/13. A state's `_research` (never served) says how its items were sourced. Edit an item, then rerun the script. `register` names the state's page for registering to vote (its online registration where it has one, else its registration page); the script checks it answers on the state's own domain, and a page behind a bot wall is kept but marked unconfirmed. `none` with a quote states a state has no registration. `registerFallback` is vote.gov, for a state with no entry.",
+ "_about": "Input to build_election_calendar.py: each state's (and D.C.'s) voter deadlines for the general election, as its election authority or its statute states them. Each item cites the page that says so, with a passage quoted verbatim (as the script's --text normalises it) so the script can confirm the page still says it. Sources are the state's own pages or statute, never an aggregator; a page behind a bot wall is never worked around (AGENTS.md section 7): cite the statute, or leave the item out, since the script refuses an item it cannot verify. A state with no readable official source carries `unread` (why, never served) and no items. Researched 2026-10-12/13. A state's `_research` (never served) says how its items were sourced. Edit an item, then rerun the script. `register` names the state's page for registering to vote (its online registration where it has one, else its registration page); the script checks it answers on the state's own domain, and a page behind a bot wall is kept but marked unconfirmed. `none` with a quote states a state has no registration. `registerFallback` is vote.gov, for a state with no entry. An item may name `republished` (publisher, url, quote): a county election office's printing of the same deadline, read only when the item's own source can't be read (a wall or an outage, never a page that answered without the passage), and labelled on the page.",
  "electionDate": "2026-11-03",
  "states": {
   "AK": {
@@ -3259,7 +3259,7 @@
   },
   "NY": {
    "timeZone": "America/New_York",
-   "_research": "elections.ny.gov (State Board of Elections), nysenate.gov and vote.gov answer a Cloudflare challenge (403), and the LRS statute site times out (2026-10-12/16). The deadlines are the statewide Election Law ones (10 days before for registration and mail ballot applications), read from the Board of Elections in the City of New York, the election authority for New York City's five counties, which prints them for this election. Early voting dates are not on a page that could be read, so none is listed.",
+   "_research": "Cited to the Election Law (nysenate.gov). That site, like the State Board of Elections' (elections.ny.gov) and vote.gov, answers a Cloudflare challenge some of the time (2026-10-12/16), so each item also names `republished`: the same deadline as the Board of Elections in the City of New York (the election authority for the city's five counties) prints it for this election. The script reads the statute first on every run and uses the republication only while the statute can't be read, labelled as such. Early voting dates are not on a page that could be read, so none is listed.",
    "note": "Early voting sites and hours are set by your county board of elections.",
    "items": [
     {
@@ -3269,7 +3269,12 @@
      "daysBefore": 10,
      "date": "2026-10-24",
      "source": {
-      "type": "official",
+      "type": "statute",
+      "publisher": "New York Election Law § 5-210",
+      "url": "https://www.nysenate.gov/legislation/laws/ELN/5-210",
+      "quote": "received no laterthan the tenth day before such election, or delivered in person to suchboard of elections not later than the tenth day before such election"
+     },
+     "republished": {
       "publisher": "Board of Elections in the City of New York",
       "url": "https://www.vote.nyc/page/registration-deadlines",
       "quote": "last day to register to vote in person isoctober 24, 2026"
@@ -3283,7 +3288,12 @@
      "daysBefore": 10,
      "date": "2026-10-24",
      "source": {
-      "type": "official",
+      "type": "statute",
+      "publisher": "New York Election Law § 5-210",
+      "url": "https://www.nysenate.gov/legislation/laws/ELN/5-210",
+      "quote": "received no laterthan the tenth day before such election, or delivered in person to suchboard of elections not later than the tenth day before such election"
+     },
+     "republished": {
       "publisher": "Board of Elections in the City of New York",
       "url": "https://www.vote.nyc/page/registration-deadlines",
       "quote": "applications to register by mail must be received byoctober 24, 2026"
@@ -3297,7 +3307,12 @@
      "daysBefore": 10,
      "date": "2026-10-24",
      "source": {
-      "type": "official",
+      "type": "statute",
+      "publisher": "New York Election Law § 8-400",
+      "url": "https://www.nysenate.gov/legislation/laws/ELN/8-400",
+      "quote": "must bereceived by the board of elections not later than the tenth day beforethe election for which a ballot is first requested."
+     },
+     "republished": {
       "publisher": "Board of Elections in the City of New York",
       "url": "https://www.vote.nyc/page/absentee-voting",
       "quote": "last day for board of elections to receive application or letter of application by mail or online portal is october 24, 2026"
@@ -3310,7 +3325,12 @@
      "daysBefore": 1,
      "date": "2026-11-02",
      "source": {
-      "type": "official",
+      "type": "statute",
+      "publisher": "New York Election Law § 8-400",
+      "url": "https://www.nysenate.gov/legislation/laws/ELN/8-400",
+      "quote": "must be received bysuch board not later than the day before such election."
+     },
+     "republished": {
       "publisher": "Board of Elections in the City of New York",
       "url": "https://www.vote.nyc/page/absentee-voting",
       "quote": "last day to apply in person at your county board of elections is november 2, 2026"
@@ -3320,25 +3340,36 @@
      "kind": "ballot_return",
      "method": "mail",
      "basis": "postmarked",
-     "rule": "A mailed ballot must be postmarked by Election Day.",
+     "rule": "A mailed ballot must be postmarked by Election Day and arrive within 7 days.",
      "daysBefore": 0,
      "date": "2026-11-03",
      "source": {
-      "type": "official",
+      "type": "statute",
+      "publisher": "New York Election Law § 8-412",
+      "url": "https://www.nysenate.gov/legislation/laws/ELN/8-412",
+      "quote": "not later thanthe day of the election and received by such board of elections notlater than seven days following the day of election"
+     },
+     "republished": {
       "publisher": "Board of Elections in the City of New York",
       "url": "https://www.vote.nyc/page/absentee-voting",
       "quote": "put it in the mail ensuring it receives a postmark no later than november 3, 2026."
-     }
+     },
+     "endDate": "2026-11-10"
     },
     {
      "kind": "ballot_return",
      "method": "in_person",
-     "rule": "Drop off your ballot at your county board of elections or an Election Day poll site by 9 p.m. on Election Day.",
+     "rule": "Drop off your ballot at your county board of elections or a poll site before the polls close (9 p.m.) on Election Day.",
      "daysBefore": 0,
      "date": "2026-11-03",
      "time": "21:00",
      "source": {
-      "type": "official",
+      "type": "statute",
+      "publisher": "New York Election Law § 8-412",
+      "url": "https://www.nysenate.gov/legislation/laws/ELN/8-412",
+      "quote": "absenteeballots received by it before the close of the polls on election day"
+     },
+     "republished": {
       "publisher": "Board of Elections in the City of New York",
       "url": "https://www.vote.nyc/page/absentee-voting",
       "quote": "drop off your ballot to your county board of elections office no later than november 3, 2026 by 9pm."

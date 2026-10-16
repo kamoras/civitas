@@ -52,7 +52,7 @@ export function calendarEntries(cal: ElectionCalendar): CalendarEntry[] {
       date: d.date,
       state: d.state,
       tag: "DEADLINE" as const,
-      text: `${d.stateName}: ${d.sentence}`,
+      text: `${d.stateName}: ${d.sentence}${d.republishedBy ? ` (as published by the ${d.republishedBy})` : ""}`,
       status: d.status === "closed" ? "PASSED" : d.status === "open" ? "OPEN" : "UPCOMING",
       passed: d.status === "closed",
       href: safeHref(d.source.url),

@@ -7,7 +7,7 @@
   "url": "https://vote.gov/",
   "publisher": "Vote.gov (U.S. General Services Administration)",
   "checkedOn": "2026-10-16",
-  "status": "blocked"
+  "status": "verified"
  },
  "states": {
   "AK": {
@@ -3030,7 +3030,7 @@
     "url": "https://mvic.sos.state.mi.us/RegisterVoter",
     "publisher": "Michigan Secretary of State",
     "checkedOn": "2026-10-16",
-    "status": "blocked"
+    "status": "verified"
    },
    "note": "From 14 days before through Election Day you can register in person at your city or township clerk's office with proof of residency."
   },
@@ -3478,7 +3478,7 @@
     "url": "https://sosmt.gov/elections/",
     "publisher": "Montana Secretary of State",
     "checkedOn": "2026-10-16",
-    "status": "blocked"
+    "status": "verified"
    },
    "note": "Montana has no online voter registration. After regular registration closes, late registration runs through Election Day at the place your county names; late registrants must get their ballot in person."
   },
@@ -4282,14 +4282,14 @@
      "daysBefore": 10,
      "date": "2026-10-24",
      "source": {
-      "type": "official",
-      "publisher": "Board of Elections in the City of New York",
-      "url": "https://www.vote.nyc/page/registration-deadlines",
-      "quote": "last day to register to vote in person isoctober 24, 2026"
+      "type": "statute",
+      "publisher": "New York Election Law § 5-210",
+      "url": "https://www.nysenate.gov/legislation/laws/ELN/5-210",
+      "quote": "received no laterthan the tenth day before such election, or delivered in person to suchboard of elections not later than the tenth day before such election"
      },
      "countedDate": "2026-10-24",
      "verification": {
-      "status": "verified",
+      "status": "statute",
       "checkedOn": "2026-10-16"
      }
     },
@@ -4301,14 +4301,14 @@
      "daysBefore": 10,
      "date": "2026-10-24",
      "source": {
-      "type": "official",
-      "publisher": "Board of Elections in the City of New York",
-      "url": "https://www.vote.nyc/page/registration-deadlines",
-      "quote": "applications to register by mail must be received byoctober 24, 2026"
+      "type": "statute",
+      "publisher": "New York Election Law § 5-210",
+      "url": "https://www.nysenate.gov/legislation/laws/ELN/5-210",
+      "quote": "received no laterthan the tenth day before such election, or delivered in person to suchboard of elections not later than the tenth day before such election"
      },
      "countedDate": "2026-10-24",
      "verification": {
-      "status": "verified",
+      "status": "statute",
       "checkedOn": "2026-10-16"
      }
     },
@@ -4320,14 +4320,14 @@
      "daysBefore": 10,
      "date": "2026-10-24",
      "source": {
-      "type": "official",
-      "publisher": "Board of Elections in the City of New York",
-      "url": "https://www.vote.nyc/page/absentee-voting",
-      "quote": "last day for board of elections to receive application or letter of application by mail or online portal is october 24, 2026"
+      "type": "statute",
+      "publisher": "New York Election Law § 8-400",
+      "url": "https://www.nysenate.gov/legislation/laws/ELN/8-400",
+      "quote": "must bereceived by the board of elections not later than the tenth day beforethe election for which a ballot is first requested."
      },
      "countedDate": "2026-10-24",
      "verification": {
-      "status": "verified",
+      "status": "statute",
       "checkedOn": "2026-10-16"
      }
     },
@@ -4338,14 +4338,14 @@
      "daysBefore": 1,
      "date": "2026-11-02",
      "source": {
-      "type": "official",
-      "publisher": "Board of Elections in the City of New York",
-      "url": "https://www.vote.nyc/page/absentee-voting",
-      "quote": "last day to apply in person at your county board of elections is november 2, 2026"
+      "type": "statute",
+      "publisher": "New York Election Law § 8-400",
+      "url": "https://www.nysenate.gov/legislation/laws/ELN/8-400",
+      "quote": "must be received bysuch board not later than the day before such election."
      },
      "countedDate": "2026-11-02",
      "verification": {
-      "status": "verified",
+      "status": "statute",
       "checkedOn": "2026-10-16"
      }
     },
@@ -4353,37 +4353,38 @@
      "kind": "ballot_return",
      "method": "mail",
      "basis": "postmarked",
-     "rule": "A mailed ballot must be postmarked by Election Day.",
+     "rule": "A mailed ballot must be postmarked by Election Day and arrive within 7 days.",
      "daysBefore": 0,
      "date": "2026-11-03",
      "source": {
-      "type": "official",
-      "publisher": "Board of Elections in the City of New York",
-      "url": "https://www.vote.nyc/page/absentee-voting",
-      "quote": "put it in the mail ensuring it receives a postmark no later than november 3, 2026."
+      "type": "statute",
+      "publisher": "New York Election Law § 8-412",
+      "url": "https://www.nysenate.gov/legislation/laws/ELN/8-412",
+      "quote": "not later thanthe day of the election and received by such board of elections notlater than seven days following the day of election"
      },
+     "endDate": "2026-11-10",
      "countedDate": "2026-11-03",
      "verification": {
-      "status": "verified",
+      "status": "statute",
       "checkedOn": "2026-10-16"
      }
     },
     {
      "kind": "ballot_return",
      "method": "in_person",
-     "rule": "Drop off your ballot at your county board of elections or an Election Day poll site by 9 p.m. on Election Day.",
+     "rule": "Drop off your ballot at your county board of elections or a poll site before the polls close (9 p.m.) on Election Day.",
      "daysBefore": 0,
      "date": "2026-11-03",
      "time": "21:00",
      "source": {
-      "type": "official",
-      "publisher": "Board of Elections in the City of New York",
-      "url": "https://www.vote.nyc/page/absentee-voting",
-      "quote": "drop off your ballot to your county board of elections office no later than november 3, 2026 by 9pm."
+      "type": "statute",
+      "publisher": "New York Election Law § 8-412",
+      "url": "https://www.nysenate.gov/legislation/laws/ELN/8-412",
+      "quote": "absenteeballots received by it before the close of the polls on election day"
      },
      "countedDate": "2026-11-03",
      "verification": {
-      "status": "verified",
+      "status": "statute",
       "checkedOn": "2026-10-16"
      }
     }

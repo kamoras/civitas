@@ -20,6 +20,10 @@ every cited page to confirm the quoted passage is still on it:
 
   - "verified": the quote is on the election authority's own page;
   - "statute": the quote is in the statute's official text;
+  - "republished": the item's own source couldn't be read (a wall or an
+    outage), and the quote is on a county election office's printing of
+    the same deadline (`republished`), labelled as such on the page. The
+    own source is tried first on every run.
 
 An item whose page could not be read (a bot wall, which is never worked
 around -- AGENTS.md section 7 -- or an outage) or no longer carries the
@@ -130,6 +134,9 @@ def resolve(item: dict, election: dt.date, where: str) -> dict:
         sys.exit(f"{where}: source needs type official|statute and url")
     if not src.get("quote"):
         sys.exit(f"{where}: source needs the quoted passage that states the rule")
+    rep = item.get("republished")
+    if rep and not all(rep.get(f) for f in ("publisher", "url", "quote")):
+        sys.exit(f"{where}: republished needs publisher, url and quote")
     out = dict(item)
     stated = _date(item.get("date"), where)
     if item.get("daysBefore") is not None:
@@ -239,6 +246,9 @@ def carry(sources: dict, election: dt.date) -> tuple[dict, dict[str, list[str]]]
                 counted = old - dt.timedelta(days=int(item["daysBefore"]))
                 moves.setdefault(counted, counted + shift)
             moved["source"] = {**item["source"], "quote": redate_quote(item["source"]["quote"], moves, (old.year, election.year))}
+            if item.get("republished"):
+                moved["republished"] = {**item["republished"], "quote": redate_quote(
+                    item["republished"]["quote"], moves, (old.year, election.year))}
             if why:
                 lost.append(f"{item['kind']}/{item.get('method', '')}: {why}")
             else:
@@ -323,6 +333,24 @@ def build(sources: dict, client: httpx.Client, cache: pathlib.Path | None, stric
             if src["url"] not in pages:
                 pages[src["url"]] = fetch(src["url"], client, cache)
             text, how = pages[src["url"]]
+            rep = item.get("republished")
+            republished = None
+            if text is None and rep:
+                # The item's own source can't be read (a wall or an outage,
+                # never a page that answered without the passage): the same
+                # deadline as a county election office prints it, labelled
+                # on the page. Read again every run, so the state's own
+                # source is used again the run it answers.
+                if rep["url"] not in pages:
+                    pages[rep["url"]] = fetch(rep["url"], client, cache)
+                rtext, rhow = pages[rep["url"]]
+                if rtext is not None and normalise(rep["quote"]) in rtext:
+                    republished = {"publisher": rep["publisher"], "stateSource": src["url"], "stateSourceRead": how}
+                    print(f"{code}[{i}] {item['kind']}: {src['url']} unread ({how}); as published by "
+                          f"{rep['publisher']}", file=sys.stderr)
+                    text, src = rtext, {"type": "official", **rep}
+                    item["source"] = src
+            item.pop("republished", None)
             if text is None or normalise(src["quote"]) not in text:
                 why = how if text is None else "quote not on the page"
                 if not strict:
@@ -334,8 +362,9 @@ def build(sources: dict, client: httpx.Client, cache: pathlib.Path | None, stric
                 errors.append(f"{code}[{i}] {item['kind']}: not verified ({why}, {src['url']})")
                 continue
             item["verification"] = {
-                "status": "verified" if src["type"] == "official" else "statute",
+                "status": "republished" if republished else "verified" if src["type"] == "official" else "statute",
                 "checkedOn": today,
+                **({"republished": republished} if republished else {}),
             }
             items.append(item)
         if not items and not strict and entry.get("items"):

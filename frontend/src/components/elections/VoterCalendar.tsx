@@ -23,6 +23,8 @@ function checked(d: VoterDeadline): string {
   const on = d.verification.checkedOn ? `, checked ${shortDate(d.verification.checkedOn)}` : "";
   // Only verified items reach the page: the generator refuses any other.
   if (d.verification.status === "statute") return `From state law${on}`;
+  if (d.verification.status === "republished")
+    return `As published by ${d.source.publisher ?? "a county election office"}${on}`;
   return `From ${d.source.publisher ?? "the state"}${on}`;
 }
 
@@ -168,6 +170,11 @@ export default function VoterCalendar({
       className="mb-6 border border-white/15 bg-surface px-4 py-3"
     >
       {heading}
+      {calendar.republished && (
+        <p className="mt-1 border-l-2 border-signal-amber/60 pl-2 text-sm text-ink">
+          {calendar.republished}
+        </p>
+      )}
       <Registration calendar={calendar} />
       {calendar.electionDay && calendar.items.length > 0 && (
         <DeadlineRibbon

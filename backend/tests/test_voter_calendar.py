@@ -544,3 +544,45 @@ def test_every_state_in_the_bundled_calendar_has_somewhere_to_register():
         assert host.endswith(".gov") or host.endswith(".us") or host in cited, (code, host)
     assert data["states"]["ND"]["register"]["none"] is True
     assert not data["states"]["NY"].get("unread") and data["states"]["NY"]["items"]
+
+
+# ── A county office's printing, while the state's own source is walled ──
+
+_WALL = (403, "<title>Just a moment...</title>", None, {"cf-mitigated": "challenge"})
+
+
+def _ny_item():
+    return {"kind": "registration", "method": "in_person", "rule": "10 days before.", "daysBefore": 10,
+            "source": {"type": "statute", "publisher": "Election Law", "url": "https://law.example.gov/5-210",
+                       "quote": "not later than the tenth day before such election"},
+            "republished": {"publisher": "Board of Elections in the City of New York",
+                            "url": "https://www.vote.nyc/deadlines", "quote": "register in person is october 24, 2026"}}
+
+
+@pytest.mark.parametrize("statute, status", [
+    (_WALL, "republished"),  # walled: the county's printing, labelled
+    ((200, "<p>Not later than the tenth day before such election.</p>"), "statute"),  # answers: the state's own again
+])
+def test_a_walled_state_source_falls_back_to_its_labelled_republication_and_back(generator, calendar, statute, status):
+    pages = _Redirecting({"https://law.example.gov/5-210": statute,
+                          "https://www.vote.nyc/deadlines": (200, "<p>Register in person is October 24, 2026</p>")})
+    out = generator.build(_sources({"NY": {"timeZone": "America/New_York", "items": [_ny_item()]}}), pages, None)
+    (item,) = out["states"]["NY"]["items"]
+    assert item["verification"]["status"] == status and "republished" not in item
+    calendar(out["states"])
+    cal = voter_calendar.calendar_for_state("NY", ELECTION, _utc(2026, 10, 16, 18))
+    if status == "republished":
+        assert item["source"]["url"] == "https://www.vote.nyc/deadlines"
+        assert cal["republished"] == ("These deadlines are as published by the Board of Elections in the City of "
+                                      "New York; New York's own source blocks automated reads.")
+        assert cal["items"][0]["republishedBy"] == "Board of Elections in the City of New York"
+    else:
+        assert item["source"]["url"] == "https://law.example.gov/5-210"
+        assert cal["republished"] is None and cal["items"][0]["republishedBy"] is None
+
+
+def test_a_state_source_that_answers_without_the_passage_never_falls_back(generator):
+    pages = _Redirecting({"https://law.example.gov/5-210": (200, "<p>Repealed.</p>"),
+                          "https://www.vote.nyc/deadlines": (200, "<p>Register in person is October 24, 2026</p>")})
+    with pytest.raises(SystemExit):
+        generator.build(_sources({"NY": {"timeZone": "America/New_York", "items": [_ny_item()]}}), pages, None)

@@ -281,3 +281,34 @@ describe("VoterCalendar: registering", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("VoterCalendar: republished deadlines", () => {
+  it("says visibly whose printing the deadlines are read from, and why", () => {
+    const rep = item({
+      source: {
+        publisher: "Board of Elections in the City of New York",
+        url: "https://www.vote.nyc/page/registration-deadlines",
+        type: "official",
+      },
+      verification: { status: "republished", checkedOn: "2026-10-16" },
+    });
+    render(
+      <VoterCalendar
+        calendar={{
+          ...calendar,
+          items: [rep],
+          republished:
+            "These deadlines are as published by the Board of Elections in the City of New York; New York's own source blocks automated reads.",
+        }}
+        stateName="New York"
+        {...LOOKUP}
+      />
+    );
+    expect(screen.getByText(/^These deadlines are as published by the Board/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", {
+        name: /^As published by Board of Elections in the City of New York, checked/,
+      })
+    ).toHaveAttribute("href", "https://www.vote.nyc/page/registration-deadlines");
+  });
+});

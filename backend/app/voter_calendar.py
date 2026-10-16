@@ -192,6 +192,7 @@ def _item(item: dict, now: datetime, today: date, zone: ZoneInfo) -> dict:
         "_closes": closes,
         "source": {"publisher": src.get("publisher"), "url": src["url"], "type": src["type"]},
         "verification": item["verification"],
+        "republishedBy": (item["verification"].get("republished") or {}).get("publisher"),
     }
 
 
@@ -280,6 +281,21 @@ def _register_link(entry: dict, data: dict) -> dict | None:
             "statePage": reg is entry.get("register")}
 
 
+def _republished(items: list[dict], state: str) -> str | None:
+    """Said visibly when deadlines were read from a county election office's
+    printing because the state's own source couldn't be (the build script
+    tries the state's own first, every run): whose printing, and why."""
+    reps = [i["verification"].get("republished") for i in items if i["verification"]["status"] == "republished"]
+    if not reps:
+        return None
+    name = STATE_NAMES.get(state.upper(), state)
+    publishers = sorted({r["publisher"] for r in reps})
+    walled = all("bot wall" in (r.get("stateSourceRead") or "") for r in reps)
+    which = "These deadlines are" if len(reps) == len(items) else f"{len(reps)} of these deadlines are"
+    why = "blocks automated reads" if walled else "couldn't be read when the list was rebuilt"
+    return f"{which} as published by the {' and the '.join(publishers)}; {name}'s own source {why}."
+
+
 def _note(entry: dict, state: str) -> str | None:
     """The state's own note, and — when the calendar was carried to this
     election and some deadlines could not be confirmed for it — that some
@@ -316,6 +332,7 @@ def calendar_for_state(state: str, election_day: date, now: datetime | None = No
         "next": {k: v for k, v in nxt.items() if k != "_closes"} if nxt else None,
         "registrationSummary": _registration_summary(items),
         "registration": line,
+        "republished": _republished(items, state),
         "register": _register_link(entry, data),
         "electionDay": election_day.isoformat(),
         "items": [{k: v for k, v in i.items() if k != "_closes"} for i in items],

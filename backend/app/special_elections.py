@@ -337,7 +337,7 @@ def election_calendar(db: Session, now: datetime | None = None) -> dict:
             deadlines.append({
                 "state": state, "stateName": STATE_NAMES[state], "kind": item["kind"], "label": item["label"],
                 "sentence": item["sentence"], "date": item["closesOn"], "status": item["status"],
-                "daysLeft": item["daysLeft"], "source": item["source"],
+                "daysLeft": item["daysLeft"], "source": item["source"], "republishedBy": item["republishedBy"],
                 "register": cal["register"] if item["kind"] == "registration" and item["status"] != CLOSED else None,
             })
     deadlines.sort(key=lambda d: (d["date"], d["state"]))
