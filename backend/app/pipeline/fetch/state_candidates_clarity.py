@@ -81,7 +81,7 @@ the shared parsers had never seen:
 import logging
 import re
 import time
-from datetime import timezone
+from datetime import date, timezone
 from email.utils import parsedate_to_datetime
 
 import httpx
@@ -98,7 +98,7 @@ from app.pipeline.fetch.state_candidates_common import (
     pick_nominee,
     federal_record,
 )
-from app.pipeline.fetch.election_results import ContestCount, StateCount, UntrustedCount, is_special_contest, pick_general
+from app.pipeline.fetch.election_results import ContestCount, StateCount, UntrustedCount, is_special_contest, pick_election
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -436,7 +436,7 @@ async def _general_election_id(
                 state, len(order), _MAX_WALK, election_day,
             )
         try:
-            found = pick_general(held, state)
+            found = pick_election(held, state, date.fromisoformat(election_day))
         except UntrustedCount as refused:
             _general_eid_misses[key] = (time.monotonic(), str(refused))
             raise
@@ -455,7 +455,7 @@ async def _general_election_id(
         for e in elections
         if isinstance(e, dict) and _clarity_date(str(e.get("Date") or "")) == election_day and e.get("EID")
     ]
-    return pick_general(held, state)
+    return pick_election(held, state, date.fromisoformat(election_day))
 
 
 def general_contests(summary: dict) -> list[ContestCount]:

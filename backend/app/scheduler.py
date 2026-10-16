@@ -590,38 +590,55 @@ def _election_ballot_sync() -> None:
 
 def _election_results_sync() -> None:
     """Every covered state's live count, from election day until the
-    results window closes (election_phase) — a no-op the rest of the year.
+    results window closes (election_phase), and each special election's,
+    from its own day until its window closes (live_results/specials.py) --
+    a no-op the rest of the year.
 
-    Every five minutes while the count is moving; once no race's totals
+    Every five minutes while a count is moving; once no race's totals
     have changed for a day, hourly, since the page then only waits out its
     grace period and a late amendment is all there is left to catch.
     """
     from app.election_phase import active_election
+    from app.live_results.specials import due_specials
 
     election = active_election()
-    if not election.shows_results:
-        return
+    general = election.shows_results
     last = election.last_result_change
-    if last is not None and utcnow() - last > timedelta(days=1) and utcnow().minute >= 5:
+    if general and last is not None and utcnow() - last > timedelta(days=1) and utcnow().minute >= 5:
+        general = False
+    db = SessionLocal()
+    try:
+        specials = [row.id for row in due_specials(db)]
+    finally:
+        db.close()
+    if not general and not specials:
         return
 
     def _run():
         from app.election_archive import freeze
         from app.http_client import make_async_client
+        from app.live_results.specials import sync_specials
         from app.live_results.sync import results_tracker, sync_live_results
+        from app.models import FederalElectionDate
 
         async def _sync():
             db = SessionLocal()
             try:
+                summary = {}
                 async with make_async_client() as client:
-                    summary = await sync_live_results(db, client, election.election_day)
-                # The election's archive (app/election_archive.py), copied
-                # on every pass through the window and frozen by its close.
-                try:
-                    freeze(db, election.election_day)
-                except Exception:
-                    db.rollback()
-                    logger.exception("Election archive copy failed")
+                    if general:
+                        summary = await sync_live_results(db, client, election.election_day)
+                    if specials:
+                        rows = db.query(FederalElectionDate).filter(FederalElectionDate.id.in_(specials)).all()
+                        summary["_specials"] = await sync_specials(db, client, rows)
+                if general:
+                    # The election's archive (app/election_archive.py), copied
+                    # on every pass through the window and frozen by its close.
+                    try:
+                        freeze(db, election.election_day)
+                    except Exception:
+                        db.rollback()
+                        logger.exception("Election archive copy failed")
                 return summary
             finally:
                 db.close()

@@ -45,7 +45,7 @@ from app.election_calendar import (
     federal_states,
     seats_up_for_year,
 )
-from app.election_phase import active_election, election_is_held
+from app.election_phase import active_election, election_is_held, election_today
 from app.http_client import make_async_client
 from app.live_results import bluesky as live_bluesky
 from app.models import (
@@ -63,11 +63,14 @@ from app.pipeline.analyze import election_bluesky, election_coverage, race_relev
 from app.pipeline.analyze.score_calculator import get_district_pvi_map
 from app.pipeline.fetch.congress_legislators import fetch_bioguide_to_fec_ids
 from app.pipeline.fetch.fec import fetch_all_candidates, fetch_candidate_financials
+from app.pipeline.fetch.special_elections import refresh_special_elections
 from app.pipeline.fetch.state_candidates import (
     crawl_for_new_sources,
+    report_file_problems,
     sync_ballot_filings,
     sync_confirmed_candidates,
 )
+from app.special_elections import publish_new_specials
 from app.pipeline.fetch.state_election_dates import senate_election_known
 from app.pipeline.progress_tracker import ProgressTracker
 from app.pipeline import lease
@@ -94,6 +97,7 @@ def current_election_cycle(db: Session | None = None) -> int:
     return active_election(db).cycle
 
 ELECTION_PIPELINE_STEPS = [
+    ("special_elections",    "specials",            "Read special elections, vacancies and the election calendar"),
     ("roster_sync",          "roster",              "Sync candidate roster"),
     ("financial_refresh",    "financial",           "Refresh candidate financials"),
     ("confirmed_candidates", "confirmed_candidates", "Confirm general-election candidates"),
@@ -1557,6 +1561,28 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
             # list, before the roster is filtered by it. Best-effort: a
             # failed read keeps what is stored (senate_classes.py).
             await senate_classes.refresh_senate_classes(client)
+            # Specials, vacancies and the calendar, in every season: specials
+            # are held in any month, and the calendar page reads this
+            # whether or not a general is near. After the classes, which the
+            # Senate's vacancies are read against.
+            run.current_phase = "specials"
+            db.commit()
+            progress.begin("special_elections")
+            try:
+                specials = await refresh_special_elections(db, client, election_today(), cycle)
+                publish_new_specials(db, specials["new"])
+                report_file_problems(
+                    "Special elections or the election calendar not fully read",
+                    "What is stored stays shown; the next run retries.",
+                    specials["problems"], "special-elections-read",
+                )
+                progress.complete("special_elections", detail=f"{len(specials['new'])} new calendar rows")
+            except Exception:
+                db.rollback()
+                logger.exception("Special-election read failed — continuing")
+                progress.fail("special_elections")
+            run.current_phase = "roster"
+            db.commit()
             try:
                 if election_held:
                     progress.skip("roster_sync", detail=f"skipped: {ELECTION_HELD}")
