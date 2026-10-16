@@ -1212,6 +1212,7 @@ function HouseDetail({
       <DistrictMap
         state={ballot.state}
         newLines={newLines}
+        cycleYear={ballot.cycleYear}
         races={houseRaces}
         picked={null}
         onPick={(id) => onPick(id)}
@@ -2025,7 +2026,10 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
               ballot, not under it: in a state still on FEC filers after its
               primary, a reader who only sees a footnote has been misled. */}
             <BallotBasisNotice basis={ballot.ballotBasis} />
-            <GeneralRunoffNotice runoffs={ballot.generalRunoffs} />
+            <GeneralRunoffNotice
+              runoffs={ballot.generalRunoffs}
+              electionDate={ballot.electionDate}
+            />
             <TopPrimaryNotice rules={ballot.topPrimary} stateName={stateName} />
             <RankedChoiceNotice rankedChoice={ballot.rankedChoice} stateName={stateName} />
 

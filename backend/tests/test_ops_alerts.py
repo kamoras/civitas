@@ -6,6 +6,7 @@ and supplementary data 1+ day with nothing telling an operator to look.
 """
 
 from datetime import date, datetime, timedelta
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -13,11 +14,12 @@ import pytest
 from app import ops_alerts
 from app.election_phase import ActiveElection
 from app.models import (
-    ElectionPipelineRun, HousePipelineRun, PipelineRun, PipelineStatus,
+    ElectionPipelineRun, HousePipelineRun, PipelineRun, PipelineStatus, President,
     StockTradesPipelineRun, SupplementaryPipelineRun,
 )
 from app.ops_alerts import (
     check_pipeline_overrun,
+    check_sitting_president,
     check_pipeline_staleness,
     recent_alerts,
     resolve_ops_alert,
@@ -300,8 +302,6 @@ class TestCheckPipelineStaleness:
 
 
 def test_an_unreadable_database_does_not_stop_an_alert(monkeypatch):
-    from app import ops_alerts
-
     def no_database():
         raise RuntimeError("database is locked")
 
@@ -405,8 +405,6 @@ class TestOpenAndResolved:
         assert [a["subject"] for a in self._alerts(db_session)] == ["Old but still broken", "Recent event"]
 
     def test_pruning_keeps_every_open_alert(self, db_session):
-        from app import ops_alerts
-
         with patch.object(ops_alerts, "_HISTORY_KEEP", 3):
             self._send(db_session, "Open", condition="open")
             for i in range(5):
@@ -417,7 +415,6 @@ class TestOpenAndResolved:
 
     def test_pruning_keeps_a_superseded_alerts_key_while_its_condition_is_open(self, db_session):
         # Freed, the key would let the swing back to it send it again.
-        from app import ops_alerts
 
         with patch.object(ops_alerts, "_HISTORY_KEEP", 2):
             assert self._send(db_session, "States A failing", dedupe_key="a", condition="states")
@@ -429,7 +426,6 @@ class TestOpenAndResolved:
     def test_pruning_keeps_only_so_many_superseded_alerts(self, db_session):
         # A condition open for weeks under a dated key would otherwise keep
         # a row a day for good: the newest are kept, the oldest go.
-        from app import ops_alerts
         from app.models import ApiCache
 
         with patch.object(ops_alerts, "_HISTORY_KEEP", 2), patch.object(ops_alerts, "_SUPERSEDED_KEPT", 2):
@@ -545,3 +541,81 @@ class TestElectionReadiness:
             ops_alerts.check_election_readiness()
         assert alert.call_args.kwargs["condition"] == "election-ready-maps"
         assert "election-ready-calendar" in [c.args[0] for c in resolve.call_args_list]
+
+
+class TestCheckSittingPresident:
+    """The roster's sitting president against the Federal Register's newest
+    presidential document: an inauguration the roster hasn't caught up with
+    is alerted; a register that is merely behind the roster is not."""
+
+    @staticmethod
+    def _check(db_session, signer):
+        with patch("app.ops_alerts.newest_presidential_signer", return_value=signer), \
+             patch("app.ops_alerts.SessionLocal", return_value=SimpleNamespace(query=db_session.query, close=lambda: None)), \
+             patch("app.ops_alerts.send_ops_alert") as alert, \
+             patch("app.ops_alerts.resolve_ops_alert") as resolve:
+            check_sitting_president()
+        return alert, resolve
+
+    @pytest.fixture
+    def roster(self, db_session):
+        db_session.add_all([
+            President(id="outgoing-47", name="Outgoing A. President, Jr.", party="R", number=47,
+                      term_start="2025-01-20", is_current=True),
+        ])
+        db_session.commit()
+
+    def test_the_same_person_resolves(self, db_session, roster):
+        alert, resolve = self._check(db_session, ("Outgoing President", "2026-10-07"))
+        alert.assert_not_called()
+        resolve.assert_called_once_with("sitting-president-mismatch")
+
+    def test_a_new_president_the_roster_lacks_alerts(self, db_session, roster):
+        # 2029-01-21: the new president's first documents, the roster still
+        # on the outgoing one.
+        alert, _ = self._check(db_session, ("Incoming President", "2029-01-21"))
+        assert alert.call_args.kwargs["condition"] == "sitting-president-mismatch"
+        assert "Incoming President" in alert.call_args.args[1]
+
+    def test_a_register_behind_the_roster_is_quiet(self, db_session):
+        # The roster already shows the new president; the register's newest
+        # documents (published days after signing) are still the outgoing
+        # president's.
+
+        db_session.add(President(id="incoming-48", name="Incoming President", party="D", number=48,
+                                 term_start="2029-01-20", is_current=True))
+        db_session.commit()
+        alert, resolve = self._check(db_session, ("Outgoing President", "2029-01-17"))
+        alert.assert_not_called()
+        resolve.assert_not_called()
+
+    def test_no_sitting_president_alerts(self, db_session):
+        alert, _ = self._check(db_session, ("Incoming President", "2029-01-21"))
+        assert "nobody" in alert.call_args.args[1]
+
+    def test_an_unreadable_register_changes_nothing(self, db_session, roster):
+        alert, resolve = self._check(db_session, None)
+        alert.assert_not_called()
+        resolve.assert_not_called()
+
+
+def test_newest_presidential_signer_reads_the_newest_signing(monkeypatch):
+    class Resp:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"results": [
+                {"president": {"name": "Outgoing President"}, "signing_date": "2029-01-19"},
+                {"president": {"name": "Incoming President"}, "signing_date": "2029-01-20"},
+                {"president": None, "signing_date": "2029-01-21"},
+            ]}
+
+    monkeypatch.setattr(ops_alerts.httpx, "get", lambda *a, **k: Resp())
+    assert ops_alerts.newest_presidential_signer() == ("Incoming President", "2029-01-20")
+
+    def down(*a, **k):
+        raise ops_alerts.httpx.ConnectError("down")
+
+    monkeypatch.setattr(ops_alerts.httpx, "get", down)
+    assert ops_alerts.newest_presidential_signer() is None

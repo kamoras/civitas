@@ -253,6 +253,7 @@ def _nightly_pipeline() -> None:
         check_current_congress_staleness,
         check_election_readiness,
         check_feedback_token_expiration,
+        check_sitting_president,
         check_state_pvi_staleness,
         resolve_ops_alert,
         send_ops_alert,
@@ -278,6 +279,10 @@ def _nightly_pipeline() -> None:
             # lean, voter calendar, poll closing times, town sample
             # ballots), each alerted once its lead time begins.
             check_election_readiness,
+            # The presidents table's sitting president against the Federal
+            # Register's newest presidential document (an inauguration the
+            # roster hasn't caught up with).
+            check_sitting_president,
         )
         for check in pre_checks:
             try:
