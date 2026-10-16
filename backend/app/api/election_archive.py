@@ -139,6 +139,22 @@ def archive_map_csv(cycle: int = CYCLE, db: Session = Depends(get_db)):
     )
 
 
+def latest_check(db: Session) -> dict | None:
+    """The newest archived election's map check in a line, for the elections
+    hub's Archive card (api/sections.py); None before any archive exists."""
+    row = (db.query(ElectionArchive).filter(ElectionArchive.record_json.isnot(None))
+           .order_by(ElectionArchive.cycle.desc()).first())
+    if row is None:
+        return None
+    election = active_election(db)
+    return {
+        "cycle": row.cycle,
+        "stillCounting": election.cycle == row.cycle and election.shows_results,
+        "accountability": (accountability.summary(accountability.grade(
+            json.loads(row.map_json), json.loads(row.record_json))) if row.map_json else None),
+    }
+
+
 def _graded(db: Session, cycle: int) -> dict:
     row = _row(db, cycle)
     if row.map_json is None:

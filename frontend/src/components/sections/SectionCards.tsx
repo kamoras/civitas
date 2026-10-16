@@ -26,7 +26,8 @@ export async function fetchSectionFigures(): Promise<SectionFigures | null> {
 /** Where each hub's figures come from, printed under a shared picture. */
 const SOURCES: Partial<Record<SectionKey, string>> = {
   congress: "Congressional Record; Senate and House roll calls; OMB statements of policy",
-  elections: "State election offices; Civitas election map; enacted House maps",
+  elections:
+    "State election offices (official counts for the archive's map check); Civitas election map; enacted House maps",
   agencies: "Federal Register; USAspending.gov",
 };
 

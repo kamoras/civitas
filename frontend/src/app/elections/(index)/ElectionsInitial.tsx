@@ -2,7 +2,6 @@
 
 import { createContext, useContext } from "react";
 import type { ElectionPhaseInfo, PviMap } from "@/types/election";
-import type { ArchiveIndex } from "@/types/electionArchive";
 
 /** What the server already read for /elections (elections/layout.tsx): the
  * lean map and which mode the page is in, so the masthead, map and state
@@ -19,10 +18,6 @@ export interface ElectionsInitial {
     phase: ElectionPhaseInfo;
     cycleYear: number | null;
   } | null;
-  /** The archived elections, for the hub's "did the map's ranges hold"
-   * card; null when the server couldn't read them (the card is then left
-   * out, never shown empty). */
-  archive?: ArchiveIndex | null;
   /** The server's clock when it rendered, so the countdown reads the same
    * on the server and in the browser. */
   renderedAt: number;

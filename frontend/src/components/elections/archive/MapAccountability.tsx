@@ -2,7 +2,6 @@ import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR, shareMetaAttrs } from "@/lib/shareImage";
 import {
-  ACCOUNTABILITY_SOURCE,
   HOUSE_GAP,
   HOUSE_TILE,
   NO_CONTEST_FILL,
@@ -26,6 +25,11 @@ const CHAMBERS: MapChamberKey[] = ["senate", "house"];
 const CHAMBER_NAME: Record<MapChamberKey, string> = { senate: "Senate", house: "House" };
 const TILE = 10;
 const GAP = 1;
+/** The source line of the held election's check and swing map (archive
+ * page), inside every share image of it. */
+const ACCOUNTABILITY_SOURCE =
+  "Civitas: the pre-election map as frozen on election day; counts from each state's own results system, used once the state lists them official; usual vote from official returns (MEDSL, FEC, VEST, Census); polls: Wikipedia contributors, CC BY-SA 4.0";
+
 const WAITING_STROKE = "#CDC7BC";
 
 function pct(share: number | null): string {

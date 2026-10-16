@@ -11,6 +11,7 @@ from datetime import date, datetime
 import pytest
 
 from app.api import election_archive as api
+from app.api import sections
 from app.election_archive import freeze
 from app.forecast import accountability
 from app.forecast.build import map_path
@@ -230,6 +231,9 @@ class TestThroughTheArchive:
         [entry] = _body(api.archive_index(db_session))["cycles"]
         assert entry["accountability"] == {"ranged": 6, "certified": 4, "official": 3, "graded": 3,
                                            "held80": 1, "held95": 2, "swingSeats": 3}
+        # The elections hub's Archive card (GET /api/sections) reads the same line.
+        assert sections.elections(db_session)["archive"] == {
+            "cycle": 2026, "stillCounting": False, "accountability": entry["accountability"]}
 
     def test_the_frozen_map_is_used_never_a_rebuild(self, db_session, freeze_utcnow):
         """No look-ahead: once frozen, a later map file (the next build, a

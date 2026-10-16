@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import type { LiveResults, PviMap, RaceSummary } from "@/types/election";
-import type { ArchiveIndex } from "@/types/electionArchive";
 import { TOPIC_FEEDS, pageMetadata } from "@/lib/site";
 import { describeElections } from "@/lib/seo";
 import { everyLiveStateVoting, showsResults } from "@/lib/results";
@@ -86,30 +85,13 @@ async function fetchPvi(): Promise<PviMap | null> {
   }
 }
 
-// The archive index, for the hub's accountability card. Null when the
-// backend can't answer: the card is then left out.
-async function fetchArchiveIndex(): Promise<ArchiveIndex | null> {
-  try {
-    const res = await fetch(`${BACKEND}/api/elections/archive`, { next: { revalidate: 300 } });
-    if (!res.ok) return null;
-    const body = (await res.json()) as Partial<ArchiveIndex> | null;
-    return body && Array.isArray(body.cycles) && body.current ? (body as ArchiveIndex) : null;
-  } catch {
-    return null;
-  }
-}
-
 // Rendered per request, never at build time: `next build` has no backend,
 // so a prerendered page would always be the no-data frame.
 async function readInitial(): Promise<ElectionsInitial> {
   await connection();
   const renderedAt = Date.now();
-  const [pvi, phase, archive] = await Promise.all([
-    fetchPvi(),
-    fetchPhase(renderedAt),
-    fetchArchiveIndex(),
-  ]);
-  return { pvi, phase, archive, renderedAt };
+  const [pvi, phase] = await Promise.all([fetchPvi(), fetchPhase(renderedAt)]);
+  return { pvi, phase, renderedAt };
 }
 
 export default async function ElectionsLayout({ children }: { children: React.ReactNode }) {

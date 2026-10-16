@@ -2,15 +2,12 @@ import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import axe from "axe-core";
 import MapAccountability, { statusSentence } from "./MapAccountability";
-import { accountabilityCard } from "./AccountabilityCard";
-import { ELECTIONS_ARCHIVE_HREF } from "@/lib/routes";
 import type {
   AccountabilitySeat,
   ChamberAccountability,
   CoverageCell,
   MapAccountability as Data,
 } from "@/types/mapAccountability";
-import type { ArchiveIndex } from "@/types/electionArchive";
 
 function seat(over: Partial<AccountabilitySeat>): AccountabilitySeat {
   return {
@@ -212,72 +209,5 @@ describe("MapAccountability", () => {
       rules: { "color-contrast": { enabled: false } },
     });
     expect(result.violations.map((v) => v.id)).toEqual([]);
-  });
-});
-
-describe("accountabilityCard", () => {
-  const index = (over: Partial<ArchiveIndex["cycles"][number]> | null): ArchiveIndex => ({
-    cycles: over
-      ? [
-          {
-            cycle: 2026,
-            electionDay: "2026-11-03",
-            recordAsOf: null,
-            mapAsOf: null,
-            hasMap: true,
-            stillCounting: false,
-            races: 470,
-            counted: 400,
-            official: 390,
-            measures: 0,
-            states: 50,
-            ...over,
-          },
-        ]
-      : [],
-    current: { cycle: 2026, electionDay: "2026-11-03", phase: "campaign" },
-  });
-
-  it("before any archive, says when the first check comes", () => {
-    const card = accountabilityCard(index(null));
-    expect(card.href).toBe(ELECTIONS_ARCHIVE_HREF);
-    expect(card.detail).toContain("After the 2026 election");
-  });
-
-  it("with nothing official, says so", () => {
-    const card = accountabilityCard(
-      index({
-        accountability: {
-          ranged: 40,
-          certified: 0,
-          official: 0,
-          graded: 0,
-          held80: 0,
-          held95: 0,
-          swingSeats: 0,
-        },
-      })
-    );
-    expect(card.headline).toBe("2026: no count official yet");
-    expect(card.href).toBe("/elections/2026#map-check");
-  });
-
-  it("states the counts", () => {
-    const card = accountabilityCard(
-      index({
-        stillCounting: true,
-        accountability: {
-          ranged: 40,
-          certified: 31,
-          official: 30,
-          graded: 30,
-          held80: 25,
-          held95: 29,
-          swingSeats: 300,
-        },
-      })
-    );
-    expect(card.headline).toBe("2026: 25 of 30 official margins inside the map's 80% ranges");
-    expect(card.detail).toContain("31 of 40 seats with a range have an official count so far");
   });
 });

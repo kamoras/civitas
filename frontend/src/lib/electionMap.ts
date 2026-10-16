@@ -77,11 +77,6 @@ export function chamberView(r: ElectionMapResponse, chamber: MapChamber): Electi
  * statically prerendered routes"), which could open the Difference view
  * on a reader who asked for the map. Do not "tidy" the query away.
  */
-/** The source line of the held election's check and swing map (archive
- * page and the hub's card), inside every share image of them. */
-export const ACCOUNTABILITY_SOURCE =
-  "Civitas: the pre-election map as frozen on election day; counts from each state's own results system, used once the state lists them official; usual vote from official returns (MEDSL, FEC, VEST, Census); polls: Wikipedia contributors, CC BY-SA 4.0";
-
 export const ELECTION_MAP_HREF = "/elections/map?chamber=senate&view=usual";
 
 export function mapHref(view: MapView, chamber: MapChamber = "senate", seat?: string): string {

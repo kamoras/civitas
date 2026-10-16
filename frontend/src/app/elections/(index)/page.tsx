@@ -11,7 +11,6 @@ import Link from "next/link";
 import RaceMap, { FIPS_TO_STATE } from "@/components/elections/RaceMap";
 import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
 import ResultsOverview from "@/components/elections/results/ResultsOverview";
-import AccountabilityCard from "@/components/elections/archive/AccountabilityCard";
 import { electionTitle, formatPvi, pviColor, stateBallotHref } from "@/lib/elections";
 import { formatUtcDate } from "@/lib/formatting";
 import {
@@ -498,8 +497,6 @@ export default function ElectionsPage() {
               </section>
             </>
           )}
-
-          {initial?.archive && phaseKnown && <AccountabilityCard index={initial.archive} />}
         </div>
       </main>
       <BackToTop />
