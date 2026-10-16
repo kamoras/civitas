@@ -274,6 +274,39 @@ def _computed_lean(race: Race, pvi_level: str | None) -> float | None:
     return computed_lean_for(race.state, race.district, congress_for_election(race.cycle_year))
 
 
+def _usual_vote(race: Race, pvi: int | None, pvi_level: str | None,
+                state_pvi: dict[str, int]) -> tuple[dict | None, dict | None]:
+    """(usualVote, leanContext): the seat's lean as the 2026 election map
+    shows it, and where it sits among its kind, counted on the same figures.
+
+    A House seat's is Civitas's computed lean on the lines its cycle is
+    fought on (district_lean.json), a Senate seat's the state's lean
+    (state_pvi.json, also computed by Civitas from official returns); both
+    are written with district_lean.lean_label, the map's own function, so
+    the race page and the map can't show different numbers for a seat.
+    Cook's figure stays on the race as `pvi`, the cross-check. A House seat
+    with no computed figure has no usual vote, and its context falls back to
+    Cook's table (labelled as Cook's on the page)."""
+    if race.office == "H":
+        congress = congress_for_election(race.cycle_year)
+        lean = computed_lean_for(race.state, race.district, congress) if pvi_level == "district" else None
+        if lean is None:
+            return None, None
+        table = {k: round(v) for k, v in district_lean.computed_lean(congress).items()}
+        return ({"lean": round(lean, 2), "label": district_lean.lean_label(lean), "source": "computed"},
+                lean_context("H", round(lean), "district", state_pvi, table))
+    if pvi is None:
+        return None, None
+    return ({"lean": pvi, "label": district_lean.lean_label(pvi), "source": "state"},
+            lean_context("S", pvi, pvi_level, state_pvi, {}))
+
+
+def _usual_vote_fields(race, pvi, pvi_level, state_pvi, district_pvi) -> dict:
+    usual, context = _usual_vote(race, pvi, pvi_level, state_pvi)
+    return {"usualVote": usual,
+            "leanContext": context or lean_context(race.office, pvi, pvi_level, state_pvi, district_pvi)}
+
+
 def _iso_utc(dt) -> str | None:
     """Serialize a stored naive-UTC datetime with an explicit Z suffix —
     an offset-less ISO string gets parsed as LOCAL time by JS Date
@@ -788,8 +821,9 @@ def _race_full(
         "pvi": pvi,
         "pviLevel": pvi_level,
         "computedLean": _computed_lean(race, pvi_level),
-        # Where this seat's lean sits among all seats of its kind.
-        "leanContext": lean_context(race.office, pvi, pvi_level, state_pvi, district_pvi),
+        # The map's own lean for the seat, and where it sits among all seats
+        # of its kind (counted on the same figures).
+        **_usual_vote_fields(race, pvi, pvi_level, state_pvi, district_pvi),
         "counties": counties,
         "places": places,
         "candidateSource": _candidate_source(race.candidates, complete),
@@ -2123,7 +2157,7 @@ def race_detail(race_id: str, db: Session = Depends(get_db)):
         "pvi": pvi,
         "pviLevel": pvi_level,
         "computedLean": _computed_lean(race, pvi_level),
-        "leanContext": lean_context(race.office, pvi, pvi_level, state_pvi, district_pvi),
+        **_usual_vote_fields(race, pvi, pvi_level, state_pvi, district_pvi),
         "candidateSource": _candidate_source(race.candidates, complete),
         "candidates": [_candidate_summary(c, stale_incumbent_ids) for c in candidates],
         "coverage": [_coverage_item(item) for item in coverage],
