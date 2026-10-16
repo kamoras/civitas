@@ -168,6 +168,7 @@ import pathlib
 import statistics
 from datetime import date
 
+from app import data_refresh
 from app.atomic_write import update_json_file
 from app.config import settings
 from app.file_cache import Stamp, new_reload_lock
@@ -500,7 +501,7 @@ def write_member_ideal_points(chamber: str, data: dict) -> None:
         )
 
 
-_state_population_cache: dict[str, float] | None = None
+_state_population_cache: tuple[dict, dict[str, float]] | None = None
 
 
 def _state_population() -> dict[str, float]:
@@ -519,16 +520,16 @@ def _state_population() -> dict[str, float]:
     the 2030 census.
     """
     global _state_population_cache
-    if _state_population_cache is None:
-        path = pathlib.Path(__file__).resolve().parent.parent.parent / "data" / "state_population.json"
+    # The copy in use: refreshed when a new census is published
+    # (data_refresh), else the bundled file.
+    data = data_refresh.read("state_population.json")
+    if _state_population_cache is None or _state_population_cache[0] is not data:
         try:
-            _state_population_cache = {
-                k: float(v) for k, v in json.loads(path.read_text())["states"].items()
-            }
+            _state_population_cache = (data, {k: float(v) for k, v in data["states"].items()})
         except Exception:
             logger.warning("state_population.json unavailable — small-donor baseline will use the national mean for every state")
-            _state_population_cache = {}
-    return _state_population_cache
+            return {}
+    return _state_population_cache[1]
 
 
 _position_reliability_cache: dict | None = None

@@ -17,7 +17,7 @@ letter capitalization, so the table only ever replaces a guess with an
 observed form. normalize_finance._clean_donor_name reads it.
 
 Run from backend/ (network required):
-    python scripts/build_name_casing.py [--year 2025] [--days 120]
+    python scripts/build_name_casing.py [--year YYYY, default last year] [--days 120]
 Rerun to refresh (new names enter the Register every day).
 """
 
@@ -127,7 +127,7 @@ def build(year: int, days: int, cache: pathlib.Path, min_count: int = CASING_MIN
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--year", type=int, default=2025)
+    ap.add_argument("--year", type=int, default=datetime.date.today().year - 1)
     ap.add_argument("--days", type=int, default=120)
     ap.add_argument("--cache", type=pathlib.Path, default=pathlib.Path("fr_bulk_cache"),
                     help="where downloaded issues are kept between runs")

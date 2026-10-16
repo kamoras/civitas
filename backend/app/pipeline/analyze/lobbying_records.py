@@ -64,13 +64,13 @@ lobbied on it, not for or against it — the LDA form has no such field.
 
 from __future__ import annotations
 
-import json
 import logging
 import math
 import pathlib
 import re
 from difflib import SequenceMatcher
-from functools import lru_cache
+
+from app import data_refresh
 
 logger = logging.getLogger(__name__)
 
@@ -203,12 +203,18 @@ def _tokens(text: str, years: bool = False) -> set[str]:
     }
 
 
-@lru_cache(maxsize=1)
+_df_memo: tuple[dict, tuple[int, dict[str, int]]] | None = None
+
+
 def _document_frequencies() -> tuple[int, dict[str, int]]:
-    """(number of titles, per-word title counts) from the generated table.
-    Words seen in only one title are not stored and count as 1."""
-    data = json.loads(_DF_PATH.read_text())
-    return int(data["documents"]), {k: int(v) for k, v in data["df"].items()}
+    """(number of titles, per-word title counts) from the generated table
+    (refreshed monthly by data_refresh, else the bundled one). Words seen in
+    only one title are not stored and count as 1."""
+    global _df_memo
+    data = data_refresh.read(_DF_PATH.name)
+    if _df_memo is None or _df_memo[0] is not data:
+        _df_memo = (data, (int(data["documents"]), {k: int(v) for k, v in data["df"].items()}))
+    return _df_memo[1]
 
 
 def _idf(token: str) -> float:

@@ -124,6 +124,7 @@ def interval(o: np.ndarray) -> dict:
 
 
 def main() -> None:
+    out_path = pathlib.Path(sys.argv[sys.argv.index("--output") + 1]) if "--output" in sys.argv else CALIBRATION_PATH
     ref = Reference()
     exs = examples()
     dates = np.array([datetime.date.fromisoformat(e["date"]) for e in exs])
@@ -209,7 +210,7 @@ def main() -> None:
             "held_out": interval(routed_outcomes(test_rows, test_mask, proto_best, gated=False)),
         },
     }
-    CALIBRATION_PATH.write_text(json.dumps(out, indent=1) + "\n")
+    out_path.write_text(json.dumps(out, indent=1) + "\n")
     print(json.dumps({k_: v for k_, v in out.items() if k_ != "held_out_curve"}, indent=1))
 
 

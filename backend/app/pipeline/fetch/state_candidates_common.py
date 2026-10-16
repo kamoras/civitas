@@ -18,14 +18,13 @@ invented:
   NCSBE/NC    "US SENATE (DEM)"
 """
 
-import json
 import logging
-import pathlib
 import re
 from collections.abc import Callable
 from datetime import date, timedelta
 from urllib.parse import urljoin
 
+from app import data_refresh
 from app.pipeline.fetch.fec import general_election_day
 from app.pipeline.fetch.http_utils import fetch_text_with_retry
 from app.time_utils import utcnow
@@ -533,8 +532,6 @@ def fec_party(code: str | None) -> str | None:
     return FEC_PARTY_ALIASES.get(code or "", code) if code else code
 
 
-_FEC_PARTY_CODES_PATH = pathlib.Path(__file__).resolve().parents[2] / "data" / "fec_party_codes.json"
-_fec_party_codes: dict[str, str] | None = None
 
 
 def fec_party_label(code: str | None) -> str | None:
@@ -542,10 +539,7 @@ def fec_party_label(code: str | None) -> str | None:
     (app/data/fec_party_codes.json, scripts/fetch_fec_party_codes.py): "TX"
     is the Taxpayers party. None for a code the table doesn't define —
     one a filer typed ("08", "GOP"), shown as filed."""
-    global _fec_party_codes
-    if _fec_party_codes is None:
-        _fec_party_codes = json.loads(_FEC_PARTY_CODES_PATH.read_text())["codes"]
-    return _fec_party_codes.get(code or "")
+    return (data_refresh.read("fec_party_codes.json").get("codes") or {}).get(code or "")
 
 
 def ballot_party(record: dict) -> str | None:

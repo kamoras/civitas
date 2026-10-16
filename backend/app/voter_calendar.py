@@ -21,7 +21,8 @@ import pathlib
 from datetime import date, datetime, time
 from zoneinfo import ZoneInfo
 
-from app.file_cache import read_json
+from app.atomic_write import runtime_data_path
+from app.file_cache import Uncached, files_stamp, read_json_preferring
 from app.state_names import STATE_NAMES
 from app.time_utils import utcnow
 
@@ -36,10 +37,23 @@ _METHOD = {"online": "online", "mail": "by mail", "in_person": "in person", "any
 _WINDOWS = {"early_voting", "same_day_registration"}
 
 
+_stamp = None
+
+
 def _load() -> dict:
-    global _cache
-    if _cache is None:
-        _cache = read_json(_PATH) or {}
+    """The calendar in use: the refreshed copy on the data volume (rebuilt
+    for each election by app/data_refresh.py), else the bundled one at
+    _PATH. Re-read when either file changes, so the API process sees a
+    refresh the pipeline process wrote."""
+    global _cache, _stamp
+    paths = (runtime_data_path(_PATH.name), _PATH)
+    stamp = files_stamp(paths)
+    if _cache is None or stamp != _stamp:
+        try:
+            _cache = read_json_preferring(*paths, default={}, accept=lambda d: isinstance(d, dict) and "states" in d)
+        except Uncached as unreadable:
+            return unreadable.value
+        _stamp = stamp
     return _cache
 
 
@@ -184,6 +198,19 @@ def _registration_summary(items: list[dict]) -> str | None:
     return f"{gone}. Still open: {left}."
 
 
+def _note(entry: dict, state: str) -> str | None:
+    """The state's own note, and — when the calendar was carried to this
+    election and some deadlines could not be confirmed for it — that some
+    are missing, so a missing deadline never reads as there being none."""
+    parts = [entry.get("note")] if entry.get("note") else []
+    if entry.get("incomplete"):
+        parts.append(
+            f"Not every one of {STATE_NAMES.get(state.upper(), state)}'s deadlines is confirmed for this election yet; "
+            "one not listed here may still apply, so check with your county election office."
+        )
+    return " ".join(parts) or None
+
+
 def calendar_for_state(state: str, election_day: date, now: datetime | None = None) -> dict | None:
     """`state`'s voter calendar for `election_day`, with each deadline's
     status on the state's own clock; None when the file has no calendar for
@@ -202,7 +229,7 @@ def calendar_for_state(state: str, election_day: date, now: datetime | None = No
     return {
         "timeZone": entry["timeZone"],
         "localToday": today.isoformat(),
-        "note": entry.get("note"),
+        "note": _note(entry, state),
         "next": {k: v for k, v in nxt.items() if k != "_closes"} if nxt else None,
         "registrationSummary": _registration_summary(items),
         "items": [{k: v for k, v in i.items() if k != "_closes"} for i in items],
