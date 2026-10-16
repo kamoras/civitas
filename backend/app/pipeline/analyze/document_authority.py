@@ -119,6 +119,60 @@ def is_identifier_query(query: str) -> bool:
     return rest != (query or "") and not _WORD_RE.search(rest)
 
 
+# A docket id as Regulations.gov writes them: the agency's letters, any
+# sub-agency or docket-type segments, a four-digit year, then a sequence
+# ("IRS-2026-1090", "EPA-HQ-OAR-2021-0317", "FDA-2018-N-3240",
+# "DOD-2026-OS-0662"); a document in it adds a four-digit number
+# ("IRS-2026-1090-0001"). The agencies' own formats, not a guess.
+_DOCKET_ID_RE = re.compile(r"\b[A-Z]{2,}(?:-[A-Z0-9]+)*?-(?:19|20)\d{2}(?:-[A-Z0-9]+)*?-\d{4,}\b")
+# The Federal Register's comment link names the Regulations.gov document
+# that takes comments: /commenton/<docket>-<four-digit document number>.
+_REGS_GOV_RE = re.compile(r"regulations\.gov/(?:commenton|document|docket)/([A-Za-z0-9_-]+)", re.IGNORECASE)
+
+
+def docket_identifiers(comment_url: str | None) -> set[str]:
+    """The Regulations.gov docket ("docket:IRS-2026-1090") and comment
+    document ("docket:IRS-2026-1090-0001") a Federal Register document's
+    comment link names. Empty for a catch-all ("DOL_FRDOC_0001-2659"),
+    which names no rulemaking."""
+    m = _REGS_GOV_RE.search(comment_url or "")
+    if not m:
+        return set()
+    named = m.group(1).upper()
+    found = {f"docket:{named}"} if _DOCKET_ID_RE.fullmatch(named) else set()
+    docket, _, number = named.rpartition("-")
+    if len(number) == 4 and number.isdigit() and _DOCKET_ID_RE.fullmatch(docket):
+        found.add(f"docket:{docket}")
+    return found
+
+
+# A GovInfo Congressional Record granule ("CREC-2026-09-16-pt1-PgH5836-3"),
+# which a floor speech's external id carries: the day, and the page the
+# granule starts on (H House, S Senate, E Extensions, D Digest).
+_GRANULE_RE = re.compile(r"CREC-(\d{4})-(\d{2})-(\d{2})-PT\d+-PG([HSED])(\d+)(?:-\d+)?", re.IGNORECASE)
+# How the Record is cited: "172 Cong. Rec. H5836".
+_CONG_REC_RE = re.compile(
+    r"\b(\d{2,3})\s+CONG(?:RESSIONAL)?\.?\s*REC(?:ORD)?\.?\s+([HSED])\s?-?(\d{1,5})\b", re.IGNORECASE)
+
+
+def record_volume(year: int, month: int, day: int) -> int:
+    """The Congressional Record's volume for a day: one a session, 171 for
+    the 119th Congress's first (2025). A session starts on January 3
+    (20th Amendment), so January 1 and 2 still belong to the year before's."""
+    return year - 1854 - ((month, day) < (1, 3))
+
+
+def congressional_record_identifiers(external_id: str | None) -> set[str]:
+    """A floor speech's Record citation, by the page its granule starts on
+    ("crec:172-H5836"), and the granule itself ("crecgranule:CREC-...")."""
+    m = _GRANULE_RE.search(external_id or "")
+    if not m:
+        return set()
+    year, month, day, letter, page = m.groups()
+    volume = record_volume(int(year), int(month), int(day))
+    return {f"crec:{volume}-{letter.upper()}{int(page)}", f"crecgranule:{m.group(0).upper()}"}
+
+
 def _normalize_rin(raw: str) -> str:
     return raw.replace("–", "-").upper()
 
