@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildRecordEntries, formatEntryDate } from "./RecordIndex";
+import { render, screen } from "@testing-library/react";
+import { RecordIndexList, buildRecordEntries, formatEntryDate } from "./RecordIndex";
 import type { NationalMonitor } from "@/lib/api";
 import type { ActionIssue } from "@/types/action";
 import type { BillInFlight } from "@/types/bill";
@@ -210,5 +211,14 @@ describe("buildRecordEntries", () => {
   it("singularises a monitor with exactly one update", () => {
     const [one] = buildRecordEntries([], [monitor({ updateCount: 1 })], []);
     expect(one.detail).toBe("1 update tracked");
+  });
+});
+
+describe("RecordIndexList heading", () => {
+  it("names its heading by the heading alone, with the Action Center link beside it", () => {
+    render(<RecordIndexList entries={[]} />);
+    const heading = screen.getByRole("heading", { level: 2 });
+    expect(heading.textContent).toBe("Entered into the record");
+    expect(heading.querySelector("a")).toBeNull();
   });
 });

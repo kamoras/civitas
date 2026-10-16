@@ -54,16 +54,18 @@ async function fetchSources(): Promise<SourceRow[] | null> {
 export default async function Holdings() {
   const sources = await fetchSources();
   return (
-    <aside>
-      <h2 className="flex flex-wrap items-baseline justify-between gap-x-4 border-b border-white/15 pb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
-        <span>Built from the public record</span>
+    <aside aria-labelledby="public-record-sources">
+      {/* The link sits beside the heading, not in it, so the heading's name
+          is the heading (as in OnTheRecord). */}
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 border-b border-white/15 pb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
+        <h2 id="public-record-sources">Built from the public record</h2>
         <Link
           href="/about/data#sources"
           className="normal-case tracking-[0.06em] underline decoration-white/30 underline-offset-4 hover:text-phos"
         >
           Every source &rarr;
         </Link>
-      </h2>
+      </div>
 
       <dl className="mt-1">
         {sources

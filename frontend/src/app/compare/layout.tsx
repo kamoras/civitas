@@ -1,12 +1,21 @@
 import { connection } from "next/server";
-import { pageMetadata } from "@/lib/site";
+import { TITLE_TEMPLATE, pageMetadata } from "@/lib/site";
 
-export const metadata = pageMetadata({
-  title: "Compare Members of Congress Side by Side",
-  description:
-    "Compare any two senators or representatives side by side: voting records, campaign donors, PAC funding, and representation scores from public federal data.",
-  path: "/compare",
-});
+const TITLE = "Compare Members of Congress Side by Side";
+
+export const metadata = {
+  ...pageMetadata({
+    title: TITLE,
+    description:
+      "Compare any two senators or representatives side by side: voting records, campaign donors, PAC funding, and representation scores from public federal data.",
+    path: "/compare",
+  }),
+  // A layout's plain-string title ends the root layout's template for the
+  // routes below it: /compare/presidents was titled without " | Civitas
+  // Research" (WCAG 2.4.2 asks for consistent, descriptive titles). Passing
+  // the template on keeps every page under /compare on the site's pattern.
+  title: { default: TITLE, template: TITLE_TEMPLATE },
+};
 
 // Rendered per request, so the page's query string (a linked pair) is known
 // on the server and the page it renders is the one that stays: prerendered,
