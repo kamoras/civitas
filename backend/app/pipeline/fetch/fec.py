@@ -663,6 +663,25 @@ async def with_seat_election(
 
 # Rows the receipts queries keep: the FEC's largest page.
 _TOP_RECEIPTS = 100
+# Where _floored_top_receipts starts its floor. It sets only how many
+# queries the search takes, never what it returns.
+_FLOOR_START = 10_000
+
+
+async def _floored_top_receipts(client: httpx.AsyncClient, url: str) -> dict:
+    """The largest receipts `url` asks for, read with `min_amount` floors
+    after the plain query failed. A full page at or above a floor holds the
+    largest _TOP_RECEIPTS overall, the same rows the plain query returns,
+    so the floor halves until a page comes back full. A floor of 1 is
+    taken as it comes: at most the receipts under a dollar are missing.
+    Raises FecUnavailable when a floored query fails too."""
+    floor = _FLOOR_START
+    while True:
+        data = await _fetch_or_raise(client, f"{url}&min_amount={floor}")
+        if len(data.get("results") or []) >= _TOP_RECEIPTS or floor <= 1:
+            logger.info("FEC top receipts read with a %d floor: %s", floor, url)
+            return data
+        floor //= 2
 
 
 async def _top_receipts(
@@ -677,16 +696,24 @@ async def _top_receipts(
     504 "Query timed out" after 30s, every time, while each cycle alone
     answers in about 6s (measured 2026-10-10 on the two committees that
     failed that night) — and a member whose receipts can't be read keeps
-    the last run's scorecard."""
+    the last run's scorecard.
+
+    A large enough committee times out on one cycle too (2026-10-16: a
+    Senate campaign's 2024 cycle, 504 after 30s on every try). Then the
+    cycle is read with an amount floor (_floored_top_receipts), which the
+    FEC answers in about a second."""
     rows: list[dict] = []
     for cycle in sorted(set(cycles)) if cycles else [None]:
         period = f"&two_year_transaction_period={cycle}" if cycle else ""
-        data = await _fetch_or_raise(
-            client,
+        url = (
             f"{FEC_API_BASE}/schedules/schedule_a/?committee_id={committee_id}"
             f"&sort=-contribution_receipt_amount&per_page={_TOP_RECEIPTS}"
-            f"&is_individual={'true' if is_individual else 'false'}{period}",
+            f"&is_individual={'true' if is_individual else 'false'}{period}"
         )
+        try:
+            data = await _fetch_or_raise(client, url)
+        except FecUnavailable:
+            data = await _floored_top_receipts(client, url)
         rows.extend(data.get("results", []))
     rows.sort(key=lambda r: -(r.get("contribution_receipt_amount") or 0))
     return rows[:_TOP_RECEIPTS]
