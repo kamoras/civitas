@@ -3,6 +3,7 @@ import { serializeJsonLd } from "@/components/seo/JsonLd";
 import {
   agencyJsonLd,
   describeAgency,
+  describeElectionMap,
   describeBill,
   describeElections,
   describeProfile,
@@ -295,5 +296,16 @@ describe("agency metadata", () => {
     const ld = agencyJsonLd(fda);
     expect(ld["@type"]).toBe("GovernmentOrganization");
     expect(ld.parentOrganization?.url).toMatch(/\/agencies\/health-and-human-services-department$/);
+  });
+});
+
+describe("describeElectionMap", () => {
+  it("names the cycle the backend reports, and no year without one", () => {
+    expect(describeElectionMap(2028).title).toBe(
+      "2028 Senate and House Map: Usual Vote and Poll Ranges"
+    );
+    expect(describeElectionMap(2028).description).toContain("each 2028 Senate and House seat");
+    expect(describeElectionMap().title).toBe("Senate and House Map: Usual Vote and Poll Ranges");
+    expect(describeElectionMap().description).not.toMatch(/\d{4}/);
   });
 });

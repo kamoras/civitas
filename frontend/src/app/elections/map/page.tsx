@@ -36,7 +36,7 @@ async function fetchMap(chamber: MapChamber = "senate"): Promise<MapState> {
 export async function generateMetadata() {
   const state = await fetchMap().catch(() => null);
   return pageMetadata({
-    ...describeElectionMap(),
+    ...describeElectionMap(state?.kind === "map" ? state.data.cycle : undefined),
     path: PATH,
     noindex: state?.kind === "hidden",
   });
@@ -58,7 +58,10 @@ export default async function ElectionMapPage({
       <Navbar />
       <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
         <div className="mx-auto max-w-6xl space-y-8">
-          <PageMasthead eyebrow="2026 general election · Senate and House" title="Where seats lean">
+          <PageMasthead
+            eyebrow={`${state.kind === "map" ? `${state.data.cycle} general` : "General"} election · Senate and House`}
+            title="Where seats lean"
+          >
             How each seat usually votes, and the range this year&apos;s polls suggest for the
             margin. Ranges, not results. Not a race call.
           </PageMasthead>
