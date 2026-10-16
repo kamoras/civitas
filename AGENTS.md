@@ -1669,11 +1669,29 @@ it keeps, each enforced by a test (`tests/test_forecast_model.py`,
   (`RaceContext` links to the map; it does not show the range). It lives
   outside `app/pipeline/`, so editing it never moves the analysis-code
   fingerprint.
-- **Fitted, not typed (§3a).** `scripts/fit_forecast_model.py` builds
-  `app/data/forecast_training.json` (Senate generals 1998–2022: MEDSL results
-  and presidential returns, CC0; FEC incumbency codes; FiveThirtyEight's
-  `raw_polls.csv`, CC BY 4.0, pinned to a commit) and writes every parameter
-  and the leave-one-cycle-out evaluation to `app/data/forecast_model.json`.
+- **Fitted, not typed (§3a), and refitted on its own.** `scripts/fit_forecast_model.py` builds
+  `app/data/forecast_training.json` (Senate generals from 1998: MEDSL results
+  and presidential returns, CC0, newest Dataverse version; FEC incumbency
+  codes; Silver Bulletin's raw polls) and writes every parameter, the
+  leave-one-cycle-out evaluation and the forward check (the newest cycle,
+  fitted on earlier cycles only, with its binomial band) to
+  `app/data/forecast_model.json`. `app/data_refresh.py` reruns it when the
+  training polls change and monthly, into `/data/forecast_*.json` (the
+  checked-in files are the fallback), and alerts, without holding the fit
+  back, when the forward 80% coverage is outside its band. The poll window
+  is the training polls' own reach (`model.poll_window`), never typed;
+  beyond it every range is the structural line's, labelled fundamentals only.
+- **Training polls: Silver Bulletin, gated, attributed.**
+  `app/forecast/training_polls.py` (fetched by
+  `scripts/fetch_silver_bulletin_polls.py` with `BOT_USER_AGENT` and no other
+  identifying header) refuses a whole file on a failed gate (terms sentence,
+  exact columns, append-only with bounded logged corrections, 0 to N days
+  with N the accepted file's reach, valid shares, a new cycle's Senate and
+  generic-ballot rows, stated results against MEDSL's certified margins) and
+  names the gate in the alert; an unreadable page is an outage alert. Results
+  always come from MEDSL and the FEC, never from the poll file; a race where
+  the two disagree is excluded from the fit. Its terms ask for attribution to
+  Silver Bulletin: keep it on the map, in `_source` and on `/about/data`.
   The test refits from the training file and must match it within tolerance at write precision (10 significant digits; a different BLAS changes a least-squares solve's last bits). A race's
   historical lean uses only the two presidential elections before it.
 - **The House fit's lean is rebuilt, not borrowed.** `scripts/
@@ -1686,7 +1704,8 @@ it keeps, each enforced by a test (`tests/test_forecast_model.py`,
   generic-ballot coefficient, so the House takes the Senate fit's
   (`model.fit(national_coef=)`), refitted without each held-out cycle. Don't
   add a House cycle from a source behind a sign-in form (MEDSL's House file
-  is one) or a lean made another way.
+  is one: its guestbook) or a lean made another way; the fit takes every
+  FEC compilation the FEC's results index links.
 - **Polls from Wikipedia, gated, attributed.** `forecast/polls.py` reads each
   race article's current revision (recorded per seat), parses the table whose
   columns are the confirmed nominees, and rejects the whole table on a failed
@@ -1715,7 +1734,8 @@ it keeps, each enforced by a test (`tests/test_forecast_model.py`,
   files; a new cycle's first build never keeps the last cycle's file. No
   table for the cycle's lines alerts (`election-map-house-lines`), and fits
   that stop before the last certified general (sworn in each January 3)
-  alert from the nightly pre-checks (`election-map-training-stale`).
+  alert from the nightly pre-checks (`election-map-training-stale`), naming
+  each missing input per chamber from the training files' `_coverage`.
 - **Hidden from election day.** The refresh job (`scheduler`, every three
   hours) stops and the API answers 404 once `active_election()` leaves the
   campaign phase; the results map takes over.
@@ -1985,7 +2005,7 @@ the pending list).
 | Election cycle pipeline (candidates, financials, ballot measures, coverage) | `backend/app/pipeline/election_pipeline.py` |
 | What shapes a race (seat lean among all seats, FEC contribution categories, state CSV; descriptive, no forecast) | `backend/app/race_context.py`, `frontend/src/components/elections/ballot/RaceContext.tsx`, `RaceMoneyBars.tsx` |
 | Election phase (campaign / election day / results) + results grace period | `backend/app/election_phase.py` |
-| Senate and House map: usual vote and poll ranges (pre-election; separate from scoring) | `backend/app/forecast/` (`model.py`, `polls.py`, `build.py`), `backend/scripts/fit_forecast_model.py`, `backend/scripts/build_house_lean_history.py`, `app/data/forecast_model.json`, `forecast_house_model.json`, `forecast_house_lean.json`, `backend/app/api/election_map.py`, `frontend/src/components/elections/map/`, `frontend/src/lib/electionMap.ts` |
+| Senate and House map: usual vote and poll ranges (pre-election; separate from scoring) | `backend/app/forecast/` (`model.py`, `polls.py`, `training_polls.py`, `build.py`), `backend/scripts/fit_forecast_model.py`, `backend/scripts/fetch_silver_bulletin_polls.py`, `backend/scripts/build_house_lean_history.py`, `app/data/forecast_model.json`, `forecast_house_model.json`, `forecast_house_lean.json`, `backend/app/api/election_map.py`, `frontend/src/components/elections/map/`, `frontend/src/lib/electionMap.ts` |
 | Live election-night results (vendor readers, sync, trust gates, events) | `backend/app/pipeline/fetch/election_results.py`, `backend/app/live_results/sync.py`, `fetch/poll_close.py`, each vendor's `fetch_general_results` |
 | Seat-flip DEVELOPING issues + election-night posts (feed, then Bluesky) | `backend/app/live_results/signals.py`, `live_results/bluesky.py` |
 | Results UI (map colouring, live updates, state results) | `frontend/src/lib/results.ts`, `frontend/src/hooks/useLiveResults.ts`, `frontend/src/components/elections/results/` |

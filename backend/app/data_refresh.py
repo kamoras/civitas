@@ -51,8 +51,10 @@ from app.atomic_write import runtime_data_path, write_text_atomic
 from app.config import settings
 from app.contact import BOT_USER_AGENT
 from app.database import SessionLocal
+from app.election_calendar import last_certified_general
 from app.election_phase import active_election
 from app.file_cache import Uncached, files_stamp, read_json_preferring
+from app.forecast import training_polls
 from app.ops_alerts import resolve_ops_alert, send_ops_alert
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.state_names import STATE_NAMES
@@ -114,6 +116,12 @@ class DataFile:
     moves_scores: bool = False
     timeout_s: int = 3600
     extra: dict = field(default_factory=dict)
+    # Further files the same command writes ("{out:<name>}" in its argv),
+    # installed with this one when its gate passes, never on their own.
+    outputs: tuple[str, ...] = ()
+    # After an install (or an unchanged refresh): a finding about the files
+    # in use ({name: doc}) worth an ops alert that doesn't hold them back.
+    check: Callable[[dict[str, dict]], str | None] | None = None
 
     @property
     def stem(self) -> str:
@@ -160,18 +168,19 @@ def run_command(argv: list[str], timeout_s: int) -> tuple[int, str]:
     return done.returncode, (done.stdout + done.stderr)[-2000:]
 
 
-def install(spec: DataFile, new: dict, argv: list[str]) -> bool:
+def install(spec: DataFile | str, new: dict, argv: list[str]) -> bool:
     """Write a gated candidate as the copy in use, with its provenance.
     False when it is the same content as the copy in use (nothing written)."""
-    old = read(spec.name)
+    name = spec if isinstance(spec, str) else spec.name
+    old = read(name)
     sha = content_sha256(new)
     if old and content_sha256(old) == sha:
         return False
     rel = [a if not a.startswith(str(BACKEND)) else os.path.relpath(a, BACKEND) for a in argv]
     doc = {**new, "_refreshed": {"at": utcnow().isoformat(timespec="seconds"),
                                  "by": "app/data_refresh.py", "command": " ".join(rel), "sha256": sha}}
-    write_text_atomic(runtime_data_path(spec.name), json.dumps(doc, indent=1, ensure_ascii=False) + "\n")
-    _read_cache.pop(spec.name, None)
+    write_text_atomic(runtime_data_path(name), json.dumps(doc, indent=1, ensure_ascii=False) + "\n")
+    _read_cache.pop(name, None)
     return True
 
 
@@ -183,29 +192,41 @@ def refresh_one(spec: DataFile, ctx: Context) -> str:
         return "nothing to run"
     out_dir = pathlib.Path(runtime_data_path(spec.name)).parent
     out_dir.mkdir(parents=True, exist_ok=True)
-    fd, out = tempfile.mkstemp(prefix=f".{spec.name}.", suffix=".candidate", dir=out_dir)
-    os.close(fd)
-    os.unlink(out)
+    candidates = {}
+    for name in (spec.name, *spec.outputs):
+        fd, candidates[name] = tempfile.mkstemp(prefix=f".{name}.", suffix=".candidate", dir=out_dir)
+        os.close(fd)
+        os.unlink(candidates[name])
     # "{tmp}": a scratch directory for the script's downloads, removed after.
     scratch = tempfile.mkdtemp(prefix=f".{spec.name}.", suffix=".scratch", dir=out_dir)
-    argv = [a.replace("{out}", out).replace("{tmp}", scratch) for a in template]
+
+    def fill(arg: str) -> str:
+        for name in spec.outputs:
+            arg = arg.replace("{out:%s}" % name, candidates[name])
+        return arg.replace("{out}", candidates[spec.name]).replace("{tmp}", scratch)
+
+    argv = [fill(a) for a in template]
+    docs: dict[str, dict] = {}
     try:
         code, tail = run_command(argv, spec.timeout_s)
-        failures: list[str]
-        new: dict = {}
+        failures: list[str] = []
         if code != 0:
             failures = [f"the generator exited {code}: {tail.strip()[-600:]}"]
         else:
-            try:
-                new = json.loads(pathlib.Path(out).read_text())
-                failures = [] if isinstance(new, dict) and new else ["the generator wrote no JSON object"]
-            except (OSError, ValueError) as e:
-                failures = [f"the generator's output is unreadable: {e}"]
+            for name, path in candidates.items():
+                try:
+                    docs[name] = json.loads(pathlib.Path(path).read_text())
+                    if not (isinstance(docs[name], dict) and docs[name]):
+                        failures.append(f"the generator wrote no JSON object to {name}")
+                except (OSError, ValueError) as e:
+                    failures.append(f"the generator's {name} is unreadable: {e}")
             if not failures:
-                failures = spec.gate(new, ctx.doc)
+                failures = spec.gate(docs[spec.name], ctx.doc)
     finally:
-        pathlib.Path(out).unlink(missing_ok=True)
+        for path in candidates.values():
+            pathlib.Path(path).unlink(missing_ok=True)
         shutil.rmtree(scratch, ignore_errors=True)
+    new = docs.get(spec.name, {})
     if failures:
         send_ops_alert(
             f"{spec.name} not refreshed",
@@ -215,7 +236,17 @@ def refresh_one(spec: DataFile, ctx: Context) -> str:
         )
         return "kept: " + "; ".join(failures)
     changed = install(spec, new, argv)
+    for name in spec.outputs:
+        changed = install(name, docs[name], argv) or changed
     resolve_ops_alert(condition)
+    if spec.check:
+        finding = spec.check({name: read(name) for name in (spec.name, *spec.outputs)})
+        if finding:
+            send_ops_alert(f"{spec.name}: check after refresh", f"app/data/{spec.name}: {finding}",
+                           dedupe_key=f"data-check-{spec.stem}-{content_sha256({'f': finding})[:12]}",
+                           condition=f"data-check-{spec.stem}")
+        else:
+            resolve_ops_alert(f"data-check-{spec.stem}")
     if changed and spec.moves_scores:
         send_ops_alert(
             f"{spec.name} refreshed",
@@ -501,6 +532,80 @@ def _peer_gdp_stale(ctx: Context) -> str | None:
     return None
 
 
+# The election map's training polls (app/forecast/training_polls.py):
+# Silver Bulletin adds a cycle each winter once its results are rated, so
+# weekly until the file holds the last certified general, monthly after.
+def _poll_cycles(doc: dict) -> set[int]:
+    return {c for c in (training_polls.cycle_of(r) for r in training_polls.as_dicts(doc)) if c is not None}
+
+
+def _training_polls_due(ctx: Context) -> bool:
+    due = last_certified_general(ctx.today)
+    behind = due is not None and due not in _poll_cycles(ctx.doc)
+    return not ctx.tried_within(7 if behind else 30)
+
+
+def _training_polls_command(ctx: Context) -> list[str]:
+    return [PY, _script("fetch_silver_bulletin_polls.py"), "{out}", "--cache", "{tmp}"]
+
+
+# The map's fits (scripts/fit_forecast_model.py): refit whenever the
+# training polls in use change, and monthly besides, which picks up a new
+# MEDSL version or a newly published FEC House compilation. Display only:
+# nothing in scoring reads them.
+FORECAST_OUTPUTS = ("forecast_training.json", "forecast_house_training.json", "forecast_house_model.json")
+
+
+def _forecast_due(ctx: Context) -> bool:
+    polls = (read(training_polls.FILE_NAME).get("file") or {}).get("sha256")
+    fitted = (ctx.doc.get("_polls") or {}).get("sha256")
+    return (polls is not None and polls != fitted and not ctx.tried_within(1)) or not ctx.tried_within(30)
+
+
+def _forecast_command(ctx: Context) -> list[str]:
+    runtime = runtime_data_path(training_polls.FILE_NAME)
+    polls = runtime if pathlib.Path(runtime).exists() else str(BUNDLED / training_polls.FILE_NAME)
+    return [PY, _script("fit_forecast_model.py"), "--cache", "{tmp}", "--polls", polls,
+            "--senate-model", "{out}", "--senate-training", "{out:forecast_training.json}",
+            "--house-model", "{out:forecast_house_model.json}",
+            "--house-training", "{out:forecast_house_training.json}"]
+
+
+def _cycles_fitted(doc: dict) -> set[int]:
+    return {int(y) for ev in (doc.get("evaluation") or {}).values() for y in ev.get("cycles") or []}
+
+
+def _forecast_gate(new: dict, old: dict) -> list[str]:
+    failures = []
+    fits, evaluation = new.get("fits") or {}, new.get("evaluation") or {}
+    horizons = {str(h) for h in (old.get("fits") or {})} or set(fits)
+    if not horizons or set(fits) != horizons or set(evaluation) != horizons:
+        failures.append(f"horizons fitted {sorted(fits)}, evaluated {sorted(evaluation)}, expected {sorted(horizons)}")
+    dropped = _cycles_fitted(old) - _cycles_fitted(new)
+    if dropped:
+        failures.append(f"the refit dropped cycles {sorted(dropped)}")
+    return failures
+
+
+def _forward_finding(docs: dict[str, dict]) -> str | None:
+    """Each chamber's forward check (its newest cycle, predicted by a fit on
+    the cycles before it only): 80% ranges whose share holding the result
+    falls outside the binomial 95% band for that many races. Published
+    anyway, so the page's figures match the fit; the alert asks for a look."""
+    off = []
+    for chamber, name in (("Senate", "forecast_model.json"), ("House", "forecast_house_model.json")):
+        for h, ev in sorted(((docs.get(name) or {}).get("evaluation") or {}).items(), key=lambda kv: int(kv[0])):
+            fw = ev.get("forward")
+            if fw and not fw["coverage80Band"][0] <= fw["coverage80"] <= fw["coverage80Band"][1]:
+                off.append(f"{chamber} {fw['cycle']}, {h} days out: 80% ranges held {fw['coverage80']:.0%} of "
+                           f"{fw['races']} races, outside {fw['coverage80Band'][0]:.0%}-{fw['coverage80Band'][1]:.0%}")
+    if not off:
+        return None
+    return ("the forward check (each chamber's newest cycle, fitted on earlier cycles only) is outside the "
+            "binomial 95% band: " + "; ".join(off) + ". The refit is published, and the map shows this "
+            "figure; look at whether the spread needs another term.")
+
+
 DATA_FILES: list[DataFile] = [
     DataFile("poll_close_times.json", command=_poll_close_command, due=_poll_close_due, gate=_poll_close_gate,
              timeout_s=300),
@@ -528,6 +633,10 @@ DATA_FILES: list[DataFile] = [
                                   "--output", "{out}", "--cache", "{tmp}"],
              due=lambda ctx: not ctx.tried_within(365) and ctx.today >= date(ctx.today.year, 2, 1),
              gate=_casing_gate, heavy=True, timeout_s=4 * 3600),
+    DataFile(training_polls.FILE_NAME, command=_training_polls_command, due=_training_polls_due,
+             gate=training_polls.gate, timeout_s=900),
+    DataFile("forecast_model.json", command=_forecast_command, due=_forecast_due, gate=_forecast_gate,
+             outputs=FORECAST_OUTPUTS, check=_forward_finding, heavy=True, timeout_s=3600),
     DataFile("ces_member_approval.json", stale=_ces_stale),
     DataFile("peer_gdp_per_capita.json", stale=_peer_gdp_stale),
     DataFile("bluesky_post_windows.json", stale=_bluesky_windows_stale),

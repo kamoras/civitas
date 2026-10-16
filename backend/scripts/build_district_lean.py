@@ -130,6 +130,7 @@ import fetch_state_leg_crosswalk as sl  # noqa: E402
 import fetch_state_pvi as sp  # noqa: E402
 from app.contact import BOT_USER_AGENT  # noqa: E402  (cw put backend/ on sys.path)
 from app.pipeline.fetch.state_candidates_tabular import _xlsx_rows  # noqa: E402
+from app.pipeline.fetch.state_candidates_tabular import xlsx_sheet_as_first as _as_first_sheet  # noqa: E402
 
 try:  # research-only dependency (scripts/requirements-research.txt)
     from pyproj import CRS, Transformer
@@ -677,20 +678,6 @@ def _scale_to_municipalities(units: list[Unit], county: str,
         out.append(Unit(county, list(table[m]), spread=True))
         notes.append(f"{county} {m}: official county-wide row spread over the county's districts")
     return out
-
-
-def _as_first_sheet(xlsx: bytes, sheet: str) -> bytes:
-    """The workbook with `sheet` moved into sheet1's place, for the
-    first-sheet reader the app already has."""
-    src = zipfile.ZipFile(io.BytesIO(xlsx))
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w") as dst:
-        for name in src.namelist():
-            if name == "xl/worksheets/sheet1.xml":
-                dst.writestr(name, src.read(f"xl/worksheets/{sheet}.xml"))
-            else:
-                dst.writestr(name, src.read(name))
-    return buf.getvalue()
 
 
 class Official:
