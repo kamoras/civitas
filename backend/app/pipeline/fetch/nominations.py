@@ -49,7 +49,7 @@ from app.config import settings
 from app.http_client import make_async_client
 from app.models import Nomination
 from app.pipeline.cache import api_cache_get, api_cache_set
-from app.pipeline.fetch.congress import CONGRESS_API_BASE, _fetch_with_retry
+from app.pipeline.fetch.congress import CONGRESS_API_BASE, _fetch_with_retry, congress_first_year
 from app.pipeline.fetch.justice_records import FJC_JUDGES, _get, _iso
 from app.pipeline.rate_limiter import RateLimiter
 from app.pipeline.run_tracker import PipelineRunTracker
@@ -465,4 +465,34 @@ async def sync_nominations(db: Session, congress: int | None = None, *, limit: i
         "expected": expected,
     })
     summary["backfillComplete"] = backfill_complete
+    return summary
+
+
+# A Congress's last actions reach Congress.gov after it ends: the nominations
+# still pending at sine die are returned to the President (Senate Rule XXXI,
+# paragraph 6) on its final day, and last-day confirmations are entered in
+# the days after. The ended Congress is read on, beside the new one, until a
+# complete pass this long after its end.
+ENDED_SETTLE = timedelta(days=30)
+
+
+def congress_ended_at(congress: int) -> datetime:
+    """Noon Eastern (17:00 UTC) on Jan 3 of the next Congress's first year:
+    when `congress` ends (20th Amendment). Naive UTC, like utcnow()."""
+    return datetime(congress_first_year(congress + 1), 1, 3, 17)
+
+
+async def sync_ended_congress(db: Session) -> dict | None:
+    """One pass over the Congress before the sitting one, until it is
+    closed (a complete pass ENDED_SETTLE after it ended), so its returned
+    and last-day nominations don't stay "pending" forever. None when there
+    is nothing to close: never synced, or already closed."""
+    congress = settings.CURRENT_CONGRESS - 1
+    marker = read_marker(db, congress)
+    if not marker or marker.get("closed"):
+        return None
+    summary = await sync_nominations(db, congress)
+    if summary["complete"] and utcnow() >= congress_ended_at(congress) + ENDED_SETTLE:
+        api_cache_set(db, _CACHE_TIER, _cursor_key(congress), {**read_marker(db, congress), "closed": True})
+        summary["closed"] = True
     return summary

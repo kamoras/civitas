@@ -65,7 +65,7 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
   return pageMetadata({
     title: "Presidential Nominations and Confirmations in the Senate",
     description:
-      "Every nomination the president has sent the Senate this Congress (cabinet, agency, ambassador, judge and military) with its status, the committee, the hearings, how long confirmation took and how each senator voted.",
+      "Every presidential nomination sent to the Senate this Congress (cabinet, agency, ambassador, judge and military) with its status, the committee, the hearings, how long confirmation took and how each senator voted.",
     path: NOMINATIONS_HREF,
     // A filtered list is the same page narrowed: one URL in the index.
     noindex: Boolean(f.status || f.kind || f.agency || f.q || f.page > 1),
