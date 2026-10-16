@@ -5,16 +5,16 @@ Additive only (one nullable column), so the previous image runs unchanged
 against the migrated schema. Rows retired before it are given a reason by
 the hourly refresh (early_signal.reword_retired_drafts).
 
-Revision ID: 0052
-Revises: 0051
+Revision ID: 0051
+Revises: 0050
 Create Date: 2026-10-16
 """
 from alembic import op
 import sqlalchemy as sa
 
 
-revision = '0052'
-down_revision = '0051'
+revision = '0051'
+down_revision = '0050'
 branch_labels = None
 depends_on = None
 
