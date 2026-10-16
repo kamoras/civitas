@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
+import StateAtAGlance from "@/components/elections/ballot/StateAtAGlance";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import CoverageFeed from "@/components/elections/CoverageFeed";
@@ -2000,6 +2001,12 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                 lookupIsStateSpecific={lookupIsStateSpecific}
               />
             )}
+
+            <StateAtAGlance
+              state={ballot.state}
+              stateName={stateName}
+              redrawn={ballot.houseRaces.some((r) => r.redistricting)}
+            />
 
             {resultsMode && (
               <>

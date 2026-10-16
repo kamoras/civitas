@@ -19,6 +19,9 @@ import type { President } from "@/types/president";
 import type { Justice } from "@/types/justice";
 import Photo from "@/components/Photo";
 import RedrawnSeatNote from "@/components/redistricting/RedrawnSeatNote";
+import SeatOnMap from "@/components/elections/SeatOnMap";
+import { useAsyncData } from "@/hooks/useAsyncData";
+import { fetchMapSeats } from "@/lib/api";
 import PresidentialSupportSection from "@/components/presidentialSupport/PresidentialSupportSection";
 
 const DOC_TYPE_LABELS: Record<string, string> = {
@@ -371,6 +374,20 @@ export function OnBallotLine({ race }: { race: NonNullable<PoliticianProfile["on
       >
         WHO&apos;S RUNNING<span className="hidden sm:inline"> AND WHO FUNDS THEM</span> →
       </Link>
+      <SeatOnMapLine raceId={race.raceId} />
     </p>
+  );
+}
+
+/** The seat's usual vote and poll range from the election map, linking
+ * its place there; nothing out of the campaign, when the map isn't shown. */
+function SeatOnMapLine({ raceId }: { raceId: string }) {
+  const { data } = useAsyncData(`map-seat:${raceId}`, () => fetchMapSeats({ seat: raceId }));
+  const seat = data?.seats[0];
+  if (!seat) return null;
+  return (
+    <span className="mt-1 block">
+      <SeatOnMap seat={seat} label="ON THE MAP" />
+    </span>
   );
 }

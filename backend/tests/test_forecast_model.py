@@ -681,3 +681,25 @@ def test_the_staleness_alert_names_missing_polls(freeze_utcnow, monkeypatch):
     assert ("Senate (fit stops at 2024): Silver Bulletin's raw-poll file (app/data/forecast_polls.json, retrieved "
             "2027-01-10) has no 2026 Senate polls yet.") in body
     assert "House (fit" not in body
+
+
+def test_api_gives_a_states_seats_and_one_seat_in_a_line_each(db_session, freeze_utcnow, monkeypatch):
+    data = _built(db_session, freeze_utcnow)
+    client = _client(monkeypatch, data)
+    body = client.get("/api/elections/map/seats?state=OH").json()
+    by_id = {s["id"]: s for s in body["seats"]}
+    oh = by_id["2026-SEN-OH"]
+    full = next(s for s in _seats(data) if s["id"] == "2026-SEN-OH")
+    # The build's own labels, never re-derived.
+    assert oh["chamber"] == "senate" and oh["leanLabel"] == full["leanLabel"]
+    assert oh["range80Label"] == full.get("range80Label") and set(by_id) <= {s["id"] for s in _seats(data)}
+    assert all(s["state"] == "OH" for s in body["seats"])
+    assert body["pollSource"]["license"] == "CC BY-SA 4.0"
+    one = client.get("/api/elections/map/seats?seat=2026-HOUSE-OH-9").json()["seats"]
+    assert [s["id"] for s in one] == ["2026-HOUSE-OH-9"] and one[0]["chamber"] == "house"
+    assert client.get("/api/elections/map/seats").status_code == 422
+
+
+def test_api_hides_the_seat_lines_from_election_day(db_session, freeze_utcnow, monkeypatch):
+    data = _built(db_session, freeze_utcnow)
+    assert _client(monkeypatch, data, phase=ELECTION_DAY).get("/api/elections/map/seats?state=OH").status_code == 404

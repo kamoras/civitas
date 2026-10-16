@@ -17,6 +17,7 @@ import type { SignalOverlap } from "@/types/scoreBreakdown";
 import type { Agreement } from "@/types/compare";
 import type { MemberSupport } from "@/types/presidentialSupport";
 import type { TrendPostsAudit } from "@/types/trendPosts";
+import type { MapSeatLines } from "@/types/electionMap";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 
@@ -922,6 +923,22 @@ export interface ExploreBillMatch {
 export interface ExploreMatches {
   members: { total: number; items: ExploreMemberMatch[] };
   bills: { total: number; items: ExploreBillMatch[] };
+}
+
+/** A state's seats, or one seat, from the election map in a line each;
+ * null while the map isn't shown (out of the campaign: 404) or hasn't been
+ * built (503), which a page says nothing about. Any other failure throws. */
+export async function fetchMapSeats(query: {
+  state?: string;
+  seat?: string;
+}): Promise<MapSeatLines | null> {
+  const params = new URLSearchParams();
+  if (query.state) params.set("state", query.state);
+  if (query.seat) params.set("seat", query.seat);
+  const res = await fetch(`${API_BASE}/elections/map/seats?${params}`);
+  if (res.status === 404 || res.status === 503) return null;
+  if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
+  return (await res.json()) as MapSeatLines;
 }
 
 export async function fetchExploreMatches(q: string): Promise<ExploreMatches> {

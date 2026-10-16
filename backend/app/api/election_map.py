@@ -92,6 +92,39 @@ def election_map(chamber: str | None = Query(None, pattern="^(senate|house)$",
     return cached_json(dict(data, chambers=chambers), max_age=CACHE_TTL_LIST_S)
 
 
+def seat_summary(chamber: str, s: dict) -> dict:
+    """One seat in a line, for the pages that link to the map (a state's
+    ballot, a member's profile): every figure and label the map's build
+    wrote, none re-derived."""
+    ranged = s["status"] == "range"
+    return {
+        "id": s["id"], "chamber": chamber, "state": s["state"], "district": s.get("district"),
+        "special": s["special"], "leanLabel": s["leanLabel"], "status": s["status"],
+        "range80Label": s["range80Label"] if ranged else None,
+        "close": s["close"] if ranged else None,
+        "reason": None if ranged else s.get("reason"),
+    }
+
+
+@router.get("/map/seats")
+def election_map_seats(
+    state: str | None = Query(None, pattern="^[A-Z]{2}$", description="A state's seats, by postal code"),
+    seat: str | None = Query(None, max_length=40, description="One seat, by its race id"),
+):
+    """A state's seats, or one seat, from the map in a line each (usual vote
+    and the 80% poll range), for the pages that link to the map. 404 out of
+    the campaign, as the map is."""
+    if not (state or seat):
+        raise HTTPException(status_code=422, detail="state or seat is required")
+    data = current_map()
+    seats = [seat_summary(chamber, s) for chamber, c in data["chambers"].items() for s in c["seats"]
+             if (state is None or s["state"] == state) and (seat is None or s["id"] == seat)]
+    return cached_json({
+        "cycle": data["cycle"], "asOf": data["asOf"], "stale": data["stale"], "seats": seats,
+        "pollSource": {"attribution": POLL_ATTRIBUTION, "license": POLL_LICENSE, "url": POLL_LICENSE_URL},
+    }, max_age=CACHE_TTL_LIST_S)
+
+
 CSV_COLUMNS = (
     "chamber", "seat", "state", "district", "special", "democrat", "republican", "incumbent_party",
     "usual_vote_lean", "usual_vote_label", "status", "structural_margin", "range80_low", "range80_high",
