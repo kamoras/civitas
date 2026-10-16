@@ -17,7 +17,7 @@ describe("issue link-preview card", () => {
   it("carries the day, whose words the summary is, the photo credit, the sources and the link", () => {
     const t = issueCardTexts(news);
     expect(t.date).toBe("October 15, 2026");
-    expect(t.summaryCredit).toBe("— Outlet B");
+    expect(t.summaryCredit).toBe("Quoted from Outlet B");
     expect(t.photoCredit).toBe("Photo: A. Photographer/Wire");
     expect(t.sources).toBe("Sources: Outlet A, Outlet B");
     expect(t.link).toBe("civitas-research.org/issue/i0000abcd");

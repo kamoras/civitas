@@ -1708,6 +1708,71 @@ def _digest_reason(article: NewsArticle) -> str | None:
     return None
 
 
+# Livestream announcements ("WATCH LIVE: Trump speaks at midterm rally in
+# Youngstown, Ohio") are pages for watching an event, not reports of it.
+# Two became confirmed issue titles in two days (2026-10-12/13), one third
+# on the homepage record, and a permanent issue page kept saying "Watch
+# live" after the event. The page is marked by the headline's kicker, the
+# outlet's label before its first ": " (a news-headline convention like the
+# digest titles' product names above), and the kicker is classified by
+# embedding margin, not matched against a phrase list.
+#
+# Measured on the similarity model over every distinct kicker of the
+# titles production composed or stored from 2026-08-27 to 2026-10-16
+# (app/data/broadcast_kicker_labels.json, 129 kickers): the two broadcast
+# kickers scored +0.286 and +0.302, the highest other one +0.150 ("WATCH",
+# a recorded clip, +0.125; "Live updates", a live blog, -0.101). The whole
+# headline does not separate: its topic outweighs the kicker, and seven
+# reporting headlines outscored a "WATCH LIVE" one.
+_BROADCAST_PROTOTYPES = (
+    ["tune in to the live stream now", "live broadcast airing now"],
+    ["a news report", "a recorded video clip", "a live blog of updates"],
+)
+_broadcast_cache: dict[str, float | None] = {}
+
+
+def _headline_kicker(title: str) -> str | None:
+    head, sep, _ = (title or "").partition(": ")
+    return (head.strip() or None) if sep else None
+
+
+def _broadcast_margins(kickers: list[str]) -> np.ndarray:
+    broadcast, other = _BROADCAST_PROTOTYPES
+    vecs = _embed_texts_sim([*kickers, *broadcast, *other])
+    k, b = vecs[:len(kickers)], vecs[len(kickers):len(kickers) + len(broadcast)]
+    o = vecs[len(kickers) + len(broadcast):]
+    return (k @ b.T).max(axis=1) - (k @ o.T).max(axis=1)
+
+
+def _broadcast_threshold() -> float | None:
+    """Midway between the lowest-scoring labelled broadcast kicker and the
+    highest-scoring other one, measured from the labels on first use (so a
+    new embedding model is re-measured, not left on a stale cut). None when
+    the labels no longer separate, and then nothing is called a broadcast:
+    a report wrongly held back hides a story, a livestream title only reads
+    badly."""
+    if "cut" not in _broadcast_cache:
+        labels = json.loads((_DATA_DIR / "broadcast_kicker_labels.json").read_text())
+        lo = float(_broadcast_margins(labels["broadcast"]).min())
+        hi = float(_broadcast_margins(labels["other"]).max())
+        if lo <= hi:
+            logger.warning("Broadcast kicker labels no longer separate (%.3f <= %.3f); none held back", lo, hi)
+        _broadcast_cache["cut"] = (lo + hi) / 2 if lo > hi else None
+    return _broadcast_cache["cut"]
+
+
+def announces_broadcast(titles: list[str]) -> list[bool]:
+    """Per headline: is it a livestream announcement (its kicker scores
+    past _broadcast_threshold)? A headline with no kicker never is."""
+    kickers = [_headline_kicker(t) for t in titles]
+    present = [k for k in kickers if k]
+    cut = _broadcast_threshold() if present else None
+    if cut is None:
+        return [False] * len(titles)
+    scores = iter(_broadcast_margins(present))
+    return [bool(k) and float(next(scores)) > cut for k in kickers]
+
+
 def _filter_policy_relevant(db: Session, articles: list[NewsArticle]) -> list[tuple[NewsArticle, np.ndarray]]:
     """Keep only articles about US policy/legislation (policy_relevance.judge);
     drop digest articles."""
@@ -5369,6 +5434,24 @@ def _run_refresh(db: Session) -> int:
         on_topic = [(a, float(s)) for a, s in zip(cluster, centered_sims) if float(s) >= SOURCE_SIM_FLOOR]
         if not on_topic:
             on_topic = [(cluster[0], 1.0)]
+
+        # A livestream announcement neither titles the issue nor supplies
+        # its facts or sources: its headline is an invitation to watch, and
+        # what it "claims" ("Trump speaks at midterm rally") is an event
+        # that hasn't happened yet when it is published. A cluster of
+        # nothing else waits for a report to join it. Replayed on the
+        # stored clusters of 2026-10-12/13: "Watch live: Trump heads to
+        # Alaska as Senate race heats up" takes PBS's "Trump heads to Alaska
+        # in a sign of how close its Senate race may be"; the Youngstown
+        # rally, two livestream pages, publishes nothing.
+        live = announces_broadcast([a.title for a, _ in on_topic])
+        if any(live):
+            action_metrics.increment("articles_dropped_broadcast", sum(live))
+            on_topic = [pair for pair, is_live in zip(on_topic, live) if not is_live]
+            if not on_topic:
+                logger.info("Rank %d: only livestream announcements, no issue until a report joins", rank)
+                action_metrics.increment("clusters_only_broadcast")
+                continue
 
         filtered_cluster = [a for a, _ in on_topic]
         logger.info(

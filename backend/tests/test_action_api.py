@@ -17,7 +17,7 @@ from app.api.action import (
     list_monitors,
 )
 from app.issue_ids import to_public_id
-from app.models import ActionIssue, ActionIssueStatus, ApiCache, MonitorStatus, NationalMonitor
+from app.models import ActionIssue, ActionIssueStatus, ApiCache, MonitorStatus, MonitorUpdate, NationalMonitor
 
 
 def _make_issue(date: str, rank: int, title: str, is_current: bool) -> ActionIssue:
@@ -773,6 +773,31 @@ class TestRecentActionIssues:
         result = await get_recent_action_issues(Response(), limit=10, db=db_session)
 
         assert [i["title"] for i in result["issues"]] == ["Beef import tariffs", "Something else"]
+
+    async def test_shows_one_issue_per_monitor(self, db_session):
+        """Two developments of one monitored story (a statement, then a
+        letter) are separate events, not duplicates, but the record lists the
+        newer only; the monitor is linked by the issue or by an update that
+        quotes its title. Issues of no monitor all stay."""
+        monitor = NationalMonitor(slug="diesel-deal", title="Russian diesel deal", status=MonitorStatus.ACTIVE)
+        db_session.add(monitor)
+        db_session.flush()
+        letter = _make_issue("2026-10-15", 1, "Senators send letter on diesel deal", is_current=True)
+        letter.related_monitor_slugs = json.dumps(["diesel-deal"])
+        statement = _make_issue("2026-10-12", 1, "Senators issue statement on diesel deal", is_current=False)
+        db_session.add_all([
+            letter, statement,
+            _make_issue("2026-10-14", 1, "Unrelated story", is_current=False),
+            _make_issue("2026-10-11", 1, "Another unrelated story", is_current=False),
+            MonitorUpdate(monitor_id=monitor.id, date="2026-10-12", summary="s", source_url="u",
+                          article_title="Senators issue statement on diesel deal"),
+        ])
+        db_session.commit()
+
+        result = await get_recent_action_issues(Response(), limit=10, db=db_session)
+        assert [i["title"] for i in result["issues"]] == [
+            "Senators send letter on diesel deal", "Unrelated story", "Another unrelated story",
+        ]
 
     async def test_leaves_out_drafts_retired_unconfirmed(self, db_session):
         """A developing draft taken off the Action Center never had news

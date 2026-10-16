@@ -133,7 +133,10 @@ export default function NewsChapter() {
             four, and merging two stories hides one. Multi-story briefings (&ldquo;Up First&rdquo;,
             &ldquo;Morning news brief&rdquo;) are dropped at the door, because once several stories
             share one article they can&apos;t be separated later. So is a two-story item whose
-            headline and summary both tell the same two unrelated stories, one sentence each.
+            headline and summary both tell the same two unrelated stories, one sentence each. A
+            livestream page (&ldquo;WATCH LIVE: &hellip;&rdquo;) is an invitation to watch, not a
+            report, so it never names an issue or supplies a fact; a story with nothing else waits
+            for a report.
           </P>
           <P>
             Reddit was a trending source until September 2026, when it began requiring a login this
@@ -188,7 +191,9 @@ export default function NewsChapter() {
           reporting in its place. A draft that leaves the Action Center without coverage confirming
           it, its vote or rule having aged past the window, isn&apos;t part of that record either:
           its own page stays up for two weeks, marked{" "}
-          <strong className="text-ink-hi">Not confirmed</strong>.
+          <strong className="text-ink-hi">Not confirmed</strong>. That record lists one issue per
+          ongoing story the site follows (the newest), beside the story itself, so two days of one
+          story don&apos;t fill it.
         </P>
         <P>
           Each issue ends with what you can do about it, built from the record and never advocacy

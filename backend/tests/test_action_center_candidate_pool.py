@@ -194,3 +194,18 @@ def test_an_issue_names_and_links_the_outlet_of_every_line_it_quotes(db_session,
 def test_each_published_issue_records_its_principal_actor(db_session, refresh):
     action_center._run_refresh(db_session)
     assert {i.principal_actor for i in db_session.query(ActionIssue).all()} == {"class:us_gov"}
+
+
+def test_a_livestream_announcement_never_titles_or_sources_an_issue(db_session, refresh, monkeypatch):
+    """Cluster 3 leads with a livestream page: the issue takes the next
+    headline, and the page is not among its sources. Cluster 5 is nothing
+    but livestream pages, so it publishes nothing and cluster 6 takes the
+    second slot (2026-10-12/13: two "WATCH LIVE" titles confirmed)."""
+    live_urls = {CLUSTERS[2][0].url, *(a.url for a in CLUSTERS[4])}
+    monkeypatch.setattr(action_center, "announces_broadcast", lambda titles: [
+        any(a.title == t and a.url in live_urls for c in CLUSTERS for a in c) for t in titles
+    ])
+    action_center._run_refresh(db_session)
+    issues = db_session.query(ActionIssue).order_by(ActionIssue.rank).all()
+    assert [i.title for i in issues] == ["Story 3 headline 1", "Story 6 headline 0"]
+    assert CLUSTERS[2][0].url not in json.loads(issues[0].source_urls)
