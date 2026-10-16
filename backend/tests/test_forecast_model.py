@@ -1,4 +1,4 @@
-"""The 2026 election map's method (app/forecast): the fit reproduces from
+"""The election map's method (app/forecast): the fit reproduces from
 its checked-in inputs, the poll parser's gates hold, the output carries no
 win language and its licence, and the map hides from election day on."""
 
@@ -18,6 +18,7 @@ from app.election_phase import CAMPAIGN, ELECTION_DAY, ActiveElection
 from app.forecast import build, model
 from app.forecast import polls as wiki
 from app.models import Candidate, Race
+from app.pipeline.fetch.district_pvi import congress_for_election
 
 DATA = Path(__file__).resolve().parents[1] / "app" / "data"
 TRAINING = json.loads((DATA / "forecast_training.json").read_text())
@@ -162,8 +163,14 @@ ROW = """|-
 """
 
 
-def parse(text: str, as_of=date(2026, 10, 15)):
-    return wiki.poll_table(text, "Alex Smith", "Jordan Lee", as_of, wiki.named_refs(text))
+def parse(text: str, as_of=date(2026, 10, 15), cycle: int = 2026):
+    return wiki.poll_table(text, "Alex Smith", "Jordan Lee", as_of, wiki.named_refs(text), cycle)
+
+
+def in_cycle(text: str, cycle: int) -> str:
+    """A fixture written for the 2026 cycle, moved to `cycle` (its dates
+    and titles), so the same article tests any election."""
+    return text.replace("2026", str(cycle)).replace("2025", str(cycle - 1))
 
 
 def test_a_poll_row_parses_with_its_source_and_partisan_mark():
@@ -239,19 +246,20 @@ def test_a_question_without_a_nominee_is_skipped():
 # ---------------------------------------------------------------------------
 
 
-def _seed(db):
-    db.add(Race(id="2026-SEN-OH", cycle_year=2026, office="S", state="OH", is_special=False))
-    db.add(Candidate(id="S1", race_id="2026-SEN-OH", name="SMITH, ALEX", ballot_name="Alex Smith", party="DEM",
+def _seed(db, cycle: int = 2026):
+    c = cycle
+    db.add(Race(id=f"{c}-SEN-OH", cycle_year=c, office="S", state="OH", is_special=False))
+    db.add(Candidate(id=f"S1-{c}", race_id=f"{c}-SEN-OH", name="SMITH, ALEX", ballot_name="Alex Smith", party="DEM",
                      incumbent_challenge="C", confirmed_general=True))
-    db.add(Candidate(id="S2", race_id="2026-SEN-OH", name="LEE, JORDAN", ballot_name="Jordan Lee", party="REP",
+    db.add(Candidate(id=f"S2-{c}", race_id=f"{c}-SEN-OH", name="LEE, JORDAN", ballot_name="Jordan Lee", party="REP",
                      incumbent_challenge="I", confirmed_general=True))
-    db.add(Race(id="2026-HOUSE-OH-9", cycle_year=2026, office="H", state="OH", district=9, is_special=False))
-    db.add(Candidate(id="H1", race_id="2026-HOUSE-OH-9", name="SMITH, ALEX", ballot_name="Alex Smith", party="DEM",
-                     incumbent_challenge="I", confirmed_general=True))
-    db.add(Candidate(id="H2", race_id="2026-HOUSE-OH-9", name="LEE, JORDAN", ballot_name="Jordan Lee", party="REP",
-                     incumbent_challenge="C", confirmed_general=True))
-    db.add(Race(id="2026-SEN-WY", cycle_year=2026, office="S", state="WY", is_special=False))
-    db.add(Candidate(id="S3", race_id="2026-SEN-WY", name="ROE, PAT", party="REP", incumbent_challenge="O",
+    db.add(Race(id=f"{c}-HOUSE-OH-9", cycle_year=c, office="H", state="OH", district=9, is_special=False))
+    db.add(Candidate(id=f"H1-{c}", race_id=f"{c}-HOUSE-OH-9", name="SMITH, ALEX", ballot_name="Alex Smith",
+                     party="DEM", incumbent_challenge="I", confirmed_general=True))
+    db.add(Candidate(id=f"H2-{c}", race_id=f"{c}-HOUSE-OH-9", name="LEE, JORDAN", ballot_name="Jordan Lee",
+                     party="REP", incumbent_challenge="C", confirmed_general=True))
+    db.add(Race(id=f"{c}-SEN-WY", cycle_year=c, office="S", state="WY", is_special=False))
+    db.add(Candidate(id=f"S3-{c}", race_id=f"{c}-SEN-WY", name="ROE, PAT", party="REP", incumbent_challenge="O",
                      confirmed_general=True))
     db.commit()
 
@@ -278,25 +286,35 @@ GENERIC = """==Generic congressional ballot aggregate polls==
 """
 
 
-def _revisions():
-    rev = {"revid": 7, "timestamp": "2026-10-15T00:00:00Z"}
+def senate_ohio(cycle: int = 2026) -> str:
+    return f"{cycle} United States Senate election in Ohio"
+
+
+def house_ohio(cycle: int = 2026) -> str:
+    return f"{cycle} United States House of Representatives elections in Ohio"
+
+
+HOUSE_OHIO = house_ohio()
+
+
+def _revisions(cycle: int = 2026):
+    rev = {"revid": 7, "timestamp": f"{cycle}-10-15T00:00:00Z"}
+    row = in_cycle(ROW, cycle)
+    generic = build.generic_article(cycle)
     return {
-        "2026 United States Senate election in Ohio": dict(rev, title="2026 United States Senate election in Ohio",
-                                                           content=article(ROW)),
-        build.GENERIC_ARTICLE: dict(rev, title=build.GENERIC_ARTICLE, content=GENERIC),
-        HOUSE_OHIO: dict(rev, title=HOUSE_OHIO, content="== District 8 ==\nnothing\n== District 9 ==\n"
-                         + article(ROW).replace("==General election==", "===General election===")
-                         .replace("===Polling===", "====Polling====").replace("===Results===", "====Results====")),
+        senate_ohio(cycle): dict(rev, title=senate_ohio(cycle), content=article(row)),
+        generic: dict(rev, title=generic, content=in_cycle(GENERIC, cycle)),
+        house_ohio(cycle): dict(rev, title=house_ohio(cycle), content="== District 8 ==\nnothing\n== District 9 ==\n"
+                                + article(row).replace("==General election==", "===General election===")
+                                .replace("===Polling===", "====Polling====")
+                                .replace("===Results===", "====Results====")),
     }
 
 
-HOUSE_OHIO = "2026 United States House of Representatives elections in Ohio"
-
-
-def _built(db_session, freeze_utcnow):
-    freeze_utcnow(datetime(2026, 10, 15, 16, 0))
-    _seed(db_session)
-    return build.build(db_session, _revisions(), house_titles=[HOUSE_OHIO])
+def _built(db_session, freeze_utcnow, cycle: int = 2026):
+    freeze_utcnow(datetime(cycle, 10, 15, 16, 0))
+    _seed(db_session, cycle)
+    return build.build(db_session, _revisions(cycle), house_titles=[house_ohio(cycle)])
 
 
 def _seats(data):
@@ -334,8 +352,10 @@ def test_a_house_seat_reads_its_district_section(db_session, freeze_utcnow):
     (oh9,) = data["chambers"]["house"]["seats"]
     assert oh9["status"] == "range" and oh9["polls"]["used"] == 1
     assert oh9["article"]["title"] == HOUSE_OHIO and oh9["district"] == 9
-    # Its lean is the 2026-lines computed lean the site publishes.
-    assert oh9["lean"] == district_lean.lean_for("OH", 9, build.HOUSE_LINES)
+    # Its lean is the computed lean on the lines the cycle seats, the one
+    # the race page shows.
+    assert data["sources"]["lean"]["house"]["congress"] == congress_for_election(2026)
+    assert oh9["lean"] == district_lean.lean_for("OH", 9, congress_for_election(2026))
 
 
 @pytest.mark.parametrize("chamber,fitted", [("senate", FITTED), ("house", HOUSE_FITTED)])
@@ -361,7 +381,7 @@ def test_a_rejected_table_and_an_outage_are_named_not_read_as_no_poll(db_session
     freeze_utcnow(datetime(2026, 10, 15, 16, 0))
     _seed(db_session)
     revs = _revisions()
-    revs["2026 United States Senate election in Ohio"]["content"] = article(ROW.replace("|6%", "|16%"))
+    revs[senate_ohio()]["content"] = article(ROW.replace("|6%", "|16%"))
     oh = next(s for s in _seats(build.build(db_session, revs, house_titles=[HOUSE_OHIO]))
               if s["id"] == "2026-SEN-OH")
     assert oh["status"] == "range" and oh["pollSource"]["state"] == "rejected"
@@ -434,7 +454,8 @@ def test_build_stops_on_election_day(db_session, freeze_utcnow):
 
 def _client(monkeypatch, data, phase=CAMPAIGN):
     monkeypatch.setattr(api, "_load", lambda: data)
-    monkeypatch.setattr(api, "active_election", lambda: ActiveElection(date(2026, 11, 3), phase, None, None))
+    day = date.fromisoformat(data["electionDay"])
+    monkeypatch.setattr(api, "active_election", lambda: ActiveElection(day, phase, None, None))
     app = FastAPI()
     app.include_router(api.router, prefix="/api")
     return TestClient(app)
@@ -464,3 +485,116 @@ def test_the_method_reads_nothing_from_scoring():
     for path in root.glob("*.py"):
         imports = [line for line in path.read_text().splitlines() if line.startswith(("from ", "import "))]
         assert not [line for line in imports if "app.pipeline.analyze" in line or "config_definitions" in line]
+
+
+# ---------------------------------------------------------------------------
+# Any cycle, no code edit: the cycle comes from active_election()
+# ---------------------------------------------------------------------------
+
+
+def test_the_fieldwork_floor_is_the_cycles_own():
+    assert wiki.earliest_fieldwork(2026) == date(2025, 1, 1)
+    assert wiki.earliest_fieldwork(2028) == date(2027, 1, 1)
+    # A 2028 article's row dated in the 2026 cycle is the last cycle's poll.
+    with pytest.raises(wiki.GateFailure, match="2027-01-01"):
+        parse(article(ROW), as_of=date(2028, 9, 15), cycle=2028)
+    (poll,) = parse(article(in_cycle(ROW, 2028).replace("2028", "2027")), as_of=date(2028, 9, 15), cycle=2028).polls
+    assert poll.end == "2027-10-09"
+    # The generic-ballot averages have the same floor.
+    with pytest.raises(wiki.GateFailure, match="date or share gate"):
+        wiki.generic_ballot(GENERIC, date(2028, 9, 15), 2028)
+
+
+def test_a_future_campaign_reads_its_own_articles_and_lines(db_session, freeze_utcnow, monkeypatch, tmp_path):
+    """2028's campaign: its articles, its fieldwork floor and the lines the
+    election seats (the 121st Congress's), with no edit to the code."""
+    monkeypatch.setattr(build, "map_path", lambda: str(tmp_path / "m.json"))
+    assert build.generic_article(2028) == "2028 United States House of Representatives elections"
+    data = _built(db_session, freeze_utcnow, 2028)  # 2028-10-15, the campaign's final weeks
+    assert data["cycle"] == 2028 and data["electionDay"] == "2028-11-07"
+    assert data["national"]["article"] == build.generic_article(2028) and data["national"]["margin"] == -4.0
+    oh = next(s for s in _seats(data) if s["id"] == "2028-SEN-OH")
+    assert oh["article"]["title"] == senate_ohio(2028) and oh["polls"]["used"] == 1
+    assert data["sources"]["lean"]["house"]["congress"] == congress_for_election(2028) == 121
+    (oh9,) = data["chambers"]["house"]["seats"]
+    # No computed lean for the 121st Congress's lines yet: the seat says so
+    # (the race page shows no usual vote either), never the 120th's figure.
+    expected = district_lean.lean_for("OH", 9, 121)
+    if expected is None:
+        assert oh9["status"] == "no_lean" and oh9["lean"] is None
+    else:
+        assert oh9["lean"] == expected
+
+
+def test_a_new_cycle_never_keeps_the_last_cycles_figures(db_session, freeze_utcnow, monkeypatch, tmp_path):
+    path = tmp_path / "election_map.json"
+    monkeypatch.setattr(build, "map_path", lambda: str(path))
+    path.write_text(json.dumps(_built(db_session, freeze_utcnow)))
+    freeze_utcnow(datetime(2028, 9, 15, 16, 0))
+    _seed(db_session, 2028)
+    # Wikipedia down on the 2028 map's first build: no 2026 national figure
+    # to fall back on, so it refuses rather than showing last cycle's.
+    with pytest.raises(wiki.GateFailure):
+        build.build(db_session, None)
+
+
+def test_the_map_stops_on_a_future_election_night(db_session, freeze_utcnow):
+    freeze_utcnow(datetime(2028, 11, 8, 2, 0))  # 9 p.m. Eastern, Nov 7, 2028
+    _seed(db_session, 2028)
+    assert build.build(db_session, _revisions(2028)) is None
+
+
+def test_a_missing_house_table_raises_an_ops_alert(db_session, freeze_utcnow, monkeypatch, tmp_path):
+    monkeypatch.setattr(build, "map_path", lambda: str(tmp_path / "m.json"))
+    monkeypatch.setattr(build.district_lean, "computed_lean", lambda congress: {})
+    sent, resolved = [], []
+    monkeypatch.setattr(build, "send_ops_alert", lambda subject, body, **kw: sent.append(kw["dedupe_key"]))
+    monkeypatch.setattr(build, "resolve_ops_alert", resolved.append)
+    data = _built(db_session, freeze_utcnow, 2028)
+    build._alert_missing_house_lines(data, 2028)
+    assert sent == [f"{build.HOUSE_LINES_CONDITION}-121"]
+    data["chambers"]["house"]["seats"][0]["status"] = "range"
+    build._alert_missing_house_lines(data, 2028)
+    assert resolved == [build.HOUSE_LINES_CONDITION]
+
+
+def test_api_names_the_cycle_and_its_lines(db_session, freeze_utcnow, monkeypatch, tmp_path):
+    monkeypatch.setattr(build, "map_path", lambda: str(tmp_path / "m.json"))
+    data = _built(db_session, freeze_utcnow, 2028)
+    client = _client(monkeypatch, data)
+    assert client.get("/api/elections/map").json()["cycle"] == 2028
+    res = client.get("/api/elections/map.csv")
+    assert res.text.startswith("# Civitas 2028 general-election map")
+    assert "121st Congress lines" in res.text
+    assert 'filename="civitas-2028-election-map.csv"' in res.headers["content-disposition"]
+
+
+@pytest.mark.parametrize("today, due", [
+    (date(2025, 1, 2), 2022),   # the 2024 winners not yet sworn in
+    (date(2025, 1, 3), 2024),
+    (date(2026, 10, 16), 2024),
+    (date(2028, 11, 8), 2026),  # election night: 2028's count is not certified
+    (date(2029, 1, 3), 2028),
+])
+def test_the_last_certified_general(today, due):
+    assert build.last_certified_general(today) == due
+
+
+def test_fits_a_cycle_behind_raise_an_ops_alert_until_refitted(freeze_utcnow, monkeypatch, tmp_path):
+    sent, resolved = [], []
+    monkeypatch.setattr(build, "send_ops_alert", lambda subject, body, **kw: sent.append((kw["dedupe_key"], body)))
+    monkeypatch.setattr(build, "resolve_ops_alert", resolved.append)
+    newest = max(r["year"] for r in TRAINING["races"])
+    house_newest = max(r["year"] for r in HOUSE_TRAINING["races"])
+    # The day the next general after the fits' newest is certified.
+    freeze_utcnow(datetime(min(newest, house_newest) + 3, 1, 3, 12, 0))
+    build.check_training_staleness()
+    assert sent and sent[0][0] == f"{build.TRAINING_CONDITION}-{min(newest, house_newest) + 2}"
+    # Refitted on that election: resolved.
+    paths = {}
+    for chamber in ("senate", "house"):
+        paths[chamber] = tmp_path / f"{chamber}.json"
+        paths[chamber].write_text(json.dumps({"races": [{"year": min(newest, house_newest) + 2}]}))
+    monkeypatch.setattr(build, "TRAINING_PATHS", paths)
+    build.check_training_staleness()
+    assert resolved == [build.TRAINING_CONDITION]

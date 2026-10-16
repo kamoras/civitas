@@ -276,7 +276,7 @@ def _computed_lean(race: Race, pvi_level: str | None) -> float | None:
 
 def _usual_vote(race: Race, pvi: int | None, pvi_level: str | None,
                 state_pvi: dict[str, int]) -> tuple[dict | None, dict | None]:
-    """(usualVote, leanContext): the seat's lean as the 2026 election map
+    """(usualVote, leanContext): the seat's lean as the election map
     shows it, and where it sits among its kind, counted on the same figures.
 
     A House seat's is Civitas's computed lean on the lines its cycle is

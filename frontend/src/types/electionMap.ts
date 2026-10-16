@@ -124,6 +124,7 @@ export interface ChamberModel {
 
 export interface LeanSource {
   source: string;
+  /** The presidential elections the lean is computed from, "2020+2024". */
   window: string;
   file: string;
   congress?: number;
@@ -155,6 +156,8 @@ export interface ElectionMapResponse {
   schemaVersion: number;
   asOf: string;
   electionDay: string;
+  /** The election's year (the backend's active election), for every title. */
+  cycle: number;
   daysToElection: number;
   horizon: number;
   /** True when the map is older than the backend's stale threshold. */
@@ -186,6 +189,7 @@ export interface ElectionMapData {
   chamber: MapChamberKey;
   asOf: string;
   electionDay: string;
+  cycle: number;
   daysToElection: number;
   horizon: number;
   national: NationalInput & { shift: number; shiftLabel: string };

@@ -104,7 +104,7 @@ export default async function ElectionsChapter() {
           incumbent&apos;s Representation Score.
         </P>
         <P>
-          <strong>The seat.</strong> Its lean is the figure the 2026 election map shows, computed by
+          <strong>The seat.</strong> Its lean is the figure the election map shows, computed by
           Civitas with Cook&apos;s formula (Cook&apos;s own PVI is shown beside it as a
           cross-check): how much more Republican or Democratic it voted than the nation in the last
           two presidential elections. Beside it, one square for every seat of its kind, from the
@@ -136,18 +136,16 @@ export default async function ElectionsChapter() {
         </P>
       </Section>
 
-      <Section id="election-map" title="The 2026 Senate and House map: usual vote and poll ranges">
+      <Section id="election-map" title="The Senate and House map: usual vote and poll ranges">
         <P>
           <A href={ELECTION_MAP_HREF}>The map</A> covers every Senate and House seat, in three
-          views. <strong>Usual vote</strong> is each state<strong>Usual vote</strong> is each
-          state&apos;s lean from the last two presidentialapos;s or district
-          <strong>Usual vote</strong> is each state&apos;s lean from the last two presidentialapos;s
-          lean from the last two presidential elections, computed by Civitas from official returns;
-          no model is involved. <strong>Polls</strong> is a range for the margin: that lean, plus
-          incumbency and the national generic-ballot average, combined with the race&apos;s own
-          polls. A range that crosses even is grey and says too close to tell.{" "}
-          <strong>Difference</strong> marks the seats whose polls pull the range clear of where the
-          lean, incumbency and the national swing alone would put it.
+          views. <strong>Usual vote</strong> is each state&apos;s or district&apos;s lean from the
+          last two presidential elections, computed by Civitas from official returns; no model is
+          involved. <strong>Polls</strong> is a range for the margin: that lean, plus incumbency and
+          the national generic-ballot average, combined with the race&apos;s own polls. A range that
+          crosses even is grey and says too close to tell. <strong>Difference</strong> marks the
+          seats whose polls pull the range clear of where the lean, incumbency and the national
+          swing alone would put it.
         </P>
         <P>
           It is not a prediction and calls no race: it shows no chance of anyone winning and no seat

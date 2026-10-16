@@ -56,7 +56,7 @@ def computed_lean(congress: int | None) -> dict[str, float]:
 
 
 def lean_label(lean: float) -> str:
-    """How a lean is written wherever the site shows one beside the 2026
+    """How a lean is written wherever the site shows one beside the election
     map (the map, the race pages): rounded to a whole point, "R+3",
     "D+2" or "EVEN". One function, so the two pages can't disagree."""
     r = round(lean)

@@ -8,7 +8,9 @@ import {
   HOUSE_TILE,
   houseLayout,
   changedLine,
+  leanWindowWords,
   mapCounts,
+  mapTitle,
   parseView,
   rangeLabel,
   seatBin,
@@ -78,6 +80,7 @@ const data: ElectionMapData = {
   pollWindowDays: 45,
   asOf: "2026-10-15T16:00:00Z",
   electionDay: "2026-11-03",
+  cycle: 2026,
   daysToElection: 19,
   horizon: 14,
   chamber: "senate",
@@ -184,6 +187,7 @@ const response: ElectionMapResponse = {
   schemaVersion: 2,
   asOf: data.asOf,
   electionDay: data.electionDay,
+  cycle: data.cycle,
   daysToElection: data.daysToElection,
   horizon: data.horizon,
   pollWindowDays: 45,
@@ -506,5 +510,26 @@ describe("election map", () => {
     } finally {
       globalThis.fetch = original;
     }
+  });
+});
+
+describe("labels come from the API's cycle, never a year in the code", () => {
+  it("names the map and its lines from the cycle and window", () => {
+    expect(mapTitle(2028, "house")).toBe("2028 House map");
+    expect(leanWindowWords("2020+2024")).toBe("2020 and 2024");
+    expect(leanWindowWords("2024+2028")).toBe("2024 and 2028");
+    const later: ElectionMapData = {
+      ...data,
+      asOf: "2028-10-15T16:00:00Z",
+      cycle: 2028,
+      chamber: "house",
+      sources: { ...data.sources, lean: { ...data.sources.lean, window: "2024+2028" } },
+    };
+    const { container } = render(<ElectionMapMethod data={later} />);
+    const text = container.textContent ?? "";
+    expect(text).toContain("2024 and 2028 presidential elections");
+    expect(text).toContain("placed on the 2028 district lines");
+    expect(text).toContain("Wikipedia's 2028 race articles");
+    expect(text).not.toContain("2026");
   });
 });
