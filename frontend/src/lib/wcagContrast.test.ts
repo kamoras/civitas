@@ -136,7 +136,7 @@ function classStrings(src: string): { text: string; line: number }[] {
 
 const TOKEN_RE = Object.keys(TOKENS)
   .sort((a, b) => b.length - a.length)
-  .map((t) => t.replace(/[-]/g, "\\-"))
+  .map((t) => t.replace(/[.*+?^${}()|[\]\\-]/g, "\\$&"))
   .join("|");
 const CLASS_RE = new RegExp(
   `^((?:[a-z-]+(?:\\[[^\\]]+\\])?:)*)(text|bg)-(${TOKEN_RE})(?:/(\\[[0-9.]+\\]|[0-9]+))?$`
