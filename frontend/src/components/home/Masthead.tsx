@@ -1,5 +1,9 @@
+"use client";
+
 import Link from "next/link";
 import { SITE_TAGLINE } from "@/lib/site";
+import { stateBallotHref } from "@/lib/elections";
+import { useYourState } from "@/hooks/useYourState";
 import { ELECTION_MAP_HREF } from "@/lib/electionMap";
 import { REDISTRICTING_HREF } from "@/lib/redistricting";
 import type { ElectionPhase } from "@/types/election";
@@ -39,14 +43,17 @@ export function electionLinks(phase: ElectionPhase | null): { href: string; labe
  * anything takes away from it): the tilted rubber stamp is gone, its facts
  * stated once, plainly, in the source ledger ("Built from the public
  * record") and the footer; the "request a record" box is the header's
- * search, on every page; and the state select is gone from the voter line,
- * since each link leads to a page where the state is chosen.
+ * search, on every page; and the state select is the header's too, asked
+ * once for every page, with the voter links following it.
  */
 export default function Masthead({
   electionPhase = null,
 }: {
   electionPhase?: ElectionPhase | null;
 }) {
+  // With a state chosen in the header (this tab only), the two links go
+  // straight to that state's members and ballot.
+  const { state } = useYourState();
   return (
     <section className="mx-auto max-w-7xl px-4 pt-8 sm:px-6">
       <div className="min-w-0">
@@ -84,19 +91,21 @@ export default function Masthead({
           , the page shows how it was made.
         </p>
 
-        {/* The voter's way in, in the first screen. Each link leads to a
-              page that asks for the state (§8: an explicit, unremembered
-              choice there); a bare form select in the masthead read as a
-              widget, and saved no step. The researcher's links (methods,
-              API, changelog) are in the page's one index. */}
+        {/* The voter's way in, in the first screen. The state is asked once,
+            in the header (YourStatePicker); with none chosen, each link
+            leads to a page where it is. The researcher's links (methods,
+            API, changelog) are in the page's one index. */}
         <nav
           aria-label="For voters"
           className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-xs tracking-[0.1em]"
         >
-          <Link href="/politicians" className={VOTER_LINK}>
+          <Link
+            href={state ? `/politicians?state=${state}` : "/politicians"}
+            className={VOTER_LINK}
+          >
             YOUR MEMBERS
           </Link>
-          <Link href="/elections" className={VOTER_LINK}>
+          <Link href={state ? stateBallotHref(state) : "/elections"} className={VOTER_LINK}>
             YOUR BALLOT
           </Link>
           {electionLinks(electionPhase).map(({ href, label }) => (

@@ -6,6 +6,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { SECTIONS, inSection, sectionSubpages, type SectionKey } from "@/lib/routes";
 import { BSKY_PROFILE_URL } from "@/lib/site";
 import RecordsBand from "./RecordsBand";
+import YourStatePicker from "./YourStatePicker";
 
 // The main navigation is the SECTIONS table (lib/routes.ts): each section's
 // hub, with its other pages one step below it. Leaderboard and Compare are
@@ -348,7 +349,7 @@ export default function Navbar() {
       }
       if (e.key !== "Tab" || !menuRef.current) return;
       const focusable = menuRef.current.querySelectorAll<HTMLElement>(
-        "a[href], button:not([disabled])"
+        "a[href], button:not([disabled]), select"
       );
       if (focusable.length === 0) return;
       const first = focusable[0];
@@ -378,7 +379,7 @@ export default function Navbar() {
         `--header-clearance` (6rem). Keep it to one line on mobile — a second line would
         push past that margin.
       */}
-      <RecordsBand />
+      <RecordsBand aside={<YourStatePicker />} />
       {/* The skip link is the root layout's, ahead of everything: a second
           one here cost keyboard users an extra Tab on every page. */}
       <nav aria-label="Main navigation" className="relative border-b-3 border-white/15">
@@ -511,6 +512,9 @@ export default function Navbar() {
             id="mobile-menu"
             className={`${menuOnly} max-h-[calc(100dvh-5.5rem)] overflow-y-auto overscroll-contain bg-surface-base/[0.98] border-t border-white/[0.07] px-6 pt-2 pb-6`}
           >
+            <div className="border-b border-white/[0.07] py-3">
+              <YourStatePicker size="lg" />
+            </div>
             <ul>
               {NAV.map((section) => {
                 const { label, href } = SECTIONS[section];
