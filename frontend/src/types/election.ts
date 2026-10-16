@@ -195,7 +195,7 @@ export interface RaceWithCandidates {
    * one decimal), beside Cook's `pvi`; never scored. Null where no
    * district figure is shown or none is computed for these lines. */
   computedLean?: number | null;
-  /** The seat's lean exactly as the 2026 election map shows it (backend
+  /** The seat's lean exactly as the election map shows it (backend
    * district_lean.lean_label): a House seat's computed lean, a Senate
    * seat's state lean. Null when there is none (the page then shows
    * Cook's `pvi`, labelled as Cook's). */

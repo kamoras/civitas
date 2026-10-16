@@ -1361,3 +1361,33 @@ def test_contests_with_their_own_primary_date_are_named(db_session):
         {"offices": ["H"], "districts": [1, 2, 6, 7], "date": "2026-08-11"},
     ]
     assert _body(elections.state_ballot("CO", db_session))["otherPrimaries"] == []
+
+
+def test_standing_law_holds_in_a_cycle_nobody_wrote_up_and_one_offs_do_not(db_session, freeze_utcnow, monkeypatch):
+    """2028, with no entry for it: Georgia's majority rule and the top-two
+    and top-four primaries are law, so they hold, with Georgia's runoff
+    computed as the statute counts it (28 days after that cycle's general);
+    2026's one-offs (Louisiana's open House primary, Alabama's postponed
+    districts) do not carry over."""
+    from datetime import date
+
+    from app.config import settings
+
+    freeze_utcnow(datetime(2028, 9, 15, 12, 0))
+    monkeypatch.setattr("app.election_phase.election_today", lambda: date(2028, 9, 15))
+    monkeypatch.setattr(settings, "CURRENT_CONGRESS", 120)
+    for race_id, st, office in (("2028-SEN-GA", "GA", "S"), ("2028-HOUSE-LA-5", "LA", "H"),
+                                ("2028-HOUSE-AL-2", "AL", "H"), ("2028-HOUSE-CA-4", "CA", "H"),
+                                ("2028-HOUSE-AK-0", "AK", "H"), ("2028-HOUSE-WA-1", "WA", "H")):
+        _race(db_session, race_id, st, office=office, district=None if office == "S" else 1, cycle_year=2028)
+    db_session.commit()
+    assert _body(elections.state_ballot("GA", db_session))["generalRunoffs"] == [
+        {"offices": "*", "openPrimary": False, "runoffDate": "2028-12-05"},
+    ]
+    assert _body(elections.state_ballot("LA", db_session))["generalRunoffs"] == []
+    assert _body(elections.state_ballot("AL", db_session))["otherPrimaries"] == []
+    assert _body(elections.state_ballot("CA", db_session))["topPrimary"] == [{"offices": "*", "advance": 2}]
+    assert _body(elections.state_ballot("AK", db_session))["topPrimary"] == [{"offices": "*", "advance": 4}]
+    assert _body(elections.state_ballot("WA", db_session))["topPrimary"] == [{"offices": "*", "advance": 2}]
+    # 2030: the same rule, another general (Nov 5 -> Dec 3).
+    assert elections._election_rules("GA", 2030, "generalRunoffs")[0]["runoffDate"] == "2030-12-03"

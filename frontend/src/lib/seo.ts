@@ -334,7 +334,8 @@ export function describeStateBallot(
 /** The redistricting index: what people search when a map changes. */
 export function describeRedistrictingIndex(
   cycle: string | null,
-  states: number
+  states: number,
+  upcoming = true
 ): {
   title: string;
   description: string;
@@ -342,7 +343,7 @@ export function describeRedistrictingIndex(
   const year = cycle ?? "";
   return {
     title: `New ${year} congressional maps: what changed in each district`.replace("  ", " "),
-    description: `${states} states vote on new U.S. House maps in ${year}. For each district: where its residents lived before, how its partisan lean moved, and the act or court order behind the map. Census counts, downloadable.`,
+    description: `${states} states ${upcoming ? "vote" : "voted"} on new U.S. House maps in ${year}. For each district: where its residents lived before, how its partisan lean moved, and the act or court order behind the map. Census counts, downloadable.`,
   };
 }
 
@@ -359,17 +360,17 @@ export function describeStateRedistricting(
   };
 }
 
-/** /elections/map: the 2026 Senate and House map (usual vote, poll
- * ranges). Never "forecast", "prediction" or "projection" — the page is
- * none of those. */
-export function describeElectionMap(): {
+/** /elections/map: the Senate and House map of the cycle the backend
+ * names (usual vote, poll ranges); no year when the map isn't up. Never
+ * "forecast", "prediction" or "projection" — the page is none of those. */
+export function describeElectionMap(cycle?: number): {
   title: string;
   description: string;
 } {
+  const year = cycle ? `${cycle} ` : "";
   return {
-    title: "2026 Senate and House Map: Usual Vote and Poll Ranges",
-    description:
-      "How each 2026 Senate and House seat usually votes, the range this year's polls suggest for the margin, and where the two disagree. Ranges, not results; not a race call. Method and held-out calibration shown.",
+    title: `${year}Senate and House Map: Usual Vote and Poll Ranges`,
+    description: `How each ${year}Senate and House seat usually votes, the range this year's polls suggest for the margin, and where the two disagree. Ranges, not results; not a race call. Method and held-out calibration shown.`,
   };
 }
 

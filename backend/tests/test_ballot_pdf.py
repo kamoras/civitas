@@ -12,6 +12,7 @@ first office name. All three are covered below so they can't regress.
 
 import json
 import time
+from datetime import date, datetime
 
 import pytest
 
@@ -221,7 +222,7 @@ def test_column_bounds_scale_to_page_width():
 
 
 @pytest.mark.asyncio
-async def test_town_ballot_discloses_which_election_the_pdf_is_for(monkeypatch, db_session):
+async def test_town_ballot_discloses_which_election_the_pdf_is_for(monkeypatch, db_session, freeze_utcnow):
     """A PDF-sourced ballot can be for a DIFFERENT election than the page's
     own "GENERAL ELECTION" header — right now, Somerville's only
     published PDF is its September primary, not the November general.
@@ -233,6 +234,10 @@ async def test_town_ballot_discloses_which_election_the_pdf_is_for(monkeypatch, 
                 "sourceUrl": "https://example.com/ballot.pdf"}
 
     monkeypatch.setattr(ballot_pdf, "fetch_town_ballot_pdf", fake_fetch)
+    # Inside the cycle the bundled ballot is for (a later cycle reads not
+    # covered: test_ballot_measures, the sample ballot from last cycle).
+    freeze_utcnow(datetime(2026, 10, 1, 12))
+    monkeypatch.setattr("app.election_phase.election_today", lambda: date(2026, 10, 1))
     data = _body(await elections.town_ballot(None, "MA", "Somerville", db=db_session))
     assert data["status"] == "covered"
     assert data["electionName"] == "2026 Massachusetts State Primary (Democratic Party)"

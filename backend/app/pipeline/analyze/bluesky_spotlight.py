@@ -34,6 +34,7 @@ from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.score_display import displayed_rank, displayed_score
 from app.services.representative_service import get_representative_score_breakdown
 from app.services.senator_service import get_senator_score_breakdown
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -195,7 +196,7 @@ def _publish_spotlight(db: Session, text: str, entity: "Senator | Representative
 def post_daily_spotlight(db: Session) -> None:
     """Publish a daily senator/representative score spotlight. No-op if
     already published today."""
-    today = datetime.now(UTC).date().isoformat()
+    today = utcnow().date().isoformat()
     already_posted = (
         db.query(BskySenatorSpotlight)
         .filter(BskySenatorSpotlight.posted_at >= today)

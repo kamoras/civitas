@@ -1,4 +1,4 @@
-import { chamberWord, coverageSentence, formatAsOf } from "@/lib/electionMap";
+import { chamberWord, coverageSentence, formatAsOf, leanWindowWords } from "@/lib/electionMap";
 import type { ElectionMapData } from "@/types/electionMap";
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
@@ -29,11 +29,13 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
       <ul className="list-disc space-y-1 pl-5">
         <li>
           <strong className="text-ink">Usual vote</strong> is each {house ? "district" : "state"}
-          &apos;s lean: how much more Republican or Democratic it voted than the nation in the 2020
-          and 2024 presidential elections (Cook&apos;s formula, 75% on the newer one), computed by
-          Civitas from{" "}
-          {house ? "precinct returns placed on the 2026 district lines" : "official returns"}. No
-          model is involved.
+          &apos;s lean: how much more Republican or Democratic it voted than the nation in the{" "}
+          {leanWindowWords(data.sources.lean.window)} presidential elections (Cook&apos;s formula,
+          75% on the newer one), computed by Civitas from{" "}
+          {house
+            ? `precinct returns placed on the ${data.cycle} district lines`
+            : "official returns"}
+          . No model is involved.
         </li>
         <li>
           <strong className="text-ink">Polls</strong> is an 80% range for the margin: the usual
@@ -76,7 +78,7 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
       {house && (
         <p>
           A House fit needs each district&apos;s lean as it stood before each past election, on the
-          lines that election used. Civitas rebuilt it the same way as the 2026 lean, from VEST
+          lines that election used. Civitas rebuilt it the same way as the usual vote, from VEST
           precinct returns placed on Census blocks: for 2018 and 2020 from the 2016 presidential
           vote alone, on the 116th Congress&apos;s lines (2012 has no open precinct returns), and
           for 2022 from 2016 and 2020 on the new lines drawn after the census. North Carolina&apos;s
@@ -174,7 +176,7 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
         </li>
         <li>Training: {data.sources.training}</li>
         <li>
-          This year&apos;s polls and the generic-ballot averages: Wikipedia&apos;s 2026 race
+          This year&apos;s polls and the generic-ballot averages: Wikipedia&apos;s {data.cycle} race
           articles, read as of each article&apos;s revision shown with its seat. Every table passes
           checks before it is used: dates on or before the revision, shares that add up, no poll
           listed twice, one column per nominee. A revision that fails keeps the previous good one.

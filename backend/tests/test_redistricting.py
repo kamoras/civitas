@@ -226,3 +226,15 @@ def test_routes_resolve_on_the_real_app():
     assert c.get("/api/elections/redistricting/UT").json()["state"] == "UT"
     assert c.get("/api/elections/redistricting/UT/old/1").json()["seat"]["district"] == "UT-1"
     assert c.get("/api/elections/redistricting/UT/overlap.csv").headers["content-type"].startswith("text/csv")
+
+
+def test_the_index_says_a_redraw_is_past_once_its_election_is_held(freeze_utcnow, monkeypatch):
+    """Before the cycle's election its new lines are the coming ones; after
+    it (and into the next cycle) the same page describes a past redraw."""
+    from datetime import date, datetime
+
+    c = _client()
+    for today, upcoming in ((date(2026, 10, 1), True), (date(2026, 11, 4), False), (date(2028, 3, 1), False)):
+        freeze_utcnow(datetime.combine(today, datetime.min.time()).replace(hour=15))
+        monkeypatch.setattr("app.api.redistricting.election_today", lambda d=today: d)
+        assert c.get("/api/elections/redistricting").json()["upcoming"] is upcoming, today

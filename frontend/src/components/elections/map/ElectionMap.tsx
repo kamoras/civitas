@@ -34,6 +34,7 @@ import {
   footerText,
   legendCells,
   mapCounts,
+  mapTitle,
   pollSourceSentence,
   racePageHref,
   nationalSentence,
@@ -722,7 +723,7 @@ function SeatDetail({
             <span className="text-ink-min">
               {seat.district == null
                 ? "(Civitas, from official returns)"
-                : "(Civitas-computed lean, on the 2026 district lines)"}
+                : `(Civitas-computed lean, on the ${data.cycle} district lines)`}
             </span>
           </dd>
         </div>
@@ -857,8 +858,8 @@ function SeatTable({ data, onSelect }: { data: ElectionMapData; onSelect: (id: s
     <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Every seat, as a table">
       <table className="w-full min-w-[40rem] border-collapse text-sm text-ink-lo">
         <caption className="sr-only">
-          Every 2026 {chamberWord(data.chamber)} seat: usual vote, poll range, polls used and
-          difference
+          Every {data.cycle} {chamberWord(data.chamber)} seat: usual vote, poll range, polls used
+          and difference
         </caption>
         <thead className="border-b border-white/20">
           <tr>
@@ -926,7 +927,7 @@ function SeatTable({ data, onSelect }: { data: ElectionMapData; onSelect: (id: s
 }
 
 /**
- * The 2026 general-election map: how each Senate seat usually votes, what
+ * The general-election map: how each Senate seat usually votes, what
  * this year's polls suggest (a range of the margin, never a winner), and
  * where the two disagree. All figures from GET /api/elections/map.
  *
@@ -1085,7 +1086,7 @@ export default function ElectionMap({
   return (
     <ShareSubjectProvider
       subject={{
-        title: `2026 ${chamberWord(chamber)} map, ${VIEW_LABEL[view].toLowerCase()}`,
+        title: `${mapTitle(data.cycle, chamber)}, ${VIEW_LABEL[view].toLowerCase()}`,
         subtitle: `As of ${formatAsOf(data.asOf)} · Ranges, not results · Not a race call`,
         url: `${pageUrl}?chamber=${chamber}&view=${view}`,
         source: SHARE_SOURCE,
@@ -1216,7 +1217,7 @@ export default function ElectionMap({
                 </p>
               </div>
               <ShareSectionButton
-                label={`2026 ${chamberWord(chamber)} map, ${VIEW_LABEL[view].toLowerCase()}`}
+                label={`${mapTitle(data.cycle, chamber)}, ${VIEW_LABEL[view].toLowerCase()}`}
                 anchor="general-map"
               />
             </div>

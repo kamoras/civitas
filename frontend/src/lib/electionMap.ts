@@ -1,5 +1,5 @@
 /**
- * The 2026 election map's display rules. Every figure comes from the
+ * The election map's display rules. Every figure comes from the
  * backend (GET /api/elections/map); this file only decides how a figure
  * the backend computed is drawn and worded. Nothing here computes a
  * margin, a range or a bin.
@@ -26,6 +26,20 @@ export type MapChamber = MapChamberKey;
 export const CHAMBER_LABEL: Record<MapChamber, string> = { senate: "SENATE", house: "HOUSE" };
 const CHAMBER_WORD: Record<MapChamber, string> = { senate: "Senate", house: "House" };
 
+/** "2028 House map": the map's name, from the API's cycle. */
+export function mapTitle(cycle: number, chamber: MapChamber): string {
+  return `${cycle} ${CHAMBER_WORD[chamber]} map`;
+}
+
+/** The lean's presidential elections in words, from the API's window:
+ * "2020+2024" -> "2020 and 2024". */
+export function leanWindowWords(window: string): string {
+  const years = window.match(/\d{4}/g) ?? [];
+  return years.length > 1
+    ? `${years.slice(0, -1).join(", ")} and ${years[years.length - 1]}`
+    : (years[0] ?? window);
+}
+
 /** One chamber's map out of the API's response, in the shape every
  * component reads. No figure is computed here. */
 export function chamberView(r: ElectionMapResponse, chamber: MapChamber): ElectionMapData {
@@ -34,6 +48,7 @@ export function chamberView(r: ElectionMapResponse, chamber: MapChamber): Electi
     chamber,
     asOf: r.asOf,
     electionDay: r.electionDay,
+    cycle: r.cycle,
     daysToElection: r.daysToElection,
     horizon: r.horizon,
     national: { ...r.national, shift: c.shift, shiftLabel: c.shiftLabel },

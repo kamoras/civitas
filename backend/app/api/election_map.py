@@ -1,4 +1,4 @@
-"""The 2026 general-election map: each seat's structural lean and, where
+"""The general-election map: each seat's structural lean and, where
 polls exist, the poll-informed range of its vote margin.
 
 Ranges, not results, and never a race call: the file holds no chance of
@@ -26,6 +26,7 @@ from app.election_phase import CAMPAIGN, active_election
 from app.file_cache import new_reload_lock, reload_if_moved
 from app.forecast.build import map_path
 from app.forecast.polls import POLL_ATTRIBUTION, POLL_LICENSE, POLL_LICENSE_URL
+from app.ordinals import ordinal
 from app.time_utils import utcnow
 
 router = APIRouter(prefix="/elections")
@@ -68,13 +69,15 @@ def current_map() -> dict:
     if data.get("electionDay") != election.election_day.isoformat():
         raise HTTPException(status_code=404, detail=HIDDEN)
     as_of = datetime.fromisoformat(data["asOf"].replace("Z", "+00:00")).replace(tzinfo=None)
-    return dict(data, stale=utcnow() - as_of > STALE_AFTER)
+    # The cycle the page names in its titles, from the election itself (a
+    # file built before the field existed has the same election day).
+    return dict(data, cycle=election.cycle, stale=utcnow() - as_of > STALE_AFTER)
 
 
 @router.get("/map")
 def election_map(chamber: str | None = Query(None, pattern="^(senate|house)$",
                                               description="Only this chamber's seats (the page loads one at a time)")):
-    """Every 2026 Senate and House seat: its usual vote (structural lean) and, where
+    """Every Senate and House seat on the active election's ballot: its usual vote (structural lean) and, where
     Democrats and Republicans both have a nominee, the poll-informed 80%
     range of the margin, with the polls behind it and the method's
     held-out calibration. `chamber` returns one chamber's, with
@@ -99,10 +102,12 @@ CSV_COLUMNS = (
 
 def csv_text(data: dict) -> str:
     out = io.StringIO()
-    out.write(f"# Civitas 2026 general-election map, as of {data['asOf']}. Ranges, not results. Not a race call.\n")
+    out.write(f"# Civitas {data['cycle']} general-election map, as of {data['asOf']}. Ranges, not results. "
+              "Not a race call.\n")
     out.write("# Margins are Republican minus Democratic share of the two-party vote, in points (negative = D).\n")
     out.write("# Usual vote: Civitas's computed lean from official returns (Senate: app/data/state_pvi.json; "
-              "House: app/data/district_lean.json, 2026 lines).\n")
+              f"House: app/data/district_lean.json, {ordinal(data['sources']['lean']['house']['congress'])} "
+              "Congress lines).\n")
     out.write(f"# Polls: {POLL_ATTRIBUTION}, {POLL_LICENSE} ({POLL_LICENSE_URL}). The poll-derived columns are "
               f"shared under the same licence; reuse them with attribution and under {POLL_LICENSE}.\n")
     w = csv.writer(out)
@@ -137,5 +142,5 @@ def election_map_csv():
     return Response(
         content=csv_text(data), media_type="text/csv; charset=utf-8",
         headers={"Cache-Control": f"public, max-age={CACHE_TTL_LIST_S}, stale-while-revalidate={CACHE_TTL_LIST_S}",
-                 "Content-Disposition": 'attachment; filename="civitas-2026-election-map.csv"'},
+                 "Content-Disposition": f'attachment; filename="civitas-{data["cycle"]}-election-map.csv"'},
     )
