@@ -13,8 +13,9 @@ the window closes, every pass of the live-results sync copies them here
           stops on election day (forecast/build.build), so the file on disk
           then is the final pre-election map. Copied once, never replaced.
   record  the federal races with the candidates on the ballot, each race's
-          count as the state reported it, and the statewide measures,
-          quoted. Re-copied on every pass while the count may still move,
+          count as the state reported it, the statewide offices, state
+          legislative seats and judgeships with their nominees (the state
+          ballot page's own sections), and the statewide measures, quoted. Re-copied on every pass while the count may still move,
           and frozen by the window's close, after which nothing calls this.
 
 Everything in it is copied, never written: candidate names as the state
@@ -35,10 +36,16 @@ from app.api.elections import (
     _candidate_source,
     _candidate_summary,
     _confirmed_or_all,
+    _judicial_marker,
+    _judicial_section,
     _measure_json,
     _measure_order,
     _race_complete,
     _result_json,
+    _state_leg_section,
+    _statewide_marker,
+    _statewide_section,
+    ballot_state_codes,
 )
 from app.forecast.build import map_path
 from app.live_results.sync import redrawn_states
@@ -74,6 +81,34 @@ def held_map(election_day: date) -> dict | None:
     return data
 
 
+def _without(rows: list[dict], key: str) -> list[dict]:
+    return [{k: v for k, v in r.items() if k != key} for r in rows]
+
+
+def state_contests(db: Session, state: str, cycle: int) -> dict | None:
+    """The state's own contests as its ballot page showed them: statewide
+    offices, legislative seats and judgeships, each with its nominees and
+    whose list they came from. None when the state had none on file. The
+    place lists a reader filters by (seat `areas`, district `towns`) are
+    the page's finding aid, rebuilt from the crosswalks, not ballot
+    content, and are left out."""
+    statewide, statewide_cov = _statewide_section(db, state, cycle)
+    legislature = _state_leg_section(db, state, cycle, _statewide_marker(db, state, cycle))
+    judicial, judicial_cov = _judicial_section(db, state, cycle, _judicial_marker(db, state, cycle))
+    if not (statewide or legislature or judicial):
+        return None
+    return {
+        "statewideRaces": _without(statewide, "areas"),
+        "stateLegRaces": [dict(c, districts=_without(c["districts"], "towns")) for c in legislature],
+        "judicialRaces": judicial,
+        # Whose list the names are, and whether it was the state's
+        # November ballot list or primary results (which can miss an
+        # unopposed nominee): the legislature shares the statewide marker.
+        "statewideSource": {"sourceName": statewide_cov["sourceName"], "ballotList": statewide_cov["ballotList"]},
+        "judicialSource": {"sourceName": judicial_cov["sourceName"], "ballotList": judicial_cov["ballotList"]},
+    }
+
+
 def build_record(db: Session, election_day: date) -> dict:
     """The held election's federal ballot, its counts and its statewide
     measures, in the shapes the live pages already use."""
@@ -101,14 +136,16 @@ def build_record(db: Session, election_day: date) -> dict:
         })
     measures = sorted(db.query(BallotMeasure).filter(BallotMeasure.election_date == day).all(),
                       key=lambda m: (m.state, _measure_order(m)))
-    states = sorted({r["state"] for r in out_races} | {m.state for m in measures})
+    contests = {st: c for st in sorted(ballot_state_codes()) if (c := state_contests(db, st, cycle))}
+    states = sorted({r["state"] for r in out_races} | {m.state for m in measures} | set(contests))
     return {
         "cycle": cycle,
         "electionDay": day,
         "states": [{"state": st, "stateName": STATE_NAMES.get(st, st),
                     # Whose list the candidates are (the ballot-basis marker's
                     # source); null where no state list was read.
-                    "candidateListSource": (markers.get(st) or {}).get("sourceName") or None}
+                    "candidateListSource": (markers.get(st) or {}).get("sourceName") or None,
+                    "stateContests": contests.get(st)}
                    for st in states],
         "liveStates": sorted(live_results_states()),
         "rankedChoiceStates": sorted(ranked_choice_states()),
@@ -133,7 +170,7 @@ def freeze(db: Session, election_day: date) -> ElectionArchive | None:
             row.map_json = json.dumps(snapshot, separators=(",", ":"))
             row.map_as_of = datetime.fromisoformat(snapshot["asOf"].replace("Z", "+00:00")).replace(tzinfo=None)
     record = build_record(db, election_day)
-    if record["races"]:
+    if record["races"] or any(s["stateContests"] for s in record["states"]):
         row.record_json = json.dumps(record, separators=(",", ":"))
         row.record_as_of = utcnow()
     if row.map_json is None:

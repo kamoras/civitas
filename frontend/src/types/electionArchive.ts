@@ -1,7 +1,14 @@
 /** GET /api/elections/archive and /api/elections/archive/{cycle} (backend
  * app/api/election_archive.py): each held general election as Civitas
  * recorded it. Every field is copied from the live pages' own shapes. */
-import type { BallotMeasure, LiveRaceResult } from "@/types/election";
+import type {
+  BallotMeasure,
+  JudicialCourt,
+  LiveRaceResult,
+  StateLegChamber,
+  StateLegDistrict,
+  StatewideRace,
+} from "@/types/election";
 
 export interface ArchiveTotals {
   races: number;
@@ -10,6 +17,8 @@ export interface ArchiveTotals {
   /** Of those, counts the state itself lists as official. */
   official: number;
   measures: number;
+  /** Statewide offices, legislative seats and judgeships. */
+  stateContests?: number;
   states: number;
 }
 
@@ -55,10 +64,29 @@ export interface ArchivedRace {
   result: LiveRaceResult | null;
 }
 
+/** The state's own contests as its ballot page showed them, without the
+ * place lists the page filters by. */
+export interface ArchivedStateContests {
+  statewideRaces: Omit<StatewideRace, "areas">[];
+  stateLegRaces: (Omit<StateLegChamber, "districts"> & {
+    districts: Omit<StateLegDistrict, "towns">[];
+  })[];
+  judicialRaces: JudicialCourt[];
+  statewideSource: { sourceName: string | null; ballotList: boolean };
+  judicialSource: { sourceName: string | null; ballotList: boolean };
+}
+
 export interface ArchiveRecord {
   cycle: number;
   electionDay: string;
-  states: { state: string; stateName: string; candidateListSource: string | null }[];
+  states: {
+    state: string;
+    stateName: string;
+    candidateListSource: string | null;
+    /** Null where the state had none on file (and in a record copied
+     * before these were kept). */
+    stateContests?: ArchivedStateContests | null;
+  }[];
   liveStates: string[];
   rankedChoiceStates: string[];
   redrawnStates: string[];

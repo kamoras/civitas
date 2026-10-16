@@ -26,7 +26,7 @@ async function fetchIndex(): Promise<ArchiveIndex> {
 
 /** What the archive keeps, said once whether or not anything is in it yet. */
 const KEEPS =
-  "Each general election is kept here from its election day: the seat map as it stood the day before, each Senate and House race's count as its state reports it, and the candidates and statewide ballot measures on the ballot, quoted from their sources. The record stays after the site moves on to the next election.";
+  "Each general election is kept here from its election day: the seat map as it stood the day before, each Senate and House race's count as its state reports it, and the whole ballot the site showed (federal, statewide, legislative and judicial contests, and statewide measures), quoted from their sources. The record stays after the site moves on to the next election.";
 
 /** When the next archive starts, from the site's current election. */
 function nextLine(index: ArchiveIndex): string | null {
@@ -96,7 +96,9 @@ export default async function ElectionArchiveIndexPage() {
                       </span>
                       <span className="mt-1 block font-mono text-xs text-ink-lo">
                         {longDate(c.electionDay)} · {c.races} federal races · {c.counted} with a
-                        count read, {c.official} listed official · {c.measures} statewide measures
+                        count read, {c.official} listed official
+                        {c.stateContests ? ` · ${c.stateContests} state contests` : ""} ·{" "}
+                        {c.measures} statewide measures
                         {c.hasMap ? " · the map before election day" : ""}
                       </span>
                       {c.recordAsOf && (

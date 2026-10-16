@@ -122,8 +122,9 @@ async function ArchivePage({
             title={`The ${cycle} general election`}
           >
             What Civitas recorded: the seat map as it stood before election day, each Senate and
-            House race&apos;s count as its state reported it, and the candidates and statewide
-            ballot measures on the ballot, quoted from their sources.{" "}
+            House race&apos;s count as its state reported it, and the whole ballot the site showed
+            (federal, statewide, legislative and judicial contests, and statewide measures), quoted
+            from their sources.{" "}
             <Link href={ELECTIONS_ARCHIVE_HREF} className="text-ink-hi underline">
               Every archived election →
             </Link>

@@ -36,7 +36,35 @@ function record(overrides: Partial<ArchiveRecord> = {}): ArchiveRecord {
     electionDay: "2026-11-03",
     states: [
       { state: "GA", stateName: "Georgia", candidateListSource: "Georgia Secretary of State" },
-      { state: "ME", stateName: "Maine", candidateListSource: null },
+      {
+        state: "ME",
+        stateName: "Maine",
+        candidateListSource: null,
+        stateContests: {
+          statewideRaces: [
+            {
+              office: "governor",
+              label: "Governor",
+              nominees: [
+                { party: "DEM", partyLabel: null, name: "Jo Park" },
+                { party: "OTH", partyLabel: "Green Independent", name: "Kit Hale" },
+              ],
+            },
+          ],
+          stateLegRaces: [
+            {
+              chamber: "upper",
+              label: "State Senate",
+              districts: [
+                { district: "12", nominees: [{ party: "REP", partyLabel: null, name: "Bo Tan" }] },
+              ],
+            },
+          ],
+          judicialRaces: [],
+          statewideSource: { sourceName: "Maine Secretary of State", ballotList: false },
+          judicialSource: { sourceName: null, ballotList: false },
+        },
+      },
     ],
     liveStates: ["GA"],
     rankedChoiceStates: ["ME"],
@@ -112,7 +140,7 @@ function record(overrides: Partial<ArchiveRecord> = {}): ArchiveRecord {
     mapAsOf: null,
     hasMap: false,
     stillCounting: false,
-    totals: { races: 2, counted: 1, official: 1, measures: 1, states: 2 },
+    totals: { races: 2, counted: 1, official: 1, measures: 1, stateContests: 2, states: 2 },
     ...overrides,
   };
 }
@@ -154,6 +182,17 @@ describe("CycleArchive", () => {
     expect(screen.getByText(/the state's certified list/)).toBeTruthy();
     expect(screen.getByText(/ranked-choice rounds/)).toBeTruthy();
     expect(screen.getByText(/No candidate list was on file/)).toBeTruthy();
+  });
+
+  it("keeps the state's own contests, with whose list and what it can miss", () => {
+    renderArchive(record());
+    expect(screen.getByText("Statewide offices")).toBeTruthy();
+    expect(screen.getByText(/Kit Hale/)).toBeTruthy();
+    expect(screen.getByText("(Green Independent)")).toBeTruthy();
+    expect(screen.getByText("District 12")).toBeTruthy();
+    expect(screen.getAllByText(/Names as listed by Maine Secretary of State/)[0]).toBeTruthy();
+    expect(screen.getAllByText(/Names come from primary results/)[0]).toBeTruthy();
+    expect(screen.getByText(/no count for the state's own contests/)).toBeTruthy();
   });
 
   it("quotes the measures verbatim with their drafter", () => {

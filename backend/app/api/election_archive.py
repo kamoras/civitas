@@ -48,6 +48,13 @@ def _counts(record: dict) -> dict:
         "counted": len(results),
         "official": sum(1 for r in results if r["official"]),
         "measures": len(record["measures"]),
+        # Statewide offices, legislative seats and judgeships, each counted
+        # once (a record copied before these were kept has none).
+        "stateContests": sum(
+            len(c["statewideRaces"]) + sum(len(ch["districts"]) for ch in c["stateLegRaces"])
+            + sum(len(ct["seats"]) for ct in c["judicialRaces"])
+            for c in (s.get("stateContests") for s in record["states"]) if c
+        ),
         "states": len(record["states"]),
     }
 

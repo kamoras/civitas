@@ -730,15 +730,18 @@ export default async function ElectionsChapter() {
               /elections/archive
             </Link>
             : the seat map as its last refresh before election day left it, each Senate and House
-            race&apos;s count as its state reported it, and the candidates and statewide ballot
-            measures on the ballot, quoted from their sources. The count is copied again each time
-            it is read, until the results stay up no longer; after that nothing changes it. A link
-            to a race from an earlier election, such as an old post, opens that race in its archive
-            rather than the next election&apos;s ballot.
+            race&apos;s count as its state reported it, and the candidates, nominees and statewide
+            ballot measures on the ballot, quoted from their sources. The count is copied again each
+            time it is read, until the results stay up no longer; after that nothing changes it. A
+            link to a race from an earlier election, such as an old post, opens that race in its
+            archive rather than the next election&apos;s ballot.
           </P>
           <P>
-            The archive keeps the federal contests and statewide measures only. A count it shows as
-            leading still only leads, official or not: Civitas calls no race there either.
+            It keeps the whole ballot the state pages showed: federal races, statewide offices, the
+            legislature, elected judgeships and statewide measures. Counts are kept for the federal
+            races only, the only ones Civitas reads on election night. It leaves out the news
+            coverage beside each race and campaign-finance figures, which the FEC keeps. A count it
+            shows as leading still only leads, official or not: Civitas calls no race there either.
           </P>
         </Sub>
       </Section>

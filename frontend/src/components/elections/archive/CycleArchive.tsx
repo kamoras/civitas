@@ -2,7 +2,7 @@ import Link from "next/link";
 import ElectionMap from "@/components/elections/map/ElectionMap";
 import BallotMeasureCard from "@/components/elections/BallotMeasureCard";
 import { statusTag } from "@/components/elections/results/RaceResult";
-import { candidateName } from "@/lib/elections";
+import { candidateName, PRIMARY_RESULTS_CAVEAT } from "@/lib/elections";
 import { formatUtcDate, safeHref } from "@/lib/formatting";
 import { formatAsOf } from "@/lib/electionMap";
 import {
@@ -12,7 +12,8 @@ import {
   raceLabel,
   reportingText,
 } from "@/lib/results";
-import type { ArchiveRecord, ArchivedRace } from "@/types/electionArchive";
+import type { ArchiveRecord, ArchivedRace, ArchivedStateContests } from "@/types/electionArchive";
+import type { StatewideNominee } from "@/types/election";
 import type { ElectionMapResponse } from "@/types/electionMap";
 
 /** Whose list a race's candidates are, in words (candidateSource, decided
@@ -38,6 +39,91 @@ function noCountText(race: ArchivedRace, record: ArchiveRecord): string {
   if (!record.liveStates.includes(race.state))
     return "No count shown: Civitas does not read this state's results feed.";
   return "No count shown: the state's feed listed no contest Civitas could match to this race.";
+}
+
+/** A state nominee's party as the state's list printed it: its own label
+ * where the shared codes can't name it, else the code's letter. */
+function nomineeParty(n: StatewideNominee): string {
+  return n.partyLabel || partyTag(n.party);
+}
+
+function NomineeList({ nominees }: { nominees: StatewideNominee[] }) {
+  return (
+    <span className="text-ink">
+      {nominees.map((n, i) => (
+        <span key={`${i}-${n.name}`}>
+          {i > 0 && " · "}
+          {n.name} <span className="font-mono text-xs text-ink-lo">({nomineeParty(n)})</span>
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function sourceLine(src: { sourceName: string | null; ballotList: boolean }): string {
+  const from = src.sourceName ? `Names as listed by ${src.sourceName}. ` : "";
+  return src.ballotList
+    ? `${from}The state's list for the November ballot.`
+    : `${from}${PRIMARY_RESULTS_CAVEAT}`;
+}
+
+/** The state's own contests (statewide offices, the legislature, elected
+ * judgeships) as its ballot page showed them: who was on the ballot, from
+ * whose list. Civitas read no count for these. */
+function StateContests({ contests }: { contests: ArchivedStateContests }) {
+  const heading = "font-mono text-xs uppercase tracking-[0.14em] text-ink-min";
+  const row =
+    "grid gap-x-4 gap-y-0.5 border-b border-white/[0.07] px-4 py-2.5 text-sm last:border-b-0 sm:grid-cols-[14rem_minmax(0,1fr)]";
+  return (
+    <div className="space-y-4">
+      {contests.statewideRaces.length > 0 && (
+        <div className="space-y-2">
+          <h4 className={heading}>Statewide offices</h4>
+          <ul className="border border-white/[0.09] bg-surface">
+            {contests.statewideRaces.map((r) => (
+              <li key={r.office} className={row}>
+                <span className="text-ink-lo">{r.label}</span>
+                <NomineeList nominees={r.nominees} />
+              </li>
+            ))}
+          </ul>
+          <p className="text-xs text-ink-min">{sourceLine(contests.statewideSource)}</p>
+        </div>
+      )}
+      {contests.stateLegRaces.map((chamber) => (
+        <div key={chamber.chamber} className="space-y-2">
+          <h4 className={heading}>{chamber.label}</h4>
+          <ul className="border border-white/[0.09] bg-surface">
+            {chamber.districts.map((d) => (
+              <li key={d.district} className={row}>
+                <span className="text-ink-lo">District {d.district}</span>
+                <NomineeList nominees={d.nominees} />
+              </li>
+            ))}
+          </ul>
+          <p className="text-xs text-ink-min">{sourceLine(contests.statewideSource)}</p>
+        </div>
+      ))}
+      {contests.judicialRaces.map((court) => (
+        <div key={court.court} className="space-y-2">
+          <h4 className={heading}>{court.label}</h4>
+          <ul className="border border-white/[0.09] bg-surface">
+            {court.seats.map((seat) => (
+              <li key={seat.seat} className={row}>
+                <span className="text-ink-lo">{seat.seat}</span>
+                <NomineeList nominees={seat.nominees} />
+              </li>
+            ))}
+          </ul>
+          <p className="text-xs text-ink-min">{sourceLine(contests.judicialSource)}</p>
+        </div>
+      ))}
+      <p className="text-xs text-ink-min">
+        Civitas read no count for the state&apos;s own contests: the state&apos;s results pages have
+        them.
+      </p>
+    </div>
+  );
 }
 
 function RaceEntry({ race, record }: { race: ArchivedRace; record: ArchiveRecord }) {
@@ -173,11 +259,12 @@ export default function CycleArchive({
         </p>
       )}
 
-      <dl className="grid grid-cols-2 gap-px border border-white/[0.09] bg-white/[0.07] font-mono sm:grid-cols-4">
+      <dl className="grid grid-cols-2 gap-px border border-white/[0.09] bg-white/[0.07] font-mono sm:grid-cols-5 [&>div:last-child]:col-span-2 sm:[&>div:last-child]:col-span-1">
         {[
           ["Federal races", t.races],
           ["With a count read", t.counted],
           ["Count listed official", t.official],
+          ["State contests", t.stateContests ?? 0],
           ["Statewide measures", t.measures],
         ].map(([label, n]) => (
           <div key={label} className="bg-surface-base px-4 py-3">
@@ -229,9 +316,10 @@ export default function CycleArchive({
             Count and ballot, by state
           </h2>
           <p className="mt-1 max-w-3xl text-sm text-ink-lo">
-            Each race&apos;s count as its state&apos;s own results system last reported it, and the
-            candidates and statewide measures on the ballot, quoted from their sources. A count the
-            state lists as official still only leads: Civitas calls no race.
+            Each federal race&apos;s count as its state&apos;s own results system last reported it,
+            and the whole ballot the site showed: federal candidates, statewide offices, the
+            legislature, elected judgeships and statewide measures, quoted from their sources. A
+            count the state lists as official still only leads: Civitas calls no race.
             {record.recordAsOf ? ` Recorded ${formatEasternTime(record.recordAsOf)}.` : ""}
           </p>
         </div>
@@ -278,6 +366,7 @@ export default function CycleArchive({
                   ))}
                 </ol>
               )}
+              {s.stateContests && <StateContests contests={s.stateContests} />}
               {measures.length > 0 && (
                 <div className="space-y-3">
                   <h4 className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">

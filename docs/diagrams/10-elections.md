@@ -40,7 +40,8 @@ would unwrite what was certified.
 Each pass of the live count also copies the held election into its
 archive (`app/election_archive.freeze`, table `election_archives`, kept by a
 data reset): the map's file once (the campaign's last build), and the
-ballot, counts and statewide measures on every pass until the results
+ballot (federal, statewide, legislative and judicial contests), counts and
+statewide measures on every pass until the results
 window closes. After that nothing rewrites it, and `/elections/{cycle}`
 serves it for good.
 

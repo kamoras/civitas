@@ -1671,7 +1671,8 @@ wrong number on election night is worse than none:
   (`app/election_archive.py`, `ElectionArchive`, kept by every reset through
   `RESET_KEEPS`): from election day each live-results pass copies the map's
   file once (the campaign's last build: the build stops on election day) and
-  the federal ballot, counts and statewide measures on every pass until the
+  the ballot (federal, statewide, legislative and judicial contests), counts
+  and statewide measures on every pass until the
   window closes; nothing rewrites it after, and a pass that finds no races
   never replaces a record. `/elections/{cycle}` serves it, and an old
   `/elections/{raceId}` link goes there once the site's election is a later

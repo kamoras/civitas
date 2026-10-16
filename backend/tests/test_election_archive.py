@@ -252,3 +252,72 @@ def test_the_sitemap_lists_each_archived_election(db_session, freeze_utcnow):
     _archived(db_session, freeze_utcnow)
     freeze_utcnow(AFTER_JAN_3)
     assert _body(sitemap_entries(db_session))["electionArchives"] == [{"id": "2026", "lastmod": "2026-11-04"}]
+
+
+def _seed_state_contests(db):
+    """Georgia's governor, one state senate seat and a supreme court seat,
+    and North Carolina's governor alone (a state with no federal race
+    seeded): the state ballot page's own sections."""
+    from app.models import JudicialNominee, StateLegNominee, StatewideNominee
+    from app.pipeline.cache import api_cache_set
+    from app.pipeline.fetch.state_candidates_common import (
+        JUDICIAL_MARKER_TIER, STATEWIDE_MARKER_TIER, judicial_marker_key, statewide_marker_key,
+    )
+
+    db.add_all([
+        StatewideNominee(state="GA", cycle_year=2026, office="governor", party="D", display_name="Dana Smith"),
+        StatewideNominee(state="GA", cycle_year=2026, office="governor", party="R", display_name="Ray Jones"),
+        StateLegNominee(state="GA", cycle_year=2026, chamber="upper", district="5", party="D",
+                        display_name="Lee Roe"),
+        JudicialNominee(state="GA", cycle_year=2026, court="supreme", seat="3", party="N",
+                        party_label="Nonpartisan", display_name="Pat Doe"),
+        StatewideNominee(state="NC", cycle_year=2026, office="governor", party="R", display_name="Sam Lee"),
+    ])
+    for st in ("GA", "NC"):
+        api_cache_set(db, STATEWIDE_MARKER_TIER, statewide_marker_key(st, 2026),
+                      {"checkedAt": "2026-11-01T00:00:00Z", "sourceName": f"{st} SOS", "ballotList": st == "GA"})
+    api_cache_set(db, JUDICIAL_MARKER_TIER, judicial_marker_key("GA", 2026),
+                  {"checkedAt": "2026-11-01T00:00:00Z", "sourceName": "GA SOS", "ballotList": True})
+    db.commit()
+
+
+class TestStateContests:
+    """The statewide offices, legislative seats and judgeships the state
+    ballot page shows are archived with the federal ballot, and outlive
+    their rows the same way."""
+
+    def test_kept_with_their_sources_and_without_the_finding_aids(self, db_session, freeze_utcnow):
+        freeze_utcnow(ELECTION_NIGHT)
+        _seed(db_session)
+        _seed_state_contests(db_session)
+        record = json.loads(freeze(db_session, DAY).record_json)
+        states = {s["state"]: s for s in record["states"]}
+        ga = states["GA"]["stateContests"]
+        assert [n["name"] for n in ga["statewideRaces"][0]["nominees"]] == ["Dana Smith", "Ray Jones"]
+        assert "areas" not in ga["statewideRaces"][0]
+        [chamber] = ga["stateLegRaces"]
+        [district] = chamber["districts"]
+        assert district["district"] == "5" and "towns" not in district
+        assert [n["name"] for n in district["nominees"]] == ["Lee Roe"]
+        assert ga["judicialRaces"][0]["seats"][0]["nominees"][0]["partyLabel"] == "Nonpartisan"
+        assert ga["statewideSource"] == {"sourceName": "GA SOS", "ballotList": True}
+        # A state whose only contests are its own is still in the record.
+        assert states["NC"]["stateContests"]["statewideSource"]["ballotList"] is False
+
+    def test_served_after_january_3_once_their_rows_are_gone(self, db_session, freeze_utcnow):
+        from app.models import ApiCache, JudicialNominee, StateLegNominee, StatewideNominee
+
+        freeze_utcnow(ELECTION_NIGHT)
+        _seed(db_session)
+        _seed_state_contests(db_session)
+        freeze(db_session, DAY)
+        freeze_utcnow(AFTER_JAN_3)
+        # What a data reset outside the window wipes.
+        for model in (StatewideNominee, StateLegNominee, JudicialNominee, ApiCache):
+            db_session.query(model).delete()
+        db_session.commit()
+        record = _body(api.archive_record(2026, db_session))
+        assert record["totals"]["stateContests"] == 4  # GA governor, senate 5, supreme 3; NC governor
+        ga = next(s for s in record["states"] if s["state"] == "GA")
+        assert ga["stateContests"]["judicialRaces"][0]["seats"][0]["nominees"][0]["name"] == "Pat Doe"
+        assert _body(api.archive_index(db_session))["cycles"][0]["stateContests"] == 4
