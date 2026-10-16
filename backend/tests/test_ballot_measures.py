@@ -9,7 +9,6 @@ voter in a state with 17 amendments that there is nothing to research.
 import json
 import logging
 import threading
-import time
 from datetime import datetime, timedelta
 
 import pytest
@@ -444,16 +443,6 @@ async def test_link_verification_shows_a_link_that_resolves(monkeypatch, tmp_pat
     assert shown["url"] == "https://ga.example/lookup"
 
 
-def _real_time() -> float:
-    """The machine's real clock: time-machine's escape hatch while the
-    suite travels (scripts/frozen_clock_plugin.py), else time.time()."""
-    try:
-        from time_machine import escape_hatch
-    except ImportError:  # time-machine is a research dependency, not the image's
-        return time.time()
-    return escape_hatch.time.time() if escape_hatch.is_travelling() else time.time()
-
-
 class _TlsLab:
     """A trusted test root, its intermediate, and local servers (HTTPS for
     the page, plain HTTP for the AIA address) — so the link check runs
@@ -464,18 +453,19 @@ class _TlsLab:
 
         from cryptography.hazmat.primitives.asymmetric import ec
 
-        # OpenSSL checks a certificate's dates against the machine's real
-        # clock, so the lab's certificates are dated from it even when the
-        # suite runs at another date (scripts/frozen_clock_plugin.py moves
-        # Python's clock, not OpenSSL's).
-        self.now = datetime.datetime.fromtimestamp(_real_time(), datetime.timezone.utc)
+        self.now = datetime.datetime.now(datetime.timezone.utc)
         self.root_key = ec.generate_private_key(ec.SECP256R1())
         self.root = self._cert("Test Root", self.root_key, "Test Root", self.root_key, ca=True)
         self.inter_key = ec.generate_private_key(ec.SECP256R1())
         self.inter = self._cert("Test Intermediate", self.inter_key, "Test Root", self.root_key, ca=True)
         self.aia_port = None
 
-    def _cert(self, subject, key, issuer, issuer_key, *, ca=False, host=None, aia=None, days=(-1, 30)):
+    # A valid certificate's window is wide: OpenSSL checks it against the
+    # machine's real clock, while self.now is Python's, which the suite moves
+    # when it runs at another date (scripts/frozen_clock_plugin.py).
+    VALID = (-3650, 3650)
+
+    def _cert(self, subject, key, issuer, issuer_key, *, ca=False, host=None, aia=None, days=VALID):
         import datetime
 
         from cryptography import x509
@@ -508,7 +498,7 @@ class _TlsLab:
             )]), critical=False)
         return builder.sign(issuer_key, hashes.SHA256())
 
-    def leaf(self, *, host="localhost", issuer="inter", aia=True, days=(-1, 30)):
+    def leaf(self, *, host="localhost", issuer="inter", aia=True, days=VALID):
         from cryptography.hazmat.primitives.asymmetric import ec
 
         key = ec.generate_private_key(ec.SECP256R1())
