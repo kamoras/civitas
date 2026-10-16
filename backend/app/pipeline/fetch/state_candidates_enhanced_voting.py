@@ -120,7 +120,7 @@ from app.pipeline.fetch.election_results import (
     UntrustedCount,
     is_special_contest,
     parse_utc,
-    pick_general,
+    pick_election,
 )
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -531,7 +531,7 @@ async def fetch_general_results(
     real = [e for e in held if not _DEMO_ID_RE.search(str(e["publicElectionId"]))]
     payload = None
     try:
-        election = pick_general([(_text(e.get("name")), e) for e in real], state)
+        election = pick_election([(_text(e.get("name")), e) for e in real], state, election_day)
     except UntrustedCount:
         picked = await _one_election_listed_twice(client, data_url, real, state)
         if picked is None:

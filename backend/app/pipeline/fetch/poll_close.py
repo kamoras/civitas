@@ -89,3 +89,13 @@ def last_poll_close(state: str, election_day: date) -> datetime:
 def polls_closed(state: str, election_day: date, now: datetime) -> bool:
     """`now` is naive UTC (time_utils.utcnow)."""
     return now >= last_poll_close(state, election_day)
+
+
+def state_zone(state: str) -> ZoneInfo | None:
+    """The zone the file gives `state`'s polls (where they close last), the
+    clock a page reads that state's election day on; None when unlisted."""
+    zone = (_states().get(state.upper()) or {}).get("zone")
+    try:
+        return ZoneInfo(zone) if zone else None
+    except (KeyError, ValueError):
+        return None
