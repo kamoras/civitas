@@ -60,6 +60,7 @@ from app.models import (
 )
 from app.atomic_write import NotSaved
 from app.time_utils import utcnow
+from app.state_ballot_scope import on_november_ballot
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch import state_candidate_sources
 from app.pipeline.fetch.state_candidate_sources import (
@@ -1375,6 +1376,17 @@ def _printed_party(record: dict) -> str | None:
     return label[:80] or None
 
 
+def statewide_none_basis(source: dict, state: str, cycle: int) -> str | None:
+    """The source's statement that the state elects no statewide executive
+    officer on this ballot (statewide_offices_basis), only in a cycle when
+    its election calendar says so (state_ballot_scope's
+    statewide_executive): Montana's "presidential-election years" is true
+    of a midterm and false in a presidential year, when the feed must be
+    read instead."""
+    basis = str(source.get("statewide_offices_basis") or "") or None
+    return None if basis is None or on_november_ballot(state, "statewide_executive", cycle) else basis
+
+
 def _sync_statewide_nominees(
     db: Session, cycle: int, state: str, source: dict, records: list[dict],
     *, ballot_list: bool = False,
@@ -1469,7 +1481,7 @@ def _sync_statewide_nominees(
             # not on a feed we parsed, and the page has to say which —
             # "as published by the Department of Elections" would claim
             # a reading that never happened.
-            "basis": str(source.get("statewide_offices_basis") or "") or None,
+            "basis": statewide_none_basis(source, state, cycle),
             # Whether these names come from the state's list of who is on
             # the November ballot (every qualified candidate) or from
             # primary results. Primary results name only the nominees a
@@ -1870,7 +1882,7 @@ async def _sync_confirmed_candidates(db: Session, client: httpx.AsyncClient, cyc
         # window ran to 2026-09-29). A state whose "none" rests on its
         # constitutional calendar rather than the feed
         # (statewide_offices_basis) is still recorded.
-        if main_answered and not records and not source.get("statewide_offices_basis"):
+        if main_answered and not records and not statewide_none_basis(source, state, cycle):
             main_answered = False
         # The adapter's federal rows are settled but its state-office read
         # is not (a party's primary or a runoff still settling -- see

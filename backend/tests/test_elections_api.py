@@ -147,7 +147,7 @@ class TestListRaces:
         assert senate["computedLean"] is None
 
     def test_race_page_leads_with_the_maps_own_lean(self, db_session, on_date):
-        """usualVote is the figure the 2026 election map shows for the seat,
+        """usualVote is the figure the election map shows for the seat,
         written by the same function, and the seat's place among its kind
         is counted on the same figures."""
         from app import district_lean

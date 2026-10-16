@@ -26,6 +26,11 @@ def test_every_entry_names_a_real_state_and_a_known_office():
             assert state in STATE_NAMES, (kind, state)
             for office, years in offices.items():
                 assert office in known, (kind, state, office)
+                if isinstance(years, dict):  # a rule by year: {"term": N, "byYearEnding": {digit: N | null}}
+                    assert set(years) == {"term", "byYearEnding"}, (kind, state, office)
+                    assert all(d.isdigit() and len(d) == 1 for d in years["byYearEnding"]), (kind, state, office)
+                    assert all(v is None or 1 <= v <= 14 for v in years["byYearEnding"].values())
+                    years = years["term"]
                 assert isinstance(years, int) and 1 <= years <= 14, (kind, state, office, years)
 
 
@@ -37,3 +42,16 @@ def test_a_seat_of_a_district_body_uses_the_bodys_term_and_nothing_is_guessed():
     # wrong for New Hampshire's two-year governors before they were listed.
     assert term_years("statewide", "NH", "attorney_general") is None
     assert term_years("statewide", "NH", "governor") == 2
+
+
+def test_a_term_that_depends_on_the_year_is_computed_for_each_cycle():
+    """Minnesota's senate runs 2-4-4: two-year terms in years ending in 0.
+    Arkansas, Delaware and Florida elect their whole senate in years ending
+    in 2, some seats for two years, some for four: no single term then."""
+    assert term_years("legislature", "MN", "upper", 2026) == 4
+    assert term_years("legislature", "MN", "upper", 2030) == 2
+    assert term_years("legislature", "MN", "upper", 2032) == 4
+    assert term_years("legislature", "FL", "upper", 2028) == 4
+    assert term_years("legislature", "FL", "upper", 2032) is None
+    assert term_years("legislature", "AR", "upper") == 4  # the regular term
+    assert term_years("legislature", "AR", "lower", 2032) == 2

@@ -1,4 +1,4 @@
-"""The 2026 general-election map's poll-informed vote-margin ranges.
+"""The general-election map's poll-informed vote-margin ranges.
 
 Kept apart from everything that scores members: nothing here reads a
 Representation Score, a scoring reference or SCORE_WEIGHTS, and nothing

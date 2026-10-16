@@ -9,6 +9,7 @@ from apscheduler.triggers.cron import CronTrigger
 from app.config import settings
 from app.database import SessionLocal
 from app.error_utils import exception_summary
+from app.forecast.build import check_training_staleness as check_election_map_training_staleness
 from app.forecast.build import run_refresh as election_map_refresh
 from app.pipeline.senate_pipeline import run_senate_pipeline
 from app.pipeline.house_pipeline import run_house_pipeline, is_house_pipeline_running, house_pipeline_age
@@ -252,6 +253,7 @@ def _nightly_pipeline() -> None:
     """
     from app.ops_alerts import (
         check_current_congress_staleness,
+        check_election_readiness,
         check_feedback_token_expiration,
         check_sitting_president,
         check_state_pvi_staleness,
@@ -275,10 +277,17 @@ def _nightly_pipeline() -> None:
             # self-advance (see the check's own docstring for why), so the
             # alert is the only signal that a manual refresh is due.
             check_state_pvi_staleness,
+            # The coming election's cycle-specific data (maps, district
+            # lean, voter calendar, poll closing times, town sample
+            # ballots), each alerted once its lead time begins.
+            check_election_readiness,
             # The presidents table's sitting president against the Federal
             # Register's newest presidential document (an inauguration the
             # roster hasn't caught up with).
             check_sitting_president,
+            # The election map's fits stop at their newest trained cycle;
+            # like state_pvi.json, nothing refits them on its own.
+            check_election_map_training_staleness,
         )
         for check in pre_checks:
             try:
@@ -808,7 +817,7 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
-    # The 2026 election map's data (app/forecast/build.py) — every three
+    # The election map's data (app/forecast/build.py) — every three
     # hours at :55, and once at start, a no-op outside the campaign. Not
     # through _start_job: it reads the database and writes only its own
     # file on the data volume, so it is no database writer for a data

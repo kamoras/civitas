@@ -99,12 +99,12 @@ export default async function ElectionsChapter() {
         <P>
           Each federal contest&apos;s research opens with what shapes the race. Civitas publishes no
           odds or rating for any race, and calls none; these figures describe a race. The one place
-          this year&apos;s polls appear is the <A href="#election-map">Senate map</A>, as a range
-          for the margin, kept apart from this block because the block shows the incumbent&apos;s
-          Representation Score.
+          this year&apos;s polls appear is the <A href="#election-map">Senate and House map</A>, as
+          a range for the margin, kept apart from this block because the block shows the
+          incumbent&apos;s Representation Score.
         </P>
         <P>
-          <strong>The seat.</strong> Its lean is the figure the 2026 election map shows, computed by
+          <strong>The seat.</strong> Its lean is the figure the election map shows, computed by
           Civitas with Cook&apos;s formula (Cook&apos;s own PVI is shown beside it as a
           cross-check): how much more Republican or Democratic it voted than the nation in the last
           two presidential elections. Beside it, one square for every seat of its kind, from the
@@ -136,13 +136,13 @@ export default async function ElectionsChapter() {
         </P>
       </Section>
 
-      <Section id="election-map" title="The 2026 Senate map: usual vote and poll ranges">
+      <Section id="election-map" title="The Senate and House map: usual vote and poll ranges">
         <P>
-          <A href={ELECTION_MAP_HREF}>The Senate map</A> has three views.{" "}
-          <strong>Usual vote</strong> is each state&apos;s lean from the last two presidential
-          elections, computed by Civitas from official returns; no model is involved.{" "}
-          <strong>Polls</strong> is a range for the margin: that lean, plus incumbency and the
-          national generic-ballot average, combined with the race&apos;s own polls. A range that
+          <A href={ELECTION_MAP_HREF}>The map</A> covers every Senate and House seat, in three
+          views. <strong>Usual vote</strong> is each state&apos;s or district&apos;s lean from the
+          last two presidential elections, computed by Civitas from official returns; no model is
+          involved. <strong>Polls</strong> is a range for the margin: that lean, plus incumbency and
+          the national generic-ballot average, combined with the race&apos;s own polls. A range that
           crosses even is grey and says too close to tell. <strong>Difference</strong> marks the
           seats whose polls pull the range clear of where the lean, incumbency and the national
           swing alone would put it.
@@ -154,7 +154,9 @@ export default async function ElectionsChapter() {
           election cycles the fit never saw; the map&apos;s own method section shows how often its
           ranges held the result, and why there is no seat total. It has nothing to do with
           Representation Scores, which measure a member&apos;s record, not an election. Only
-          Democrat-versus-Republican races get a range. House districts are not on it yet.
+          Democrat-versus-Republican races whose November ballot Civitas has confirmed get a range.
+          The House fit covers 2018, 2020 and 2022, with each district&apos;s lean rebuilt from
+          precinct returns as it stood before each election, on the lines it was held on.
         </P>
         <P>
           This year&apos;s polls come from Wikipedia&apos;s race articles. The poll figures and the
@@ -653,8 +655,9 @@ export default async function ElectionsChapter() {
             </Item>
             <Item label="Before election day">
               This rule is about the count. Before election day the{" "}
-              <A href="#election-map">Senate map</A> shows a range for each margin and how often
-              such ranges held the result, never a winner; it is withdrawn when the count begins.
+              <A href="#election-map">Senate and House map</A> shows a range for each margin and how
+              often such ranges held the result, never a winner; it is withdrawn when the count
+              begins.
             </Item>
             <Item label="A seat changing party">
               A seat is only described as changing party once half its reporting areas are in. Where

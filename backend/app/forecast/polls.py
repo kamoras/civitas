@@ -1,6 +1,6 @@
 """This year's polls, read from Wikipedia's race articles.
 
-Wikipedia's 2026 race articles are the one source of poll tables whose
+Wikipedia's race articles for the cycle are the one source of poll tables whose
 licence can be read first-hand (CC BY-SA 4.0, stated on every page and in
 the API's own rights metadata). Every poll Civitas derives from them, and
 every range built on them, carries that licence and the attribution
@@ -27,7 +27,9 @@ progress never reaches the map.
 
 Gates (a table that fails any is rejected whole):
   * every row has a pollster, a fieldwork end date on or before the
-    revision's own date and not before 2025, and an end date not before
+    revision's own date and not before January 1 of the year before the
+    election (earliest_fieldwork: the cycle's own polls, never the last
+    cycle's), and an end date not before
     its start;
   * both nominees' shares are numbers between 0 and 100, and the row's
     shares sum to no more than 102 (100 plus rounding);
@@ -53,7 +55,6 @@ HEADERS = {"User-Agent": BOT_USER_AGENT}
 POLL_LICENSE = "CC BY-SA 4.0"
 POLL_LICENSE_URL = "https://creativecommons.org/licenses/by-sa/4.0/"
 POLL_ATTRIBUTION = "Wikipedia contributors"
-EARLIEST_FIELDWORK = date(2025, 1, 1)
 SHARE_TOTAL_MAX = 102.0
 # A handful of requests per build to a large public site.
 _rate_limiter = RateLimiter(rps=1.0)
@@ -382,14 +383,33 @@ def candidate_columns(low_headers: list[str], name: str, party_tag: str) -> list
 # ---------------------------------------------------------------------------
 
 
-def poll_table(text: str, dem_name: str, rep_name: str, as_of: date, refs: dict[str, str]) -> TableResult | None:
+def earliest_fieldwork(cycle: int) -> date:
+    """The first day a poll of the `cycle` election may have been in the
+    field: January 1 of the year before it. A row dated earlier belongs to
+    the previous cycle (a table carried over, a misdated row)."""
+    return date(cycle - 1, 1, 1)
+
+
+def poll_table(text: str, dem_name: str, rep_name: str, as_of: date, refs: dict[str, str], cycle: int,
+               district: int | None = None) -> TableResult | None:
     """The general-election poll table of one race article, or None when
     the article has none for these two nominees. Raises GateFailure when
-    the table is there but fails a gate."""
-    general = section(text, "General election", 2)
+    the table is there but fails a gate.
+
+    A Senate race, or an at-large House seat, has an article of its own,
+    with "General election" at the top level. A districted state's House
+    article has a "District N" section per seat, with the same structure
+    one level down."""
+    within, level = None, 2
+    if district is not None:
+        within = section(text, f"District {district}", 2)
+        if within is None:
+            return None
+        level = 3
+    general = section(text, "General election", level, within)
     if general is None:
         return None
-    polling = section(text, "Polling", 3, general)
+    polling = section(text, "Polling", level + 1, general)
     if polling is None:
         return None
     block = text[polling[0]:polling[1]]
@@ -423,11 +443,11 @@ def poll_table(text: str, dem_name: str, rep_name: str, as_of: date, refs: dict[
         # one of the nominees'): how a third candidate polls decides
         # whether this is a Democrat-vs-Republican race at all.
         others = [i for i in share_cols if i not in (dcols[0], rcols[0]) and re.search(r"\([a-z]+\)\s*$", low[i])]
-        return _rows(data, col, dcols[0], rcols[0], share_cols, others, as_of, refs, low)
+        return _rows(data, col, dcols[0], rcols[0], share_cols, others, as_of, earliest_fieldwork(cycle), refs, low)
     return None
 
 
-def _rows(data, col, dcol, rcol, share_cols, others, as_of: date, refs: dict[str, str],
+def _rows(data, col, dcol, rcol, share_cols, others, as_of: date, earliest: date, refs: dict[str, str],
           low_of: list[str]) -> TableResult:
     out = TableResult()
     seen = set()
@@ -471,8 +491,8 @@ def _rows(data, col, dcol, rcol, share_cols, others, as_of: date, refs: dict[str
         if dates is None:
             raise GateFailure(f"{name}: fieldwork dates {plain(row[col['dates']][1])!r} do not parse")
         start, end = dates
-        if end > as_of or end < EARLIEST_FIELDWORK or start > end:
-            raise GateFailure(f"{name}: fieldwork {start}..{end} outside 2025-01-01..{as_of}")
+        if end > as_of or end < earliest or start > end:
+            raise GateFailure(f"{name}: fieldwork {start}..{end} outside {earliest}..{as_of}")
         if plain(row[dcol][1]) in _NO_SHARE or plain(row[rcol][1]) in _NO_SHARE:
             # A question this poll asked without one of the nominees (a
             # head-to-head with someone else): not a reading of this race.
@@ -483,7 +503,10 @@ def _rows(data, col, dcol, rcol, share_cols, others, as_of: date, refs: dict[str
         # In a ranked-choice round the ballots no longer ranking anyone are
         # printed beside the shares, outside the 100%.
         counted = [i for i in share_cols if col["round"] is None or "not ranked" not in low_of[i]]
-        total = sum(v for i in counted if i < len(row) and (v := parse_share(row[i][1])) is not None)
+        # A cell spanning two columns ("Other" and "Undecided" together) is
+        # one share, counted once.
+        cells = list({id(row[i]): row[i] for i in counted if i < len(row)}.values())
+        total = sum(v for cell in cells if (v := parse_share(cell[1])) is not None)
         if total > SHARE_TOTAL_MAX:
             raise GateFailure(f"{name} ({end}): shares sum to {total:.1f}")
         n, pop = parse_sample(row[col["sample"]][1]) if col["sample"] is not None and col["sample"] < len(row) else (None, "")
@@ -503,11 +526,12 @@ def _rows(data, col, dcol, rcol, share_cols, others, as_of: date, refs: dict[str
 # ---------------------------------------------------------------------------
 
 
-def generic_ballot(text: str, as_of: date) -> list[dict]:
+def generic_ballot(text: str, as_of: date, cycle: int) -> list[dict]:
     """The generic-ballot averages the article's aggregate table lists:
     [{"source", "updated", "dem", "rep", "url"}]. Wikipedia lists averages
     here, not individual generic-ballot polls; the gates are the same
-    shape (dates, shares, duplicates)."""
+    shape (dates, shares, duplicates), with the cycle's fieldwork floor."""
+    earliest = earliest_fieldwork(cycle)
     m = re.search(r'<section begin="?GenericBallotAgg"?\s*/>(.*?)<section end="?GenericBallotAgg"?\s*/>', text, re.S)
     if not m:
         raise GateFailure("no generic-ballot aggregate table")
@@ -527,7 +551,7 @@ def generic_ballot(text: str, as_of: date) -> list[dict]:
         dem, rep = parse_share(row[ci["democrats"]][1]), parse_share(row[ci["republicans"]][1])
         if updated is None or dem is None or rep is None:
             raise GateFailure(f"generic-ballot row {name!r} does not parse")
-        if updated[1] > as_of or updated[1] < EARLIEST_FIELDWORK or dem + rep > SHARE_TOTAL_MAX:
+        if updated[1] > as_of or updated[1] < earliest or dem + rep > SHARE_TOTAL_MAX:
             raise GateFailure(f"generic-ballot row {name!r} fails the date or share gate")
         if name.lower() in seen:
             raise GateFailure(f"generic-ballot source {name!r} is listed twice")
@@ -582,6 +606,26 @@ async def fetch_current(titles: list[str]) -> dict[str, dict] | None:
             out[requested] = {"title": page["title"], "revid": rev["revid"], "timestamp": rev["timestamp"],
                               "content": rev.get("slots", {}).get("main", {}).get("content", "")}
     return out
+
+
+async def titles_with_prefix(prefix: str) -> list[str] | None:
+    """Every article title starting with `prefix` (main namespace), or None
+    when Wikipedia could not be reached."""
+    out: list[str] = []
+    params = {"action": "query", "list": "allpages", "apprefix": prefix, "apnamespace": "0",
+              "apfilterredir": "nonredirects", "aplimit": "500", "format": "json", "formatversion": "2"}
+    while True:
+        resp = await fetch_with_retry_requests(
+            _rate_limiter, "GET", API + "?" + urllib.parse.urlencode(params), retries=4, backoff_s=10.0,
+            log_label="election-map wikipedia titles", headers=HEADERS,
+        )
+        if resp is None:
+            return None
+        body = resp.json()
+        out += [p["title"] for p in body.get("query", {}).get("allpages", [])]
+        if "continue" not in body:
+            return out
+        params.update(body["continue"])
 
 
 def revision_date(rev: dict) -> date:

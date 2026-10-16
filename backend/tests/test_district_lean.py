@@ -241,3 +241,41 @@ def client_api():
     app = FastAPI()
     app.include_router(api_router)
     return TestClient(app)
+
+
+def test_a_new_congress_without_its_own_table_reads_the_last_one_only_where_the_map_is_unchanged(monkeypatch):
+    """The 121st's lines (elected 2028) before anyone builds their table:
+    a state on the same map as in 2026 reads the 120th's lean (the same
+    districts); a state that redrew reads nothing; and nothing at all is
+    carried until the 2028 maps are confirmed in
+    redrawn_congressional_maps.json."""
+    from app import district_lean as dl
+    from app import district_lines
+
+    table = {"congresses": {"120": {"districts": {"OH-9": 4.9, "TX-1": 20.0}}}}
+    monkeypatch.setattr(dl, "_file", lambda: table)
+    monkeypatch.setattr(district_lines, "_maps", lambda: {"2026": {"TX": {"map": "CD120"}}})
+    assert dl.lean_for("OH", 9, 121) is None  # 2028 not reviewed
+    monkeypatch.setattr(district_lines, "_maps", lambda: {"2026": {"TX": {"map": "CD120"}}, "2028": {"OH": {"map": "CD121"}}})
+    assert dl.lean_for("OH", 9, 121) is None  # redrew for 2028
+    assert dl.lean_for("TX", 1, 121) == 20.0  # same map as 2026
+    assert dl.lean_for("OH", 9, 120) == 4.9   # its own table
+
+
+def test_every_district_table_follows_the_same_lines_rule(monkeypatch):
+    """Counties and places by district follow the computed lean's rule: in
+    2028 (the 121st's lines) a state on an unchanged map reads the 120th's
+    table once the cycle is confirmed, a state that redrew reads nothing,
+    and a cycle nobody confirmed reads nothing (no table at all)."""
+    from app import district_places as dp
+    from app import district_lines
+
+    monkeypatch.setattr(district_lines, "_maps", lambda: {"2026": {"TX": {"map": "CD120"}}})
+    assert dp.counties_on_lines_of(121) is None and dp.places_on_lines_of(121) is None
+    monkeypatch.setattr(district_lines, "_maps", lambda: {"2026": {"TX": {"map": "CD120"}}, "2028": {"OH": {"map": "CD121"}}})
+    counties = dp.counties_on_lines_of(121)
+    assert counties["TX-1"] == dp.counties_on_lines_of(120)["TX-1"]
+    assert not any(k.startswith("OH-") for k in counties)
+    assert dp.places_on_lines_of(121)["TX-1"] == dp.places_on_lines_of(120)["TX-1"]
+    # The sitting Congress's finder (politicians) on 2029-01-03, 121st in office.
+    assert dp.counties_on_lines_of(119)["OH-9"]

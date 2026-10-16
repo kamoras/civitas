@@ -3,9 +3,21 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
+import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
+import ElectionMapMethod from "./ElectionMapMethod";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR, shareMetaAttrs } from "@/lib/shareImage";
 import {
+  CHAMBER_LABEL,
   CLOSE_HATCH,
+  HOUSE_GAP,
+  HOUSE_TILE,
+  MAP_CHAMBERS,
+  chamberView,
+  chamberWord,
+  formatAsOf,
+  houseLayout,
+  stateAriaLabel,
+  type MapChamber,
   MAP_VIEWS,
   NO_CONTEST_FILL,
   STATE_TILES,
@@ -22,8 +34,8 @@ import {
   footerText,
   legendCells,
   mapCounts,
+  mapTitle,
   pollSourceSentence,
-  formatAsOf,
   racePageHref,
   nationalSentence,
   rangeLabel,
@@ -33,7 +45,16 @@ import {
   stampSentence,
   type MapView,
 } from "@/lib/electionMap";
-import type { ElectionMapData, MapBin, MapSeat, RangedSeat } from "@/types/electionMap";
+import type {
+  ElectionMapData,
+  ElectionMapResponse,
+  MapBin,
+  MapSeat,
+  RangedSeat,
+} from "@/types/electionMap";
+
+const SHARE_SOURCE =
+  "Civitas, from official returns (MEDSL, FEC, VEST, Census); polls: Wikipedia contributors, CC BY-SA 4.0";
 
 const TILE = 10;
 const GAP = 1;
@@ -72,42 +93,52 @@ const NO_POLL_STROKE = "#CDC7BC";
  * (usual vote and national swing only) is outlined in dashes in the Polls
  * view as in the Difference view, so it is never drawn as if polled; a
  * seat with no usual-vote figure is an empty dashed square, never the "no
- * contest" fill. */
-function tileStyle(s: MapSeat, view: MapView, bin: MapBin | null, hatch: string, width: number) {
+ * contest" fill. A selected seat is outlined in ink. */
+function tileStyle(
+  s: MapSeat,
+  view: MapView,
+  bin: MapBin | null,
+  hatch: string,
+  width: number,
+  selected = false
+) {
   const ranged = s.status === "range";
-  if (s.status === "no_lean")
+  const base = (() => {
+    if (s.status === "no_lean")
+      return {
+        fill: "transparent",
+        stroke: NO_POLL_STROKE,
+        strokeWidth: width * 2,
+        strokeDasharray: "0.8 0.8",
+      };
+    if (view === "diff")
+      return {
+        fill: "transparent",
+        stroke: s.usualBin ? binFill(s.usualBin) : NO_POLL_STROKE,
+        strokeWidth: width * 2,
+        strokeDasharray: ranged && s.difference.seatPolls ? undefined : "0.6 0.6",
+      };
+    if (view === "polls" && ranged && !s.difference.seatPolls)
+      return {
+        fill: fillFor(bin, hatch),
+        stroke: NO_POLL_STROKE,
+        strokeWidth: width * 3,
+        strokeDasharray: "0.9 0.7",
+      };
     return {
-      fill: "transparent",
-      stroke: NO_POLL_STROKE,
-      strokeWidth: width * 2,
-      strokeDasharray: "0.8 0.8",
+      fill: ranged || view === "usual" ? fillFor(bin, hatch) : NO_CONTEST_FILL,
+      stroke: "rgba(255,255,255,0.18)",
+      strokeWidth: width,
+      strokeDasharray: undefined as string | undefined,
     };
-  if (view === "diff")
-    return {
-      fill: "transparent",
-      stroke: s.usualBin ? binFill(s.usualBin) : NO_POLL_STROKE,
-      strokeWidth: width * 2,
-      strokeDasharray: ranged && s.difference.seatPolls ? undefined : "0.6 0.6",
-    };
-  if (view === "polls" && ranged && !s.difference.seatPolls)
-    return {
-      fill: fillFor(bin, hatch),
-      stroke: NO_POLL_STROKE,
-      strokeWidth: width * 3,
-      strokeDasharray: "0.9 0.7",
-    };
-  return {
-    fill: ranged || view === "usual" ? fillFor(bin, hatch) : NO_CONTEST_FILL,
-    stroke: "rgba(255,255,255,0.18)",
-    strokeWidth: width,
-    strokeDasharray: undefined,
-  };
+  })();
+  return selected ? { ...base, stroke: "#F2EEE7", strokeWidth: width * 4 } : base;
 }
 
-/** The national tile map: one tile per state, a seat's tile split in two
+/** The Senate tile map: one tile per state, a seat's tile split in two
  * where a state has two contests. `mini` draws a thumbnail with no labels
  * and no interaction. */
-function TileMap({
+function SenateTileMap({
   data,
   view,
   selected,
@@ -260,8 +291,226 @@ function TileMap({
   );
 }
 
-/** A state's seats as a list: the keyboard's (and a two-race state's) way
- * to a seat. */
+/** The House tile map: one equal-size tile per seat, each state a block
+ * (houseLayout). A state is one keyboard stop, never 435; Enter or a tap
+ * opens its seats as a list. On a wide screen a click on a tile opens that
+ * seat directly. */
+function HouseTileMap({
+  data,
+  view,
+  selected,
+  onSelect,
+  onState,
+  mini = false,
+}: {
+  data: ElectionMapData;
+  view: MapView;
+  selected?: string | null;
+  onSelect?: (seatId: string) => void;
+  onState?: (state: string) => void;
+  mini?: boolean;
+}) {
+  const hatch = `hhatch-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  const layout = useMemo(() => houseLayout(data.seats), [data.seats]);
+  const step = HOUSE_TILE + HOUSE_GAP;
+  const open = (state: string, seatId: string | undefined) => {
+    const wide =
+      typeof window !== "undefined" && window.matchMedia?.("(min-width: 1024px)").matches;
+    if (wide && seatId) onSelect?.(seatId);
+    else onState?.(state);
+  };
+  return (
+    <svg
+      viewBox={`-2 -2 ${layout.width + 4} ${layout.height + 4}`}
+      className="block h-auto w-full"
+      role={mini ? undefined : "group"}
+      aria-hidden={mini ? true : undefined}
+      aria-label={mini ? undefined : "House seats, grouped by state"}
+    >
+      <HatchDefs id={hatch} />
+      {layout.blocks.map((b) => (
+        <g
+          key={b.state}
+          role={mini ? undefined : "button"}
+          tabIndex={mini ? undefined : 0}
+          aria-label={
+            mini
+              ? undefined
+              : stateAriaLabel(b.seats[0].stateName, b.seats, view, data.bins.leansMax)
+          }
+          className={
+            mini
+              ? undefined
+              : "cursor-pointer outline-none [&:focus-visible>rect.frame]:stroke-ink-hi"
+          }
+          onClick={
+            mini
+              ? undefined
+              : (e) => open(b.state, (e.target as Element).getAttribute("data-seat") ?? undefined)
+          }
+          onKeyDown={
+            mini
+              ? undefined
+              : (e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onState?.(b.state);
+                  }
+                }
+          }
+        >
+          {!mini && (
+            <text
+              x={b.x}
+              y={b.y - 2}
+              className="pointer-events-none fill-ink-min font-mono"
+              fontSize="6"
+            >
+              {b.state}
+            </text>
+          )}
+          {/* An invisible hit area around the block, so a small state
+              is still a 24px target once the map is phone-sized. */}
+          {!mini && (
+            <rect
+              x={b.x - 3}
+              y={b.y - 9}
+              width={b.cols * step + 5}
+              height={b.rows * step + 11}
+              fill="transparent"
+            />
+          )}
+          {b.seats.map((s, i) => {
+            const x = b.x + (i % b.cols) * step;
+            const y = b.y + Math.floor(i / b.cols) * step;
+            const bin = seatBin(s, view);
+            const diff = view === "diff";
+            const glyph = diff ? differenceGlyph(s) : null;
+            return (
+              <g key={s.id}>
+                <rect
+                  data-seat={s.id}
+                  x={x}
+                  y={y}
+                  width={HOUSE_TILE}
+                  height={HOUSE_TILE}
+                  {...tileStyle(s, view, bin, hatch, 0.3, s.id === selected)}
+                />
+                {glyph && (
+                  <text
+                    x={x + HOUSE_TILE / 2}
+                    y={y + 8}
+                    textAnchor="middle"
+                    fontSize="9"
+                    fill={s.status === "range" && s.difference.direction === "D" ? DEM : REP}
+                    className="pointer-events-none font-mono motion-safe:animate-[map-pulse_0.6s_ease-in-out_2]"
+                  >
+                    {glyph}
+                  </text>
+                )}
+              </g>
+            );
+          })}
+          {!mini && (
+            <rect
+              className="frame"
+              x={b.x - 1}
+              y={b.y - 1}
+              width={b.cols * step + 1}
+              height={b.rows * step + 1}
+              fill="none"
+              stroke="transparent"
+              strokeWidth="0.8"
+            />
+          )}
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+function TileMap(props: {
+  data: ElectionMapData;
+  view: MapView;
+  selected?: string | null;
+  onSelect?: (seatId: string) => void;
+  onState?: (state: string) => void;
+  mini?: boolean;
+}) {
+  return props.data.chamber === "house" ? (
+    <HouseTileMap {...props} />
+  ) : (
+    <SenateTileMap {...props} />
+  );
+}
+
+/** The House on a phone: one row per state, a full-width target, with its
+ * seats as equal tiles big enough to see (the tile map's 7 px tiles are a
+ * picture at that width, not something to tap). */
+function HouseStateList({
+  data,
+  view,
+  onState,
+}: {
+  data: ElectionMapData;
+  view: MapView;
+  onState: (state: string) => void;
+}) {
+  const byState = useMemo(() => {
+    const m = new Map<string, MapSeat[]>();
+    for (const s of data.seats) m.set(s.state, [...(m.get(s.state) ?? []), s]);
+    return [...m.entries()].sort((a, b) => a[1][0].stateName.localeCompare(b[1][0].stateName));
+  }, [data.seats]);
+  const swatch = (s: MapSeat): React.CSSProperties => {
+    const bin = seatBin(s, view);
+    const dashed =
+      s.status === "no_lean" ||
+      (view !== "usual" && s.status === "range" && !s.difference.seatPolls);
+    const border = dashed ? `1px dashed ${NO_POLL_STROKE}` : "1px solid rgba(255,255,255,0.18)";
+    if (view === "diff" || bin === null) return { border, background: "transparent" };
+    if (bin === "close")
+      return {
+        border,
+        background: `repeating-linear-gradient(-45deg, ${CLOSE_HATCH}99 0 1px, ${binFill("close")} 1px 3px)`,
+      };
+    return { border, background: binFill(bin) };
+  };
+  return (
+    <ul className="divide-y divide-white/[0.07] border-y border-white/[0.07]">
+      {byState.map(([state, seats]) => (
+        <li key={state}>
+          <button
+            type="button"
+            onClick={() => onState(state)}
+            aria-label={stateAriaLabel(seats[0].stateName, seats, view, data.bins.leansMax)}
+            className="flex min-h-11 w-full items-center gap-3 py-1.5 text-left"
+          >
+            <span className="w-28 shrink-0 text-sm text-ink-hi">{seats[0].stateName}</span>
+            <span className="flex flex-wrap gap-[3px]" aria-hidden="true">
+              {seats.map((s) => (
+                <span key={s.id} className="relative block h-3 w-3" style={swatch(s)}>
+                  {view === "diff" && differenceGlyph(s) && (
+                    <span
+                      className="absolute inset-0 text-center font-mono text-[9px] leading-3"
+                      style={{
+                        color: s.status === "range" && s.difference.direction === "D" ? DEM : REP,
+                      }}
+                    >
+                      {differenceGlyph(s)}
+                    </span>
+                  )}
+                </span>
+              ))}
+            </span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** A House state's seats as a list (the phone's bottom sheet, and the
+ * keyboard's way into a state). */
 function StateSheet({
   data,
   state,
@@ -302,7 +551,7 @@ function StateSheet({
                 usual {s.leanLabel ?? "–"}
                 {s.status === "range"
                   ? ` · polls ${rangeLabel(s)}${crossesEven(s) ? " · close" : ""}`
-                  : " · no range"}
+                  : " · no D-vs-R range"}
               </span>
             </button>
           </li>
@@ -385,7 +634,7 @@ function Legend({ data, view }: { data: ElectionMapData; view: MapView }) {
       <p className="mt-1 font-mono text-[10px] text-ink-min sm:text-xs">
         {view === "usual"
           ? "Points more Republican (R) or Democratic (D) than the nation, in the last two presidential elections."
-          : "Margin in points. A seat is coloured by the end of its range nearest even, so a range that crosses even is grey. Dark with a label: no Democrat-versus-Republican race to range."}
+          : "Margin in points. A seat is coloured by the end of its range nearest even, so a range that crosses even is grey. Dark: no range (no Democrat-versus-Republican race, or its ballot not yet confirmed)."}
       </p>
     </div>
   );
@@ -437,7 +686,8 @@ function SeatDetail({
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-            Senate{seat.special ? " · special election" : ""}
+            {seat.district != null ? "House" : "Senate"}
+            {seat.special ? " · special election" : ""}
           </p>
           <h3 className="font-display text-xl font-bold text-ink-hi">{seatName(seat)}</h3>
         </div>
@@ -470,7 +720,11 @@ function SeatDetail({
           <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">Usual vote</dt>
           <dd className="text-ink-hi">
             {seat.leanLabel ?? "No figure"}{" "}
-            <span className="text-ink-min">(Civitas, from official returns)</span>
+            <span className="text-ink-min">
+              {seat.district == null
+                ? "(Civitas, from official returns)"
+                : `(Civitas-computed lean, on the ${data.cycle} district lines)`}
+            </span>
           </dd>
         </div>
         {seat.status === "range" ? (
@@ -499,7 +753,7 @@ function SeatDetail({
       </dl>
       {seat.status === "range" && (
         <>
-          <p className="text-xs">{coverageSentence(data.calibration)}</p>
+          <p className="text-xs">{coverageSentence(data.calibration, data.chamber)}</p>
           <p className="text-xs">{pollSourceSentence(seat, data.pollWindowDays)}</p>
           {seat.polls.list.length > 0 && (
             <ul className="space-y-1 border-t border-white/[0.07] pt-2 text-xs">
@@ -604,7 +858,8 @@ function SeatTable({ data, onSelect }: { data: ElectionMapData; onSelect: (id: s
     <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Every seat, as a table">
       <table className="w-full min-w-[40rem] border-collapse text-sm text-ink-lo">
         <caption className="sr-only">
-          Every 2026 Senate seat: usual vote, poll range, polls used and difference
+          Every {data.cycle} {chamberWord(data.chamber)} seat: usual vote, poll range, polls used
+          and difference
         </caption>
         <thead className="border-b border-white/20">
           <tr>
@@ -644,9 +899,11 @@ function SeatTable({ data, onSelect }: { data: ElectionMapData; onSelect: (id: s
                   <span className="font-sans text-xs">
                     {s.status === "not_contested"
                       ? "No D-vs-R contest"
-                      : s.status === "no_lean"
-                        ? "No usual-vote figure"
-                        : "Not a D-vs-R race"}
+                      : s.status === "unconfirmed"
+                        ? "Ballot not confirmed"
+                        : s.status === "no_lean"
+                          ? "No usual-vote figure"
+                          : "Not a D-vs-R race"}
                   </span>
                 )}
               </td>
@@ -670,7 +927,7 @@ function SeatTable({ data, onSelect }: { data: ElectionMapData; onSelect: (id: s
 }
 
 /**
- * The 2026 general-election map: how each Senate seat usually votes, what
+ * The general-election map: how each Senate seat usually votes, what
  * this year's polls suggest (a range of the margin, never a winner), and
  * where the two disagree. All figures from GET /api/elections/map.
  *
@@ -680,16 +937,31 @@ function SeatTable({ data, onSelect }: { data: ElectionMapData; onSelect: (id: s
  * does nothing on a route loaded with a query string (AGENTS.md).
  */
 export default function ElectionMap({
-  data,
+  response,
   initialView,
+  initialChamber,
   initialSeat = null,
+  pageUrl,
 }: {
-  data: ElectionMapData;
+  /** The page's chamber only (?chamber=); the other loads on demand. */
+  response: ElectionMapResponse;
   initialView: MapView;
+  initialChamber: MapChamber;
   /** A seat to open on arrival (?seat=, from a race page's map link). */
   initialSeat?: string | null;
+  /** The page's absolute URL without a query, for share links. */
+  pageUrl: string;
 }) {
   const [view, setView] = useState<MapView>(initialView);
+  const [loaded, setLoaded] = useState<ElectionMapResponse>(response);
+  const [chamber, setChamber] = useState<MapChamber>(
+    response.chambers[initialChamber]
+      ? initialChamber
+      : (Object.keys(response.chambers)[0] as MapChamber)
+  );
+  const [loading, setLoading] = useState<MapChamber | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const data = useMemo(() => chamberView(loaded, chamber), [loaded, chamber]);
   const [selected, setSelected] = useState<string | null>(() =>
     initialSeat && data.seats.some((s) => s.id === initialSeat) ? initialSeat : null
   );
@@ -717,11 +989,11 @@ export default function ElectionMap({
 
   useEffect(() => {
     const url = new URL(window.location.href);
-    url.searchParams.set("chamber", "senate");
+    url.searchParams.set("chamber", chamber);
     url.searchParams.set("view", view);
     url.searchParams.delete("seat");
     window.history.replaceState(null, "", url.toString());
-  }, [view]);
+  }, [view, chamber]);
 
   const close = () => {
     setSelected(null);
@@ -776,182 +1048,294 @@ export default function ElectionMap({
     setSheetState(state);
     requestAnimationFrame(() => detailRef.current?.focus());
   };
+  const switchChamber = async (c: MapChamber) => {
+    setSelected(null);
+    setSheetState(null);
+    setLoadError(false);
+    if (loaded.chambers[c]) {
+      setChamber(c);
+      return;
+    }
+    // The other chamber is fetched when it is first asked for: a reader of
+    // one chamber never downloads both.
+    setLoading(c);
+    try {
+      const res = await fetch(`/api/elections/map?chamber=${c}`);
+      if (!res.ok) throw new Error(String(res.status));
+      const more = (await res.json()) as ElectionMapResponse;
+      setLoaded((prev) => ({ ...prev, chambers: { ...prev.chambers, ...more.chambers } }));
+      setChamber(c);
+    } catch {
+      setLoadError(true);
+    } finally {
+      setLoading(null);
+    }
+  };
+  // The thumbnails in the view buttons are drawn on a wide screen only, and
+  // only in the browser: a phone never downloads three extra maps.
+  const [wide, setWide] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia?.("(min-width: 1024px)");
+    if (!mq) return;
+    const update = () => setWide(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
 
   return (
-    <div className="space-y-4">
-      {/* Clear of the fixed site header when scrolled to (scroll-mt). */}
-      <div
-        id="map-views"
-        {...{ [SHARE_EXCLUDE_ATTR]: "" }}
-        className="scroll-mt-[var(--header-clearance)] space-y-3"
-      >
+    <ShareSubjectProvider
+      subject={{
+        title: `${mapTitle(data.cycle, chamber)}, ${VIEW_LABEL[view].toLowerCase()}`,
+        subtitle: `As of ${formatAsOf(data.asOf)} · Ranges, not results · Not a race call`,
+        url: `${pageUrl}?chamber=${chamber}&view=${view}`,
+        source: SHARE_SOURCE,
+        asOf: data.asOf,
+      }}
+    >
+      <div className="space-y-4">
+        {/* Clear of the fixed site header when scrolled to (scroll-mt). */}
         <div
-          role="group"
-          aria-label="Map view"
-          className="flex font-mono text-xs tracking-[0.12em]"
+          id="map-views"
+          {...{ [SHARE_EXCLUDE_ATTR]: "" }}
+          className="scroll-mt-[var(--header-clearance)] space-y-3"
         >
-          {MAP_VIEWS.map((v, i) => {
-            const disabled = v !== "usual" && !hasPolls;
-            return (
+          <div
+            role="group"
+            aria-label="Chamber"
+            className="flex font-mono text-xs tracking-[0.12em]"
+          >
+            {MAP_CHAMBERS.map((c, i) => (
               <button
-                key={v}
+                key={c}
                 type="button"
-                aria-pressed={view === v}
-                disabled={disabled}
-                onClick={() => setView(v)}
-                className={`min-h-11 flex-1 border px-2 sm:flex-none sm:px-4 ${
-                  view === v
+                aria-pressed={chamber === c}
+                disabled={loading !== null}
+                onClick={() => switchChamber(c)}
+                className={`min-h-11 border px-4 ${
+                  chamber === c
                     ? "border-phos bg-surface-raised text-ink-hi"
-                    : "border-white/20 text-ink-min hover:text-ink-hi disabled:opacity-60"
+                    : "border-white/20 text-ink-min hover:text-ink-hi"
                 } ${i ? "-ml-px" : ""}`}
               >
-                <span className="hidden w-24 py-2 lg:block" aria-hidden="true">
-                  <TileMap data={data} view={v} mini />
-                </span>
-                {VIEW_LABEL[v]}
+                {CHAMBER_LABEL[c]}
               </button>
-            );
-          })}
-        </div>
-        {!hasPolls && (
-          <p className="text-sm text-ink-lo">
-            Polls and Difference are off: no seat has a poll-informed range yet.
-          </p>
-        )}
-        <p className="min-w-0 break-words font-mono text-xs text-ink-lo">
-          {changedLine(view, counts, data.national, data.bins)}
-          {view !== "diff" && counts.differ > 0 && (
-            <>
-              {" "}
-              <button
-                type="button"
-                onClick={() => setView("diff")}
-                className="inline min-h-6 whitespace-normal break-words text-left text-ink-hi underline"
-              >
-                {counts.differ} {counts.differ === 1 ? "seat" : "seats"} where polls tell a
-                different story →
-              </button>
-            </>
-          )}
-        </p>
-      </div>
-
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <section
-          id="general-map"
-          aria-labelledby="general-map-stamp"
-          className="relative min-w-0 scroll-mt-[var(--header-clearance)] border border-phos/20 bg-surface p-3 sm:p-4"
-          {...{ [SHARE_SECTION_ATTR]: "general-map" }}
-          {...shareMetaAttrs({
-            source:
-              "Civitas, from official returns (MEDSL, FEC); polls: Wikipedia contributors, CC BY-SA 4.0",
-            asOf: data.asOf,
-            scaleMax: null,
-          })}
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h2
-                id="general-map-stamp"
-                className="font-mono text-xs uppercase tracking-[0.14em] text-ink-hi"
-              >
-                {VIEW_STAMP[view]} · SENATE
-              </h2>
-              <p aria-live="polite" className="sr-only">
-                {stampSentence(view, counts, data.asOf)}
-              </p>
-              <p className="mt-1 text-sm text-ink-lo">
-                {VIEW_EXPLAINER[view]}{" "}
-                <a
-                  href="#method"
-                  className="underline decoration-white/30 hover:text-ink-hi"
-                  {...{ [SHARE_EXCLUDE_ATTR]: "" }}
-                >
-                  How this is measured
-                </a>
-              </p>
-            </div>
-            <ShareSectionButton
-              label={`2026 Senate map, ${VIEW_LABEL[view].toLowerCase()}`}
-              anchor="general-map"
-            />
+            ))}
           </div>
-          {data.stale && (
-            <p className="mt-2 font-mono text-xs text-signal-amber">
-              NOT UPDATED SINCE {formatAsOf(data.asOf).toUpperCase()}: the latest refreshes failed,
-              so these figures are older than usual.
+          <p aria-live="polite" className="font-mono text-xs text-ink-lo">
+            {loading
+              ? `Loading the ${chamberWord(loading)} map…`
+              : loadError
+                ? "That map couldn't be loaded; try again."
+                : ""}
+          </p>
+          <div
+            role="group"
+            aria-label="Map view"
+            className="flex font-mono text-xs tracking-[0.12em]"
+          >
+            {MAP_VIEWS.map((v, i) => {
+              const disabled = v !== "usual" && !hasPolls;
+              return (
+                <button
+                  key={v}
+                  type="button"
+                  aria-pressed={view === v}
+                  disabled={disabled}
+                  onClick={() => setView(v)}
+                  className={`min-h-11 flex-1 border px-2 sm:flex-none sm:px-4 ${
+                    view === v
+                      ? "border-phos bg-surface-raised text-ink-hi"
+                      : "border-white/20 text-ink-min hover:text-ink-hi disabled:opacity-60"
+                  } ${i ? "-ml-px" : ""}`}
+                >
+                  {wide && (
+                    <span className="block w-24 py-2" aria-hidden="true">
+                      <TileMap data={data} view={v} mini />
+                    </span>
+                  )}
+                  {VIEW_LABEL[v]}
+                </button>
+              );
+            })}
+          </div>
+          {!hasPolls && (
+            <p className="text-sm text-ink-lo">
+              Polls and Difference are off: no seat has a poll-informed range yet.
             </p>
           )}
-          <div className="mx-auto mt-3 max-w-[38rem]">
-            <TileMap
-              data={data}
-              view={view}
-              selected={selected}
-              onSelect={select}
-              onState={openState}
-            />
-          </div>
-          <div className="mt-3">
-            <Legend data={data} view={view} />
-            {view !== "usual" && (
-              <p className="mt-2 font-mono text-xs text-ink-lo">
-                {nationalSentence(data.national)}
+          <p className="min-w-0 break-words font-mono text-xs text-ink-lo">
+            {changedLine(view, counts, data.national, data.bins)}
+            {view !== "diff" && counts.differ > 0 && (
+              <>
+                {" "}
+                <button
+                  type="button"
+                  onClick={() => setView("diff")}
+                  className="inline min-h-6 whitespace-normal break-words text-left text-ink-hi underline"
+                >
+                  {counts.differ} {counts.differ === 1 ? "seat" : "seats"} where polls tell a
+                  different story →
+                </button>
+              </>
+            )}
+          </p>
+        </div>
+
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+          <section
+            id="general-map"
+            aria-labelledby="general-map-stamp"
+            className="relative min-w-0 scroll-mt-[var(--header-clearance)] border border-phos/20 bg-surface p-3 sm:p-4"
+            {...{ [SHARE_SECTION_ATTR]: "general-map" }}
+            {...shareMetaAttrs({
+              source: SHARE_SOURCE,
+              asOf: data.asOf,
+              scaleMax: null,
+            })}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2
+                  id="general-map-stamp"
+                  className="font-mono text-xs uppercase tracking-[0.14em] text-ink-hi"
+                >
+                  {VIEW_STAMP[view]} · {CHAMBER_LABEL[chamber]}
+                </h2>
+                <p aria-live="polite" className="sr-only">
+                  {stampSentence(view, counts, data.asOf)}
+                </p>
+                <p className="mt-1 text-sm text-ink-lo">
+                  {VIEW_EXPLAINER[view]}{" "}
+                  <a
+                    href="#method"
+                    className="underline decoration-white/30 hover:text-ink-hi"
+                    {...{ [SHARE_EXCLUDE_ATTR]: "" }}
+                  >
+                    How this is measured
+                  </a>
+                </p>
+              </div>
+              <ShareSectionButton
+                label={`${mapTitle(data.cycle, chamber)}, ${VIEW_LABEL[view].toLowerCase()}`}
+                anchor="general-map"
+              />
+            </div>
+            {chamber === "house" && (
+              // A phone-sized tile map makes a one-seat state a small
+              // target; this picker is the same action at full size.
+              <div className="mt-3 md:hidden" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
+                <label
+                  htmlFor="house-state-picker"
+                  className="block font-mono text-xs uppercase tracking-[0.12em] text-ink-min"
+                >
+                  Pick a state
+                </label>
+                <select
+                  id="house-state-picker"
+                  value={sheetState ?? ""}
+                  onChange={(e) => e.target.value && openState(e.target.value)}
+                  className="mt-1 min-h-11 w-full border border-white/20 bg-surface-raised px-3 font-mono text-sm text-ink-hi"
+                >
+                  <option value="">Choose a state…</option>
+                  {[...new Map(data.seats.map((s) => [s.state, s.stateName])).entries()]
+                    .sort((a, b) => a[1].localeCompare(b[1]))
+                    .map(([code, name]) => (
+                      <option key={code} value={code}>
+                        {name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            )}
+            {data.stale && (
+              <p className="mt-2 font-mono text-xs text-signal-amber">
+                NOT UPDATED SINCE {formatAsOf(data.asOf).toUpperCase()}: the latest refreshes
+                failed, so these figures are older than usual.
               </p>
             )}
-          </div>
-          <p className="mt-3 border-t border-white/[0.07] pt-2 font-mono text-[11px] leading-relaxed text-ink-min">
-            {footerText(data)}
-          </p>
-        </section>
-
-        {modal && (
-          <div aria-hidden="true" className="fixed inset-0 z-30 bg-black/60" onClick={close} />
-        )}
-        <aside
-          ref={detailRef}
-          tabIndex={-1}
-          aria-label="Seat detail"
-          {...(modal ? { role: "dialog", "aria-modal": true } : {})}
-          {...{ [SHARE_EXCLUDE_ATTR]: "" }}
-          className={`border border-white/[0.07] bg-surface-raised p-4 outline-none ${
-            open
-              ? "fixed inset-x-0 bottom-0 z-40 max-h-[75vh] overflow-y-auto lg:static lg:max-h-none"
-              : "hidden lg:block"
-          }`}
-        >
-          {seat ? (
-            <SeatDetail data={data} seat={seat} onClose={close} />
-          ) : sheetState ? (
-            <StateSheet data={data} state={sheetState} onSelect={select} onClose={close} />
-          ) : (
-            <p className="text-sm text-ink-lo">
-              Choose a state for its usual vote, its poll range, the polls behind it and a link to
-              the race.
+            {chamber === "house" && (
+              <div className="mt-3 md:hidden">
+                <HouseStateList data={data} view={view} onState={openState} />
+              </div>
+            )}
+            <div
+              className={`mx-auto mt-3 max-w-[38rem] ${chamber === "house" ? "hidden md:block" : ""}`}
+            >
+              <TileMap
+                data={data}
+                view={view}
+                selected={selected}
+                onSelect={select}
+                onState={openState}
+              />
+            </div>
+            <div className="mt-3">
+              <Legend data={data} view={view} />
+              {view !== "usual" && (
+                <p className="mt-2 font-mono text-xs text-ink-lo">
+                  {nationalSentence(data.national)}
+                </p>
+              )}
+            </div>
+            <p className="mt-3 border-t border-white/[0.07] pt-2 font-mono text-[11px] leading-relaxed text-ink-min">
+              {footerText(data)}
             </p>
-          )}
-        </aside>
-      </div>
+          </section>
 
-      <div {...{ [SHARE_EXCLUDE_ATTR]: "" }} className="flex flex-wrap gap-3">
-        <button
-          type="button"
-          aria-expanded={tableOpen}
-          aria-controls="general-map-table"
-          onClick={() => setTableOpen((o) => !o)}
-          className="min-h-11 border border-white/20 px-4 font-mono text-xs tracking-[0.12em] text-ink-lo hover:text-ink-hi"
-        >
-          TABLE {tableOpen ? "▴" : "▾"}
-        </button>
-        <a
-          href="/api/elections/map.csv"
-          className="inline-flex min-h-11 items-center border border-white/20 px-4 font-mono text-xs tracking-[0.12em] text-ink-lo hover:text-ink-hi"
-        >
-          CSV
-        </a>
+          {modal && (
+            <div aria-hidden="true" className="fixed inset-0 z-30 bg-black/60" onClick={close} />
+          )}
+          <aside
+            ref={detailRef}
+            tabIndex={-1}
+            aria-label="Seat detail"
+            {...(modal ? { role: "dialog", "aria-modal": true } : {})}
+            {...{ [SHARE_EXCLUDE_ATTR]: "" }}
+            className={`border border-white/[0.07] bg-surface-raised p-4 outline-none ${
+              open
+                ? "fixed inset-x-0 bottom-0 z-40 max-h-[75vh] overflow-y-auto lg:static lg:max-h-none"
+                : "hidden lg:block"
+            }`}
+          >
+            {seat ? (
+              <SeatDetail data={data} seat={seat} onClose={close} />
+            ) : sheetState ? (
+              <StateSheet data={data} state={sheetState} onSelect={select} onClose={close} />
+            ) : (
+              <p className="text-sm text-ink-lo">
+                {chamber === "house"
+                  ? "Choose a state for its seats, or a seat for its usual vote, its poll range, the polls behind it and a link to the race."
+                  : "Choose a state for its usual vote, its poll range, the polls behind it and a link to the race."}
+              </p>
+            )}
+          </aside>
+        </div>
+
+        <div {...{ [SHARE_EXCLUDE_ATTR]: "" }} className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            aria-expanded={tableOpen}
+            aria-controls="general-map-table"
+            onClick={() => setTableOpen((o) => !o)}
+            className="min-h-11 border border-white/20 px-4 font-mono text-xs tracking-[0.12em] text-ink-lo hover:text-ink-hi"
+          >
+            TABLE {tableOpen ? "▴" : "▾"}
+          </button>
+          <a
+            href="/api/elections/map.csv"
+            className="inline-flex min-h-11 items-center border border-white/20 px-4 font-mono text-xs tracking-[0.12em] text-ink-lo hover:text-ink-hi"
+          >
+            CSV
+          </a>
+        </div>
+        <div id="general-map-table" hidden={!tableOpen}>
+          {tableOpen && <SeatTable data={data} onSelect={select} />}
+        </div>
+        <div className="mt-12 max-w-3xl">
+          <ElectionMapMethod data={data} />
+        </div>
       </div>
-      <div id="general-map-table" hidden={!tableOpen}>
-        <SeatTable data={data} onSelect={select} />
-      </div>
-    </div>
+    </ShareSubjectProvider>
   );
 }

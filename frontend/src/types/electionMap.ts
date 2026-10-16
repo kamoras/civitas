@@ -41,6 +41,8 @@ interface MapSeatBase {
   state: string;
   stateName: string;
   special: boolean;
+  /** House seats: the district number (0 = at-large); null for the Senate. */
+  district?: number | null;
   /** Null (status "no_lean") when Civitas has no usual-vote figure. */
   lean: number | null;
   leanLabel: string | null;
@@ -72,7 +74,7 @@ export interface RangedSeat extends MapSeatBase {
 }
 
 export interface UnrangedSeat extends MapSeatBase {
-  status: "not_contested" | "not_two_party" | "no_lean";
+  status: "not_contested" | "not_two_party" | "unconfirmed" | "no_lean";
   reason: string;
   polls?: { count: number; list: MapPoll[] };
 }
@@ -89,61 +91,113 @@ export interface CalibrationBin {
   years?: [number, number];
 }
 
-export interface ElectionMapData {
+export type MapChamberKey = "senate" | "house";
+
+export interface ChamberCalibration {
+  cycles: [number, number];
+  races: number;
+  coverage80: number;
+  coverage95: number;
+  meanAbsError: number;
+  table: CalibrationBin[];
+  seatTotals: {
+    year: number;
+    expectedDem: number;
+    actualDem: number;
+    races: number;
+    independentSd: number;
+  }[];
+  seatTotalsOutside90: number;
+  brier: { combined: number; fundamentals: number; pollsOnly: number; polledRaces: number };
+}
+
+export interface ChamberModel {
+  beta: [number, number, number, number];
+  priorSd: number;
+  halfLife: number;
+  pollFloor: number;
+  pollSpread: number;
+  scale: number;
+  file: string;
+  fit: string;
+}
+
+export interface LeanSource {
+  source: string;
+  /** The presidential elections the lean is computed from, "2020+2024". */
+  window: string;
+  file: string;
+  congress?: number;
+}
+
+export interface NationalInput {
+  margin: number;
+  label: string;
+  /** The newest "updated" date of the averages read. */
+  updated: string;
+  /** "ok", or "kept" when the latest revision couldn't be read. */
+  statusDetail?: string;
+  averages: { source: string; updated: string; dem: number; rep: number; url: string | null }[];
+  article: string;
+  revid: number;
+  url: string;
+  status: string;
+}
+
+export interface PollLicence {
+  attribution: string;
+  license: string;
+  licenseUrl: string;
+  notice: string;
+}
+
+/** GET /api/elections/map as the backend sends it. */
+export interface ElectionMapResponse {
   schemaVersion: number;
   asOf: string;
   electionDay: string;
+  /** The election's year (the backend's active election), for every title. */
+  cycle: number;
   daysToElection: number;
   horizon: number;
-  chamber: "senate";
   /** True when the map is older than the backend's stale threshold. */
   stale?: boolean;
   pollWindowDays: number;
-  national: {
-    margin: number;
-    label: string;
-    shift: number;
-    shiftLabel: string;
-    updated: string;
-    statusDetail?: string;
-    averages: { source: string; updated: string; dem: number; rep: number; url: string | null }[];
-    article: string;
-    revid: number;
-    url: string;
-    status: string;
-  };
+  national: NationalInput;
   bins: { leansMax: number; usuallyMax: number };
-  calibration: {
-    cycles: [number, number];
-    races: number;
-    coverage80: number;
-    coverage95: number;
-    meanAbsError: number;
-    table: CalibrationBin[];
-    seatTotals: {
-      year: number;
-      expectedDem: number;
-      actualDem: number;
-      races: number;
-      independentSd: number;
-    }[];
-    seatTotalsOutside90: number;
-    brier: { combined: number; fundamentals: number; pollsOnly: number; polledRaces: number };
-  };
-  model: {
-    beta: [number, number, number, number];
-    priorSd: number;
-    halfLife: number;
-    pollFloor: number;
-    pollSpread: number;
-    scale: number;
-    file: string;
-    fit: string;
-  };
   sources: {
-    lean: { source: string; window: string; file: string };
-    training: string;
-    polls: { attribution: string; license: string; licenseUrl: string; notice: string };
+    lean: Record<MapChamberKey, LeanSource>;
+    training: Record<MapChamberKey, string>;
+    polls: PollLicence;
   };
+  chambers: Record<
+    MapChamberKey,
+    {
+      shift: number;
+      shiftLabel: string;
+      calibration: ChamberCalibration;
+      model: ChamberModel;
+      seats: MapSeat[];
+    }
+  >;
+  /** Both chambers' names; `chambers` holds only the one asked for (?chamber=). */
+  chambersAvailable?: MapChamberKey[];
+}
+
+/** One chamber's map, as every component reads it (chamberView). */
+export interface ElectionMapData {
+  chamber: MapChamberKey;
+  asOf: string;
+  electionDay: string;
+  cycle: number;
+  daysToElection: number;
+  horizon: number;
+  national: NationalInput & { shift: number; shiftLabel: string };
+  stale?: boolean;
+  pollWindowDays: number;
+  bins: { leansMax: number; usuallyMax: number };
+  calibration: ChamberCalibration;
+  model: ChamberModel;
+  sources: { lean: LeanSource; training: string; polls: PollLicence };
   seats: MapSeat[];
 }

@@ -14,6 +14,8 @@ import json
 import logging
 import pathlib
 
+from app.district_lines import table_for_lines
+
 logger = logging.getLogger(__name__)
 
 _PATH = pathlib.Path(__file__).resolve().parent / "data" / "congressional_district_places.json"
@@ -23,9 +25,9 @@ _cache: dict[str, dict[str, list[str]]] | None = None
 def places_on_lines_of(congress: int) -> dict[str, list[str]] | None:
     """"ST-N" -> the places in that district on `congress`'s lines, largest
     first (at-large seats are "ST-0"); a place listed under several
-    districts is split between them. None when the file has no map for
-    that Congress — never another Congress's map in its place, since in a
-    redrawn state the same number is a different district."""
+    districts is split between them. None when no map on file describes
+    that Congress's lines (district_lines.table_for_lines: never another
+    Congress's map for a state that redrew)."""
     global _cache
     if _cache is None:
         try:
@@ -33,4 +35,29 @@ def places_on_lines_of(congress: int) -> dict[str, list[str]] | None:
         except Exception:
             logger.exception("congressional_district_places.json unavailable")
             _cache = {}
-    return _cache.get(str(congress))
+    return table_for_lines(congress, {int(c): t for c, t in _cache.items()})
+
+
+_DATA_DIR = pathlib.Path(__file__).resolve().parent / "data"
+# Each declares the Congress whose lines it holds: the sitting Congress's
+# (scripts/build_county_district_crosswalk.py --sitting) and the coming
+# election's, which becomes the sitting map once that Congress convenes.
+_CROSSWALK_FILES = ("county_district_crosswalk_sitting.json", "county_district_crosswalk.json")
+_crosswalks: dict[int, dict[str, list[str]]] | None = None
+
+
+def counties_on_lines_of(congress: int) -> dict[str, list[str]] | None:
+    """"ST-N" -> county names on the district lines of `congress`, or None
+    when no bundled crosswalk describes those lines
+    (district_lines.table_for_lines: never another Congress's map for a
+    state that redrew)."""
+    global _crosswalks
+    if _crosswalks is None:
+        _crosswalks = {}
+        for name in _CROSSWALK_FILES:
+            try:
+                doc = json.loads((_DATA_DIR / name).read_text())
+                _crosswalks[int(doc["congress"])] = doc["districts"]
+            except Exception:
+                logger.exception("%s unavailable", name)
+    return table_for_lines(congress, _crosswalks)

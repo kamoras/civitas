@@ -9,12 +9,12 @@
    "pollFloor": 3.25,
    "pollSpread": 9.0,
    "beta": [
-    -0.06333761863,
-    1.320436109,
-    15.14355673,
-    0.8554031962
+    -0.06594155577,
+    1.32482281,
+    15.15372252,
+    0.8548525611
    ],
-   "priorSd": 14.33647371,
+   "priorSd": 14.35650835,
    "houseEffects": {
     "pollsters": {
      "1892polling": 0.513,
@@ -391,7 +391,7 @@
     },
     "partisan": 3.38
    },
-   "scale": 1.0868,
+   "scale": 1.0871,
    "priorScale": 0.9952,
    "pollScale": 1.0092
   },
@@ -401,12 +401,12 @@
    "pollFloor": 3.5,
    "pollSpread": 9.5,
    "beta": [
-    0.11585614,
-    1.315330903,
-    15.17877934,
-    0.8583979251
+    0.1141600451,
+    1.319797032,
+    15.18843499,
+    0.8583133226
    ],
-   "priorSd": 14.35848588,
+   "priorSd": 14.37779728,
    "houseEffects": {
     "pollsters": {
      "1892polling": 0.513,
@@ -783,7 +783,7 @@
     },
     "partisan": 3.38
    },
-   "scale": 1.0654,
+   "scale": 1.0657,
    "priorScale": 0.9952,
    "pollScale": 0.9871
   },
@@ -793,12 +793,12 @@
    "pollFloor": 4.75,
    "pollSpread": 8.5,
    "beta": [
-    0.224585005,
-    1.323174579,
-    15.11611187,
-    0.8872306079
+    0.223298259,
+    1.327769234,
+    15.12531645,
+    0.8874018777
    ],
-   "priorSd": 14.37209599,
+   "priorSd": 14.39103941,
    "houseEffects": {
     "pollsters": {
      "1892polling": 0.513,
@@ -1175,7 +1175,7 @@
     },
     "partisan": 3.38
    },
-   "scale": 1.0923,
+   "scale": 1.0925,
    "priorScale": 0.9952,
    "pollScale": 1.0114
   }
@@ -1201,12 +1201,12 @@
    ],
    "all": {
     "combined": {
-     "brier": 0.0416,
-     "logLoss": 0.1372
+     "brier": 0.0417,
+     "logLoss": 0.1373
     },
     "fundamentals": {
-     "brier": 0.0909,
-     "logLoss": 0.2939
+     "brier": 0.091,
+     "logLoss": 0.2943
     }
    },
    "polled": {
@@ -1215,8 +1215,8 @@
      "logLoss": 0.1312
     },
     "fundamentals": {
-     "brier": 0.0949,
-     "logLoss": 0.3061
+     "brier": 0.0951,
+     "logLoss": 0.3066
     },
     "pollsOnly": {
      "brier": 0.0435,
@@ -1231,7 +1231,7 @@
      "low": 0.0,
      "high": 0.05,
      "n": 140,
-     "meanChance": 0.006,
+     "meanChance": 0.007,
      "demShare": 0.0,
      "demCarried": 0,
      "years": [
@@ -1255,7 +1255,7 @@
      "low": 0.15,
      "high": 0.35,
      "n": 20,
-     "meanChance": 0.235,
+     "meanChance": 0.236,
      "demShare": 0.1,
      "demCarried": 2,
      "years": [
@@ -1267,7 +1267,7 @@
      "low": 0.35,
      "high": 0.65,
      "n": 43,
-     "meanChance": 0.532,
+     "meanChance": 0.533,
      "demShare": 0.535,
      "demCarried": 23,
      "years": [
@@ -1371,7 +1371,7 @@
     },
     {
      "year": 2014,
-     "expectedDem": 14.2,
+     "expectedDem": 14.3,
      "actualDem": 12,
      "races": 34,
      "independentSd": 1.39
@@ -1427,30 +1427,30 @@
    "all": {
     "combined": {
      "brier": 0.0459,
-     "logLoss": 0.1487
+     "logLoss": 0.1488
     },
     "fundamentals": {
-     "brier": 0.0923,
-     "logLoss": 0.2973
+     "brier": 0.0925,
+     "logLoss": 0.2977
     }
    },
    "polled": {
     "combined": {
-     "brier": 0.0452,
-     "logLoss": 0.1448
+     "brier": 0.0453,
+     "logLoss": 0.1449
     },
     "fundamentals": {
-     "brier": 0.0977,
-     "logLoss": 0.3131
+     "brier": 0.0978,
+     "logLoss": 0.3136
     },
     "pollsOnly": {
      "brier": 0.049,
      "logLoss": 0.1573
     }
    },
-   "coverage80": 0.783,
-   "coverage95": 0.955,
-   "meanAbsError": 6.19,
+   "coverage80": 0.78,
+   "coverage95": 0.957,
+   "meanAbsError": 6.2,
    "calibration": [
     {
      "low": 0.0,
@@ -1504,7 +1504,7 @@
      "low": 0.65,
      "high": 0.85,
      "n": 28,
-     "meanChance": 0.745,
+     "meanChance": 0.744,
      "demShare": 0.714,
      "demCarried": 20,
      "years": [
@@ -1550,7 +1550,7 @@
      "expectedDem": 15.3,
      "actualDem": 18,
      "races": 32,
-     "independentSd": 1.54
+     "independentSd": 1.55
     },
     {
      "year": 2002,
@@ -1603,21 +1603,21 @@
     },
     {
      "year": 2016,
-     "expectedDem": 12.7,
+     "expectedDem": 12.8,
      "actualDem": 11,
      "races": 32,
      "independentSd": 1.42
     },
     {
      "year": 2018,
-     "expectedDem": 21.9,
+     "expectedDem": 22.0,
      "actualDem": 21,
      "races": 32,
      "independentSd": 1.53
     },
     {
      "year": 2020,
-     "expectedDem": 15.9,
+     "expectedDem": 16.0,
      "actualDem": 14,
      "races": 33,
      "independentSd": 1.52
@@ -1651,31 +1651,31 @@
    ],
    "all": {
     "combined": {
-     "brier": 0.0538,
-     "logLoss": 0.1722
+     "brier": 0.0539,
+     "logLoss": 0.1723
     },
     "fundamentals": {
-     "brier": 0.0927,
-     "logLoss": 0.2984
+     "brier": 0.0928,
+     "logLoss": 0.2988
     }
    },
    "polled": {
     "combined": {
-     "brier": 0.0557,
-     "logLoss": 0.1748
+     "brier": 0.0558,
+     "logLoss": 0.1749
     },
     "fundamentals": {
-     "brier": 0.102,
-     "logLoss": 0.3263
+     "brier": 0.1022,
+     "logLoss": 0.3268
     },
     "pollsOnly": {
      "brier": 0.0599,
      "logLoss": 0.1894
     }
    },
-   "coverage80": 0.788,
+   "coverage80": 0.785,
    "coverage95": 0.938,
-   "meanAbsError": 6.59,
+   "meanAbsError": 6.6,
    "calibration": [
     {
      "low": 0.0,
@@ -1693,7 +1693,7 @@
      "low": 0.05,
      "high": 0.15,
      "n": 35,
-     "meanChance": 0.093,
+     "meanChance": 0.094,
      "demShare": 0.029,
      "demCarried": 1,
      "years": [
@@ -1705,7 +1705,7 @@
      "low": 0.15,
      "high": 0.35,
      "n": 30,
-     "meanChance": 0.236,
+     "meanChance": 0.237,
      "demShare": 0.167,
      "demCarried": 5,
      "years": [
@@ -1716,9 +1716,9 @@
     {
      "low": 0.35,
      "high": 0.65,
-     "n": 43,
-     "meanChance": 0.504,
-     "demShare": 0.558,
+     "n": 42,
+     "meanChance": 0.5,
+     "demShare": 0.571,
      "demCarried": 24,
      "years": [
       1998,
@@ -1728,9 +1728,9 @@
     {
      "low": 0.65,
      "high": 0.85,
-     "n": 31,
-     "meanChance": 0.764,
-     "demShare": 0.742,
+     "n": 32,
+     "meanChance": 0.761,
+     "demShare": 0.719,
      "demCarried": 23,
      "years": [
       1998,
