@@ -71,7 +71,10 @@ def election_map():
     Democrats and Republicans both have a nominee, the poll-informed 80%
     range of the margin, with the polls behind it and the method's
     held-out calibration."""
-    return cached_json(current_map(), max_age=CACHE_TTL_LIST_S)
+    data = current_map()
+    seats = [dict(s, polls={k: v for k, v in s["polls"].items() if k != "all"}) if "polls" in s else s
+             for s in data["seats"]]
+    return cached_json(dict(data, seats=seats), max_age=CACHE_TTL_LIST_S)
 
 
 CSV_COLUMNS = (

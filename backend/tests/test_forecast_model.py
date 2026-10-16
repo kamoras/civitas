@@ -222,6 +222,7 @@ def test_build_describes_ranges_and_never_chances(db_session, freeze_utcnow):
     oh = next(s for s in data["seats"] if s["id"] == "2026-SEN-OH")
     assert oh["status"] == "range" and oh["range80"][0] < oh["mean"] < oh["range80"][1]
     assert oh["polls"]["used"] == 1 and oh["polls"]["list"][0]["usedInAverage"]
+    assert oh["polls"]["all"] == oh["polls"]["list"]
     wy = next(s for s in data["seats"] if s["id"] == "2026-SEN-WY")
     assert wy["status"] == "not_contested" and "Democratic" in wy["reason"]
     assert data["national"]["margin"] == -4.0
@@ -259,6 +260,7 @@ def test_api_serves_the_map_with_its_licence(db_session, freeze_utcnow, monkeypa
     data = _built(db_session, freeze_utcnow)
     client = _client(monkeypatch, data)
     body = client.get("/api/elections/map").json()
+    assert all("all" not in s.get("polls", {}) for s in body["seats"])
     assert body["sources"]["polls"]["license"] == "CC BY-SA 4.0"
     assert body["sources"]["polls"]["attribution"] == "Wikipedia contributors"
     csv_text = client.get("/api/elections/map.csv").text

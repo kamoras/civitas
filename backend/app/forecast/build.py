@@ -176,6 +176,13 @@ def build(db: Session, revisions: dict[str, dict] | None, today: date | None = N
             "coverage95": evaluation["coverage95"],
             "meanAbsError": evaluation["meanAbsError"],
             "table": evaluation["calibration"],
+            "seatTotals": evaluation["seatTotals"],
+            # Cycles whose Democratic seat count fell outside the central 90%
+            # band that independent races would give (1.645 standard
+            # deviations): the measured reason the map adds up no total.
+            "seatTotalsOutside90": sum(
+                1 for t in evaluation["seatTotals"]
+                if abs(t["actualDem"] - t["expectedDem"]) > 1.6448536269514722 * t["independentSd"]),
             "brier": {"combined": evaluation["polled"]["combined"]["brier"],
                       "fundamentals": evaluation["polled"]["fundamentals"]["brier"],
                       "pollsOnly": evaluation["polled"]["pollsOnly"]["brier"],
@@ -229,7 +236,7 @@ def _seat(race, leans, params, national, revisions, previous, today: date, elect
     except wiki.GateFailure as exc:
         kept = (previous or {}).get("article", {})
         if previous and kept.get("revid") and previous.get("dem") == seat["dem"] and previous.get("rep") == seat["rep"]:
-            parsed = previous.get("polls", {}).get("list", [])
+            parsed = previous.get("polls", {}).get("all", [])
             article.update({k: kept[k] for k in ("revid", "timestamp", "url") if k in kept})
         article["status"] = f"rejected: {exc}" + ("; the previous good revision's polls are kept" if parsed else "")
         logger.warning("Election map: %s %s", title, article["status"])
@@ -239,7 +246,7 @@ def _seat(race, leans, params, national, revisions, previous, today: date, elect
     if others and sum(others) / len(others) > min(sum(p["dem"] for p in parsed) / len(parsed),
                                                    sum(p["rep"] for p in parsed) / len(parsed)):
         side = "Democratic" if sum(p["dem"] for p in parsed) < sum(p["rep"] for p in parsed) else "Republican"
-        return dict(seat, status="not_two_party", polls={"count": len(parsed), "list": parsed},
+        return dict(seat, status="not_two_party", polls={"count": len(parsed), "list": [], "all": parsed},
                     reason=f"In this race's polls a candidate of neither major party runs ahead of the {side} "
                            "nominee, so a Democrat-versus-Republican margin would not describe it. The method "
                            "was fitted only on Democrat-versus-Republican races.")
@@ -273,7 +280,12 @@ def _seat(race, leans, params, national, revisions, previous, today: date, elect
         pollsBin=range_bin(r["low80"], r["high80"]),
         pollAverage=None if r["pollAverage"] is None else round(r["pollAverage"], 1),
         pollShare=round(poll_share, 2),
-        polls={"count": len(parsed), "used": r["pollsUsed"], "latest": latest, "list": parsed},
+        # "list" is what the map shows (the polls in the average, newest
+        # first); "all" keeps every parsed row for the next build to fall
+        # back on if a revision fails its gates, and the API leaves it out.
+        polls={"count": len(parsed), "used": r["pollsUsed"], "latest": latest,
+               "list": sorted((p for p in parsed if p["usedInAverage"]), key=lambda p: p["end"], reverse=True),
+               "all": parsed},
         difference={"strength": strength,
                     "direction": None if strength == 0 else ("D" if r["mean"] < r["prior"] else "R"),
                     "seatPolls": r["average"] is not None},

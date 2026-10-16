@@ -314,7 +314,8 @@ def predict_raw(row: dict, polls: list[Poll], nat: float, params: dict) -> dict:
     avg_sd = poll_sd(avg.k_eff, params["pollFloor"], params["pollSpread"]) if avg else None
     mean, sd = combine(prior, params["priorSd"], avg.margin if avg else None, avg_sd)
     return {"prior": prior, "pollAverage": avg.margin if avg else None, "pollSd": avg_sd,
-            "pollsUsed": len(avg.used) if avg else 0, "mean": mean, "sd": sd, "average": avg}
+            # Polls, not question rows: a poll printed as two questions is one.
+            "pollsUsed": len({pollster_key(p.pollster) for p in avg.used}) if avg else 0, "mean": mean, "sd": sd, "average": avg}
 
 
 def predict(row: dict, polls: list[Poll], nat: float, params: dict) -> dict:
@@ -408,6 +409,17 @@ def summarize(preds: list[dict]) -> dict:
         "coverage95": round(float(np.mean([p["low95"] <= p["margin"] <= p["high95"] for p in preds])), 3),
         "meanAbsError": round(float(np.mean([abs(p["mean"] - p["margin"]) for p in preds])), 2),
         "calibration": calibration_table([p["pDem"] for p in preds], dem, years),
+        # Why the map shows no seat total: adding up races whose errors move
+        # together (a national swing the polls missed) is not the sum of
+        # independent ranges. Per held-out cycle, the seats the implied
+        # chances add up to for Democrats against the seats they carried.
+        "seatTotals": [
+            {"year": y, "expectedDem": round(sum(preds[i]["pDem"] for i in idx), 1),
+             "actualDem": int(sum(dem[i] for i in idx)), "races": len(idx),
+             # The spread the total would have if the races were independent.
+             "independentSd": round(math.sqrt(sum(preds[i]["pDem"] * (1 - preds[i]["pDem"]) for i in idx)), 2)}
+            for y in sorted(set(years)) for idx in [[i for i, yy in enumerate(years) if yy == y]]
+        ],
     }
 
 

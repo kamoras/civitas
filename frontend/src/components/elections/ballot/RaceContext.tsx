@@ -13,6 +13,7 @@ import {
   isRedrawnSeat,
 } from "@/lib/elections";
 import { STATE_NAMES } from "@/lib/stateCodes";
+import { mapHref } from "@/lib/electionMap";
 import type { LeanContext, RaceWithCandidates } from "@/types/election";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR, shareMetaAttrs } from "@/lib/shareImage";
@@ -82,7 +83,10 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 /** What shapes this race, before its money: where the seat leans and how
  * that compares with every other seat, whether the member who holds it is
  * running, and that none of it is a forecast. Descriptive only — Civitas
- * publishes no prediction and calls no race.
+ * publishes no odds and calls no race. A Senate race links to the 2026
+ * map's poll range for it (lib/electionMap), which is kept off this
+ * section on purpose: the section shows the incumbent's Representation
+ * Score, and a poll range must never sit beside a score.
  *
  * From election day (`resultsMode`) the lean is left out, as it is from the
  * page header: beside a live count it reads as a prediction of it. */
@@ -159,7 +163,21 @@ export default function RaceContext({
       <p className="mt-2 text-[13px] text-ink-lo">
         {resultsMode
           ? "Civitas calls no race. A count on this page is the state's own, linked to its source."
-          : "Descriptive only: Civitas publishes no prediction or odds for this race."}
+          : "Descriptive only: Civitas publishes no odds for this race and calls no race."}
+        {!resultsMode && race.district == null && (
+          <>
+            {" "}
+            The 2026 Senate map shows the range polls suggest for its margin, beside how the state
+            usually votes.{" "}
+            <Link
+              href={mapHref("polls")}
+              className="whitespace-nowrap font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
+              {...{ [SHARE_EXCLUDE_ATTR]: "" }}
+            >
+              [ SENATE MAP → ]
+            </Link>
+          </>
+        )}
       </p>
       <dl>
         {lean && race.pvi != null && (

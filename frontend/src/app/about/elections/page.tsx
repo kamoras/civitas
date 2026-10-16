@@ -13,6 +13,7 @@ import {
   A,
 } from "@/components/about/AboutPage";
 import { ACTION_CENTER_HREF } from "@/lib/routes";
+import { ELECTION_MAP_HREF } from "@/lib/electionMap";
 import {
   countWord,
   fetchLiveStates,
@@ -94,11 +95,13 @@ export default async function ElectionsChapter() {
         </P>
       </Section>
 
-      <Section id="race-context" title="What shapes a race (and why there is no forecast)">
+      <Section id="race-context" title="What shapes a race">
         <P>
           Each federal contest&apos;s research opens with what shapes the race. Civitas publishes no
-          prediction, odds or rating for any race, and calls none; these figures describe a race,
-          they don&apos;t forecast it.
+          odds or rating for any race, and calls none; these figures describe a race. The one place
+          this year&apos;s polls appear is the <A href="#election-map">Senate map</A>, as a range
+          for the margin, kept apart from this block because the block shows the incumbent&apos;s
+          Representation Score.
         </P>
         <P>
           <strong>The seat.</strong> Its lean is the Cook-PVI-style figure: how much more Republican
@@ -128,6 +131,35 @@ export default async function ElectionsChapter() {
           dates they are as of, the seat&apos;s lean and the FEC link. The{" "}
           <span className="font-mono text-ink-hi">[ JSON ]</span> link is the race as the page reads
           it.
+        </P>
+      </Section>
+
+      <Section id="election-map" title="The 2026 Senate map: usual vote and poll ranges">
+        <P>
+          <A href={ELECTION_MAP_HREF}>The Senate map</A> has three views.{" "}
+          <strong>Usual vote</strong> is each state&apos;s lean from the last two presidential
+          elections, computed by Civitas from official returns; no model is involved.{" "}
+          <strong>Polls</strong> is a range for the margin: that lean, plus incumbency and the
+          national generic-ballot average, combined with the race&apos;s own polls. A range that
+          crosses even is grey and says too close to tell. <strong>Difference</strong> marks the
+          seats whose polls pull the range clear of where the lean, incumbency and the national
+          swing alone would put it.
+        </P>
+        <P>
+          It is not a prediction and calls no race: it shows no chance of anyone winning and no seat
+          total by party. Every number in the method is fitted by a script on official results and
+          FiveThirtyEight&apos;s archive of final-weeks polls (1998 to 2022), and checked on
+          election cycles the fit never saw; the map&apos;s own method section shows how often its
+          ranges held the result, and why there is no seat total. It has nothing to do with
+          Representation Scores, which measure a member&apos;s record, not an election. Only
+          Democrat-versus-Republican races get a range. House districts are not on it yet.
+        </P>
+        <P>
+          This year&apos;s polls come from Wikipedia&apos;s race articles. The poll figures and the
+          ranges built on them are shared under Wikipedia&apos;s licence, CC BY-SA 4.0, with
+          attribution to Wikipedia contributors: reuse them under the same licence. Each seat links
+          the article revision its polls were read from. From election day the map is withdrawn and
+          the results map takes its place.
         </P>
       </Section>
 
@@ -616,6 +648,11 @@ export default async function ElectionsChapter() {
               &ldquo;leads&rdquo; once it has, and never &ldquo;wins&rdquo;: an official
               count&apos;s leader can still face a runoff (Georgia requires a majority), a recount
               or a court.
+            </Item>
+            <Item label="Before election day">
+              This rule is about the count. Before election day the{" "}
+              <A href="#election-map">Senate map</A> shows a range for each margin and how often
+              such ranges held the result, never a winner; it is withdrawn when the count begins.
             </Item>
             <Item label="A seat changing party">
               A seat is only described as changing party once half its reporting areas are in. Where

@@ -67,7 +67,9 @@ describe("RaceContext", () => {
 
   it("says plainly it is not a forecast, and offers the data", () => {
     render(<RaceContext race={race()} />);
-    expect(screen.getByText(/publishes no prediction or odds/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/publishes no odds for this race and calls no race/)
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "CSV: every federal candidate in North Carolina" })
     ).toHaveAttribute("href", "/api/elections/states/NC/races.csv");

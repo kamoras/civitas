@@ -356,3 +356,16 @@ export function describeStateRedistricting(
     description: `${stateName}'s ${seats} U.S. House districts on the ${cycle} map: where each district's residents lived before (${movedPct}% are in a district built mostly from another), how each lean moved, and the official source. Find yours by town or county.`,
   };
 }
+
+/** /elections/map: the 2026 Senate map (usual vote, poll ranges). Never
+ * "forecast", "prediction" or "projection" — the page is none of those. */
+export function describeElectionMap(data: { seats: unknown[] } | null): {
+  title: string;
+  description: string;
+} {
+  const seats = data ? `${data.seats.length} ` : "";
+  return {
+    title: "2026 Senate Map: Usual Vote and Poll Ranges",
+    description: `How each of the ${seats}2026 Senate seats usually votes, the range this year's polls suggest for the margin, and where the two disagree. Ranges, not results; not a race call. Method and held-out calibration shown.`,
+  };
+}
