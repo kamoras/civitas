@@ -37,6 +37,7 @@ from app.models import (
     HousePipelineRun,
     PipelineRun,
     PipelineStatus,
+    President,
     StockTradesPipelineRun,
     SupplementaryPipelineRun,
 )
@@ -408,8 +409,6 @@ def check_sitting_president() -> None:
     president's term began, by someone else, means the roster has fallen
     behind. A register still showing the outgoing president's last
     documents (it publishes days after signing) is not a disagreement."""
-    from app.models import President
-
     signer = newest_presidential_signer()
     if signer is None:
         return

@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 
 from app.models import (
-    PolicyStatement, PresidentialSupport, Representative, RollCall, RollCallPosition, Senator, StatementRollCall,
+    PolicyStatement, President, PresidentialSupport, Representative, RollCall, RollCallPosition, Senator, StatementRollCall,
 )
 from app.pipeline.analyze import presidential_support as ps
 from app.pipeline.analyze import sap_position
@@ -377,8 +377,6 @@ def test_a_congress_spanning_an_inauguration_counts_only_the_sitting_president(d
     president; from Jan 20 "the president" is the new one. An outgoing
     statement must not count a later vote as the new president's position,
     and votes before the new term are not the new president's either."""
-    from app.models import President
-
     db_session.add_all([
         President(id="outgoing-47", name="Outgoing", party="R", number=47, term_start="2025-01-20",
                   term_end="2029-01-20"),

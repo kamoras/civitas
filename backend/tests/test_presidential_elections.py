@@ -10,6 +10,12 @@ mandates-table elections where both figures exist — re-estimated on every
 fetch since v6.13 (_fit_scales) rather than hand-typed from a one-off fit.
 """
 
+import asyncio
+from unittest.mock import AsyncMock, patch
+
+from app.models import President
+from app.pipeline.cache import api_cache_set
+from app.pipeline.fetch import presidential_elections as pe
 from app.pipeline.fetch.presidential_elections import (
     _MIN_FIT_ROWS,
     _fit_scales,
@@ -83,12 +89,7 @@ def test_a_new_president_on_the_roster_reads_the_table_afresh(db_session):
     # Results are cached for a month; the cache is keyed by the newest
     # president, so a new president's first night doesn't serve a copy
     # without their election.
-    import asyncio
-    from unittest.mock import AsyncMock, patch
 
-    from app.models import President
-    from app.pipeline.cache import api_cache_set
-    from app.pipeline.fetch import presidential_elections as pe
 
     db_session.add(President(id="old-47", name="Old President", party="R", number=47, term_start="2025-01-20"))
     db_session.commit()

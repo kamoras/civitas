@@ -6,16 +6,19 @@ and supplementary data 1+ day with nothing telling an operator to look.
 """
 
 from datetime import date, datetime, timedelta
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app.models import (
-    ElectionPipelineRun, HousePipelineRun, PipelineRun, PipelineStatus,
+    ElectionPipelineRun, HousePipelineRun, PipelineRun, PipelineStatus, President,
     StockTradesPipelineRun, SupplementaryPipelineRun,
 )
+from app import ops_alerts
 from app.ops_alerts import (
     check_pipeline_overrun,
+    check_sitting_president,
     check_pipeline_staleness,
     recent_alerts,
     resolve_ops_alert,
@@ -298,8 +301,6 @@ class TestCheckPipelineStaleness:
 
 
 def test_an_unreadable_database_does_not_stop_an_alert(monkeypatch):
-    from app import ops_alerts
-
     def no_database():
         raise RuntimeError("database is locked")
 
@@ -403,8 +404,6 @@ class TestOpenAndResolved:
         assert [a["subject"] for a in self._alerts(db_session)] == ["Old but still broken", "Recent event"]
 
     def test_pruning_keeps_every_open_alert(self, db_session):
-        from app import ops_alerts
-
         with patch.object(ops_alerts, "_HISTORY_KEEP", 3):
             self._send(db_session, "Open", condition="open")
             for i in range(5):
@@ -415,7 +414,6 @@ class TestOpenAndResolved:
 
     def test_pruning_keeps_a_superseded_alerts_key_while_its_condition_is_open(self, db_session):
         # Freed, the key would let the swing back to it send it again.
-        from app import ops_alerts
 
         with patch.object(ops_alerts, "_HISTORY_KEEP", 2):
             assert self._send(db_session, "States A failing", dedupe_key="a", condition="states")
@@ -427,7 +425,6 @@ class TestOpenAndResolved:
     def test_pruning_keeps_only_so_many_superseded_alerts(self, db_session):
         # A condition open for weeks under a dated key would otherwise keep
         # a row a day for good: the newest are kept, the oldest go.
-        from app import ops_alerts
         from app.models import ApiCache
 
         with patch.object(ops_alerts, "_HISTORY_KEEP", 2), patch.object(ops_alerts, "_SUPERSEDED_KEPT", 2):
@@ -505,10 +502,6 @@ class TestCheckSittingPresident:
 
     @staticmethod
     def _check(db_session, signer):
-        from types import SimpleNamespace
-
-        from app.ops_alerts import check_sitting_president
-
         with patch("app.ops_alerts.newest_presidential_signer", return_value=signer), \
              patch("app.ops_alerts.SessionLocal", return_value=SimpleNamespace(query=db_session.query, close=lambda: None)), \
              patch("app.ops_alerts.send_ops_alert") as alert, \
@@ -518,8 +511,6 @@ class TestCheckSittingPresident:
 
     @pytest.fixture
     def roster(self, db_session):
-        from app.models import President
-
         db_session.add_all([
             President(id="outgoing-47", name="Outgoing A. President, Jr.", party="R", number=47,
                       term_start="2025-01-20", is_current=True),
@@ -542,7 +533,6 @@ class TestCheckSittingPresident:
         # The roster already shows the new president; the register's newest
         # documents (published days after signing) are still the outgoing
         # president's.
-        from app.models import President
 
         db_session.add(President(id="incoming-48", name="Incoming President", party="D", number=48,
                                  term_start="2029-01-20", is_current=True))
@@ -562,8 +552,6 @@ class TestCheckSittingPresident:
 
 
 def test_newest_presidential_signer_reads_the_newest_signing(monkeypatch):
-    from app import ops_alerts
-
     class Resp:
         def raise_for_status(self):
             pass
