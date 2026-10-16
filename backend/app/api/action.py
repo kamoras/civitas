@@ -95,9 +95,10 @@ def _renumber_for_display(issues: list[ActionIssue]) -> list[ActionIssue]:
 
 
 _NOT_DEVELOPING = or_(ActionIssue.status.is_(None), ActionIssue.status != ActionIssueStatus.DEVELOPING)
-# Not a draft taken off the Action Center unconfirmed: a developing issue
-# that is no longer current never had news coverage behind it, so it is not
-# part of the record the homepage keeps (retired confirmed stories are).
+# Not a developing draft taken off the Action Center: retired unconfirmed,
+# it never had coverage behind it; retired covered, the record lists the
+# reporting that covered it instead (as mark_recent_duplicates already
+# did). Retired confirmed stories stay part of the record.
 NOT_RETIRED_DRAFT = or_(_NOT_DEVELOPING, ActionIssue.is_current.is_(True))
 
 
@@ -603,6 +604,7 @@ def _build_issue_response(
         is_trending=is_trending,
         status=getattr(issue, "status", None) or "confirmed",
         is_current=issue.is_current is not False,
+        retired_reason=None if issue.is_current is not False else getattr(issue, "retired_reason", None),
         covered_by=to_public_id(issue.duplicate_of_id) if issue.duplicate_of_id else None,
         source_type=getattr(issue, "source_type", None),
         count_as_of=count_as_of,

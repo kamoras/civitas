@@ -29,26 +29,40 @@ function draft(overrides: Partial<ActionIssue> = {}): ActionIssue {
   };
 }
 
-describe("a developing draft retired unconfirmed", () => {
-  it("is flagged Not confirmed, never Developing", () => {
-    render(<IssueMeta issue={draft({ isCurrent: false })} />);
+describe("a retired developing draft", () => {
+  it("retired unconfirmed: flagged Not confirmed, never Developing", () => {
+    render(<IssueMeta issue={draft({ isCurrent: false, retiredReason: "unconfirmed" })} />);
     expect(screen.getByText("Not confirmed")).toBeInTheDocument();
     expect(screen.queryByText("Developing")).toBeNull();
   });
 
-  it("says it was taken off the Action Center, not that coverage is still to come", () => {
-    render(<DevelopingDisclosure sourceType="house_roll_call_vote" retired />);
+  it("retired unconfirmed: taken off before coverage confirmed it, not still to come", () => {
+    render(
+      <DevelopingDisclosure sourceType="house_roll_call_vote" retired retiredReason="unconfirmed" />
+    );
     expect(
-      screen.getByText(/taken off the Action Center before broader news coverage/)
+      screen.getByText(
+        /^Not confirmed\. .*taken off the Action Center before broader news coverage/
+      )
     ).toBeInTheDocument();
     expect(screen.queryByText(/has not yet confirmed/)).toBeNull();
     expect(screen.queryByRole("link")).toBeNull();
   });
 
-  it("links the reported issue that covers the same vote", () => {
+  it("retired covered: superseded by the reporting, which it links, never 'not confirmed'", () => {
+    render(<IssueMeta issue={draft({ isCurrent: false, retiredReason: "covered" })} />);
+    expect(screen.getByText("Superseded")).toBeInTheDocument();
+    expect(screen.queryByText("Not confirmed")).toBeNull();
     render(
-      <DevelopingDisclosure sourceType="house_roll_call_vote" retired coveredBy="i12ab34cd" />
+      <DevelopingDisclosure
+        sourceType="house_roll_call_vote"
+        retired
+        retiredReason="covered"
+        coveredBy="i12ab34cd"
+      />
     );
+    expect(screen.getByText(/^Superseded by broader coverage\./)).toBeInTheDocument();
+    expect(screen.queryByText(/Not confirmed|before broader news coverage confirmed/)).toBeNull();
     expect(screen.getByRole("link", { name: /reported issue on the same vote/ })).toHaveAttribute(
       "href",
       "/issue/i12ab34cd"

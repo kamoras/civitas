@@ -156,9 +156,13 @@ export interface ActionIssue {
    *  disclosure badge and ranked after every "confirmed" issue. */
   status: "developing" | "confirmed";
   /** False once the issue is off the Action Center. A "developing" issue
-   *  that is not current was retired unconfirmed: it reads "Not confirmed",
-   *  never "Developing". Optional for an older backend. */
+   *  that is not current was retired (retiredReason says why), and never
+   *  reads "Developing". Optional for an older backend. */
   isCurrent?: boolean;
+  /** Why a retired draft left: "unconfirmed" (no coverage in time) reads
+   *  "Not confirmed"; "covered" (a reported issue covers it) reads
+   *  "Superseded". Null while current. */
+  retiredReason?: string | null;
   /** The issue this one duplicates — for a retired vote draft, the reported
    *  issue covering the same vote. */
   coveredBy?: string | null;

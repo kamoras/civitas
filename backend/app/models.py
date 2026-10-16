@@ -60,6 +60,19 @@ class MonitorStatus(StrEnum):
     CLOSED = "closed"  # inactive >30 days, archived
 
 
+class RetiredReason(StrEnum):
+    """Why a DEVELOPING draft left the Action Center (ActionIssue.retired_reason).
+
+    UNCONFIRMED: no coverage confirmed it in time (its vote aged past the
+    window, its confirmation deadline passed). COVERED: a reported issue now
+    covers its bill, so coverage did appear; the draft gave way to it. The
+    two read differently, and only UNCONFIRMED may say coverage never came.
+    """
+
+    UNCONFIRMED = "unconfirmed"
+    COVERED = "covered"
+
+
 class ActionIssueStatus(StrEnum):
     """Lifecycle of an ActionIssue's confidence, not its retirement state
     (see ActionIssue.is_current for that — orthogonal: a DEVELOPING issue
@@ -1447,6 +1460,9 @@ class ActionIssue(Base):
     # this column, until the hourly refresh fills it (backfill_new_facts).
     new_facts: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     is_current: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Why a developing draft was retired (RetiredReason); None while current,
+    # and for every confirmed issue.
+    retired_reason: Mapped[str | None] = mapped_column(String(16), nullable=True, default=None)
     # The row this one is a near-identical duplicate of, among the newest
     # rows the homepage feed reads (action_center.mark_recent_duplicates);
     # None for a representative, or a row never compared.

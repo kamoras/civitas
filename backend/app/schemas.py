@@ -1555,10 +1555,14 @@ class ActionIssueSchema(CamelModel):
     # normal top-story ranking competition.
     status: str = "confirmed"
     # False once the issue is off the Action Center. With status
-    # "developing" that means the draft was retired unconfirmed (its vote
-    # past the window, its deadline passed, or a reported issue covering
-    # it), and the page says so rather than "Developing".
+    # "developing" the draft was retired (retired_reason says why), and the
+    # page says so rather than "Developing".
     is_current: bool = True
+    # Why a developing draft left the Action Center (models.RetiredReason):
+    # "unconfirmed" (no coverage in time) or "covered" (a reported issue
+    # covers it). None while current, and for a draft retired before reasons
+    # were recorded until the next refresh gives it one.
+    retired_reason: str | None = None
     # The issue this one was found to duplicate (duplicate_of_id): for a
     # retired vote draft, the reported issue covering the same vote.
     covered_by: str | None = None

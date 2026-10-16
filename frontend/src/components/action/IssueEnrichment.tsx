@@ -151,7 +151,9 @@ export function IssueMeta({
       )}
       {issue.status === "developing" &&
         (issue.isCurrent === false ? (
-          <span className="text-ink-lo">Not confirmed</span>
+          <span className="text-ink-lo">
+            {RETIRED_FLAG[issue.retiredReason ?? ""] ?? "Retired"}
+          </span>
         ) : (
           <span className="text-signal-amber">Developing</span>
         ))}
@@ -160,14 +162,22 @@ export function IssueMeta({
   );
 }
 
+/** A retired draft's flag, by why it left (backend models.RetiredReason). */
+const RETIRED_FLAG: Record<string, string> = {
+  unconfirmed: "Not confirmed",
+  covered: "Superseded",
+};
+
 /** One-line disclosure paired with the "Developing" flag — explains what it
  *  means, and names what the story was drafted from, rather than leaving
- *  readers to guess. A draft retired unconfirmed says that instead: "has not
- *  yet confirmed" on a month-old draft reads as a story still developing. */
+ *  readers to guess. A retired draft says why it left instead: "has not yet
+ *  confirmed" on a month-old draft reads as a story still developing, and a
+ *  draft that gave way to reporting must not read as never confirmed. */
 export function DevelopingDisclosure({
   sourceType,
   countOfficial = false,
   retired = false,
+  retiredReason,
   coveredBy,
 }: {
   sourceType?: string | null;
@@ -175,21 +185,27 @@ export function DevelopingDisclosure({
   countOfficial?: boolean;
   /** The draft is off the Action Center (isCurrent false). */
   retired?: boolean;
-  /** The reported issue covering the same vote, when that is why. */
+  /** Why: "unconfirmed" (no coverage in time) or "covered" (a reported
+   *  issue covers it); null for one retired before reasons were kept. */
+  retiredReason?: string | null;
+  /** The reported issue on the same vote, when the record knows it. */
   coveredBy?: string | null;
 }) {
   const source = developingSource(sourceType, { countOfficial });
   if (retired) {
+    const subject = sourceType === "federal_register_significant_rule" ? "rule" : "vote";
     return (
       <p className="mb-4 font-mono text-xs leading-relaxed text-ink-min">
-        Not confirmed. Based on {source}; taken off the Action Center before broader news coverage
-        confirmed it.
+        {retiredReason === "covered"
+          ? `Superseded by broader coverage. Based on ${source}; taken off the Action Center once a reported issue covered the same ${subject}.`
+          : retiredReason === "unconfirmed"
+            ? `Not confirmed. Based on ${source}; taken off the Action Center before broader news coverage confirmed it.`
+            : `Based on ${source}; taken off the Action Center.`}
         {coveredBy && (
           <>
             {" "}
             <Link href={`/issue/${coveredBy}`} className="text-ink underline underline-offset-2">
-              The reported issue on the same{" "}
-              {sourceType === "federal_register_significant_rule" ? "rule" : "vote"} →
+              The reported issue on the same {subject} →
             </Link>
           </>
         )}
