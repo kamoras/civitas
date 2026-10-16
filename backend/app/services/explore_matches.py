@@ -1,4 +1,4 @@
-"""Explore's typed match groups: the members and bills a search names.
+"""Explore's typed match groups: the members, bills and agencies a search names.
 
 Explore searches documents (speeches, rules, opinions), so a senator's surname gave
 thirty floor speeches and no link to the senator's page, and "flag burning"
@@ -13,7 +13,11 @@ over the state), and, when no name holds the words, a misspelt surname by
 difflib's similarity to each word of the member's page address (the rule
 the member 404 page's suggestions use, from 0.75). Bills: the bill a whole
 bill number names, then bills whose titles hold every word
-(bill_service.bills_matching). Names and titles only, verbatim; no model.
+(bill_service.bills_matching). Agencies: every word of the query as the
+start of a word of a Federal Register agency's name, short name or the
+Register's own description of it (ranked by BM25, a name or short name
+weighted over the description), so "aviation" offers the FAA. Names,
+titles and descriptions only, verbatim; no model.
 """
 
 import re
@@ -21,7 +25,7 @@ from difflib import SequenceMatcher
 
 from sqlalchemy.orm import Session
 
-from app.models import Representative, Senator
+from app.models import Agency, Representative, Senator
 from app.photos import bioguide_photo
 from app.services.bill_record import canonical_bill_id
 from app.services.bill_service import bills_matching
@@ -42,6 +46,11 @@ _MEMBER_WEIGHTS = (5.0, 1.0)
 # long or longer: two or three letters are like half of every name.
 _FUZZY_MIN_RATIO = 0.75
 _FUZZY_MIN_LEN = 4
+# BM25 column weights (name, short name, description): the Register's
+# descriptions run to a paragraph of history, so a word there counts a
+# tenth of one in the agency's name. A convention, like the member weights'
+# order; the name-first order is what it fixes.
+_AGENCY_WEIGHTS = (10.0, 10.0, 1.0)
 
 
 def _members(db: Session) -> list[dict]:
@@ -99,10 +108,28 @@ def bill_matches(db: Session, q: str) -> tuple[int, list[dict]]:
     return total, items
 
 
+def agency_matches(db: Session, q: str) -> tuple[int, list[dict]]:
+    """(how many Federal Register agencies match, the best GROUP_LIMIT of
+    them). None stored yet (the agency list not read) is no match."""
+    agencies = {a.slug: a for a in db.query(Agency.slug, Agency.name, Agency.short_name, Agency.description)}
+    if not agencies:
+        return 0, []
+    conn = build_index(((a.slug, a.name, a.short_name or "", a.description or "") for a in agencies.values()),
+                       n_texts=3)
+    try:
+        keys = ranked(conn, q, _AGENCY_WEIGHTS)
+    finally:
+        conn.close()
+    return len(keys), [{"slug": k, "name": agencies[k].name, "shortName": agencies[k].short_name}
+                       for k in keys[:GROUP_LIMIT]]
+
+
 def explore_matches(db: Session, q: str) -> dict:
     members_total, members = member_matches(db, q)
     bills_total, bills = bill_matches(db, q)
+    agencies_total, agencies = agency_matches(db, q)
     return {
         "members": {"total": members_total, "items": members},
         "bills": {"total": bills_total, "items": bills},
+        "agencies": {"total": agencies_total, "items": agencies},
     }

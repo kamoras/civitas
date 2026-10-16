@@ -308,3 +308,73 @@ def test_an_agency_page_lists_the_action_center_issues_citing_its_documents(db_s
     db_session.commit()
     body = _get(db_session, "/api/agencies/health-and-human-services-department").json()
     assert [i["title"] for i in body["actionIssues"]] == ["Food labels change"]
+
+
+class TestLinking:
+    """Documents stored before agencies were read: linked by name where the
+    named agency has no sub-agencies, otherwise from the Register's own
+    record of the issuer; and while any is unlinked, the API says so."""
+
+    def _unlinked_docs(self, db):
+        db.add_all([
+            Agency(slug=a["slug"], fr_id=a["id"], name=a["name"], synced_at=NOW,
+                   parent_slug={2: "health-and-human-services-department"}.get(a["parent_id"]))
+            for a in FR_LIST
+        ])
+        db.add_all([
+            ExploreDocument(doc_type="Proposed Rule", source="Federal Register", title="Air", date="2026-01-02",
+                            chamber="Regulatory", agency_name="Environmental Protection Agency", external_id="fr-reg-10"),
+            ExploreDocument(doc_type="Final Rule", source="Federal Register", title="Drugs", date="2026-01-01",
+                            chamber="Regulatory", agency_name="Health and Human Services Department",
+                            external_id="fr-reg-11"),
+        ])
+        db.commit()
+
+    def test_a_childless_agency_is_linked_by_name_and_a_department_is_left(self, db_session):
+        self._unlinked_docs(db_session)
+        assert ag.linking_progress(db_session) == {"linked": 0, "total": 2}
+        assert ag.link_by_name(db_session) == 1
+        by_title = {d.title: d.agency_slug for d in db_session.query(ExploreDocument)}
+        # A department's document may be a sub-agency's: read, not guessed.
+        assert by_title == {"Air": "environmental-protection-agency", "Drugs": None}
+        assert ag.linking_progress(db_session) == {"linked": 1, "total": 2}
+
+    async def test_a_departments_document_is_linked_to_the_issuer_the_register_names(self, db_session):
+        self._unlinked_docs(db_session)
+        listed = [{"name": "Health and Human Services Department", "id": 2, "parent_id": None,
+                   "slug": "health-and-human-services-department"},
+                  {"name": "Food and Drug Administration", "id": 3, "parent_id": 2,
+                   "slug": "food-and-drug-administration"}]
+
+        def handle(request):
+            return httpx.Response(200, json={"document_number": "11", "agencies": listed})
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as c:
+            got = await ag.link_documents(db_session, c)
+        assert got == {"byName": 1, "read": 1}
+        drug = db_session.query(ExploreDocument).filter_by(title="Drugs").one()
+        assert (drug.agency_name, drug.agency_slug) == ("Food and Drug Administration", "food-and-drug-administration")
+        assert ag.linking_progress(db_session) is None
+
+    async def test_a_number_the_register_has_no_document_for_is_removed(self, db_session):
+        self._unlinked_docs(db_session)
+        ag.link_by_name(db_session)
+        async with httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(404, text="<html>"))) as c:
+            assert await ag.read_issuers(db_session, c) == 0
+        assert db_session.query(ExploreDocument).filter_by(title="Drugs").count() == 0
+        assert ag.linking_progress(db_session) is None
+
+    async def test_the_register_unreachable_leaves_documents_unlinked(self, db_session):
+        self._unlinked_docs(db_session)
+        async with httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(503))) as c:
+            assert await ag.read_issuers(db_session, c) is None
+        assert db_session.query(ExploreDocument).filter_by(title="Drugs").one().agency_slug is None
+
+    def test_the_api_says_linking_is_incomplete_rather_than_none(self, db_session):
+        assert ensure_lexical_index(db_session.get_bind())
+        self._unlinked_docs(db_session)
+        body = _get(db_session, "/api/agencies").json()
+        assert body["documentsLinking"] == {"linked": 0, "total": 2}
+        page = _get(db_session, "/api/agencies/environmental-protection-agency").json()
+        assert page["documents"]["linking"] == {"linked": 0, "total": 2}
+        ag.link_by_name(db_session)
+        assert _get(db_session, "/api/agencies").json()["documentsLinking"] == {"linked": 1, "total": 2}

@@ -64,8 +64,8 @@ export default async function ElectionMapPage({
             eyebrow={`${state.kind === "map" ? `${state.data.cycle} general` : "General"} election · Senate and House`}
             title="Where seats lean"
           >
-            How each seat usually votes, and the range this year&apos;s polls suggest for the
-            margin. Ranges, not results. Not a race call.
+            How each seat usually votes, and a range for its margin, from this year&apos;s polls
+            where a seat has any. Ranges, not results. Not a race call.
           </PageMasthead>
           {state.kind === "map" ? (
             <ElectionMap

@@ -72,6 +72,9 @@ const ranged = (over: Partial<MapSeat> = {}): MapSeat =>
       ],
     },
     difference: { strength: 2, direction: "D", seatPolls: true },
+    rangeBasis: "polls",
+    rangeBasisLabel: "Margin range, from polls",
+    rangeBasisShort: "from polls",
     article: { title: "x", revid: 7, url: "https://en.wikipedia.org/w/index.php?oldid=7" },
     ...over,
   }) as MapSeat;
@@ -299,7 +302,7 @@ describe("election map", () => {
     expect(window.location.search).toContain("view=diff");
     fireEvent.click(screen.getByRole("button", { name: /^Ohio:/ }));
     const detail = screen.getByRole("complementary", { name: "Seat detail" });
-    expect(detail.textContent).toContain("a margin from D+9 to R+5");
+    expect(detail.textContent).toContain("margin D+9 to R+5");
     expect(detail.textContent).toContain("TOO CLOSE TO TELL");
     expect(detail.textContent).toContain("Ranges like these held the result 79% of the time");
     expect(within(detail).getByRole("link", { name: "Example Polling" })).toHaveAttribute(
@@ -502,9 +505,62 @@ describe("election map", () => {
     fireEvent.keyDown(ohio, { key: "Enter" });
     const sheet = screen.getByRole("complementary", { name: "Seat detail" });
     fireEvent.click(within(sheet).getByRole("button", { name: /Ohio \(special\)/ }));
-    expect(sheet.textContent).toContain("a margin from R+1 to R+9");
+    expect(sheet.textContent).toContain("margin R+1 to R+9");
     fireEvent.click(document.querySelector("[data-seat='2026-SEN-OH']") as Element);
-    expect(sheet.textContent).toContain("a margin from D+9 to R+5");
+    expect(sheet.textContent).toContain("margin D+9 to R+5");
+  });
+
+  it("labels a range by what it rests on, never polls on a seat with none", () => {
+    const unpolled = ranged({
+      difference: { strength: 0, direction: null, seatPolls: false },
+      rangeBasis: "no_poll",
+      rangeBasisLabel: "Margin range, no poll of this seat",
+      rangeBasisShort: "no poll",
+    } as Partial<RangedSeat>);
+    renderMap("polls", "senate", { seats: [unpolled] });
+    const ohio = screen.getByRole("button", { name: /^Ohio:/ });
+    expect(ohio.getAttribute("aria-label")).toContain(
+      "Margin range, no poll of this seat: D+9 to R+5"
+    );
+    fireEvent.click(ohio);
+    const detail = screen.getByRole("complementary", { name: "Seat detail" });
+    expect(detail.textContent).toContain("Margin range, no poll of this seat");
+    expect(detail.textContent).toContain("R+5 lean");
+    expect(detail.textContent).not.toMatch(/polls suggest|from polls/i);
+  });
+
+  it("lists one poll asked two ways once, with both questions", () => {
+    const base = (ranged() as RangedSeat).polls.list[0];
+    const seat = ranged({
+      polls: {
+        count: 2,
+        used: 1,
+        latest: "2026-10-06",
+        list: [
+          {
+            ...base,
+            questions: [
+              { dem: 40, rep: 49 },
+              { dem: 42, rep: 51 },
+            ],
+          },
+        ],
+      },
+    } as Partial<RangedSeat>);
+    renderMap("polls", "senate", { seats: [seat] });
+    fireEvent.click(screen.getByRole("button", { name: /^Ohio:/ }));
+    const list = screen.getByRole("list", { name: "Polls in the average" });
+    expect(within(list).getAllByRole("listitem")).toHaveLength(1);
+    expect(list.textContent).toContain("D 40 / R 49; D 42 / R 51");
+    expect(list.textContent).toContain("one poll asked 2 ways, counted once");
+  });
+
+  it("explains the Senate's faint tiles in every view", () => {
+    for (const view of ["usual", "polls", "diff"] as const) {
+      const { unmount } = renderMap(view, "senate");
+      expect(screen.getByText(/no Senate race in this state this year/)).toBeInTheDocument();
+      unmount();
+    }
   });
 
   it("draws a seat with no poll of its own with a dashed outline in the Polls view", () => {
@@ -524,6 +580,30 @@ describe("election map", () => {
       "href",
       "/elections/states/OH#race-2026-SEN-OH"
     );
+  });
+
+  it("names each view button by its label alone, thumbnails drawn (wide screen)", () => {
+    const original = window.matchMedia;
+    window.matchMedia = ((q: string) => ({
+      matches: q.includes("min-width"),
+      media: q,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia;
+    try {
+      renderMap("diff");
+      const group = screen.getByRole("group", { name: "Map view" });
+      // The Difference thumbnail draws « ‹ glyphs; none reach a name.
+      expect(group.querySelector("svg")).not.toBeNull();
+      expect(
+        within(group)
+          .getAllByRole("button")
+          .map((b) => b.getAttribute("aria-label"))
+      ).toEqual(["USUAL VOTE", "POLLS", "DIFFERENCE"]);
+      expect(within(group).getByRole("button", { name: "DIFFERENCE" })).toBeInTheDocument();
+    } finally {
+      window.matchMedia = original;
+    }
   });
 
   it("is a modal dialog on a phone: Escape closes it and focus goes back", async () => {

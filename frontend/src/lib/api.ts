@@ -922,6 +922,15 @@ export interface ExploreBillMatch {
 export interface ExploreMatches {
   members: { total: number; items: ExploreMemberMatch[] };
   bills: { total: number; items: ExploreBillMatch[] };
+  /** Optional only for a response cached before the field. */
+  agencies?: { total: number; items: ExploreAgencyMatch[] };
+}
+
+/** A Federal Register agency whose name, short name or description holds the search's words. */
+export interface ExploreAgencyMatch {
+  slug: string;
+  name: string;
+  shortName: string | null;
 }
 
 export async function fetchExploreMatches(q: string): Promise<ExploreMatches> {

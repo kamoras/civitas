@@ -66,6 +66,25 @@ TRAINING_CONDITION = "election-map-training-stale"
 # The newest polls a seat's detail lists (each with its source); every poll
 # in the average still counts, and "used" says how many there are.
 POLLS_SHOWN = 6
+# What a seat's range rests on, sent as a label so the page never calls a
+# range "polls" when no poll is in it: "polls" (the seat's own polls are in
+# the average), "no_poll" (none in the window: the usual vote, incumbency and
+# the national swing alone) or "before_window" (further out than the method
+# was checked with polls, so no poll enters any range).
+RANGE_BASIS = {
+    "polls": {"label": "Margin range, from polls", "short": "from polls"},
+    "no_poll": {"label": "Margin range, no poll of this seat", "short": "no poll"},
+    "before_window": {"label": "Margin range, before polls count", "short": "polls not counted yet"},
+}
+# The two numbers a seat shows are in different units, and both are written
+# "D+N": the page prints these beside them.
+UNITS = {
+    "lean": "Lean: how many points more Democratic (D) or Republican (R) a place votes than the whole "
+            "country, in each party's share of the vote.",
+    "margin": "Margin: how many points the Democrat or the Republican may finish ahead of the other. A margin "
+              "counts the gap between two shares, so it runs twice a lean: a place that leans D+8 has a margin "
+              "of D+16 when the country splits evenly.",
+}
 
 
 def map_path() -> str:
@@ -310,6 +329,7 @@ def build(db: Session, revisions: dict[str, dict] | None, today: date | None = N
         "pollsInRange": polls_used,
         "national": national,
         "bins": {"leansMax": LEANS_MAX, "usuallyMax": USUALLY_MAX},
+        "units": UNITS,
         "sources": {
             "lean": {chamber: meta for chamber, (_, meta) in leans.items()},
             "training": training,
@@ -418,9 +438,11 @@ def _seat(race, lean: float | None, params, national, revisions, titles: list[st
         # (priorScale): no poll enters the range.
         live["scale"] = params["priorScale"]
     r = model.predict({"lean": lean, "inc": inc}, poll_objs if polls_used else [], national["margin"], live)
-    used = {(p.pollster, p.days_out, p.margin) for p in (r["average"].used if r["average"] else ())}
+    # By identity: two rows of one pollster can share a date and a margin.
+    used = {id(p) for p in (r["average"].used if r["average"] else ())}
     for p, obj in zip(parsed, poll_objs):
-        p["usedInAverage"] = (obj.pollster, obj.days_out, obj.margin) in used
+        p["usedInAverage"] = id(obj) in used
+    basis = "before_window" if not polls_used else "polls" if r["average"] is not None else "no_poll"
     poll_share = 0.0
     if r["pollSd"] is not None:
         wp, wa = 1 / params["priorSd"] ** 2, 1 / r["pollSd"] ** 2
@@ -451,14 +473,28 @@ def _seat(race, lean: float | None, params, national, revisions, titles: list[st
         polls={"count": len(parsed), "used": r["pollsUsed"], "latest": latest,
                # Beyond the window no poll is in the range, so the list is
                # the newest polls, shown beside it.
-               "list": sorted((p for p in parsed if p["usedInAverage"] or not polls_used), key=lambda p: p["end"],
-                              reverse=True)[:POLLS_SHOWN],
+               "list": poll_list([p for p in parsed if p["usedInAverage"] or not polls_used]),
                "all": parsed},
         fundamentalsOnly=not polls_used,
+        rangeBasis=basis, rangeBasisLabel=RANGE_BASIS[basis]["label"], rangeBasisShort=RANGE_BASIS[basis]["short"],
         difference={"strength": strength,
                     "direction": None if strength == 0 else ("D" if r["mean"] < r["prior"] else "R"),
                     "seatPolls": r["average"] is not None},
     )
+
+
+def poll_list(rows: list[dict]) -> list[dict]:
+    """The polls a seat lists, newest first, one entry per poll. An article
+    prints one poll asked two ways (with and without leaners, say) as two
+    rows under one pollster and one set of dates; the average counts it once
+    (model.eligible, pollsUsed), so the list does too: the first row, with
+    every question's shares under "questions"."""
+    groups: dict[tuple, list[dict]] = {}
+    for p in rows:
+        groups.setdefault((model.pollster_key(p["pollster"]), p["end"]), []).append(p)
+    entries = [qs[0] if len(qs) == 1 else dict(qs[0], questions=[{"dem": q["dem"], "rep": q["rep"]} for q in qs])
+               for qs in groups.values()]
+    return sorted(entries, key=lambda p: p["end"], reverse=True)[:POLLS_SHOWN]
 
 
 async def refresh(db: Session) -> dict | None:

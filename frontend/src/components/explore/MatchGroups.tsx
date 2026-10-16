@@ -1,15 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import type { ExploreBillMatch, ExploreMatches, ExploreMemberMatch } from "@/lib/api";
+import type {
+  ExploreAgencyMatch,
+  ExploreBillMatch,
+  ExploreMatches,
+  ExploreMemberMatch,
+} from "@/lib/api";
 import { useConfig } from "@/hooks/useConfig";
 import { PARTY_BADGE } from "@/lib/partyStyles";
 import { billStageStyle } from "@/lib/billStages";
 import { billHref } from "@/lib/congress";
+import { agencyHref } from "@/lib/routes";
 import Photo from "@/components/Photo";
 
 /**
- * The members and bills a search names, as their own groups above Explore's
+ * The members, bills and agencies a search names, as their own groups above Explore's
  * document results (GET /api/explore/matches). Explore searches documents,
  * so a senator's surname listed thirty floor speeches and no link to the senator,
  * and "flag burning" never offered the Flag Burners Act. Grouped, never
@@ -24,10 +30,11 @@ export default function MatchGroups({
   query: string;
 }) {
   const { members, bills } = matches;
-  const both = members.total > 0 && bills.total > 0;
-  if (!members.total && !bills.total) return null;
+  const agencies = matches.agencies ?? { total: 0, items: [] };
+  const groups = [members, bills, agencies].filter((g) => g.total > 0).length;
+  if (!groups) return null;
   return (
-    <div className={`mb-4 grid gap-3 ${both ? "sm:grid-cols-2" : ""}`}>
+    <div className={`mb-4 grid gap-3 ${groups > 1 ? "sm:grid-cols-2" : ""}`}>
       {members.total > 0 && (
         <Group id="match-members" label="Members" count={members.total}>
           {members.items.map((m) => (
@@ -51,6 +58,25 @@ export default function MatchGroups({
         >
           {bills.items.map((b) => (
             <BillRow key={`${b.billId}-${b.congress}`} b={b} />
+          ))}
+        </Group>
+      )}
+      {agencies.total > 0 && (
+        <Group
+          id="match-agencies"
+          label="Agencies"
+          count={agencies.total}
+          more={
+            agencies.total > agencies.items.length
+              ? {
+                  href: `/agencies?q=${encodeURIComponent(query)}`,
+                  text: `Agencies named “${query}”`,
+                }
+              : null
+          }
+        >
+          {agencies.items.map((a) => (
+            <AgencyRow key={a.slug} a={a} />
           ))}
         </Group>
       )}
@@ -148,6 +174,22 @@ function BillRow({ b }: { b: ExploreBillMatch }) {
             </span>
           )}
         </span>
+      </Link>
+    </li>
+  );
+}
+
+function AgencyRow({ a }: { a: ExploreAgencyMatch }) {
+  return (
+    <li>
+      <Link
+        href={agencyHref(a.slug)}
+        className="flex min-h-11 items-center gap-2.5 border-b border-white/[0.06] py-1.5 text-sm text-ink-hi hover:text-phos"
+      >
+        <span className="min-w-0 flex-1 truncate">{a.name}</span>
+        {a.shortName && (
+          <span className="shrink-0 font-mono text-xs text-ink-lo">{a.shortName}</span>
+        )}
       </Link>
     </li>
   );
