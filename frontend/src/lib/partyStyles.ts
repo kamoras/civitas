@@ -65,3 +65,11 @@ export function policyAreaBadgeClass(party: string | null | undefined): string {
   if (party === "D") return PARTY_BADGE.D.className;
   return "text-signal-amber border-signal-amber/40 bg-signal-amber/10";
 }
+
+/** A party's members as a group, for a roll call's split ("Republicans"). */
+export const PARTY_PLURAL: Record<string, string> = {
+  R: "Republicans",
+  D: "Democrats",
+  I: "Independents",
+  ID: "Independents",
+};

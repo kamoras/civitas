@@ -186,10 +186,20 @@ def _event(e: CongressEvent) -> dict:
     }
 
 
+def amendment_fields(rc: RollCall) -> dict:
+    """The amendment a vote was on and its purpose as the record states it
+    (fetch/amendment_purpose.py): both null for a vote not on one, or one
+    not read yet; a purpose of "" is a record that states none."""
+    on_one = bool(rc.amendment)
+    return {"amendment": rc.amendment if on_one else None,
+            "amendmentPurpose": rc.amendment_purpose if on_one else None}
+
+
 def _vote(rc: RollCall, shaped: dict | None = None) -> dict:
     """`shaped`: the roll call's roll_call_shape.shape, read by the caller
     (shapes) where it can be an election, which needs its positions."""
     return {
+        **amendment_fields(rc),
         "chamber": rc.chamber, "congress": rc.congress, "session": rc.session, "number": rc.number,
         "date": rc.date, "question": rc.question, "title": rc.title, "result": rc.result,
         "rejected": rc.rejected, "majorityRequirement": rc.majority_requirement,

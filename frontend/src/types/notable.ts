@@ -1,7 +1,9 @@
 /** GET /api/notable (backend/app/api/notable.py): the homepage's "On the
  *  record" entries. Every figure and sentence is the backend's. */
 
-export interface NotableVote {
+import type { AmendmentFields } from "./congress";
+
+export interface NotableVote extends AmendmentFields {
   chamber: "senate" | "house";
   congress: number;
   session: number;

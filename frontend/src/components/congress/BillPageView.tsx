@@ -13,6 +13,7 @@ import SectionTabs from "@/components/layout/SectionTabs";
 import BillSources from "./BillSources";
 import CommitteeEntries from "./CommitteeEntries";
 import StageLadder from "./StageLadder";
+import BillJourney from "./BillJourney";
 import VotePanel from "./VotePanel";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
@@ -123,6 +124,12 @@ export default function BillPageView({
   const officialTitle = record?.shortTitle ? record.officialTitle : (detail?.officialTitle ?? null);
   const under = officialTitle || listed;
   const reportedDays = new Set((record?.days ?? []).map((d) => d.date));
+  // Where each glossary term first appears in the history, which is where
+  // its meaning is shown.
+  const explained = new Map<string, number>();
+  (record?.actions ?? []).forEach((a, i) => {
+    if (a.term && !explained.has(a.term)) explained.set(a.term, i);
+  });
   const unavailable = record?.unavailable ?? [];
   const stage = detail ? billStageStyle(detail.stage) : null;
   // What the bill does, in the CRS's words: the summary's first paragraph
@@ -233,6 +240,9 @@ export default function BillPageView({
                       </a>
                     </p>
                   </div>
+                )}
+                {record?.journey && (
+                  <BillJourney journey={record.journey} passage={record.passage} />
                 )}
                 {detail?.stageMilestones && <StageLadder data={detail.stageMilestones} />}
                 <div className="flex flex-wrap items-center gap-2">
@@ -432,7 +442,11 @@ export default function BillPageView({
                       record
                         ? record.coverage?.votes.held === false
                           ? "not held"
-                          : `${record.votes.length} recorded`
+                          : !record.votes.length &&
+                              record.passage?.length &&
+                              record.passage.every((p) => p.method !== "rollCall")
+                            ? "no roll call"
+                            : `${record.votes.length} recorded`
                         : undefined
                     }
                     shareable
@@ -445,6 +459,7 @@ export default function BillPageView({
                     named={record?.actions.flatMap((a) =>
                       a.rollCalls.map((rc) => ({ ...rc, date: a.date }))
                     )}
+                    passage={record?.passage}
                   />
                 </section>
 
@@ -532,7 +547,17 @@ export default function BillPageView({
                           <span className="font-mono text-xs tabular-nums text-ink-lo">
                             {shortDate(a.date).slice(5)}, {a.date.slice(0, 4)}
                           </span>
-                          <span className="text-sm leading-relaxed text-ink">{a.text}</span>
+                          <span className="flex min-w-0 flex-col gap-1">
+                            <span className="text-sm leading-relaxed text-ink">{a.text}</span>
+                            {/* A procedural term's plain meaning, from the
+                                glossary keyed by the action's code
+                                (bill_journey), the first time it appears. */}
+                            {a.term && a.meaning && explained.get(a.term) === i && (
+                              <span className="text-xs leading-relaxed text-ink-lo">
+                                <span className="font-bold text-ink">{a.term}:</span> {a.meaning}
+                              </span>
+                            )}
+                          </span>
                           {reportedDays.has(a.date) ? (
                             <Link
                               href={dayHref(a.date)}
