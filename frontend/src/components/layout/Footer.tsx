@@ -55,7 +55,10 @@ export default function Footer() {
     <footer className="border-t-3 border-white/15 bg-surface-base px-4 py-8 sm:px-6">
       <div className="mx-auto max-w-7xl">
         <nav aria-label="Footer navigation" className="border-b border-white/[0.07] pb-5">
-          <div className="grid grid-cols-2 gap-x-6 gap-y-6 sm:grid-cols-4 lg:grid-cols-7">
+          {/* Columns at least 9.5rem wide, as many as fit: seven in a row
+              at 1280 px, two on a phone, and fewer as the text grows, so a
+              200% text size reflows instead of overflowing (WCAG 1.4.4). */}
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,9.5rem),1fr))] gap-x-6 gap-y-6">
             {FOOTER_SECTIONS.map((key) => {
               const { label, href } = SECTIONS[key];
               const subs = sectionSubpages(key);
@@ -115,8 +118,8 @@ export default function Footer() {
           40px gap when they stack on mobile. The globals.css comment calls out
           this exact hazard.
         */}
-        <div className="grid grid-cols-1 gap-6 pt-5 md:grid-cols-12 md:gap-9">
-          <div className="md:col-span-4">
+        <div className="grid grid-cols-1 gap-6 pt-5 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] md:gap-9">
+          <div>
             {/* CIVITAS appears at the top of every page (nav) and, on the
                 homepage, in the overprint mark too — this colophon is the
                 one place the FULL name belongs: civitas-research.org is the
@@ -124,7 +127,7 @@ export default function Footer() {
                 the standing name for the project itself, stated once, the
                 way a masthead credits a publication under its logo rather
                 than repeating the logo. */}
-            <p className="font-mono text-xs leading-[1.9] tracking-[0.08em] text-ink-min">
+            <p className="font-mono text-xs leading-[1.9] tracking-[0.08em] text-ink-min [overflow-wrap:anywhere]">
               CIVITAS RESEARCH
               <br />
               OPEN SOURCE PUBLIC-INTEREST PROJECT
@@ -137,7 +140,7 @@ export default function Footer() {
             </p>
           </div>
 
-          <div className="md:col-span-8">
+          <div>
             <p className="font-display text-base leading-relaxed text-ink-lo">
               All data sourced from public records, principally: FEC campaign finance filings
               (fec.gov); bills and roll-call votes from Congress.gov, Senate.gov and the House

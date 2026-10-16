@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { SECTIONS, inSection, sectionSubpages, type SectionKey } from "@/lib/routes";
 import { BSKY_PROFILE_URL } from "@/lib/site";
 import RecordsBand from "./RecordsBand";
@@ -56,6 +56,56 @@ function currentSubpage(section: SectionKey, href: string, pathname: string): bo
   return (
     path === pathname && SECTIONS[section].tabs.filter((t) => pathOf(t.href) === path).length === 1
   );
+}
+
+// Where the desktop row replaces MENU, and where it takes its full
+// treatment, in rem so both move with the reader's text size (a larger
+// default font or zoom reaches MENU sooner, never an overflowing row).
+// Measured under `next build` at the default size: the compact row is
+// 599 px beside a 116 px wordmark, so from 56rem (896 px) it has 149 px to
+// spare; the full row is 839 px beside a 132 px wordmark, 261 px to spare
+// from 80rem (1280 px). The margins are for a longer label or a wider
+// fallback face; past them, useRowFits below switches to MENU.
+// Written out in full where used (min-[56rem]:…, xl:…): Tailwind finds
+// classes by scanning for whole strings, never a built one.
+// The least space kept between the wordmark and the row.
+const MIN_GAP_PX = 24;
+
+/**
+ * Whether the desktop row fits its bar, measured: the rem breakpoints
+ * above are the layout, this is the guard behind them. If the row (or a
+ * translated label, or a fallback face) is wider than the bar leaves, the
+ * header takes the MENU layout at that width instead of overflowing or
+ * wrapping past `--header-clearance`. A row that doesn't fit stays laid out
+ * (invisible and inert), so it is still measured, and comes back as soon as
+ * it fits. Without ResizeObserver (a test, an old browser) the
+ * breakpoints alone decide.
+ */
+export function useRowFits(
+  bar: React.RefObject<HTMLElement | null>,
+  logo: React.RefObject<HTMLElement | null>,
+  row: React.RefObject<HTMLElement | null>
+): boolean {
+  const [fits, setFits] = useState(true);
+  useEffect(() => {
+    const b = bar.current;
+    if (!b || typeof ResizeObserver === "undefined") return;
+    let needed = 0;
+    const check = () => {
+      const r = row.current;
+      if (r && r.offsetWidth > 0)
+        needed = (logo.current?.offsetWidth ?? 0) + r.scrollWidth + MIN_GAP_PX;
+      const style = getComputedStyle(b);
+      const room = b.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+      setFits(needed === 0 || needed <= room);
+    };
+    const ro = new ResizeObserver(check);
+    ro.observe(b);
+    if (row.current) ro.observe(row.current);
+    check();
+    return () => ro.disconnect();
+  }, [bar, logo, row]);
+  return fits;
 }
 
 const SUBLINK =
@@ -125,7 +175,7 @@ function SectionItem({
       <Link
         href={href}
         aria-current={active ? "page" : undefined}
-        className={`tracking-normal lg:tracking-widest ${navLinkClass(active, section === ACCENT, "xs")}`}
+        className={`tracking-normal xl:tracking-widest ${navLinkClass(active, section === ACCENT, "xs")}`}
       >
         {label.toUpperCase()}
       </Link>
@@ -190,6 +240,12 @@ export default function Navbar() {
   const closeSection = useCallback(() => setOpened(null), []);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
+  const logoRef = useRef<HTMLAnchorElement>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
+  const rowFits = useRowFits(barRef, logoRef, rowRef);
+  // MENU's breakpoint, or always MENU when the row doesn't fit.
+  const menuOnly = rowFits ? "min-[56rem]:hidden" : "";
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 50);
@@ -252,32 +308,43 @@ export default function Navbar() {
       {/* The skip link is the root layout's, ahead of everything: a second
           one here cost keyboard users an extra Tab on every page. */}
       <nav aria-label="Main navigation" className="border-b-3 border-white/15">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+        <div
+          ref={barRef}
+          className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between"
+        >
           <Link
+            ref={logoRef}
             href="/"
-            className="font-pixel text-xs sm:text-sm md:text-xs lg:text-sm text-ink-hi hover:text-phos transition-colors tracking-widest"
+            className="font-pixel text-xs sm:text-sm min-[56rem]:text-xs xl:text-sm text-ink-hi hover:text-phos transition-colors tracking-widest"
           >
             CIVITAS
           </Link>
 
           {/*
-          One row from 768 px, compact below lg (tighter gap, normal
-          tracking, no [BSKY], which the footer carries anyway) and full from
-          lg. It was two rows, one per width, which each section's pages
-          would have given two copies of every id.
+          One row from 56rem (896 px at the default text size), compact
+          below xl (tighter gap, normal tracking, no [BSKY], which the footer
+          carries anyway) and full from xl. It was two rows, one per width,
+          which each section's pages would have given two copies of every
+          id. The widths and margins are in the comment above useRowFits.
 
-          Measured under `next build`: seven sections with a 24 px pages
-          button each are 599 px compact (no tracking, 8 px gaps, the
-          wordmark at text-xs) beside the wordmark at 768 px, the narrowest
-          width the row renders at, ending at x=740 of a 744 px content
-          edge; and 839 px full at 1024 px, 25 px clear of the wordmark.
-
-          `flex-nowrap` is the guard, not the layout: if a fallback face ever
-          measures wider than Share Tech Mono, the row overflows — which the
-          route audit catches as horizontal scroll — rather than silently
-          wrapping and clipping the top of every page again.
+          It started at 768 px with 4 px to spare, so one longer label or a
+          larger text size would have overflowed it. Now the breakpoints are
+          in rem (they move with the text size) with ~150 px to spare, and
+          useRowFits switches to MENU at any width where the measured row
+          still doesn't fit. `flex-nowrap` stays: a wrapped row would push
+          the header past `--header-clearance` and clip every page.
         */}
-          <div className="hidden md:flex items-center gap-2 lg:gap-6 flex-nowrap">
+          <div
+            ref={rowRef}
+            data-testid="nav-row"
+            // Not fitting, it stays laid out but invisible, inert and out of
+            // the flow, so useRowFits can still measure it and bring it back
+            // when it fits again (the window widens, the text shrinks).
+            inert={!rowFits}
+            className={`hidden min-[56rem]:flex items-center gap-2 xl:gap-6 flex-nowrap ${
+              rowFits ? "" : "invisible pointer-events-none absolute right-0"
+            }`}
+          >
             {NAV.map((section, i) => (
               <SectionItem
                 key={section}
@@ -298,7 +365,7 @@ export default function Navbar() {
               rel="noopener noreferrer"
               aria-label="Civitas on Bluesky (opens in new tab)"
               title="Follow Civitas on Bluesky"
-              className="hidden lg:inline text-ink-lo hover:text-phos font-mono text-xs tracking-widest transition-colors"
+              className="hidden xl:inline text-ink-lo hover:text-phos font-mono text-xs tracking-widest transition-colors"
             >
               [BSKY]
             </a>
@@ -310,7 +377,7 @@ export default function Navbar() {
               move. It was the 36x20 word alone, in the hardest thumb zone. */}
           <button
             ref={toggleRef}
-            className="md:hidden -my-3 -mr-2 inline-flex min-h-11 min-w-11 items-center justify-center px-2 text-ink-lo hover:text-ink-hi font-mono text-sm tracking-widest transition-colors"
+            className={`${menuOnly} -my-3 -mr-2 inline-flex min-h-11 min-w-11 items-center justify-center px-2 text-ink-lo hover:text-ink-hi font-mono text-sm tracking-widest transition-colors`}
             onClick={() => (menuOpen ? closeMenu() : setMenuOpen(true))}
             aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"}
             aria-expanded={menuOpen}
@@ -328,7 +395,7 @@ export default function Navbar() {
           <div
             ref={menuRef}
             id="mobile-menu"
-            className="md:hidden max-h-[calc(100dvh-5.5rem)] overflow-y-auto overscroll-contain bg-surface-base/[0.98] border-t border-white/[0.07] px-6 pt-2 pb-6"
+            className={`${menuOnly} max-h-[calc(100dvh-5.5rem)] overflow-y-auto overscroll-contain bg-surface-base/[0.98] border-t border-white/[0.07] px-6 pt-2 pb-6`}
           >
             <ul>
               {NAV.map((section) => {
