@@ -345,10 +345,7 @@ function SeatDetail({
         <div>
           <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">Usual vote</dt>
           <dd className="text-ink-hi">
-            {seat.leanLabel}{" "}
-            <span className="text-ink-min">
-              (Cook PVI {seat.leanLabel}: the same formula, reproduced)
-            </span>
+            {seat.leanLabel} <span className="text-ink-min">(Cook PVI {seat.leanLabel})</span>
           </dd>
         </div>
         {seat.status === "range" ? (
@@ -401,7 +398,7 @@ function SeatDetail({
                   {p.partisan && (
                     <span className="text-ink-min">
                       {" "}
-                      (marked {p.partisan === "R" ? "Republican" : "Democratic"}-sponsored)
+                      (marked partisan, {p.partisan}, by the article)
                     </span>
                   )}{" "}
                   · {p.end}
