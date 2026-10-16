@@ -549,9 +549,9 @@ function StateSheet({
             >
               <span className="text-ink-hi">{seatName(s)}</span>
               <span className="font-mono text-xs">
-                usual {s.leanLabel ?? "–"}
+                lean {s.leanLabel ?? "–"}
                 {s.status === "range"
-                  ? ` · polls ${rangeLabel(s)}${crossesEven(s) ? " · close" : ""}`
+                  ? ` · margin ${rangeLabel(s)}${s.rangeBasisShort ? ` (${s.rangeBasisShort})` : ""}${crossesEven(s) ? " · close" : ""}`
                   : " · no D-vs-R range"}
               </span>
             </button>
@@ -580,6 +580,20 @@ function DashedKey() {
   );
 }
 
+/** The Senate's faint tiles: a state with no seat on this ballot. Worded
+ * for any cycle (a third of the states vote each time, never the same third). */
+function NoRaceKey({ data }: { data: ElectionMapData }) {
+  if (data.chamber !== "senate") return null;
+  return (
+    <p className="mt-1 flex items-center gap-2 font-mono text-[10px] text-ink-lo sm:text-xs">
+      <svg viewBox="0 0 10 6" className="inline-block h-3 w-4 align-middle" aria-hidden="true">
+        <rect width="10" height="6" fill={NO_CONTEST_FILL} />
+      </svg>
+      Faint tile, faint letters: no Senate race in this state this year.
+    </p>
+  );
+}
+
 function Legend({ data, view }: { data: ElectionMapData; view: MapView }) {
   const hatch = `lg-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   if (view === "diff") {
@@ -597,6 +611,9 @@ function Legend({ data, view }: { data: ElectionMapData; view: MapView }) {
         <li className="basis-full text-ink-min">
           One mark: the usual vote (with incumbency and the national swing) is outside the
           seat&apos;s 80% poll range; two: outside its 95% range.
+        </li>
+        <li className="basis-full">
+          <NoRaceKey data={data} />
         </li>
       </ul>
     );
@@ -627,6 +644,7 @@ function Legend({ data, view }: { data: ElectionMapData; view: MapView }) {
           <DashedKey /> no poll of this seat: the usual vote and the national swing only
         </p>
       )}
+      <NoRaceKey data={data} />
       {data.seats.some((s) => s.status === "no_lean") && (
         <p className="mt-1 font-mono text-[10px] text-ink-lo sm:text-xs">
           Empty dashed square: Civitas has no usual-vote figure for that seat.
@@ -634,9 +652,12 @@ function Legend({ data, view }: { data: ElectionMapData; view: MapView }) {
       )}
       <p className="mt-1 font-mono text-[10px] text-ink-min sm:text-xs">
         {view === "usual"
-          ? "Points more Republican (R) or Democratic (D) than the nation, in the last two presidential elections."
-          : "Margin in points. A seat is coloured by the end of its range nearest even, so a range that crosses even is grey. Dark: no range (no Democrat-versus-Republican race, or its ballot not yet confirmed)."}
+          ? `${data.units?.lean ?? "Points more Republican (R) or Democratic (D) than the nation."} From the last two presidential elections.`
+          : `A seat is coloured by the end of its range nearest even, so a range that crosses even is grey. Dark${data.chamber === "senate" ? ", with bright letters" : ""}: no range (no Democrat-versus-Republican race, or its ballot not yet confirmed).`}
       </p>
+      {view === "polls" && data.units && (
+        <p className="mt-1 font-mono text-[10px] text-ink-min sm:text-xs">{data.units.margin}</p>
+      )}
     </div>
   );
 }
@@ -720,7 +741,7 @@ function SeatDetail({
         <div>
           <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">Usual vote</dt>
           <dd className="text-ink-hi">
-            {seat.leanLabel ?? "No figure"}{" "}
+            {seat.leanLabel ? `${seat.leanLabel} lean` : "No figure"}{" "}
             <span className="text-ink-min">
               {seat.district == null
                 ? "(Civitas, from official returns)"
@@ -731,10 +752,10 @@ function SeatDetail({
         {seat.status === "range" ? (
           <div>
             <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
-              {seat.fundamentalsOnly ? "Fundamentals only" : "Polls suggest"}
+              {seat.rangeBasisLabel ?? "Margin range"}
             </dt>
             <dd>
-              <span className="text-ink-hi">a margin from {rangeLabel(seat)}</span>
+              <span className="text-ink-hi">margin {rangeLabel(seat)}</span>
               {crossesEven(seat) && (
                 <span className="ml-2 font-mono text-xs">TOO CLOSE TO TELL</span>
               )}
@@ -791,8 +812,19 @@ function SeatDetail({
                   )}{" "}
                   · {p.end}
                   {p.sample ? ` · ${p.sample.toLocaleString("en-US")} ${p.population}` : ""} ·{" "}
-                  <span className="text-dem-blue">D {p.dem}</span> /{" "}
-                  <span className="text-rep-red">R {p.rep}</span>
+                  {(p.questions ?? [{ dem: p.dem, rep: p.rep }]).map((q, j) => (
+                    <span key={j}>
+                      {j ? "; " : ""}
+                      <span className="text-dem-blue">D {q.dem}</span> /{" "}
+                      <span className="text-rep-red">R {q.rep}</span>
+                    </span>
+                  ))}
+                  {p.questions && (
+                    <span className="text-ink-min">
+                      {" "}
+                      (one poll asked {p.questions.length} ways, counted once)
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>
@@ -871,14 +903,14 @@ function SeatTable({ data, onSelect }: { data: ElectionMapData; onSelect: (id: s
     <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Every seat, as a table">
       <table className="w-full min-w-[40rem] border-collapse text-sm text-ink-lo">
         <caption className="sr-only">
-          Every {data.cycle} {chamberWord(data.chamber)} seat: usual vote, poll range, polls used
+          Every {data.cycle} {chamberWord(data.chamber)} seat: usual vote, margin range, polls used
           and difference
         </caption>
         <thead className="border-b border-white/20">
           <tr>
             {th("seat", "Seat")}
-            {th("usual", "Usual vote")}
-            {th("range", "Poll range (80%)")}
+            {th("usual", "Usual vote (lean)")}
+            {th("range", "Margin range (80%)")}
             {th("polls", "Polls used")}
             <th
               scope="col"
@@ -907,6 +939,9 @@ function SeatTable({ data, onSelect }: { data: ElectionMapData; onSelect: (id: s
                   <>
                     {rangeLabel(s)}
                     {crossesEven(s) ? " · close" : ""}
+                    {s.rangeBasisShort && (
+                      <span className="font-sans text-xs text-ink-min"> ({s.rangeBasisShort})</span>
+                    )}
                   </>
                 ) : (
                   <span className="font-sans text-xs">
@@ -941,7 +976,7 @@ function SeatTable({ data, onSelect }: { data: ElectionMapData; onSelect: (id: s
 
 /**
  * The general-election map: how each Senate seat usually votes, what
- * this year's polls suggest (a range of the margin, never a winner), and
+ * a range of each margin (from polls where a seat has any, never a winner), and
  * where the two disagree. All figures from GET /api/elections/map.
  *
  * View state: latched at mount from the server-read `?view=` (the page
@@ -1154,6 +1189,9 @@ export default function ElectionMap({
                   key={v}
                   type="button"
                   aria-pressed={view === v}
+                  // The name is the label alone: the thumbnail's glyphs
+                  // (« ‹ › ») are a picture, never part of it (WCAG 4.1.2).
+                  aria-label={VIEW_LABEL[v]}
                   disabled={disabled}
                   onClick={() => setView(v)}
                   className={`min-h-11 flex-1 border px-2 sm:flex-none sm:px-4 ${
@@ -1201,6 +1239,10 @@ export default function ElectionMap({
             aria-labelledby="general-map-stamp"
             className="relative min-w-0 scroll-mt-[var(--header-clearance)] border border-phos/20 bg-surface p-3 sm:p-4"
             {...{ [SHARE_SECTION_ATTR]: "general-map" }}
+            // A share image is drawn at a fixed layout width with the tile
+            // map, whatever the screen: a phone's House state list made a
+            // 1:8 strip a feed shrinks to nothing (globals.css).
+            data-share-fixed-layout=""
             {...shareMetaAttrs({
               source: SHARE_SOURCE,
               asOf: data.asOf,
@@ -1274,12 +1316,13 @@ export default function ElectionMap({
               </p>
             )}
             {chamber === "house" && (
-              <div className="mt-3 md:hidden">
+              <div className="mt-3 md:hidden" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
                 <HouseStateList data={data} view={view} onState={openState} />
               </div>
             )}
             <div
               className={`mx-auto mt-3 max-w-[38rem] ${chamber === "house" ? "hidden md:block" : ""}`}
+              data-share-show=""
             >
               <TileMap
                 data={data}

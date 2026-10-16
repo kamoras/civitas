@@ -35,13 +35,21 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
           {house
             ? `precinct returns placed on the ${data.cycle} district lines`
             : "official returns"}
-          . No model is involved.
+          . No model is involved. Written D+N or R+N, it is N points of the two-party vote: the
+          party&apos;s share here minus its share nationwide.
         </li>
         <li>
           <strong className="text-ink">Polls</strong> is an 80% range for the margin: the usual
           vote, plus incumbency and the national generic-ballot average, combined with the
           seat&apos;s own polls. A seat is coloured by the end of its range nearest even, so a range
-          that crosses even is grey and labelled too close to tell.
+          that crosses even is grey and labelled too close to tell. The margin is the Republican
+          share of the two-party vote minus the Democratic share, also written D+N or R+N but on
+          twice the lean&apos;s scale: a gap between two shares, where a lean is one share against
+          the nation&apos;s. A seat leaning D+8 has a margin of D+16 when the nation splits evenly,
+          so a margin printed beside a lean is not a swing. Each range is labelled by what it rests
+          on: <em>from polls</em> when the seat&apos;s own polls are in the average,{" "}
+          <em>no poll of this seat</em> when none is (the structural line alone), and{" "}
+          <em>before polls count</em> further out than the poll window.
         </li>
         <li>
           <strong className="text-ink">Difference</strong> marks seats whose polls pull the range
