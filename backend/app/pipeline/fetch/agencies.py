@@ -214,7 +214,14 @@ def _store_toptier(db: Session, toptier: list[dict], matches: dict[str, tuple[st
         row.obligated = t.get("obligated_amount")
         row.outlays = t.get("outlay_amount")
         row.synced_at = now
+        row.retired_at = None
         db.add(row)
+    # A read that succeeded and no longer lists an agency retires it, dated:
+    # its last figures are kept, and never counted among this year's.
+    listed = {t["toptier_code"] for t in toptier}
+    for code, row in stored.items():
+        if code not in listed and row.retired_at is None:
+            row.retired_at = now
 
 
 def _alert(source: str, ok: bool) -> None:

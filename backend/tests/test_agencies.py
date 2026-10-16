@@ -161,7 +161,7 @@ def _seed(db):
     db.add(AgencyBudget(toptier_code="075", name="Department of Health and Human Services",
                         agency_slug="health-and-human-services-department", match_score=0.96,
                         fiscal_year=2026, fiscal_quarter=4, budget_authority=2.0e12, synced_at=NOW,
-                        by_year=json.dumps([{"fiscalYear": 2026, "budgetaryResources": 2.1e12}])))
+                        by_year=json.dumps([{"fiscalYear": 2026, "budgetaryResources": 2.0e12}])))
     db.add(AgencyBudget(toptier_code="999", name="Vietnam Education Foundation", fiscal_year=2026,
                         budget_authority=0.0, synced_at=NOW))
     db.add_all([
@@ -237,3 +237,74 @@ class TestApi:
             {"id": "food-and-drug-administration", "lastmod": "2026-10-01"},
             {"id": "health-and-human-services-department", "lastmod": "2026-10-01"},
         ]
+
+
+class TestBudgetStates:
+    def _rrb(self, db, **kw):
+        db.add(Agency(slug="railroad-retirement-board", fr_id=9, name="Railroad Retirement Board", synced_at=NOW))
+        row = dict(toptier_code="060", name="Railroad Retirement Board", agency_slug="railroad-retirement-board",
+                   fiscal_year=2026, budget_authority=0.0, obligated=0.0, outlays=0.0, synced_at=NOW,
+                   by_year=json.dumps([{"fiscalYear": 2025, "budgetaryResources": 17.8e9, "throughPeriod": 12}]))
+        row.update(kw)
+        db.add(AgencyBudget(**row))
+        db.commit()
+
+    def test_a_year_not_reported_yet_is_not_a_zero(self, db_session):
+        # USAspending's list says 0.0 for FY2026; its year-by-year record has
+        # no FY2026 at all.
+        self._rrb(db_session)
+        body = _get(db_session, "/api/agencies/railroad-retirement-board").json()
+        assert body["budgetStatus"] == "not_yet_reported"
+        assert body["budget"]["budgetAuthority"] is None and body["budget"]["reported"] is False
+        assert body["budget"]["latest"]["fiscalYear"] == 2025
+        index = _get(db_session, "/api/agencies").json()["budget"]
+        row = index["agencies"][0]
+        assert row["share"] is None and row["budgetAuthority"] is None and index["reportedCount"] == 0
+
+    def test_listed_with_no_figures_for_any_year_is_none(self, db_session):
+        self._rrb(db_session, by_year="[]")
+        assert _get(db_session, "/api/agencies/railroad-retirement-board").json()["budgetStatus"] == "none"
+
+    def test_a_retired_row_is_kept_dated_and_left_out_of_the_year(self, db_session):
+        self._rrb(db_session, retired_at=datetime(2026, 10, 14), budget_authority=5.0e9)
+        body = _get(db_session, "/api/agencies/railroad-retirement-board").json()
+        assert body["budgetStatus"] == "retired" and body["budget"]["retiredAt"] == "2026-10-14"
+        assert _get(db_session, "/api/agencies").json()["budget"] is None
+
+    def test_never_read_and_unmatched_are_told_apart(self, db_session):
+        db_session.add(Agency(slug="x-board", fr_id=7, name="X Board", synced_at=NOW))
+        db_session.commit()
+        assert _get(db_session, "/api/agencies/x-board").json()["budgetStatus"] == "not_read"
+        assert _get(db_session, "/api/agencies").json()["budgetStatus"] == "not_read"
+        db_session.add(AgencyBudget(toptier_code="999", name="Vietnam Education Foundation", fiscal_year=2026,
+                                    budget_authority=0.0, synced_at=NOW))
+        db_session.commit()
+        body = _get(db_session, "/api/agencies/x-board").json()
+        assert body["budgetStatus"] == "unmatched" and body["unmatchedBudgets"] == ["Vietnam Education Foundation"]
+
+    async def test_a_read_that_drops_an_agency_retires_it(self, db_session, quiet_alerts):
+        async with _client({ag.FR_AGENCIES_URL: FR_LIST, ag.TOPTIER_URL: TOPTIER, **_budget_urls(YEARS)}) as c:
+            await ag.sync_agencies(db_session, c)
+        fewer = {"results": TOPTIER["results"][:2]}
+        async with _client({ag.FR_AGENCIES_URL: FR_LIST, ag.TOPTIER_URL: fewer, **_budget_urls(YEARS)}) as c:
+            await ag.sync_agencies(db_session, c)
+        assert db_session.get(AgencyBudget, "999").retired_at is not None
+        assert db_session.get(AgencyBudget, "068").retired_at is None
+        # An outage retires nothing.
+        async with _client({ag.FR_AGENCIES_URL: FR_LIST, ag.TOPTIER_URL: 503}) as c:
+            await ag.sync_agencies(db_session, c)
+        assert db_session.get(AgencyBudget, "068").retired_at is None
+
+
+def test_an_agency_page_lists_the_action_center_issues_citing_its_documents(db_session):
+    from app.models import ActionIssue
+
+    _seed(db_session)
+    doc = db_session.query(ExploreDocument).filter_by(title="Food labels").one()
+    db_session.add_all([
+        ActionIssue(date="2026-10-02", rank=1, title="Food labels change", related_explore_ids=json.dumps([doc.id])),
+        ActionIssue(date="2026-10-03", rank=1, title="Unrelated", related_explore_ids="[]"),
+    ])
+    db_session.commit()
+    body = _get(db_session, "/api/agencies/health-and-human-services-department").json()
+    assert [i["title"] for i in body["actionIssues"]] == ["Food labels change"]

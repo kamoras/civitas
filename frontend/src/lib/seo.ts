@@ -372,9 +372,11 @@ export function describeAgencyIndex(): { title: string; description: string } {
 export function describeAgency(a: AgencyDetail): { title: string; description: string } {
   const name = a.shortName && a.shortName !== a.name ? `${a.name} (${a.shortName})` : a.name;
   const parts = [
-    a.budget?.budgetAuthority != null && a.budget.fiscalYear
+    a.budget?.reported && a.budget.budgetAuthority != null
       ? `${formatCurrency(a.budget.budgetAuthority)} in budgetary resources in FY${a.budget.fiscalYear}`
-      : null,
+      : a.budget?.latest?.budgetaryResources != null
+        ? `${formatCurrency(a.budget.latest.budgetaryResources)} in budgetary resources in FY${a.budget.latest.fiscalYear}`
+        : null,
     a.documents.openCommentsCount > 0
       ? `${a.documents.openCommentsCount} open comment period${a.documents.openCommentsCount === 1 ? "" : "s"}`
       : null,

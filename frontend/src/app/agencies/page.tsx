@@ -76,8 +76,11 @@ export default async function AgenciesPage({
   const withRecords = listed.filter((a) => a.documents > 0 || a.budgetAuthority != null);
   const without = listed.filter((a) => !(a.documents > 0 || a.budgetAuthority != null));
   const fy = budget ? fiscalYearLabel(budget.fiscalYear, budget.throughPeriod) : "";
-  const shown = budget?.agencies.slice(0, BARS_SHOWN) ?? [];
-  const rest = budget?.agencies.slice(BARS_SHOWN) ?? [];
+  // Reported agencies come first (the backend's order); one not yet
+  // reported is never a bar.
+  const shown = budget?.agencies.filter((r) => r.reported).slice(0, BARS_SHOWN) ?? [];
+  const rest = budget?.agencies.filter((r) => !shown.includes(r)) ?? [];
+  const unreported = budget ? budget.agencies.length - budget.reportedCount : 0;
 
   return (
     <ShareSubjectProvider
@@ -130,6 +133,12 @@ export default async function AgenciesPage({
               </button>
             </form>
 
+            {!budget && (
+              <p className="mb-10 text-sm text-ink-lo">
+                USAspending.gov&apos;s budgets haven&apos;t been read yet, so no spending is shown.
+                That is a gap on Civitas, not a government without a budget.
+              </p>
+            )}
             {budget && (
               <section
                 id="budget"
@@ -151,7 +160,11 @@ export default async function AgenciesPage({
                   <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink">
                     Budgetary resources are the money an agency can commit in a fiscal year: new
                     funding from Congress plus what it carried over. {formatCurrency(budget.total)}{" "}
-                    across {budget.agencies.length} agencies in {fy}; the {shown.length} largest:
+                    across the {budget.reportedCount} agencies that have reported {fy}
+                    {unreported > 0
+                      ? ` (${unreported} more haven't reported FY${budget.fiscalYear} yet)`
+                      : ""}
+                    ; the {shown.length} largest:
                   </p>
                   <div className="mt-4">
                     <BudgetBars rows={shown} />

@@ -50,6 +50,7 @@ def upgrade() -> None:
         sa.Column('by_year', sa.Text(), nullable=True),
         sa.Column('by_year_synced_at', sa.DateTime(), nullable=True),
         sa.Column('synced_at', sa.DateTime(), nullable=False),
+        sa.Column('retired_at', sa.DateTime(), nullable=True),
         sa.PrimaryKeyConstraint('toptier_code'),
     )
     op.create_index('ix_agency_budgets_agency_slug', 'agency_budgets', ['agency_slug'])

@@ -4,8 +4,8 @@ import { notFound } from "next/navigation";
 import { absoluteUrl, notFoundMetadata, pageMetadata } from "@/lib/site";
 import { agencyJsonLd, describeAgency } from "@/lib/seo";
 import { fetchAgency } from "@/lib/agencyServer";
-import { fiscalYearLabel } from "@/lib/agencies";
-import { commentPeriodToday, formatCurrency, safeHref } from "@/lib/formatting";
+import { fiscalYearLabel, money, readOn } from "@/lib/agencies";
+import { commentPeriodToday, safeHref } from "@/lib/formatting";
 import { agencyExploreHref, agencyHref } from "@/lib/routes";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
@@ -50,9 +50,129 @@ function Figure({ label, value, note }: { label: string; value: string; note?: s
   );
 }
 
+/** Budget figures by the state USAspending's data is in for this agency
+ * (backend api/agencies._budget_status): each worded on its own, a year not
+ * yet reported never shown as $0, and an outage never as "no budget". */
+function BudgetBlock({ a }: { a: AgencyDetail }) {
+  const b = a.budget;
+  const status = a.budgetStatus;
+  const LINK = "text-signal-cyan underline underline-offset-2 hover:text-phos";
+  if (status === "part_of" && a.budgetOf) {
+    return (
+      <p className="mt-3 text-sm text-ink">
+        Its spending is reported within the budget of the{" "}
+        <Link href={agencyHref(a.budgetOf.slug)} className={LINK}>
+          {a.budgetOf.name}
+        </Link>
+        .
+      </p>
+    );
+  }
+  if (status === "not_read" || !b) {
+    return status === "unmatched" ? (
+      <div className="mt-3 text-sm text-ink-lo">
+        <p>
+          No agency in USAspending.gov&apos;s list matched this one by name closely enough to link
+          the two, so no budget is shown rather than a guessed one.
+        </p>
+        {a.unmatchedBudgets.length > 0 && (
+          <details className="mt-2" data-share-exclude>
+            <summary className="inline-flex min-h-6 cursor-pointer items-center font-mono text-xs text-ink-min hover:text-phos">
+              USAspending agencies left unlinked: {a.unmatchedBudgets.length}
+            </summary>
+            <p className="mt-1 text-xs leading-relaxed">{a.unmatchedBudgets.join("; ")}.</p>
+          </details>
+        )}
+      </div>
+    ) : (
+      <p className="mt-3 text-sm text-ink-lo">
+        USAspending.gov&apos;s budgets haven&apos;t been read yet, so none is shown. That is a gap
+        on Civitas, not an agency without a budget.
+      </p>
+    );
+  }
+  const latest = b.latest;
+  const current = b.reported;
+  return (
+    <>
+      {status === "none" ? (
+        <p className="mt-3 text-sm text-ink-lo">
+          USAspending.gov lists {b.name} but reports no budget figures for it in any fiscal year.
+        </p>
+      ) : (
+        <>
+          {status === "retired" && (
+            <p className="mt-3 text-sm text-ink-lo">
+              USAspending.gov stopped listing {b.name} on {readOn(b.retiredAt)}. Its last reported
+              figures:
+            </p>
+          )}
+          {status === "not_yet_reported" && b.fiscalYear && (
+            <p className="mt-3 text-sm text-ink-lo">
+              FY{b.fiscalYear} not yet reported by USAspending.gov. The latest year it has:
+            </p>
+          )}
+          <dl className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
+            <Figure
+              label="Budgetary resources"
+              value={money(current ? b.budgetAuthority : latest?.budgetaryResources)}
+              note={
+                current
+                  ? fiscalYearLabel(b.fiscalYear, b.throughPeriod)
+                  : latest
+                    ? fiscalYearLabel(latest.fiscalYear, latest.throughPeriod)
+                    : ""
+              }
+            />
+            <Figure
+              label="Obligated"
+              value={money(current ? b.obligated : latest?.obligated)}
+              note="committed"
+            />
+            <Figure
+              label="Outlays"
+              value={money(current ? b.outlays : latest?.outlays)}
+              note="paid out"
+            />
+          </dl>
+        </>
+      )}
+      {b.byYear && b.byYear.length > 1 && (
+        <div className="mt-5">
+          <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
+            Budgetary resources by fiscal year
+          </p>
+          <ol className="mt-2 space-y-1.5">
+            {b.byYear.map((y) => (
+              <li
+                key={y.fiscalYear}
+                className="grid grid-cols-[7.5rem_1fr_auto] items-center gap-2 text-xs sm:grid-cols-[11rem_1fr_auto]"
+              >
+                <span className="font-mono text-ink-lo">
+                  {fiscalYearLabel(y.fiscalYear, y.throughPeriod)}
+                </span>
+                <span className="h-2 bg-white/[0.05]" aria-hidden="true">
+                  <span className="block h-2 bg-phos/70" style={{ width: `${y.barPercent}%` }} />
+                </span>
+                <span className="font-mono tabular-nums text-ink-lo">
+                  {money(y.budgetaryResources)}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+      <SourceLine
+        source={b.source}
+        asOf={b.asOf}
+        detail={`${b.name}, ${fiscalYearLabel(b.fiscalYear, b.throughPeriod)}`}
+      />
+    </>
+  );
+}
+
 /** What it spends and what it is doing, as one shareable card. */
 function Overview({ a }: { a: AgencyDetail }) {
-  const b = a.budget;
   const docs = a.documents;
   const proposed = docs.byType["Proposed Rule"] ?? 0;
   const final = docs.byType["Final Rule"] ?? 0;
@@ -71,75 +191,7 @@ function Overview({ a }: { a: AgencyDetail }) {
           </h2>
           <ShareSectionButton label={`${a.name} at a glance`} />
         </div>
-        {b ? (
-          <>
-            <dl className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
-              <Figure
-                label="Budgetary resources"
-                value={formatCurrency(b.budgetAuthority ?? 0)}
-                note={fiscalYearLabel(b.fiscalYear, b.throughPeriod)}
-              />
-              <Figure
-                label="Obligated"
-                value={formatCurrency(b.obligated ?? 0)}
-                note="committed so far"
-              />
-              <Figure
-                label="Outlays"
-                value={formatCurrency(b.outlays ?? 0)}
-                note="paid out so far"
-              />
-            </dl>
-            {b.byYear && b.byYear.length > 1 && (
-              <div className="mt-5">
-                <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
-                  Budgetary resources by fiscal year
-                </p>
-                <ol className="mt-2 space-y-1.5">
-                  {b.byYear.map((y) => (
-                    <li
-                      key={y.fiscalYear}
-                      className="grid grid-cols-[7.5rem_1fr_auto] items-center gap-2 text-xs sm:grid-cols-[11rem_1fr_auto]"
-                    >
-                      <span className="font-mono text-ink-lo">
-                        {fiscalYearLabel(y.fiscalYear, y.throughPeriod)}
-                      </span>
-                      <span className="h-2 bg-white/[0.05]" aria-hidden="true">
-                        <span
-                          className="block h-2 bg-phos/70"
-                          style={{ width: `${y.barPercent}%` }}
-                        />
-                      </span>
-                      <span className="font-mono tabular-nums text-ink-lo">
-                        {formatCurrency(y.budgetaryResources ?? 0)}
-                      </span>
-                    </li>
-                  ))}
-                </ol>
-              </div>
-            )}
-            <SourceLine
-              source={b.source}
-              asOf={b.asOf}
-              detail={`${b.name}, ${fiscalYearLabel(b.fiscalYear, b.throughPeriod)}`}
-            />
-          </>
-        ) : a.budgetOf ? (
-          <p className="mt-3 text-sm text-ink">
-            Its spending is reported within the budget of the{" "}
-            <Link
-              href={agencyHref(a.budgetOf.slug)}
-              className="text-signal-cyan underline underline-offset-2 hover:text-phos"
-            >
-              {a.budgetOf.name}
-            </Link>
-            .
-          </p>
-        ) : (
-          <p className="mt-3 text-sm text-ink-lo">
-            USAspending.gov reports no budget under this agency&apos;s name.
-          </p>
-        )}
+        <BudgetBlock a={a} />
         <dl className="mt-5 grid grid-cols-3 gap-4 border-t border-white/[0.07] pt-4">
           <Figure label="Open for comment" value={String(docs.openCommentsCount)} />
           <Figure label="Proposed rules" value={proposed.toLocaleString("en-US")} />
@@ -260,6 +312,32 @@ export default async function AgencyPage({ params }: PageProps) {
                   <p className="mt-2 text-sm text-ink-lo">None on Civitas.</p>
                 )}
               </section>
+
+              {a.actionIssues.length > 0 && (
+                <section aria-labelledby="issues-heading">
+                  <h2 id="issues-heading" className={H2}>
+                    In the Action Center
+                  </h2>
+                  <p className="mt-1 text-xs text-ink-min">
+                    Issues that cite one of its documents, newest first
+                  </p>
+                  <ul className="divide-y divide-white/[0.07]">
+                    {a.actionIssues.map((i) => (
+                      <li key={i.id} className="py-3">
+                        <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
+                          {readOn(i.date)}
+                        </p>
+                        <Link
+                          href={`/issue/${i.id}`}
+                          className="mt-1 block text-sm leading-snug text-ink-hi hover:text-phos"
+                        >
+                          {i.title}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
 
               <section aria-labelledby="eo-heading">
                 <h2 id="eo-heading" className={H2}>

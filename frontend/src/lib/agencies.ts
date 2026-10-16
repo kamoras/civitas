@@ -1,4 +1,10 @@
-import { formatUtcDate } from "@/lib/formatting";
+import { formatCurrency, formatUtcDate } from "@/lib/formatting";
+
+/** A dollar figure USAspending reported, or "not reported": a figure it
+ * hasn't reported is never shown as $0. */
+export function money(v: number | null | undefined): string {
+  return v == null ? "not reported" : formatCurrency(v);
+}
 
 /** "Oct 15, 2026" for a YYYY-MM-DD the backend says it read something on. */
 export function readOn(iso: string | null): string {

@@ -22,10 +22,12 @@ from sqlalchemy.orm import Session
 
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, CACHE_TTL_LIST_S, cached_json
 from app.database import get_db
-from app.models import Agency, AgencyBudget, ExploreDocument
+from app.issue_ids import to_public_id
+from app.models import ActionIssue, ActionIssueStatus, Agency, AgencyBudget, ExploreDocument
 from app.pipeline import lexical_index
 from app.pipeline.fetch.agencies import FR_SOURCE, USASPENDING_SOURCE
 from app.pipeline.fetch.fr_rulemaking import FR_TYPE_LABELS
+from app.retractions import retraction_for_issue
 from app.time_utils import comment_period_today
 
 router = APIRouter(prefix="/agencies")
@@ -96,16 +98,41 @@ def _register_as_of(db: Session) -> str | None:
                 .filter(ExploreDocument.source == "Federal Register").scalar())
 
 
-def _through_period(b: AgencyBudget) -> int | None:
-    """The fiscal month (1 = October) USAspending's figures for b's current
-    fiscal year run through, from its year-by-year record."""
-    for y in json.loads(b.by_year) if b.by_year else []:
-        if y.get("fiscalYear") == b.fiscal_year:
-            return y.get("throughPeriod")
+def _years(b: AgencyBudget) -> list[dict] | None:
+    """b's year-by-year figures, newest first; None when never read."""
+    return json.loads(b.by_year) if b.by_year is not None else None
+
+
+def current_year(b: AgencyBudget) -> dict | None:
+    """b's figures for its current fiscal year, or None when USAspending has
+    not reported that year.
+
+    USAspending's toptier list answers 0.0 for an agency with no submission
+    for the year yet: on 2026-10-16 each of the 10 agencies it listed at 0.0
+    for FY2026 had 0.0 obligations and outlays too, and no FY2026 entry in
+    its year-by-year record (no reporting period at all), while 5 of them
+    had a nonzero FY2025 there (the Railroad Retirement Board's $17.8B among
+    them). So the year counts as reported when the year-by-year record has
+    it, or, before that record is read, when the list's figure isn't 0."""
+    years = _years(b)
+    entry = next((y for y in years or [] if y.get("fiscalYear") == b.fiscal_year), None)
+    if entry:
+        return entry
+    if b.budget_authority:
+        return {"fiscalYear": b.fiscal_year, "budgetaryResources": b.budget_authority,
+                "obligated": b.obligated, "outlays": b.outlays, "throughPeriod": None}
     return None
 
 
+def latest_year(b: AgencyBudget) -> dict | None:
+    """The newest fiscal year USAspending has figures for: the current one
+    when reported, else the last before it."""
+    return current_year(b) or next(iter(_years(b) or []), None)
+
+
 def _budget_row(b: AgencyBudget) -> dict:
+    cur = current_year(b)
+    latest = latest_year(b)
     return {
         "toptierCode": b.toptier_code,
         "name": b.name,
@@ -113,10 +140,14 @@ def _budget_row(b: AgencyBudget) -> dict:
         "slug": b.agency_slug,
         "fiscalYear": b.fiscal_year,
         "fiscalQuarter": b.fiscal_quarter,
-        "throughPeriod": _through_period(b),
-        "budgetAuthority": b.budget_authority,
-        "obligated": b.obligated,
-        "outlays": b.outlays,
+        # The current fiscal year's figures, null when it isn't reported yet
+        # (never 0 for that); `latest` is the newest year that is.
+        "reported": cur is not None,
+        "throughPeriod": cur.get("throughPeriod") if cur else None,
+        "budgetAuthority": cur.get("budgetaryResources") if cur else None,
+        "obligated": cur.get("obligated") if cur else None,
+        "outlays": cur.get("outlays") if cur else None,
+        "latest": latest,
     }
 
 
@@ -127,7 +158,13 @@ def list_agencies(db: Session = Depends(get_db)):
     fiscal year's budget authority, the unmatched ones named."""
     agencies = db.query(Agency).order_by(Agency.name).all()
     counts = _document_counts(db)
-    budgets = sorted(db.query(AgencyBudget), key=lambda b: -(b.budget_authority or 0))
+    # Listed by USAspending's last read, this fiscal year's figures first.
+    budgets = [b for b in db.query(AgencyBudget) if b.retired_at is None]
+    fy = max((b.fiscal_year for b in budgets if b.fiscal_year), default=None)
+    budgets = [b for b in budgets if b.fiscal_year == fy]
+    rows_by_code = {b.toptier_code: _budget_row(b) for b in budgets}
+    budgets.sort(key=lambda b: (not rows_by_code[b.toptier_code]["reported"],
+                                -(rows_by_code[b.toptier_code]["budgetAuthority"] or 0), b.name))
     by_slug = {b.agency_slug: b for b in budgets if b.agency_slug}
     children = children_of(agencies)
     rows = []
@@ -141,30 +178,37 @@ def list_agencies(db: Session = Depends(get_db)):
             "parentSlug": a.parent_slug,
             "children": len(children.get(a.slug, [])),
             "documents": sum(counts.get(s, 0) for s in tree),
-            "budgetAuthority": b.budget_authority if b else None,
+            "budgetAuthority": rows_by_code[b.toptier_code]["budgetAuthority"] if b else None,
         })
-    fy = next((b.fiscal_year for b in budgets if b.fiscal_year), None)
-    current = [b for b in budgets if b.fiscal_year == fy]
-    total = sum(b.budget_authority or 0 for b in current)
-    largest = max((b.budget_authority or 0 for b in current), default=0)
+    reported = [rows_by_code[b.toptier_code] for b in budgets if rows_by_code[b.toptier_code]["reported"]]
+    total = sum(r["budgetAuthority"] or 0 for r in reported)
+    largest = max((r["budgetAuthority"] or 0 for r in reported), default=0)
     return cached_json({
         "agencies": rows,
         "agenciesSource": FR_SOURCE,
         "agenciesAsOf": _day(max((a.synced_at for a in agencies), default=None)),
         "budget": {
             "fiscalYear": fy,
-            "fiscalQuarter": next((b.fiscal_quarter for b in current), None),
-            "throughPeriod": max((p for b in current if (p := _through_period(b))), default=None),
+            "fiscalQuarter": next((b.fiscal_quarter for b in budgets), None),
+            "throughPeriod": max((r["throughPeriod"] for r in reported if r["throughPeriod"]), default=None),
+            # Over the agencies that reported the year: one not yet reported
+            # is neither a zero nor part of the total.
             "total": total,
+            "reportedCount": len(reported),
             # share: percent of the year's total; barPercent: of the largest.
-            "agencies": [{**_budget_row(b),
-                          "share": round(100 * (b.budget_authority or 0) / total, 2) if total else None,
-                          "barPercent": round(100 * max(b.budget_authority or 0, 0) / largest, 1) if largest else 0}
-                         for b in budgets],
+            "agencies": [{**r,
+                          "share": round(100 * r["budgetAuthority"] / total, 2)
+                          if r["reported"] and total else None,
+                          "barPercent": round(100 * max(r["budgetAuthority"], 0) / largest, 1)
+                          if r["reported"] and largest else 0}
+                         for r in (rows_by_code[b.toptier_code] for b in budgets)],
             "unmatched": sorted(b.name for b in budgets if not b.agency_slug),
             "source": USASPENDING_SOURCE,
             "asOf": _day(max((b.synced_at for b in budgets), default=None)),
         } if budgets else None,
+        # Why `budget` is null: USAspending never read yet (an outage or a
+        # new install), never "no agency has a budget".
+        "budgetStatus": "read" if budgets else "not_read",
         "documentsSource": FR_SOURCE,
         "documentsAsOf": _register_as_of(db),
     }, max_age=CACHE_TTL_LIST_S)
@@ -233,12 +277,60 @@ def _budget(b: AgencyBudget) -> dict:
         **_budget_row(b),
         "matchScore": round(b.match_score, 3) if b.match_score is not None else None,
         "byYear": _with_bars(json.loads(b.by_year)) if b.by_year else None,
+        "retiredAt": _day(b.retired_at),
         "byYearAsOf": _day(b.by_year_synced_at),
         "source": {"name": USASPENDING_SOURCE["name"],
                    "url": f"https://www.usaspending.gov/agency/{b.usaspending_slug}" if b.usaspending_slug
                    else USASPENDING_SOURCE["url"]},
         "asOf": _day(b.synced_at),
     }
+
+
+def _action_issues(db: Session, slugs: list[str]) -> list[dict]:
+    """Action Center issues that cite one of the agency's documents, newest
+    first: the issue's own record of which documents it drew on
+    (related_explore_ids), never a match on its words. Left out: withdrawn
+    issues, duplicates of another, and drafts taken down unconfirmed."""
+    doc_ids = {i for (i,) in db.query(ExploreDocument.id).filter(ExploreDocument.agency_slug.in_(slugs))}
+    if not doc_ids:
+        return []
+    out = []
+    rows = (db.query(ActionIssue.id, ActionIssue.title, ActionIssue.date, ActionIssue.related_explore_ids,
+                     ActionIssue.status, ActionIssue.is_current)
+            .filter(ActionIssue.related_explore_ids != "[]", ActionIssue.duplicate_of_id.is_(None))
+            .order_by(ActionIssue.date.desc(), ActionIssue.id.desc()))
+    for issue_id, title, day, related, status, is_current in rows:
+        if status == ActionIssueStatus.DEVELOPING and not is_current:
+            continue
+        try:
+            cited = set(json.loads(related or "[]")) & doc_ids
+        except (ValueError, TypeError):
+            continue
+        public_id = to_public_id(issue_id)
+        if cited and not retraction_for_issue(public_id):
+            out.append({"id": public_id, "title": title, "date": day, "documents": len(cited)})
+        if len(out) == SHOWN:
+            break
+    return out
+
+
+def _budget_status(own: AgencyBudget | None, budget_of: dict | None, read: bool) -> str:
+    """Which of the budget's states the page is in, each worded on its own:
+    reported (this year's figures); not_yet_reported (an earlier year's are
+    the latest); none (USAspending lists the agency with no figures for any
+    year); retired (USAspending's list stopped including it); part_of (a
+    sub-agency, in its department's budget); unmatched (USAspending was read
+    and no agency of its matched this one by name); not_read (USAspending
+    hasn't been read: an outage or a new install, never "no budget")."""
+    if own is not None:
+        if own.retired_at is not None:
+            return "retired"
+        if current_year(own):
+            return "reported"
+        return "not_yet_reported" if latest_year(own) else "none"
+    if budget_of is not None:
+        return "part_of"
+    return "unmatched" if read else "not_read"
 
 
 @router.get("/{slug}")
@@ -252,7 +344,8 @@ def get_agency(slug: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Agency not found")
     today = comment_period_today()
     counts = _document_counts(db)
-    budgets = {b.agency_slug: b for b in db.query(AgencyBudget).filter(AgencyBudget.agency_slug.isnot(None))}
+    all_budgets = db.query(AgencyBudget).all()
+    budgets = {b.agency_slug: b for b in all_budgets if b.agency_slug}
     tree_of = children_of(agencies)
     tree = descendants(tree_of, slug)
     own = budgets.get(slug)
@@ -280,7 +373,13 @@ def get_agency(slug: str, db: Session = Depends(get_db)):
         "profileAsOf": _day(agency.synced_at),
         "budget": _budget(own) if own else None,
         "budgetOf": budget_of,
+        "budgetStatus": _budget_status(own, budget_of, bool(all_budgets)),
+        # USAspending's agencies no Register agency's name matched, for an
+        # agency with no budget of its own to say which those are.
+        "unmatchedBudgets": sorted(b.name for b in all_budgets if not b.agency_slug and b.retired_at is None)
+        if own is None and budget_of is None else [],
         "documents": _documents(db, tree, today),
+        "actionIssues": _action_issues(db, tree),
         "executiveOrders": _executive_orders(db, [agency.name, own.name if own else None], today),
         "documentsSource": FR_SOURCE,
         "documentsAsOf": _register_as_of(db),

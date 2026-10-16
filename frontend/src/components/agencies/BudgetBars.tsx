@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { AgencyIndex } from "@/types/agency";
-import { formatCurrency } from "@/lib/formatting";
+import { money } from "@/lib/agencies";
 import { agencyHref } from "@/lib/routes";
 
 type Row = NonNullable<AgencyIndex["budget"]>["agencies"][number];
@@ -21,13 +21,31 @@ export function BudgetBar({ row }: { row: Row }) {
       <div className="flex items-baseline justify-between gap-3 text-sm">
         <span className="min-w-0 break-words">{name}</span>
         <span className="shrink-0 font-mono text-xs tabular-nums text-ink-lo">
-          {formatCurrency(row.budgetAuthority ?? 0)}
-          {row.share != null && <span className="text-ink-min"> · {row.share.toFixed(1)}%</span>}
+          {row.reported ? (
+            <>
+              {money(row.budgetAuthority)}
+              {row.share != null && (
+                <span className="text-ink-min"> · {row.share.toFixed(1)}%</span>
+              )}
+            </>
+          ) : (
+            <>
+              FY{row.fiscalYear} not yet reported
+              {row.latest && (
+                <span className="text-ink-min">
+                  {" "}
+                  · FY{row.latest.fiscalYear}: {money(row.latest.budgetaryResources)}
+                </span>
+              )}
+            </>
+          )}
         </span>
       </div>
-      <div className="mt-1 h-2 bg-white/[0.05]" aria-hidden="true">
-        <div className="h-2 bg-phos/70" style={{ width: `${row.barPercent}%` }} />
-      </div>
+      {row.reported && (
+        <div className="mt-1 h-2 bg-white/[0.05]" aria-hidden="true">
+          <div className="h-2 bg-phos/70" style={{ width: `${row.barPercent}%` }} />
+        </div>
+      )}
     </li>
   );
 }

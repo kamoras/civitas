@@ -1424,6 +1424,9 @@ class AgencyBudget(Base):
     by_year: Mapped[str | None] = mapped_column(Text, nullable=True)
     by_year_synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     synced_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    # When a successful read of USAspending's list no longer included it
+    # (NULL while listed): kept, never read as a zero budget.
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class ActionIssue(Base):

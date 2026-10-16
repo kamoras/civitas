@@ -15,6 +15,14 @@ export interface AgencySummary {
   budgetAuthority: number | null;
 }
 
+export interface AgencyYearFigures {
+  fiscalYear: number;
+  budgetaryResources: number | null;
+  obligated: number | null;
+  outlays: number | null;
+  throughPeriod: number | null;
+}
+
 export interface AgencyBudgetRow {
   toptierCode: string;
   /** USAspending's name for it. */
@@ -24,6 +32,11 @@ export interface AgencyBudgetRow {
   slug: string | null;
   fiscalYear: number | null;
   fiscalQuarter: number | null;
+  /** False when USAspending hasn't reported the current fiscal year: the
+   * year's figures are then null, never 0, and `latest` is the newest
+   * year it has. */
+  reported: boolean;
+  latest: AgencyYearFigures | null;
   /** The fiscal month (1 = October) the year's figures run through. */
   throughPeriod: number | null;
   /** USAspending's budget_authority_amount: the year's total budgetary
@@ -41,7 +54,9 @@ export interface AgencyIndex {
     fiscalYear: number | null;
     fiscalQuarter: number | null;
     throughPeriod: number | null;
+    /** Over the agencies that reported the year. */
     total: number;
+    reportedCount: number;
     agencies: (AgencyBudgetRow & { share: number | null; barPercent: number })[];
     unmatched: string[];
     source: AgencySource;
@@ -49,6 +64,8 @@ export interface AgencyIndex {
   } | null;
   documentsSource: AgencySource;
   documentsAsOf: string | null;
+  /** "not_read": USAspending hasn't been read (an outage or a new install). */
+  budgetStatus: "read" | "not_read";
 }
 
 export interface AgencyDocument {
@@ -90,12 +107,20 @@ export interface AgencyDetail {
         matchScore: number | null;
         byYear: AgencyBudgetYear[] | null;
         byYearAsOf: string | null;
+        retiredAt: string | null;
         source: AgencySource;
         asOf: string | null;
       })
     | null;
   /** For a sub-agency: the department whose budget includes its spending. */
   budgetOf: { slug: string; name: string } | null;
+  budgetStatus:
+    "reported" | "not_yet_reported" | "none" | "retired" | "part_of" | "unmatched" | "not_read";
+  /** For an agency with no budget of its own: USAspending's agencies no
+   * Register agency matched. */
+  unmatchedBudgets: string[];
+  /** Action Center issues citing one of its documents, newest first. */
+  actionIssues: { id: string; title: string; date: string; documents: number }[];
   documents: {
     total: number;
     byType: Record<string, number>;

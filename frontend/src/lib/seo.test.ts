@@ -265,6 +265,24 @@ describe("agency metadata", () => {
     expect(description).toContain("3 open comment periods, 120 Federal Register documents");
   });
 
+  it("states the latest reported year, never $0 for a year not yet reported", () => {
+    const rrb = {
+      ...fda,
+      parent: null,
+      shortName: "RRB",
+      name: "Railroad Retirement Board",
+      budget: {
+        reported: false,
+        budgetAuthority: null,
+        fiscalYear: 2026,
+        latest: { fiscalYear: 2025, budgetaryResources: 17_820_000_000 },
+      },
+    } as unknown as AgencyDetail;
+    const { description } = describeAgency(rrb);
+    expect(description).toContain("$17.8B in budgetary resources in FY2025");
+    expect(description).not.toContain("$0");
+  });
+
   it("names its department as the parent organization", () => {
     const ld = agencyJsonLd(fda);
     expect(ld["@type"]).toBe("GovernmentOrganization");
