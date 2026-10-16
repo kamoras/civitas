@@ -97,13 +97,6 @@ export default async function Holdings() {
         Civitas is an open source, volunteer-run project, not a registered organization of any kind.
         It takes no money from parties, candidates or PACs, requires no account, and sells nothing.
       </p>
-
-      <Link
-        href="/about/scores"
-        className="mt-3 inline-block border-b border-phos-mid/40 font-mono text-xs tracking-[0.1em] text-phos-mid hover:text-phos"
-      >
-        HOW SCORES ARE COMPUTED →
-      </Link>
     </aside>
   );
 }

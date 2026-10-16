@@ -8,7 +8,7 @@ import {
 } from "@/types/senator";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
 import type { JusticeLeaderboardEntry } from "@/types/justice";
-import type { ActionIssue, ActionIssuesResponse, IssueMembers } from "@/types/action";
+import type { ActionIssuesResponse, IssueMembers } from "@/types/action";
 import type { RedistrictedSeat } from "@/types/redistricting";
 import type { HouseDistrictsByCounty, PoliticianCard } from "@/types/politicians";
 import type { PaginatedBills } from "@/types/bill";
@@ -2005,18 +2005,6 @@ export async function fetchActionIssues(date?: string): Promise<ActionIssuesResp
   return withShape<ActionIssuesResponse>(
     await cachedFetch(url, TTL.VOLATILE),
     { lists: ["issues", "availableDates"] },
-    url
-  );
-}
-
-/** Most recently touched issues regardless of is_current — backs the
- * homepage's "record index", which needs entries that don't vanish the
- * instant an issue retires (see backend's get_recent_action_issues). */
-export async function fetchRecentActionIssues(limit = 10): Promise<{ issues: ActionIssue[] }> {
-  const url = `${API_BASE}/action/issues/recent?limit=${limit}`;
-  return withShape<{ issues: ActionIssue[] }>(
-    await cachedFetch(url, TTL.VOLATILE),
-    { lists: ["issues"] },
     url
   );
 }

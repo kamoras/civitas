@@ -186,8 +186,21 @@ function FullStrip({ data }: { data: ThisWeek }) {
               {line.caption}
             </span>
           </p>
-          <p className="font-display text-base text-ink">{line.pick}:</p>
-          <StatePicker states={election.states} compact={false} />
+          {/* Behind a disclosure, as in the compact strip: 51 boxes were
+              the heaviest thing on the homepage and a third of its tab
+              stops, and the masthead's state picker already leads to a
+              ballot. */}
+          <details className="group">
+            <summary className="cursor-pointer list-none font-display text-base text-ink-hi underline decoration-white/30 underline-offset-4 hover:text-phos [&::-webkit-details-marker]:hidden">
+              {line.pick}
+              <span aria-hidden="true" className="ml-1 inline-block group-open:rotate-180">
+                &#9662;
+              </span>
+            </summary>
+            <div className="pt-3">
+              <StatePicker states={election.states} compact={false} />
+            </div>
+          </details>
           {election.deadlines && election.deadlines.length > 0 && (
             <StateDeadlines rows={election.deadlines} />
           )}

@@ -36,13 +36,6 @@ export function electionLinks(phase: ElectionPhase | null): { href: string; labe
   return [];
 }
 
-const RESEARCH_LINKS: readonly { href: string; label: string }[] = [
-  { href: "/about/scores", label: "METHODS" },
-  { href: "/about/data#sources", label: "SOURCES" },
-  { href: "/developers", label: "DATA & API" },
-  { href: "/changelog", label: "SCORING CHANGELOG" },
-];
-
 /**
  * The homepage masthead:overprint wordmark, the statement of what this is,
  * the governance stamp, and the record request slip.
@@ -137,7 +130,9 @@ export default function Masthead({
               what's on my ballot and what Congress is doing had one
               labelled entry above the fold on a phone between them (the
               state picker for ballots sat two screens down). A state picked
-              here only fills in the two links; nothing is asked or kept. */}
+              here only fills in the two links; nothing is asked or kept.
+              The researcher's links (methods, API, changelog) are in the
+              page's one index, with the source ledger beside them. */}
           <nav
             aria-label="For voters"
             className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-xs tracking-[0.1em]"
@@ -161,14 +156,11 @@ export default function Masthead({
             </label>
             <Link
               href={state ? `/politicians?state=${state}` : "/politicians"}
-              className="inline-flex min-h-[24px] items-center border-b border-phos-mid/40 text-phos-mid hover:text-phos"
+              className={VOTER_LINK}
             >
               YOUR MEMBERS
             </Link>
-            <Link
-              href={state ? `/elections/states/${state}` : "/elections"}
-              className="inline-flex min-h-[24px] items-center border-b border-phos-mid/40 text-phos-mid hover:text-phos"
-            >
+            <Link href={state ? `/elections/states/${state}` : "/elections"} className={VOTER_LINK}>
               YOUR BALLOT
             </Link>
             {electionLinks(electionPhase).map(({ href, label }) => (
@@ -179,25 +171,6 @@ export default function Masthead({
             <Link href="/congress" className={VOTER_LINK}>
               CONGRESS THIS WEEK
             </Link>
-          </nav>
-
-          {/* The researcher's way in, in the first screen: the methods, the
-              source list, the API and the scoring changelog were reachable
-              before only from the footer, four screens down on a phone. */}
-          <nav
-            aria-label="For researchers"
-            className="mt-4 flex flex-wrap items-baseline gap-x-4 gap-y-1 font-mono text-xs tracking-[0.1em]"
-          >
-            <span className="text-ink-min">FOR RESEARCHERS:</span>
-            {RESEARCH_LINKS.map(({ href, label }) => (
-              <Link
-                key={href}
-                href={href}
-                className="inline-flex min-h-[24px] items-center border-b border-phos-mid/40 text-phos-mid hover:text-phos"
-              >
-                {label}
-              </Link>
-            ))}
           </nav>
         </div>
 
