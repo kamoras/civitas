@@ -28,10 +28,13 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
-from app import district_lean
+from app import broadcast, district_lean
 from app.election_calendar import new_congress_day, previous_election_day
 from app.election_phase import active_election
+from app.live_results.specials import COUNTED_TYPES
 from app.models import BroadcastPost, FecReportingDeadline, FederalElectionDate, SeatVacancy
+from app.pipeline.analyze.score_calculator import get_state_pvi_map
+from app.pipeline.fetch.election_results import live_results_states
 from app.pipeline.fetch.poll_close import last_poll_close, state_zone
 from app.state_names import STATE_NAMES
 from app.time_utils import EASTERN, congress_in_session, utcnow
@@ -102,8 +105,6 @@ def usual_vote(row) -> dict | None:
         return {"lean": round(lean, 1), "label": district_lean.lean_label(lean), "source": "computed",
                 "congress": congress}
     if row.office == "S":
-        from app.pipeline.analyze.score_calculator import get_state_pvi_map
-
         lean = get_state_pvi_map().get(row.state)
         if lean is None:
             return None
@@ -178,14 +179,10 @@ def _iso(dt: datetime | None) -> str | None:
 
 
 def _covered(state: str) -> bool:
-    from app.pipeline.fetch.election_results import live_results_states
-
     return state in live_results_states()
 
 
 def special_item(row: FederalElectionDate, now: datetime) -> dict:
-    from app.live_results.specials import COUNTED_TYPES
-
     status, days = day_status(row.state, date.fromisoformat(row.election_date), now)
     counted = row.type_code in COUNTED_TYPES
     return {
@@ -406,9 +403,6 @@ def publish_new_specials(db: Session, new_ids: list[str], today: date | None = N
     """One feed entry (never Bluesky: what is posted there is a measured
     volume decision) for each special general or runoff newly on the FEC's
     calendar and still ahead. Returns how many were published."""
-    from app import broadcast
-    from app.live_results.specials import COUNTED_TYPES
-
     today = today or utcnow().date()
     published = 0
     for rid in new_ids:

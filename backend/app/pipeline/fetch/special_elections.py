@@ -34,7 +34,9 @@ import httpx
 from lxml import etree
 from sqlalchemy.orm import Session
 
+from app.election_calendar import senate_classes
 from app.models import FecReportingDeadline, FederalElectionDate, SeatVacancy
+from app.pipeline.fetch.fec import _fetch_with_retry
 from app.pipeline.fetch.house_clerk import MEMBER_DATA_URL, _VOTING_DISTRICT
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
 from app.pipeline.fetch.senate_classes import SENATORS_URL, _ROMAN
@@ -106,8 +108,6 @@ def reporting_years(today: date) -> list[int]:
 
 async def fetch_reporting_deadlines(client: httpx.AsyncClient, year: int) -> tuple[list[dict], bool]:
     """(rows, complete) of the FEC's reporting dates for report year `year`."""
-    from app.pipeline.fetch.fec import _fetch_with_retry
-
     rows: list[dict] = []
     for page in range(1, _FEC_MAX_PAGES + 1):
         payload = await _fetch_with_retry(
@@ -249,9 +249,11 @@ def save_vacancies(db: Session, office: str, vacancies: list[dict]) -> None:
 async def refresh_special_elections(db: Session, client: httpx.AsyncClient, today: date, cycle: int) -> dict:
     """Read and store the calendar, the reporting deadlines and both
     chambers' vacancies. Returns {"new": [ids new to the calendar],
-    "problems": [what could not be read]}; never raises for a source."""
-    from app.election_calendar import senate_classes
+    "problems": [what could not be read]}; never raises for a source.
 
+    Each source's rows are committed as soon as they are stored, never
+    held across the next request: SQLite has one writer, and an open
+    write would make every other writer wait out the reads."""
     read_on = today.isoformat()
     problems: list[str] = []
     new: list[str] = []
@@ -259,12 +261,14 @@ async def refresh_special_elections(db: Session, client: httpx.AsyncClient, toda
         rows, complete = await fetch_fec_rows(client, year)
         if rows:
             new += save_election_rows(db, year, rows, complete=complete, read_on=read_on)
+            db.commit()
         if not complete:
             problems.append(f"FEC election dates {year}: read incomplete, nothing retracted")
     for year in reporting_years(today):
         rows, complete = await fetch_reporting_deadlines(client, year)
         if rows:
             save_reporting_deadlines(db, year, rows, complete=complete, read_on=read_on)
+            db.commit()
         if not complete:
             problems.append(f"FEC reporting dates {year}: read incomplete, nothing retracted")
 
@@ -273,6 +277,7 @@ async def refresh_special_elections(db: Session, client: httpx.AsyncClient, toda
         problems.append("House Clerk member list: unreadable, House vacancies kept as stored")
     else:
         save_vacancies(db, "H", house)
+        db.commit()
     senate = parse_senate_vacancies(await _get(client, SENATORS_URL) or b"", senate_classes())
     if senate is None:
         problems.append("Senate member list: unreadable or cut short, Senate vacancies kept as stored")
