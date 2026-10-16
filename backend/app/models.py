@@ -1675,6 +1675,11 @@ class FeedArticle(Base):
     source_name: Mapped[str] = mapped_column(String)
     scope: Mapped[str | None] = mapped_column(String(16), nullable=True)
     text: Mapped[str] = mapped_column(Text)
+    # The article as the feed gave it (the headline, and the description as
+    # parsed), unmasked: what clustering reads (action_center.cluster_text)
+    # and what a replay of any later gate needs.
+    title: Mapped[str] = mapped_column(Text, default="")
+    description: Mapped[str] = mapped_column(Text, default="")
     names_official: Mapped[bool] = mapped_column(Boolean, default=False)
     label: Mapped[int | None] = mapped_column(Integer, nullable=True)
     vote: Mapped[float | None] = mapped_column(Float, nullable=True)

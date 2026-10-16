@@ -26,6 +26,8 @@ def upgrade() -> None:
         sa.Column('source_name', sa.String(), nullable=False),
         sa.Column('scope', sa.String(length=16), nullable=True),
         sa.Column('text', sa.Text(), nullable=False),
+        sa.Column('title', sa.Text(), nullable=False),
+        sa.Column('description', sa.Text(), nullable=False),
         sa.Column('names_official', sa.Boolean(), nullable=False),
         sa.Column('label', sa.Integer(), nullable=True),
         sa.Column('vote', sa.Float(), nullable=True),

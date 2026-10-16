@@ -156,6 +156,7 @@ def test_judge_keeps_by_vote_and_stores_every_article_with_its_label(db_session,
     rows = {r.url: r for r in db_session.query(FeedArticle)}
     assert {u: r.label for u, r in rows.items()} == {politics.url: 1, world.url: 0, named.url: 1, unfiled.url: None}
     assert rows[named.url].text.startswith("[name] visits")
+    assert rows[named.url].title == "Jane Doe visits abroad"  # the unmasked record, for clustering and replays
     assert rows[named.url].names_official and rows[politics.url].kept and not rows[world.url].kept
 
 

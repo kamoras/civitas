@@ -354,6 +354,8 @@ def _store(db: Session, articles: Sequence[NewsArticle], masked: Sequence[tuple[
                     db.add(row)
                     existing[a.url] = row
                 row.source_name = a.source_name
+                row.title = a.title or ""
+                row.description = a.summary or ""
                 row.scope = scope
                 row.text = text
                 row.names_official = named
