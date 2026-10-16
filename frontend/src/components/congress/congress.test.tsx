@@ -529,6 +529,96 @@ describe("roll call page", () => {
 });
 
 describe("bill page", () => {
+  it("says a past Congress's votes aren't held, and links the roll calls its history names", () => {
+    const notHeld = (sentence: string) => ({ held: false, sentence });
+    const past: BillRecord = {
+      ...record,
+      billId: "HR.2",
+      billLabel: "H.R. 2",
+      congress: 118,
+      votes: [],
+      days: [],
+      floorDebate: [],
+      floorSpeechCount: 0,
+      unavailable: [],
+      actions: [
+        {
+          date: "2023-05-11",
+          text: "Passed House by recorded vote: 219 - 213 (Roll no. 209).",
+          type: "Floor",
+          rollCalls: [
+            {
+              chamber: "house",
+              number: 209,
+              session: 1,
+              sourceUrl: "https://clerk.house.gov/evs/2023/roll209.xml",
+            },
+          ],
+        },
+      ],
+      coverage: {
+        votes: notHeld(
+          "Civitas holds roll calls from the 119th Congress on, so this bill's votes aren't held."
+        ),
+        floor: notHeld("Civitas keeps the sitting Congress's floor speeches only."),
+        digest: notHeld("Civitas's record of Congress starts January 3, 2025."),
+      },
+    };
+    render(
+      <BillPageView
+        billId="HR.2"
+        canonicalPath="/congress/bills/HR.2?congress=118"
+        record={past}
+        detail={null}
+        stageName={null}
+        committee={{ total: 0, entries: [] } as never}
+      />
+    );
+    expect(screen.queryByText("No recorded votes on this bill in either chamber.")).toBeNull();
+    expect(screen.getByText(/so this bill's votes aren't held/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "House roll call 209" })).toHaveAttribute(
+      "href",
+      "https://clerk.house.gov/evs/2023/roll209.xml"
+    );
+    expect(
+      screen.getByText("Civitas keeps the sitting Congress's floor speeches only.")
+    ).toBeTruthy();
+    expect(screen.getByText("Civitas's record of Congress starts January 3, 2025.")).toBeTruthy();
+    expect(screen.queryByText(/No committee meeting or report/)).toBeNull();
+    expect(screen.getAllByText("not held").length).toBe(3);
+    expect(screen.queryByText(/Speeches are matched by the bill number/)).toBeNull();
+    expect(screen.getByText(/Not held for this Congress/)).toBeTruthy();
+  });
+
+  it("a part Congress.gov didn't return is not counted or called unpublished", () => {
+    render(
+      <BillPageView
+        billId="S.4668"
+        canonicalPath="/congress/bills/S.4668"
+        record={{ ...record, actions: [], summary: null, unavailable: ["actions", "summaries"] }}
+        detail={null}
+        stageName={null}
+      />
+    );
+    expect(screen.queryByText("0 actions")).toBeNull();
+    expect(screen.queryByText(/None published by the Congressional Research Service/)).toBeNull();
+    expect(screen.getByText("Not read from Congress.gov just now.")).toBeTruthy();
+  });
+
+  it("an unreadable record's votes are unknown, not none", () => {
+    render(
+      <BillPageView
+        billId="S.4668"
+        canonicalPath="/congress/bills/S.4668"
+        record={null}
+        detail={null}
+        stageName={null}
+      />
+    );
+    expect(screen.queryByText("No recorded votes on this bill in either chamber.")).toBeNull();
+    expect(screen.getByText("The votes could not be loaded just now.")).toBeTruthy();
+  });
+
   it("shows the record, each party's split, and every member's vote a pick away", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => detail }));
     render(

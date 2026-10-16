@@ -421,12 +421,23 @@ export default function BillPageView({
                   <SectionHead
                     id="votes"
                     title="Votes"
-                    count={record ? `${record.votes.length} recorded` : undefined}
+                    count={
+                      record
+                        ? record.coverage?.votes.held === false
+                          ? "not held"
+                          : `${record.votes.length} recorded`
+                        : undefined
+                    }
                     shareable
                   />
                   <VotePanel
                     votes={record?.votes ?? []}
                     congress={record?.congress ?? detail?.congress ?? 0}
+                    unreadable={!record}
+                    coverage={record?.coverage?.votes}
+                    named={record?.actions.flatMap((a) =>
+                      a.rollCalls.map((rc) => ({ ...rc, date: a.date }))
+                    )}
                   />
                 </section>
 
@@ -435,9 +446,15 @@ export default function BillPageView({
                     <SectionHead
                       id="floor"
                       title="Floor debate"
-                      count={`${record.floorSpeechCount ?? 0} speech${record.floorSpeechCount === 1 ? "" : "es"}`}
+                      count={
+                        record.coverage?.floor.held === false
+                          ? "not held"
+                          : `${record.floorSpeechCount ?? 0} speech${record.floorSpeechCount === 1 ? "" : "es"}`
+                      }
                     />
-                    {record.floorDebate.length > 0 ? (
+                    {record.coverage?.floor.held === false ? (
+                      <p className="text-ink-lo">{record.coverage.floor.sentence}</p>
+                    ) : record.floorDebate.length > 0 ? (
                       <ol className="flex flex-col">
                         {record.floorDebate.map((d) => (
                           <li
@@ -477,12 +494,14 @@ export default function BillPageView({
                         No floor speech on file names this bill in its Congressional Record heading.
                       </p>
                     )}
-                    <p className="text-xs text-ink-min">
-                      Speeches are matched by the bill number printed in the Congressional
-                      Record&apos;s heading, never by their words. Each name opens that
-                      member&apos;s first speech under the heading; a number is how many times they
-                      spoke.
-                    </p>
+                    {record.coverage?.floor.held !== false && (
+                      <p className="text-xs text-ink-min">
+                        Speeches are matched by the bill number printed in the Congressional
+                        Record&apos;s heading, never by their words. Each name opens that
+                        member&apos;s first speech under the heading; a number is how many times
+                        they spoke.
+                      </p>
+                    )}
                   </section>
                 )}
 
@@ -490,7 +509,11 @@ export default function BillPageView({
                   <SectionHead
                     id="history"
                     title="History"
-                    count={record ? `${record.actions.length} actions` : undefined}
+                    count={
+                      record && !unavailable.includes("actions")
+                        ? `${record.actions.length} actions`
+                        : undefined
+                    }
                   />
                   {record && record.actions.length > 0 ? (
                     <ol className="flex flex-col">
@@ -529,9 +552,17 @@ export default function BillPageView({
                   <SectionHead
                     id="committee"
                     title="In committee"
-                    count={committee ? `${committee.total} in the Daily Digest` : undefined}
+                    count={
+                      record?.coverage?.digest.held === false
+                        ? "not held"
+                        : committee
+                          ? `${committee.total} in the Daily Digest`
+                          : undefined
+                    }
                   />
-                  {committee && committee.entries.length > 0 ? (
+                  {record?.coverage?.digest.held === false ? (
+                    <p className="text-ink-lo">{record.coverage.digest.sentence}</p>
+                  ) : committee && committee.entries.length > 0 ? (
                     <CommitteeEntries entries={committee.entries} />
                   ) : (
                     <p className="text-ink-lo">

@@ -161,7 +161,16 @@ def test_a_vote_carries_its_roll_call_and_each_party_split(client):
     assert vote["rollCall"]["sourceUrl"].startswith("https://www.senate.gov/")
     (rc,) = _body(client, "/bills/hr.1/votes")["entries"]
     assert (rc["yeas"], rc["nays"], rc["chamber"]) == (1, 0, "senate")
-    assert _body(client, "/bills/HR.1/votes", congress=118)["entries"] == []
+    assert _body(client, "/bills/HR.1/votes")["covered"] is True
+
+
+def test_a_congress_whose_roll_calls_are_not_held_says_so(client):
+    """An empty list outside the held Congresses is "not held", not "no
+    recorded vote": H.R. 2 of the 118th, passed by the House on a roll
+    call, read as a bill with none (2026-10-16)."""
+    body = _body(client, "/bills/HR.1/votes", congress=118)
+    PublicBillVotesSchema.model_validate(body)
+    assert (body["entries"], body["covered"], body["heldCongresses"]) == ([], False, [119])
 
 
 @pytest.mark.parametrize("path,member,schema", [
