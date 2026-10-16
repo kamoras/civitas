@@ -3,6 +3,7 @@ own script on its own cadence, gated, the last good copy kept and an alert
 opened on a failure, and a staleness alert where a person must regenerate.
 Offline: the generators here are tiny inline scripts or mocked."""
 
+import importlib.util
 import json
 import pathlib
 import sys
@@ -12,7 +13,12 @@ from unittest.mock import patch
 
 import pytest
 
+from app import committee_routing
 from app import data_refresh as dr
+from app.config import settings
+from app.election_phase import ActiveElection
+from app.pipeline.fetch.state_candidates_common import fec_party_label
+from app.state_names import STATE_NAMES
 
 
 def _write_runtime(name: str, doc: dict) -> None:
@@ -32,7 +38,7 @@ def _ctx(name="x.json", doc=None, today=date(2028, 3, 1), last=None):
 
 @pytest.fixture
 def alerts():
-    with patch("app.ops_alerts.send_ops_alert") as send, patch("app.ops_alerts.resolve_ops_alert") as resolve:
+    with patch.object(dr, "send_ops_alert") as send, patch.object(dr, "resolve_ops_alert") as resolve:
         yield SimpleNamespace(send=send, resolve=resolve)
 
 
@@ -43,8 +49,6 @@ def test_the_refreshed_copy_wins_and_a_rewrite_is_noticed():
     assert "REP" in bundled["codes"]
     _write_runtime("fec_party_codes.json", {"codes": {"ZZZ": "Refreshed"}})
     assert dr.read("fec_party_codes.json") == {"codes": {"ZZZ": "Refreshed"}}
-    from app.pipeline.fetch.state_candidates_common import fec_party_label
-
     assert fec_party_label("ZZZ") == "Refreshed"
     pathlib.Path(dr.runtime_data_path("fec_party_codes.json")).unlink()
     assert dr.read("fec_party_codes.json") == bundled
@@ -120,8 +124,6 @@ def test_one_files_error_never_stops_the_rest(alerts):
 # ── when each file is due, at future dates ───────────────────────────
 
 def _election(day, phase="campaign"):
-    from app.election_phase import ActiveElection
-
     return ActiveElection(election_day=day, phase=phase, results_until=None, last_result_change=None)
 
 
@@ -148,8 +150,6 @@ def test_the_voter_calendar_is_rebuilt_for_the_coming_election_from_200_days_out
 
 
 def test_jurisdictions_are_reread_weekly_until_they_are_the_sitting_congresses(monkeypatch, freeze_utcnow):
-    from app.config import settings
-
     freeze_utcnow(datetime(2027, 1, 20, 12))
     monkeypatch.setattr(settings, "CURRENT_CONGRESS", 120)
     assert dr._jurisdictions_due(_ctx(doc={"congress": 119}, last=datetime(2027, 1, 12)))
@@ -157,8 +157,6 @@ def test_jurisdictions_are_reread_weekly_until_they_are_the_sitting_congresses(m
 
 
 def test_the_routing_fit_is_refit_when_its_inputs_change(monkeypatch):
-    from app import committee_routing
-
     monkeypatch.setattr(committee_routing, "data_hash", lambda: "new-inputs")
     assert dr._routing_due(_ctx(doc={"data_hash": "old-inputs"}))
     assert not dr._routing_due(_ctx(doc={"data_hash": "new-inputs"}))
@@ -169,8 +167,6 @@ def test_the_routing_fit_is_refit_when_its_inputs_change(monkeypatch):
 # ── gates ────────────────────────────────────────────────────────────
 
 def test_the_poll_close_gate():
-    from app.state_names import STATE_NAMES
-
     states = {s: {"close": "20:00"} for s in STATE_NAMES if s != "DC"}
     assert dr._poll_close_gate({"states": states}, {"states": states}) == []
     assert dr._poll_close_gate({"states": {**states, "OH": {"close": "09:00"}}}, {})
@@ -187,8 +183,6 @@ def test_the_calendar_gate_allows_a_carried_calendar_to_lose_items_but_not_a_rec
 
 
 def test_the_population_gate_allows_a_new_census_and_holds_a_jump_within_one():
-    from app.state_names import STATE_NAMES
-
     base = {s: 5.0 for s in STATE_NAMES if s != "DC"}
     assert dr._population_gate({"census": 2020, "states": base}, {"census": 2020, "states": base}) == []
     jumped = {**base, "TX": 6.0}
@@ -212,8 +206,6 @@ def test_a_newer_survey_is_flagged_once_it_should_be_out():
 
 
 def test_calibrations_tied_to_a_congress_are_flagged_when_the_next_one_is_complete(monkeypatch):
-    from app.config import settings
-
     monkeypatch.setattr(settings, "CURRENT_CONGRESS", 120)
     assert dr._position_confidence_stale(_ctx(doc={"calibrated_through": 119})) is None
     assert dr._commemorative_stale(_ctx(doc={"les_spearman_118th": 0.9})) is None
@@ -239,13 +231,11 @@ def test_a_newer_maddison_release_is_found_by_search(monkeypatch):
         def json(self):
             return {"data": {"items": [{"name": n} for n in self.names]}}
 
-    import httpx
-
     doc = {"_source": "Maddison Project Database 2023 (Bolt & van Zanden 2024)"}
     monkeypatch.setattr(dr, "_record_try", lambda n, o: None)
-    monkeypatch.setattr(httpx, "get", lambda *a, **k: Resp(["Maddison Project Database 2023"]))
+    monkeypatch.setattr(dr.httpx, "get", lambda *a, **k: Resp(["Maddison Project Database 2023"]))
     assert dr._peer_gdp_stale(_ctx("peer_gdp_per_capita.json", doc)) is None
-    monkeypatch.setattr(httpx, "get", lambda *a, **k: Resp(["Maddison Project Database 2026", "x"]))
+    monkeypatch.setattr(dr.httpx, "get", lambda *a, **k: Resp(["Maddison Project Database 2026", "x"]))
     assert "2026 is published" in dr._peer_gdp_stale(_ctx("peer_gdp_per_capita.json", doc))
     assert dr._peer_gdp_stale(_ctx("peer_gdp_per_capita.json", doc, last=datetime.now())) is None
 
@@ -259,8 +249,6 @@ def test_every_generated_file_on_record_exists_and_every_command_names_a_real_sc
 
 
 def test_the_house_rules_are_found_for_the_newest_congress_the_page_links():
-    import importlib.util
-
     script = dr.BACKEND / "scripts" / "fetch_committee_jurisdictions.py"
     spec = importlib.util.spec_from_file_location("fetch_committee_jurisdictions", script)
     module = importlib.util.module_from_spec(spec)
@@ -274,8 +262,6 @@ def test_the_house_rules_are_found_for_the_newest_congress_the_page_links():
 
 
 def test_the_population_source_says_which_census_it_reports():
-    import importlib.util
-
     script = dr.BACKEND / "scripts" / "fetch_state_population.py"
     spec = importlib.util.spec_from_file_location("fetch_state_population", script)
     module = importlib.util.module_from_spec(spec)

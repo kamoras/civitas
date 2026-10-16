@@ -25,6 +25,7 @@ from app.pipeline.analyze.action_center import get_action_refresh_state, refresh
 from app.pipeline.congress_activity import congress_sync_age, eastern_today, is_congress_sync_running, run_congress_sync
 from app.pipeline.analyze.congress_bluesky import post_congress_lookahead, post_daily_congress, post_weekly_congress
 from app.time_utils import utcnow
+from app import data_refresh
 from app.background import WritesHeld, start_writer
 from app.broadcast import deliver_pending, refresh_engagement
 from app.pipeline.analyze.trend_poster import run_trend_posts
@@ -646,8 +647,6 @@ def _data_refresh() -> None:
     failure. Daily; the files that load the embedding model or are
     CPU-bound wait while a pipeline runs."""
     def _run():
-        from app import data_refresh
-
         with lease.job(lease.DATA_REFRESH, who="Data file refresh") as held:
             if not held:
                 return

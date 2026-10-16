@@ -322,10 +322,8 @@ def test_a_calendar_missing_some_deadlines_says_so(calendar):
 
 
 def test_the_refreshed_calendar_wins_over_the_bundled_one(calendar):
-    from app import voter_calendar as vc
-
     calendar({"WA": WA})
-    refreshed = pathlib.Path(vc.runtime_data_path(vc._PATH.name))
+    refreshed = pathlib.Path(voter_calendar.runtime_data_path(voter_calendar._PATH.name))
     refreshed.parent.mkdir(parents=True, exist_ok=True)
     refreshed.write_text(json.dumps({"electionDate": "2028-11-07", "states": {"OR": {**WA}}}))
     assert voter_calendar.calendar_for_state("WA", ELECTION) is None

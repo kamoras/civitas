@@ -35,6 +35,7 @@ import json
 import logging
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -43,9 +44,18 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
+import httpx
+
+from app import committee_routing
 from app.atomic_write import runtime_data_path, write_text_atomic
 from app.config import settings
+from app.contact import BOT_USER_AGENT
+from app.database import SessionLocal
+from app.election_phase import active_election
 from app.file_cache import Uncached, files_stamp, read_json_preferring
+from app.ops_alerts import resolve_ops_alert, send_ops_alert
+from app.pipeline.cache import api_cache_get, api_cache_set
+from app.state_names import STATE_NAMES
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -117,9 +127,6 @@ def content_sha256(doc: dict) -> str:
 
 
 def _last_tried(name: str) -> datetime | None:
-    from app.database import SessionLocal
-    from app.pipeline.cache import api_cache_get
-
     db = SessionLocal()
     try:
         state = api_cache_get(db, _STATE_TIER, name, max_age_hours=24 * 365 * 5) or {}
@@ -129,9 +136,6 @@ def _last_tried(name: str) -> datetime | None:
 
 
 def _record_try(name: str, outcome: str) -> None:
-    from app.database import SessionLocal
-    from app.pipeline.cache import api_cache_set
-
     db = SessionLocal()
     try:
         api_cache_set(db, _STATE_TIER, name, {"triedAt": utcnow().isoformat(), "outcome": outcome},
@@ -171,8 +175,6 @@ def install(spec: DataFile, new: dict, argv: list[str]) -> bool:
 
 def refresh_one(spec: DataFile, ctx: Context) -> str:
     """Regenerate, gate and install one file. Returns the outcome."""
-    from app.ops_alerts import resolve_ops_alert, send_ops_alert
-
     condition = f"data-refresh-{spec.stem}"
     template = spec.command(ctx) if spec.command else None
     if template is None:
@@ -225,8 +227,6 @@ def refresh_one(spec: DataFile, ctx: Context) -> str:
 def run_refreshes(files: list[DataFile] | None = None, *, pipeline_busy: bool = False) -> dict[str, str]:
     """Every file's staleness check, and each due refresh. One file's
     failure never stops the others."""
-    from app.ops_alerts import resolve_ops_alert, send_ops_alert
-
     outcomes: dict[str, str] = {}
     for spec in files if files is not None else DATA_FILES:
         try:
@@ -273,8 +273,6 @@ def _drift(new: dict, old: dict, key: str, *, keep: float) -> list[str]:
 
 
 def _election():
-    from app.election_phase import active_election
-
     return active_election()
 
 
@@ -296,8 +294,6 @@ def _poll_close_due(ctx: Context) -> bool:
 
 
 def _poll_close_gate(new: dict, old: dict) -> list[str]:
-    from app.state_names import STATE_NAMES
-
     states = new.get("states") or {}
     failures = []
     expected = {s for s in STATE_NAMES if s != "DC"}
@@ -372,16 +368,12 @@ def _jurisdictions_gate(new: dict, old: dict) -> list[str]:
 # The committee-routing fit: refit whenever its inputs change (the
 # jurisdictions above, or the labels in a commit) — its data_hash names them.
 def _routing_due(ctx: Context) -> bool:
-    from app.committee_routing import data_hash
-
-    return ctx.doc.get("data_hash") != data_hash() and not ctx.tried_within(7)
+    return ctx.doc.get("data_hash") != committee_routing.data_hash() and not ctx.tried_within(7)
 
 
 def _routing_gate(new: dict, old: dict) -> list[str]:
-    from app.committee_routing import data_hash
-
     failures = []
-    if new.get("data_hash") != data_hash():
+    if new.get("data_hash") != committee_routing.data_hash():
         failures.append("the fit is not of the inputs in use")
     if not (0 < float(new.get("threshold") or 0) < 1) or int(new.get("k") or 0) < 1:
         failures.append(f"threshold {new.get('threshold')}, k {new.get('k')}")
@@ -389,8 +381,6 @@ def _routing_gate(new: dict, old: dict) -> list[str]:
 
 
 def _population_gate(new: dict, old: dict) -> list[str]:
-    from app.state_names import STATE_NAMES
-
     states, before = new.get("states") or {}, old.get("states") or {}
     failures = []
     missing = {s for s in STATE_NAMES if s != "DC"} - set(states)
@@ -449,8 +439,6 @@ def _ces_stale(ctx: Context) -> str | None:
 
 
 def _bluesky_windows_stale(ctx: Context) -> str | None:
-    import re
-
     found = re.search(r"generated (\d{4}-\d{2}-\d{2})", str(ctx.doc.get("_source") or ""))
     if found and ctx.today - date.fromisoformat(found[1]) > timedelta(days=365):
         return ("the posting windows were measured over a year ago; audiences shift by season. Rerun "
@@ -470,8 +458,6 @@ def _position_confidence_stale(ctx: Context) -> str | None:
 
 
 def _commemorative_stale(ctx: Context) -> str | None:
-    import re
-
     measured = [int(m) for m in re.findall(r"les_spearman_(\d+)", json.dumps(sorted(ctx.doc)))]
     if measured and settings.CURRENT_CONGRESS - 2 > max(measured):
         return (f"measured against Volden & Wiseman's {max(measured)}th-Congress coding; the "
@@ -481,8 +467,6 @@ def _commemorative_stale(ctx: Context) -> str | None:
 
 
 def _district_lean_stale(ctx: Context) -> str | None:
-    import re
-
     years = [int(y) for y in re.findall(r"\d{4}", str(ctx.doc.get("_window") or ""))]
     if years and ctx.today >= date(max(years) + 4, 12, 15):
         return (f"windowed to {ctx.doc['_window']}; the {max(years) + 4} presidential election's precinct returns "
@@ -494,12 +478,6 @@ def _district_lean_stale(ctx: Context) -> str | None:
 def _peer_gdp_stale(ctx: Context) -> str | None:
     """A newer Maddison Project release than the one on file, from
     DataverseNL's search (monthly; None when it can't be read)."""
-    import re
-
-    import httpx
-
-    from app.contact import BOT_USER_AGENT
-
     if ctx.tried_within(30):
         return None
     _record_try(ctx.name, "release check")
