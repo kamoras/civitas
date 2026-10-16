@@ -1,4 +1,6 @@
-import { pageMetadata } from "@/lib/site";
+import Link from "next/link";
+import { connection } from "next/server";
+import { pageMetadata, TOPIC_FEEDS } from "@/lib/site";
 import Navbar from "@/components/layout/Navbar";
 import PageMasthead from "@/components/layout/PageMasthead";
 import Footer from "@/components/layout/Footer";
@@ -7,11 +9,81 @@ import { formatUtcDate } from "@/lib/formatting";
 import { SCORE_VERSIONS, type ScoreVersion } from "@/lib/scoreVersions";
 
 export const metadata = pageMetadata({
-  title: "Scoring Changelog",
+  title: "Changelog",
   description:
-    "Version history of the Civitas scoring algorithms: every formula and data-input change, when it was released, and why it was made.",
+    "What is new on Civitas, and the version history of its scoring algorithms: every formula and data-input change, when it was released, and why it was made.",
   path: "/changelog",
+  feed: TOPIC_FEEDS.new,
 });
+
+const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
+
+interface Feature {
+  id: string;
+  date: string;
+  title: string;
+  summary: string;
+  url: string;
+}
+
+/**
+ * New pages and features, from backend/app/data/whats_new.json (GET
+ * /api/whats-new): the same entries the What's new feed and Bluesky post
+ * once each (backend/app/whats_new.py), so there is one place to write one.
+ * Per request, never prerendered (`next build` can't reach the backend);
+ * left out when the backend can't answer, and the scoring history below
+ * still renders.
+ */
+async function NewOnTheSite() {
+  await connection();
+  let features: Feature[] = [];
+  try {
+    const res = await fetch(`${BACKEND}/api/whats-new`, { next: { revalidate: 300 } });
+    if (res.ok) features = ((await res.json()) as { entries?: Feature[] }).entries ?? [];
+  } catch {
+    features = [];
+  }
+  if (!features.length) return null;
+  return (
+    <section aria-labelledby="new-h" className="scroll-mt-[var(--header-clearance)]">
+      <h2
+        id="new-h"
+        className="font-display text-2xl font-bold leading-tight tracking-[-0.01em] text-ink-hi"
+      >
+        New on the site
+      </h2>
+      <p className="mt-3 text-base leading-relaxed text-ink">
+        New pages and features, newest first, dated by release. Each is also posted once to the{" "}
+        <A href={TOPIC_FEEDS.new.url}>What&apos;s new feed</A> and to Bluesky.
+      </p>
+      <ul className="mt-4 divide-y divide-white/[0.07] border-y border-white/[0.07]">
+        {features.map((f) => (
+          <li
+            key={f.id}
+            id={`new-${f.id}`}
+            className="grid gap-1 py-3 sm:grid-cols-[9rem_1fr] sm:gap-4"
+          >
+            <time
+              dateTime={f.date}
+              className="font-mono text-xs uppercase tracking-[0.08em] text-signal-amber sm:pt-1"
+            >
+              {released(f.date)}
+            </time>
+            <div>
+              <Link
+                href={f.url}
+                className="font-display text-base font-semibold text-signal-cyan underline underline-offset-2 hover:text-phos"
+              >
+                {f.title}
+              </Link>
+              <p className="mt-1 text-sm leading-relaxed text-ink-lo">{f.summary}</p>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 /** Which score a version belongs to, from how its name is written. */
 function family(v: ScoreVersion): "Congress" | "Presidents" | "Justices" {
@@ -84,15 +156,18 @@ export default function ChangelogPage() {
         <div className="max-w-3xl mx-auto font-sans">
           <PageMasthead
             className="mb-6"
-            eyebrow="Changelog · versioned scoring methodology"
-            title="Scoring changelog"
+            eyebrow="Changelog · new features and versioned scoring methodology"
+            title="Changelog"
           >
             <p>
-              Every change to how scores are calculated, when it was released, and why it was made.
+              What is new on the site, and every change to how scores are calculated, when it was
+              released, and why it was made.
             </p>
           </PageMasthead>
 
           <div className="mt-10 space-y-12">
+            <NewOnTheSite />
+
             <Summary>
               <Point>
                 The scoring methods are versioned. A new version can move every score at once on the
