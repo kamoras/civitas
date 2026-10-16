@@ -2497,6 +2497,60 @@ forecast for the bill), the Ongoing tab lists recently closed monitors, and
 `/compare` offers pairs that need no picking. Never fill the gap with model
 text or a visitor's input (§7, §8).
 
+#### Accessibility: WCAG 2.2 AA is a merge requirement (2026-10)
+
+Accessibility outranks styling. A change that fails WCAG 2.2 Level AA is not
+merged, however it looks; when a design and a criterion disagree, the design
+moves. `/accessibility` states this target and the known gaps; a change that
+closes or opens one updates that page in the same PR.
+
+How to check, before asking for review:
+
+- **`npm test`**: the jsdom axe tests (scorecards, Congress reports, the
+  state ballot, the voter calendar, the maps) and
+  `src/lib/wcagContrast.test.ts`, which computes the WCAG ratio of every text
+  token on every ground and of every `text-*`/`bg-*` pair written together in
+  one class string (each variant: `hover:`, `aria-selected:`...) from
+  `tailwind.config.ts`, and fails below 4.5:1 (3:1 for large text). A colour
+  that fails is fixed in the token or the pair, never with an opacity tweak at
+  one call site.
+- **`npm run build && npm run test:a11y -- .lighthouserc.populated.json`**
+  (`scripts/axe-routes.mjs`, also run by the Lighthouse workflow on both of
+  its route lists): every axe rule tagged WCAG 2.0, 2.1 or 2.2 A/AA, in
+  Chrome, at 320px and 1280px, plus no horizontal scroll at 320px. A new
+  route or page type goes into the Lighthouse configs so both gates see it.
+  The workflow is not a required GitHub check, so read its result on the PR.
+- **By hand, on a production build**, for what axe cannot see: keyboard
+  paths through anything interactive you touched (menus, tabs, disclosures,
+  drawers, dialogs, maps), Shift+Tab as well as Tab; focus visible and never
+  under the fixed header; 200% text at 1280px; text drawn inside SVG charts
+  and maps (axe does not measure it); hover and focus pop-ups; reduced
+  motion. Say in the PR what you checked and the result.
+
+Patterns that exist because they failed once:
+
+- **Focus Not Obscured (2.4.11)** is one rule: `html { scroll-padding-top }`
+  in `globals.css`, sized to the fixed header. Don't add `scroll-mt-*` to
+  anchor targets (it adds to the padding). A page with a sticky bar under the
+  header marks it `data-sticky-subnav`.
+- **Dialogs** trap Tab with `trapTab` (`src/lib/focusedDialog.ts`), which
+  also wraps when focus sits on the dialog or its heading. A check for "on
+  the first control" let Shift+Tab out of every dialog here.
+- **Links in running text** use `INLINE_LINK` (`src/lib/controlStyles.ts`):
+  underlined, since cyan is 1.1-1.3:1 against the ink around it.
+- **Labels on map tiles** carry `MAP_LABEL_HALO` (`src/lib/results.ts`); no
+  ink colour reads on every party fill.
+- **Hover content** stays open while the pointer moves onto it and closes on
+  Escape from anywhere (`MetricTooltip`); no `title` attribute as a tooltip.
+- **Scripted scrolling** takes `scrollBehavior()` (`src/lib/motion.ts`), so
+  reduced motion jumps instead of gliding.
+- **Targets** are 24x24 (`min-h-6`, or `h-6 w-6` with a negative margin, as
+  `MetricTooltip` does) unless they are links inside a sentence.
+- **A filter that changes a list** says so in a `role="status"` line
+  (`CalendarList`).
+- **A display or pixel face** is for the wordmark only, never body or data
+  text.
+
 ### Testing
 
 - pytest with `asyncio_mode = auto`

@@ -18,7 +18,7 @@ import {
 export const metadata = pageMetadata({
   title: "Accessibility Statement",
   description:
-    "Civitas accessibility statement: the WCAG 2.1 AA standard it is built to, what is checked automatically on every change, what isn't, and how to report a barrier.",
+    "Civitas accessibility statement: the WCAG 2.2 AA standard it is built to, what is checked automatically on every change, the gaps we know of, and how to report a barrier.",
   path: "/accessibility",
 });
 
@@ -49,8 +49,9 @@ export default function AccessibilityPage() {
           <div className="mt-10 space-y-12">
             <Summary>
               <Point>
-                Civitas is built to WCAG 2.1 Level AA. We know of no open failures; if you find one,
-                it is a bug.
+                Civitas is built to WCAG 2.2 Level AA, and the project&apos;s rules don&apos;t merge
+                a change that fails it. The gaps we know of are listed below; anything else you find
+                is a bug.
               </Point>
               <Point>
                 Every change is audited automatically, on pages with data and on the empty and error
@@ -68,11 +69,15 @@ export default function AccessibilityPage() {
 
             <Section id="status" title="Where the site stands">
               <Facts>
-                <Fact label="Standard">WCAG 2.1 Level AA</Fact>
+                <Fact label="Standard">WCAG 2.2 Level AA</Fact>
                 <Fact label="Status">
-                  Conformant, as far as we know: no known failures are open.
+                  Partially conformant: every check below passes on every page we audit, and the
+                  gaps we know of are listed under &ldquo;Known gaps&rdquo;.
                 </Fact>
-                <Fact label="Last reviewed">2026-09-29</Fact>
+                <Fact label="Last reviewed">
+                  2026-10-16: every public route, at 320, 375 and 1280 pixels wide and at 200% text
+                  size, by keyboard and with axe-core.
+                </Fact>
               </Facts>
             </Section>
 
@@ -83,18 +88,22 @@ export default function AccessibilityPage() {
                   the navigation. In a set of tabs, the arrow keys, Home and End move between tabs
                   and Tab moves into the content. In the main navigation, the button beside each
                   section lists its pages as plain links; Escape closes the list and returns focus
-                  to the button, and moving focus away closes it too. The mobile menu and the
-                  scorecard and ballot drawers keep focus inside while open, close on Escape, and
-                  return focus to what opened them.
+                  to the button, and moving focus away closes it too. The mobile menu, the share
+                  dialog, the map&apos;s seat sheet and the scorecard and ballot drawers keep focus
+                  inside while open (Tab and Shift+Tab both wrap), close on Escape, and return focus
+                  to what opened them. Map tiles are one keyboard stop per state, opened with Enter.
                 </Item>
                 <Item label="Focus">
-                  The element with keyboard focus always shows a 2px cyan outline.
+                  The element with keyboard focus always shows a 2px cyan outline, and the page
+                  scrolls so it is never hidden under the fixed header.
                 </Item>
                 <Item label="Contrast">
                   Text colours come from a fixed palette with no dimmer shades to reach for. The
                   faintest text clears 4.5:1 against the lightest background any text sits on, and
                   stays at or above APCA Lc 58 on every background, a stricter measure of how light
-                  text on a dark page actually reads.
+                  text on a dark page actually reads. Links inside a sentence are underlined, not
+                  only coloured. Letters drawn on map tiles sit on a dark outline, so they read on
+                  any tile colour.
                 </Item>
                 <Item label="Screen readers">
                   Pages use landmarks (header, navigation, main) and headings in order. Tabs,
@@ -110,17 +119,22 @@ export default function AccessibilityPage() {
                   opens with a short version before any method.
                 </Item>
                 <Item label="Motion">
-                  With reduced motion turned on in your system settings, animations stop and
-                  transitions are instant.
+                  With reduced motion turned on in your system settings, animations stop,
+                  transitions are instant and the page jumps instead of scrolling smoothly.
                 </Item>
                 <Item label="Windows High Contrast">
                   In forced-colours mode, decorative colour effects that would smear text are
                   removed.
                 </Item>
                 <Item label="Touch">
-                  The small score-explanation buttons are 24×24 pixels, WCAG 2.2&apos;s minimum
-                  target size. On a phone the MENU button, the way to every section, is a 44×44
-                  target around the word.
+                  Controls are at least 24×24 pixels, WCAG 2.2&apos;s minimum target size, or spaced
+                  so a 24-pixel circle around each touches no other; links inside a sentence are the
+                  exception the standard allows. On a phone the MENU button, the way to every
+                  section, is a 44×44 target around the word. Nothing needs dragging.
+                </Item>
+                <Item label="Pop-up explanations">
+                  A score&apos;s explanation opens on hover, focus or tap, stays open while the
+                  pointer moves onto it, and closes with Escape wherever focus is.
                 </Item>
               </List>
               <More label="Typefaces, and why">
@@ -137,9 +151,15 @@ export default function AccessibilityPage() {
                 <Item label="Lighthouse, on every change">
                   Each pull request builds the site and runs Lighthouse&apos;s accessibility audit
                   twice. The first run has no backend, so pages show the empty and error states a
-                  visitor sees when a source is down (10 routes). The second uses a seeded fictional
-                  dataset, so profiles, score tables, documents and a state ballot are audited with
-                  content (11 routes). Every route has to score 100.
+                  visitor sees when a source is down (12 routes). The second uses a seeded fictional
+                  dataset, so profiles, score tables, documents and state ballots are audited with
+                  content (17 routes). Every route has to score 100.
+                </Item>
+                <Item label="axe-core in a browser, on every change">
+                  The same routes, on the same production build, are loaded in Chrome at 320 and
+                  1280 pixels wide and checked against every axe-core rule for WCAG 2.0, 2.1 and 2.2
+                  at levels A and AA, including colour contrast and target size. A page wider than a
+                  320-pixel screen fails too.
                 </Item>
                 <Item label="axe-core, in the test suite">
                   The member, president and justice scorecards, the Congress report pages and the
@@ -152,26 +172,52 @@ export default function AccessibilityPage() {
                 </Item>
                 <Item label="Palette tests">
                   Tests fail if code uses a stock Tailwind colour or a semi-transparent colour
-                  outside the palette, and they hold each text colour to its APCA floor on every
-                  background.
+                  outside the palette. They hold each text colour to its APCA floor on every
+                  background, and compute the WCAG ratio of every text and background pair written
+                  in the code, failing below 4.5:1 (3:1 for large text).
                 </Item>
               </List>
               <More label="What the automated checks don't cover">
                 <P>
                   Automated tools find some kinds of failure and not others. They can confirm that a
-                  button has a name, not that the name makes sense. Contrast is checked in
-                  Lighthouse, but not in the axe-core tests, which run without a real renderer.
-                  Keyboard behaviour is covered by component tests where it has regressed before
-                  (the tab bars are one). Otherwise it is checked by hand on a production build when
-                  it changes, not on a schedule. We have not run a formal audit with screen reader
-                  users.
+                  button has a name, not that the name makes sense. Contrast is measured in the
+                  browser checks, not in the component tests, which run without a real renderer;
+                  axe-core does not measure text drawn inside a chart or map, so those colours are
+                  checked by the palette tests and by hand. Keyboard behaviour is covered by
+                  component tests where it has regressed before (the tab bars and dialog focus are
+                  two). Otherwise it is checked by hand on a production build when it changes, not
+                  on a schedule.
                 </P>
                 <P>
-                  The Lighthouse job runs on every pull request but is not a required status check,
-                  so a failing score is visible on the pull request rather than technically blocking
+                  The project&apos;s rules don&apos;t merge a change that fails these checks, but
+                  the browser job (Lighthouse and axe-core) is not yet a required status check on
+                  GitHub, so a failure shows on the pull request rather than technically blocking
                   the merge.
                 </P>
               </More>
+            </Section>
+
+            <Section id="gaps" title="Known gaps">
+              <List>
+                <Item label="No audit with disabled users">
+                  The checks above are automated or done by us. We have not run a formal audit with
+                  screen reader, switch or voice-control users.
+                </Item>
+                <Item label="Shared images">
+                  An image made with a Share button has no description of its own once it leaves the
+                  site: the preview in the dialog is described, but the saved file is not. Add a
+                  description where you post it.
+                </Item>
+                <Item label="The admin dashboard">
+                  The operators&apos; dashboard behind a login is not part of the public site and is
+                  not in the audit.
+                </Item>
+                <Item label="Not every page variant">
+                  The browser checks cover a fixed list of routes. Pages built from records the
+                  fixture doesn&apos;t have (a live election night, a monitor&apos;s history) are
+                  checked by hand when they change.
+                </Item>
+              </List>
             </Section>
 
             <Section id="report" title="Reporting a barrier">
