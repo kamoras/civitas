@@ -2,7 +2,7 @@ import Link from "next/link";
 import { connection } from "next/server";
 import type { CommentDeadline, StateNextDeadline, ThisWeek } from "@/types/thisWeek";
 import { countdownText } from "@/components/elections/VoterCalendar";
-import { rollCallHref, shortDate, weekHref } from "@/lib/congress";
+import { rollCallHref, shortDate, voteResult, weekHref } from "@/lib/congress";
 import { stateBallotHref } from "@/lib/elections";
 import { STATE_NAMES } from "@/lib/stateCodes";
 
@@ -233,7 +233,8 @@ function FullStrip({ data }: { data: ThisWeek }) {
                     {v.title || v.question}
                   </Link>
                   <span className="block font-mono text-xs text-ink-min">
-                    {shortDate(v.date)} · {v.chamber === "senate" ? "Senate" : "House"} · {v.result}
+                    {shortDate(v.date)} · {v.chamber === "senate" ? "Senate" : "House"} ·{" "}
+                    {voteResult(v)}
                   </span>
                 </li>
               ))}

@@ -77,7 +77,9 @@ export default function DataChapter() {
               chamber&apos;s live floor log. Held from the first day of Civitas&apos;s record of
               Congress, as are the Daily Digest&apos;s days, and a page outside it says where the
               record starts; a bill of an earlier Congress says its votes aren&apos;t held and links
-              each roll call to the chamber&apos;s record.
+              each roll call to the chamber&apos;s record. A Senate tie the Vice President broke is
+              shown with the Vice President&apos;s vote, an election of the Speaker by each
+              candidate&apos;s votes, and a quorum call as the members present, with no result.
             </Fact>
             <Fact label="unitedstates/congress-legislators">
               Committee seats and party leadership titles, an open dataset refreshed weekly. It

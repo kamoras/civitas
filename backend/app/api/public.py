@@ -732,7 +732,9 @@ def _roll_call(rc: dict | None, chamber: str | None = None, congress: int | None
     return {
         "chamber": rc.get("chamber") or chamber, "congress": rc.get("congress") or congress,
         "session": rc["session"], "number": rc["number"], "date": rc["date"],
+        "kind": rc.get("kind") or "question",
         "question": rc.get("question") or "", "result": rc.get("result") or "",
+        "tieBreaker": rc.get("tieBreaker"), "candidates": rc.get("candidates") or [],
         "sourceUrl": rc.get("sourceUrl") or "",
         "parties": [{"party": p["party"], "yea": p["yea"], "nay": p["nay"], "present": p["present"],
                      "notVoting": p["notVoting"]} for p in rc.get("parties") or []],

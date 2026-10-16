@@ -38,6 +38,7 @@ from app.models import (
 )
 from app.ordinals import ordinal
 from app.services.bill_record import bill_label, party_breakdown
+from app.services.roll_call_shape import shape
 
 SITE_DOMAIN = "civitas-research.org"
 
@@ -108,6 +109,13 @@ def _as_of(moment: datetime | None) -> str:
     return (moment or datetime.now()).date().isoformat()
 
 
+def _count(row: dict, bucket: str) -> int:
+    """One party's count in a tally row: a position, or a candidate's votes."""
+    if bucket.startswith("candidate:"):
+        return row.get("candidates", {}).get(bucket.removeprefix("candidate:"), 0)
+    return row[bucket]
+
+
 def vote_card(db: Session, chamber: str, congress: int, session: int, number: int,
               show_title: bool = True) -> RecordCard | None:
     rc = db.query(RollCall).filter_by(chamber=chamber, congress=congress, session=session, number=number).one_or_none()
@@ -115,14 +123,19 @@ def vote_card(db: Session, chamber: str, congress: int, session: int, number: in
         return None
     positions = db.query(RollCallPosition).filter_by(roll_call_id=rc.id).all()
     rows = party_breakdown(positions)
+    sh = shape(rc, positions)
+    # An election of the Speaker: one row per candidate, then present and
+    # not voting; a quorum call has no yeas or nays to show.
+    buckets = [(f"candidate:{c['name']}", c["name"]) for c in sh["candidates"]] + [
+        (b, lab) for b, lab in POSITIONS if not (sh["kind"] != "question" and b in ("yea", "nay"))]
     tally = []
-    for bucket, label in POSITIONS:
-        total = sum(r[bucket] for r in rows)
+    for bucket, label in buckets:
+        total = sum(_count(r, bucket) for r in rows)
         if bucket == "present" and not total:
             continue
         tally.append({
             "position": bucket, "label": label, "total": total,
-            "parties": [{"party": r["party"], "name": PARTY_NAMES.get(r["party"], r["party"]), "count": r[bucket]}
+            "parties": [{"party": r["party"], "name": PARTY_NAMES.get(r["party"], r["party"]), "count": _count(r, bucket)}
                         for r in rows],
         })
     if not positions:  # the tally as recorded, when the positions weren't stored
@@ -133,6 +146,8 @@ def vote_card(db: Session, chamber: str, congress: int, session: int, number: in
     # title out) its bill number. A vote with neither shows nothing of what
     # was voted on and has no card.
     measure = ((rc.title or "").strip() if show_title else "") or (bill_label(rc.bill_id) or "")
+    if not measure and sh["kind"] == "election":
+        measure = (rc.question or "").strip()  # "Election of the Speaker": the question is the subject
     if not measure:
         return None
     question = (rc.question or "").strip()
@@ -142,7 +157,8 @@ def vote_card(db: Session, chamber: str, congress: int, session: int, number: in
         kind="vote", key=f"vote:{chamber}/{congress}/{session}/{number}",
         eyebrow=f"{CHAMBER_NAMES[chamber]} roll call {number}, {ordinal(congress)} Congress",
         headline=headline,
-        lines=[f"Result: {rc.result}"] if rc.result else [],
+        lines=([f"Result: {sh['resultLabel']}"] if sh["resultLabel"] else []) + (
+            [f"Tie broken: {sh['tieBreaker']['byWhom']} voted {sh['tieBreaker']['vote']}"] if sh["tieBreaker"] else []),
         tally=tally, date=rc.date,
         path=f"/congress/votes/{chamber}/{congress}/{session}/{number}",
         source_name=_VOTE_SOURCE[chamber], as_of=_as_of(rc.fetched_at),
