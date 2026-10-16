@@ -1756,12 +1756,14 @@ GET /api/public/v1/senators                      Serving senators, ranked by sco
 GET /api/public/v1/senators/{id}                 One senator's full record
 GET /api/public/v1/senators/{id}/history         A senator's scores over time
 GET /api/public/v1/senators/{id}/breakdown       How a senator's score is computed
-GET /api/public/v1/senators/{id}/votes           A senator's votes, each with its roll call
+GET /api/public/v1/senators/{id}/votes           Every position a senator recorded this Congress,
+                                                 each with its roll call
 GET /api/public/v1/representatives               Serving representatives, ranked by score
 GET /api/public/v1/representatives/{id}          One representative's full record
 GET /api/public/v1/representatives/{id}/history  A representative's scores over time
 GET /api/public/v1/representatives/{id}/breakdown How a representative's score is computed
-GET /api/public/v1/representatives/{id}/votes    A representative's votes, each with its roll call
+GET /api/public/v1/representatives/{id}/votes    Every position a representative recorded this
+                                                 Congress, each with its roll call
 GET /api/public/v1/bills/{id}/votes              The roll calls on a bill, with each party's split
 GET /api/public/v1/search                        Floor speeches, presidential actions,
                                                  Supreme Court opinions and federal rules
@@ -1783,6 +1785,14 @@ profile carries `algorithmVersion` and `scoredOn` (the newest history
 snapshot's, the same two fields as `/breakdown`), and each `/history`
 snapshot its own `algorithmVersion`, so a jump between two snapshots can be
 read as a method change rather than a change in the record.
+
+A member's `/votes` is every position they recorded on the chamber's roll
+calls this Congress (`services/member_positions.py`, from `roll_call_positions`),
+not the profile's selection of votes (`key_votes`, about a fifth of the
+record). Each says whether it sided with the party, read as the scoring run
+reads it, and `countedAsBreak` marks the breaks Constituent Alignment
+counted, so the party-line figure can be checked against the record;
+`chamberRollCalls` is how many roll calls the chamber held.
 
 A score can be reproduced from the API alone. `/breakdown` serves, for each
 dimension, the stored score, the score recomputed from the member's stored

@@ -65,7 +65,9 @@ def client(db_session, fixed_ranking, monkeypatch):
         Senator(id="S000001", name="Jane Doe", state="GA", party="D", **SCORES),
         Senator(id="S000002", name="Ann Poe", state="OH", party="R",
                 **{**SCORES, "score_funding_independence": 95}),
-        Representative(id="R000001", name="John Roe", state="GA", district=5, party="R", **SCORES),
+        Representative(id="R000001", name="John Roe", state="GA", district=5, party="R", bioguide_id="R000001",
+                       party_line_record='{"congress": 119, "votes": 1, "breaks": [{"rollCall": "house-119-1-7", '
+                                         '"vote": "Yea"}], "flankBreaks": []}', **SCORES),
         Representative(id="R000002", name="Kay Loe", state="WY", district=0, party="D",
                        **{**SCORES, "score_funding_independence": 95}),
         ScoreSnapshot(entity_type="senator", entity_id="S000001", date="2026-09-01",
@@ -79,6 +81,19 @@ def client(db_session, fixed_ranking, monkeypatch):
                  question="On Passage of the Bill", result="Bill Passed", yeas=1, nays=0, bill_id="HR.1",
                  source_url="https://www.senate.gov/legislative/LIS/roll_call_votes/vote1191/vote_119_1_00005.htm"),
         RollCallPosition(roll_call_id=1, member_id="S001", last_name="Doe", party="D", state="GA", position="Yea"),
+        # Two more of each party, so the roll call has a party split.
+        *[RollCallPosition(roll_call_id=1, member_id=f"S{n}", last_name=f"D{n}", party="D", state="NY", position="Yea")
+          for n in (10, 11)],
+        *[RollCallPosition(roll_call_id=1, member_id=f"S{n}", last_name=f"R{n}", party="R", state="TX", position="Nay")
+          for n in (20, 21, 22)],
+        RollCall(id=7, chamber="house", congress=119, session=1, number=7, date="2026-01-20",
+                 question="On Passage", result="Passed", yeas=4, nays=3, bill_id="HR.3",
+                 source_url="https://clerk.house.gov/evs/2026/roll007.xml"),
+        RollCallPosition(roll_call_id=7, member_id="R000001", last_name="Roe", party="R", state="GA", position="Aye"),
+        *[RollCallPosition(roll_call_id=7, member_id=f"H{n}", last_name=f"D{n}", party="D", state="NY", position="Aye")
+          for n in (1, 2, 3)],
+        *[RollCallPosition(roll_call_id=7, member_id=f"H{n}", last_name=f"R{n}", party="R", state="TX", position="No")
+          for n in (4, 5, 6)],
         KeyVote(senator_id="S000001", bill_name="Placeholder Act", bill_id="HR.1", date="2026-02-01", vote="Yea",
                 voted_with_party=True, party_leaning="D", roll_call="senate-119-1-5"),
         RepKeyVote(representative_id="R000001", bill_name="Placeholder Act", bill_id="HR.1", date="2026-01-20",
@@ -140,7 +155,9 @@ def test_every_response_matches_its_documented_schema(client, path, params, sche
 def test_a_vote_carries_its_roll_call_and_each_party_split(client):
     (vote,) = _body(client, "/senators/S000001/votes")["entries"]
     assert vote["votedWithParty"] is True and vote["rollCall"]["number"] == 5
-    assert vote["rollCall"]["parties"] == [{"party": "D", "yea": 1, "nay": 0, "present": 0, "notVoting": 0}]
+    assert (vote["partyLeaning"], vote["policyArea"]) == ("D", "PROCEDURAL")
+    assert vote["rollCall"]["parties"] == [{"party": "R", "yea": 0, "nay": 3, "present": 0, "notVoting": 0},
+                                           {"party": "D", "yea": 3, "nay": 0, "present": 0, "notVoting": 0}]
     assert vote["rollCall"]["sourceUrl"].startswith("https://www.senate.gov/")
     (rc,) = _body(client, "/bills/hr.1/votes")["entries"]
     assert (rc["yeas"], rc["nays"], rc["chamber"]) == (1, 0, "senate")
@@ -377,3 +394,49 @@ def test_profiles_and_history_name_the_scoring_version(client, db_session, chamb
 def test_a_profile_with_no_snapshot_names_no_version(client):
     profile = _body(client, "/senators/S000002")
     assert (profile["algorithmVersion"], profile["scoredOn"]) == (None, None)
+
+
+def test_votes_are_every_position_the_member_recorded(client, db_session):
+    """Every position on the chamber's roll calls, not the profile's stored
+    selection (key_votes held 202 of a senator's 915 positions on
+    2026-10-16): total is the member's positions, and a roll call the
+    scoring run stored no vote row for is there too, with its party split."""
+    db_session.add_all([
+        RollCall(id=50, chamber="senate", congress=119, session=1, number=6, date="2026-02-02",
+                 question="On the Motion to Table", result="Motion to Table Agreed to", yeas=1, nays=0),
+        RollCallPosition(roll_call_id=50, member_id="S001", last_name="Doe", party="D", state="GA", position="Yea"),
+        RollCall(id=51, chamber="senate", congress=118, session=2, number=6, date="2024-02-02",
+                 question="On Passage", result="Passed", yeas=1, nays=0),
+        RollCallPosition(roll_call_id=51, member_id="S001", last_name="Doe", party="D", state="GA", position="Yea"),
+    ])
+    db_session.commit()
+    body = _body(client, "/senators/S000001/votes")
+    PublicMemberVotesSchema.model_validate(body)
+    assert (body["total"], body["congress"], body["chamberRollCalls"]) == (2, 119, 3)
+    newest = body["entries"][0]
+    assert newest["rollCall"]["number"] == 6 and newest["billId"] is None
+    # A motion to table is housekeeping: no party signal, and no stored row.
+    assert (newest["votedWithParty"], newest["partyLeaning"], newest["policyArea"]) == (None, None, None)
+    assert newest["countedAsBreak"] is None  # no party-line record stored for this senator
+
+
+def test_a_house_aye_against_the_party_is_the_scores_break(client):
+    (vote,) = _body(client, "/representatives/R000001/votes")["entries"]
+    assert (vote["vote"], vote["votedWithParty"], vote["countedAsBreak"]) == ("Yea", False, True)
+    assert vote["billId"] == "HR.3" and vote["policyArea"] is None
+
+
+def test_paging_through_every_position(client, db_session):
+    db_session.add_all([
+        RollCall(id=100 + n, chamber="senate", congress=119, session=2, number=100 + n, date=f"2026-03-{n:02d}",
+                 question="On the Nomination PN1", result="Nomination Confirmed", yeas=1, nays=0)
+        for n in range(1, 4)
+    ] + [RollCallPosition(roll_call_id=100 + n, member_id="S001", last_name="Doe", party="D", state="GA",
+                          position="Not Voting") for n in range(1, 4)])
+    db_session.commit()
+    first = _body(client, "/senators/S000001/votes", per_page=2)
+    last = _body(client, "/senators/S000001/votes", per_page=2, page=2)
+    assert (first["total"], first["totalPages"]) == (4, 2)
+    seen = [e["rollCall"]["number"] for e in first["entries"] + last["entries"]]
+    assert seen == [103, 102, 101, 5]
+    assert first["entries"][0]["vote"] == "Not Voting"
