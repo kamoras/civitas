@@ -1,4 +1,4 @@
-/** Midterm-elections feature types (2026-07). Mirrors the backend's
+/** Elections feature types (2026-07). Mirrors the backend's
  * /api/elections/* response shapes exactly — see backend/app/api/elections.py.
  */
 
@@ -549,7 +549,7 @@ export interface StateBallot {
    * Optional for an older backend: absent reads as false. */
   newDistrictLines?: boolean;
   /** Where November does not settle a contest by plurality (Georgia's
-   * majority rule; Louisiana's 2026 House open primary), with the
+   * majority rule; Louisiana's House open primary, where its law makes one), with the
    * runoff's date. Optional for an older backend. */
   generalRunoffs?: GeneralRunoff[];
   /** Contests whose primary was not `primaryDate` (Alabama's postponed

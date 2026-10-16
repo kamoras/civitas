@@ -46,19 +46,21 @@ describe("GeneralRunoffNotice", () => {
   it("says an open primary is one, with its runoff date", () => {
     render(
       <GeneralRunoffNotice
-        runoffs={[{ offices: ["H"], openPrimary: true, runoffDate: "2026-12-12" }]}
+        runoffs={[{ offices: ["H"], openPrimary: true, runoffDate: "2030-12-14" }]}
+        electionDate="2030-11-05"
       />
     );
     expect(
-      screen.getByText(/U\.S\. House contests, November 3 is an all-party primary/)
+      screen.getByText(/U\.S\. House contests, November 5, 2030 is an all-party primary/)
     ).toBeInTheDocument();
-    expect(screen.getByText(/runoff on December 12/)).toBeInTheDocument();
+    expect(screen.getByText(/runoff on December 14/)).toBeInTheDocument();
   });
 
   it("says a majority rule covers every contest", () => {
     render(
       <GeneralRunoffNotice
         runoffs={[{ offices: "*", openPrimary: false, runoffDate: "2026-12-01" }]}
+        electionDate="2026-11-03"
       />
     );
     expect(
@@ -68,7 +70,9 @@ describe("GeneralRunoffNotice", () => {
   });
 
   it("says nothing for a plurality state or an older API", () => {
-    const { container } = render(<GeneralRunoffNotice runoffs={undefined} />);
+    const { container } = render(
+      <GeneralRunoffNotice runoffs={undefined} electionDate="2026-11-03" />
+    );
     expect(container).toBeEmptyDOMElement();
   });
 

@@ -113,7 +113,7 @@ export default function RaceContext({
       {...{ [SHARE_SECTION_ATTR]: `context-${race.id}` }}
       {...shareMetaAttrs({
         source:
-          "Cook PVI; Civitas-computed lean from open 2020 and 2024 precinct returns; Civitas representation scores",
+          "Cook PVI; Civitas-computed lean from open precinct returns; Civitas representation scores",
         // Read when the page loads.
         asOf: null,
         scaleMax: incumbent?.incumbentRecord ? 100 : null,
