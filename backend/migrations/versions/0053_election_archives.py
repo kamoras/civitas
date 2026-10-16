@@ -5,16 +5,16 @@ after the site moves on to the next cycle (app/election_archive.py)
 Additive only (one new table), so the previous image runs unchanged
 against the migrated schema.
 
-Revision ID: 0054
-Revises: 0051
+Revision ID: 0053
+Revises: 0052
 Create Date: 2026-10-16
 """
 from alembic import op
 import sqlalchemy as sa
 
 
-revision = '0054'
-down_revision = '0051'
+revision = '0053'
+down_revision = '0052'
 branch_labels = None
 depends_on = None
 
