@@ -61,7 +61,7 @@ def _parse_gdp_csv(text: str) -> dict[int, float]:
 
 
 async def fetch_historical_real_gdp(
-    client: httpx.AsyncClient, db: Session, start_year: int = 1790, end_year: int = 2025,
+    client: httpx.AsyncClient, db: Session, start_year: int, end_year: int,
 ) -> dict[int, float]:
     """Fetch the full annual real-GDP series once; callers compute each
     president's own term growth rate from the shared series, reused
