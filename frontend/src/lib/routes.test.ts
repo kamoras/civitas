@@ -5,6 +5,7 @@ import { inSection, issuesUrl, monitorHref, SECTIONS, sectionSubpages } from "./
 import { ELECTION_MAP_HREF } from "./electionMap";
 import { REDISTRICTING_HREF } from "./redistricting";
 import { presidentSupportHref } from "./presidentialSupport";
+import { NOMINATIONS_HREF } from "./nominations";
 
 describe("issuesUrl", () => {
   it("is bare /action for the live view with nothing expanded", () => {
@@ -38,6 +39,7 @@ describe("SECTIONS", () => {
     expect(href("elections", "map")).toBe(ELECTION_MAP_HREF);
     expect(href("elections", "redistricting")).toBe(REDISTRICTING_HREF);
     expect(href("congress", "president")).toBe(presidentSupportHref("house"));
+    expect(href("congress", "nominations")).toBe(NOMINATIONS_HREF);
   });
 });
 
@@ -96,7 +98,11 @@ describe("SECTIONS covers the site", () => {
   });
 
   it("menus leave out the hub, which their section's own link already is", () => {
-    expect(sectionSubpages("elections").map((t) => t.key)).toEqual(["map", "redistricting"]);
+    expect(sectionSubpages("elections").map((t) => t.key)).toEqual([
+      "map",
+      "redistricting",
+      "archive",
+    ]);
     expect(sectionSubpages("explore")).toEqual([]);
   });
 

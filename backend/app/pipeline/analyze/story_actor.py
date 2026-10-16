@@ -14,10 +14,11 @@ sees and what the measured complaint was about (2026-10-10: 37% of the last
 
 A headline that names no tracked official gets a class instead: a
 similarity-weighted vote among the STORY_CLASS_K nearest of the relevance
-gate's hand-labelled articles (app/data/policy_relevance_examples.json),
-whose categories say who acts — U.S. government, courts, an election,
-foreign politics, business, crime, a disaster (kNN, Cover & Hart 1967; the
-labelled set is the same human knowledge that seeds the relevance gate).
+seed's articles (app/data/policy_relevance_examples.json), whose
+hand-drawn categories say who acts — U.S. government, courts, an election,
+foreign politics, business, crime, a disaster (kNN, Cover & Hart 1967). The
+relevance gate no longer reads those labels (app/policy_relevance.py);
+this watch-only class vote still does.
 Prototype sentences were tried first and measured useless here: on
 hand-labelled stories the government/non-government prototype margin caught
 0 of 11 held-out non-government stories at a margin that was precise on the

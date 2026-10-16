@@ -11,6 +11,7 @@ const notFound = vi.hoisted(() =>
   })
 );
 vi.mock("next/navigation", () => ({ redirect, notFound }));
+vi.mock("next/server", () => ({ connection: vi.fn(async () => undefined) }));
 
 import RaceDetailRedirect from "./page";
 
@@ -32,6 +33,44 @@ describe("RaceDetailRedirect", () => {
     await expect(
       RaceDetailRedirect({ params: Promise.resolve({ raceId: "2026-HOUSE-GA-06" }) })
     ).rejects.toThrow("REDIRECT:/elections/states/GA#race-2026-HOUSE-GA-06");
+  });
+
+  it("sends a past election's race to its place in that election's archive", async () => {
+    // After the results window the state page shows the next ballot, so an
+    // old link (a Bluesky race post) lands on the archive instead.
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: "2026-HOUSE-GA-6", state: "GA", archiveCycle: 2026 }),
+    });
+
+    await expect(
+      RaceDetailRedirect({ params: Promise.resolve({ raceId: "2026-HOUSE-GA-6" }) })
+    ).rejects.toThrow("REDIRECT:/elections/2026#race-2026-HOUSE-GA-6");
+  });
+
+  it("keeps the site's own election's races on the state page", async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: "2026-SEN-GA", state: "GA", archiveCycle: null }),
+    });
+
+    await expect(
+      RaceDetailRedirect({ params: Promise.resolve({ raceId: "2026-SEN-GA" }) })
+    ).rejects.toThrow("REDIRECT:/elections/states/GA#race-2026-SEN-GA");
+  });
+
+  it("treats a four-digit year as an election, not a race", async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: false, status: 404 });
+
+    // The page hands a year to the archive page, which 404s an election
+    // with no archive.
+    const page = (await RaceDetailRedirect({
+      params: Promise.resolve({ raceId: "2024" }),
+    })) as unknown as { type: (p: unknown) => Promise<unknown>; props: unknown };
+    await expect(page.type(page.props)).rejects.toThrow("NOT_FOUND");
+    const url = String((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0]);
+    expect(url).toContain("/api/elections/archive/2024");
+    expect(redirect).not.toHaveBeenCalled();
   });
 
   it("404s when the race no longer exists", async () => {

@@ -136,8 +136,10 @@ describe("ElectionsPage", () => {
       "Ballots by state",
       "Seat map",
       "New House maps",
+      "Archive",
     ]);
     expect(tabs[0]).toHaveAttribute("aria-current", "page");
+    expect(tabs[3]).toHaveAttribute("href", "/elections/archive");
     expect(tabs[1]).toHaveAttribute("href", "/elections/map?chamber=senate&view=usual");
     // The inline masthead links, which ran off a phone screen, are gone.
     expect(screen.queryByText(/POLL RANGES →/)).not.toBeInTheDocument();

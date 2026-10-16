@@ -715,6 +715,7 @@ class TestElectionResultsSync:
         from app.time_utils import utcnow
 
         calls = []
+        self.archived = []
 
         async def fake_sync(db, client, day):
             calls.append(day)
@@ -725,6 +726,7 @@ class TestElectionResultsSync:
              patch("app.election_phase.active_election", return_value=election), \
              patch("app.scheduler.utcnow", return_value=now), \
              patch("app.live_results.sync.sync_live_results", fake_sync), \
+             patch("app.election_archive.freeze", side_effect=lambda db, day: self.archived.append(day)), \
              patch("app.scheduler.SessionLocal", return_value=MagicMock()), \
              patch("app.scheduler.lease.run_tracked", side_effect=lambda tier, tracker, work, who=None: __import__("asyncio").run(work())):
             scheduler._election_results_sync()
@@ -737,6 +739,8 @@ class TestElectionResultsSync:
         from app.time_utils import utcnow
 
         assert len(self._run(self._election("results", utcnow() - timedelta(minutes=10)))) == 1
+        # Each pass also copies the held election into its archive.
+        assert [d.isoformat() for d in self.archived] == ["2026-11-03"]
 
     def test_settled_count_is_polled_hourly(self):
         from app.time_utils import utcnow

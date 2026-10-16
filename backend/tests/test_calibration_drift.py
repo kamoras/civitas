@@ -31,32 +31,32 @@ def _count(gate, day, n, passed, freeze_utcnow):
 
 def test_decisions_are_counted_in_memory_and_written_by_flush(store, freeze_utcnow):
     freeze_utcnow(datetime(2028, 3, 1, 12))
-    cd.observe("policy_relevance", [0.2, 0.6, 0.9], 0.5)
-    cd.observe("policy_relevance", [0.7], 0.5)
-    assert cd._days(store, "policy_relevance", date(2028, 3, 1), date(2028, 3, 2)) == (0, 0)
+    cd.observe("cluster_pairs", [0.2, 0.6, 0.9], 0.5)
+    cd.observe("cluster_pairs", [0.7], 0.5)
+    assert cd._days(store, "cluster_pairs", date(2028, 3, 1), date(2028, 3, 2)) == (0, 0)
     cd.flush()
-    assert cd._days(store, "policy_relevance", date(2028, 3, 1), date(2028, 3, 2)) == (4, 3)
-    cd.observe("policy_relevance", [0.1], 0.5)
+    assert cd._days(store, "cluster_pairs", date(2028, 3, 1), date(2028, 3, 2)) == (4, 3)
+    cd.observe("cluster_pairs", [0.1], 0.5)
     cd.flush()
-    assert cd._days(store, "policy_relevance", date(2028, 3, 1), date(2028, 3, 2)) == (5, 3)
+    assert cd._days(store, "cluster_pairs", date(2028, 3, 1), date(2028, 3, 2)) == (5, 3)
 
 
 def test_a_moved_pass_rate_is_flagged_and_noise_is_not(store, freeze_utcnow):
     start = date(2028, 1, 1)
     freeze_utcnow(datetime(2028, 1, 1, 12))
     with patch.object(cd, "_calibration_sha", return_value="v1"):
-        assert cd.drift("policy_relevance", start) is None  # first seen: the baseline starts today
+        assert cd.drift("cluster_pairs", start) is None  # first seen: the baseline starts today
         for d in range(28):
-            _count("policy_relevance", start + timedelta(days=d), 40, 12, freeze_utcnow)  # 30%
+            _count("cluster_pairs", start + timedelta(days=d), 40, 12, freeze_utcnow)  # 30%
         today = start + timedelta(days=70)
         for d in range(28):
-            _count("policy_relevance", today - timedelta(days=d), 40, 14, freeze_utcnow)  # 35%: within noise
-        assert cd.drift("policy_relevance", today) is None
+            _count("cluster_pairs", today - timedelta(days=d), 40, 14, freeze_utcnow)  # 35%: within noise
+        assert cd.drift("cluster_pairs", today) is None
         later = today + timedelta(days=40)
         for d in range(28):
-            _count("policy_relevance", later - timedelta(days=d), 40, 26, freeze_utcnow)  # 65%
-        why = cd.drift("policy_relevance", later)
-        assert "65%" in why and "30%" in why and "policy_relevance_calibration.json" in why
+            _count("cluster_pairs", later - timedelta(days=d), 40, 26, freeze_utcnow)  # 65%
+        why = cd.drift("cluster_pairs", later)
+        assert "65%" in why and "30%" in why and "cluster_pair_calibration.json" in why
 
 
 def test_a_refit_starts_a_new_baseline(store, freeze_utcnow):
@@ -91,7 +91,7 @@ def test_check_all_alerts_per_gate_and_resolves_the_rest(store):
         out = cd.check_all()
     assert out["trend_loaded"] == "moved"
     assert send.call_args.kwargs["condition"] == "calibration-drift-trend-loaded"
-    assert "calibration-drift-policy-relevance" in [c.args[0] for c in resolve.call_args_list]
+    assert "calibration-drift-cluster-pairs" in [c.args[0] for c in resolve.call_args_list]
 
 
 def test_every_gate_names_a_calibration_file_that_exists():

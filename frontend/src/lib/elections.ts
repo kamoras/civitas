@@ -523,3 +523,8 @@ export function tierCandidates(candidates: BallotCandidate[]): RaceTiers {
 export function fecCandidateUrl(candidateId: string, cycleYear: number): string {
   return `https://www.fec.gov/data/candidate/${encodeURIComponent(candidateId)}/?cycle=${cycleYear}&election_full=true`;
 }
+
+/** What a state-contest list drawn from primary results can miss: said
+ * wherever such a list is shown (the state ballot page, the archive). */
+export const PRIMARY_RESULTS_CAVEAT =
+  "Names come from primary results, which can omit a nominee who ran unopposed, independent candidates (who run in no primary) and anyone a party named or replaced after the primary, so an office may be missing, or missing a party's nominee.";

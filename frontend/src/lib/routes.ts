@@ -61,6 +61,27 @@ export function agencyExploreHref(slug: string): string {
 }
 
 /**
+ * The elections archive: every general election Civitas has kept a record
+ * of (`/elections/archive`), and each one's page (`/elections/{cycle}`).
+ *
+ * The last tab of `SECTIONS.elections`, and the tab an archive page marks
+ * as its own. The index never goes empty: before the first archive it says
+ * when one starts.
+ */
+export const ELECTIONS_ARCHIVE_HREF = "/elections/archive";
+
+/** One archived general election's page. */
+export function electionArchiveHref(cycle: number): string {
+  return `/elections/${cycle}`;
+}
+
+/** A race on its archived election's page (the anchor the page gives it,
+ *  and the one the old `/elections/{raceId}` links resolve to). */
+export function archivedRaceHref(cycle: number, raceId: string): string {
+  return `${electionArchiveHref(cycle)}#race-${raceId}`;
+}
+
+/**
  * The site's sections and each one's pages, in the order the main
  * navigation, the footer, the homepage's "Sections" band and each section's
  * tab bar list them: one table, so a page added here appears in all of
@@ -98,6 +119,7 @@ export const SECTIONS = {
       { key: "month", label: "Latest month", href: "/congress/month" },
       { key: "bills", label: "Bills", href: "/congress/bills" },
       { key: "committees", label: "Committees", href: "/congress/committees" },
+      { key: "nominations", label: "Nominations", href: "/congress/nominations" },
       // "Votes with the president", not "With the president": the page is
       // how often members voted with the president's stated positions.
       { key: "president", label: "Votes with the president", href: "/congress/president/house" },
@@ -132,6 +154,7 @@ export const SECTIONS = {
       { key: "ballots", label: "Ballots by state", href: "/elections" },
       { key: "map", label: "Seat map", href: "/elections/map?chamber=senate&view=usual" },
       { key: "redistricting", label: "New House maps", href: "/elections/redistricting" },
+      { key: "archive", label: "Archive", href: ELECTIONS_ARCHIVE_HREF },
     ],
   },
   explore: {

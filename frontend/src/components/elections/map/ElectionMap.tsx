@@ -697,10 +697,13 @@ function SeatDetail({
   data,
   seat,
   onClose,
+  raceHref,
 }: {
   data: ElectionMapData;
   seat: MapSeat;
   onClose: () => void;
+  /** The race's own page, or its place on an archive page. */
+  raceHref: string;
 }) {
   const inc = (party: "D" | "R") => (seat.incumbentParty === party ? " (incumbent)" : "");
   return (
@@ -846,10 +849,10 @@ function SeatDetail({
       )}
       <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">Not a race call.</p>
       <Link
-        href={racePageHref(seat)}
+        href={raceHref}
         className="inline-flex min-h-11 items-center font-mono text-xs text-ink-hi underline"
       >
-        → Race page
+        {raceHref.startsWith("#") ? "→ Count and ballot" : "→ Race page"}
       </Link>
     </div>
   );
@@ -990,6 +993,7 @@ export default function ElectionMap({
   initialChamber,
   initialSeat = null,
   pageUrl,
+  archiveCycle,
 }: {
   /** The page's chamber only (?chamber=); the other loads on demand. */
   response: ElectionMapResponse;
@@ -999,7 +1003,12 @@ export default function ElectionMap({
   initialSeat?: string | null;
   /** The page's absolute URL without a query, for share links. */
   pageUrl: string;
+  /** Drawn on an archived election's page: the other chamber and the CSV
+   * come from that election's archive, and a seat links to its race
+   * further down the same page. */
+  archiveCycle?: number;
 }) {
+  const mapApi = archiveCycle ? `/api/elections/archive/${archiveCycle}/map` : "/api/elections/map";
   const [view, setView] = useState<MapView>(initialView);
   const [loaded, setLoaded] = useState<ElectionMapResponse>(response);
   const [chamber, setChamber] = useState<MapChamber>(
@@ -1108,7 +1117,7 @@ export default function ElectionMap({
     // one chamber never downloads both.
     setLoading(c);
     try {
-      const res = await fetch(`/api/elections/map?chamber=${c}`);
+      const res = await fetch(`${mapApi}?chamber=${c}`);
       if (!res.ok) throw new Error(String(res.status));
       const more = (await res.json()) as ElectionMapResponse;
       setLoaded((prev) => ({ ...prev, chambers: { ...prev.chambers, ...more.chambers } }));
@@ -1361,7 +1370,12 @@ export default function ElectionMap({
             }`}
           >
             {seat ? (
-              <SeatDetail data={data} seat={seat} onClose={close} />
+              <SeatDetail
+                data={data}
+                seat={seat}
+                onClose={close}
+                raceHref={archiveCycle ? `#race-${seat.id}` : racePageHref(seat)}
+              />
             ) : sheetState ? (
               <StateSheet data={data} state={sheetState} onSelect={select} onClose={close} />
             ) : (
@@ -1385,7 +1399,7 @@ export default function ElectionMap({
             TABLE {tableOpen ? "▴" : "▾"}
           </button>
           <a
-            href="/api/elections/map.csv"
+            href={`${mapApi}.csv`}
             className="inline-flex min-h-11 items-center border border-white/20 px-4 font-mono text-xs tracking-[0.12em] text-ink-lo hover:text-ink-hi"
           >
             CSV

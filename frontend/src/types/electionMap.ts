@@ -207,6 +207,9 @@ export interface ElectionMapResponse {
   horizon: number;
   /** True when the map is older than the backend's stale threshold. */
   stale?: boolean;
+  /** True on an archived election's map: its last campaign build, kept
+   * as it stood (GET /api/elections/archive/{cycle}/map). */
+  frozen?: boolean;
   pollWindowDays: number;
   /** False further out than pollWindowDays: every range is fundamentals only. */
   pollsInRange?: boolean;
