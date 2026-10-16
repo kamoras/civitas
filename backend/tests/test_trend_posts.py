@@ -628,21 +628,29 @@ def test_a_nominee_named_in_a_story_is_not_an_anchor(world):
     assert world["db"].query(TrendCandidate).one().decision == "ineligible"
 
 
-def test_a_trend_about_the_nomination_anchors_on_the_vote(world):
-    _nomination(world["db"])
+def test_a_trend_that_began_with_the_vote_anchors_on_it(world):
+    _nomination(world["db"], date="2026-10-13")
     name = "Jordan Vale confirmation"
-    world["trends"] = [trend(name, description="The Senate confirmed Jordan Vale.")]
-    world["scores"][name] = TrendScores(0.9, 0, 0, 0, appointment=0.95)
+    world["trends"] = [trend(name, description="The Senate confirmed Jordan Vale.")]  # began 10-14
     run(world)
     row = world["db"].query(TrendCandidate).one()
     assert (row.match_type, row.record_key) == ("nominee", "vote:senate/119/2/302")
+
+
+def test_a_trend_days_after_the_vote_is_not_about_it(world):
+    """Past NOMINEE_WINDOW a trend naming the nominee is about what they did
+    since, whatever it is called."""
+    _nomination(world["db"], date="2026-10-11")
+    name = "Jordan Vale confirmation"
+    world["trends"] = [trend(name, description="The Senate confirmed Jordan Vale.")]
+    run(world)
+    assert world["db"].query(TrendCandidate).one().decision == "ineligible"
 
 
 def test_an_old_confirmation_is_not_a_record_of_new_news(world):
     _nomination(world["db"], date="2026-03-01")
     name = "Jordan Vale confirmation"
     world["trends"] = [trend(name, description="The Senate confirmed Jordan Vale.")]
-    world["scores"][name] = TrendScores(0.9, 0, 0, 0, appointment=0.95)
     run(world)
     assert world["db"].query(TrendCandidate).one().decision == "ineligible"
 

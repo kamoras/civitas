@@ -1308,13 +1308,13 @@ the trend's own name (described trends only); an Act's full title (the whole
 capitalised run must be the record's title, or the trend gives the bill
 number — a shorter name inside a longer title, or a qualifier like "EU" in
 front, is another act); a nominee's confirmation vote, only when the
-appointment kNN vote says the trend is about the nomination; or a named
+trend began within a day of the vote (`trend_evidence.NOMINEE_WINDOW`); or a named
 member's own recent bill on the topic — never a person alone. Records must be
 dated on or before the trend's start plus two days, and a record more than 30
 days older than the trend counts only when the trend's name names it; a vote
 with no measure title and no bill is never a record. All of this sits on
 top of a kNN relevance vote ≥ 0.5 over labelled trends (`trend_relevance.py`,
-`app/data/trend_*`/`political_violence_examples.json`/`loaded_language_examples.json`/`appointment_examples.json`,
+`app/data/trend_*`/`political_violence_examples.json`/`loaded_language_examples.json`,
 calibrated by `scripts/calibrate_trend_gates.py` into
 `trend_gates_calibration.json`). The trend's name must pass a neutrality gate
 (`grounding`'s electioneering, editorializing and advocacy-as-fact checks plus a
