@@ -13,6 +13,8 @@ import { absoluteUrl } from "@/lib/site";
 import SectionTabs from "@/components/layout/SectionTabs";
 import { ResultLabel } from "./ReportParts";
 import VoteMembers, { PartyBar } from "./VoteMembers";
+import { STATUS_LABEL, nominationHref } from "@/lib/nominations";
+import type { NominationVote, RollCallNomination } from "@/types/nomination";
 
 const LINK = "text-ink underline decoration-white/30 underline-offset-4 hover:text-phos";
 const SOURCE_NAME = { senate: "Senate.gov", house: "the House Clerk" } as const;
@@ -104,6 +106,7 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
                     </>
                   )}
                 </p>
+                {vote.nominationVote && <NominationLinks nv={vote.nominationVote} />}
               </header>
 
               <div className="grid gap-8 border border-white/15 bg-surface p-4 sm:p-5 lg:grid-cols-[18rem_minmax(0,1fr)]">
@@ -207,5 +210,62 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
         <Footer />
       </div>
     </ShareSubjectProvider>
+  );
+}
+
+/** The nominations the vote's question names, each linked to its record:
+ *  one for a single nomination, a folded list for an en bloc vote, counted
+ *  from the question, so a vote whose nominations aren't all read yet still
+ *  says how many it decided. */
+function NominationLinks({ nv }: { nv: NominationVote }) {
+  const label = (n: RollCallNomination) =>
+    `${n.citation}${n.nominees.length === 1 && n.nomineeCount === 1 ? `: ${n.nominees[0]}` : ""}${
+      n.positionTitle ? `, ${n.positionTitle}` : ""
+    }`;
+  if (nv.citationCount === 1) {
+    const n = nv.nominations[0];
+    if (!n)
+      return (
+        <p className="text-sm text-ink-lo">
+          {nv.label}. The nomination&apos;s record isn&apos;t read yet.
+        </p>
+      );
+    return (
+      <p className="text-sm text-ink-lo">
+        {nv.label}. The nomination&apos;s record, with its committee, hearings and every action:{" "}
+        <Link href={nominationHref(n)} className={LINK}>
+          {label(n)}
+        </Link>
+        {nv.kind === "confirm" && (
+          <>
+            {" "}
+            <span className="font-mono text-xs text-ink-min">{STATUS_LABEL[n.status]}</span>
+          </>
+        )}
+      </p>
+    );
+  }
+  const unread = nv.citationCount - nv.nominations.length;
+  return (
+    <details className="text-sm text-ink-lo">
+      <summary className="cursor-pointer font-mono text-xs uppercase tracking-[0.12em] hover:text-phos">
+        [{nv.label} on {nv.citationCount} nominations at once, each with its record]
+      </summary>
+      <ul className="mt-2 flex flex-col gap-1">
+        {nv.nominations.map((n) => (
+          <li key={n.citation}>
+            <Link href={nominationHref(n)} className={LINK}>
+              {label(n)}
+            </Link>
+          </li>
+        ))}
+      </ul>
+      {unread > 0 && (
+        <p className="mt-2">
+          {unread} of the {nv.citationCount} aren&apos;t read yet; they appear here as the daily
+          sync reads them.
+        </p>
+      )}
+    </details>
   );
 }

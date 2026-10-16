@@ -65,6 +65,7 @@ locally on a single self-hosted device with zero cloud AI calls.
 - **Branches covered**: Senate (100 senators), House (435 representatives), Presidents (historical + modern), Supreme Court (9 justices)
 - **News Feeds**: RSS parsing (NPR, PBS, BBC, The Hill, Politico, Roll Call) + Google Trends + Bluesky trending for Action Center; 41 per-state newsrooms for election races
 - **Action Center**: Three tabs — Today (the day's issues, what a reader can do about each, open comment periods), Ongoing (national monitors: auto-detected ongoing concerns, and those closed in the last 60 days), Archive (year-in-review timeline). Elections live on `/elections`, find-your-members on `/politicians`
+- **Nominations**: every presidential nomination this Congress from Congress.gov (daily, `fetch/nominations.py`), with status, committee, hearings, time to confirm and each roll call that names it (`/congress/nominations`)
 - **Elections**: State index → per-state ballot page (federal contests + statewide ballot measures, quoted verbatim) → race/candidate detail with FEC financials
 
 All services, models, and data run on-device. No data leaves the server.
@@ -1308,7 +1309,7 @@ the trend's own name (described trends only); an Act's full title (the whole
 capitalised run must be the record's title, or the trend gives the bill
 number — a shorter name inside a longer title, or a qualifier like "EU" in
 front, is another act); a nominee's confirmation vote, only when the
-appointment kNN vote says the trend is about the nomination; or a named
+trend began within a day of the vote (`trend_evidence.NOMINEE_WINDOW`); or a named
 member's own recent bill on the topic — never a person alone. Records must be
 dated on or before the trend's start plus two days, and a record more than 30
 days older than the trend counts only when the trend's name names it; a vote
@@ -1316,7 +1317,7 @@ with no measure title and no bill is never a record. Only a trend Bluesky's
 getTrends files under "politics" goes to matching (its own category, read as
 published: `trend_relevance.POLITICS_CATEGORY`; the kNN relevance vote over
 350 hand-labelled topics it replaced was removed 2026-10-16). The other
-votes (`trend_relevance.py`, `political_violence_examples.json`/`loaded_language_examples.json`/`appointment_examples.json`)
+votes (`trend_relevance.py`, `political_violence_examples.json`/`loaded_language_examples.json`)
 are calibrated by `scripts/calibrate_trend_gates.py` into
 `trend_gates_calibration.json`. The trend's name must pass a neutrality gate
 (`grounding`'s electioneering, editorializing and advocacy-as-fact checks plus a
@@ -2055,6 +2056,7 @@ the pending list).
 | Public API v1 + its MCP server (spec generated from the routes, rendered at `/developers`) | `backend/app/api/public.py`, `backend/app/api/public_mcp.py`, `app/schemas.py` ("Public API v1"), `tests/test_public_api_contract.py`, `frontend/src/app/developers/page.tsx`, `frontend/src/lib/openapi.ts` |
 | Votes with the president's stated positions (OMB SAPs, matching, per-member rate, expected rate by seat; informational, not scored) | `backend/app/pipeline/fetch/omb_statements.py`, `analyze/sap_position.py`, `analyze/presidential_support.py`, `services/presidential_support_service.py`, `frontend/src/components/presidentialSupport/`, `frontend/src/app/congress/president/` |
 | Federal agencies: weekly Register list + USAspending budgets, name crosswalk, agency pages | `backend/app/pipeline/fetch/agencies.py`, `backend/app/api/agencies.py`, `backend/scripts/calibrate_agency_crosswalk.py` (`app/data/agency_crosswalk.json`), `frontend/src/app/agencies/` |
+| Presidential nominations (daily Congress.gov sync, FJC join, list/stats/detail, roll-call links) | `backend/app/pipeline/fetch/nominations.py`, `backend/app/services/nomination_service.py`, `services/nomination_links.py`, `backend/app/api/nominations.py`, `frontend/src/app/congress/nominations/` |
 | Explore hybrid search ranking (RRF fusion, priors, dedup, diversity) | `backend/app/services/explore_search.py` |
 | Explore keyword index (FTS5 + BM25F) | `backend/app/pipeline/lexical_index.py` |
 | Document citation graph + PageRank authority | `backend/app/pipeline/analyze/document_authority.py` |

@@ -5,6 +5,8 @@ import StateBallotClient from "./StateBallotClient";
 import type { RaceWithCandidates, StateBallot } from "@/types/election";
 
 vi.mock("@/lib/api", () => ({
+  // The seat map is not shown (out of the campaign, or not built): no lines.
+  fetchMapSeats: vi.fn().mockResolvedValue(null),
   fetchTownsForState: vi.fn().mockResolvedValue([]),
   fetchTownBallot: vi.fn(),
 }));
