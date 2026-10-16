@@ -67,6 +67,7 @@ export function parseView(value: string | string[] | undefined | null): MapView 
   return (MAP_VIEWS as readonly string[]).includes(v ?? "") ? (v as MapView) : "usual";
 }
 
+/** @public The chamber in `?chamber=` (one chamber until the House map lands). */
 export function parseChamber(value: string | string[] | undefined | null): MapChamber {
   const v = Array.isArray(value) ? value[0] : value;
   return (MAP_CHAMBERS as readonly string[]).includes(v ?? "") ? (v as MapChamber) : "senate";

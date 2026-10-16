@@ -296,7 +296,9 @@ def fit(rows: list[dict], generic: dict, horizon: int) -> dict:
     means, sds, prior_m, avg_m, actual = [], [], [], [], []
     for i in usable:
         r = predict_raw(rows[i], races[i], nat[rows[i]["year"]], params)
-        means.append(r["mean"]); sds.append(r["sd"]); actual.append(rows[i]["margin"])
+        means.append(r["mean"])
+        sds.append(r["sd"])
+        actual.append(rows[i]["margin"])
         prior_m.append(r["prior"])
         if r["pollAverage"] is not None:
             avg_m.append((r["pollAverage"], r["pollSd"], actual[-1]))

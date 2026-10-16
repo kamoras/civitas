@@ -94,7 +94,7 @@ CSV_COLUMNS = (
 def csv_text(data: dict) -> str:
     out = io.StringIO()
     out.write(f"# Civitas 2026 general-election map, as of {data['asOf']}. Ranges, not results. Not a race call.\n")
-    out.write(f"# Margins are Republican minus Democratic share of the two-party vote, in points (negative = D).\n")
+    out.write("# Margins are Republican minus Democratic share of the two-party vote, in points (negative = D).\n")
     out.write(f"# Usual vote: Civitas's computed lean from official returns ({data['sources']['lean']['file']}).\n")
     out.write(f"# Polls: {POLL_ATTRIBUTION}, {POLL_LICENSE} ({POLL_LICENSE_URL}). The poll-derived columns are "
               f"shared under the same licence; reuse them with attribution and under {POLL_LICENSE}.\n")
