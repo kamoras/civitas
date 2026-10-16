@@ -246,6 +246,14 @@ after: FR citation R@1 0.011 → 0.854 (R@5 1.000; a citation is a page, and a
 third of cited documents share theirs), FR document number R@1 0.465 → 1.000,
 every other style unchanged.
 
+**Dockets and Record pages name documents too, and a miss says so.** A rule is
+known by the docket its comment link names, a floor speech by its Record
+citation ("172 Cong. Rec. H5836") and granule. An identifier-only query asks
+the keyword channel for the identifier as written, never for any one of its
+words, and an identifier no document is known by gets a `notHeld` note (why,
+and the official copy) instead of documents that share a word with it
+(`services/explore_coverage.py`). EXPLORE_EVAL_NUMBERS
+
 **Half the engine can be down and search still works — and says so.** The
 vector index records which model built it, and a mismatch at startup drops the
 vec tables and kicks off a background reindex that takes minutes on the Pi.
