@@ -306,8 +306,11 @@ def calibration(db: Session, vectors: np.ndarray, labels: np.ndarray, seeded: in
         return stored
     fitted = fit(vectors, labels)
     fitted.update({"date": today, "model": model, "seed_rows": seeded})
+    # In a savepoint and uncommitted, like _store: the refresh commits.
     try:
-        api_cache_set(db, _CALIBRATION_TIER, _CALIBRATION_KEY, fitted, normal_ttl_hours=_CALIBRATION_TTL_HOURS)
+        with db.begin_nested():
+            api_cache_set(db, _CALIBRATION_TIER, _CALIBRATION_KEY, fitted,
+                          normal_ttl_hours=_CALIBRATION_TTL_HOURS, commit=False)
     except Exception:
         logger.warning("Relevance calibration not stored; refit next run", exc_info=True)
     logger.info("Relevance gate refit: %s", fitted)
@@ -333,32 +336,34 @@ def judge(db: Session, articles: Sequence[NewsArticle]) -> tuple[list[tuple[News
 
 def _store(db: Session, articles: Sequence[NewsArticle], masked: Sequence[tuple[str, bool]],
            vectors: np.ndarray, votes: np.ndarray, threshold: float) -> None:
-    """Upsert each judged article by URL and prune past REFERENCE_DAYS. A
-    failure here costs the reference one run's articles, never the run."""
+    """Upsert each judged article by URL and prune past REFERENCE_DAYS,
+    inside a savepoint of the caller's session: a failure here rolls back
+    only these rows, never the refresh's own pending work, and costs the
+    reference one run's articles, never the run. The caller commits."""
     model = _MODEL
     now = utcnow()
     try:
-        existing = {r.url: r for r in db.query(FeedArticle).filter(FeedArticle.url.in_([a.url for a in articles]))}
-        for a, (text, named), vector, vote in zip(articles, masked, vectors, votes):
-            scope = publisher_scope(a)
-            row = existing.get(a.url)
-            if row is None:
-                row = FeedArticle(url=a.url, seen_at=now)
-                db.add(row)
-                existing[a.url] = row
-            row.source_name = a.source_name
-            row.scope = scope
-            row.text = text
-            row.names_official = named
-            row.label = publisher_label(scope, named)
-            row.vote = float(vote)
-            row.kept = bool(vote >= threshold)
-            row.embedding = np.asarray(vector, dtype=np.float32).tobytes()
-            row.model = model
-            row.published = a.published.replace(tzinfo=None) if a.published else None
-        db.query(FeedArticle).filter(FeedArticle.seen_at < now - timedelta(days=REFERENCE_DAYS)).delete(
-            synchronize_session=False)
-        db.commit()
+        with db.begin_nested():
+            existing = {r.url: r for r in
+                        db.query(FeedArticle).filter(FeedArticle.url.in_([a.url for a in articles]))}
+            for a, (text, named), vector, vote in zip(articles, masked, vectors, votes):
+                scope = publisher_scope(a)
+                row = existing.get(a.url)
+                if row is None:
+                    row = FeedArticle(url=a.url, seen_at=now)
+                    db.add(row)
+                    existing[a.url] = row
+                row.source_name = a.source_name
+                row.scope = scope
+                row.text = text
+                row.names_official = named
+                row.label = publisher_label(scope, named)
+                row.vote = float(vote)
+                row.kept = bool(vote >= threshold)
+                row.embedding = np.asarray(vector, dtype=np.float32).tobytes()
+                row.model = model
+                row.published = a.published.replace(tzinfo=None) if a.published else None
+            db.query(FeedArticle).filter(FeedArticle.seen_at < now - timedelta(days=REFERENCE_DAYS)).delete(
+                synchronize_session=False)
     except Exception:
-        db.rollback()
         logger.warning("Feed articles not stored for the relevance reference", exc_info=True)

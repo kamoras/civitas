@@ -216,3 +216,44 @@ def test_officials_come_from_the_sitting_roster(db_session):
     assert names.mask("Ann Roe and Bo Pike met Pat Example")[0] == "[name] and [name] met [name]"
     assert names.mask("Example spoke")[0] == "[name] spoke"
     assert names.mask("Old Hand")[1] is False
+
+
+def test_a_failed_store_keeps_the_refreshs_own_pending_work(db_session, fake_embed, freeze_utcnow, monkeypatch):
+    """The store runs in a savepoint of the refresh's session: when it fails,
+    only its own rows go, and nothing the refresh has pending is rolled back
+    (or committed) by it."""
+    freeze_utcnow(datetime(2028, 3, 1, 12))
+    db_session.add(Senator(id="pending-one", name="Pending One", state="ZZ", party="I", is_current=True))
+    db_session.flush()  # the refresh's own work, not yet committed
+
+    calls = {"n": 0}
+
+    def scope_then_fail(article):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise RuntimeError("store broke mid-batch")
+        return POLITICS_SCOPE
+
+    monkeypatch.setattr(pr, "publisher_scope", scope_then_fail)
+    articles = [_article("Senate passes a budget", "https://example.org/p1", POLITICS_FEED),
+                _article("Senate passes a bill", "https://example.org/p2", POLITICS_FEED)]
+    kept, _ = pr.judge(db_session, articles)
+
+    assert len(kept) == 2  # the gate still decided
+    assert db_session.query(FeedArticle).count() == 0  # the store's rows rolled back together
+    assert db_session.get(Senator, "pending-one") is not None  # the refresh's work survived
+    db_session.commit()
+    assert db_session.query(Senator).filter_by(id="pending-one").count() == 1
+
+
+def test_judge_never_commits_the_refreshs_pending_work(db_session, fake_embed, freeze_utcnow):
+    """The refresh owns its transaction: a successful judge neither commits
+    the refresh's pending work nor its own rows inside it."""
+    freeze_utcnow(datetime(2028, 3, 1, 12))
+    db_session.add(Senator(id="pending-two", name="Pending Two", state="ZZ", party="I", is_current=True))
+    db_session.flush()
+    pr.judge(db_session, [_article("Senate passes a budget", "https://example.org/p1", POLITICS_FEED)])
+    assert db_session.query(FeedArticle).count() == 1
+    db_session.rollback()
+    assert db_session.query(Senator).filter_by(id="pending-two").count() == 0
+    assert db_session.query(FeedArticle).count() == 0
