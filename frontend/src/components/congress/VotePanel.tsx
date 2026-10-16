@@ -91,7 +91,7 @@ export default function VotePanel({
                 >
                   <a
                     href={rc.sourceUrl ?? undefined}
-                    className="underline decoration-white/30 underline-offset-4 hover:text-phos"
+                    className="inline-flex min-h-6 items-center underline decoration-white/30 underline-offset-4 hover:text-phos"
                   >
                     {CHAMBER_NAME[rc.chamber as keyof typeof CHAMBER_NAME] ?? rc.chamber} roll call{" "}
                     {rc.number}

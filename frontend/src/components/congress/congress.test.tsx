@@ -536,6 +536,7 @@ describe("bill page", () => {
       billId: "HR.2",
       billLabel: "H.R. 2",
       congress: 118,
+      title: null,
       votes: [],
       days: [],
       floorDebate: [],
@@ -586,6 +587,8 @@ describe("bill page", () => {
     expect(screen.getByText("Civitas's record of Congress starts January 3, 2025.")).toBeTruthy();
     expect(screen.queryByText(/No committee meeting or report/)).toBeNull();
     expect(screen.getAllByText("not held").length).toBe(3);
+    // Congress.gov gave no title here: the h1 is the bill's number, never empty.
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("H.R. 2");
     expect(screen.queryByText(/Speeches are matched by the bill number/)).toBeNull();
     expect(screen.getByText(/Not held for this Congress/)).toBeTruthy();
   });

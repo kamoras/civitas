@@ -68,7 +68,12 @@ function SectionHead({
       <h2 id={id} className="scroll-mt-28 font-display text-2xl font-extrabold text-ink-hi">
         {title}
         {count !== undefined && (
-          <span className="ml-2 font-mono text-sm font-normal text-ink-min">{count}</span>
+          // The comma is for a screen reader, which ran the two together
+          // ("Votesnot held"); on screen the gap separates them.
+          <span className="ml-2 font-mono text-sm font-normal text-ink-min">
+            <span className="sr-only">, </span>
+            {count}
+          </span>
         )}
       </h2>
       {shareable && <ShareSectionButton label={title} />}
@@ -109,7 +114,9 @@ export default function BillPageView({
   const shortTitleType = record?.shortTitle
     ? record.shortTitleType
     : (detail?.shortTitleType ?? null);
-  const title = shortTitle || listed;
+  // The bill's number when Congress.gov couldn't give its title just now:
+  // an empty h1 left the page with no heading to name it.
+  const title = shortTitle || listed || label;
   // Under a short title, the official one from Congress.gov's same list; the
   // listing title only when the list gives none (it can be a short title the
   // bill no longer goes by, so it is not called official).
@@ -124,7 +131,7 @@ export default function BillPageView({
   const lead = summary ? (summary.paragraphs[1] ?? summary.paragraphs[0]) : null;
   // What a shared image of any section says it is from.
   const shareSubject = {
-    title: title ? `${label}: ${title}` : label,
+    title: title && title !== label ? `${label}: ${title}` : label,
     subtitle: [
       record?.congress ? `${ordinal(record.congress)} Congress` : null,
       stageName ?? detail?.stage,

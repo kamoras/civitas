@@ -128,7 +128,7 @@ export default function BillSources({
             Cite this bill page
           </h3>
           <CiteThis
-            title={`${label}: ${title}${congress ? ` (${ordinal(congress)} Congress)` : ""}`}
+            title={`${label}${title && title !== label ? `: ${title}` : ""}${congress ? ` (${ordinal(congress)} Congress)` : ""}`}
             path={canonicalPath}
           />
         </div>
