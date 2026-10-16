@@ -168,9 +168,10 @@ export default function PresidentsAndJusticesChapter() {
         <Sub title="Historical Legacy (50%)">
           <P>
             What none of the others can capture (crisis leadership, moral authority, vision) from
-            C-SPAN&apos;s Presidential Historians Survey: about 142 historians in the 2021 survey,
-            the most recent (C-SPAN postponed the 2025 survey). It rates only presidents whose terms
-            were complete by 2021, so later presidents read N/A.
+            C-SPAN&apos;s Presidential Historians Survey, newest edition published: as of October
+            2026 that was the 2021 survey of about 142 historians (C-SPAN postponed its 2025
+            survey). It rates only presidents whose terms were complete when it was taken, so a
+            later president reads N/A until an edition rates them.
           </P>
           <P>
             It is a real, documented external survey, not neutral ground truth. Studies of these
@@ -288,8 +289,9 @@ export default function PresidentsAndJusticesChapter() {
           party&apos;s, +1.1 points, not significant); and scoring how often a justice votes against
           their usual ideological side (in divided decisions that rate tracks closeness to the
           Court&apos;s center, a −0.77 correlation with distance from the median, the same flaw that
-          removed the old measures). The president who returned in 2025 after a gap gives a direct
-          test of loyalty, but 43 cases since then are too few to decide it. The study is at{" "}
+          removed the old measures). A president who returns to office after a gap gives a direct
+          test of loyalty, but when measured in October 2026 the 43 cases since the most recent
+          return were too few to decide it. The study is at{" "}
           <a href={JUSTICE_RESEARCH_URL}>docs/research/justice-scores.md</a>.
         </P>
         <More label="Measures we removed">

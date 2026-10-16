@@ -10,6 +10,12 @@ mandates-table elections where both figures exist — re-estimated on every
 fetch since v6.13 (_fit_scales) rather than hand-typed from a one-off fit.
 """
 
+import asyncio
+from unittest.mock import AsyncMock, patch
+
+from app.models import President
+from app.pipeline.cache import api_cache_set
+from app.pipeline.fetch import presidential_elections as pe
 from app.pipeline.fetch.presidential_elections import (
     _MIN_FIT_ROWS,
     _fit_scales,
@@ -66,3 +72,35 @@ class TestMarginScaleConsistency:
         assert fits is None
         assert "jqadams-6" not in margins
         assert margins["lincoln-16"][0] == 10.0  # popular margins still used
+
+
+def test_a_president_elected_after_the_table_was_written_is_matched_by_name():
+    # The mandates table names a winner _NAME_TO_ID doesn't list: their
+    # election counts through the presidents table (the roster's names),
+    # with no code edit.
+    rows = _paired_rows(25) + [_row("Future Q. President", 2028, 3.5, 55.0, 10.0)]
+    margins, _ = _parse_mandates_table(_table(rows), {"future q president": "president-48"})
+    assert margins["president-48"] == [3.5]
+    unmatched, _ = _parse_mandates_table(_table(rows))
+    assert "president-48" not in unmatched
+
+
+def test_a_new_president_on_the_roster_reads_the_table_afresh(db_session):
+    # Results are cached for a month; the cache is keyed by the newest
+    # president, so a new president's first night doesn't serve a copy
+    # without their election.
+
+
+    db_session.add(President(id="old-47", name="Old President", party="R", number=47, term_start="2025-01-20"))
+    db_session.commit()
+    api_cache_set(db_session, pe._CACHE_TIER, "all-presidents-47", {"data": {"old-47": 1.0}})
+    assert asyncio.run(pe.fetch_election_margins(db_session)) == {"old-47": 1.0}
+
+    db_session.add(President(id="president-48", name="Future Q. President", party="D", number=48,
+                             term_start="2029-01-20", is_current=True))
+    db_session.commit()
+    page = type("R", (), {"status_code": 200, "text": _table(_paired_rows(25) + [
+        _row("Future Q. President", 2028, 3.5, 55.0, 10.0)])})()
+    with patch.object(pe, "fetch_with_retry_requests", AsyncMock(return_value=page)):
+        margins = asyncio.run(pe.fetch_election_margins(db_session))
+    assert margins["president-48"] == 3.5

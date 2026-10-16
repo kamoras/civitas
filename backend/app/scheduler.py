@@ -253,6 +253,7 @@ def _nightly_pipeline() -> None:
     from app.ops_alerts import (
         check_current_congress_staleness,
         check_feedback_token_expiration,
+        check_sitting_president,
         check_state_pvi_staleness,
         resolve_ops_alert,
         send_ops_alert,
@@ -274,6 +275,10 @@ def _nightly_pipeline() -> None:
             # self-advance (see the check's own docstring for why), so the
             # alert is the only signal that a manual refresh is due.
             check_state_pvi_staleness,
+            # The presidents table's sitting president against the Federal
+            # Register's newest presidential document (an inauguration the
+            # roster hasn't caught up with).
+            check_sitting_president,
         )
         for check in pre_checks:
             try:

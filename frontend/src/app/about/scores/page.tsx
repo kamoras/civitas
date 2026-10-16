@@ -309,7 +309,7 @@ export default function ScoresChapter() {
                 party is never read for the member. The last Congress&apos;s position is used only
                 for this, never scored. Using the last Congress&apos;s record once this
                 Congress&apos;s positions are in (a full record, or any record for a member with no
-                position yet) begins with the 120th Congress, from January 2027: the 118th
+                position yet) applies from the 120th Congress (January 2027) on: the 118th
                 Congress&apos;s positions weren&apos;t kept before this change.
               </span>
             </Step>

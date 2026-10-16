@@ -52,7 +52,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import SessionLocal
 from app.models import (
-    PolicyStatement, PresidentialSupport, Representative, RollCall, RollCallPosition, Senator, StatementRollCall,
+    PolicyStatement, President, PresidentialSupport, Representative, RollCall, RollCallPosition, Senator, StatementRollCall,
 )
 from app.pipeline.analyze import sap_position
 from app.pipeline.analyze.population_reference import ChamberReference
@@ -198,13 +198,27 @@ def applicable_statement(roll_call: dict, statements: list[dict]) -> dict | None
     return latest
 
 
+def presidency_start(db: Session) -> str | None:
+    """The sitting president's term start (presidents table, from the
+    roster), or None when no one is marked sitting."""
+    row = db.query(President.term_start).filter(President.is_current.is_(True)).order_by(
+        President.term_start.desc()).first()
+    return row[0] if row else None
+
+
 def match_roll_calls(db: Session, chamber: str, congress: int) -> int:
     """Rewrite the chamber's statement_roll_calls for the Congress. Returns
     how many roll calls a statement applies to (whatever its position)."""
     # A bill number names a different bill in each Congress: only statements
     # issued during this one (noon ET Jan 3 of its first year on, a date
-    # comparison is enough) can apply to its roll calls.
+    # comparison is enough) can apply to its roll calls. And "the
+    # president" is the sitting one: a Congress that spans an inauguration
+    # (every one that convenes in the year after a presidential election)
+    # counts only the sitting president's statements and the votes cast
+    # since their term began, never the outgoing president's position as
+    # theirs.
     start, end = f"{congress_first_year(congress)}-01-03", f"{congress_first_year(congress + 1)}-01-03"
+    start = max(start, presidency_start(db) or start)
     statements = [
         {"id": s.id, "chamber": s.chamber, "issued": s.issued, "measures": json.loads(s.measures or "[]"),
          "amendments": json.loads(s.amendments or "[]")}
@@ -215,6 +229,7 @@ def match_roll_calls(db: Session, chamber: str, congress: int) -> int:
     measures = {m for s in statements for m in s["measures"]}
     rolls = db.query(RollCall).filter(
         RollCall.chamber == chamber, RollCall.congress == congress, RollCall.bill_id.in_(measures),
+        RollCall.date >= start,
     ).all() if measures else []
     db.query(StatementRollCall).filter(
         StatementRollCall.roll_call_id.in_(db.query(RollCall.id).filter_by(chamber=chamber, congress=congress))

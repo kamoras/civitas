@@ -782,8 +782,9 @@ class PublicLeanDistrictSchema(_PublicModel):
 
 
 class PublicLeanCongressSchema(_PublicModel):
-    congress: int = Field(description="The Congress elected on these district lines (119: elected 2024; "
-                                      "120: elected 2026, nine states redrawn)")
+    congress: int = Field(description="The Congress elected on these district lines (the Nth Congress is "
+                                      "elected in 1786 + 2N; a state that redrew between two Congresses has "
+                                      "different lines in each)")
     districts: list[PublicLeanDistrictSchema]
 
 
@@ -1024,7 +1025,8 @@ class PublicSeatSchema(_PublicModel):
                     "a score stored before this was recorded")
     computed_lean: float | None = Field(
         description="Civitas's own lean for the House district on those same lines, positive leaning Republican, "
-                    "one decimal: Cook's formula worked out from open precinct returns (VEST 2020, MEDSL 2024), "
+                    "one decimal: Cook's formula worked out from open precinct returns (the elections and sources "
+                    "are named in the dataset's own metadata), "
                     "for comparison with cook_pvi. Not used in any score; null for senators or lines with no "
                     "computed table")
 

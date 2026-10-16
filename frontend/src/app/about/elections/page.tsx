@@ -223,22 +223,22 @@ export default async function ElectionsChapter() {
           Pick your county and the page narrows to the district covering it. About 13% of counties
           span more than one district; those offer the two or three as a second tap. Where a county
           isn&apos;t enough, a map of the districts lets you click yours. It draws the lines the
-          ballot&apos;s House seats are contested on: the Census Bureau&apos;s 119th-Congress
-          boundaries, and for the nine states that redrew for 2026 their new lines, built from
-          Census blocks. Districts are shaded by partisan lean, and in the redrawn states that is
-          the lean of the new district on the ballot (Cook&apos;s 2026 figures for the new lines),
-          not of the old seat with the same number. A district with no lean of its own on file is
-          left unshaded rather than given its state&apos;s colour. A text filter works too: type
-          your city, town or county, a candidate&apos;s name or a district number. Each district
-          lists the cities, towns and communities in it, from the same Census block files as the
-          state legislative lists below (a place with fewer than 50 residents inside a district is
-          left off it), and a district that matches what you typed lists the matching place or
-          county first, by its full name: a city can share its name with a county elsewhere in the
-          state, and the label shows which one matched. Type a place&apos;s full name and the page
-          says which districts it is in; a city split between districts says so, since there your
-          street decides which one is yours. On the map, Tab reaches one district and the arrow keys
-          move between them. All of it runs on data already on the page: nothing is typed into a
-          lookup, sent or stored.
+          ballot&apos;s House seats are contested on: the Census Bureau&apos;s boundaries for the
+          sitting Congress, and for each state that redrew for the election its new lines, built
+          from Census blocks. Districts are shaded by partisan lean, and in the redrawn states that
+          is the lean of the new district on the ballot (Cook&apos;s figures for the new lines), not
+          of the old seat with the same number. A district with no lean of its own on file is left
+          unshaded rather than given its state&apos;s colour. A text filter works too: type your
+          city, town or county, a candidate&apos;s name or a district number. Each district lists
+          the cities, towns and communities in it, from the same Census block files as the state
+          legislative lists below (a place with fewer than 50 residents inside a district is left
+          off it), and a district that matches what you typed lists the matching place or county
+          first, by its full name: a city can share its name with a county elsewhere in the state,
+          and the label shows which one matched. Type a place&apos;s full name and the page says
+          which districts it is in; a city split between districts says so, since there your street
+          decides which one is yours. On the map, Tab reaches one district and the arrow keys move
+          between them. All of it runs on data already on the page: nothing is typed into a lookup,
+          sent or stored.
         </P>
         <P>
           In a state whose lines were redrawn after its members were elected (those going into the
@@ -262,22 +262,22 @@ export default async function ElectionsChapter() {
           answers whether your district is different and by how much: for each new district, the
           share of its residents who were in each old one and how its lean moved, and for each old
           district, where its residents went. Find yours by city, town or county. The counts are
-          2020 Census residents, joined block by block to the old and new district files, so
-          everyone is counted once; both leans are Cook&apos;s on the same presidential elections,
-          so a change in lean comes from the lines alone. The page leads with how many seats lean
-          each way before and after; how many districts lean differently from the old district most
-          of their residents came from is a separate count, shown with the method. Each page links
-          the act or court order behind the map, explains the method and offers the whole table as
-          CSV and JSON. It describes who is in which district; it says nothing about why a line was
-          drawn.
+          Census residents, joined block by block to the old and new district files, so everyone is
+          counted once; both leans are Cook&apos;s on the same presidential elections, so a change
+          in lean comes from the lines alone. The page leads with how many seats lean each way
+          before and after; how many districts lean differently from the old district most of their
+          residents came from is a separate count, shown with the method. Each page links the act or
+          court order behind the map, explains the method and offers the whole table as CSV and
+          JSON. It describes who is in which district; it says nothing about why a line was drawn.
         </P>
         <P>
           To find who represents you today, use the Politicians directory instead: pick your state,
           then type your city, town or county. It uses the districts as of the current Congress, the
-          lines today&apos;s members were elected on (the Census Bureau&apos;s 119th-Congress file),
-          not the 2026 lines. In the nine redrawn states the two give different answers, and each
-          page says which map it shows. When the new Congress is sworn in on January 3, the
-          directory moves to the 2026 lines on its own.
+          lines today&apos;s members were elected on (the Census Bureau&apos;s file for that
+          Congress), not the lines of the next election. In a state that has redrawn since, the two
+          give different answers, and each page says which map it shows. From the day a new Congress
+          is sworn in (January 3 of an odd year), the directory moves to the lines that Congress was
+          elected on, on its own.
         </P>
         <P>
           State legislative districts are far smaller than a county, so each one lists the places it
@@ -285,12 +285,12 @@ export default async function ElectionsChapter() {
           England, New York, New Jersey, Pennsylvania, Michigan, Minnesota, Wisconsin), every city
           and every unincorporated community Census names (Silver Spring, The Woodlands), and every
           county it touches. Type any of them, or a candidate&apos;s name or the district number,
-          and the list narrows. The places come from the Census Bureau&apos;s 2026 state legislative
-          district files joined block by block to the 2020 census, so a place is listed for a
-          district only where people in it actually live inside that district; a sliver with fewer
-          than 50 residents (about one census block) is left off. A city split between districts is
-          listed under each, and your street decides which: the state&apos;s own voter lookup gives
-          the exact answer.
+          and the list narrows. The places come from the Census Bureau&apos;s state legislative
+          district files for the election, joined block by block to the decennial census, so a place
+          is listed for a district only where people in it actually live inside that district; a
+          sliver with fewer than 50 residents (about one census block) is left off. A city split
+          between districts is listed under each, and your street decides which: the state&apos;s
+          own voter lookup gives the exact answer.
         </P>
         <Sub title="The optional town selector">
           <P>
@@ -408,13 +408,13 @@ export default async function ElectionsChapter() {
             </Item>
             <Item label="Special elections and runoffs">
               A legislative seat with a special election for the rest of its term beside its regular
-              contest is shown as two contests. Louisiana&apos;s House contests on 3 November are an
-              all-party primary with a 12 December runoff, and Georgia requires a majority in
-              November with a 1 December runoff; both pages now say so above the ballot. So do
-              California and Washington, whose top-two primaries can send two candidates of one
-              party to November, and Alaska, whose top-four primary sends four. Maine and Alaska
-              rank candidates in their federal contests, and their pages now say so before election
-              day, not only on election night.
+              contest is shown as two contests. Where general-election day is an all-party primary
+              (Louisiana&apos;s House contests, in the years its law makes them one) or a majority
+              is required (Georgia), the page now says so above the ballot, with the runoff date the
+              state set. So do California and Washington, whose top-two primaries can send two
+              candidates of one party to November, and Alaska, whose top-four primary sends four.
+              Maine and Alaska rank candidates in their federal contests, and their pages now say so
+              before election day, not only on election night.
             </Item>
             <Item label="Finding your district">
               The filter ignores accents and punctuation, so &ldquo;dona ana&rdquo;, &ldquo;st

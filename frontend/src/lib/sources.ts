@@ -8,7 +8,7 @@ import { currentCongress } from "./congress";
 /**
  * Ordinal form ("119th", "101st", "112th").
  */
-function congressOrdinal(congress: number): string {
+export function congressOrdinal(congress: number): string {
   const mod100 = congress % 100;
   const suffix =
     mod100 >= 11 && mod100 <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" }[congress % 10] ?? "th");

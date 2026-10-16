@@ -762,6 +762,46 @@ snapshot-history distribution checks — no named reference members, no
 hand-typed score ranges, per principle 1/3a), so the identical checks run
 for both chambers in `senate_pipeline.py` and `house_pipeline.py`.
 
+### 6a. Evergreen: no code is about this cycle, this Congress, this president or this Court
+
+The site has to keep working, unedited, through the next election, the next
+Congress (noon ET, Jan 3 of every odd year), the next president (noon ET,
+Jan 20 after a presidential election), a vacancy on the Court, a special
+election, a party switch and a mid-decade redistricting. Every new feature
+answers these before it merges:
+
+- **Which Congress?** `settings.CURRENT_CONGRESS` (from the clock, held per
+  job by `scoring_congress`), or `congress_for_election(cycle)` for the
+  Congress an election seats. Never a literal `119`, never a default
+  argument naming one, never "119th" in copy (the frontend's
+  `currentCongress()` / `congressOrdinal`, or the API's own field).
+- **Which election?** `election_phase.active_election()` (its `.cycle`,
+  `.election_day`, phase), never `next_election_day()` directly and never a
+  year or "November 3" literal. Cycle-specific external names (an article
+  title, a results URL, an FEC cycle) are built from the cycle by rule.
+- **Who holds office?** Read from the official source every run: members
+  from Congress.gov's current roster (`member_lifecycle` for departures),
+  the president from the roster with the Federal Register cross-check
+  (`check_sitting_president`), justices from Oyez's sitting list
+  (`retire_departed_justices`, `court_roster_changed`), leadership and
+  committees from congress-legislators. Never a typed name, majority party
+  or count ("the nine justices").
+- **A fact that is law, not a cycle:** store the rule (`{"every": 4,
+  "from": ...}`, "28 days after the general"), not this cycle's date, so the
+  next cycle computes its own.
+- **Data that genuinely needs a new source each cycle** (a calendar, poll
+  closing times, a new map's lines): regenerate it automatically on its
+  cadence where the source can be found by rule, gate it, keep the last good
+  copy, and alert ahead of the cycle when it can't — a file keyed to one
+  cycle must never go quietly empty or quietly reuse the last cycle's values.
+- **Copy:** labels come from the API or the clock helpers; a measured
+  number in prose is dated ("measured October 2026"), which keeps it true.
+- **Prove it at future dates:** tests at the next hand-over instants
+  (`freeze_utcnow`, and the full fast suite under
+  `scripts/frozen_clock_plugin.py`, see Testing): Jan 3 of the next odd year
+  either side of noon ET, the next primary and general season, election
+  night, Jan 20 after a presidential election, and a Court vacancy.
+
 ### 7. Ballot content is quoted, never generated
 
 Anything that describes what is on a voter's ballot — measure titles,
@@ -1187,7 +1227,12 @@ Between TRANSFORM and the rest, both chamber pipelines run
 
 **Presidents are never reconciled or removed, and neither is the Court** —
 both functions take an explicit chamber and reject anything but
-`senate`/`house`. A former president is permanent site content. Relatedly,
+`senate`/`house`. A former president is permanent site content. The Court
+has its own, narrower reconciliation: the justice step marks a justice no
+longer on Oyez's sitting list inactive (`retire_departed_justices`, never a
+delete, refused below the Court's quorum of six) and the Supplementary run
+checks that list nightly so a confirmation or departure doesn't wait for the
+weekly refresh (`court_roster_changed`). Relatedly,
 the Senate/House leaderboards rank only currently-serving members, while the
 presidential leaderboard ranks the *historical* field and excludes the
 sitting president (see `president_service.get_president_leaderboard`) — for

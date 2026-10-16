@@ -10,7 +10,8 @@ export interface PresidentialScore {
   effectiveness: number | null;
   /** C-SPAN Presidential Historians Survey, z-scored. Null for any
    * currently-serving or just-departed president — the survey only rates
-   * a completed term, and its 2025 cycle was postponed entirely. */
+   * a completed term, so a president the newest published edition predates
+   * has none. */
   historicalLegacy: number | null;
   /** Backend-computed weighted total, renormalized over whichever
    * dimensions are non-null — never recompute this client-side. */

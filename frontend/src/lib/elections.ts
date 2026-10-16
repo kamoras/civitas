@@ -1,10 +1,55 @@
-/** Shared display helpers for the midterm-elections feature (race labels,
+/** Shared display helpers for the elections feature (race labels,
  * PVI formatting, UTC parsing, sorting). Pure functions only — safe to
  * import from both server and client components.
  */
 
 import type { BallotCandidate, CandidateSummary } from "@/types/election";
 import { formatCurrency } from "@/lib/formatting";
+
+/** Which page title the elections hub is showing. */
+export type ElectionTitleView = "election_day" | "results" | "ballot" | "elections";
+
+/** The elections hub's H1 for a cycle: "2026 midterm ballot", "2028
+ * presidential election results". The word comes from the cycle year, never
+ * a literal: a presidential election falls in every year divisible by four
+ * (the first in 1788), a midterm in every other even year. Null year (the
+ * API hasn't said which cycle): a title true of any cycle. */
+export function electionTitle(year: number | null | undefined, view: ElectionTitleView): string {
+  if (year == null) {
+    return {
+      election_day: "Election day",
+      results: "Election results",
+      ballot: "General election ballot",
+      elections: "General elections",
+    }[view];
+  }
+  if (year % 4 === 2) {
+    return {
+      election_day: `${year} midterms: election day`,
+      results: `${year} midterm results`,
+      ballot: `${year} midterm ballot`,
+      elections: `${year} midterm elections`,
+    }[view];
+  }
+  const name = year % 4 === 0 ? "presidential election" : "general election";
+  return {
+    election_day: `${year} ${name}: election day`,
+    results: `${year} ${name} results`,
+    ballot: `${year} ${name} ballot`,
+    elections: `${year} elections`,
+  }[view];
+}
+
+/** "2020 and 2024" from a lean's election window as the API states it
+ * ("2020+2024"), so no page names a window the data doesn't. Null when the
+ * API gave none. */
+export function leanWindowWords(window: string | null | undefined): string | null {
+  const years = (window ?? "")
+    .split("+")
+    .map((y) => y.trim())
+    .filter(Boolean);
+  return years.length ? new Intl.ListFormat("en-US").format(years) : null;
+}
 
 /** Formats a signed PVI int as "R+3"/"D+3"/"EVEN" — display-only, not a computation. */
 export function formatPvi(pvi: number | null): string {
