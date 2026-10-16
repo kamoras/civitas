@@ -43,6 +43,7 @@ from app.pipeline.fetch.congress import (
 from app.pipeline.fetch.daily_digest import first_bill_id
 from app.pipeline.fetch.federal_register import fetch_recent_significant_rules
 from app.pipeline.fetch.floor_logs import bill_id_from_number, house_roll_call_url, senate_roll_call_url
+from app.pipeline.house_pipeline import roll_call_year
 from app.pipeline.transform.normalize_votes import vote_date_iso
 from app.services.bill_service import names_phrase, short_title
 from app.services.congress_service import bill_label
@@ -251,9 +252,12 @@ def _fetch_recent_votes(db: Session) -> list[dict]:
                     max_age_hours=_ROLL_CALL_POLL_MAX_AGE_HOURS,
                 )
                 votes.extend(session_votes or [])
+            # The sitting Congress's Clerk year (clamped to its last), not
+            # the calendar's: Jan 1-3 of an odd year belongs to the
+            # outgoing Congress, whose votes are numbered in the year before.
             house_votes = await fetch_recent_house_roll_calls(
                 client, db,
-                year=utcnow().year,
+                year=roll_call_year(settings.CURRENT_CONGRESS, utcnow())[0],
                 count=_ROLL_CALL_POLL_COUNT_PER_SESSION,
                 max_age_hours=_ROLL_CALL_POLL_MAX_AGE_HOURS,
             )
