@@ -90,7 +90,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 /** What shapes this race, before its money: where the seat leans and how
  * that compares with every other seat, whether the member who holds it is
  * running, and that none of it is a forecast. Descriptive only — Civitas
- * publishes no odds and calls no race. A Senate race links to the 2026
+ * publishes no odds and calls no race. The race links to the 2026
  * map's poll range for it (lib/electionMap), which is kept off this
  * section on purpose: the section shows the incumbent's Representation
  * Score, and a poll range must never sit beside a score.
@@ -172,17 +172,18 @@ export default function RaceContext({
         {resultsMode
           ? "Civitas calls no race. A count on this page is the state's own, linked to its source."
           : "Descriptive only: Civitas publishes no odds for this race and calls no race."}
-        {!resultsMode && race.district == null && (
+        {!resultsMode && (
           <>
             {" "}
-            The 2026 Senate map shows the range polls suggest for its margin, beside how the state
-            usually votes.{" "}
+            The 2026 {race.district == null ? "Senate" : "House"} map shows the range polls suggest
+            for its margin, beside how the {race.district == null ? "state" : "district"} usually
+            votes.{" "}
             <Link
-              href={mapHref("polls", "senate", race.id)}
+              href={mapHref("polls", race.district == null ? "senate" : "house", race.id)}
               className="whitespace-nowrap font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
               {...{ [SHARE_EXCLUDE_ATTR]: "" }}
             >
-              [ SENATE MAP → ]
+              [ {race.district == null ? "SENATE" : "HOUSE"} MAP → ]
             </Link>
           </>
         )}

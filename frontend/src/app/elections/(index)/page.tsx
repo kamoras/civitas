@@ -390,7 +390,7 @@ export default function ElectionsPage() {
                   href={ELECTION_MAP_HREF}
                   className="whitespace-nowrap font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
                 >
-                  [ SENATE MAP: USUAL VOTE AND POLL RANGES → ]
+                  [ SENATE AND HOUSE MAP: USUAL VOTE AND POLL RANGES → ]
                 </Link>
               </>
             ) : null}

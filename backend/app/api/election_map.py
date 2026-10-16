@@ -18,7 +18,7 @@ import io
 import json
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 
 from app.api.response_helpers import CACHE_TTL_LIST_S, cached_json
@@ -72,19 +72,25 @@ def current_map() -> dict:
 
 
 @router.get("/map")
-def election_map():
-    """Every 2026 Senate seat: its usual vote (structural lean) and, where
+def election_map(chamber: str | None = Query(None, pattern="^(senate|house)$",
+                                              description="Only this chamber's seats (the page loads one at a time)")):
+    """Every 2026 Senate and House seat: its usual vote (structural lean) and, where
     Democrats and Republicans both have a nominee, the poll-informed 80%
     range of the margin, with the polls behind it and the method's
-    held-out calibration."""
+    held-out calibration. `chamber` returns one chamber's, with
+    `chambersAvailable` naming both."""
     data = current_map()
-    seats = [dict(s, polls={k: v for k, v in s["polls"].items() if k != "all"}) if "polls" in s else s
-             for s in data["seats"]]
-    return cached_json(dict(data, seats=seats), max_age=CACHE_TTL_LIST_S)
+    chambers = {
+        name: dict(c, seats=[dict(s, polls={k: v for k, v in s["polls"].items() if k != "all"}) if "polls" in s else s
+                             for s in c["seats"]])
+        for name, c in data["chambers"].items() if chamber in (None, name)
+    }
+    data = dict(data, chambersAvailable=list(data["chambers"]))
+    return cached_json(dict(data, chambers=chambers), max_age=CACHE_TTL_LIST_S)
 
 
 CSV_COLUMNS = (
-    "seat", "state", "special", "democrat", "republican", "incumbent_party",
+    "chamber", "seat", "state", "district", "special", "democrat", "republican", "incumbent_party",
     "usual_vote_lean", "usual_vote_label", "status", "structural_margin", "range80_low", "range80_high",
     "range95_low", "range95_high", "poll_average", "polls_used", "polls_listed", "latest_poll", "poll_source",
     "differs_from_usual", "difference_direction",
@@ -95,26 +101,33 @@ def csv_text(data: dict) -> str:
     out = io.StringIO()
     out.write(f"# Civitas 2026 general-election map, as of {data['asOf']}. Ranges, not results. Not a race call.\n")
     out.write("# Margins are Republican minus Democratic share of the two-party vote, in points (negative = D).\n")
-    out.write(f"# Usual vote: Civitas's computed lean from official returns ({data['sources']['lean']['file']}).\n")
+    out.write("# Usual vote: Civitas's computed lean from official returns (Senate: app/data/state_pvi.json; "
+              "House: app/data/district_lean.json, 2026 lines).\n")
     out.write(f"# Polls: {POLL_ATTRIBUTION}, {POLL_LICENSE} ({POLL_LICENSE_URL}). The poll-derived columns are "
               f"shared under the same licence; reuse them with attribution and under {POLL_LICENSE}.\n")
     w = csv.writer(out)
     w.writerow(CSV_COLUMNS)
-    for s in data["seats"]:
-        ranged = s["status"] == "range"
-        w.writerow([
-            s["id"], s["state"], s["special"], s.get("dem") or "", s.get("rep") or "", s.get("incumbentParty") or "",
-            s["lean"], s["leanLabel"], s["status"],
-            s.get("prior", "") if ranged else "",
-            *(s["range80"] if ranged else ("", "")), *(s["range95"] if ranged else ("", "")),
-            s.get("pollAverage") if ranged and s.get("pollAverage") is not None else "",
-            s["polls"]["used"] if ranged else "", s.get("polls", {}).get("count", ""),
-            (s["polls"].get("latest") or "") if ranged else "",
-            (s.get("pollSource") or {}).get("state", ""),
-            s["difference"]["strength"] if ranged else "",
-            (s["difference"]["direction"] or "") if ranged else "",
-        ])
+    for chamber, c in data["chambers"].items():
+        for s in c["seats"]:
+            _row(w, chamber, s)
     return out.getvalue()
+
+
+def _row(w, chamber: str, s: dict) -> None:
+    ranged = s["status"] == "range"
+    w.writerow([
+        chamber, s["id"], s["state"], "" if s.get("district") is None else s["district"], s["special"],
+        s.get("dem") or "", s.get("rep") or "", s.get("incumbentParty") or "",
+        s["lean"], s["leanLabel"], s["status"],
+        s.get("prior", "") if ranged else "",
+        *(s["range80"] if ranged else ("", "")), *(s["range95"] if ranged else ("", "")),
+        s.get("pollAverage") if ranged and s.get("pollAverage") is not None else "",
+        s["polls"]["used"] if ranged else "", s.get("polls", {}).get("count", ""),
+        (s["polls"].get("latest") or "") if ranged else "",
+        (s.get("pollSource") or {}).get("state", ""),
+        s["difference"]["strength"] if ranged else "",
+        (s["difference"]["direction"] or "") if ranged else "",
+    ])
 
 
 @router.get("/map.csv")

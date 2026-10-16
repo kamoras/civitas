@@ -1,4 +1,4 @@
-import { coverageSentence, formatAsOf } from "@/lib/electionMap";
+import { chamberWord, coverageSentence, formatAsOf } from "@/lib/electionMap";
 import type { ElectionMapData } from "@/types/electionMap";
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
@@ -8,6 +8,7 @@ const pct = (x: number) => `${Math.round(x * 100)}%`;
 export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
   const c = data.calibration;
   const [b0, bLean, bInc, bNat] = data.model.beta;
+  const house = data.chamber === "house";
   return (
     <section
       id="method"
@@ -27,10 +28,12 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
       <h3 className="font-display text-lg font-bold text-ink-hi">The three views</h3>
       <ul className="list-disc space-y-1 pl-5">
         <li>
-          <strong className="text-ink">Usual vote</strong> is each state&apos;s lean: how much more
-          Republican or Democratic it voted than the nation in the 2020 and 2024 presidential
-          elections (Cook&apos;s formula, 75% on the newer one), computed by Civitas from official
-          returns. No model is involved.
+          <strong className="text-ink">Usual vote</strong> is each {house ? "district" : "state"}
+          &apos;s lean: how much more Republican or Democratic it voted than the nation in the 2020
+          and 2024 presidential elections (Cook&apos;s formula, 75% on the newer one), computed by
+          Civitas from{" "}
+          {house ? "precinct returns placed on the 2026 district lines" : "official returns"}. No
+          model is involved.
         </li>
         <li>
           <strong className="text-ink">Polls</strong> is an 80% range for the margin: the usual
@@ -49,8 +52,8 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
       <ol className="list-decimal space-y-2 pl-5">
         <li>
           <strong className="text-ink">Structural line.</strong> A straight-line fit through every
-          contested Senate general election from {c.cycles[0]} to {c.cycles[1]}: margin ={" "}
-          {b0.toFixed(1)} + {bLean.toFixed(2)} × lean + {bInc.toFixed(1)} × incumbent +{" "}
+          contested {chamberWord(data.chamber)} general election from {c.cycles[0]} to {c.cycles[1]}
+          : margin = {b0.toFixed(1)} + {bLean.toFixed(2)} × lean + {bInc.toFixed(1)} × incumbent +{" "}
           {bNat.toFixed(2)} × national. The incumbent term is +1 for a Republican incumbent, −1 for
           a Democrat, 0 for an open seat; national is the generic-ballot average. A seat with no
           poll keeps this line, with its historical spread ({data.model.priorSd.toFixed(1)} points),
@@ -70,6 +73,18 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
           the result as often as they say.
         </li>
       </ol>
+      {house && (
+        <p>
+          A House fit needs each district&apos;s lean as it stood before each past election, on the
+          lines that election used. Civitas rebuilt it the same way as the 2026 lean, from VEST
+          precinct returns placed on Census blocks: for 2018 and 2020 from the 2016 presidential
+          vote alone, on the 116th Congress&apos;s lines (2012 has no open precinct returns), and
+          for 2022 from 2016 and 2020 on the new lines drawn after the census. North Carolina&apos;s
+          2020 races are left out (it voted on new lines Census publishes only on older blocks), and
+          2024 is not fitted: no openly licensed archive holds its generic-ballot polls. So the
+          House checks cover three cycles, one of them the redistricting year 2022.
+        </p>
+      )}
       <p>
         Every number in these formulas is fitted by a script from the sources below and written to{" "}
         <code className="font-mono text-sm">{data.model.file}</code> ({data.model.fit}); none is
@@ -80,8 +95,8 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
       <p>
         Each cycle from {c.cycles[0]} to {c.cycles[1]} was predicted by a fit that never saw it,
         using only the polls fielded by {data.horizon} days before election day.{" "}
-        {coverageSentence(c)} The 95% ranges held it {pct(c.coverage95)} of the time. The middle of
-        the range missed the margin by {c.meanAbsError} points on average.
+        {coverageSentence(c, data.chamber)} The 95% ranges held it {pct(c.coverage95)} of the time.
+        The middle of the range missed the margin by {c.meanAbsError} points on average.
       </p>
       <p>
         Internally the ranges imply a chance for each race; the map never shows one, because a
@@ -192,9 +207,9 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
       <p>
         Only Democrat-versus-Republican races are ranged, because only those were in the fit. A seat
         with no Democratic or Republican nominee, or where a candidate of neither party polls ahead
-        of a major-party nominee, shows its usual vote and says why it has no range. House districts
-        are not on this map yet. As of {formatAsOf(data.asOf)}; {data.daysToElection} days to
-        election day. From election day on, the results map takes this map&apos;s place.
+        of a major-party nominee, shows its usual vote and says why it has no range. As of{" "}
+        {formatAsOf(data.asOf)}; {data.daysToElection} days to election day. From election day on,
+        the results map takes this map&apos;s place.
       </p>
     </section>
   );
