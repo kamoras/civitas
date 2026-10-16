@@ -772,7 +772,11 @@ def _nominations_sync() -> None:
             async def work():
                 db = SessionLocal()
                 try:
-                    return await nominations.sync_nominations(db)
+                    summary = await nominations.sync_nominations(db)
+                    # The Congress before, until its last actions are in
+                    # (nominations.sync_ended_congress).
+                    ended = await nominations.sync_ended_congress(db)
+                    return {**summary, "endedCongress": ended} if ended else summary
                 finally:
                     db.close()
 
