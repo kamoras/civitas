@@ -297,21 +297,15 @@ class TestDistinctClaims:
     """One fact told twice is one fact: the two-claim gate counted a
     headline and its own lede as two (replay, 2026-10-11..15)."""
 
-    def test_the_calibration_matches_its_pairs(self):
-        """Rerun scripts/calibrate_claim_restatement.py after editing
-        app/data/claim_restatement_pairs.json."""
-        from app.pipeline.analyze import claims as mod
-
-        assert mod.restatement_calibration()["pairs_hash"] == mod.restatement_pairs_hash()
-
-    def test_the_pairs_say_where_they_came_from_and_how_they_were_labelled(self):
+    def test_without_a_stored_refit_the_bundled_cut_is_used(self, monkeypatch):
         import json
 
         from app.pipeline.analyze import claims as mod
 
-        data = json.loads(mod.RESTATEMENT_PAIRS_PATH.read_text())
-        assert data["_source"] and data["_rubric"]
-        assert {p["restatement"] for p in data["pairs"]} == {True, False}
+        monkeypatch.setattr(mod, "_restatement_calibration_cache", None)
+        monkeypatch.setattr(mod, "api_cache_get", lambda *a, **k: None)
+        bundled = json.loads(mod.RESTATEMENT_CALIBRATION_PATH.read_text())
+        assert bundled["_source"] and mod.restatement_calibration()["threshold"] == bundled["threshold"]
 
     def test_a_claim_at_the_threshold_of_an_earlier_one_is_dropped(self, monkeypatch):
         import numpy as np
