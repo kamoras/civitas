@@ -1698,6 +1698,14 @@ wrong number on election night is worse than none:
   `/elections/{raceId}` link goes there once the site's election is a later
   one (`race_detail`'s `archiveCycle`). The same §7 rules hold there:
   quoted, and no race called.
+- A special election is read the same way, from its own day until
+  `RESULTS_GRACE_DAYS` after its count last moves (`live_results/specials.py`):
+  the same readers find it by its date (`election_results.pick_election`),
+  the same gates apply, and its count is stored on its FEC calendar row
+  (`FederalElectionDate`), never on a `Race` (a special is on no cycle's
+  ballot pages). Its swing against the seat's usual vote is a measurement
+  in the lean's own units, given only once settled and where both major
+  parties ran (`app/special_elections.py`).
 - A data reset inside the results window keeps the held election's ballot and
   count (`database.RESET_KEEPS_WHILE_RESULTS`) and the coverage markers its
   pages read beside them (statewide, judicial and ballot-basis `api_cache`
@@ -2071,6 +2079,7 @@ the pending list).
 | Voter calendar (registration, early voting, mail-ballot deadlines; status on the state's own clock) | `backend/app/voter_calendar.py`, `backend/app/data/election_calendar.json` (built by `backend/scripts/build_election_calendar.py` from `scripts/election_calendar_sources.json`), `frontend/src/components/elections/VoterCalendar.tsx` |
 | Statewide ballot-measure ingestion (verbatim, no LLM) | `backend/app/pipeline/fetch/ballot_measures_pdf.py` (pipeline stage + `STRATEGIES`), one reader per state in `fetch/ballot_measures_<st>.py`, registry `backend/app/data/ballot_measure_pdf_sources.json` |
 | What changed on the new House maps (old/new district overlap, lean before/after, enacting act) | `backend/app/redistricting.py`, `backend/app/api/redistricting.py`, `backend/scripts/build_redistricting_overlap.py` → `app/data/redistricting_overlap.json`, `frontend/src/components/redistricting/`, `frontend/src/app/elections/redistricting/` |
+| Special elections, vacancies and the election calendar (FEC election and reporting dates, House Clerk and Senate vacancies, a special's live count and swing, the season /elections leads with) | `backend/app/pipeline/fetch/special_elections.py`, `backend/app/live_results/specials.py`, `backend/app/special_elections.py`, `backend/app/api/special_elections.py` |
 | Official-ballot link table + liveness gating (verified / blocked-unconfirmed / dead) | `backend/app/pipeline/fetch/ballot_lookup.py` |
 | Public API v1 + its MCP server (spec generated from the routes, rendered at `/developers`) | `backend/app/api/public.py`, `backend/app/api/public_mcp.py`, `app/schemas.py` ("Public API v1"), `tests/test_public_api_contract.py`, `frontend/src/app/developers/page.tsx`, `frontend/src/lib/openapi.ts` |
 | Votes with the president's stated positions (OMB SAPs, matching, per-member rate, expected rate by seat; informational, not scored) | `backend/app/pipeline/fetch/omb_statements.py`, `analyze/sap_position.py`, `analyze/presidential_support.py`, `services/presidential_support_service.py`, `frontend/src/components/presidentialSupport/`, `frontend/src/app/congress/president/` |

@@ -115,7 +115,7 @@ from app.pipeline.fetch.election_results import (
     UntrustedCount,
     is_special_contest,
     parse_utc,
-    pick_general,
+    pick_election,
 )
 from app.pipeline.rate_limiter import RateLimiter
 
@@ -471,11 +471,11 @@ async def fetch_general_results(
     )
     if not isinstance(elections, list):
         return None
-    election = pick_general([
+    election = pick_election([
         (e.get("electionName") or "", e) for e in elections
         if str(e.get("electionDate") or "").startswith(day) and e.get("electionID")
         and not _is_preview_id(e["electionID"])
-    ], state)
+    ], state, election_day)
     if election is None:
         return None
     eid = str(election["electionID"])
