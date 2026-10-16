@@ -13,9 +13,9 @@ export interface RollCallShape {
    * names a candidate) or "quorum" (members answer present; nothing decided). */
   kind?: "question" | "election" | "quorum";
   /** "50–50, Vice President of the United States voted Yea", "433 present",
-   * "Johnson (LA) 218, Jeffries 215, Emmer 1". */
+   * "Doe (TX) 218, Roe 215, Poe 1". */
   tally?: string;
-  /** What was decided: the chamber's result, "Johnson (LA) elected",
+  /** What was decided: the chamber's result, "Doe (TX) elected",
    * "No one elected" or "Quorum call". */
   resultLabel?: string;
   /** A Senate tie the Vice President broke; null otherwise. */

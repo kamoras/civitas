@@ -635,8 +635,8 @@ async def repair_house_requirements(client: httpx.AsyncClient, db: Session,
 
 
 # Senate ties stored before roll_calls read <tie_breaker> (NULL columns):
-# re-read until none is left, each one request, once. A tie is rare (7 of
-# the 119th Congress's first 915 Senate roll calls), so one batch covers them.
+# re-read until none is left, each one request, once. A tie is rare (under
+# 2% of a Congress's Senate roll calls), so one batch covers them.
 _TIE_REREAD_BATCH = 20
 
 

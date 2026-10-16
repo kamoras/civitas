@@ -871,7 +871,7 @@ class PublicTieBreakerSchema(_PublicModel):
 
 
 class PublicCandidateVotesSchema(_PublicModel):
-    name: str = Field(description="The candidate, as the House Clerk records the vote (e.g. \"Johnson (LA)\")")
+    name: str = Field(description="The candidate, as the House Clerk records the vote (e.g. \"Doe (TX)\": a surname, with the state where two members share it)")
     votes: int
 
 

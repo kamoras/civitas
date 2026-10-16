@@ -146,7 +146,7 @@ export function voteTally(v: { tally?: string; yeas: number; nays: number }): st
 }
 
 /** What a roll call decided, as the backend words it ("Quorum call",
- * "Johnson (LA) elected"); the chamber's result from an older backend. */
+ * "Doe (TX) elected"); the chamber's result from an older backend. */
 export function voteResult(v: { resultLabel?: string; result: string }): string {
   return v.resultLabel ?? v.result;
 }

@@ -38,7 +38,7 @@ something false for these:
   again once (`reread_senate_ties`).
 - *An election of the Speaker.* Each recorded vote is a candidate's name,
   counted per candidate. The Clerk's result names the candidate with the most
-  votes even on a ballot no one won (2023-01-03), so "elected" is read from
+  votes even on a ballot no one won, so "elected" is read from
   the count by the House's rule: a majority of the votes cast for a person.
 - *A quorum call.* Members answer present and nothing is decided: shown as
   "433 present", with no carried or rejected result.

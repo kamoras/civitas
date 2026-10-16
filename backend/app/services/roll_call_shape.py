@@ -9,10 +9,10 @@ them states something false:
   so the yeas and nays stay equal and the record names the tie-breaker's
   vote apart (RollCall.tie_breaker_*): "Bill Passed 50–50" without it.
 - **An election of the Speaker.** Each member's recorded vote is a
-  candidate's name (the Clerk's "Johnson (LA)"), which a yea/nay tally reads
+  candidate's name (the Clerk's "Doe (TX)"), which a yea/nay tally reads
   as not voting: 0–0 with 434 not voting. The Clerk's result names the
-  candidate with the most votes, elected or not (on 2023-01-03 it named the
-  leader of each ballot no one won), so whether anyone was elected is read
+  candidate with the most votes, elected or not (it names the leader of a
+  ballot no one won, and the House then votes again), so whether anyone was elected is read
   from the count, by the House's rule: a majority of the votes cast for a
   person by name (present and not voting are not votes for anyone).
 - **A quorum call** ("Call by States", "Call of the House"): members answer
@@ -53,8 +53,8 @@ def shape(rc: RollCall, positions: list[RollCallPosition] | None = None) -> dict
 
     kind: "question" | "election" | "quorum"
     tally: the count in words ("50–50, Vice President of the United States
-        voted Yea", "433 present", "Johnson (LA) 218, Jeffries 215, Emmer 1")
-    resultLabel: what was decided ("Bill Passed", "Johnson (LA) elected",
+        voted Yea", "433 present", "Doe (TX) 218, Roe 215, Poe 1")
+    resultLabel: what was decided ("Bill Passed", "Doe (TX) elected",
         "No one elected", "Quorum call")
     rejected: the record's own, except null where nothing was put to a vote
     tieBreaker: {"byWhom", "vote"} or null
@@ -74,9 +74,9 @@ def shape(rc: RollCall, positions: list[RollCallPosition] | None = None) -> dict
     if candidates:
         cast = sum(c["votes"] for c in candidates)
         top = candidates[0]
-        # On 2023-01-03 McCarthy was elected on the 15th ballot with 216 of
-        # 428 votes for a person, 6 present: a majority of those, not of
-        # the House.
+        # A majority of the votes for a person, not of the House: members
+        # answering present don't count, so 216 of 428 such votes elects
+        # even with 6 present.
         elected = top["votes"] * 2 > cast
         return {
             **out, "kind": "election", "rejected": None, "notVoting": rc.not_voting - cast,

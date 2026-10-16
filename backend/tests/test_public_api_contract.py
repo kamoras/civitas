@@ -443,7 +443,7 @@ def test_paging_through_every_position(client, db_session):
 def test_a_tie_the_vice_president_broke_is_stated(client, db_session):
     """A tie broken by the Vice President (who is no member, so the yeas and
     nays stay equal) carries the tie-breaker, as /developers documents."""
-    db_session.add(RollCall(chamber="senate", congress=119, session=1, number=372, date="2025-07-01",
+    db_session.add(RollCall(chamber="senate", congress=119, session=1, number=7, date="2026-02-03",
                             question="On Passage of the Bill", result="Bill Passed", yeas=50, nays=50,
                             bill_id="HR.2", tie_breaker_by="Vice President of the United States",
                             tie_breaker_vote="Yea"))

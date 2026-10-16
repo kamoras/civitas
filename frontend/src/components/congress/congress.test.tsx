@@ -530,7 +530,7 @@ describe("roll call page", () => {
   it("names the Vice President's tie-breaking vote", () => {
     const tie: VoteDetail = {
       ...detail,
-      number: 372,
+      number: 7,
       yeas: 50,
       nays: 50,
       result: "Bill Passed",
@@ -540,7 +540,7 @@ describe("roll call page", () => {
       tieBreaker: { byWhom: "Vice President of the United States", vote: "Yea" },
       candidates: [],
     };
-    render(<RollCallView vote={tie} path="/congress/votes/senate/119/1/372" />);
+    render(<RollCallView vote={tie} path="/congress/votes/senate/119/1/7" />);
     expect(screen.getByText("50–50")).toBeTruthy();
     expect(
       screen.getByText("Tie broken: Vice President of the United States voted Yea")
@@ -568,7 +568,7 @@ describe("roll call page", () => {
       number: 2,
       question: "Election of the Speaker",
       title: "",
-      result: "Johnson (LA)",
+      result: "Doe (TX)",
       rejected: null,
       majorityRequirement: "1/2",
       billId: null,
@@ -577,31 +577,31 @@ describe("roll call page", () => {
       nays: 0,
       notVoting: 0,
       kind: "election",
-      tally: "Johnson (LA) 2, Jeffries 1",
-      resultLabel: "Johnson (LA) elected",
+      tally: "Doe (TX) 2, Roe 1",
+      resultLabel: "Doe (TX) elected",
       tieBreaker: null,
       candidates: [
-        { name: "Johnson (LA)", votes: 2 },
-        { name: "Jeffries", votes: 1 },
+        { name: "Doe (TX)", votes: 2 },
+        { name: "Roe", votes: 1 },
       ],
       parties: [
-        { party: "R", yea: 0, nay: 0, present: 0, notVoting: 0, candidates: { "Johnson (LA)": 2 } },
-        { party: "D", yea: 0, nay: 0, present: 0, notVoting: 0, candidates: { Jeffries: 1 } },
+        { party: "R", yea: 0, nay: 0, present: 0, notVoting: 0, candidates: { "Doe (TX)": 2 } },
+        { party: "D", yea: 0, nay: 0, present: 0, notVoting: 0, candidates: { Roe: 1 } },
       ],
       members: [
-        member("Scalise", "R", "Johnson (LA)"),
-        member("Higgins", "R", "Johnson (LA)"),
-        member("Fields", "D", "Jeffries"),
+        member("Aster", "R", "Doe (TX)"),
+        member("Birch", "R", "Doe (TX)"),
+        member("Cedar", "D", "Roe"),
       ],
     };
     render(<RollCallView vote={election} path="/congress/votes/house/119/1/2" />);
-    expect(screen.getByText("Johnson (LA) elected")).toBeTruthy();
+    expect(screen.getByText("Doe (TX) elected")).toBeTruthy();
     // The question is the title, said once.
     expect(screen.getAllByText("Election of the Speaker")).toHaveLength(1);
-    expect(screen.getByText("2 Johnson (LA)")).toBeTruthy();
-    expect(screen.getByText("Republicans: 2 for Johnson (LA)")).toHaveClass("sr-only");
-    expect(screen.getByText("Johnson (LA) · 2")).toBeTruthy();
-    expect(screen.getByText("Jeffries · 1")).toBeTruthy();
+    expect(screen.getByText("2 Doe (TX)")).toBeTruthy();
+    expect(screen.getByText("Republicans: 2 for Doe (TX)")).toHaveClass("sr-only");
+    expect(screen.getByText("Doe (TX) · 2")).toBeTruthy();
+    expect(screen.getByText("Roe · 1")).toBeTruthy();
     expect(screen.queryByText("Not voting · 3")).toBeNull();
     expect(screen.queryByText("Required")).toBeNull();
   });
