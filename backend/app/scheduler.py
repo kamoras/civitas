@@ -256,6 +256,7 @@ def _nightly_pipeline() -> None:
         resolve_ops_alert,
         send_ops_alert,
     )
+    from app import calibration_drift
     from app.pipeline_chain import run_chain
 
     def _run():
@@ -273,6 +274,9 @@ def _nightly_pipeline() -> None:
             # self-advance (see the check's own docstring for why), so the
             # alert is the only signal that a manual refresh is due.
             check_state_pvi_staleness,
+            # Each hand-labelled calibration against the stream it gates
+            # (pass rates since it was fitted).
+            calibration_drift.check_all,
         )
         for check in pre_checks:
             try:
@@ -358,6 +362,9 @@ def _hourly_action_refresh() -> None:
         except Exception:
             logger.exception("Action center refresh failed")
         _post_trends()
+        # The calibrated gates' decisions this hour (calibration_drift).
+        from app import calibration_drift
+        calibration_drift.flush()
 
     _start_job(_run, name="action-refresh")
 

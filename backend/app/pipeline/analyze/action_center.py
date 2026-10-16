@@ -38,6 +38,7 @@ from scipy.spatial.distance import squareform
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
+from app import calibration_drift
 from app.contact import BOT_USER_AGENT
 from app.config import settings
 from app.config_definitions import RECENT_FEED_MAX_LIMIT, RECENT_FEED_POOL_MULTIPLIER
@@ -1578,6 +1579,7 @@ def _filter_policy_relevant(articles: list[NewsArticle]) -> list[tuple[NewsArtic
     k = int(calibration["k"])
     threshold = float(calibration["threshold"])
     votes = relevance_votes(article_embeddings, _relevance_reference(), labels, k)
+    calibration_drift.observe("policy_relevance", votes, threshold)
 
     relevant = [
         (article, article_embeddings[i])
@@ -1650,6 +1652,7 @@ def _cluster_articles(
     centered = _center_titles(embeddings, embeddings.mean(axis=0))
     distance = np.clip(1.0 - centered @ centered.T, 0.0, None)
     threshold = float(cluster_calibration()["threshold"])
+    calibration_drift.observe("cluster_pairs", (1.0 - distance)[np.triu_indices(len(items), 1)], threshold)
     labels = fcluster(
         linkage(squareform(distance, checks=False), method="complete"),
         t=1.0 - threshold, criterion="distance",
