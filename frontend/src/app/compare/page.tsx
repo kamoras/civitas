@@ -23,6 +23,7 @@ import { PARTY_COLORS } from "@/lib/partyStyles";
 import { BOXED_CONTROL } from "@/lib/controlStyles";
 import VotingAgreement from "@/components/compare/VotingAgreement";
 import { HeldScoreTag, heldScoreText } from "@/components/scorecard/HeldScore";
+import CiteThis from "@/components/shared/CiteThis";
 import { useYourState } from "@/hooks/useYourState";
 
 type Chamber = "senate" | "house";
@@ -382,6 +383,7 @@ function ComparisonTable({
           <div className="text-ink-min font-mono text-xs mt-0.5 uppercase tracking-wide">
             {leftChamber === "house" ? "House" : "Senate"}
           </div>
+          <ScoredOn member={left} />
         </div>
         <div className="p-3 flex items-center justify-center">
           <span className="text-ink-min font-mono text-xs">VS</span>
@@ -398,6 +400,7 @@ function ComparisonTable({
           <div className="text-ink-min font-mono text-xs mt-0.5 uppercase tracking-wide">
             {rightChamber === "house" ? "House" : "Senate"}
           </div>
+          <ScoredOn member={right} />
         </div>
       </div>
 
@@ -470,6 +473,21 @@ function ComparisonTable({
         })}
       </div>
 
+      {/* Informational: measured and shown, but not part of the overall
+          score (v6.5), so no "better score" marker. */}
+      <div className="grid grid-cols-3 items-center border-t border-white/[0.07] px-3 py-2">
+        <div className="text-right font-mono text-sm text-ink-lo">
+          {left.representationScore.fundingDiversity}
+        </div>
+        <div className="text-center px-1 text-xs text-ink-lo font-mono leading-snug tracking-wide">
+          FUNDING DIVERSITY
+          <span className="block text-ink-min normal-case tracking-normal">not in the score</span>
+        </div>
+        <div className="text-left font-mono text-sm text-ink-lo">
+          {right.representationScore.fundingDiversity}
+        </div>
+      </div>
+
       {leftChamber === rightChamber && (
         <VotingAgreement
           chamber={leftChamber}
@@ -516,8 +534,50 @@ function ComparisonTable({
           FULL SCORECARD →
         </a>
       </div>
+
+      <div className="border-t border-white/[0.07] p-3">
+        <h3 className="mb-2 font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
+          Cite this comparison
+        </h3>
+        <CiteThis
+          title={`${left.name} and ${right.name}: Representation scores compared${methodNote(left, right)}`}
+          date={[left.scoredOn, right.scoredOn].filter(Boolean).sort().pop() ?? null}
+          path={comparePath(left, right, leftChamber, rightChamber)}
+        />
+      </div>
     </div>
   );
+}
+
+/** "Scored 2026-10-16 · v6.35": which run and method stored the member's
+ *  scores, so a held or older score reads as such beside a newer one. */
+function ScoredOn({ member }: { member: Senator }) {
+  if (!member.scoredOn) return null;
+  return (
+    <div className="mt-0.5 font-mono text-xs text-ink-min">
+      Scored {member.scoredOn}
+      {member.algorithmVersion ? ` · ${member.algorithmVersion}` : ""}
+    </div>
+  );
+}
+
+/** ", scoring method v6.35" (or each member's, when they differ). */
+function methodNote(left: Senator, right: Senator): string {
+  const l = left.algorithmVersion;
+  const r = right.algorithmVersion;
+  if (!l && !r) return "";
+  if (l === r) return `, scoring method ${l}`;
+  return `, scoring methods ${l ?? "unrecorded"} (${left.name}) and ${r ?? "unrecorded"} (${right.name})`;
+}
+
+function comparePath(left: Senator, right: Senator, lCh: Chamber, rCh: Chamber): string {
+  const params = new URLSearchParams({
+    leftId: left.id,
+    leftChamber: lCh,
+    rightId: right.id,
+    rightChamber: rCh,
+  });
+  return `/compare?${params}`;
 }
 
 // The masthead's line, sent with the server's fallback too (PageFallback).
