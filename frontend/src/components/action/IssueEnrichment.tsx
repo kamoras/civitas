@@ -42,6 +42,7 @@ import type { ActionTapKind } from "@/lib/api";
 import Photo from "@/components/Photo";
 import ContactYourMembers from "@/components/action/ContactYourMembers";
 import TrackedLink from "@/components/action/TrackedLink";
+import OnTheBallot from "@/components/action/OnTheBallot";
 import AgencyLink from "@/components/agencies/AgencyLink";
 import { exploreHref } from "@/lib/exploreHref";
 
@@ -613,6 +614,8 @@ export function WhatYouCanDo({
   return (
     <section className={className}>
       <Heading className={SECTION_HEADING}>What you can do</Heading>
+      {/* An election story's next step is the voter's own ballot: first. */}
+      <OnTheBallot ballot={issue.ballot} />
       <ul>
         {rows.map((row) => {
           const cls = `${TEXT_LINK} whitespace-nowrap`;

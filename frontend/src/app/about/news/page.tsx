@@ -213,6 +213,14 @@ export default function NewsChapter() {
           the exception: its issue is the count, so what you can do is follow that count on its
           state&apos;s page.
         </P>
+        <P>
+          When an issue names a race on this year&apos;s ballot, it leads with it: &quot;On the
+          ballot: Georgia · Senate race (Roe)&quot;, then the state&apos;s next voter deadline from
+          its election office and links to register and to check your registration. A race is linked
+          only when the story names one of its confirmed nominees (in full, or by surname beside the
+          state&apos;s name when no other nominee there shares it) or the seat itself (&quot;the
+          Michigan Senate race&quot;). A state named without one of its races is not linked.
+        </P>
         <More label="How a story is linked to votes in Congress">
           <P>
             News rarely prints a bill&apos;s number, so until October 2026 not one issue in 543 had
@@ -416,13 +424,34 @@ export default function NewsChapter() {
         </P>
       </Section>
 
+      <Section id="race-posts" title="Race updates">
+        <P>
+          A news story is listed beside a race when it names one of the race&apos;s candidates in
+          full and also names the race: its state, or another of its candidates. A candidate&apos;s
+          name alone is not enough, because a member of Congress is in the news for many things
+          besides their own race. Newsletters and other multi-story roundups are left out, the same
+          way the Action Center leaves them out.
+        </P>
+        <P>
+          Civitas posts far fewer stories than it lists. Before a story becomes an update on its
+          race, it must also be about a candidate still on the state&apos;s certified November
+          ballot, and score high enough on how closely it matches the race. That bar was set against
+          stories we read and marked as about the race or not: about nine in ten of the stories
+          above it were about their race.
+        </P>
+      </Section>
+
       <Section id="retractions" title="Corrections and retractions">
         <P>
           When something Civitas published is wrong and can&apos;t be corrected from its sources, it
           is withdrawn, not quietly deleted. Each withdrawal is listed with its date and reason in a
-          public retraction log in the source code, and the issue&apos;s page says it was withdrawn
-          and why. The first entry, on 27 September 2026, withdrew two issues that a since-fixed
-          grouping step had built from unrelated stories.
+          public retraction log in the source code. A withdrawn issue&apos;s page says it was
+          withdrawn and why; a withdrawn race update is left out of the feeds, and its story out of
+          the race&apos;s page. The first entry, on 27 September 2026, withdrew two issues that a
+          since-fixed grouping step had built from unrelated stories. The second, on 17 October
+          2026, withdrew an update on a New York House race that was really a newsletter about other
+          things, and a check of the month before it withdrew sixteen more race updates linked to a
+          race by a candidate&apos;s name alone or by a newsletter.
         </P>
       </Section>
     </AboutPage>

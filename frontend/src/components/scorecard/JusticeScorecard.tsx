@@ -242,7 +242,7 @@ export default function JusticeScorecard({
           <header
             id="overview"
             {...{ [SHARE_SECTION_ATTR]: "overview" }}
-            className={`grid gap-6 border border-white/25 border-t-[3px] bg-surface px-5 py-6 font-sans sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] ${party.border}`}
+            className={`grid grid-cols-[minmax(0,1fr)] gap-6 border border-white/25 border-t-[3px] bg-surface px-5 py-6 font-sans sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] ${party.border}`}
           >
             {/* Portrait above the name below sm: beside it, the name had
                 about 146px at 320px and long surnames split mid-word. */}
@@ -303,7 +303,7 @@ export default function JusticeScorecard({
             </div>
           </header>
 
-          <div className="grid items-stretch gap-5 lg:grid-cols-3">
+          <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-3">
             <LoyaltyColumn justice={j} />
             <IdeologyColumn points={j.idealPoints} />
             <RecordColumn justice={j} />

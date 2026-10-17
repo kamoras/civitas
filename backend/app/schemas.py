@@ -1615,6 +1615,26 @@ class RelatedMonitorSchema(CamelModel):
     title: str
 
 
+class IssueBallotRaceSchema(CamelModel):
+    """A race the issue names: by id ("2026-SEN-GA"), its label ("Senate",
+    "GA-2") and the nominee the story named, as the story wrote it."""
+    id: str
+    label: str
+    candidate: str | None = None
+
+
+class IssueBallotSchema(CamelModel):
+    """A state the issue names (app/ballot_links.py): its races, the voter
+    calendar's next deadline (registration while it is open), where to register and
+    the state's official voter lookup, read when the issue is served."""
+    state: str
+    state_name: str
+    races: list[IssueBallotRaceSchema] = []
+    deadline: dict | None = None
+    register_link: dict | None = None
+    lookup: dict | None = None
+
+
 class ActionIssueSchema(CamelModel):
     id: int
     public_id: str
@@ -1665,6 +1685,8 @@ class ActionIssueSchema(CamelModel):
     # stays on the issues it tracked, and linked nowhere.
     related_monitors: list[RelatedMonitorSchema] = []
     deciders: list[DeciderSchema] = []
+    # The states and races the issue names, with their voter information.
+    ballot: list[IssueBallotSchema] = []
     # Roll calls linked to the issue (IssueVoteSchema), so a page knows to
     # offer each member's record on them.
     vote_count: int = 0
