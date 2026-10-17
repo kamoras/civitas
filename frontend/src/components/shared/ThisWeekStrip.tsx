@@ -257,7 +257,10 @@ function FullStrip({ data }: { data: ThisWeek }) {
               ))}
             </ul>
           )}
-          <Link href={weekHref(congress.weekStart)} className={`font-mono text-xs ${LINK}`}>
+          <Link
+            href={weekHref(congress.weekStart)}
+            className={`inline-flex min-h-6 w-fit items-center font-mono text-xs ${LINK}`}
+          >
             What Congress did this week &rarr;
           </Link>
         </div>
@@ -289,7 +292,10 @@ function FullStrip({ data }: { data: ThisWeek }) {
               })}
             </ul>
           )}
-          <Link href="/explore?comment=open" className={`font-mono text-xs ${LINK}`}>
+          <Link
+            href="/explore?comment=open"
+            className={`inline-flex min-h-6 w-fit items-center font-mono text-xs ${LINK}`}
+          >
             Every open comment period &rarr;
           </Link>
         </div>

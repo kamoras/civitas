@@ -3,6 +3,7 @@ import ConfigProvider from "@/components/providers/ConfigProvider";
 import LoadTimingBeacon from "@/components/LoadTimingBeacon";
 import NavigationBeacon from "@/components/NavigationBeacon";
 import ForgetLegacyStorage from "@/components/ForgetLegacyStorage";
+import HeaderClearance from "@/components/layout/HeaderClearance";
 import {
   FEED_ALTERNATES,
   HOME_DESCRIPTION,
@@ -98,6 +99,7 @@ export default function RootLayout({
           <LoadTimingBeacon />
           <NavigationBeacon />
           <ForgetLegacyStorage />
+          <HeaderClearance />
         </ConfigProvider>
       </body>
     </html>

@@ -34,9 +34,14 @@ export default function ConstituentApproval({
       </BlockLabel>
       <ul className="flex flex-col gap-1.5" aria-label="Approval among constituents, by party">
         {approval.byParty.map((g) => (
-          <li key={g.party} className="flex items-baseline justify-between gap-3 text-sm">
+          // Wraps at a large text size: the figure drops under the group
+          // rather than running past the column (WCAG 1.4.10).
+          <li
+            key={g.party}
+            className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm"
+          >
             <span className="text-ink-lo">{GROUP_LABELS[g.party]}</span>
-            <span className="text-right text-ink-hi">
+            <span className="ml-auto min-w-0 text-right text-ink-hi [overflow-wrap:anywhere]">
               {g.approve === null
                 ? "too few respondents to measure"
                 : `${Math.round(g.approve * 100)}% approve`}
