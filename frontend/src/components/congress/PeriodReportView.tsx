@@ -140,6 +140,10 @@ export default function PeriodReportView({
       ? `Week of ${longDate(report.start).replace(/^\w+, /, "")}`
       : monthLabel(report.start.slice(0, 7));
   const pending = senate.daysPending + house.daysPending;
+  // In a recess the week is the last one with business, under the page's
+  // own lead: its lists fold behind their headings (each says its count),
+  // and the full week is a tab away.
+  const folded = Boolean(lead);
   // A neighbour only when it has a record to show (the API says null past
   // either end of the record).
   const step = (period: string | null) =>
@@ -155,7 +159,8 @@ export default function PeriodReportView({
       <Navbar />
       <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
         <div className="mx-auto max-w-6xl">
-          <SectionTabs section="congress" active={kind} />
+          {/* /congress in a recess is still the Today tab, showing a week. */}
+          <SectionTabs section="congress" active={lead ? "reports" : kind} />
           <PageMasthead
             className="mb-6"
             eyebrow="What happened in Congress"
@@ -246,7 +251,7 @@ export default function PeriodReportView({
 
           <div className="mt-10 grid gap-12 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
             <div className="flex min-w-0 flex-col gap-6">
-              <Section level={2} title="Record votes" count={report.votes.length}>
+              <Section level={2} title="Record votes" count={report.votes.length} folded={folded}>
                 {report.votes.length ? (
                   <ul className="flex flex-col">
                     {report.votes.map((v) => (
@@ -264,7 +269,12 @@ export default function PeriodReportView({
             </div>
             <div className="flex min-w-0 flex-col gap-6">
               {report.becameLaw.length > 0 && (
-                <Section level={2} title="Became law" count={report.becameLaw.length}>
+                <Section
+                  level={2}
+                  title="Became law"
+                  count={report.becameLaw.length}
+                  folded={folded}
+                >
                   <BillList items={report.becameLaw} />
                 </Section>
               )}
@@ -272,6 +282,7 @@ export default function PeriodReportView({
                 level={2}
                 title="Passed both chambers"
                 count={report.passedBothChambers.length}
+                folded={folded}
               >
                 {report.passedBothChambers.length ? (
                   <BillList items={report.passedBothChambers} />
@@ -279,7 +290,12 @@ export default function PeriodReportView({
                   <Empty>None.</Empty>
                 )}
               </Section>
-              <Section level={2} title="Passed one chamber" count={report.passedOneChamber.length}>
+              <Section
+                level={2}
+                title="Passed one chamber"
+                count={report.passedOneChamber.length}
+                folded={folded}
+              >
                 {report.passedOneChamber.length ? (
                   <BillList items={report.passedOneChamber} />
                 ) : (
@@ -287,7 +303,7 @@ export default function PeriodReportView({
                 )}
               </Section>
               {report.closestVotes.length > 0 && (
-                <Section level={2} title="Closest votes">
+                <Section level={2} title="Closest votes" folded={folded}>
                   <ul className="flex flex-col">
                     {report.closestVotes.map((v) => (
                       <li

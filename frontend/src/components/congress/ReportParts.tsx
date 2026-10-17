@@ -44,24 +44,44 @@ export function Section({
   title,
   count,
   level = 3,
+  folded = false,
   children,
 }: {
   title: string;
   count?: number | string | null;
   /** 2 on a page whose sections sit directly under its title; 3 under a chamber's heading. */
   level?: 2 | 3;
+  /** Closed behind its heading until opened (/congress in a recess, where
+   *  the week is the last one with business, not the page's subject). */
+  folded?: boolean;
   children: React.ReactNode;
 }) {
   const Heading = level === 2 ? "h2" : "h3";
+  const heading = (
+    <Heading className="inline font-display text-base font-bold text-ink-hi">
+      {title}
+      {count !== undefined && count !== null && (
+        <span className="ml-2 font-mono text-sm font-normal text-ink-min">
+          <span className="sr-only">, </span>
+          {count}
+        </span>
+      )}
+    </Heading>
+  );
   return (
     <section className="flex flex-col gap-3 border-t border-white/15 pt-4">
-      <Heading className="font-display text-base font-bold text-ink-hi">
-        {title}
-        {count !== undefined && count !== null && (
-          <span className="ml-2 font-mono text-sm font-normal text-ink-min">{count}</span>
-        )}
-      </Heading>
-      {children}
+      {folded ? (
+        <details className="group">
+          <summary className="flex min-h-6 cursor-pointer items-baseline gap-2 hover:text-phos">
+            {heading}
+            <span className="font-mono text-xs text-ink-min group-open:hidden">Show</span>
+          </summary>
+          <div className="mt-3">{children}</div>
+        </details>
+      ) : (
+        heading
+      )}
+      {!folded && children}
     </section>
   );
 }

@@ -61,6 +61,10 @@ locally on a single self-hosted device with zero cloud AI calls.
 - **Keyword Index**: SQLite FTS5 (`explore_fts`, external-content over
   `explore_documents`) with BM25F ranking — the second retrieval channel behind
   Explore search; see `pipeline/lexical_index.py`
+- **Site search**: one entity index of everything with a page (`/data/site_search.db`,
+  SQLite FTS5 + trigram + exact identifier keys), rebuilt by the pipeline
+  process when its sources move; the header's autocomplete and `/search`
+  read it with no model — see `app/site_search.py`
 - **Deployment**: Docker Swarm (single-node), `docker stack deploy` for zero-downtime rolling updates, nginx (in-stack) reverse proxy with caching
 - **Branches covered**: Senate (100 senators), House (435 representatives), Presidents (historical + modern), Supreme Court (9 justices)
 - **News Feeds**: RSS parsing (NPR, PBS, BBC, The Hill, Politico, Roll Call) + Google Trends + Bluesky trending for Action Center; 41 per-state newsrooms for election races
@@ -626,6 +630,14 @@ document type can earn belongs in the fusion as a *partial* ranker (documents
 it can't score contribute nothing) rather than as a full ordering, or it
 silently demotes every document that had no way to earn it.
 
+The same discipline covers site search (`app/site_search.py`): its scoring
+weights and its "straight to the page" thresholds are fitted by
+`backend/scripts/calibrate_site_search.py` on known-item probes built from
+the index (half the entities fit, half reported) and read from
+`app/data/site_search_calibration.json`. A wrong jump is worse than a
+results page: the thresholds allow no wrong jump in any probe type on the
+fit half. Rerun it when the index gains a kind or aliases.
+
 ### 4. Content-based party alignment
 
 A bill's party alignment comes from **how the parties actually voted on it**
@@ -996,6 +1008,16 @@ What this rules in and out:
   sends the identical request; nothing visitor-specific leaves the server.
   That distinction — our address, not theirs — is the whole line.
 
+**What a reader searches for is never kept.** The site search
+(`/api/search`, `/api/search/suggest`, `/search`) and Explore carry the query
+in the URL, so: nginx's access log has one format, `civitas_private`, with no
+query string and no referrer (`test_nginx_config.py`); uvicorn's access log
+drops query strings (`main.DropQueryString`); search answers are
+`Cache-Control: private` (the reader's browser may keep them, nginx's disk
+cache never does); the `/search` page fetches with `no-store` (Next's data
+cache is a file); and no log line names a query. Keep a new search-like
+endpoint the same way.
+
 The one thing counted about visitors — daily unique visits — uses an HMAC of
 the IP under a random salt that exists only for the current UTC day and is
 then deleted (`api/visits.py`, `VisitSalt`). A permanent key would not do:
@@ -1070,7 +1092,7 @@ client per issue an hour (`ISSUE_VIEW_PERIOD_S`). The state picker on an issue (
 explicit, unremembered choice from a list: the state goes in the URL that loads
 its members (`GET /api/action/issues/{id}/members?state=`) and nowhere else, and
 the House town filter runs in the browser over district lists the page already
-has. Keep both that way: a tap row that named a state would be a coarse
+has. `/congress`'s "Your members this Congress" works the same way (`GET /api/congress/members?state=`). Keep both that way: a tap row that named a state would be a coarse
 location log per issue.
 
 The admin dashboard's headline traffic figures are the two that measure people:
@@ -1460,6 +1482,16 @@ Each issue's actions are fixed templates around stored data:
   measured at 0.38 held-out precision — do not drop the labelled votes to
   "simplify". The chair and ranking member are read from the stored rosters
   when the issue is served (`api/action._committee_leaders`).
+- **"On the ballot"** for the states and races the issue's own words name
+  (`action_center.ballot_links`, stored as `ActionIssue.ballot_links` when
+  the issue is written): a confirmed nominee by full name, a state's only
+  nominee of a surname beside the state's name, a seat phrase (the
+  election-results gate's `race_named`). A state alone in an election
+  story's headline is not linked: measured at 16 of 22 on topic, under the
+  bar. Served with the voter calendar's next
+  deadline and the state's register and lookup links
+  (`app/ballot_links.py`), read when the issue is served so a countdown is
+  never stale. Measured in `docs/research/action-center-ballot-links.md`.
 - **"Comment by <date>"** for a proposed or final rule (the Register's own
   `type`) still open for comment whose title clears `EXPLORE_TITLE_MIN_SIM`
   (`_open_comment_docs`). The API drops it once the period closes (#903's
@@ -2209,6 +2241,7 @@ the pending list).
 | Votes with the president's stated positions (OMB SAPs, matching, per-member rate, expected rate by seat; informational, not scored) | `backend/app/pipeline/fetch/omb_statements.py`, `analyze/sap_position.py`, `analyze/presidential_support.py`, `services/presidential_support_service.py`, `frontend/src/components/presidentialSupport/`, `frontend/src/app/congress/president/` |
 | Federal agencies: weekly Register list + USAspending budgets, name crosswalk, agency pages | `backend/app/pipeline/fetch/agencies.py`, `backend/app/api/agencies.py`, `backend/scripts/calibrate_agency_crosswalk.py` (`app/data/agency_crosswalk.json`), `frontend/src/app/agencies/` |
 | Presidential nominations (daily Congress.gov sync, FJC join, list/stats/detail, roll-call links) | `backend/app/pipeline/fetch/nominations.py`, `backend/app/services/nomination_service.py`, `services/nomination_links.py`, `backend/app/api/nominations.py`, `frontend/src/app/congress/nominations/` |
+| Site search: entity index (write time), identifier parser, ranking, direct navigation, section anchors | `backend/app/site_search_index.py`, `backend/app/site_search.py`, `backend/app/api/search.py`, `backend/app/data/site_pages.json`, `backend/app/data/site_search_sections.json`, `backend/scripts/calibrate_site_search.py`, `frontend/src/components/search/`, `frontend/src/app/search/page.tsx` |
 | Explore hybrid search ranking (RRF fusion, priors, dedup, diversity) | `backend/app/services/explore_search.py` |
 | Explore permanent addresses (`/explore/{key}` from the official identifier; old row ids 308 to it), coverage windows and "not held here" notes | `backend/app/services/explore_keys.py`, `backend/app/services/explore_coverage.py`, `frontend/src/lib/exploreHref.ts` |
 | Explore keyword index (FTS5 + BM25F) | `backend/app/pipeline/lexical_index.py` |
@@ -2562,7 +2595,7 @@ the bills page's "Active now" falls back to bills that moved this week and
 says so (`shown`/`movedSince`), a bill page states its stage's base rate
 (`stageBaseRate` — worded as what happens to bills at the stage, never a
 forecast for the bill), the Ongoing tab lists recently closed monitors, and
-`/compare` offers pairs that need no picking. Never fill the gap with model
+`/compare` offers pairs that need no picking, and `/congress` leads with the Congress so far (the days each chamber sat, how far its bills got; `services/congress_glance.py`) and, in a recess, shows the last day of business on its week and month cards. Never fill the gap with model
 text or a visitor's input (§7, §8).
 
 #### Accessibility: WCAG 2.2 AA is a merge requirement (2026-10)

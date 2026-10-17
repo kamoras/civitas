@@ -26,6 +26,7 @@ from difflib import SequenceMatcher
 from functools import lru_cache
 import time
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Iterator, NamedTuple
 import uuid
 from datetime import date, datetime, timedelta
@@ -37,15 +38,18 @@ import numpy as np
 from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.spatial.distance import squareform
 from sqlalchemy import func, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from app.contact import BOT_USER_AGENT
 from app.config import settings
 from app.config_definitions import RECENT_FEED_MAX_LIMIT, RECENT_FEED_POOL_MULTIPLIER
 from app.database import SessionLocal
+from app.election_phase import active_election
+from app.state_names import STATE_NAMES
 from app.models import (
     ActionIssue,
     ActionIssueStatus,
+    Candidate,
     ExploreDocument,
     FeedArticle,
     Justice,
@@ -54,6 +58,7 @@ from app.models import (
     MonitorUpdate,
     NationalMonitor,
     President,
+    Race,
     Representative,
     Senator,
 )
@@ -3998,8 +4003,6 @@ _ORDINAL_WORD_RE = re.compile(
 
 
 def _mark_states(text: str, state_name: str) -> str:
-    from app.state_names import STATE_NAMES
-
     names = sorted({v.lower() for v in STATE_NAMES.values()}, key=len, reverse=True)
     pattern = re.compile(r"\b(?:" + "|".join(re.escape(n) for n in names) + r")\b", re.IGNORECASE)
     return pattern.sub(lambda m: _OURS if m.group(0).lower() == state_name else _OTHER, text)
@@ -4505,10 +4508,6 @@ def _results_race_named(issue, story_text: str, db=None) -> bool:
     whether a Senate race is its state's only one this cycle (see
     _senate_needs_telling_apart) and who the race's candidates are; the
     issue's own session is used when none is passed."""
-    from sqlalchemy.orm import object_session
-
-    from app.state_names import STATE_NAMES
-
     race = None
     try:
         for action in json.loads(issue.actions or "[]"):
@@ -4517,16 +4516,31 @@ def _results_race_named(issue, story_text: str, db=None) -> bool:
         return False
     if race is None:
         return False
-    cycle, office, state, part = race.groups()
-    race_id = race.group(0).removeprefix("#race-")
-    state_name = STATE_NAMES.get(state, "").lower()
-    if not state_name:
-        return False
     if db is None:
         try:
             db = object_session(issue)
         except Exception:  # not a mapped instance (a test double)
             db = None
+    return race_named(race.group(0).removeprefix("#race-"), story_text, db)
+
+
+_RACE_ID_RE = re.compile(r"^(\d{4})-(SEN|HOUSE)-([A-Z]{2})(?:-(\d+|SPECIAL))?$")
+
+
+def race_named(race_id: str, story_text: str, db=None, need_candidate: bool = True) -> bool:
+    """Whether `story_text` names the race `race_id` ("2026-SEN-GA",
+    "2026-HOUSE-GA-2") by the seat phrase above. With `need_candidate`
+    (an election-results issue's promotion), a race with candidates on
+    record must also have one of them named by full name; without it (the
+    ballot links, app/ballot_links.py, which name candidates separately)
+    the phrase alone decides."""
+    race = _RACE_ID_RE.match(race_id or "")
+    if race is None:
+        return False
+    cycle, office, state, part = race.groups()
+    state_name = STATE_NAMES.get(state, "").lower()
+    if not state_name:
+        return False
     story_text = _strip_accents(_URL_RE.sub(" ", story_text))
     # The phrases are read in lower case; `cased` keeps the story's own
     # capitals at the same offsets, for what follows a district phrase.
@@ -4546,7 +4560,9 @@ def _results_race_named(issue, story_text: str, db=None) -> bool:
 
     def named() -> bool | None:
         """Whether the story names one of the race's candidates by full
-        name; None when none is on record."""
+        name; None when none is on record, or none is asked for."""
+        if not need_candidate:
+            return None
         ours = people()
         return None if ours is None else _names_a_candidate(story_text, ours)
 
@@ -4731,6 +4747,168 @@ def _find_matching_issue(
     return None
 
 
+# ── Ballot links ─────────────────────────────────────────────────
+# Which ballot an issue reaches: the states and races its own words name
+# (ballot_links below), stored on the issue (ActionIssue.ballot_links) and
+# served with the state's deadlines and official links (app/ballot_links.py).
+#
+# Which ballot an Action Center issue reaches: the states and races its
+# own words name, worked out when the issue is written (the hourly refresh,
+# action_center) and served with the state's deadlines and official links
+# (api/action.py, issue_ballot).
+#
+# An election story ("Agency sues a state over mail ballots", "The president
+# stumps for Roe in Georgia") is the one kind of issue whose next step is the
+# voter's own ballot, and until 2026-10 none of the eight such issues in a
+# month linked a race, a ballot page or a deadline. Every link here comes
+# from an entity match against stored rows, never from model text:
+#
+# - **A nominee named.** A confirmed general-election candidate of a race
+#   this cycle named by full name in the headline, summary or facts (the
+#   election-results gate's own matcher, action_center._names_a_candidate),
+#   members of Congress included. A full name nominees of two races share
+#   ("Pat Quill") names one of them only beside its state's name.
+# - **A nominee's surname beside the state.** "Roe" in a story that also
+#   names Georgia, when Georgia's nominees include exactly one Roe, and
+#   the surname is not written after a different given name ("Jordan
+#   Marsh" is not Lee Marsh).
+# - **The seat named.** "Alaska's Senate race", "Georgia's 2nd District":
+#   the results gate's seat phrases (action_center.race_named), which
+#   already tell a legislature's seats and other states' names apart.
+#
+# A state is linked only through one of its races. A state named in the
+# headline of a story the class vote calls an election was also linked,
+# alone, until review: 16 of 22 such links on the stored issues were on
+# topic, under the site's precision bar, so that path was dropped.
+#
+# Measured on the stored issues: see docs/research/action-center-ballot-links.md.
+
+# Every state name, longest first, so "West Virginia" is one name and
+# never Virginia; written as a name (capitalised, or the whole headline in
+# capitals). "Washington, D.C." is the capital, not the state.
+_BALLOT_STATE_NAMES = sorted(STATE_NAMES.items(), key=lambda kv: len(kv[1]), reverse=True)
+_BALLOT_STATE_RE = re.compile(
+    r"(?<![\w-])(" + "|".join(re.escape(n) for _, n in _BALLOT_STATE_NAMES) + r")(?![\w-])(?!,?\s+D\.?C\b)",
+    re.IGNORECASE,
+)
+_BALLOT_STATE_CODE = {n.lower(): c for c, n in STATE_NAMES.items()}
+
+# How a link was made, most specific first (one race keeps its best).
+BALLOT_CANDIDATE, BALLOT_SURNAME, BALLOT_SEAT = "candidate", "surname", "seat"
+_BALLOT_VIA_ORDER = {BALLOT_CANDIDATE: 0, BALLOT_SURNAME: 1, BALLOT_SEAT: 2}
+
+
+def states_named(text: str) -> list[str]:
+    """The postal codes of the states `text` names, in order of first
+    mention."""
+    out: list[str] = []
+    for m in _BALLOT_STATE_RE.finditer(text or ""):
+        word = m.group(0)
+        if not (word[0].isupper() or word.isupper()):
+            continue  # "georgia" in a URL slug or prose is not written as a name
+        code = _BALLOT_STATE_CODE[word.lower()]
+        if code not in out:
+            out.append(code)
+    return out
+
+
+@dataclass(frozen=True)
+class _Nominee:
+    race: Race
+    name: str
+    person: object  # action_center._Person
+
+
+def _ballot_nominees(db: Session, cycle: int) -> list[_Nominee]:
+    rows = (
+        db.query(Candidate, Race).join(Race, Race.id == Candidate.race_id)
+        .filter(Race.cycle_year == cycle, Candidate.confirmed_general.is_(True))
+        .all()
+    )
+    out = []
+    for cand, race in rows:
+        person = _person([cand.name, cand.ballot_name])
+        if person is not None:
+            out.append(_Nominee(race, cand.ballot_name or cand.name, person))
+    return out
+
+
+def _ballot_surname_alone(text: str, nominee: _Nominee) -> str | None:
+    """`nominee`'s surname as the story writes it, when it is written as a
+    name and every time without another capitalised word before it that
+    isn't one of their own given names; else None. One "Jordan Marsh" or
+    "Rep. Marsh" anywhere and the bare surname could be that person (or
+    anyone under that title), so it names no one."""
+    folded = _strip_accents(text)
+    person = nominee.person
+    own = {g.lower() for g in person.leads} | {i.lower() for i in person.initials}
+    hit = None
+    for m in _surname_alone_pattern(person).finditer(folded):
+        if not _name_cased(m):
+            continue
+        before = re.search(r"([\w.'\"“”]+)[^\S\n]+$", folded[:m.start()])
+        word = before.group(1).strip("\"“”'") if before else ""
+        if word[:1].isupper() and word.rstrip(".").lower() not in own:
+            return None
+        hit = hit or m.group("surname")
+    return hit
+
+
+def _ballot_full_name(text: str, nominee: _Nominee) -> str | None:
+    """`nominee`'s full name as the story writes it (_names_a_candidate's
+    match), or None."""
+    pattern = _candidate_name_pattern(nominee.person)
+    if pattern is None:
+        return None
+    folded = _strip_accents(text)
+    return next((m.group(0) for m in pattern.finditer(folded) if _name_cased(m)), None)
+
+
+def ballot_links(db: Session, cycle: int, title: str, summary: str, facts: list[str]) -> list[dict]:
+    """The issue's ballot links: [{"state", "raceId", "candidate", "via"}],
+    the races it names, each by its best link."""
+    lines = [title or "", summary or "", *(str(f) for f in facts or [])]
+    text = "\n".join(lines)
+    named = set(states_named(text))
+    found: dict[str, dict] = {}
+
+    def add(race: Race, via: str, candidate: str | None) -> None:
+        held = found.get(race.id)
+        if held is None or _BALLOT_VIA_ORDER[via] < _BALLOT_VIA_ORDER[held["via"]]:
+            found[race.id] = {"state": race.state, "raceId": race.id, "candidate": candidate, "via": via}
+
+    folded = _strip_accents(text).lower()
+    nominees = _ballot_nominees(db, cycle)
+    # Earliest-mentioned first, so a race keeps the nominee the story leads with.
+    nominees.sort(key=lambda n: folded.find(n.person.surname.split()[-1]) % (len(folded) + 1))
+    full: dict[str, list[tuple[_Nominee, str]]] = {}
+    for n in nominees:
+        if max(re.split(r"['\s-]+", n.person.surname), key=len) not in folded:
+            continue  # the cheap scan _names_a_candidate itself starts with
+        written = _ballot_full_name(text, n)
+        if written:
+            full.setdefault(written.lower(), []).append((n, written))
+    for group in full.values():
+        races = {n.race.state for n, _ in group}
+        for n, written in group:
+            if len(races) == 1 or n.race.state in named:
+                add(n.race, BALLOT_CANDIDATE, written)
+    for state in named:
+        in_state = [n for n in nominees if n.race.state == state]
+        by_surname: dict[str, list[_Nominee]] = {}
+        for n in in_state:
+            by_surname.setdefault(n.person.surname, []).append(n)
+        for group in by_surname.values():
+            if len(group) == 1 and group[0].race.id not in found:
+                written = _ballot_surname_alone(text, group[0])
+                if written:
+                    add(group[0].race, BALLOT_SURNAME, written)
+        for race in db.query(Race).filter(Race.cycle_year == cycle, Race.state == state):
+            if race.id not in found and race_named(race.id, text, db, need_candidate=False):
+                add(race, BALLOT_SEAT, None)
+    return sorted(found.values(), key=lambda link: (_BALLOT_VIA_ORDER[link["via"]], link["raceId"]))
+
+
 def _run_periodic_bluesky_posts(db: Session) -> None:
     """The daily member spotlight, and the hourly retry of posts Bluesky
     refused (broadcast.deliver_pending).
@@ -4856,6 +5034,8 @@ def _run_refresh(db: Session) -> int:
 
     logger.info("Action center refresh starting for %s", today)
     action_metrics.reset()
+    # The election whose races an issue's ballot links name (ballot_links).
+    ballot_cycle = active_election(db).cycle
     _set_refresh_state(
         is_running=True, stage="primary_source_signals", stage_detail=None,
         started_at=utcnow(),
@@ -5396,6 +5576,8 @@ def _run_refresh(db: Session) -> int:
         # Who the issue is principally about (story_actor), for the admin's
         # weekly actor concentration.
         actor = _principal_actor(title, summary, related_officials)
+        # The states and races it names, for its ballot line (ballot_links).
+        issue_ballot_links = ballot_links(db, ballot_cycle, title, summary, facts)
 
         # Find the matching existing issue across all recent issues (2-day
         # lookback, any rank). Same STORY → same row, regardless of rank
@@ -5428,6 +5610,7 @@ def _run_refresh(db: Session) -> int:
             "related_explore_keys": json.dumps(keys_for_ids(db, related_explore_ids)),
             "related_senators": json.dumps(related_senators),
             "related_officials": json.dumps(related_officials),
+            "ballot_links": json.dumps(issue_ballot_links),
             "primary_article_date": primary_article_date,
             "image_url": image_url,
             "image_alt": image_alt,
@@ -5542,6 +5725,13 @@ def _run_refresh(db: Session) -> int:
         _save_timeline_entry(today, db)
         generate_period_summaries(today, db)
 
+    # Rows written before ballot links were matched get theirs here.
+    try:
+        link_issue_ballots(db, ballot_cycle)
+    except Exception:
+        logger.exception("Linking issues to the ballot failed")
+        db.rollback()
+
     # Rows published before principal actors were recorded get theirs here,
     # where the model is loaded; after the first run there are none left.
     try:
@@ -5644,6 +5834,26 @@ def _principal_actor(title: str, summary: str, officials: list[dict]) -> str:
         _embed_texts_sim([f"{title}. {summary}"])[0],
         _relevance_reference(), [e["category"] for e in relevance_examples()],
     )
+
+
+def link_issue_ballots(db: Session, cycle: int) -> int:
+    """Match ballot links (ballot_links) for every news issue that has none
+    yet: the rows from before the column existed."""
+    rows = (
+        db.query(ActionIssue)
+        .filter(ActionIssue.ballot_links.is_(None), ActionIssue.source_type.is_(None))
+        .all()
+    )
+    for row in rows:
+        try:
+            facts = json.loads(row.facts or "[]")
+        except (TypeError, ValueError):
+            facts = []
+        row.ballot_links = json.dumps(ballot_links(db, cycle, row.title, row.summary or "", facts))
+    if rows:
+        db.commit()
+        logger.info("Linked %d earlier issues to the ballot", len(rows))
+    return len(rows)
 
 
 def label_principal_actors(db: Session) -> int:
