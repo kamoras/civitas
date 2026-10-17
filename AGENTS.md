@@ -1591,9 +1591,9 @@ its cluster, but one whose headline lists several stories — the kicker over
 two or more items naming disjoint entities (`_multi_story_headline`) — never
 titles an issue or lends it its headline claim: the issue takes the next
 single story's headline, and a cluster of nothing else waits for one (issue
-806, 2026-10-16, "Live updates: Zacharia exits White House post; Trump stumps
-for Collins in Georgia", put a second story on the page and kept it from
-matching the PBS-titled issue on the first). On 2,642 headlines the shape
+806, 2026-10-16, titled "Live updates: <a press secretary's exit>; <a
+campaign rally>", put a second story on the page and kept it from matching
+the PBS-titled issue on the first). On 2,642 headlines the shape
 with a kicker was 20 of 20 live blogs; without one, 12 of 28 were single
 stories. When matching, a row titled that way is compared story by story
 (`_shared_source_title_sim`), and a shared article whose headline titled the

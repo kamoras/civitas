@@ -4234,21 +4234,21 @@ class TestLiveBlogHeadlines:
     stories titled a second issue over the PBS report that titled the
     first, and its other story kept the two from matching."""
 
-    LIVE = "Live updates: Zacharia exits White House post; Trump stumps for Collins in Georgia"
-    REPORT = "White House press secretary Katie Zacharia leaving the job after Trump casts doubt"
-    PBS = "https://www.pbs.org/newshour/politics/trump-casts-doubt-on-press-secretary-katie-zacharias-future"
+    LIVE = "Live updates: Press secretary Morrow exits; Varga rallies for Brandt at Dunmore county fair"
+    REPORT = "Press secretary Dana Morrow leaving the job after Varga casts doubt"
+    PBS = "https://example.org/politics/varga-casts-doubt-on-press-secretary-morrow"
 
     def test_a_kicker_over_disjoint_stories_is_a_live_blog(self):
         assert ac._multi_story_headline(self.LIVE)
-        assert ac._story_titles(self.LIVE) == ["Zacharia exits White House post", "Trump stumps for Collins in Georgia"]
+        assert ac._story_titles(self.LIVE) == ["Press secretary Morrow exits", "Varga rallies for Brandt at Dunmore county fair"]
         # One story under a kicker, a report, disjoint items with no kicker
         # (a photo column, two sentences of one story), items sharing a name.
         for title in (
             "Live updates: Senate votes on the Varga nomination",
             self.REPORT,
-            "Capitol Lens | Pipes of peace",
-            "Mike Rogers claims he was an assembly line worker. The UAW said that is stretching the truth.",
-            "Live updates: Blanche says Trump will follow ballot ruling; Kennedy Center loses bid to add Trump's name",
+            "Photo Desk | Quiet Hallway",
+            "Dale Hartwell claims he was an assembly line worker. The Machinists said that is a stretch.",
+            "Live updates: Ostrander says Varga will follow ballot ruling; Arts council rejects bid to add Varga's name",
         ):
             assert not ac._multi_story_headline(title), title
             assert ac._story_titles(title) == [title]
@@ -4262,8 +4262,8 @@ class TestLiveBlogHeadlines:
         return {
             self.REPORT: [1.0, 0.0, 0.0],
             self.LIVE: [0.5, 0.0, (1 - 0.5 ** 2) ** 0.5],
-            "Zacharia exits White House post": agree,
-            "Trump stumps for Collins in Georgia": [0.0, 0.0, 1.0],
+            "Press secretary Morrow exits": agree,
+            "Varga rallies for Brandt at Dunmore county fair": [0.0, 0.0, 1.0],
         }
 
     def test_a_live_blog_row_matches_on_its_shared_story(self, monkeypatch):
@@ -4309,3 +4309,14 @@ class TestLiveBlogHeadlines:
         # The later row gives way: its headline tells two stories.
         assert (report.duplicate_of_id, live.duplicate_of_id) == (None, report.id)
         assert (report.is_current, live.is_current) == (True, False)
+
+
+@pytest.mark.slow
+def test_a_live_blog_title_agrees_on_its_shared_story():
+    """On the similarity model, the live blog's whole headline falls under
+    SHARED_SOURCE_TITLE_SIM against the report (issues 805/806 scored
+    0.557) and its first story clears it (0.672); these invented-name
+    titles score 0.606 and 0.679."""
+    live, report = TestLiveBlogHeadlines.LIVE, TestLiveBlogHeadlines.REPORT
+    whole = float((ac._embed_texts_sim([live]) @ ac._embed_texts_sim([report]).T)[0, 0])
+    assert whole < ac.SHARED_SOURCE_TITLE_SIM <= ac._shared_source_title_sim(whole, live, report)

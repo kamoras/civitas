@@ -966,12 +966,15 @@ def _shared_source_title_sim(sim: float, title_a: str, title_b: str) -> float:
     """The title agreement SHARED_SOURCE_TITLE_SIM is read against: the
     titles' similarity `sim`, or, when either is a live blog's headline
     listing several stories (_story_titles), the best agreement of any one
-    of its stories with the other title. A row titled "Live updates:
-    Zacharia exits White House post; Trump stumps for Collins in Georgia"
-    shared its source with "White House press secretary Katie Zacharia
-    leaving the job after Trump casts doubt" at 0.557, the second story
-    pulling the whole headline away (issues 805/806, 2026-10-16); its
-    first story alone agrees at 0.67."""
+    of its stories with the other title. Issues 805/806 (2026-10-16): a
+    live blog's headline over a press secretary's exit and an unrelated
+    campaign rally shared its source with the report of the exit at
+    0.557, the rally pulling the whole headline away; the exit alone
+    agreed at 0.672. The same shape with invented names ("Live updates:
+    Press secretary Morrow exits; Varga rallies for Brandt at Dunmore
+    county fair" against "Press secretary Dana Morrow leaving the job
+    after Varga casts doubt"): 0.606 whole, 0.679 for the first story
+    (test_a_live_blog_title_agrees_on_its_shared_story)."""
     stories_a, stories_b = _story_titles(title_a), _story_titles(title_b)
     if len(stories_a) == len(stories_b) == 1:
         return sim
@@ -1713,8 +1716,8 @@ def _parallel_stories(title: str, summary: str, truncated: bool = False) -> bool
 def _multi_story_headline(title: str) -> bool:
     """A live blog's headline: the outlet's kicker (its label before the
     first ": ", _headline_kicker) over two or more items naming disjoint
-    entities ("Live updates: Zacharia exits White House post; Trump stumps
-    for Collins in Georgia"). Such a page tells several stories, so its
+    entities ("Live updates: Press secretary Morrow exits; Varga rallies
+    for Brandt at Dunmore county fair"). Such a page tells several stories, so its
     headline neither titles an issue nor lends its headline claim to one,
     and it is compared story by story (_story_titles).
 
@@ -1723,10 +1726,10 @@ def _multi_story_headline(title: str) -> bool:
     coverage, stored issues and every composed issue title): 48 split into
     disjoint items; the 20 with a kicker were all multi-story live blogs,
     and of the 28 without one, 12 were single stories (a photo column
-    "Capitol Lens | ...", two-sentence headlines about one event, a debate
-    between two candidates; _parallel_stories' docstring). Missed: 5 live
-    blog headlines whose items share a name ("Trump") or whose second item
-    names nobody ("candidates tangle in midterm debates"); they behave as
+    "<column name> | <caption>", two-sentence headlines about one event, a
+    debate between two candidates; _parallel_stories' docstring). Missed: 5
+    live blog headlines whose items share a name (the president's) or whose
+    second item names nobody ("candidates tangle in midterm debates"); they behave as
     before. Structure only, no phrase list: any outlet's kicker counts."""
     if not _headline_kicker(title):
         return False
@@ -5536,11 +5539,11 @@ def _run_refresh(db: Session) -> int:
         filtered_cluster = [a for a, _ in on_topic]
         # The headline of the top-ranked real article (below) that is not
         # a live blog's headline listing several stories
-        # (_multi_story_headline): issue 806 (2026-10-16) was titled
-        # "Live updates: Zacharia exits White House post; Trump stumps for
-        # Collins in Georgia" over a PBS report of the first story alone,
-        # brought the second story onto the page, and agreed too little
-        # with the PBS-titled issue 805 to be matched to it. A cluster of
+        # (_multi_story_headline): issue 806 (2026-10-16) was titled by a
+        # live blog's "Live updates: <a press secretary's exit>; <a campaign
+        # rally>" over a PBS report of the exit alone, brought the rally
+        # onto the page, and agreed too little with the PBS-titled issue
+        # 805 to be matched to it. A cluster of
         # nothing else waits for a single story's report to join it.
         title = next((a.title for a in filtered_cluster if not _multi_story_headline(a.title)), None)
         if title is None:
