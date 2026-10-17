@@ -161,14 +161,17 @@ export default async function ElectionsChapter() {
           attributed to Silver Bulletin as its terms ask), refitted automatically when a new copy of
           that archive passes Civitas&apos;s checks, and checked on election cycles the fit never
           saw, including the newest cycle predicted from the earlier ones alone; the map&apos;s own
-          method section shows how often its ranges held the result, and why there is no seat total.
-          The archive&apos;s polls reach only the final weeks before election day, so further out
-          the map shows each seat&apos;s structural range alone, labelled fundamentals only, with
-          its polls listed beside it. It has nothing to do with Representation Scores, which measure
-          a member&apos;s record, not an election. Only Democrat-versus-Republican races whose
-          November ballot Civitas has confirmed get a range. The House fit covers every cycle from
-          2018 whose House results the FEC has compiled, with each district&apos;s lean rebuilt from
-          precinct returns as it stood before each election, on the lines it was held on.
+          method section opens with a short summary and keeps the full method behind a disclosure:
+          how often its ranges held the result, a calibration table that treats both parties the
+          same way (when a range leaned one way by this much, how often that side carried the seat),
+          and why there is no seat total. The archive&apos;s polls reach only the final weeks before
+          election day, so further out the map shows each seat&apos;s structural range alone,
+          labelled fundamentals only, with its polls listed beside it. It has nothing to do with
+          Representation Scores, which measure a member&apos;s record, not an election. Only
+          Democrat-versus-Republican races whose November ballot Civitas has confirmed get a range.
+          The House fit covers every cycle from 2018 whose House results the FEC has compiled, with
+          each district&apos;s lean rebuilt from precinct returns as it stood before each election,
+          on the lines it was held on.
         </P>
         <P>
           This year&apos;s polls come from Wikipedia&apos;s race articles. The poll figures and the
