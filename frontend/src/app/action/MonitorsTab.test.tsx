@@ -6,6 +6,10 @@ import * as api from "@/lib/api";
 import { closestLabel, closestVote, position } from "@/components/action/OnTheRecord";
 import type { IssueVote } from "@/types/action";
 
+// jsdom has no scrollIntoView; a row opened from a "Tracked in" link
+// scrolls itself into view on a timer that can fire in a later test.
+Element.prototype.scrollIntoView = vi.fn();
+
 function monitor(over: Partial<NationalMonitor>): NationalMonitor {
   return {
     id: 1,
