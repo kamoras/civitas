@@ -7,6 +7,7 @@ import {
   Senator,
 } from "@/types/senator";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
+import type { Court, JusticeCasePage } from "@/types/court";
 import type { JusticeLeaderboardEntry } from "@/types/justice";
 import type { ActionIssuesResponse, IssueMembers } from "@/types/action";
 import type { RedistrictedSeat } from "@/types/redistricting";
@@ -780,6 +781,18 @@ export async function fetchMemberPresidentialSupport(
     if (e instanceof Error && e.message.endsWith(": 404")) return null;
     throw e;
   }
+}
+
+/** One page of a justice's cases, newest first (court_service.justice_cases). */
+export async function fetchJusticeCases(id: string, page: number): Promise<JusticeCasePage> {
+  const url = `${API_BASE}/justices/${encodeURIComponent(id)}/cases?page=${page}&per_page=20`;
+  return cachedFetch(url, TTL.SHORT);
+}
+
+/** The Court page's record (court_service.court), for the leaderboard's
+ *  Supreme Court tab to lead with. */
+export async function fetchCourt(): Promise<Court> {
+  return cachedFetch(`${API_BASE}/court`, TTL.SHORT);
 }
 
 export async function fetchJusticeLeaderboard(): Promise<JusticeLeaderboardEntry[]> {

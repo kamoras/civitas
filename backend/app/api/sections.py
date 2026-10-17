@@ -38,7 +38,7 @@ from app.models import (
 )
 from app.pipeline.analyze.presidential_support import counted_votes
 from app.redistricting import overlap_file, redrawn_overlap_states
-from app.services import committee_record, congress_service
+from app.services import committee_record, congress_service, court_service
 from app.services.bill_service import get_bills_in_flight
 
 router = APIRouter()
@@ -183,6 +183,8 @@ def sections(db: Session = Depends(get_db)) -> JSONResponse:
         "congress": congress(db),
         "agencies": agencies(db, open_for_comment),
         "politicians": politicians(db),
+        # The latest term with decisions; null before any is stored.
+        "court": {"court": court_service.summary(db)},
         "elections": elections(db),
         "explore": {"search": {"documents": documents}},
     }, max_age=_TTL_S)
