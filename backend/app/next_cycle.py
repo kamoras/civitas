@@ -67,8 +67,9 @@ def _registered(db: Session, cycle: int) -> list[tuple[Candidate, Race]]:
 
 
 def field(db: Session, cycle: int) -> dict:
-    """Who has registered with the FEC for `cycle`'s regular Senate and House
-    races, and where each sitting member whose seat is up stands."""
+    """Who has registered with the FEC for `cycle`'s regular federal races
+    (Senate, House, and the presidency in its years), and where each sitting
+    member whose seat is up stands."""
     rows = _registered(db, cycle)
     filings_by_member: dict[str, list[Race]] = {}
     for cand, race in rows:
@@ -76,15 +77,26 @@ def field(db: Session, cycle: int) -> dict:
             filings_by_member.setdefault(cand.member_bioguide, []).append(race)
     open_seats = sorted({race.id for cand, race in rows if cand.incumbent_challenge == "O"})
 
+    def elsewhere(member, chamber: str, offices: tuple[str, ...]) -> dict | None:
+        race = next((x for x in filings_by_member.get(member.bioguide_id or "", []) if x.office in offices), None)
+        if race is None:
+            return None
+        return {"id": member.id, "name": member.name, "party": member.party, "state": member.state,
+                "district": getattr(member, "district", None), "chamber": chamber, "office": race.office,
+                "raceId": race.id}
+
+    # Sitting members registered for another federal office: a House member
+    # for the Senate or the presidency, a senator for the presidency.
     reps = db.query(Representative).filter(Representative.is_current.is_(True)).all()
-    house_own, house_other = 0, []
+    house_own, other = 0, []
     for r in reps:
-        filed = filings_by_member.get(r.bioguide_id or "", [])
-        if any(x.office == "H" for x in filed):
+        if any(x.office == "H" for x in filings_by_member.get(r.bioguide_id or "", [])):
             house_own += 1
-        elif senate := next((x for x in filed if x.office == "S"), None):
-            house_other.append({"id": r.id, "name": r.name, "party": r.party, "state": r.state,
-                                "district": r.district, "office": "S", "raceId": senate.id})
+        elif row := elsewhere(r, "H", ("S", "P")):
+            other.append(row)
+    house_other = len(other)
+    other += [row for m in db.query(Senator).filter(Senator.is_current.is_(True))
+              if (row := elsewhere(m, "S", ("P",)))]
 
     # Exactly one of a state's senators holds the seat that is up; the class
     # isn't stored per senator, so a seat counts as its incumbent's when
@@ -106,9 +118,9 @@ def field(db: Session, cycle: int) -> dict:
         "house": {
             "members": len(reps),
             "filedForHouse": house_own,
-            "filedForSenate": house_other,
-            "noFiling": len(reps) - house_own - len(house_other),
+            "noFiling": len(reps) - house_own - house_other,
         },
+        "filedForOtherOffice": other,
         "senate": {
             "seatsUp": len(up),
             "racesOnFile": len(senate_races),

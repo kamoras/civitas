@@ -18,6 +18,8 @@ import FecDeadlineCard from "@/components/elections/season/FecDeadlineCard";
 import NewCongress from "@/components/elections/season/NewCongress";
 import NextField from "@/components/elections/season/NextField";
 import OddYearStates from "@/components/elections/season/OddYearStates";
+import PresidentialContest from "@/components/elections/season/PresidentialContest";
+import ElectionAdministration from "@/components/elections/season/ElectionAdministration";
 import RedistrictingWatch from "@/components/redistricting/RedistrictingWatch";
 import { electionTitle, formatPvi, pviColor, stateBallotHref } from "@/lib/elections";
 import { formatUtcDate } from "@/lib/formatting";
@@ -482,9 +484,13 @@ export default function ElectionsPage() {
 
           {(betweenCycles || primarySeason) && <NextField field={initial?.field ?? null} />}
 
+          {campaignMode && <PresidentialContest data={initial?.presidential ?? null} />}
+
           {betweenCycles && <OddYearStates data={initial?.oddYear ?? null} />}
 
           {betweenCycles && <RedistrictingWatch watch={initial?.redistrictingWatch} compact />}
+
+          {betweenCycles && <ElectionAdministration data={initial?.administration ?? null} />}
 
           {resultsMode && results && (
             <ResultsOverview

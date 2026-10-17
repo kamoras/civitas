@@ -29,7 +29,7 @@ export default function NextField({ field }: { field: Field | null }) {
         <>
           <p className="mt-3 font-display text-2xl font-extrabold leading-tight text-ink-hi">
             {field.registered > 0
-              ? `${n(field.registered)} ${field.registered === 1 ? "candidate has" : "candidates have"} registered for Senate and House races`
+              ? `${n(field.registered)} ${field.registered === 1 ? "candidate has" : "candidates have"} registered for federal races`
               : "No candidate has registered for a Senate or House race yet"}
           </p>
           <p className="mt-2 text-sm text-ink-lo">
@@ -47,13 +47,13 @@ export default function NextField({ field }: { field: Field | null }) {
             />
             <Stat figure={figure(field.openSeats)} label="races the FEC lists as open seats" />
           </dl>
-          {field.house.filedForSenate.length > 0 && (
+          {field.filedForOtherOffice.length > 0 && (
             <>
               <h3 className="mt-4 font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-                House members registered for the Senate
+                Members registered for another office
               </h3>
               <ul className="mt-1">
-                {field.house.filedForSenate.map((m) => (
+                {field.filedForOtherOffice.map((m) => (
                   <li
                     key={m.id}
                     className="border-t border-white/[0.07] py-1.5 text-sm text-ink-lo"
@@ -64,7 +64,10 @@ export default function NextField({ field }: { field: Field | null }) {
                     >
                       {m.name}
                     </Link>{" "}
-                    ({m.party}-{m.state}), for {STATE_NAMES[m.state] ?? m.state}&apos;s Senate seat
+                    ({m.party}-{m.state}, {m.chamber === "S" ? "senator" : "representative"}), for{" "}
+                    {m.office === "P"
+                      ? "President"
+                      : `${STATE_NAMES[m.state] ?? m.state}'s Senate seat`}
                   </li>
                 ))}
               </ul>

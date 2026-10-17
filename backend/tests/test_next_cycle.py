@@ -35,6 +35,7 @@ class TestField:
             Representative(id="r2", bioguide_id="B2", name="Two", state="OH", district=2, party="D"),
             Representative(id="r3", bioguide_id="B3", name="Three", state="OH", district=3, party="D"),
             Senator(id="s1", bioguide_id="S1", name="Sen", state=senate_state, party="R"),
+            Senator(id="s2", bioguide_id="S2", name="Sen Two", state="OH", party="D"),
         ])
         _race(db_session, "2028-HOUSE-OH-1", "H", "OH", 1)
         _race(db_session, "2028-HOUSE-OH-3", "H", "OH", 3)
@@ -43,17 +44,22 @@ class TestField:
         _cand(db_session, "S8XX00001", f"2028-SENATE-{senate_state}", member="B2")
         _cand(db_session, "S8XX00002", f"2028-SENATE-{senate_state}", member="S1", ic="I")
         _cand(db_session, "H8OH03001", "2028-HOUSE-OH-3", ic="O")
+        # A senator registered for the presidency (the national race).
+        db_session.add(Race(id="2028-PRES", cycle_year=CYCLE, office="P", state="US", is_special=False))
+        _cand(db_session, "P80000001", "2028-PRES", member="S2")
         # A state's ballot-only candidate is no FEC registration.
         _cand(db_session, "ballot:2028-HOUSE-OH-3:Someone", "2028-HOUSE-OH-3")
         db_session.commit()
 
         f = nc.field(db_session, CYCLE)
-        assert f["registered"] == 4 and f["openSeats"] == 1
-        assert f["house"] == {
-            "members": 3, "filedForHouse": 1, "noFiling": 1,
-            "filedForSenate": [{"id": "r2", "name": "Two", "party": "D", "state": "OH", "district": 2,
-                                "office": "S", "raceId": f"2028-SENATE-{senate_state}"}],
-        }
+        assert f["registered"] == 5 and f["openSeats"] == 1
+        assert f["house"] == {"members": 3, "filedForHouse": 1, "noFiling": 1}
+        assert f["filedForOtherOffice"] == [
+            {"id": "r2", "name": "Two", "party": "D", "state": "OH", "district": 2, "chamber": "H",
+             "office": "S", "raceId": f"2028-SENATE-{senate_state}"},
+            {"id": "s2", "name": "Sen Two", "party": "D", "state": "OH", "district": None, "chamber": "S",
+             "office": "P", "raceId": "2028-PRES"},
+        ]
         assert f["senate"]["seatsUp"] == len(seats_up_for_year(CYCLE))
         assert f["senate"]["incumbentFiled"] == 1 and senate_state not in f["senate"]["noIncumbentFiling"]
 

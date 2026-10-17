@@ -17,22 +17,29 @@ afterEach(cleanup);
 const FIELD: Field = {
   cycle: 2028,
   registered: 412,
-  house: {
-    members: 433,
-    filedForHouse: 301,
-    filedForSenate: [
-      {
-        id: "jane-roe",
-        name: "Jane Roe",
-        party: "D",
-        state: "OH",
-        district: 9,
-        office: "S",
-        raceId: "2028-SENATE-OH",
-      },
-    ],
-    noFiling: 131,
-  },
+  house: { members: 433, filedForHouse: 301, noFiling: 131 },
+  filedForOtherOffice: [
+    {
+      id: "jane-roe",
+      name: "Jane Roe",
+      party: "D",
+      state: "OH",
+      district: 9,
+      chamber: "H",
+      office: "S",
+      raceId: "2028-SENATE-OH",
+    },
+    {
+      id: "sam-poe",
+      name: "Sam Poe",
+      party: "R",
+      state: "TX",
+      district: null,
+      chamber: "S",
+      office: "P",
+      raceId: "2028-PRES",
+    },
+  ],
   senate: { seatsUp: 34, racesOnFile: 30, incumbentFiled: 20, noIncumbentFiling: ["AL", "OH"] },
   openSeats: 12,
   sources: { fec: "https://www.fec.gov/data/candidates/" },
@@ -42,9 +49,7 @@ describe("NextField", () => {
   it("counts registrations, never ballot places or retirements", () => {
     const { container } = render(<NextField field={FIELD} />);
     expect(screen.getByRole("heading", { name: "Registered with the FEC for 2028" })).toBeTruthy();
-    expect(
-      screen.getByText("412 candidates have registered for Senate and House races")
-    ).toBeTruthy();
+    expect(screen.getByText("412 candidates have registered for federal races")).toBeTruthy();
     expect(screen.getByText("301 of 433")).toBeTruthy();
     expect(screen.getByText("20 of 34")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Jane Roe" })).toHaveAttribute(
@@ -52,6 +57,8 @@ describe("NextField", () => {
       "/politicians/jane-roe"
     );
     const text = container.textContent ?? "";
+    expect(text).toMatch(/Sam Poe \(R-TX, senator\), for President/);
+    expect(text).toMatch(/Jane Roe \(D-OH, representative\), for Ohio's Senate seat/);
     expect(text).toMatch(/No filing is not a retirement/);
     expect(text).not.toMatch(/is on the ballot|are on the ballot|retiring/i);
   });

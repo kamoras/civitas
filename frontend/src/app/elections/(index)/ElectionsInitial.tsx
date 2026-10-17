@@ -4,7 +4,14 @@ import { createContext, useContext } from "react";
 import type { ElectionPhaseInfo, PviMap } from "@/types/election";
 import type { ElectionCalendar, SpecialsBoard } from "@/types/specials";
 import type { ArchiveIndex } from "@/types/electionArchive";
-import type { FecDeadlineEvent, NewCongress, NextField, OddYearStates } from "@/types/nextCycle";
+import type {
+  ElectionAdministration,
+  FecDeadlineEvent,
+  NewCongress,
+  NextField,
+  OddYearStates,
+  PresidentialContest,
+} from "@/types/nextCycle";
 import type { RedistrictingWatch } from "@/types/redistricting";
 
 /** What the server already read for /elections (elections/layout.tsx): the
@@ -40,6 +47,10 @@ export interface ElectionsInitial {
    * between cycles. */
   redistrictingWatch?: RedistrictingWatch | null;
   oddYear?: OddYearStates | null;
+  /** The presidential contest (shown in the cycles that hold one). */
+  presidential?: PresidentialContest | null;
+  /** How the last general was run (the EAC's survey), between cycles. */
+  administration?: ElectionAdministration | null;
   /** The server's clock when it rendered, so the countdown reads the same
    * on the server and in the browser. */
   renderedAt: number;

@@ -1,3 +1,5 @@
+import type { CandidateSummary } from "@/types/election";
+
 /** The next cycle as the official records stand (backend app/next_cycle.py):
  * `GET /api/elections/field`, `/new-congress` and `/fec-deadline`. Every
  * count is the backend's; the pages only word it. */
@@ -9,17 +11,20 @@ export interface NextField {
   house: {
     members: number;
     filedForHouse: number;
-    filedForSenate: {
-      id: string;
-      name: string;
-      party: string;
-      state: string;
-      district: number | null;
-      office: "S";
-      raceId: string;
-    }[];
     noFiling: number;
   };
+  /** Sitting members registered for another federal office: a House
+   * member for the Senate or the presidency, a senator for the presidency. */
+  filedForOtherOffice: {
+    id: string;
+    name: string;
+    party: string;
+    state: string;
+    district: number | null;
+    chamber: "H" | "S";
+    office: "S" | "P";
+    raceId: string;
+  }[];
   senate: {
     seatsUp: number;
     racesOnFile: number;
@@ -76,4 +81,40 @@ export interface OddYearStates {
     why: string | null;
     office: { url: string; label: string; sourceName: string };
   }[];
+}
+
+/** GET /api/elections/presidential (backend api/special_elections.py). */
+export interface PresidentialContest {
+  cycle: number;
+  presidential: boolean;
+  nextPresidential: number;
+  electoralVotes: {
+    states: { state: string; stateName: string; votes: number }[];
+    total: number;
+    toWin: number | null;
+  };
+  /** In a presidential cycle: the FEC's statutory candidates. */
+  registered?: number;
+  candidates?: CandidateSummary[];
+  primaries?: { date: string; state: string; stateName: string; label: string }[];
+}
+
+/** GET /api/elections/administration: the EAC's survey, by state. */
+export interface ElectionAdministration {
+  year: number;
+  version: number;
+  url: string;
+  items: Record<string, string>;
+  states: {
+    state: string;
+    stateName: string;
+    jurisdictions: number;
+    items: Record<string, { value: number; reporting: number }>;
+    rates: Record<"turnout" | "byMail" | "mailRejected" | "provisionalRejected", number | null>;
+  }[];
+  national: Record<
+    "turnout" | "byMail" | "mailRejected" | "provisionalRejected",
+    { rate: number | null; states: number }
+  >;
+  of: number;
 }
