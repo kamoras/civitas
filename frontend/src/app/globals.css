@@ -337,7 +337,8 @@ input:focus-visible {
 
    Unlayered on purpose: it beats every Tailwind size utility on the control,
    so a new input can't opt back into the zoom by naming `text-xs`.
-   `max(16px, 1em)` keeps a control that inherits a larger size at that size.
+   `max(16px, 1rem)` follows a reader's own larger text setting (no control on
+   the site is set larger than body text).
    The phone-width check in scripts/axe-routes.mjs holds every route to it. */
 @media (max-width: 639.98px) {
   input:not(
@@ -354,7 +355,7 @@ input:focus-visible {
   ),
   select,
   textarea {
-    font-size: max(16px, 1em);
+    font-size: max(16px, 1rem);
     min-height: 44px;
   }
 }

@@ -136,7 +136,7 @@ linked pair's loading view keeps the masthead). Mobile LCP on those went
 from 1.7–2.1 s to 0.8–0.86 s and leaderboard CLS from 0.09 to 0. Anything
 the server could not read, the page still reads itself.
 
-**Text boxes on a phone don't zoom the page.** iOS Safari zooms the whole layout when a control whose text is under 16px takes focus, and leaves it zoomed; every search box and filter on the site was 12-14px (11 of 12 measured at 390px, 2026-10-16). Under 640px every input, select and textarea is set at `max(16px, 1em)` and at least 44px tall (`globals.css`, "Form controls on a phone"), without `maximum-scale=1`, which would stop a reader zooming on purpose. `scripts/axe-routes.mjs` fails a route whose controls compute under 16px or 44px at 320px.
+**Text boxes on a phone don't zoom the page.** iOS Safari zooms the whole layout when a control whose text is under 16px takes focus, and leaves it zoomed; every search box and filter on the site was 12-14px (11 of 12 measured at 390px, 2026-10-16). Under 640px every input, select and textarea is set at `max(16px, 1rem)` and at least 44px tall (`globals.css`, "Form controls on a phone"), without `maximum-scale=1`, which would stop a reader zooming on purpose. `scripts/axe-routes.mjs` fails a route whose controls compute under 16px or 44px at 320px.
 
 **Hardware:** Raspberry Pi 5 (16 GB RAM), NVMe SSD. All models, databases, and services run on-device. No cloud GPU, no third-party AI APIs, no data leaves the device. The backend image sets `HF_HUB_DISABLE_TELEMETRY=1`, so the Hugging Face libraries that fetch the embedding models send no usage reports.
 
