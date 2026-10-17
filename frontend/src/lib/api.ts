@@ -10,7 +10,7 @@ import type { CommentWindow } from "@/types/commentWindow";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
 import type { Court, JusticeCasePage } from "@/types/court";
 import type { JusticeLeaderboardEntry } from "@/types/justice";
-import type { ActionIssuesResponse, IssueMembers } from "@/types/action";
+import type { ActionIssuesResponse, IssueMembers, IssueVote } from "@/types/action";
 import type { RedistrictedSeat } from "@/types/redistricting";
 import type { HouseDistrictsByCounty, PoliticianCard } from "@/types/politicians";
 import type { PaginatedBills } from "@/types/bill";
@@ -2237,6 +2237,8 @@ export interface MonitorList {
 
 export interface NationalMonitorDetail extends NationalMonitor {
   updates: MonitorUpdate[];
+  /** Roll calls matched to the monitor's updates, oldest first: "On the record". */
+  onTheRecord?: IssueVote[];
 }
 
 export async function fetchMonitors(): Promise<MonitorList> {

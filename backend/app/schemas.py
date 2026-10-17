@@ -1559,8 +1559,9 @@ class DeciderSchema(CamelModel):
 
 
 class IssueVoteSchema(CamelModel):
-    """A roll call linked to an issue: the vote the issue reports, or a vote
-    on a bill the coverage names."""
+    """A roll call linked to an issue or a monitor: the vote the issue
+    reports, a vote on a bill the coverage names, or a vote matched to the
+    story (app/roll_call_links.py, "Related votes in Congress")."""
     chamber: str
     congress: int
     session: int
@@ -1570,6 +1571,15 @@ class IssueVoteSchema(CamelModel):
     result: str
     bill_id: str | None = None
     bill_label: str | None = None
+    # The measure or nominee as the record titles it.
+    title: str = ""
+    yeas: int = 0
+    nays: int = 0
+    # The chamber's own result read as carried (False) or failed (True);
+    # None when the record doesn't say.
+    rejected: bool | None = None
+    # Yeas minus nays: 0 is a tie.
+    margin: int = 0
 
 
 class IssueMemberSchema(CamelModel):
@@ -1656,6 +1666,8 @@ class ActionIssueSchema(CamelModel):
     # Roll calls linked to the issue (IssueVoteSchema), so a page knows to
     # offer each member's record on them.
     vote_count: int = 0
+    # Those roll calls themselves, newest first ("Related votes in Congress").
+    related_votes: list[IssueVoteSchema] = []
     full_story: str | None = None
     # Computed only by the list endpoint (app/trending.py needs the whole
     # day's view-count spread to judge any one issue) — always False from
@@ -1731,6 +1743,9 @@ class NationalMonitorSchema(CamelModel):
 
 class NationalMonitorDetailSchema(NationalMonitorSchema):
     updates: list[MonitorUpdateSchema] = []
+    # "On the record": the roll calls matched to the monitor's updates
+    # (app/roll_call_links.py), oldest first.
+    on_the_record: list[IssueVoteSchema] = []
 
 
 class TimelineEntrySchema(CamelModel):
