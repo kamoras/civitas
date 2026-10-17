@@ -185,3 +185,35 @@ def test_the_fits_refit_weekly_while_a_certified_general_is_missing(monkeypatch)
     assert dr._fits_behind(date(2026, 10, 17))
     docs["forecast_house_training.json"] = {"races": [{"year": 2024}]}
     assert not dr._fits_behind(date(2026, 10, 17))
+
+
+def _client_with(answers: list):
+    """A client whose requests answer in turn from `answers` (an exception is raised)."""
+    import httpx
+
+    def handler(request):
+        answer = answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    return lambda **kw: httpx.AsyncClient(transport=httpx.MockTransport(handler), **kw)
+
+
+def test_a_dropped_connection_is_retried_not_a_failed_refit(monkeypatch, tmp_path):
+    import httpx
+
+    answers = [httpx.RemoteProtocolError("Server disconnected without sending a response."),
+               httpx.Response(200, content=b"PK cn24")]
+    monkeypatch.setattr(fit, "make_async_client", _client_with(answers))
+    assert fit.fetch("https://www.fec.gov/files/bulk-downloads/2024/cn24.zip", tmp_path / "cn24.zip") == b"PK cn24"
+    assert answers == []
+
+
+def test_a_source_down_through_every_retry_stops_the_run_with_nothing_cached(monkeypatch, tmp_path):
+    import httpx
+
+    monkeypatch.setattr(fit, "make_async_client", _client_with([httpx.ConnectError("refused")] * 3))
+    with pytest.raises(SystemExit, match="no answer after 3 attempts"):
+        fit.fetch("https://www.fec.gov/files/bulk-downloads/2024/cn24.zip", tmp_path / "cn24.zip")
+    assert not (tmp_path / "cn24.zip").exists()
