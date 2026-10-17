@@ -27,7 +27,6 @@ from functools import lru_cache
 import time
 from collections.abc import Sequence
 from typing import Iterator, NamedTuple
-import unicodedata
 import uuid
 from datetime import date, datetime, timedelta
 from urllib.parse import urlparse
@@ -60,6 +59,13 @@ from app.models import (
 )
 from app.pipeline.analyze import action_metrics
 from app.committee_routing import route_committees
+from app import roll_call_links
+from app.person_names import (
+    APOSTROPHES as _APOSTROPHES,
+    RecordName as _RecordName,
+    record_name as _record_name,
+    strip_accents as _strip_accents,
+)
 from app.pipeline.analyze.bluesky_spotlight import post_daily_spotlight
 from app.pipeline.analyze.early_signal import (
     CONFIRMATION_WINDOW_HOURS,
@@ -1473,7 +1479,6 @@ _DIGEST_TITLE_SUFFIX_PATTERNS = re.compile(
 )
 
 # Feeds emit the typographic apostrophe far more often than the ASCII one.
-_APOSTROPHES = str.maketrans({"’": "'", "ʼ": "'", "‘": "'"})
 
 # Feed descriptions enumerate their items with sentence breaks, semicolons,
 # bullets, or pipes — all four appear in real NPR/AP briefing bodies. The
@@ -4473,64 +4478,6 @@ class _Person(NamedTuple):
     middles: frozenset[str]  # every other given name or initial on record
 
 
-def _strip_accents(text: str) -> str:
-    """Diacritics removed and apostrophes made straight, case kept."""
-    decomposed = unicodedata.normalize("NFKD", text or "")
-    return "".join(ch for ch in decomposed if not unicodedata.combining(ch)).translate(_APOSTROPHES)
-
-
-# A nickname a record quotes: FEC's 'DELGADO, MARTIN ALLEN "ROB"', a
-# parenthesised "(BETO)", or a single-quoted 'ROB' (not an apostrophe: it
-# stands after a space).
-_QUOTED_NICKNAME = re.compile(r"[\"“”(]\s*([^\"“”()]+?)\s*[\"“”)]|(?<!\S)'([^'\s]+)'(?!\S)")
-
-
-class _RecordName(NamedTuple):
-    surname: str
-    given: list[str]  # in order; an initial is one letter
-    nicknames: list[str]  # quoted; an initials nickname ("A.J.") as one "a.j"
-    filed: bool  # FEC's "LAST, FIRST": a filing, not a printing
-
-
-def _record_name(name: str | None) -> _RecordName:
-    """The surname, given names in order and quoted nicknames of one
-    recorded name, FEC's "LAST, FIRST MIDDLE" or a printed "First Middle
-    Last", all folded. Honorifics and suffixes are dropped; initials are
-    kept as one letter. A quoted nickname of initials ("A.J.", "T.J.") is
-    kept whole, as "a.j"; a single quoted letter is a ballot annotation
-    ("(I)" for incumbent), not a name, and is dropped."""
-    from app.pipeline.candidate_dedup import normalized_surname
-    from app.pipeline.fetch.state_candidates import _NOT_A_NAME, _without_trailing_suffix
-    from app.pipeline.fetch.state_candidates_common import surname
-
-    text = _strip_accents(name or "").lower()
-    quoted = [a or b for a, b in _QUOTED_NICKNAME.findall(text)]
-    text = _without_trailing_suffix(_QUOTED_NICKNAME.sub(" ", text))
-    filed = "," in text
-    if filed:
-        last = normalized_surname(text)
-        given_part = text.split(",", 1)[1]
-    else:
-        last = (surname(text) or "").lower()
-        words = text.split()
-        at = max((i for i, w in enumerate(words) if w.strip(".,") == last), default=len(words))
-        given_part = " ".join(words[:at])
-
-    def names(part: str) -> list[str]:
-        tokens = ("".join(ch for ch in t if ch.isalpha() or ch in "'-").strip("'-")
-                  for t in part.replace(".", " ").split())
-        return [t for t in tokens if t and t not in _NOT_A_NAME]
-
-    nicknames: list[str] = []
-    for nick in quoted:
-        tokens = names(nick)
-        if len(tokens) > 1 and all(len(t) == 1 for t in tokens):
-            nicknames.append(".".join(tokens))  # "a.j": initials, one name
-        else:
-            nicknames += [t for t in tokens if len(t) > 1]
-    return _RecordName(last.strip(), names(given_part), nicknames, filed)
-
-
 def _short_form(token: str, name: str) -> bool:
     """Whether printed `token` can be a short or long form of filed given
     name (or nickname) `name`, without being it. Exactly these pass: one
@@ -5985,6 +5932,16 @@ def _run_refresh(db: Session) -> int:
         db.commit()
     except Exception:
         logger.exception("Backfilling issues' new facts failed")
+        db.rollback()
+
+    # Related votes in Congress (app/roll_call_links.py): matched here, where
+    # both models are loaded, for the last week's issues and monitor updates
+    # and a bounded batch of older ones never matched.
+    try:
+        roll_call_links.refresh_links(db, today)
+        db.commit()
+    except Exception:
+        logger.exception("Matching issues to roll calls failed")
         db.rollback()
 
     # Stage 4: Post new/surging issues to Bluesky.

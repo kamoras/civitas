@@ -9,6 +9,13 @@
       "url": "/congress"
     },
     {
+      "id": "related-votes-in-congress",
+      "date": "2026-10-17",
+      "title": "Related votes in Congress",
+      "summary": "Action Center stories now list the related roll calls in Congress, with how your members voted and a call script that cites the vote, and each ongoing story charts its votes on the record.",
+      "url": "/action?tab=monitors"
+    },
+    {
       "id": "follow-one-thing",
       "date": "2026-10-17",
       "title": "Follow one member, bill, agency or story",

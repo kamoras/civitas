@@ -91,6 +91,14 @@ export interface IssueVote {
   result: string;
   billId?: string | null;
   billLabel?: string | null;
+  /** The measure or nominee as the record titles it. */
+  title?: string;
+  yeas?: number;
+  nays?: number;
+  /** The chamber's result read as failed (true) or carried (false). */
+  rejected?: boolean | null;
+  /** Yeas minus nays, from the backend: 0 is a tie. */
+  margin?: number;
 }
 
 export interface IssueMember {
@@ -153,6 +161,8 @@ export interface ActionIssue {
   deciders?: Decider[];
   /** How many roll calls are linked (each member's record on them is in IssueMembers). */
   voteCount?: number;
+  /** The roll calls linked to the issue, newest first: "Related votes in Congress". */
+  relatedVotes?: IssueVote[];
   fullStory?: string | null;
   /** Only ever true from the issues-list fetch — the single-issue lookup
    *  has no peer issues to judge traction against. */

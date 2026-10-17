@@ -213,6 +213,32 @@ export default function NewsChapter() {
           the exception: its issue is the count, so what you can do is follow that count on its
           state&apos;s page.
         </P>
+        <More label="How a story is linked to votes in Congress">
+          <P>
+            News rarely prints a bill&apos;s number, so until October 2026 not one issue in 543 had
+            reached the roll calls it was about, and the Iran monitor showed none of Congress&apos;s
+            war-powers votes. Now each issue and monitor update is compared with every roll call
+            taken from three days before its date to two after: the story&apos;s headline against
+            the vote&apos;s title (the measure or nominee as the chamber records it), by two of the
+            site&apos;s own language models, which compare meaning, not wording. A vote close enough
+            on both is listed under &ldquo;Related votes in Congress&rdquo;, with how your members
+            voted on it once you pick your state, and the call script cites that vote. It is shown
+            as related, never as the cause of the story. An amendment vote is compared by the
+            purpose its record states, since its title names only its sponsor, and left out when no
+            purpose is on file.
+          </P>
+          <P>
+            How close is close enough was set on 9,868 story-and-vote pairs read and marked by hand
+            (642 stories from April to October 2026), at the point where the site is most confident
+            that the links shown are right, which has to clear its bar for anything stated as fact
+            (being confident at least 80% are right). Tested on months the setting never saw, 53 of
+            57 links were right, and it found about one related vote in five: it prefers saying
+            nothing to guessing. People&apos;s names are left out of both texts before they are
+            compared, so a story is matched by what it is about, not who is in it. A monitor&apos;s
+            &ldquo;On the record&rdquo; chart shows every vote linked to its updates over its life,
+            one square per vote, higher for more yeas than nays, with the same votes in a table.
+          </P>
+        </More>
         <More label="How the committee is chosen">
           <P>
             Each chamber&apos;s committee is named from two measurements, and only when both pick
