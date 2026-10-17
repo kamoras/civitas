@@ -1456,12 +1456,18 @@ Each issue's actions are fixed templates around stored data:
   open-only rule).
 
 The Today tab's open comment periods are ranked by salience, not deadline
-(`api/action.open_comments_salience`): documents a recent issue links, then
-rules before notices, then by the Federal Register's own reader count
+(`comment_periods.salience`, shared with agency pages and Explore's
+open-comments list): documents a recent issue links, then rules before
+notices and Paperwork Reduction Act notices last, then by the Federal
+Register's own reader count
 (`ExploreDocument.fr_page_views`, read once a day by the Action Center —
 `_refresh_open_comment_views` — not by the nightly Explore refresh, whose
 module is fingerprinted). Citations were measured and rejected as the
-signal: airworthiness directives carry hundreds of boilerplate ones.
+signal: airworthiness directives carry hundreds of boilerplate ones. A
+paperwork notice is the Register's own table-of-contents subject for PRA
+collections (`fr_toc_subject`, read with the page views), never a title
+word: 303 of 615 open on 2026-10-17, precision 303/303, recall 303/304.
+Agency pages and Explore fold them under "Paperwork notices (N)".
 
 Feed descriptions are **stripped of HTML** as they are parsed
 (`news_feeds._strip_html`): the WordPress-backed feeds put real markup in

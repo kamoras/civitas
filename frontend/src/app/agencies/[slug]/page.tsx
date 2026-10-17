@@ -12,6 +12,7 @@ import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import AgencyDocList from "@/components/agencies/AgencyDocList";
+import PaperworkFold from "@/components/shared/PaperworkFold";
 import SourceLine from "@/components/agencies/SourceLine";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
@@ -294,10 +295,21 @@ export default async function AgencyPage({ params }: PageProps) {
                 <h2 id="comment-heading" className={H2}>
                   Open for comment
                 </h2>
-                {docs.openComments.length > 0 ? (
+                {docs.openComments.length > 0 || (docs.paperworkCount ?? 0) > 0 ? (
                   <>
                     <AgencyDocList docs={docs.openComments} today={today} showDeadline />
-                    {docs.openCommentsCount > docs.openComments.length && (
+                    <PaperworkFold
+                      count={docs.paperworkCount ?? 0}
+                      shown={docs.paperworkNotices?.length ?? 0}
+                    >
+                      <AgencyDocList
+                        docs={docs.paperworkNotices ?? []}
+                        today={today}
+                        showDeadline
+                      />
+                    </PaperworkFold>
+                    {docs.openCommentsCount >
+                      docs.openComments.length + (docs.paperworkNotices?.length ?? 0) && (
                       <Link href={`${agencyExploreHref(a.slug)}&comment=open`} className={MORE}>
                         [All {docs.openCommentsCount} open] →
                       </Link>

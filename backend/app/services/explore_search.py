@@ -51,6 +51,7 @@ import re
 
 from sqlalchemy import text
 
+from app import comment_periods
 from app.models import ExploreDocument
 from app.pipeline.analyze.document_authority import (
     declared_identifiers,
@@ -387,9 +388,9 @@ def browse_documents(
     """Documents with no query. One member's, or one agency's
     (`agency_slugs`: it and its sub-agencies), newest first: what a
     profile's or an agency page's "view all documents" link opens. With
-    neither, only `commentable` (every open comment period), closing
-    soonest first: a reader looking for a rule to comment on needs the next
-    deadline before the newest notice. Same response shape as hybrid_search, with no retrieval channel
+    neither, only `commentable` (every open comment period), rules first
+    and most read, as the Today tab orders them, with paperwork notices
+    apart under `paperwork` (app/comment_periods). Same response shape as hybrid_search, with no retrieval channel
     involved (so no distance, no matched terms)."""
     today = comment_period_today()
     query = db.query(ExploreDocument.id)
@@ -406,30 +407,60 @@ def browse_documents(
             ExploreDocument.comment_url.isnot(None), ExploreDocument.comment_url != "",
             ExploreDocument.comments_close_on >= today,
         )
-    order = (
-        (ExploreDocument.date.desc(), ExploreDocument.id.desc())
-        if politician_id is not None or (agency_slugs and not commentable)
-        else (ExploreDocument.comments_close_on.asc(), ExploreDocument.date.desc(), ExploreDocument.id.desc())
-    )
-    ids = [row.id for row in query.order_by(*order).limit(limit)]
-    hydrated = _hydrate(db, ids)
-    results = []
-    for doc_id in ids:
-        doc = hydrated.get(doc_id)
-        if doc is None:
-            continue
-        doc.pop("_authority", None)
-        doc.pop("_bodyHead", None)
-        doc.pop("_bodyLength", None)
-        doc.update(matchedBy=[], distance=None, snippet=doc["summary"], duplicateCount=0)
-        results.append(doc)
-    return {
+    paperwork_ids: list[int] = []
+    paperwork_count = 0
+    if commentable and politician_id is None:
+        # Every open period (hundreds at most), ordered as the Today tab
+        # orders them: rules first, paperwork notices folded apart, closing
+        # soonest first (app/comment_periods).
+        rows = query.with_entities(
+            ExploreDocument.id, ExploreDocument.doc_type, ExploreDocument.fr_toc_subject,
+            ExploreDocument.fr_page_views, ExploreDocument.comments_close_on,
+        ).all()
+        paperwork = sorted((r for r in rows if comment_periods.is_paperwork(r.doc_type, r.fr_toc_subject)),
+                           key=lambda r: (r.comments_close_on, -r.id))
+        others = sorted((r for r in rows if not comment_periods.is_paperwork(r.doc_type, r.fr_toc_subject)),
+                        key=comment_periods.salience)
+        ids = [r.id for r in others[:limit]]
+        paperwork_ids, paperwork_count = [r.id for r in paperwork[:limit]], len(paperwork)
+    else:
+        order = (
+            (ExploreDocument.date.desc(), ExploreDocument.id.desc())
+            if politician_id is not None or (agency_slugs and not commentable)
+            else (ExploreDocument.comments_close_on.asc(), ExploreDocument.date.desc(), ExploreDocument.id.desc())
+        )
+        ids = [row.id for row in query.order_by(*order).limit(limit)]
+    hydrated = _hydrate(db, ids + paperwork_ids)
+
+    def shaped(doc_ids: list[int]) -> list[dict]:
+        out = []
+        for doc_id in doc_ids:
+            doc = hydrated.get(doc_id)
+            if doc is None:
+                continue
+            doc.pop("_authority", None)
+            doc.pop("_bodyHead", None)
+            doc.pop("_bodyLength", None)
+            doc.update(matchedBy=[], distance=None, snippet=doc["summary"], duplicateCount=0)
+            if commentable:
+                # The abstract's opening sentence, verbatim, as the card's
+                # text, and the comment window from publication to deadline.
+                doc["snippet"] = comment_periods.first_sentence(doc["summary"]) or doc["summary"]
+                doc["commentWindow"] = comment_periods.comment_window(doc["date"], doc["commentsCloseOn"], today)
+            out.append(doc)
+        return out
+
+    results = shaped(ids)
+    outcome = {
         "results": results,
         "count": len(results),
         "indexReady": True,
         "semanticUnavailable": False,
         "channels": {"semantic": 0, "keyword": 0, "identifier": 0},
     }
+    if commentable and politician_id is None:
+        outcome["paperwork"] = {"count": paperwork_count, "results": shaped(paperwork_ids)}
+    return outcome
 
 
 def hybrid_search(

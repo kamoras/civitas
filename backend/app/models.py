@@ -1512,6 +1512,11 @@ class ExploreDocument(Base):
     # page_views.count), refreshed nightly; None for other sources and until
     # the first refresh. Ranks the Action Center's open comment periods.
     fr_page_views: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # The Register's table-of-contents subject (its API's toc_subject, or
+    # toc_doc where it lists none), read with fr_page_views. Says which
+    # notices are Paperwork Reduction Act collections (app/comment_periods).
+    # None for other sources and until read.
+    fr_toc_subject: Mapped[str | None] = mapped_column(String, nullable=True)
     policy_areas: Mapped[str] = mapped_column(Text, default="[]")
     external_id: Mapped[str | None] = mapped_column(String, nullable=True, unique=True)
 

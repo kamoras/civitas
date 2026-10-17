@@ -2,6 +2,8 @@
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import CommentWindowBar from "@/components/shared/CommentWindowBar";
+import PaperworkFold from "@/components/shared/PaperworkFold";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import PageMasthead from "@/components/layout/PageMasthead";
@@ -132,6 +134,9 @@ function ResultCard({ result, query }: { result: ExploreResult; query: string })
             its opening sentence does. Results only the semantic channel
             found have no matched terms, and fall back to the summary. */}
         <Snippet text={result.snippet || result.summary} />
+        {commentOpen && result.commentWindow && (
+          <CommentWindowBar period={result.commentWindow} className="mb-2" />
+        )}
 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3 flex-wrap">
@@ -833,9 +838,8 @@ function ExplorePageInner() {
                   </>
                 ) : (
                   <>
-                    {results.length === RESULT_LIMIT ? "The " : ""}
+                    {results.length === RESULT_LIMIT ? "The first " : ""}
                     {results.length} open comment period{results.length !== 1 ? "s" : ""}
-                    {results.length === RESULT_LIMIT ? " closing soonest" : ""}
                   </>
                 )}
                 {submitted?.commentableOnly && (resultsFor || politicianId) && (
@@ -847,7 +851,7 @@ function ExplorePageInner() {
                 <span className="text-ink-min ml-2">
                   · sorted by{" "}
                   {!resultsFor && !politicianId && (!agency || submitted?.commentableOnly)
-                    ? "closing date"
+                    ? "rules first, then readers"
                     : !resultsFor || submitted?.sort === "date"
                       ? "newest first"
                       : "relevance"}
@@ -858,6 +862,15 @@ function ExplorePageInner() {
                   <ResultCard key={r.id} result={r} query={resultsFor} />
                 ))}
               </div>
+              {resp?.paperwork && (
+                <PaperworkFold count={resp.paperwork.count} shown={resp.paperwork.results.length}>
+                  <div className="mt-3 space-y-3">
+                    {resp.paperwork.results.map((r) => (
+                      <ResultCard key={r.id} result={r} query={resultsFor} />
+                    ))}
+                  </div>
+                </PaperworkFold>
+              )}
             </div>
           )}
 

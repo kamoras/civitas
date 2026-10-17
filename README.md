@@ -657,13 +657,21 @@ Every hour at :15
        │         The Today tab's open comment periods (/api/action/
        │         open-comments) lead with any a recent issue links, then
        │         rules (the Register's own type) by readers (its page_views,
-       │         read once a day into fr_page_views), then notices; by
+       │         read once a day into fr_page_views), then notices, then
+       │         paperwork notices (app/comment_periods: the Register's
+       │         table-of-contents subject for PRA collections, read with
+       │         the page views into fr_toc_subject; 303 of 615 open on
+       │         2026-10-17, precision 303/303, recall 303/304); by
        │         deadline, 6 of the top 10 were PRA renewals and a waiver
        │         petition (2026-10-11), by salience none were
-       │         Every open comment period, closing soonest first:
+       │         Every open comment period, in the same order:
        │         /explore?comment=open (GET /api/explore?commentable=true
        │         with no q), the target of the homepage's and the Today
-       │         tab's "Every open comment period" links
+       │         tab's "Every open comment period" links; paperwork
+       │         notices come apart under `paperwork` and are folded
+       │         ("Paperwork notices (N)"), as on an agency page. Each
+       │         card shows the abstract's first sentence verbatim and a
+       │         days-left bar with the same fact in words
        │         Every issue but a count issue also offers the reader's
        │         own members on the page: a state picked from a list
        │         loads each office's phone (tel:) and contact form, how
@@ -1723,7 +1731,7 @@ Every sentence is a template around stored figures. When the backend can't answe
 `/agencies` and `/agencies/{slug}` make federal agencies records of their own (`api/agencies.py`). An agency is the Federal Register's: its `/api/v1/agencies.json` lists 473 (abolished ones included), each with a slug, a description, a parent and sub-agencies, stored in `agencies`. Each agency page shows what it spends, the documents it issued and the executive orders that name it, every block with its source and the day it was read.
 
 - **Spending** comes from USAspending.gov: the toptier list (`/api/v2/references/toptier_agencies/`, one request) for the current fiscal year's budgetary resources, obligations and outlays, and `/api/v2/agency/{code}/budgetary_resources/` for the same by fiscal year (one request per agency, about 110). USAspending names no Federal Register agency, so the two lists are joined by name (`fetch/agencies.crosswalk`): token-sorted names ("Agriculture Department" and "Department of Agriculture" sort alike) compared by SequenceMatcher ratio, one USAspending agency to at most one Register agency, at a threshold derived by `scripts/calibrate_agency_crosswalk.py` and stored in `app/data/agency_crosswalk.json`. Its labels come from evidence the score never reads: where an agency's USAspending abbreviation equals exactly one Register agency's short name, that pair is a positive, and the same agency's best score against every other Register agency a negative; the threshold maximizes Youden's J over them (0.834 on 2026-10-15: 76 of 80 positives and 1 of 80 negatives at or above it). 94 of 111 toptier agencies matched; the other 17 are stored with no match and named on the page as not linked, never paired with a runner-up. A sub-agency's page points to its department's budget, which includes it. A fiscal year USAspending hasn't reported is never shown as $0: its toptier list answers 0.0 for an agency with no submission yet (on 2026-10-16 all 10 agencies listed at 0.0 for FY2026 had 0.0 obligations and outlays too, and no FY2026 entry in their year-by-year record, while 5 had a nonzero FY2025, the Railroad Retirement Board's $17.8B among them), so a year counts as reported only when the year-by-year record has it; otherwise the page says "not yet reported" and leads with the latest year that is, and the agency is left out of the year's total and shares. An agency USAspending's list stops including is kept with the date it dropped out (`agency_budgets.retired_at`), never read as zero. With no budget to show, the page says which case it is: not yet read (an outage), no USAspending agency matched by name, listed with no figures for any year, or dropped from the list. An agency page also lists the Action Center issues that cite one of its documents (the issue's own `related_explore_ids`).
-- **Documents.** A Federal Register document's agency is the most specific one its `agencies[]` lists (the FAA, not the Transportation Department it sits under), stored with its slug in `explore_documents.agency_slug` at ingest, so a document reaches its agency with no name matching. Documents stored before the column are read for it by the nightly Federal Register refresh, 2,000 a night beyond the refresh's own 90-day window. A department's page lists its sub-agencies' documents too: open comment periods (closing soonest first), proposed and final rules (newest first), and a link to Explore filtered to the agency (`GET /api/explore?agency={slug}`; the agency select on Explore lists every agency with documents). A joint rule counts for its first listed issuer only.
+- **Documents.** A Federal Register document's agency is the most specific one its `agencies[]` lists (the FAA, not the Transportation Department it sits under), stored with its slug in `explore_documents.agency_slug` at ingest, so a document reaches its agency with no name matching. Documents stored before the column are read for it by the nightly Federal Register refresh, 2,000 a night beyond the refresh's own 90-day window. A department's page lists its sub-agencies' documents too: open comment periods (rules first, as the Today tab orders them, with paperwork notices folded under "Paperwork notices (N)"), proposed and final rules (newest first), and a link to Explore filtered to the agency (`GET /api/explore?agency={slug}`; the agency select on Explore lists every agency with documents). A joint rule counts for its first listed issuer only.
 - **Executive orders naming it**: every executive order lists the Executive Office of the President as its agency, so these are found by text, the keyword index's exact phrase for the agency's Register name or its USAspending name. When the keyword index can't be asked the section says so rather than reading as "none".
 - **Lobbying aimed at an agency** is not shown. LDA filings list the government entities each activity lobbied, but the LDA API can't filter filings by entity, so a per-agency figure would mean downloading every filing of a year.
 
