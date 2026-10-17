@@ -1,3 +1,4 @@
+import type { OfficialLookup, RegisterLink } from "@/types/election";
 export interface RelatedExploreDoc {
   /** Its permanent Explore key (/explore/{key}); optional only for an older backend. */
   key?: string | null;
@@ -91,6 +92,14 @@ export interface IssueVote {
   result: string;
   billId?: string | null;
   billLabel?: string | null;
+  /** The measure or nominee as the record titles it. */
+  title?: string;
+  yeas?: number;
+  nays?: number;
+  /** The chamber's result read as failed (true) or carried (false). */
+  rejected?: boolean | null;
+  /** Yeas minus nays, from the backend: 0 is a tie. */
+  margin?: number;
 }
 
 export interface IssueMember {
@@ -151,8 +160,13 @@ export interface ActionIssue {
   /** The monitors tracking this issue that still exist, by stored title. */
   relatedMonitors?: { slug: string; title: string }[];
   deciders?: Decider[];
+  /** The states and races the issue names, with each state's voter
+   *  information (backend app/ballot_links.py). Absent from an older API. */
+  ballot?: IssueBallot[];
   /** How many roll calls are linked (each member's record on them is in IssueMembers). */
   voteCount?: number;
+  /** The roll calls linked to the issue, newest first: "Related votes in Congress". */
+  relatedVotes?: IssueVote[];
   fullStory?: string | null;
   /** Only ever true from the issues-list fetch — the single-issue lookup
    *  has no peer issues to judge traction against. */
@@ -202,4 +216,21 @@ export interface ActionIssuesResponse {
   generatedAt?: string;
   /** The newest run that read the news, whether or not it changed anything. */
   checkedAt?: string;
+}
+
+/** A state an issue names, its races and where its voters go next. */
+export interface IssueBallot {
+  state: string;
+  stateName: string;
+  races: { id: string; label: string; candidate: string | null }[];
+  /** The voter calendar's next deadline: registration while it is open,
+   *  else the next one in the state's own words; null without a calendar. */
+  deadline: {
+    kind: string;
+    sentence: string;
+    closesOn: string | null;
+    daysLeft: number | null;
+  } | null;
+  registerLink: RegisterLink | null;
+  lookup: OfficialLookup | null;
 }

@@ -424,3 +424,74 @@ export interface BillJourneyStop {
 export interface BillJourney {
   stops: BillJourneyStop[];
 }
+
+/** One chamber's sittings and record votes in a month of the Congress. */
+export interface ChamberMonth {
+  days: number;
+  votes: number;
+}
+
+/** GET /api/congress/glance: the sitting Congress's days and bills. */
+export interface CongressGlance {
+  calendar: {
+    congress: number;
+    start: string;
+    end: string;
+    today: string;
+    /** The first day Civitas holds the Record for; null before any. */
+    recordFrom: string | null;
+    /** Only days a chamber sat: the record votes it took that day. */
+    days: Record<string, { senate?: number; house?: number }>;
+    months: { month: string; senate: ChamberMonth; house: ChamberMonth }[];
+    totals: { senate: ChamberMonth; house: ChamberMonth };
+    maxVotes: number;
+  };
+  /** How many of this Congress's bills reached each step; null before any. */
+  pipeline: {
+    total: number;
+    milestones: { label: string; bills: number; share: number; shareText: string }[];
+  } | null;
+}
+
+/** One of a state's members and their record this Congress
+ * (GET /api/congress/members). */
+export interface StateMemberRecord {
+  id: string;
+  name: string;
+  party: string;
+  chamber: "senate" | "house";
+  state: string;
+  district: number | null;
+  photo: string | null;
+  /** Roll calls the member is recorded on, of the chamber's; voted = rollCalls - missed. */
+  rollCalls: number;
+  chamberRollCalls: number;
+  voted: number;
+  missed: number;
+  votes: {
+    date: string;
+    vote: string;
+    billId: string | null;
+    billName: string;
+    votedWithParty: boolean | null;
+    rollCall: {
+      chamber: string;
+      congress: number;
+      session: number;
+      number: number;
+      question: string;
+      result: string;
+    } | null;
+  }[];
+  billsSponsored: number;
+  bills: {
+    billId: string;
+    billLabel: string | null;
+    congress: number;
+    title: string;
+    introduced: string;
+    stage: string;
+    latestAction: string;
+    latestActionDate: string;
+  }[];
+}

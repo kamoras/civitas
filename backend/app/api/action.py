@@ -15,10 +15,12 @@ from datetime import date, timedelta
 from app import comment_periods
 from app.config_definitions import BILL_STAGES, RECENT_FEED_MAX_LIMIT, RECENT_FEED_POOL_MULTIPLIER
 from app.retractions import retraction_for_issue
+from app.roll_call_links import parse_ref, stored_refs
 from app.api.admin import require_admin
 from app.database import get_db, get_visits_db
 from app.election_calendar import next_election_day, previous_election_day, seats_up_for_year
-from app.election_phase import election_today
+from app.ballot_links import issue_ballot
+from app.election_phase import active_election, election_today
 from app.pipeline.analyze.score_calculator import compute_overall_score, get_district_pvi_map
 from app.issue_ids import from_public_id, to_public_id
 from app.ordinals import ordinal
@@ -365,13 +367,24 @@ def _bill_records(db: Session, wanted: set[tuple[str, int]]) -> dict[tuple[str, 
 _ISSUE_VOTES_MAX = 10
 
 
+def _ref_clauses(refs: list[str]) -> list:
+    out = []
+    for ref in refs:
+        if parsed := parse_ref(ref):
+            chamber, congress, session, number = parsed
+            out.append((RollCall.chamber == chamber) & (RollCall.congress == congress)
+                       & (RollCall.session == session) & (RollCall.number == number))
+    return out
+
+
 def issue_roll_calls(db: Session, issue: ActionIssue) -> list[RollCall]:
     """The roll calls an issue is about: the vote a roll-call issue reports
-    (its primary source is the vote's own record), and the stored votes on a
-    bill its coverage names, in that bill's Congress. Housekeeping questions
-    (quorum, adjourning, tabling) are left out, as everywhere votes are
-    compared (normalize_votes.is_housekeeping)."""
-    clauses = []
+    (its primary source is the vote's own record), the stored votes on a
+    bill its coverage names, in that bill's Congress, and the votes matched
+    to the story (app/roll_call_links.py). Housekeeping questions (quorum,
+    adjourning, tabling) are left out, as everywhere votes are compared
+    (normalize_votes.is_housekeeping)."""
+    clauses = _ref_clauses(stored_refs(getattr(issue, "related_roll_call_refs", None)))
     if issue.primary_source_url:
         clauses.append(RollCall.source_url == issue.primary_source_url)
     for b in _parse_json_field(issue.related_bill_ids):
@@ -385,6 +398,16 @@ def issue_roll_calls(db: Session, issue: ActionIssue) -> list[RollCall]:
         .all()
     )
     return [rc for rc in rows if not is_housekeeping(rc.question, rc.chamber)][:_ISSUE_VOTES_MAX]
+
+
+def vote_schema(rc: RollCall) -> dict:
+    return IssueVoteSchema(
+        chamber=rc.chamber, congress=rc.congress, session=rc.session, number=rc.number,
+        date=rc.date, question=rc.question or "", result=rc.result or "",
+        bill_id=rc.bill_id, bill_label=bill_label(rc.bill_id),
+        title=rc.title or "", yeas=rc.yeas or 0, nays=rc.nays or 0, rejected=rc.rejected,
+        margin=(rc.yeas or 0) - (rc.nays or 0),
+    ).model_dump(by_alias=True)
 
 
 def _month_day(iso_day: str) -> str:
@@ -564,6 +587,7 @@ def _build_issue_response(
         .all()
     ) if monitor_slugs else {}
 
+    rolls = issue_roll_calls(db, issue)
     current_facts = _parse_json_field(issue.facts)
     # Worked out when the facts were written (app/fact_diff.py): diffing
     # them here needed the embedding model on a public GET. NULL on a row
@@ -614,7 +638,9 @@ def _build_issue_response(
             for d in related_docs
             if d["agencyName"] and d["commentUrl"] and d["commentsCloseOn"] and d["commentsCloseOn"] >= today
         ],
-        vote_count=len(issue_roll_calls(db, issue)),
+        ballot=issue_ballot(getattr(issue, "ballot_links", None), active_election(db).election_day),
+        vote_count=len(rolls),
+        related_votes=[vote_schema(rc) for rc in rolls],
         full_story=getattr(issue, "full_story", None),
         is_trending=is_trending,
         status=getattr(issue, "status", None) or "confirmed",
@@ -955,14 +981,7 @@ def get_issue_members(
 
     return IssueMembersSchema(
         state=code,
-        votes=[
-            IssueVoteSchema(
-                chamber=rc.chamber, congress=rc.congress, session=rc.session, number=rc.number,
-                date=rc.date, question=rc.question, result=rc.result,
-                bill_id=rc.bill_id, bill_label=bill_label(rc.bill_id),
-            )
-            for rc in rolls
-        ],
+        votes=[vote_schema(rc) for rc in rolls],
         members=[
             IssueMemberSchema(
                 id=m.id, name=m.name, party=m.party, chamber=chamber,
@@ -1103,7 +1122,17 @@ async def refresh_action_center(db: Session = Depends(get_db)):
     return {"message": "Action center refresh triggered"}
 
 
-def _monitor_to_schema(m: NationalMonitor, include_updates: bool = False):
+def monitor_roll_calls(db: Session, m: NationalMonitor) -> list[RollCall]:
+    """The roll calls matched to a monitor's updates, oldest first: its "On
+    the record". Housekeeping questions are left out as in issue_roll_calls."""
+    refs = sorted({r for u in (m.updates or []) for r in stored_refs(u.roll_call_refs)})
+    if not refs:
+        return []
+    rows = db.query(RollCall).filter(or_(*_ref_clauses(refs))).order_by(RollCall.date, RollCall.number).all()
+    return [rc for rc in rows if not is_housekeeping(rc.question, rc.chamber)]
+
+
+def _monitor_to_schema(m: NationalMonitor, include_updates: bool = False, db: Session | None = None):
     """Convert a NationalMonitor ORM object to a schema dict."""
     base = NationalMonitorSchema(
         id=m.id,
@@ -1135,8 +1164,9 @@ def _monitor_to_schema(m: NationalMonitor, include_updates: bool = False):
         for u in (m.updates or [])
     ]
     detail = NationalMonitorDetailSchema(
-        **{k: getattr(base, k) for k in base.model_fields},
+        **{k: getattr(base, k) for k in type(base).model_fields},
         updates=updates,
+        on_the_record=[vote_schema(rc) for rc in monitor_roll_calls(db, m)] if db is not None else [],
     )
     return detail.model_dump(by_alias=True)
 
@@ -1193,7 +1223,7 @@ async def get_monitor(response: Response, slug: str, db: Session = Depends(get_d
     )
     if not monitor:
         raise HTTPException(status_code=404, detail="Monitor not found")
-    return _monitor_to_schema(monitor, include_updates=True)
+    return _monitor_to_schema(monitor, include_updates=True, db=db)
 
 
 _MONTH_NAMES = [

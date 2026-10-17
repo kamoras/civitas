@@ -35,9 +35,12 @@ conservative at the 15-minute election-season cadence, 96 runs/day):
   - one post per race per RACE_COOLDOWN_HOURS.
 """
 
+import json
 import logging
 import time
 from datetime import timedelta
+from functools import lru_cache
+from pathlib import Path
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -52,7 +55,7 @@ from app.pipeline.analyze.grounding import (
 )
 from app.pipeline.analyze.ollama_client import call_llm
 from app.pipeline.analyze.post_composer import compose, headline_source
-from app.pipeline.analyze import race_relevance
+from app.pipeline.analyze.election_coverage import build_matchers, stored_digest_reason
 from app.pipeline.candidate_dedup import resolve_candidate_id
 from app.time_utils import utcnow
 
@@ -110,6 +113,49 @@ POSTABLE_SOURCE_TYPES = ("news",)
 # not-yet-considered backlog (the posting query is capped per run) would
 # grow without bound on busy days (2026-07 review).
 CONSIDER_MAX_AGE_HOURS = 48
+
+# The stored relevance an item must reach to be posted, fitted on hand-labelled
+# items with an exact precision bound (scripts/calibrate_race_post_relevance.py).
+# race_relevance's own threshold decides what the race page lists beside its
+# source; a post says the story is about the race in Civitas's voice, and at
+# that threshold the labelled stories were about their race 65% of the time.
+_POST_RELEVANCE_PATH = Path(__file__).resolve().parents[2] / "data" / "race_post_relevance.json"
+
+
+@lru_cache(maxsize=1)
+def post_relevance_threshold() -> float:
+    return float(json.loads(_POST_RELEVANCE_PATH.read_text())["threshold"])
+
+
+def refusal(item: RaceCoverageItem, race: Race, matchers: dict) -> str | None:
+    """Why this item must not be posted as an update on its race, or None.
+
+    Checked again here, not only at ingest, because the post is what a
+    reader sees in Civitas's voice (2026-10-17: a newsletter whose lead item
+    had a New York House member campaigning in Michigan was posted as an
+    update on her race). Each check fails closed.
+    """
+    reason = stored_digest_reason(item)
+    if reason:
+        return f"a multi-story digest ({reason})"
+    resolved = resolve_candidate_id(item.matched_candidate_id, race.candidates) if item.matched_candidate_id else None
+    matcher = matchers.get(resolved) or matchers.get(item.matched_candidate_id)
+    if matcher is None or matcher.race_id != race.id:
+        return "its matched candidate is not on this race's roster"
+    # Once the state certifies its November candidates, those are the race
+    # (elections._confirmed_or_all). A story about anyone else on the FEC
+    # roster is about someone the race no longer has: on 2026-10-17, 132 of
+    # the 148 such stored stories were not about the race (a member running
+    # for governor, a primary loser, a senator who died).
+    confirmed = {c.id for c in race.candidates if c.confirmed_general}
+    if confirmed and not ({resolved, item.matched_candidate_id} & confirmed):
+        return "its matched candidate is not on the state's certified November ballot"
+    if matcher.match_basis(f"{item.title or ''} {item.summary or ''}") != "full_name":
+        return "it names the candidate but not the race (its state or another candidate)"
+    if item.relevance is None or item.relevance < post_relevance_threshold():
+        return f"relevance {item.relevance} is below the posting threshold {post_relevance_threshold()}"
+    return None
+
 
 _SYSTEM_PROMPT = (
     "You are a civic journalist writing brief, factual updates for the Civitas "
@@ -380,6 +426,7 @@ def post_race_coverage_updates(db: Session, *, deadline: float | None = None) ->
         ).all()
     }
     cooled_down = _races_posted_recently(db)
+    matchers = {m.candidate_id: m for m in build_matchers(db)}
 
     posted = 0
     for item in candidates:
@@ -413,8 +460,9 @@ def post_race_coverage_updates(db: Session, *, deadline: float | None = None) ->
         # it? The name match that attached it answers the second question
         # only — see race_relevance's docstring for why that gap put a
         # Paramount merger on TN-9 and a Tupac trial on NC-1.
-        if not race_relevance.is_relevant(item, race, db):
-            logger.info("Skipping item %s — not about race %s", item.id, race.id)
+        why_not = refusal(item, race, matchers)
+        if why_not:
+            logger.info("Skipping item %s for race %s: %s", item.id, race.id, why_not)
             continue
 
         roster_fact = _roster_fact(item, race, db)

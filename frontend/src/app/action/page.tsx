@@ -1,5 +1,6 @@
 "use client";
 
+import RelatedVotes from "@/components/action/RelatedVotes";
 import { Suspense, useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -128,6 +129,7 @@ function IssueBody({
       )}
       <IssueTags issue={issue} onMonitor={onMonitor} />
 
+      <RelatedVotes issue={issue} headingLevel={headingLevel} />
       <WhatYouCanDo issue={issue} today={today} headingLevel={headingLevel} />
       <Coverage issue={issue} headingLevel={headingLevel} />
 
@@ -676,7 +678,10 @@ function ActionPageInner() {
             role="tablist"
             aria-label="Action Center sections"
             data-sticky-subnav
-            className="sticky top-[82px] z-30 -mx-4 mb-8 mt-6 flex gap-0 overflow-x-auto overflow-y-hidden border-b border-white/15 bg-surface-base/95 px-4 backdrop-blur-sm sm:mx-0 sm:px-0"
+            // Stuck under the header's measured bottom (HeaderClearance's
+            // --header-height), 82px until it is measured: a fixed 82px left
+            // the tabs hidden behind a header wrapped at 200% text.
+            className="sticky top-[var(--header-height,82px)] z-30 -mx-4 mb-8 mt-6 flex gap-0 overflow-x-auto overflow-y-hidden border-b border-white/15 bg-surface-base/95 px-4 backdrop-blur-sm sm:mx-0 sm:px-0"
             onKeyDown={(e) => {
               const tabs = TABS.map((t) => t.id);
               const idx = tabs.indexOf(activeTab);
