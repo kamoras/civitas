@@ -1454,6 +1454,16 @@ Each issue's actions are fixed templates around stored data:
   measured at 0.38 held-out precision — do not drop the labelled votes to
   "simplify". The chair and ranking member are read from the stored rosters
   when the issue is served (`api/action._committee_leaders`).
+- **"On the ballot"** for the states and races the issue's own words name
+  (`action_center.ballot_links`, stored as `ActionIssue.ballot_links` when
+  the issue is written): a confirmed nominee by full name, a state's only
+  nominee of a surname beside the state's name, a seat phrase (the
+  election-results gate's `race_named`), or a state in the headline of an
+  election story by the class vote. Served with the voter calendar's next
+  deadline and the state's register and lookup links
+  (`app/ballot_links.py`), read when the issue is served so a countdown is
+  never stale. A state with no race reads "Voting in", never "On the
+  ballot". Measured in `docs/research/action-center-ballot-links.md`.
 - **"Comment by <date>"** for a proposed or final rule (the Register's own
   `type`) still open for comment whose title clears `EXPLORE_TITLE_MIN_SIM`
   (`_open_comment_docs`). The API drops it once the period closes (#903's

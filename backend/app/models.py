@@ -1628,6 +1628,12 @@ class ActionIssue(Base):
     # for a primary-source draft, and for a row the refresh hasn't labelled
     # yet (it labels older rows on its next run).
     principal_actor: Mapped[str | None] = mapped_column(String(60), nullable=True, default=None)
+    # The states and races the issue's own words name (action_center.
+    # ballot_links): a JSON list of {"state", "raceId", "candidate", "via"},
+    # served with the state's deadlines (app/ballot_links.py). "[]" for none;
+    # NULL for a row the refresh hasn't linked yet (it links recent rows on
+    # its next run).
+    ballot_links: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     # Source name per fact, aligned with `facts` by index. JSON "[]"
     # when an issue predates the claim layer, so the API can render
     # attribution where it exists without a migration backfilling

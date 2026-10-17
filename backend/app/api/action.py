@@ -18,7 +18,8 @@ from app.retractions import retraction_for_issue
 from app.api.admin import require_admin
 from app.database import get_db, get_visits_db
 from app.election_calendar import next_election_day, previous_election_day, seats_up_for_year
-from app.election_phase import election_today
+from app.ballot_links import issue_ballot
+from app.election_phase import active_election, election_today
 from app.pipeline.analyze.score_calculator import compute_overall_score, get_district_pvi_map
 from app.issue_ids import from_public_id, to_public_id
 from app.ordinals import ordinal
@@ -614,6 +615,7 @@ def _build_issue_response(
             for d in related_docs
             if d["agencyName"] and d["commentUrl"] and d["commentsCloseOn"] and d["commentsCloseOn"] >= today
         ],
+        ballot=issue_ballot(getattr(issue, "ballot_links", None), active_election(db).election_day),
         vote_count=len(issue_roll_calls(db, issue)),
         full_story=getattr(issue, "full_story", None),
         is_trending=is_trending,
