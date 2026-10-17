@@ -28,7 +28,7 @@
       "broadcastPostIds": [
         114
       ],
-      "reason": "A post on 17 October 2026 presented a story about two national figures campaigning in Michigan, and speculation about 2028, as an update on the New York 14th District House race. The source was a multi-story newsletter, and it was attached to that race only because it named one of the race's candidates in full; nothing else in it concerned that race. The election coverage ingest now drops multi-story digests and newsletters as the Action Center does, requires a story to name the race (its state or another of its candidates) as well as the candidate, and posts only stories that clear a relevance threshold fitted on labelled stories (PR #PRNUM). The post is withdrawn from the Atom feeds and the story from the race page."
+      "reason": "A post on 17 October 2026 presented a story about two national figures campaigning in Michigan, and speculation about 2028, as an update on the New York 14th District House race. The source was a multi-story newsletter, and it was attached to that race only because it named one of the race's candidates in full; nothing else in it concerned that race. The election coverage ingest now drops multi-story digests and newsletters as the Action Center does, requires a story to name the race (its state or another of its candidates) as well as the candidate, and posts only stories that clear a relevance threshold fitted on labelled stories (PR #1093). The post is withdrawn from the Atom feeds and the story from the race page."
     }
   ]
 }
