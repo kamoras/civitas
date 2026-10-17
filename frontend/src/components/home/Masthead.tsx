@@ -11,7 +11,7 @@ import { LONG_LABEL } from "@/lib/controlStyles";
 import { STATE_NAMES } from "@/lib/stateCodes";
 
 const VOTER_LINK =
-  "inline-flex min-h-[24px] items-center border-b border-phos-mid/40 text-phos-mid hover:text-phos";
+  "inline-flex min-h-11 sm:min-h-[24px] items-center border-b border-phos-mid/40 text-phos-mid hover:text-phos";
 
 /** The election pages the "For voters" line adds, by the election's phase
  * (the backend's, as ElectionNight reads it): the seat map and the new

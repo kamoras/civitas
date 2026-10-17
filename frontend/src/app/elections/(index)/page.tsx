@@ -517,14 +517,19 @@ export default function ElectionsPage() {
                   <span>All states</span>
                   <span aria-hidden="true">{STATES.length} on file</span>
                 </h2>
-                <ul className="mt-3 grid grid-cols-3 gap-px bg-white/[0.07] sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8">
+                {/* Two columns of named 44px rows on a phone (mobile spec P10):
+                    a state is found by its name there, the code beside it. */}
+                <ul className="mt-3 grid grid-cols-2 gap-px bg-white/[0.07] sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8">
                   {STATES.map((state) => (
                     <li key={state}>
                       <Link
                         href={stateBallotHref(state)}
-                        className="flex items-baseline justify-between bg-surface-base px-3 py-2.5 transition-colors hover:bg-surface-raised"
+                        className="flex min-h-11 items-center justify-between gap-2 bg-surface-base px-3 py-2.5 transition-colors hover:bg-surface-raised sm:items-baseline"
                       >
-                        <span className="font-mono text-sm text-ink-hi">{state}</span>
+                        <span className="min-w-0 truncate font-mono text-sm text-ink-hi">
+                          <span className="sm:hidden">{STATE_NAMES[state] ?? state}</span>
+                          <span className="hidden sm:inline">{state}</span>
+                        </span>
                         <span
                           className={`font-mono text-xs ${pviColor(leanByState[state] ?? null)}`}
                         >

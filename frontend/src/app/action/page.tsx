@@ -31,6 +31,7 @@ import {
   SECTION_HEADING,
   SourceList,
   SummarySource,
+  TAP_TARGET,
   TEXT_LINK,
   WhatYouCanDo,
 } from "@/components/action/IssueEnrichment";
@@ -136,7 +137,7 @@ function IssueBody({
       <div className="mt-8 flex flex-col gap-3 border-t border-white/[0.07] pt-4">
         <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
           <SourceList issue={issue} />
-          <a href={`/issue/${issue.publicId}`} className={TEXT_LINK}>
+          <a href={`/issue/${issue.publicId}`} className={`${TEXT_LINK} ${TAP_TARGET}`}>
             Read full story →
           </a>
         </div>
@@ -320,7 +321,7 @@ function OpenComments() {
               </span>
               <Link
                 href={`${exploreHref(item)}#comment`}
-                className={`${TEXT_LINK} mt-1 inline-block`}
+                className={`${TEXT_LINK} ${TAP_TARGET} mt-1 sm:inline-block`}
               >
                 Comment →
               </Link>
@@ -452,7 +453,9 @@ function DayPager({
   const checked = selectedDate ? "" : clockTime(data?.checkedAt);
   const changed = selectedDate ? "" : clockTime(data?.generatedAt);
 
-  const link = "text-ink-lo hover:text-ink-hi disabled:cursor-not-allowed disabled:text-ink-min/50";
+  // 44px on a phone (mobile spec P10).
+  const link =
+    "inline-flex min-h-11 items-center sm:min-h-0 text-ink-lo hover:text-ink-hi disabled:cursor-not-allowed disabled:text-ink-min/50";
 
   return (
     <nav

@@ -28,8 +28,9 @@ export default function Pagination({
     }
   }
 
+  // 44px on a phone (mobile spec P10).
   const step =
-    "text-xs px-2 py-1 font-mono text-ink-lo hover:text-phos disabled:text-ink-min disabled:cursor-not-allowed";
+    "min-h-11 sm:min-h-0 text-xs px-2 py-1 font-mono text-ink-lo hover:text-phos disabled:text-ink-min disabled:cursor-not-allowed";
   return (
     <div className={`flex items-center justify-center mt-4 ${numbered ? "gap-1" : "gap-2"}`}>
       <button
@@ -53,7 +54,7 @@ export default function Pagination({
               disabled={disabled}
               aria-label={`Page ${p}`}
               aria-current={p === page ? "page" : undefined}
-              className={`text-xs w-7 h-7 font-mono border transition-all disabled:cursor-not-allowed ${
+              className={`text-xs h-11 w-11 sm:w-7 sm:h-7 font-mono border transition-all disabled:cursor-not-allowed ${
                 p === page
                   ? "text-ink-hi border-white/15 bg-white/[0.03]"
                   : "text-ink-min border-transparent hover:border-white/[0.07]"
