@@ -185,7 +185,10 @@ export function VoteRow({ vote, showDate = false }: { vote: RollCallSummary; sho
           </Link>
         )}
       </div>
-      <div className="col-start-2 flex flex-col items-start gap-1.5 sm:col-start-auto sm:items-end">
+      {/* wrap-anywhere: the result ("CONCURRENT RESOLUTION REJECTED") is
+          one long uppercase word after another, wider than this column on a
+          phone at 200% text; it breaks only where it would overflow. */}
+      <div className="col-start-2 flex min-w-0 flex-col items-start gap-1.5 wrap-anywhere sm:col-start-auto sm:items-end">
         <ResultLabel result={voteResult(vote)} rejected={vote.rejected} />
         <VoteCount vote={vote} />
         {(!vote.kind || vote.kind === "question") && <TallyBar yeas={vote.yeas} nays={vote.nays} />}

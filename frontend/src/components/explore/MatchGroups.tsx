@@ -33,8 +33,11 @@ export default function MatchGroups({
   const agencies = matches.agencies ?? { total: 0, items: [] };
   const groups = [members, bills, agencies].filter((g) => g.total > 0).length;
   if (!groups) return null;
+  // grid-cols-1, not grid's implicit auto column: that column is as wide as
+  // the longest truncated (nowrap) name, which pushed /search 38 px past a
+  // 375 px phone.
   return (
-    <div className={`mb-4 grid gap-3 ${groups > 1 ? "sm:grid-cols-2" : ""}`}>
+    <div className={`mb-4 grid grid-cols-1 gap-3 ${groups > 1 ? "sm:grid-cols-2" : ""}`}>
       {members.total > 0 && (
         <Group id="match-members" label="Members" count={members.total}>
           {members.items.map((m) => (
@@ -161,10 +164,14 @@ function BillRow({ b }: { b: ExploreBillMatch }) {
     <li>
       <Link
         href={billHref(b.billId, b.congress)}
-        className="flex min-h-11 items-start gap-2.5 border-b border-white/[0.06] py-1.5 text-sm hover:text-phos"
+        className="flex min-h-11 flex-wrap items-start gap-x-2.5 border-b border-white/[0.06] py-1.5 text-sm hover:text-phos"
       >
         <span className="w-20 shrink-0 pt-px font-mono text-xs text-phos">{b.label}</span>{" "}
-        <span className="min-w-0 flex-1">
+        {/* min-w-40 with the row's wrap: where the title can't have 10rem
+            beside the bill number (a phone at 200% text) it goes under it,
+            and a stage like "REFERRED TO COMMITTEE" no longer runs past the
+            screen. */}
+        <span className="min-w-[min(10rem,100%)] flex-1">
           <span className="line-clamp-2 text-ink-hi">{name ?? "Open the bill's page"}</span>
           {stage && stageName && (
             <span

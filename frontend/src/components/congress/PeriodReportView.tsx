@@ -95,7 +95,7 @@ function BillList({
       {items.map((e, i) => (
         <li
           key={`${e.billId}-${i}`}
-          className="flex gap-3 border-b border-white/[0.09] py-2 text-[15px]"
+          className="flex flex-wrap gap-x-3 border-b border-white/[0.09] py-2 text-[15px]"
         >
           {e.billId ? (
             <Link
@@ -107,7 +107,9 @@ function BillList({
           ) : (
             <span className="min-w-24 shrink-0" />
           )}
-          <span className="text-ink">
+          {/* Under the bill number where it can't have 10rem beside it (a
+              phone at 200% text), not pushed past the screen. */}
+          <span className="min-w-[min(10rem,100%)] flex-1 text-ink">
             {e.name}
             <span className="ml-2 font-mono text-xs text-ink-min">{shortDate(e.date)}</span>
           </span>
@@ -197,7 +199,7 @@ export default function PeriodReportView({
             previous={previous}
             next={next}
           />
-          <div className="mt-8 grid gap-8 md:grid-cols-2">
+          <div className="mt-8 grid grid-cols-1 gap-8 md:grid-cols-2">
             <FigureGroup name="Senate">
               <Figure
                 value={senate.daysInSession}
@@ -234,7 +236,7 @@ export default function PeriodReportView({
                 {(report as MonthReport).weeks.map((w) => (
                   <li
                     key={w.week}
-                    className="grid gap-1 border-b border-white/[0.09] py-2.5 sm:grid-cols-[10rem_minmax(0,1fr)]"
+                    className="grid grid-cols-1 gap-1 border-b border-white/[0.09] py-2.5 sm:grid-cols-[10rem_minmax(0,1fr)]"
                   >
                     <Link
                       href={weekHref(w.week)}
@@ -249,7 +251,7 @@ export default function PeriodReportView({
             </Section>
           )}
 
-          <div className="mt-10 grid gap-12 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+          <div className="mt-10 grid grid-cols-1 gap-12 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
             <div className="flex min-w-0 flex-col gap-6">
               <Section level={2} title="Record votes" count={report.votes.length} folded={folded}>
                 {report.votes.length ? (

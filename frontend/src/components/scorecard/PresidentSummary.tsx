@@ -22,7 +22,7 @@ export default function PresidentSummary({ president }: { president: President }
   return (
     <section
       aria-labelledby="sitting-president"
-      className={`grid gap-6 border border-white/25 border-t-[3px] bg-surface px-5 py-5 font-sans sm:px-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center ${party.border}`}
+      className={`grid grid-cols-[minmax(0,1fr)] gap-6 border border-white/25 border-t-[3px] bg-surface px-5 py-5 font-sans sm:px-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center ${party.border}`}
     >
       <div className="flex min-w-0 flex-col gap-4">
         <div className="flex min-w-0 items-center gap-4">
