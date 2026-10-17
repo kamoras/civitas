@@ -677,6 +677,8 @@ def test_roll_call_csv_lists_every_position(client):
     rows = _csv_rows(client, "/roll-calls/senate/119/1/5.csv")
     assert len(rows) == 6 and {r["bucket"] for r in rows} == {"yea", "nay"}
     assert client.get("/api/public/v1/roll-calls/senate/119/1/999.csv").status_code == 404
+    not_held = client.get("/api/public/v1/roll-calls/senate/100/1/5.csv")
+    assert not_held.status_code == 404 and not_held.json()["detail"].startswith("Not held")
 
 
 def test_the_index_and_spec_name_the_data_license(client, monkeypatch):
