@@ -109,7 +109,7 @@ function PoliticianCardUI({ p }: { p: PoliticianCard }) {
           <p className="font-mono text-xs text-ink-min mb-2 truncate">{subtitle}</p>
 
           {p.leadershipTitle && (
-            <span className="inline-block font-mono text-xs text-signal-amber tracking-widest border border-signal-amber/40 px-1.5 py-0.5 mb-2">
+            <span className="inline-block max-w-full font-mono text-xs text-signal-amber tracking-widest border border-signal-amber/40 px-1.5 py-0.5 mb-2">
               {p.leadershipTitle.toUpperCase()}
             </span>
           )}
@@ -423,11 +423,11 @@ function PoliticiansPageContent() {
                 aria-label="Search politicians by name"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="font-mono text-xs bg-surface-base border border-white/[0.07] focus:border-phos/40 text-ink-hi placeholder:text-ink-min px-3 py-1.5 outline-none w-48"
+                className="font-mono text-xs bg-surface-base border border-white/[0.07] focus:border-phos/40 text-ink-hi placeholder:text-ink-min px-3 py-1.5 outline-none w-48 max-w-full"
               />
 
               {/* Party filter */}
-              <div className="flex gap-1">
+              <div className="flex flex-wrap gap-1">
                 {partyTabs.map(({ key, label }) => (
                   <button
                     key={key}

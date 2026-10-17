@@ -73,7 +73,7 @@ export default async function SectionCards({
         {...shareMetaAttrs({ source: SOURCES[section] ?? "Civitas", asOf: null })}
         className={`${className} `}
       >
-        <div className="flex items-baseline justify-between gap-3 border-b border-white/15 pb-2">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 border-b border-white/15 pb-2">
           <h2 id={headingId} className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
             More in {label}
           </h2>

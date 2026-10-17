@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import OnTheRecord from "@/components/action/OnTheRecord";
 import { fetchMonitors, fetchMonitorDetail } from "@/lib/api";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { retryKeepingFocus } from "@/lib/tabFocus";
@@ -26,9 +27,17 @@ function updateTime(update: MonitorUpdate): string {
 
 const shortDate = (d: string) => formatUtcDate(d, { month: "short", day: "numeric" });
 
-/** A monitor's dated updates, each with its source. Fetched when first opened. */
-function MonitorUpdates({ slug }: { slug: string }) {
+// Updates shown when a monitor opens, and how many more each "show more"
+// adds. All 303 of the Iran monitor's at once made the tab 77.8 phone
+// screens long (2026-10-16).
+const UPDATES_PAGE = 10;
+
+/** A monitor's related votes and its dated updates, each with its source,
+ *  newest first, a page at a time. Fetched when first opened. */
+function MonitorUpdates({ slug, title }: { slug: string; title: string }) {
   const request = useAsyncData(`action-monitor:${slug}`, () => fetchMonitorDetail(slug));
+  const [shown, setShown] = useState(UPDATES_PAGE);
+  const listRef = useRef<HTMLOListElement>(null);
 
   if (request.loading) {
     return (
@@ -54,27 +63,64 @@ function MonitorUpdates({ slug }: { slug: string }) {
   }
 
   const updates = request.data.updates ?? [];
-  if (updates.length === 0) {
-    return <p className="py-3 font-display text-sm text-ink-lo">No updates recorded yet.</p>;
-  }
+  const votes = request.data.onTheRecord ?? [];
+  const rest = updates.length - shown;
+  const showMore = () => {
+    // Focus the first newly shown update, so a keyboard user carries on
+    // reading where the list grew rather than back at the button's old spot.
+    const next = shown;
+    setShown((n) => n + UPDATES_PAGE);
+    requestAnimationFrame(() =>
+      listRef.current?.querySelectorAll<HTMLElement>("li")[next]?.focus({ preventScroll: false })
+    );
+  };
 
   return (
-    <ol className="mt-2 border-l border-white/15 pl-4">
-      {updates.map((u) => (
-        <li key={u.id} className="py-2.5">
-          <span className="font-mono text-xs tracking-[0.08em] text-ink-min">{updateTime(u)}</span>
-          <p className="mt-1 font-display text-[15px] leading-relaxed text-ink">{u.summary}</p>
-          <a
-            href={safeHref(u.sourceUrl) || "#"}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-1 inline-block font-mono text-xs text-ink-lo underline decoration-white/20 underline-offset-4 hover:text-ink-hi"
-          >
-            {u.sourceName || u.articleTitle || "Source"} <span aria-hidden="true">↗</span>
-          </a>
-        </li>
-      ))}
-    </ol>
+    <>
+      <OnTheRecord slug={slug} title={title} votes={votes} />
+      {updates.length === 0 ? (
+        <p className="py-3 font-display text-sm text-ink-lo">No updates recorded yet.</p>
+      ) : (
+        <>
+          <h4 className="mt-6 font-mono text-xs uppercase tracking-[0.12em] text-ink-lo">
+            Updates, newest first · {Math.min(shown, updates.length)} of {updates.length}
+          </h4>
+          <ol ref={listRef} className="mt-2 border-l border-white/15 pl-4">
+            {updates.slice(0, shown).map((u) => (
+              <li
+                key={u.id}
+                tabIndex={-1}
+                className="py-2.5 outline-none focus-visible:ring-1 focus-visible:ring-ink-lo"
+              >
+                <span className="font-mono text-xs tracking-[0.08em] text-ink-min">
+                  {updateTime(u)}
+                </span>
+                <p className="mt-1 font-display text-[15px] leading-relaxed text-ink">
+                  {u.summary}
+                </p>
+                <a
+                  href={safeHref(u.sourceUrl) || "#"}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-1 inline-block font-mono text-xs text-ink-lo underline decoration-white/20 underline-offset-4 hover:text-ink-hi"
+                >
+                  {u.sourceName || u.articleTitle || "Source"} <span aria-hidden="true">↗</span>
+                </a>
+              </li>
+            ))}
+          </ol>
+          {rest > 0 && (
+            <button
+              type="button"
+              onClick={showMore}
+              className="mt-1 inline-flex min-h-[32px] items-center font-mono text-xs tracking-[0.12em] text-phos-mid hover:text-phos"
+            >
+              [ SHOW {Math.min(rest, UPDATES_PAGE)} MORE OF {rest} ]
+            </button>
+          )}
+        </>
+      )}
+    </>
   );
 }
 
@@ -173,7 +219,7 @@ function MonitorRow({
             subject="this monitor"
             feed={monitorFeed(monitor.slug, monitor.title)}
           />
-          <MonitorUpdates slug={monitor.slug} />
+          <MonitorUpdates slug={monitor.slug} title={monitor.title} />
         </div>
       )}
     </li>

@@ -61,6 +61,10 @@ locally on a single self-hosted device with zero cloud AI calls.
 - **Keyword Index**: SQLite FTS5 (`explore_fts`, external-content over
   `explore_documents`) with BM25F ranking — the second retrieval channel behind
   Explore search; see `pipeline/lexical_index.py`
+- **Site search**: one entity index of everything with a page (`/data/site_search.db`,
+  SQLite FTS5 + trigram + exact identifier keys), rebuilt by the pipeline
+  process when its sources move; the header's autocomplete and `/search`
+  read it with no model — see `app/site_search.py`
 - **Deployment**: Docker Swarm (single-node), `docker stack deploy` for zero-downtime rolling updates, nginx (in-stack) reverse proxy with caching
 - **Branches covered**: Senate (100 senators), House (435 representatives), Presidents (historical + modern), Supreme Court (9 justices)
 - **News Feeds**: RSS parsing (NPR, PBS, BBC, The Hill, Politico, Roll Call) + Google Trends + Bluesky trending for Action Center; 41 per-state newsrooms for election races
@@ -626,6 +630,14 @@ document type can earn belongs in the fusion as a *partial* ranker (documents
 it can't score contribute nothing) rather than as a full ordering, or it
 silently demotes every document that had no way to earn it.
 
+The same discipline covers site search (`app/site_search.py`): its scoring
+weights and its "straight to the page" thresholds are fitted by
+`backend/scripts/calibrate_site_search.py` on known-item probes built from
+the index (half the entities fit, half reported) and read from
+`app/data/site_search_calibration.json`. A wrong jump is worse than a
+results page: the thresholds allow no wrong jump in any probe type on the
+fit half. Rerun it when the index gains a kind or aliases.
+
 ### 4. Content-based party alignment
 
 A bill's party alignment comes from **how the parties actually voted on it**
@@ -996,6 +1008,16 @@ What this rules in and out:
   sends the identical request; nothing visitor-specific leaves the server.
   That distinction — our address, not theirs — is the whole line.
 
+**What a reader searches for is never kept.** The site search
+(`/api/search`, `/api/search/suggest`, `/search`) and Explore carry the query
+in the URL, so: nginx's access log has one format, `civitas_private`, with no
+query string and no referrer (`test_nginx_config.py`); uvicorn's access log
+drops query strings (`main.DropQueryString`); search answers are
+`Cache-Control: private` (the reader's browser may keep them, nginx's disk
+cache never does); the `/search` page fetches with `no-store` (Next's data
+cache is a file); and no log line names a query. Keep a new search-like
+endpoint the same way.
+
 The one thing counted about visitors — daily unique visits — uses an HMAC of
 the IP under a random salt that exists only for the current UTC day and is
 then deleted (`api/visits.py`, `VisitSalt`). A permanent key would not do:
@@ -1070,7 +1092,7 @@ client per issue an hour (`ISSUE_VIEW_PERIOD_S`). The state picker on an issue (
 explicit, unremembered choice from a list: the state goes in the URL that loads
 its members (`GET /api/action/issues/{id}/members?state=`) and nowhere else, and
 the House town filter runs in the browser over district lists the page already
-has. Keep both that way: a tap row that named a state would be a coarse
+has. `/congress`'s "Your members this Congress" works the same way (`GET /api/congress/members?state=`). Keep both that way: a tap row that named a state would be a coarse
 location log per issue.
 
 The admin dashboard's headline traffic figures are the two that measure people:
@@ -1399,6 +1421,12 @@ reasons are in `scheduler._hourly_action_refresh`); only an overlapping
 refresh of its own holds it back. The hourly bill refresh still stands down
 for the Senate and House runs, which rewrite the rows it updates.
 
+A gate's labels come from the data wherever the data supplies one (the
+relevance gate's publisher labels above). Hand labels are the exception, used
+only where it was checked that no data-supplied label exists (committee
+routing; the story-to-vote link, `app/roll_call_links.py`), and such a gate
+records each data-supplied label that turns up later for its next refit.
+
 Running beside the chain makes it a second writer on SQLite's one write
 lock, so **no refresh stage holds a write transaction across slow work**
 (a model call, an embedding pass, a network fetch): each stage commits
@@ -1455,10 +1483,43 @@ Each issue's actions are fixed templates around stored data:
   measured at 0.38 held-out precision — do not drop the labelled votes to
   "simplify". The chair and ranking member are read from the stored rosters
   when the issue is served (`api/action._committee_leaders`).
+- **"On the ballot"** for the states and races the issue's own words name
+  (`action_center.ballot_links`, stored as `ActionIssue.ballot_links` when
+  the issue is written): a confirmed nominee by full name, a state's only
+  nominee of a surname beside the state's name, a seat phrase (the
+  election-results gate's `race_named`). A state alone in an election
+  story's headline is not linked: measured at 16 of 22 on topic, under the
+  bar. Served with the voter calendar's next
+  deadline and the state's register and lookup links
+  (`app/ballot_links.py`), read when the issue is served so a countdown is
+  never stale. Measured in `docs/research/action-center-ballot-links.md`.
 - **"Comment by <date>"** for a proposed or final rule (the Register's own
   `type`) still open for comment whose title clears `EXPLORE_TITLE_MIN_SIM`
   (`_open_comment_docs`). The API drops it once the period closes (#903's
   open-only rule).
+
+**Related votes in Congress** (`app/roll_call_links.py`, outside `app/pipeline/`
+like `committee_routing`): each issue and monitor update is linked to the roll
+calls taken from three days before its date to two after whose measure title
+is close to its headline (mean of the two models' cosines at the calibrated
+threshold; `app/data/roll_call_link_calibration.json`, from hand-labelled
+pairs by `scripts/calibrate_roll_call_links.py`, under the precision rule; the
+test fails until the script is rerun after the examples change). Computed in
+the hourly refresh and stored as refs (`ActionIssue.related_roll_call_refs`,
+`MonitorUpdate.roll_call_refs`); the API reads them into `issue_roll_calls`
+(so the members panel and call script use them) and a monitor's
+`onTheRecord`. Worded as related, never as a cause. An amendment vote is
+compared by its stated purpose (`RollCall.amendment_purpose`) and is never
+linked without one: its title names only the sponsor. Its labels are by hand
+**only because no data-supplied label exists** (in the replay, 0 stories'
+articles named a bill a candidate vote was on, and 2 issues had a vote
+record as their primary source; the committee-routing precedent). Every
+structural link found from now on is kept as a data-supplied label
+(`RollCallLinkLabel`, `record_structural_labels`); recalibrate from those
+once there are enough. Person names are `[name]` in the examples and in live
+text (`NameMask`), and the mask is left out of what is compared. The gate is
+registered with the calibration-drift check (`roll_call_links` in
+`calibration_drift.GATES`).
 
 The Today tab's open comment periods are ranked by salience, not deadline
 (`comment_periods.salience`, shared with agency pages and Explore's
@@ -1491,7 +1552,9 @@ plus a day under five days, and neither raised a false alert. A feed with
 under a week of history has not shown a weekend yet, so the longest gap
 among feeds of its kind that have a week stands in.
 
-Then **multi-story digests are dropped at ingest** (`_digest_reason`) — an
+Then **multi-story digests are dropped at ingest** (`fetch/news_digest.digest_reason`,
+shared by every path that reads feed items: the Action Center and the election
+coverage ingest, which also re-checks its stored items and its posts) — an
 outlet's recurring briefing ("Up First", "Morning news brief", "The week in
 politics") is a single RSS item covering three to five unrelated stories, and
 every stage downstream treats it as one story. Four mechanical signals:
@@ -1515,7 +1578,11 @@ every stage downstream treats it as one story. Four mechanical signals:
   For the same reason an abbreviation's period ("U.S.", "Rep.") is not a
   sentence break, and photo credits and a broadcast sign-off ("… reports.")
   are not items: before 2026-10 those made 16 single stories in 627 feed
-  articles read as lists.
+  articles read as lists. A description the publisher cut ("…", "[…]") loses
+  its fragment the same way, and PBS's "joined <host> to discuss" sign-off is
+  not an item; "N takeaways" is not a digest title (every stored one was one
+  event's), "photos of the week" is (2026-10-17: 21 single stories in 1,457
+  stored race-coverage items and 20 in 875 feed articles were read as digests).
 - **A headline and body that tell the same unrelated stories**
   (`_parallel_stories`) — the two-story briefing the body check can't see
   ("<A>. And, <B>" over two teaser items): the headline's items name
@@ -2175,12 +2242,15 @@ the pending list).
 | Votes with the president's stated positions (OMB SAPs, matching, per-member rate, expected rate by seat; informational, not scored) | `backend/app/pipeline/fetch/omb_statements.py`, `analyze/sap_position.py`, `analyze/presidential_support.py`, `services/presidential_support_service.py`, `frontend/src/components/presidentialSupport/`, `frontend/src/app/congress/president/` |
 | Federal agencies: weekly Register list + USAspending budgets, name crosswalk, agency pages | `backend/app/pipeline/fetch/agencies.py`, `backend/app/api/agencies.py`, `backend/scripts/calibrate_agency_crosswalk.py` (`app/data/agency_crosswalk.json`), `frontend/src/app/agencies/` |
 | Presidential nominations (daily Congress.gov sync, FJC join, list/stats/detail, roll-call links) | `backend/app/pipeline/fetch/nominations.py`, `backend/app/services/nomination_service.py`, `services/nomination_links.py`, `backend/app/api/nominations.py`, `frontend/src/app/congress/nominations/` |
+| Site search: entity index (write time), identifier parser, ranking, direct navigation, section anchors | `backend/app/site_search_index.py`, `backend/app/site_search.py`, `backend/app/api/search.py`, `backend/app/data/site_pages.json`, `backend/app/data/site_search_sections.json`, `backend/scripts/calibrate_site_search.py`, `frontend/src/components/search/`, `frontend/src/app/search/page.tsx` |
 | Explore hybrid search ranking (RRF fusion, priors, dedup, diversity) | `backend/app/services/explore_search.py` |
 | Explore permanent addresses (`/explore/{key}` from the official identifier; old row ids 308 to it), coverage windows and "not held here" notes | `backend/app/services/explore_keys.py`, `backend/app/services/explore_coverage.py`, `frontend/src/lib/exploreHref.ts` |
 | Explore keyword index (FTS5 + BM25F) | `backend/app/pipeline/lexical_index.py` |
 | Document citation graph + PageRank authority | `backend/app/pipeline/analyze/document_authority.py` |
 | Search-quality evaluation harness | `backend/scripts/evaluate_explore_search.py` |
 | News feed fetching (RSS) | `backend/app/pipeline/fetch/news_feeds.py` |
+| Multi-story digest detection (shared by the Action Center and race coverage) | `backend/app/pipeline/fetch/news_digest.py` |
+| Race coverage matching (full name plus the race) and the race-post checks (digest, race, certified ballot, labelled relevance threshold) | `backend/app/pipeline/analyze/election_coverage.py`, `analyze/election_bluesky.py` (`refusal`), `backend/scripts/calibrate_race_post_relevance.py`, `app/data/race_post_relevance*.json` |
 | Trending topic fetching | `backend/app/pipeline/fetch/trending.py` |
 | Donor-vote cross-referencing | `backend/app/pipeline/analyze/policy_alignment.py` |
 | Representative service + paginated votes | `backend/app/services/representative_service.py` |
@@ -2193,6 +2263,7 @@ the pending list).
 | Enums, weights, industry codes | `backend/app/config_definitions.py` |
 | Senator service + paginated votes | `backend/app/services/senator_service.py` |
 | Action Center API | `backend/app/api/action.py` |
+| Related votes in Congress (story to roll call, at write time) + monitor "On the record" | `backend/app/roll_call_links.py`, `backend/scripts/calibrate_roll_call_links.py`, `backend/app/data/roll_call_link_*.json`, `frontend/src/components/action/RelatedVotes.tsx`, `OnTheRecord.tsx` |
 | Trend posts ("On the record"): getTrends reader, gates, pinned record matching, audit, record cards | `backend/app/pipeline/fetch/trending.py` (`fetch_bluesky_trends`), `analyze/trend_relevance.py`, `analyze/trend_evidence.py`, `analyze/trend_poster.py`, `backend/scripts/calibrate_trend_gates.py`, `backend/app/services/record_cards.py`, `backend/app/api/cards.py`, `frontend/src/app/api/og/route.tsx`, `frontend/src/components/admin/TrendPostsDashboard.tsx`, `docs/research/trend-posts.md` |
 | Publishing: every post stored, then sent to Bluesky; the Atom feeds | `backend/app/broadcast.py` (`publish`, `FEEDS`), `backend/app/api/feed.py`, `frontend/src/app/feeds/page.tsx`; the posting modules (`bluesky_poster.py`, `bluesky_spotlight.py`, `congress_bluesky.py`, `election_bluesky.py`, `trend_poster.py`) decide what and when; a post may carry its own image (`image_url`/`alt_text`, sent as an image embed with the link card as fallback); the hours a non-news post reaches Bluesky are `app/data/bluesky_post_windows.json` (`scripts/fetch_bluesky_activity.py`, `broadcast.SCHEDULED_KINDS`) |
 | Representative API routes | `backend/app/api/representatives.py` |
@@ -2525,7 +2596,7 @@ the bills page's "Active now" falls back to bills that moved this week and
 says so (`shown`/`movedSince`), a bill page states its stage's base rate
 (`stageBaseRate` — worded as what happens to bills at the stage, never a
 forecast for the bill), the Ongoing tab lists recently closed monitors, and
-`/compare` offers pairs that need no picking. Never fill the gap with model
+`/compare` offers pairs that need no picking, and `/congress` leads with the Congress so far (the days each chamber sat, how far its bills got; `services/congress_glance.py`) and, in a recess, shows the last day of business on its week and month cards. Never fill the gap with model
 text or a visitor's input (§7, §8).
 
 #### Accessibility: WCAG 2.2 AA is a merge requirement (2026-10)

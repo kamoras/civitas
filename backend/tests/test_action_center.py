@@ -2637,18 +2637,18 @@ class TestDigestFiltering:
         "An evening briefing on troop levels",
     ])
     def test_recurring_digest_titles_are_dropped(self, title):
-        from app.pipeline.analyze.action_center import _digest_reason
+        from app.pipeline.fetch.news_digest import digest_reason
 
-        assert _digest_reason(_make_article(title)) == "recurring digest title"
+        assert digest_reason(_make_article(title)) == "recurring digest title"
 
     def test_an_outlets_newsletter_section_is_a_digest(self):
-        from app.pipeline.analyze.action_center import _digest_reason
+        from app.pipeline.fetch.news_digest import digest_reason
 
         url = "https://example.com/newsletters/healthcare/123-drugmakers-challenge-pilot/"
-        assert _digest_reason(_make_article("Drugmakers challenge pilot program", url=url)) == "newsletter section"
+        assert digest_reason(_make_article("Drugmakers challenge pilot program", url=url)) == "newsletter section"
         # A slug that only mentions a newsletter is not the section.
         url = "https://example.com/2026/10/08/123/up-first-newsletter-story"
-        assert _digest_reason(_make_article("Senate passes the budget", url=url)) is None
+        assert digest_reason(_make_article("Senate passes the budget", url=url)) is None
 
     @pytest.mark.parametrize("title", [
         "House approves Pentagon funding framework in narrow vote",
@@ -2676,9 +2676,9 @@ class TestDigestFiltering:
         "The latest: FEMA administrator resigns",
     ])
     def test_single_story_titles_are_kept(self, title):
-        from app.pipeline.analyze.action_center import _digest_reason
+        from app.pipeline.fetch.news_digest import digest_reason
 
-        assert _digest_reason(_make_article(title)) is None
+        assert digest_reason(_make_article(title)) is None
 
     @pytest.mark.parametrize("title,body", [
         # Sentence-delimited: the shape of an NPR "Up First" body.
@@ -2697,11 +2697,11 @@ class TestDigestFiltering:
          "sues over the new map"),
     ])
     def test_bodies_listing_unrelated_stories_are_dropped(self, title, body):
-        from app.pipeline.analyze.action_center import _digest_reason
+        from app.pipeline.fetch.news_digest import digest_reason
 
         article = _make_article(title)
         article.summary = body
-        assert _digest_reason(article) == "body lists unrelated stories"
+        assert digest_reason(article) == "body lists unrelated stories"
 
     @pytest.mark.parametrize("title,body", [
         # A single story keeps returning to its own subject.
@@ -2749,11 +2749,11 @@ class TestDigestFiltering:
          "discussed it with Lee Okafor."),
     ])
     def test_single_story_bodies_are_kept(self, title, body):
-        from app.pipeline.analyze.action_center import _digest_reason
+        from app.pipeline.fetch.news_digest import digest_reason
 
         article = _make_article(title)
         article.summary = body
-        assert _digest_reason(article) is None
+        assert digest_reason(article) is None
 
     @pytest.mark.parametrize("title,body", [
         # A two-story briefing names both stories in its headline, so the
@@ -2770,11 +2770,11 @@ class TestDigestFiltering:
          "Park. Agents searched the home of Rep. Dana Okafor (D-Minn.) on Monday."),
     ])
     def test_a_headline_and_body_telling_the_same_unrelated_stories_are_dropped(self, title, body):
-        from app.pipeline.analyze.action_center import _digest_reason
+        from app.pipeline.fetch.news_digest import digest_reason
 
         article = _make_article(title)
         article.summary = body
-        assert _digest_reason(article) == "headline and body list the same unrelated stories"
+        assert digest_reason(article) == "headline and body list the same unrelated stories"
 
     @pytest.mark.parametrize("title,body", [
         # One story in two headline sentences: its teaser names both
@@ -2796,11 +2796,11 @@ class TestDigestFiltering:
          "Varga set up a panel on Friday to investigate the Fed governor. Varga said more was to come."),
     ])
     def test_a_single_story_told_in_two_headline_sentences_is_kept(self, title, body):
-        from app.pipeline.analyze.action_center import _digest_reason
+        from app.pipeline.fetch.news_digest import digest_reason
 
         article = _make_article(title)
         article.summary = body
-        assert _digest_reason(article) is None
+        assert digest_reason(article) is None
 
     @pytest.mark.parametrize("title", [
         # A possessive-led headline is the most common shape there is, and
@@ -2812,7 +2812,7 @@ class TestDigestFiltering:
         "Varga\u2019s tariff order and the Lindqvist schedule fight",
     ])
     def test_possessive_headline_still_covers_its_own_body(self, title):
-        from app.pipeline.analyze.action_center import _multi_topic_body
+        from app.pipeline.fetch.news_digest import _multi_topic_body
 
         body = (
             "The order signed by Varga takes effect Monday; Marchetti set "
@@ -2828,7 +2828,7 @@ class TestDigestFiltering:
         """Disjointness is the first of the two conditions and has to reject
         on its own: three items that keep naming the same person are one
         story told in three beats, whatever the headline says."""
-        from app.pipeline.analyze.action_center import _multi_topic_body
+        from app.pipeline.fetch.news_digest import _multi_topic_body
 
         body = (
             "Reporters pressed Okonkwo on the deal; Brandt defended the "
@@ -2844,7 +2844,7 @@ class TestDigestFiltering:
         """A description that hit MAX_SUMMARY_CHARS was cut mid-item. The
         fragment names entities that by construction appear nowhere else,
         so counting it turns a two-item blurb into a three-item list."""
-        from app.pipeline.analyze.action_center import _multi_topic_body
+        from app.pipeline.fetch.news_digest import _multi_topic_body
         from app.pipeline.fetch.news_feeds import MAX_SUMMARY_CHARS
 
         head = (
@@ -2874,7 +2874,7 @@ class TestDigestFiltering:
         (e.g. a source publishing a multi-item briefing through
         content:encoded) is not caught by this check — only by the
         title-pattern check, which runs independently."""
-        from app.pipeline.analyze.action_center import _digest_reason
+        from app.pipeline.fetch.news_digest import digest_reason
         from app.pipeline.fetch.news_feeds import MAX_SUMMARY_CHARS
 
         body = (
@@ -2888,13 +2888,13 @@ class TestDigestFiltering:
         article = _make_article("A quiet Tuesday")
         article.summary = long_body
         article.truncated = False
-        assert _digest_reason(article) is None
+        assert digest_reason(article) is None
 
     def test_bulleted_body_without_terminal_punctuation_is_still_analyzed(self):
         """Trailing punctuation was the original truncation signal and it
         discarded the final item of every list that ends without a period —
         which is most bulleted lists."""
-        from app.pipeline.analyze.action_center import _split_body_items
+        from app.pipeline.fetch.news_digest import _split_body_items
 
         body = "Ukraine aid clears the Senate • Brandt signals a pause • Texas sues"
         assert len(_split_body_items(body)) == 3
@@ -2904,7 +2904,7 @@ class TestDigestFiltering:
         bug lived. A WordPress-style digest arrives as escaped <li> markup;
         the feed parser has to turn that into item boundaries the detector
         can split on, or the body check sees one undifferentiated blob."""
-        from app.pipeline.analyze.action_center import _digest_reason, _split_body_items
+        from app.pipeline.fetch.news_digest import digest_reason, _split_body_items
         from app.pipeline.fetch.news_feeds import _parse_rss_feed
 
         article = _parse_rss_feed(
@@ -2918,7 +2918,7 @@ class TestDigestFiltering:
 
         assert "<" not in article.summary
         assert len(_split_body_items(article.summary)) == 3
-        assert _digest_reason(article) == "body lists unrelated stories"
+        assert digest_reason(article) == "body lists unrelated stories"
 
     def test_empty_input_short_circuits(self):
         from app.pipeline.analyze.action_center import _filter_policy_relevant

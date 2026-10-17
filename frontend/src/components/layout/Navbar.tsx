@@ -5,7 +5,9 @@ import { usePathname } from "next/navigation";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { SECTIONS, inSection, sectionSubpages, type SectionKey } from "@/lib/routes";
 import { BSKY_PROFILE_URL } from "@/lib/site";
+import HeaderClearance from "./HeaderClearance";
 import RecordsBand from "./RecordsBand";
+import SiteSearch from "@/components/search/SiteSearch";
 import YourStatePicker from "./YourStatePicker";
 
 // The main navigation is the SECTIONS table (lib/routes.ts): each section's
@@ -245,76 +247,9 @@ function SectionItem({
   );
 }
 
-const SEARCH_TOGGLE =
-  "inline-flex items-center font-mono tracking-widest text-ink-lo transition-colors hover:text-ink-hi aria-expanded:text-phos";
-
-/**
- * The site search, in the header on every page: a SEARCH button that opens
- * one labelled field under the bar. It was a "request a record" box in the
- * homepage's body, which asked a reader for input before showing them
- * anything; a header search is where readers look for one, and it serves
- * every page. A plain GET form to /search?q= (app/search/route.ts), a
- * labelled input and a submit button, so it works without JavaScript and
- * can be enhanced in place.
- */
-function SearchPanel({ onEscape }: { onEscape: () => void }) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  useEffect(() => inputRef.current?.focus(), []);
-  return (
-    <div id="site-search" className="border-t border-white/[0.07] bg-surface-base/[0.98]">
-      <form
-        role="search"
-        action="/search"
-        method="get"
-        className="mx-auto max-w-7xl px-4 py-3 sm:px-6"
-      >
-        <label
-          htmlFor="site-search-input"
-          className="block font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
-        >
-          Search the record
-        </label>
-        <div className="mt-2 flex items-end gap-3">
-          <input
-            ref={inputRef}
-            id="site-search-input"
-            type="search"
-            name="q"
-            // Escape closes the search and returns focus to its button.
-            onKeyDown={(e) => {
-              if (e.key === "Escape") onEscape();
-            }}
-            placeholder="Topic, document or bill number"
-            className="min-w-0 flex-1 border-0 border-b border-white/20 bg-transparent pb-1 font-mono text-sm text-ink-hi placeholder:text-ink-min focus:border-phos"
-          />
-          <button
-            type="submit"
-            className="inline-flex min-h-11 items-center font-mono text-sm tracking-[0.12em] text-phos-mid hover:text-phos"
-          >
-            [ SEARCH ]
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
 export default function Navbar() {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
-  // The toggle that opened the search, to take focus back on Escape (the
-  // row's or the MENU layout's, whichever is shown).
-  const searchToggleRef = useRef<HTMLButtonElement | null>(null);
-  const toggleSearch = (e: React.MouseEvent<HTMLButtonElement>) => {
-    searchToggleRef.current = e.currentTarget;
-    setMenuOpen(false);
-    setSearchOpen((o) => !o);
-  };
-  const closeSearch = useCallback(() => {
-    setSearchOpen(false);
-    searchToggleRef.current?.focus();
-  }, []);
   // The desktop section whose pages are showing, and the page it was opened
   // on: a navigation by any route (a link, Back) closes it without an effect.
   const [opened, setOpened] = useState<{ section: SectionKey; path: string } | null>(null);
@@ -336,11 +271,13 @@ export default function Navbar() {
 
   useEffect(() => {
     if (!menuOpen || !menuRef.current) return;
-    // The panel's first control, in reading order: the state picker at its
-    // top, then the sections. Starting on the first link skipped the
-    // picker, which Tab then reached only after every link.
-    const first = menuRef.current.querySelector<HTMLElement>("select, a[href], button");
-    first?.focus();
+    // The panel itself, named "Site menu", so Tab's first stop is the
+    // state picker at its top, then the sections. Never the picker: a phone
+    // browser opens a native select's list when it takes focus, so MENU
+    // popped the state list open on every tap. (Starting on the first link
+    // instead skipped the picker, which Tab then reached only after every
+    // link.)
+    menuRef.current.focus();
   }, [menuOpen]);
 
   useEffect(() => {
@@ -357,7 +294,8 @@ export default function Navbar() {
       if (focusable.length === 0) return;
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
+      const onPanel = document.activeElement === menuRef.current;
+      if (e.shiftKey && (onPanel || document.activeElement === first)) {
         e.preventDefault();
         last.focus();
       } else if (!e.shiftKey && document.activeElement === last) {
@@ -382,13 +320,19 @@ export default function Navbar() {
         `--header-clearance` (6rem). Keep it to one line on mobile at ordinary sizes; at
         a large text size the bar wraps and HeaderClearance follows it.
       */}
+      {/* Here, mounted with the header it measures, not in the root layout:
+          there, under next build, its effect was cleaned up during
+          hydration of the client-rendered pages (/action, /explore,
+          /politicians) and never ran again, so at 200% text their wrapped
+          header covered the page's first lines. */}
+      <HeaderClearance />
       <RecordsBand aside={<YourStatePicker />} />
       {/* The skip link is the root layout's, ahead of everything: a second
           one here cost keyboard users an extra Tab on every page. */}
       <nav aria-label="Main navigation" className="relative border-b-3 border-white/15">
         <div
           ref={barRef}
-          className="@container max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-y-2 [&>:last-child]:ml-auto"
+          className="@container max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-y-4 [&>:last-child]:ml-auto"
         >
           {/* The lockup: the pixel mark, the site's one use of that face,
               and RESEARCH beside it in the mono, after a hairline. */}
@@ -400,7 +344,9 @@ export default function Navbar() {
               share a row (a phone at 200% text: 185 + 227 px in 256), the bar
               wraps, the buttons right-aligned on a second row, and
               HeaderClearance moves the pages' clearance down with it: one
-              row clipped every page there (WCAG 1.4.10). */}
+              row clipped every page there (WCAG 1.4.10). The row gap is
+              gap-y-4, over the buttons' -my-3: at gap-y-2 their 44 px
+              targets reached 8 px up over the wordmark's. */}
           <Link
             ref={logoRef}
             href="/"
@@ -467,37 +413,20 @@ export default function Navbar() {
             >
               [BSKY]
             </a>
-            <button
-              type="button"
-              onClick={toggleSearch}
-              aria-expanded={searchOpen}
-              aria-controls="site-search"
-              className={`${SEARCH_TOGGLE} min-h-6 text-xs`}
-            >
-              SEARCH
-            </button>
+            <SiteSearch className="min-h-6 text-xs" />
           </div>
 
           {/* Mobile hamburger. A 44x44 target (WCAG 2.5.8 asks 24, 2.5.5 44)
               around the same 20 px word: the negative margins give the
               padding back, so the bar's height and the word's place don't
               move. It was the 36x20 word alone, in the hardest thumb zone. */}
-          {/* The MENU layout's search, beside MENU: the same panel. */}
+          {/* The MENU layout's search, beside MENU: the same dialog. */}
           <div className={`${menuOnly} -my-3 flex items-center`}>
-            <button
-              type="button"
-              onClick={toggleSearch}
-              aria-expanded={searchOpen}
-              aria-controls="site-search"
-              className={`${SEARCH_TOGGLE} min-h-11 min-w-11 justify-center px-2 text-sm`}
-            >
-              SEARCH
-            </button>
+            <SiteSearch className="min-h-11 min-w-11 justify-center px-2 text-sm" />
             <button
               ref={toggleRef}
               className={`-mr-2 inline-flex min-h-11 min-w-11 items-center justify-center px-2 text-ink-lo hover:text-ink-hi font-mono text-sm tracking-widest transition-colors`}
               onClick={() => {
-                setSearchOpen(false);
                 if (menuOpen) closeMenu();
                 else setMenuOpen(true);
               }}
@@ -510,8 +439,6 @@ export default function Navbar() {
           </div>
         </div>
 
-        {searchOpen && <SearchPanel onEscape={closeSearch} />}
-
         {/* Mobile menu: two levels, every section's pages listed under its
             hub, so any page is two taps from MENU (MENU, then the page).
             Every target is 44 px tall; the list scrolls inside the header
@@ -520,7 +447,10 @@ export default function Navbar() {
           <div
             ref={menuRef}
             id="mobile-menu"
-            className={`${menuOnly} max-h-[calc(100dvh-5.5rem)] overflow-y-auto overscroll-contain bg-surface-base/[0.98] border-t border-white/[0.07] px-6 pt-2 pb-6`}
+            role="region"
+            aria-label="Site menu"
+            tabIndex={-1}
+            className={`${menuOnly} outline-none max-h-[calc(100dvh-5.5rem)] overflow-y-auto overscroll-contain bg-surface-base/[0.98] border-t border-white/[0.07] px-6 pt-2 pb-6`}
           >
             <div className="border-b border-white/[0.07] py-3">
               <YourStatePicker size="lg" />
