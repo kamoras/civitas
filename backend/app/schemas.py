@@ -1002,7 +1002,11 @@ class PublicHistorySchema(_PublicModel):
 
 
 class PublicSearchResultSchema(_PublicModel):
-    id: int = Field(description="The document's id on Civitas (siteUrl)")
+    id: int = Field(description="The document's row id on Civitas. Not permanent: link and cite by key")
+    key: str = Field(description="The document's permanent id, from its official identifier: \"fr-2026-17123\" "
+                                 "(Federal Register document number), \"crec-\" and the Congressional Record "
+                                 "granule for a floor speech, \"scotus-\" and the docket for an opinion. "
+                                 "Its page is siteUrl, /explore/{key}")
     title: str
     date: str = Field(description="YYYY-MM-DD")
     doc_type: str = Field(description="One of the doc_type filter's values")
@@ -1028,12 +1032,23 @@ class PublicSearchResultSchema(_PublicModel):
     duplicate_count: int = Field(description="Near-identical copies folded into this result")
 
 
+class PublicNotHeldSchema(_PublicModel):
+    identifier: str = Field(description="The identifier as it is written, e.g. \"Executive Order 14148\"")
+    sentence: str = Field(description="Why it isn't here: before the corpus starts, or not read yet")
+    url: str = Field(description="Its official source")
+    source: str = Field(description="That source's name")
+
+
 class PublicSearchResponseSchema(_PublicModel):
     query: str
     results: list[PublicSearchResultSchema] = Field(description="Best match first")
     count: int = Field(description="Results returned (at most the request's limit), not a total")
     partial: bool = Field(description="True when only the exact-words search could answer, so the ranking is incomplete")
     index_building: bool = Field(description="True while the search index is being built; results are empty until it is")
+    not_held: list[PublicNotHeldSchema] = Field(description="Each identifier the query names (an executive order, FR "
+                                                         "citation or document number, RIN, docket, Congressional "
+                                                         "Record citation) that no document here is known by, with "
+                                                         "where its official copy is. Results, if any, cite it")
 
 
 _BREAKDOWN_RULE = (
@@ -1451,6 +1466,8 @@ class JusticeLeaderboardEntry(CamelModel):
 
 class RelatedExploreDoc(CamelModel):
     id: int
+    # The document's permanent address, /explore/{key} (services/explore_keys.py).
+    key: str | None = None
     title: str
     doc_type: str
     date: str
@@ -1511,6 +1528,8 @@ class ActionItemSchema(CamelModel):
     # comment_period: the Explore document and when its comment period
     # closes (served only while open, the #903 rule).
     doc_id: int | None = None
+    # Its permanent key, /explore/{key} (services/explore_keys.py).
+    doc_key: str | None = None
     closes_on: str | None = None
     # contact_committee
     committee: CommitteeContactSchema | None = None

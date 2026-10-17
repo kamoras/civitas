@@ -406,6 +406,21 @@ class TestCoverage:
         sitting = cs.bill_coverage(week_of_sept_21, held)
         assert all(sitting[k] == {"held": True, "sentence": None} for k in ("votes", "floor", "digest"))
 
+    def test_floor_speeches_kept_from_a_past_congress_are_held(self, week_of_sept_21):
+        # Speeches are kept after their Congress (explore_pipeline), so a
+        # past Congress's floor debate is held once any of it was read.
+        from app.models import ExploreDocument
+        held = congress_of_date(FIRST_DAY)
+        past = held - 1
+        assert cs.bill_coverage(week_of_sept_21, past)["floor"]["sentence"].startswith(
+            f"Civitas holds floor speeches from the {ordinal(held)} Congress on")
+        week_of_sept_21.add(ExploreDocument(
+            doc_type="Senate Floor Speech", source="Congressional Record (GovInfo)", title="Remarks",
+            date=f"{congress_first_year(past)}-02-01", chamber="Senate", external_id="crec-v1-x"))
+        week_of_sept_21.commit()
+        assert cs.bill_coverage(week_of_sept_21, past)["floor"] == {"held": True, "sentence": None}
+        assert cs.bill_coverage(week_of_sept_21, past - 1)["floor"]["held"] is False
+
     def test_a_roll_call_the_history_names_links_to_the_chambers_record(self, week_of_sept_21):
         from app.services import bill_record as br
 

@@ -289,7 +289,14 @@ export interface FloorDebate {
   /** The Record's heading, verbatim. */
   heading: string;
   /** Each member once, at their first turn; `speeches` counts their turns. */
-  speakers: { speaker: string; politicianId: string | null; speechId: number; speeches: number }[];
+  speakers: {
+    speaker: string;
+    politicianId: string | null;
+    speechId: number;
+    /** The speech's permanent Explore key (optional only for an older backend). */
+    speechKey?: string;
+    speeches: number;
+  }[];
 }
 
 export interface BillRecord {

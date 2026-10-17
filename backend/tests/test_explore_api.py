@@ -702,6 +702,10 @@ async def test_stats_count_every_group_in_one_pass(db_session):
         "byChamber": {"Executive": 2},
         "openForComment": 1,
         "agencies": [],
+        "coverage": [
+            {"label": "Rules and notices", "from": "2026-07-01", "to": "2026-07-01", "count": 2},
+            {"label": "Executive orders", "from": "2026-07-01", "to": "2026-07-01", "count": 1},
+        ],
     }
 
 

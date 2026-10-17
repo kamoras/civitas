@@ -38,6 +38,7 @@ import { countIsOfficial } from "@/lib/developing";
 import { tabControl } from "@/lib/controlStyles";
 import { issuesUrl } from "@/lib/routes";
 import AgencyLink from "@/components/agencies/AgencyLink";
+import { exploreHref } from "@/lib/exploreHref";
 import { scrollBehavior } from "@/lib/motion";
 
 /** Plain status line, the loading state the records pages use: no pulse. */
@@ -299,7 +300,7 @@ function OpenComments() {
                 {item.docType?.replace(/_/g, " ")}
               </span>
               <Link
-                href={`/explore/${item.id}`}
+                href={exploreHref(item)}
                 className="mt-0.5 block font-display text-[15px] leading-snug text-ink-hi hover:underline"
               >
                 {item.title}
@@ -310,7 +311,7 @@ function OpenComments() {
                 {describeDaysLeft(item.commentsCloseOn, loaded.asOf)}
               </span>
               <Link
-                href={`/explore/${item.id}#comment`}
+                href={`${exploreHref(item)}#comment`}
                 className={`${TEXT_LINK} mt-1 inline-block`}
               >
                 Comment →

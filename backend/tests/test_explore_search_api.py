@@ -265,6 +265,16 @@ class TestPublicSearch:
         body = _body(await self._public(indexed_db, "14110"))
         assert [r["id"] for r in body["results"]] == [doc.id]
 
+    async def test_results_link_the_permanent_key_and_a_miss_says_where_it_is(self, indexed_db):
+        _add(indexed_db, title="Executive Order 14110 on artificial intelligence", doc_type="Executive Order",
+             chamber="Executive", date="2025-06-01", external_id="fr-2025-11111")
+        body = _body(await self._public(indexed_db, "14110"))
+        assert body["results"][0]["key"] == "fr-2025-11111"
+        assert body["results"][0]["siteUrl"].endswith("/explore/fr-2025-11111")
+        body = _body(await self._public(indexed_db, "2019-01234"))
+        assert body["results"] == []
+        assert body["notHeld"][0]["url"] == "https://www.federalregister.gov/d/2019-01234"
+
     async def test_snippets_carry_no_highlight_control_characters(self, indexed_db):
         _add(indexed_db, title="wildfire rule", body="Standards for wildfire smoke exposure.")
         body = _body(await self._public(indexed_db, "wildfire"))
@@ -274,7 +284,8 @@ class TestPublicSearch:
 
     async def test_nothing_answerable_reports_the_index_building(self, indexed_db):
         body = _body(await self._public(indexed_db, "wildfire"))
-        assert body == {"query": "wildfire", "results": [], "count": 0, "partial": False, "indexBuilding": True}
+        assert body == {"query": "wildfire", "results": [], "count": 0, "partial": False, "indexBuilding": True,
+                        "notHeld": []}
 
 
 class TestPartialAnswersAreCachedBriefly:

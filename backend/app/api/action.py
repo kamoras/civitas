@@ -44,6 +44,7 @@ from app.schemas import (
     NationalMonitorSchema, NationalMonitorDetailSchema, MonitorUpdateSchema,
     TimelineEntrySchema,
 )
+from app.services.explore_keys import issue_doc_ids, public_key, resolve_keys
 
 logger = logging.getLogger(__name__)
 
@@ -402,7 +403,9 @@ def _build_issue_response(
     is_trending: bool = False,
     member_facts: dict[str, dict] | None = None,
 ) -> dict:
-    explore_ids = _parse_json_field(issue.related_explore_ids)
+    # By stored key (explore_keys.issue_doc_ids): the rows the ids named
+    # can have been replaced since.
+    explore_ids = issue_doc_ids(db, issue.related_explore_ids, issue.related_explore_keys)
     related_docs: list[dict] = []
     if explore_ids:
         if explore_docs_map is not None:
@@ -415,7 +418,7 @@ def _build_issue_response(
             )
         related_docs = [
             RelatedExploreDoc(
-                id=d.id, title=d.title, doc_type=d.doc_type,
+                id=d.id, key=public_key(d.external_id, d.id), title=d.title, doc_type=d.doc_type,
                 date=d.date, url=d.url,
                 comment_url=d.comment_url or None,
                 comments_close_on=d.comments_close_on or None,
@@ -456,13 +459,23 @@ def _build_issue_response(
     }
     leaders = _committee_leaders(db, committee_names)
     today = str(comment_period_today())
-    for a in raw_actions:
+    comment_docs = _comment_doc_ids(db, raw_actions)
+    for n, a in enumerate(raw_actions):
         if isinstance(a, dict) and "text" in a:
             kind = a.get("type", "general")
             # Open-only, as everywhere a comment link is shown (#903): an
             # issue stays readable for good, its comment period doesn't.
             if kind == "comment_period" and not (a.get("closesOn") and a["closesOn"] >= today):
                 continue
+            # The document by its key, wherever its row is now; gone, the
+            # action goes with it rather than link a missing page.
+            doc_id, doc_key, url = a.get("docId"), a.get("docKey"), a.get("url")
+            if kind == "comment_period":
+                doc_id = comment_docs.get(n)
+                if doc_id is None:
+                    continue
+                if doc_key:
+                    url = f"/explore/{doc_key}#comment"
             committee = None
             if kind == "contact_committee" and isinstance(a.get("committee"), dict):
                 c = a["committee"]
@@ -474,8 +487,9 @@ def _build_issue_response(
                 ActionItemSchema(
                     text=a["text"],
                     type=kind,
-                    url=a.get("url"),
-                    doc_id=a.get("docId"),
+                    url=url,
+                    doc_id=doc_id,
+                    doc_key=doc_key,
                     closes_on=a.get("closesOn"),
                     committee=committee,
                 ).model_dump(by_alias=True)
@@ -722,7 +736,7 @@ async def get_action_issues(
 
     all_explore_ids: list[int] = []
     for i in issues:
-        all_explore_ids.extend(_parse_json_field(i.related_explore_ids))
+        all_explore_ids.extend(issue_doc_ids(db, i.related_explore_ids, i.related_explore_keys))
     explore_docs_map: dict[int, ExploreDocument] = {}
     if all_explore_ids:
         docs = (
@@ -996,13 +1010,25 @@ OPEN_COMMENTS_ISSUE_DAYS = 14
 
 def _issue_linked_doc_ids(db: Session, since: str) -> set[int]:
     ids: set[int] = set()
-    for explore_ids, actions in db.query(ActionIssue.related_explore_ids, ActionIssue.actions).filter(
-        ActionIssue.date >= since, ActionIssue.duplicate_of_id.is_(None), NOT_RETIRED_DRAFT,
-    ):
-        ids.update(i for i in _parse_json_field(explore_ids) if isinstance(i, int))
-        ids.update(a["docId"] for a in _parse_json_field(actions)
-                   if isinstance(a, dict) and isinstance(a.get("docId"), int))
+    for explore_ids, explore_keys, actions in db.query(
+        ActionIssue.related_explore_ids, ActionIssue.related_explore_keys, ActionIssue.actions,
+    ).filter(ActionIssue.date >= since, ActionIssue.duplicate_of_id.is_(None), NOT_RETIRED_DRAFT):
+        ids.update(issue_doc_ids(db, explore_ids, explore_keys))
+        ids.update(i for i in _comment_doc_ids(db, _parse_json_field(actions)).values() if i is not None)
     return ids
+
+
+def _comment_doc_ids(db: Session, actions: list) -> dict[int, int | None]:
+    """For each comment-period action (by its index in `actions`), the row
+    now holding its document: by the action's docKey, or its docId for an
+    action stored before keys; None when no row holds it any more."""
+    wanted = {n: a for n, a in enumerate(actions)
+              if isinstance(a, dict) and a.get("type") == "comment_period"
+              and (isinstance(a.get("docKey"), str) or isinstance(a.get("docId"), int))}
+    keys = [a["docKey"] for a in wanted.values() if isinstance(a.get("docKey"), str)]
+    held = resolve_keys(db, keys, [a.get("docId") for a in wanted.values()]) if keys else {}
+    return {n: (held.get(a["docKey"]) if isinstance(a.get("docKey"), str) else a["docId"])
+            for n, a in wanted.items()}
 
 
 def open_comments_salience(doc, linked: set[int]) -> tuple:
@@ -1036,8 +1062,8 @@ def get_open_comments(response: Response, db: Session = Depends(get_db)):
     # and there are hundreds open at once.
     open_docs = (
         db.query(
-            ExploreDocument.id, ExploreDocument.title, ExploreDocument.agency_name, ExploreDocument.agency_slug,
-            ExploreDocument.comments_close_on, ExploreDocument.comment_url, ExploreDocument.doc_type,
+            ExploreDocument.id, ExploreDocument.external_id, ExploreDocument.title, ExploreDocument.agency_name,
+            ExploreDocument.agency_slug, ExploreDocument.comments_close_on, ExploreDocument.comment_url, ExploreDocument.doc_type,
             ExploreDocument.date, ExploreDocument.summary, ExploreDocument.fr_page_views,
         )
         .filter(
@@ -1057,6 +1083,7 @@ def get_open_comments(response: Response, db: Session = Depends(get_db)):
     for d in docs:
         result.append({
             "id": d.id,
+            "key": public_key(d.external_id, d.id),
             "title": d.title,
             "agencyName": d.agency_name,
             "agencySlug": d.agency_slug or None,

@@ -110,7 +110,12 @@ describe("Explore document page", () => {
     expect(screen.getByRole("heading", { name: "Cite this document" })).toBeInTheDocument();
     expect(screen.getByText("91 FR 48248")).toBeInTheDocument();
     expect(screen.getByText("FR Doc. 2026-15603")).toBeInTheDocument();
-    expect(await screen.findByText(/An order \[Data set\]/)).toBeInTheDocument();
+    // Cited to who issued it, in the Federal Register, never to Civitas as
+    // a dataset; Civitas is only where it was accessed.
+    const cite = await screen.findByText(/^Executive Office of the President\. .*An order\./);
+    expect(cite.textContent).toContain("Federal Register, 91, 48248 (FR Doc. 2026-15603).");
+    expect(cite.textContent).not.toContain("[Data set]");
+    expect(cite.textContent).toMatch(/accessed via Civitas Research/);
   });
 });
 

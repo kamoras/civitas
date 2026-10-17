@@ -3,6 +3,7 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import CiteThis from "@/components/shared/CiteThis";
+import { rollCallCitedSource } from "@/lib/citedSources";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import { ordinal } from "@/components/scorecard/format";
@@ -227,9 +228,10 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
                     Cite this vote
                   </h3>
                   <CiteThis
-                    title={`${chamber} roll call ${vote.number}, ${ordinal(vote.congress)} Congress: ${subject}`}
+                    title={`Roll call vote ${vote.number}, ${ordinal(vote.congress)} Congress, ${ordinal(vote.session)} session: ${subject}`}
                     date={vote.date}
                     path={path}
+                    source={rollCallCitedSource(vote.chamber, vote.sourceUrl)}
                   />
                 </div>
               </div>

@@ -675,7 +675,7 @@ describe("bill page", () => {
         votes: notHeld(
           "Civitas holds roll calls from the 150th Congress on, so this bill's votes aren't held."
         ),
-        floor: notHeld("Civitas keeps the sitting Congress's floor speeches only."),
+        floor: notHeld("Civitas holds floor speeches from the 119th Congress on."),
         digest: notHeld("Civitas's record of Congress starts January 3, 2087."),
       },
     };
@@ -696,7 +696,7 @@ describe("bill page", () => {
       "https://clerk.house.gov/evs/2085/roll209.xml"
     );
     expect(
-      screen.getByText("Civitas keeps the sitting Congress's floor speeches only.")
+      screen.getByText("Civitas holds floor speeches from the 119th Congress on.")
     ).toBeTruthy();
     expect(screen.getByText("Civitas's record of Congress starts January 3, 2087.")).toBeTruthy();
     expect(screen.queryByText(/No committee meeting or report/)).toBeNull();

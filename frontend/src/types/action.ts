@@ -1,4 +1,6 @@
 export interface RelatedExploreDoc {
+  /** Its permanent Explore key (/explore/{key}); optional only for an older backend. */
+  key?: string | null;
   id: number;
   title: string;
   docType: string;
@@ -51,6 +53,8 @@ export interface ActionItem {
   url?: string | null;
   /** comment_period: the Explore document and its closing date (served only while open). */
   docId?: number | null;
+  /** The document's permanent Explore key; optional only for an older backend. */
+  docKey?: string | null;
   closesOn?: string | null;
   /** contact_committee */
   committee?: CommitteeContact | null;

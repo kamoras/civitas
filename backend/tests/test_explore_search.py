@@ -492,3 +492,66 @@ class TestPriorScaling:
                 indexed_db, "wildfire", limit=60, include_priors=False)["results"]
         ]
         assert ids.index(docs[0].id) < ids.index(docs[3].id)
+
+
+class TestRecordIdentifiers:
+    """A rule is found by the docket its comment link names, a floor speech
+    by its Congressional Record citation; an identifier no document is known
+    by is said to be not held, with no unrelated documents in its place."""
+
+    def test_a_docket_finds_its_rule_first(self, indexed_db, stub_semantic):
+        rule = _add(indexed_db, title="Guidance on eligible investments", external_id="fr-reg-2026-17123",
+                    comment_url="http://www.regulations.gov/commenton/IRS-2026-1090-0001")
+        noise = _add(indexed_db, title="Unrelated notice", body="Investments.")
+        stub_semantic([noise.id])
+        for query in ("IRS-2026-1090", "irs-2026-1090", "IRS-2026-1090-0001"):
+            outcome = hybrid_search(indexed_db, query, limit=10)
+            assert [r["id"] for r in outcome["results"]] == [rule.id], query
+            assert outcome["results"][0]["matchedBy"] == ["identifier"]
+            assert outcome["notHeld"] == []
+
+    def test_a_record_citation_finds_the_speech(self, indexed_db, stub_semantic):
+        speech = _add(indexed_db, doc_type="House Floor Speech", source="Congressional Record (GovInfo)",
+                      chamber="House", title="Remarks", date="2026-09-16",
+                      external_id="crec-v1-CREC-2026-09-16-pt1-PgH5836-3-213d7a94")
+        stub_semantic([])
+        for query in ("172 Cong. Rec. H5836", "172 cong rec h5836", "CREC-2026-09-16-pt1-PgH5836-3"):
+            outcome = hybrid_search(indexed_db, query, limit=10)
+            assert [r["id"] for r in outcome["results"]] == [speech.id], query
+        # The 2025 volume is 171: a different page entirely.
+        assert hybrid_search(indexed_db, "171 Cong. Rec. H5836", limit=10)["results"] == []
+
+    def test_an_order_before_the_corpus_is_not_held_and_nothing_unrelated_is_shown(
+        self, indexed_db, stub_semantic
+    ):
+        held = _add(indexed_db, doc_type="Executive Order", chamber="Executive", date="2025-05-23",
+                    title="EO 14300: Something else", external_id="fr-2025-09000")
+        citing = _add(indexed_db, title="A rule", body="Consistent with Executive Order 14148, the agency...")
+        stub_semantic([held.id])
+        outcome = hybrid_search(indexed_db, "EO 14148", limit=10)
+        # The order itself isn't held; the one document that cites it is
+        # shown, the order sharing only "EO" is not.
+        assert [r["id"] for r in outcome["results"]] == [citing.id]
+        [note] = outcome["notHeld"]
+        assert note["identifier"] == "Executive Order 14148"
+        assert note["sentence"] == "Executive orders before May 23, 2025 aren't held here, so Executive Order 14148 isn't."
+        assert note["url"].startswith("https://www.federalregister.gov/")
+
+    def test_a_document_number_not_held_says_so(self, indexed_db, stub_semantic):
+        _add(indexed_db, title="A rule", date="2026-04-09", external_id="fr-reg-2026-07000")
+        stub_semantic([])
+        outcome = hybrid_search(indexed_db, "2024-12345", limit=10)
+        assert outcome["results"] == []
+        [note] = outcome["notHeld"]
+        assert note["url"] == "https://www.federalregister.gov/d/2024-12345"
+        assert "before April 9, 2026" in note["sentence"]
+
+    def test_a_filtered_miss_is_not_called_not_held(self, indexed_db, stub_semantic):
+        _add(indexed_db, title="Rule", identifiers='["fr:91-48248"]')
+        stub_semantic([])
+        assert hybrid_search(indexed_db, "91 FR 48248", limit=10, doc_type="Notice")["notHeld"] == []
+
+    def test_results_carry_the_permanent_key(self, indexed_db, stub_semantic):
+        doc = _add(indexed_db, title="wildfire rule", external_id="fr-reg-2026-17123")
+        stub_semantic([doc.id])
+        assert hybrid_search(indexed_db, "wildfire", limit=10)["results"][0]["key"] == "fr-2026-17123"

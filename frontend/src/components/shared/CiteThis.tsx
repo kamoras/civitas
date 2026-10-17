@@ -28,17 +28,48 @@ export function apaDate(iso: string | null | undefined): string | null {
   return `${m[1]}, ${MONTHS[Number(m[2]) - 1]} ${Number(m[3])}`;
 }
 
-/** An APA-style reference to a page of the record, as a dataset: the site,
- *  the record's date ("n.d." for a record that keeps changing), its title,
- *  the date the reader retrieved it, and its stable URL. */
+/** The record's own author and where it was published, for a page about a
+ *  government document or record: the agency and the Federal Register for a
+ *  rule, the chamber for a roll call, the court for an opinion. */
+export interface CitedSource {
+  /** Who issued it ("Internal Revenue Service", "United States Senate"). */
+  author: string;
+  /** Where it was published, with its official identifier ("Federal
+   *  Register, 91, 54280 (FR Doc. 2026-17123)"); omitted when the author
+   *  published it themselves. */
+  container?: string | null;
+  /** The official copy. */
+  url: string;
+}
+
+/** `text` ended by one full stop: a title that already ends a sentence
+ *  ("…Res. 14.", "…Act?") keeps its own mark. */
+function sentence(text: string): string {
+  const t = text.trim();
+  return /[.?!]$/.test(t) ? t : `${t}.`;
+}
+
+/** An APA-style reference to a page of the record. A government document or
+ *  record cites its issuing body as author, its official identifier and its
+ *  official URL, with Civitas only as where it was accessed (`source`).
+ *  Without one, the page is Civitas's own work (a scorecard, an analysis)
+ *  and cites Civitas, as a dataset: the record's date ("n.d." for a record
+ *  that keeps changing), its title, the reader's retrieval date and the
+ *  page's stable URL. */
 export function citation(
   title: string,
   date: string | null | undefined,
   path: string,
-  today: Date
+  today: Date,
+  source?: CitedSource | null
 ) {
   const retrieved = `${MONTHS[today.getMonth()]} ${today.getDate()}, ${today.getFullYear()}`;
-  return `${SITE_NAME}. (${apaDate(date) ?? "n.d."}). ${title} [Data set]. Retrieved ${retrieved}, from ${absoluteUrl(path)}`;
+  const when = apaDate(date) ?? "n.d.";
+  if (source) {
+    const container = source.container ? ` ${sentence(source.container)}` : "";
+    return `${sentence(source.author)} (${when}). ${sentence(title)}${container} ${source.url} (accessed via ${SITE_NAME}, ${retrieved}, at ${absoluteUrl(path)})`;
+  }
+  return `${SITE_NAME}. (${when}). ${title.trim().replace(/\.$/, "")} [Data set]. Retrieved ${retrieved}, from ${absoluteUrl(path)}`;
 }
 
 /**
@@ -52,12 +83,15 @@ export default function CiteThis({
   title,
   date,
   path,
+  source,
 }: {
   title: string;
   /** YYYY-MM-DD the record is of, when it has one. */
   date?: string | null;
   /** The record's canonical path. */
   path: string;
+  /** For a government document or record: who issued it and where. */
+  source?: CitedSource | null;
 }) {
   const mounted = useMounted();
   if (!mounted) {
@@ -67,5 +101,5 @@ export default function CiteThis({
       </p>
     );
   }
-  return <CopyText text={citation(title, date, path, new Date())} label="citation" />;
+  return <CopyText text={citation(title, date, path, new Date(), source)} label="citation" />;
 }
