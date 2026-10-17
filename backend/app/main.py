@@ -58,6 +58,21 @@ for _n in ("httpx", "httpcore"):
     logging.getLogger(_n).setLevel(logging.WARNING)
 
 
+class DropQueryString(logging.Filter):
+    """uvicorn's access line without the query string: a search, an
+    Explore query or a filter a reader typed never reaches the container
+    logs (AGENTS.md §8). The method, path and status are kept."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        if isinstance(args, tuple) and len(args) >= 3 and isinstance(args[2], str) and "?" in args[2]:
+            record.args = (*args[:2], args[2].split("?", 1)[0], *args[3:])
+        return True
+
+
+logging.getLogger("uvicorn.access").addFilter(DropQueryString())
+
+
 async def _bootstrap_explore() -> None:
     """Run explore pipeline once at startup if the document store is empty."""
     await asyncio.sleep(5)

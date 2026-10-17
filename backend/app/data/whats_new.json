@@ -9,6 +9,27 @@
       "url": "/action"
     },
     {
+      "id": "congress-at-a-glance",
+      "date": "2026-10-17",
+      "title": "Congress at a glance, and your members' record",
+      "summary": "The Congress page opens with a calendar of every day each chamber sat and how far bills got, and with a state picked, that state's members' latest votes and bills.",
+      "url": "/congress"
+    },
+    {
+      "id": "site-search",
+      "date": "2026-10-17",
+      "title": "Search the whole site",
+      "summary": "One box in the header finds members, bills, agencies, districts, races, issues, documents and pages as you type, and an exact match such as a bill number goes straight to its page.",
+      "url": "/search"
+    },
+    {
+      "id": "related-votes-in-congress",
+      "date": "2026-10-17",
+      "title": "Related votes in Congress",
+      "summary": "Action Center stories now list the related roll calls in Congress, with how your members voted and a call script that cites the vote, and each ongoing story charts its votes on the record.",
+      "url": "/action?tab=monitors"
+    },
+    {
       "id": "follow-one-thing",
       "date": "2026-10-17",
       "title": "Follow one member, bill, agency or story",

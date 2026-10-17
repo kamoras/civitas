@@ -253,3 +253,18 @@ def test_the_parser_keeps_quoted_values_and_drops_comments():
 def test_the_parser_treats_a_mid_token_hash_as_part_of_the_value():
     root = _parse("server { location /a { return 301 https://x/a#frag; } }")
     assert root.children[0].children[0].directives == ["return 301 https://x/a#frag"]
+
+
+def test_access_log_keeps_no_query_strings_or_referrers():
+    """What a reader searched for is in the query string (/search?q=,
+    /api/search, Explore's ?q=) and in the referrer of the next page they
+    open: neither is written to the container logs (AGENTS.md §8)."""
+    text = CONF.read_text()
+    fmt = text.split("log_format civitas_private", 1)[1].split(";", 1)[0]
+    for leak in ("$request ", '$request"', "$request_uri", "$args", "$query_string", "$http_referer"):
+        assert leak not in fmt, leak
+    assert "$uri" in fmt
+    for line in text.splitlines():
+        line = line.split("#", 1)[0].strip()
+        if line.startswith("access_log") and line != "access_log off;":
+            assert line.endswith("civitas_private;"), line

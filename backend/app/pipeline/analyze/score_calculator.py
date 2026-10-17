@@ -2502,9 +2502,9 @@ def _constituent_alignment_core(
         weight = position_confidence(position_votes, reliability)
         congruence_score = position_congruence_score(extremity, float(congruence_sat), weight)
         congruence_detail = (
-            f"{ideal.get('measure', 'NOMINATE')} dim1 {float(dim1):+.2f} vs "
-            f"{expected_dim1:+.2f} expected for a {eval_party} member of a seat at {_pvi_label(seat_pvi)}, "
-            f"{abs(extremity):.2f} "
+            f"{ideal.get('measure', 'NOMINATE')} dim1 {float(dim1):+.3f} vs "
+            f"{expected_dim1:+.3f} expected for a {eval_party} member of a seat at {_pvi_label(seat_pvi)}, "
+            f"{abs(extremity):.3f} "
             + ("toward the party flank" if extremity > 0 else "toward the seat's center")
         )
         if position_votes is None and weight < 1.0:
@@ -2872,6 +2872,11 @@ def _industry_concentration(
     )
 
 
+# Classified share of funding (percent) at which the industry HHI counts in
+# full; below it the score is shrunk toward the neutral in proportion.
+_INDUSTRY_FULL_WEIGHT_PCT = 40
+
+
 def _industry_mix_diversity(
     funding: dict, total_raised: float, missing_score: float, missing_label: str = "neutral",
 ) -> tuple[float, str]:
@@ -2902,13 +2907,20 @@ def _industry_mix_diversity(
         )
     hhi = sum((ind.get("total", 0) / total_known) ** 2 for ind in industries)
     raw = (1 - max(0, min((hhi - 0.10) / 0.90, 1.0))) * 100
-    relevance = min(total_known_pct / 40, 1.0)
+    relevance = min(total_known_pct / _INDUSTRY_FULL_WEIGHT_PCT, 1.0)
     score = raw * relevance + missing_score * (1 - relevance)
     return score, (
-        f"HHI {hhi:.3f} across {len(industries)} industries → raw {raw:.1f}, "
-        f"blended {relevance:.0%} with {missing_label} {missing_score:.0f} "
-        f"({total_known_pct:.0f}% of funding industry-classified)"
+        f"HHI {hhi:.3f} across {len(industries)} industries → raw {raw:.1f}; "
+        f"{total_known_pct:.0f}% of funding is industry-classified (full weight at {_INDUSTRY_FULL_WEIGHT_PCT:.0f}%), so the raw score "
+        f"counts {relevance:.0%} and {missing_label} {missing_score:.0f} counts {1 - relevance:.0%}: "
+        f"{raw:.1f} × {relevance:.2f} + {missing_score:.1f} × {1 - relevance:.2f} = {score:.1f}"
     )
+
+
+# Source-breadth weight per funding source: small donors most diverse,
+# opaque money (matched to no industry) least. Printed in the ledger
+# detail from the same dict, so the text can't drift from the formula.
+_BREADTH_WEIGHTS = {"small": 1.0, "classified": 0.6, "unclassified": 0.5, "opaque": 0.2}
 
 
 def _funding_diversity_core(funding: dict) -> dict:
@@ -2948,11 +2960,12 @@ def _funding_diversity_core(funding: dict) -> dict:
     # remainder (OTHER, POLITICAL, large individuals whose employer
     # didn't match any industry) is least diverse.
     other_frac = max(0, 1 - small_frac - classified_frac - unclassified_frac)
+    w = _BREADTH_WEIGHTS
     breadth = (
-        small_frac * 1.0
-        + classified_frac * 0.6
-        + unclassified_frac * 0.5
-        + other_frac * 0.2
+        small_frac * w["small"]
+        + classified_frac * w["classified"]
+        + unclassified_frac * w["unclassified"]
+        + other_frac * w["opaque"]
     )
     breadth_score = min(breadth, 1.0) * 100
 
@@ -2987,9 +3000,10 @@ def _funding_diversity_core(funding: dict) -> dict:
                 "weight": 0.5,
                 "score": round(breadth_score, 1),
                 "detail": (
-                    f"{small_frac:.0%} small-donor + {classified_frac:.0%} "
-                    f"classified-industry + {unclassified_frac:.0%} unclassified "
-                    f"(neutral) + {other_frac:.0%} opaque"
+                    f"{small_frac:.1%} small-donor × {w['small']} + {classified_frac:.1%} "
+                    f"classified-industry × {w['classified']} + {unclassified_frac:.1%} unclassified "
+                    f"(neutral) × {w['unclassified']} + {other_frac:.1%} opaque × {w['opaque']} = {breadth_score:.1f}"
+                    + (" (capped at 100)" if breadth > 1.0 else "")
                 ),
             },
             {
@@ -3850,8 +3864,10 @@ def _legislative_effectiveness_core(
             "weight": round(coalition_weight, 4),
             "score": round(coalition_pct, 1),
             "detail": (
-                "cross-party share of cosponsors attracted to own bills, "
-                "against the median member of the same party (that median scores 50)"
+                "cross-party share of the cosponsors the member's own bills attracted: "
+                + (f"{coalition_pct / 50:.2f} times" if coalition_pct < 100 else "at least twice")
+                + " the share of the median member of the same party; the score is 50 times that "
+                "ratio, so the median scores 50 and twice it or more scores 100"
             ),
         })
     return {"score": score, "components": components, "facts": _bills_facts(sponsored_bills)}

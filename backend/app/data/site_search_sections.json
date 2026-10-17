@@ -1,0 +1,21 @@
+{
+  "_source": "Section anchors a search can land on, per page kind, each with the headings that page itself prints for that section (copied verbatim; frontend/src/lib/sitePages.test.ts checks each anchor is an id the page's component renders and each heading is text in it). A query whose trailing or leading words match a section's headings, with the rest naming one page of that kind, lands on the section (app/site_search.py). Measured by scripts/calibrate_site_search.py's deep probes.",
+  "kinds": {
+    "bill": [
+      {"anchor": "summary", "file": "frontend/src/components/congress/BillPageView.tsx", "headings": ["Summary"]},
+      {"anchor": "votes", "file": "frontend/src/components/congress/BillPageView.tsx", "headings": ["Votes"]},
+      {"anchor": "floor", "file": "frontend/src/components/congress/BillPageView.tsx", "headings": ["Floor debate"]},
+      {"anchor": "history", "file": "frontend/src/components/congress/BillPageView.tsx", "headings": ["History"]},
+      {"anchor": "committee", "file": "frontend/src/components/congress/BillPageView.tsx", "headings": ["In committee"]},
+      {"anchor": "text", "file": "frontend/src/components/congress/BillPageView.tsx", "headings": ["Text"]},
+      {"anchor": "sources", "file": "frontend/src/components/congress/BillSources.tsx", "headings": ["Sources"]}
+    ],
+    "member": [
+      {"anchor": "funding-independence", "file": "frontend/src/components/scorecard/FundingColumn.tsx", "headings": ["Funding Independence", "Where the money comes from", "donors"]},
+      {"anchor": "constituent-alignment", "file": "frontend/src/components/scorecard/AlignmentColumn.tsx", "headings": ["Constituent Alignment", "Votes against party"]},
+      {"anchor": "legislative-effectiveness", "file": "frontend/src/components/scorecard/EffectivenessColumn.tsx", "headings": ["Legislative Effectiveness", "Bills by furthest stage reached"]},
+      {"anchor": "holdings", "file": "frontend/src/components/checker/Holdings.tsx", "headings": ["Holdings", "Investments & assets"]},
+      {"anchor": "methods", "file": "frontend/src/components/scorecard/MethodsLedger.tsx", "headings": ["Methods, data and citation"]}
+    ]
+  }
+}

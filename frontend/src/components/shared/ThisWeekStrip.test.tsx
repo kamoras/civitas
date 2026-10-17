@@ -170,6 +170,26 @@ describe("ThisWeekStrip", () => {
     expect(await violations()).toEqual([]);
   });
 
+  it("compact: the next deadline is the soonest, not the first rule in the news", () => {
+    // Backlog 7 #15: it named the rule in the news (Oct 20) while two closed that day.
+    const today = {
+      ...data.commentDeadlines[0],
+      id: 9,
+      title: "A rule closing today",
+      commentsCloseOn: "2026-10-11",
+      daysLeft: 0,
+      issueId: null,
+    };
+    render(<CompactStrip data={{ ...data, nextCommentDeadline: today }} />);
+    const strip = screen.getByRole("complementary", { name: "This week" });
+    expect(within(strip).getByRole("link", { name: "A rule closing today" })).toHaveAttribute(
+      "href",
+      "/explore/9"
+    );
+    expect(within(strip).getByText(/closes today/)).toBeInTheDocument();
+    expect(within(strip).queryByRole("link", { name: "A rule in the news" })).toBeNull();
+  });
+
   it("compact, on a page about another day: labelled with today's date", () => {
     // 2026-09-16's page read "This week … meets today" on 2026-10-15.
     const { rerender } = render(<CompactStrip data={data} pageDate="2026-09-16" />);

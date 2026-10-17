@@ -1646,6 +1646,10 @@ class ActionIssue(Base):
     summary_source: Mapped[str | None] = mapped_column(String, nullable=True)
     summary_source_url: Mapped[str | None] = mapped_column(String, nullable=True)
     related_monitor_slugs: Mapped[str] = mapped_column(Text, default="[]")
+    # The roll calls this story is related to ("Related votes in Congress"),
+    # as JSON refs ("senate-119-2-244"), matched by app/roll_call_links.py in
+    # the hourly refresh. NULL: not matched yet (the refresh backfills).
+    related_roll_call_refs: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     # Unused: the "This concerns me / Not a priority" vote that counted into
     # these was removed in 2026-09. Still mapped, with their default, because
     # they are NOT NULL and the image before this one still reads them; the
@@ -1921,6 +1925,28 @@ class NationalMonitor(Base):
                            order_by="desc(MonitorUpdate.date), desc(MonitorUpdate.created_at)")
 
 
+class RollCallLinkLabel(Base):
+    """A data-supplied label for the story-to-vote link (app/roll_call_links.
+    record_structural_labels): an issue that reached a vote structurally (its
+    primary source is the vote's record, or its articles named the bill a
+    vote in its window was on), kept for the next recalibration of
+    roll_call_links. One row per issue, rewritten as votes arrive."""
+    __tablename__ = "roll_call_link_labels"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    issue_id: Mapped[int] = mapped_column(Integer, nullable=False, unique=True, index=True)
+    date: Mapped[str] = mapped_column(String(10), nullable=False)
+    # The issue's headline with person names masked (roll_call_links.NameMask).
+    story: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # "primary_source", "bill_named" or both, comma-joined.
+    source: Mapped[str] = mapped_column(String(40), nullable=False, default="")
+    # JSON refs of the structurally linked votes.
+    related: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    # JSON {ref: the vote's masked text} for every linkable vote in the window.
+    candidates: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    recorded_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
 class MonitorUpdate(Base):
     """A dated development in a monitored national concern, sourced from articles."""
     __tablename__ = "monitor_updates"
@@ -1933,6 +1959,9 @@ class MonitorUpdate(Base):
     source_name: Mapped[str] = mapped_column(String(200), default="")
     article_title: Mapped[str] = mapped_column(String(500), default="")
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    # Roll calls related to this update (app/roll_call_links.py), as JSON
+    # refs; the monitor's "On the record" is their union. NULL: not matched.
+    roll_call_refs: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
 
     monitor = relationship("NationalMonitor", back_populates="updates")
 
@@ -2969,7 +2998,7 @@ class RollCallPosition(Base):
         Integer, ForeignKey("roll_calls.id", ondelete="CASCADE"), nullable=False, index=True,
     )
     # House XML carries the bioguide id; Senate XML carries the LIS id.
-    member_id: Mapped[str] = mapped_column(String(12), nullable=False)
+    member_id: Mapped[str] = mapped_column(String(12), nullable=False, index=True)
     last_name: Mapped[str] = mapped_column(String(80), nullable=False)
     first_name: Mapped[str] = mapped_column(String(80), default="")
     party: Mapped[str] = mapped_column(String(2), default="")
