@@ -351,27 +351,29 @@ export default function NewsChapter() {
         <P>
           Whether a trend is about U.S. policy is a vote among the most similar labelled Bluesky
           trends (nearest neighbors), the same method the Action Center uses for articles; the
-          labels were made by an AI agent against a written rubric, published with them. The
-          trend&apos;s name is the only text a post takes from Bluesky, so it is checked before
+          labels were made by an AI agent against a written rubric, published with them. The post
+          doesn&apos;t quote the trend&apos;s name, but it answers it, so the name is checked before
           anything else: a name that reads as electioneering, editorializes, states advocacy as
           fact, or that a vote of labelled examples finds loaded is skipped, not reworded.
         </P>
         <More label="Tragedies and violence">
           <P>
             They aren&apos;t excluded outright, because an official response to one is part of the
-            public record. A trend about one is eligible only when a vote finds it about political
-            violence, and only with an official record responding to it, or the agency&apos;s own
-            record. The post then states only what that record says, and nothing about victims or
-            perpetrators. With no such record, there is no post.
+            public record. A trend about one is eligible only with an official record (a vote, a
+            bill, a rule or the day&apos;s Congressional Record), or an Action Center issue
+            confirmed by two or more outlets, whose checked opening line the post quotes and credits
+            to its outlet. The post then states only what that record says. With no such record,
+            there is no post.
           </P>
         </More>
         <P>
-          Every word of a post is fixed template text, the record&apos;s own fields, or
-          Bluesky&apos;s name for the trend, quoted and attributed to Bluesky. No model writes any
-          of it. The picture is the record itself (a vote&apos;s tally by party, a bill, a rule) on
-          a card with its source, its page on Civitas and the date the data was read, and alt text
-          made from the same fields. For the first four weeks, alternate days carry that picture or
-          a plain link card instead, to measure which people engage with more.
+          Every word of a post is fixed template text or the record&apos;s own fields: what the
+          record says, then its date and source in parentheses. The post doesn&apos;t name the trend
+          or call it trending, so the record has to say what happened on its own. No model writes
+          any of it. The picture is the record itself (a vote&apos;s tally by party, a bill, a rule)
+          on a card with its source, its page on Civitas and the date the data was read, and alt
+          text made from the same fields. For the first four weeks, alternate days carry that
+          picture or a plain link card instead, to measure which people engage with more.
         </P>
         <P>
           Selection doesn&apos;t look at party: among eligible trends, the one posted is the one
