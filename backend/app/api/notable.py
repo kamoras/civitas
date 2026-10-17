@@ -31,7 +31,7 @@ from app.pipeline.congress_activity import eastern_today
 from app.pipeline.fetch.floor_logs import NAY_POSITIONS, YEA_POSITIONS
 from app.pipeline.transform.normalize_votes import MAJORITY_LEADER_TITLES, is_housekeeping
 from app.services.bill_record import MemberLinks
-from app.services.congress_service import bill_label, week_bounds
+from app.services.congress_service import amendment_fields, bill_label, week_bounds
 from app.services.roll_call_shape import shape
 
 router = APIRouter()
@@ -76,6 +76,7 @@ def _vote_ref(rc: RollCall) -> dict:
         "date": rc.date, "question": rc.question, "title": rc.title, "result": rc.result,
         "yeas": rc.yeas, "nays": rc.nays, "billId": rc.bill_id, "billLabel": bill_label(rc.bill_id),
         "tieBreaker": shape(rc)["tieBreaker"],
+        **amendment_fields(rc),
     }
 
 

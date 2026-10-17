@@ -1,0 +1,144 @@
+{
+  "_source": "Congress.gov API bill actions (actionCode, sourceSystem), the action-code vocabulary of the Library of Congress and the House floor and committee systems. Each code's meaning was checked against every action carrying it in the cached 119th Congress record on 2026-10-17 (24,648 bills): a code is listed only where all its actions share one meaning, so H30000 (consideration of any kind), H8D000 (debate notes of every sort) and H1B000 (Senate amendment steps) are left out. Senate floor actions carry no code and get no meaning, except through the Library of Congress twin they are folded with.",
+  "_contract": "terms is ordered: an action folded from several twins takes the first term whose codes it carries (an introduction's twin is filed under the referral code H11100 as 'Submitted in House', so the introduction codes come first). Meanings are fixed text, one or two sentences at a Flesch-Kincaid grade of 8 or below. methods explain how a chamber decided a question, read from the chamber's own formula in the action text (bill_journey.METHOD_FORMULAS).",
+  "terms": [
+    {
+      "codes": ["1000", "Intro-H", "10000", "Intro-S", "1025", "10025"],
+      "term": "Introduced",
+      "meaning": "A member files the bill and it gets its number. Any member can introduce one."
+    },
+    {
+      "codes": ["H11100"],
+      "term": "Referred to committee",
+      "meaning": "The bill goes to a committee, a small group of members who study it first. Most bills never leave committee."
+    },
+    {
+      "codes": ["H11000"],
+      "term": "Referred to a subcommittee",
+      "meaning": "The committee hands the bill to one of its smaller panels for a closer look."
+    },
+    {
+      "codes": ["H14001", "H21000"],
+      "term": "Hearing",
+      "meaning": "The committee hears from experts and officials about the bill or its subject."
+    },
+    {
+      "codes": ["H15001", "H22000"],
+      "term": "Mark-up",
+      "meaning": "The committee meets to debate the bill and change its wording, then votes on it."
+    },
+    {
+      "codes": ["H19000"],
+      "term": "Ordered reported",
+      "meaning": "The committee voted to send the bill on to the full House."
+    },
+    {
+      "codes": ["5000", "H12200", "14000", "H12100", "1010"],
+      "term": "Reported",
+      "meaning": "The committee sends the bill back to the full chamber, often with changes and a written report."
+    },
+    {
+      "codes": ["5500", "H12300", "14500"],
+      "term": "Discharged",
+      "meaning": "The committee is taken off the bill, so the full chamber can act on it without waiting."
+    },
+    {
+      "codes": ["H17000"],
+      "term": "Discharge petition",
+      "meaning": "A petition that forces a bill out of committee once a majority of the House (218 members) signs it."
+    },
+    {
+      "codes": ["H12410"],
+      "term": "Union Calendar",
+      "meaning": "The House's list of bills about taxes or spending that are ready for the floor. Being listed does not set a vote."
+    },
+    {
+      "codes": ["H12420"],
+      "term": "House Calendar",
+      "meaning": "The House's list of other bills ready for the floor. Being listed does not set a vote."
+    },
+    {
+      "codes": ["H1L210"],
+      "term": "Rule",
+      "meaning": "The Rules Committee writes the terms for debate: how long it lasts and which changes members may offer."
+    },
+    {
+      "codes": ["H1L220"],
+      "term": "Rule adopted",
+      "meaning": "The House approved the terms for debating the bill."
+    },
+    {
+      "codes": ["H30300", "H37300"],
+      "term": "Suspension of the rules",
+      "meaning": "A fast track for bills with wide support. Debate is short, no changes are allowed, and two thirds of those voting must agree."
+    },
+    {
+      "codes": ["H37100"],
+      "term": "Vote on passage",
+      "meaning": "The House votes on the bill itself. More yes votes than no votes passes it."
+    },
+    {
+      "codes": ["H35000"],
+      "term": "Previous question",
+      "meaning": "A vote to end debate and go to the final vote. Once it passes, no more changes can be offered."
+    },
+    {
+      "codes": ["H36200", "H36210"],
+      "term": "Motion to recommit",
+      "meaning": "The minority party's last try to send the bill back to committee before the final vote. It rarely passes."
+    },
+    {
+      "codes": ["H32020"],
+      "term": "Committee of the Whole",
+      "meaning": "The whole House sits as one big committee, with looser rules, to debate and change the bill."
+    },
+    {
+      "codes": ["H38310", "H41931"],
+      "term": "Motion to reconsider laid on the table",
+      "meaning": "A routine step that makes the vote final, so it cannot be taken again."
+    },
+    {
+      "codes": ["H14000"],
+      "term": "Received in the House",
+      "meaning": "The House gets a bill the Senate has passed."
+    },
+    {
+      "codes": ["H15000"],
+      "term": "Held at the desk",
+      "meaning": "The bill is kept at the front desk instead of going to a committee, so it can go straight to the floor."
+    },
+    {
+      "codes": ["19500", "20500"],
+      "term": "Resolving differences",
+      "meaning": "The House and Senate passed different versions. Both must pass exactly the same text before it goes to the President."
+    },
+    {
+      "codes": ["28000", "E20000"],
+      "term": "Presented to the President",
+      "meaning": "Both chambers passed the same text. The President has 10 days, not counting Sundays, to sign it or veto it."
+    },
+    {
+      "codes": ["E40000", "41000"],
+      "term": "Became law",
+      "meaning": "It is now law and has a law number."
+    }
+  ],
+  "methods": {
+    "unanimousConsent": {
+      "term": "Unanimous consent",
+      "meaning": "The chamber agrees to something unless any member objects. Nobody did, so no votes were counted."
+    },
+    "withoutObjection": {
+      "term": "Without objection",
+      "meaning": "The presiding officer asked if anyone objected, and no one did, so no votes were counted."
+    },
+    "voiceVote": {
+      "term": "Voice vote",
+      "meaning": "Members call out yes or no together, and the presiding officer judges which side is louder. No names are recorded."
+    },
+    "rollCall": {
+      "term": "Recorded vote",
+      "meaning": "Each member's yes or no is recorded by name. This is called a roll call."
+    }
+  }
+}

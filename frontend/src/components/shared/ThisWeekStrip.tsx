@@ -142,7 +142,7 @@ function StateDeadlines({ rows }: { rows: StateNextDeadline[] }) {
       </ul>
       {rest.length > 0 && (
         <details className="group">
-          <summary className="cursor-pointer list-none font-mono text-xs text-ink-hi underline decoration-white/30 underline-offset-4 hover:text-phos [&::-webkit-details-marker]:hidden">
+          <summary className="inline-flex min-h-6 cursor-pointer list-none items-center font-mono text-xs text-ink-hi underline decoration-white/30 underline-offset-4 hover:text-phos [&::-webkit-details-marker]:hidden">
             Every state&apos;s next deadline
             <span aria-hidden="true" className="ml-1 inline-block group-open:rotate-180">
               &#9662;
@@ -334,7 +334,7 @@ function CompactStrip({ data, pageDate }: { data: ThisWeek; pageDate?: string })
           </span>
         )}
         <details className="group open:basis-full">
-          <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden text-ink-hi underline decoration-white/30 underline-offset-4 hover:text-phos">
+          <summary className="inline-flex min-h-6 cursor-pointer list-none items-center [&::-webkit-details-marker]:hidden text-ink-hi underline decoration-white/30 underline-offset-4 hover:text-phos">
             {line.pick}
             <span aria-hidden="true" className="ml-1 inline-block group-open:rotate-180">
               &#9662;

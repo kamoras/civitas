@@ -13,6 +13,8 @@ import { absoluteUrl } from "@/lib/site";
 import SectionTabs from "@/components/layout/SectionTabs";
 import { ResultLabel, VoteCount } from "./ReportParts";
 import VoteMembers, { PartyBar } from "./VoteMembers";
+import AmendmentPurpose from "./AmendmentPurpose";
+import SeatChart from "./SeatChart";
 import { STATUS_LABEL, nominationHref } from "@/lib/nominations";
 import type { NominationVote, RollCallNomination } from "@/types/nomination";
 
@@ -117,9 +119,10 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
                   </p>
                 )}
                 {vote.nominationVote && <NominationLinks nv={vote.nominationVote} />}
+                <AmendmentPurpose vote={vote} chamber={vote.chamber} />
               </header>
 
-              <div className="grid gap-8 border border-white/15 bg-surface p-4 sm:p-5 lg:grid-cols-[18rem_minmax(0,1fr)]">
+              <div className="grid grid-cols-[minmax(0,1fr)] gap-8 border border-white/15 bg-surface p-4 sm:p-5 lg:grid-cols-[18rem_minmax(0,1fr)]">
                 <div className="flex flex-col gap-3">
                   <ResultLabel result={voteResult(vote)} rejected={vote.rejected} />
                   {vote.kind === "election" && vote.candidates?.length ? (
@@ -157,14 +160,20 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
                     )}
                   </dl>
                 </div>
-                <div className="flex flex-col gap-3">
-                  <h2 className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-                    By party
-                  </h2>
-                  {vote.parties.map((p) => (
-                    <PartyBar key={p.party} split={p} />
-                  ))}
-                </div>
+                {vote.kind === "election" ? (
+                  // An election of the Speaker is votes for names, not yea
+                  // and nay: each party's candidates, as the bars show them.
+                  <div className="flex flex-col gap-3">
+                    <h2 className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
+                      By party
+                    </h2>
+                    {vote.parties.map((p) => (
+                      <PartyBar key={p.party} split={p} />
+                    ))}
+                  </div>
+                ) : (
+                  <SeatChart members={vote.members} parties={vote.parties} chamberName={chamber} />
+                )}
               </div>
             </section>
 

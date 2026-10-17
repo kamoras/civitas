@@ -8,6 +8,7 @@ import {
   voteResult,
   voteTally,
 } from "@/lib/congress";
+import AmendmentPurpose from "./AmendmentPurpose";
 
 export function Figure({
   value,
@@ -154,6 +155,7 @@ export function VoteRow({ vote, showDate = false }: { vote: RollCallSummary; sho
         {vote.title && vote.title !== vote.question && (
           <p className="text-sm leading-snug text-ink-lo">{vote.title}</p>
         )}
+        <AmendmentPurpose vote={vote} chamber={vote.chamber} compact />
         {vote.billId && vote.billLabel && (
           <Link
             href={billHref(vote.billId, vote.congress)}

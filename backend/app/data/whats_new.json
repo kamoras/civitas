@@ -2,6 +2,20 @@
   "_contract": "One entry per user-facing feature, newest first; writing it is part of shipping the feature (AGENTS.md, 'What gets posted'). The same entry is the /changelog 'New on the site' list, the What's new feed and a Bluesky post (app/whats_new.py). id: a stable slug, never reused (it is the post's subject, so changing it posts again). date: the UTC day the feature reached main (git log --date=format-local:%Y-%m-%d with TZ=UTC). title: a name, no trailing period. summary: one plain sentence that stays true: no named politicians, no pronouns, no em dashes, no emoji, no year or Congress number. url: the page's path on the site. tests/test_whats_new.py checks each entry and that the post fits.",
   "entries": [
     {
+      "id": "bill-journey",
+      "date": "2026-10-17",
+      "title": "How a bill got there",
+      "summary": "Each bill page maps its path from introduction to law with dates, says how each chamber passed it, by roll call, voice vote or unanimous consent, and explains the procedural steps in plain words.",
+      "url": "/congress/bills"
+    },
+    {
+      "id": "amendment-purpose",
+      "date": "2026-10-17",
+      "title": "What each amendment vote was about",
+      "summary": "A vote on an amendment now quotes the amendment's official purpose from the record, and each roll call page shows the chamber as a seat chart, one dot per member.",
+      "url": "/congress"
+    },
+    {
       "id": "register-to-vote",
       "date": "2026-10-16",
       "title": "Where to register, and by when",

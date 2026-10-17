@@ -65,7 +65,13 @@ export default function DataChapter() {
               description, nominees, committee, hearings and every action in Congress.gov&apos;s own
               words, on <A href="/congress/nominations">the nominations pages</A>. Its status
               (pending, confirmed, returned, withdrawn) is read from Congress.gov&apos;s action
-              codes, and each roll call that names a nomination links to it.
+              codes, and each roll call that names a nomination links to it. A bill&apos;s path
+              (introduced, committee, each chamber, the President, law) and how each chamber passed
+              it (a roll call, a voice vote or unanimous consent) are read from the same action
+              codes and the chamber&apos;s own wording; the plain meaning beside a procedural step
+              comes from a fixed glossary keyed by its action code, never written by a model. A vote
+              on a House amendment shows the amendment&apos;s purpose from its Congress.gov record,
+              word for word.
             </Fact>
             <Fact label="FEC (fec.gov)">
               Campaign finance: individual and PAC contributions, committee filings and types,
@@ -73,13 +79,14 @@ export default function DataChapter() {
             </Fact>
             <Fact label="Senate.gov & House Clerk">
               Roll-call votes with every member&apos;s position, each shown on its own page
-              (nominations included) and linked to the chamber&apos;s record, and each
-              chamber&apos;s live floor log. Held from the first day of Civitas&apos;s record of
-              Congress, as are the Daily Digest&apos;s days, and a page outside it says where the
-              record starts; a bill of an earlier Congress says its votes aren&apos;t held and links
-              each roll call to the chamber&apos;s record. A Senate tie the Vice President broke is
-              shown with the Vice President&apos;s vote, an election of the Speaker by each
-              candidate&apos;s votes, and a quorum call as the members present, with no result.
+              (nominations included) and linked to the chamber&apos;s record, with a Senate
+              amendment&apos;s purpose quoted from the roll call itself, and each chamber&apos;s
+              live floor log. Held from the first day of Civitas&apos;s record of Congress, as are
+              the Daily Digest&apos;s days, and a page outside it says where the record starts; a
+              bill of an earlier Congress says its votes aren&apos;t held and links each roll call
+              to the chamber&apos;s record. A Senate tie the Vice President broke is shown with the
+              Vice President&apos;s vote, an election of the Speaker by each candidate&apos;s votes,
+              and a quorum call as the members present, with no result.
             </Fact>
             <Fact label="unitedstates/congress-legislators">
               Committee seats and party leadership titles, an open dataset refreshed weekly. It

@@ -3,6 +3,7 @@ import { connection } from "next/server";
 import type { Notable, NotableEntry } from "@/types/notable";
 import { rollCallHref, shortDate, weekHref } from "@/lib/congress";
 import { fetchSectionFigures } from "@/components/sections/SectionCards";
+import AmendmentPurpose from "@/components/congress/AmendmentPurpose";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
@@ -87,6 +88,11 @@ function Entry({ entry }: { entry: NotableEntry }) {
           {what}
           {v.title && v.title !== v.question ? ` · ${v.title}` : ""}
         </p>
+        {v.amendment && (
+          <div className="mt-1">
+            <AmendmentPurpose vote={v} chamber={v.chamber} compact />
+          </div>
+        )}
       </div>
       <p className="flex flex-wrap gap-x-4 md:flex-col md:items-end md:gap-0">
         {/* Named in full for a screen reader, which otherwise hears "left
