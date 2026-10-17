@@ -45,6 +45,11 @@ primary (0.663) and one about two same-named candidates on a ballot
 Same generated-tunable discipline as explore_ranking.py, including its
 failure mode: if recalibration fails the previous value stays in force,
 because a stale threshold gates better than none.
+
+That threshold decides what the race page lists, beside its source. A post
+is held to a higher one fitted on hand labels with an exact precision
+bound (election_bluesky.post_relevance_threshold): on 2026-10-17 the
+stories at or above the Otsu cut were about their race 65% of the time.
 """
 
 import json
@@ -142,14 +147,6 @@ def threshold(db=None) -> float:
     if calibration:
         return float(calibration.get("threshold", BOOTSTRAP_THRESHOLD))
     return BOOTSTRAP_THRESHOLD
-
-
-def is_relevant(item, race, db=None) -> bool:
-    text = item_text(item)
-    if not text:
-        return False
-    scores = score_pairs([text], [race_descriptor(race)])
-    return bool(scores) and scores[0] >= threshold(db)
 
 
 def calibrate_and_store(db) -> dict | None:
