@@ -75,6 +75,9 @@ export interface ThisWeek {
     recentVotes: ThisWeekVote[];
   };
   commentDeadlines: CommentDeadline[];
+  /** The soonest open rule deadline, today's included, on the deadline's
+   * own clock (Eastern); absent from an older API. */
+  nextCommentDeadline?: CommentDeadline | null;
 }
 
 /** A state whose regular registration closes soon (backend
