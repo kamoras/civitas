@@ -213,6 +213,14 @@ export default function NewsChapter() {
           the exception: its issue is the count, so what you can do is follow that count on its
           state&apos;s page.
         </P>
+        <P>
+          When an issue names a race on this year&apos;s ballot, it leads with it: &quot;On the
+          ballot: Georgia · Senate race (Roe)&quot;, then the state&apos;s next voter deadline from
+          its election office and links to register and to check your registration. A race is linked
+          only when the story names one of its confirmed nominees (in full, or by surname beside the
+          state&apos;s name when no other nominee there shares it) or the seat itself (&quot;the
+          Michigan Senate race&quot;). A state named without one of its races is not linked.
+        </P>
         <More label="How a story is linked to votes in Congress">
           <P>
             News rarely prints a bill&apos;s number, so until October 2026 not one issue in 543 had

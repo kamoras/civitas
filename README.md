@@ -544,6 +544,18 @@ Every hour at :15
        │         demoting stories with no government actor were replayed
        │         over every run since 2026-09-24, held out by date, and
        │         found no replacement story to publish instead
+       │         Each issue also records the states and races its own words
+       │         name (action_center.ballot_links): a confirmed nominee by
+       │         full name (a name two races' nominees share only beside its
+       │         state), a state's only nominee of a surname beside the
+       │         state's name, or a seat phrase ("Michigan Senate race"). The issue shows "On the ballot: Georgia · Senate
+       │         race (Roe) · <next deadline> · Register · Check your
+       │         registration" from the voter calendar and the state's own
+       │         lookup, read when served (app/ballot_links.py). Measured on
+       │         548 stored issues: 64 race links, every named person that
+       │         race's nominee; a state alone is never linked (16 of 22
+       │         such links were on topic, under the bar)
+       │         (docs/research/action-center-ballot-links.md)
        ▼
   5. EXTRACT ─── The model LOCATES an assertion in one article; it never
        │         writes the sentence. post_composer.py checks both spans
@@ -571,7 +583,13 @@ Every hour at :15
        │         article's summary contributes its claim too, after the
        │         headlines: 2026-10-01, 78 of 300 clusters in three days
        │         were dropped as too few facts, 7 of 10 sampled failures
-       │         were cut-short predicates.
+       │         were cut-short predicates. An -ing predicate is a clause
+       │         when the source's own words between the spans end in a
+       │         form of "be" ("The administration is seeking ..."):
+       │         replayed on 356 recorded answers, 162 to 168 verified, all
+       │         true. Since 2026-09-24, 37 of 41 issues carry one fact:
+       │         each article gives at most two claims and most clusters are
+       │         one or two articles (docs/research/action-center-ballot-links.md).
        │         The actor must name or describe a party that can act: a
        │         capitalised name passes, anything else ("a federal judge",
        │         "federal agents") its margin over actor/non-actor
