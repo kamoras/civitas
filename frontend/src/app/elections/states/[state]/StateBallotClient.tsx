@@ -1855,6 +1855,58 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
     asOf: null,
   };
 
+  // The page's caveat, the official lookup, its feed and what it shows on
+  // election night: rendered beside the title from lg up and after the
+  // contests on a phone (one of the two is display:none at any width).
+  const ballotLinks = (
+    <>
+      <span className="text-xs text-ink-lo">A research tool, not an official ballot.</span>
+      <a
+        href={lookupHref}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={`${officialLookup.label} (opens in new tab)`}
+        className="font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
+      >
+        {/* lookupIsStateSpecific, not the raw flag: a URL safeHref
+          rejected sends this link to USAGov. "Voter lookup", not
+          "your full ballot": some states' link is their polling-
+          place page, which shows where to vote, not the ballot. */}
+        {lookupUnconfirmed
+          ? `${stateName.toUpperCase()}'S OFFICIAL VOTER LOOKUP ↗`
+          : lookupIsStateSpecific
+            ? `${ballot.state} OFFICIAL VOTER LOOKUP ↗`
+            : "FIND YOUR ELECTION OFFICE ↗"}
+      </a>
+      {lookupUnconfirmed && (
+        <p className="max-w-xs text-xs text-ink-lo">
+          This site blocks automated checks, so we can&apos;t confirm it&apos;s up. If it
+          doesn&apos;t open, use the{" "}
+          <a
+            href={fallbackHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`${officialLookup.fallback?.label ?? "National directory of election offices"} (opens in new tab)`}
+            className={INLINE_LINK}
+          >
+            national directory ↗
+          </a>
+        </p>
+      )}
+      <FollowFeed subject={stateName} feed={stateFeed(ballot.state, stateName)} />
+      {/* Before election day nothing on the page says what it
+          will show once polls close, or what "leads" will mean. */}
+      {!resultsMode && (
+        <Link
+          href="/about/elections#election-night"
+          className="text-xs text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
+        >
+          What this page shows on election night
+        </Link>
+      )}
+    </>
+  );
+
   return (
     <ShareSubjectProvider subject={shareSubject}>
       <div className="min-h-screen bg-surface-base text-ink-hi">
@@ -1921,53 +1973,11 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                   </div>
                 )}
               </div>
-              <div className="flex shrink-0 flex-col gap-1 lg:items-end lg:text-right">
-                <span className="text-xs text-ink-lo">
-                  A research tool, not an official ballot.
-                </span>
-                <a
-                  href={lookupHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label={`${officialLookup.label} (opens in new tab)`}
-                  className="font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
-                >
-                  {/* lookupIsStateSpecific, not the raw flag: a URL safeHref
-                    rejected sends this link to USAGov. "Voter lookup", not
-                    "your full ballot": some states' link is their polling-
-                    place page, which shows where to vote, not the ballot. */}
-                  {lookupUnconfirmed
-                    ? `${stateName.toUpperCase()}'S OFFICIAL VOTER LOOKUP ↗`
-                    : lookupIsStateSpecific
-                      ? `${ballot.state} OFFICIAL VOTER LOOKUP ↗`
-                      : "FIND YOUR ELECTION OFFICE ↗"}
-                </a>
-                {lookupUnconfirmed && (
-                  <p className="max-w-xs text-xs text-ink-lo">
-                    This site blocks automated checks, so we can&apos;t confirm it&apos;s up. If it
-                    doesn&apos;t open, use the{" "}
-                    <a
-                      href={fallbackHref}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label={`${officialLookup.fallback?.label ?? "National directory of election offices"} (opens in new tab)`}
-                      className={INLINE_LINK}
-                    >
-                      national directory ↗
-                    </a>
-                  </p>
-                )}
-                <FollowFeed subject={stateName} feed={stateFeed(ballot.state, stateName)} />
-                {/* Before election day nothing on the page says what it
-                    will show once polls close, or what "leads" will mean. */}
-                {!resultsMode && (
-                  <Link
-                    href="/about/elections#election-night"
-                    className="text-xs text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
-                  >
-                    What this page shows on election night
-                  </Link>
-                )}
+              {/* The caveat and the official lookup: beside the title from lg
+                  up; on a phone after the contests, so the ballot itself is
+                  the first thing under the title (mobile spec #5). */}
+              <div className="hidden shrink-0 flex-col gap-1 lg:flex lg:items-end lg:text-right">
+                {ballotLinks}
               </div>
             </header>
 
@@ -2069,7 +2079,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
             </div>
 
             {/* Phone: the index of every contest, one line each; a contest
-              opens on its own screen with Previous/Next. */}
+              opens in a sheet over the ballot with Previous/Next. */}
             <div
               className="lg:hidden"
               data-testid="ballot-index"
@@ -2151,7 +2161,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                 <button
                   type="button"
                   onClick={() => openContest(contests[0].key)}
-                  className="mt-3 min-h-[48px] w-full bg-phos font-bold text-surface-base hover:bg-phos-mid"
+                  className="mt-3 min-h-13 w-full bg-phos font-bold text-surface-base hover:bg-phos-mid"
                 >
                   Research contest 1 →
                 </button>
@@ -2170,6 +2180,9 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                   ))}
                 </ul>
               </details>
+              <div className="mt-4 flex flex-col gap-1 border-t border-white/[0.14] pt-3">
+                {ballotLinks}
+              </div>
             </div>
           </div>
         </main>

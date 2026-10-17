@@ -125,11 +125,28 @@ describe("the ballot page", () => {
     const b = ballot();
     render(<StateBallotClient ballot={b} />);
     const name = b.stateName ?? b.state;
-    expect(screen.getByRole("link", { name: `Follow ${name} without an account` })).toHaveAttribute(
-      "href",
-      `/feed/states/${b.state}.xml`
-    );
-    expect(screen.getByRole("link", { name: "about feeds" })).toHaveAttribute("href", "/feeds");
+    // Beside the title from lg up, and after the contests on a phone, so the
+    // ballot is the first thing under a phone's title (mobile spec #5).
+    const head = document.querySelector<HTMLElement>("main header")!;
+    const phone = screen.getByTestId("ballot-index");
+    for (const where of [head, phone]) {
+      expect(
+        within(where).getByRole("link", { name: `Follow ${name} without an account` })
+      ).toHaveAttribute("href", `/feed/states/${b.state}.xml`);
+      expect(within(where).getByRole("link", { name: "about feeds" })).toHaveAttribute(
+        "href",
+        "/feeds"
+      );
+      expect(within(where).getByText("A research tool, not an official ballot.")).toBeTruthy();
+    }
+    expect(
+      within(head).getByText("A research tool, not an official ballot.").parentElement!.className
+    ).toMatch(/\bhidden\b.*\blg:flex\b/);
+    const contests = within(phone).getByRole("navigation", { name: "Contests on this ballot" });
+    expect(
+      contests.compareDocumentPosition(within(phone).getByText(/^A research tool/)) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
   });
 
   it("lays the ballot out as contests, federal first, with no drawer open", () => {
@@ -299,14 +316,15 @@ describe("the ballot page", () => {
         })}
       />
     );
-    const own = screen.getByRole("link", {
+    const head = within(document.querySelector<HTMLElement>("main header")!);
+    const own = head.getByRole("link", {
       name: "Arizona Voter Information Portal (opens in new tab)",
     });
     expect(own).toHaveAttribute("href", "https://my.arizona.vote/PortalList.aspx");
     expect(own).toHaveTextContent("ARIZONA'S OFFICIAL VOTER LOOKUP");
-    expect(screen.getByText(/This site blocks automated checks/)).toBeInTheDocument();
+    expect(head.getByText(/This site blocks automated checks/)).toBeInTheDocument();
     expect(
-      screen.getByRole("link", {
+      head.getByRole("link", {
         name: "Find your state or local election office (opens in new tab)",
       })
     ).toHaveAttribute("href", "https://www.usa.gov/election-office");
@@ -314,7 +332,7 @@ describe("the ballot page", () => {
 
   it("gives a verified lookup no caveat", () => {
     render(<StateBallotClient ballot={ballot()} />);
-    expect(screen.queryByText(/This site blocks automated checks/)).not.toBeInTheDocument();
+    expect(screen.queryAllByText(/This site blocks automated checks/)).toHaveLength(0);
   });
 });
 
@@ -330,6 +348,22 @@ describe("the contest drawer", () => {
     expect(drawer.getByRole("heading", { name: "U.S. Senator" })).toBeInTheDocument();
     expect(drawer.getByRole("tab", { name: "Money" })).toHaveAttribute("aria-selected", "true");
     await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("opens as a sheet from the bottom of a phone's screen, closed by a tap above it", async () => {
+    // Mobile spec P7: a phone's contest research covered the whole screen.
+    render(<StateBallotClient ballot={twoContests()} />);
+    await openContest(/U\.S\. Senator/);
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.className).toMatch(/\bh-\[85svh\]/);
+    expect(dialog.className).toMatch(/\blg:h-full\b/);
+    const backdrop = screen.getByRole("button", {
+      name: "Close and return to the ballot",
+      hidden: true,
+    });
+    expect(backdrop.className).not.toMatch(/\bhidden\b/);
+    await userEvent.click(backdrop);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
