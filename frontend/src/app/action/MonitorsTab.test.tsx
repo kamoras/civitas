@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import MonitorsTab from "./MonitorsTab";
 import type { NationalMonitor } from "@/lib/api";
 
@@ -49,5 +49,13 @@ describe("Ongoing tab", () => {
     expect(within(section).getByText("An older concern")).toBeInTheDocument();
     expect(within(section).getByText(/Tracked Jun 2 – Jul 30 · closed Aug 31/)).toBeInTheDocument();
     expect(screen.getAllByText("A concern")).toHaveLength(1);
+  });
+
+  it("offers an open monitor's own feed, to follow without an account", async () => {
+    render(<MonitorsTab />);
+    fireEvent.click(await screen.findByRole("button", { name: /A concern/ }));
+    const link = screen.getByRole("link", { name: "Follow this monitor without an account" });
+    expect(link.getAttribute("href")).toBe("/feed/monitors/a-concern.xml");
+    expect(link.getAttribute("type")).toBe("application/atom+xml");
   });
 });

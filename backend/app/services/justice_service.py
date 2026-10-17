@@ -89,6 +89,7 @@ def _build_justice_response(j: Justice, names: dict[str, str]) -> JusticeSchema:
         agreement=_agreement(j, names),
         loyalty=_loyalty(j),
         ideal_points=_ideal_points(j),
+        record_terms=sorted({int(v.case_term) for v in j.votes if v.case_term.isdigit()}),
     )
 
 
@@ -97,7 +98,9 @@ def _ideal_points(j: Justice) -> list[tuple[int, float]]:
         points = json.loads(j.ideal_points or "[]")
     except (json.JSONDecodeError, TypeError):
         return []
-    return points if isinstance(points, list) else []
+    # The stored rows may carry the credible interval after the position
+    # ([term, position, low, high]); this field is the position alone.
+    return [p[:2] for p in points if isinstance(p, list) and len(p) >= 2] if isinstance(points, list) else []
 
 
 def get_all_justices(db: Session) -> list[JusticeSchema]:

@@ -974,15 +974,19 @@ What this rules in and out:
   join documented in `scripts/fetch_state_leg_crosswalk.py`). Building
   those crosswalks is real work, and doing it is the price of not asking.
 - **In:** following Civitas without an account. The Atom feeds (`/feeds`)
-  are pulled, and a topic or state is chosen by which URL a reader
-  subscribes to, so there is no subscriber list to keep. A push channel
-  that would need one (email, web push, per-server webhooks) is out, for
-  the same reason as an address box. A page offers its most specific
-  feed first — `pageMetadata({ feed })` in `src/lib/site.ts` (a state's
-  ballot page its state's feed, `/congress` the Congress feed, an issue
-  page the Action Center feed) — and the state ballot and Congress pages
-  link it visibly (`FollowFeed`); a new page with a feed of its own should
-  do the same.
+  are pulled, and a topic, state or one followed thing is chosen by which
+  URL a reader subscribes to, so there is no subscriber list to keep. A
+  push channel that would need one (email, web push, per-server webhooks)
+  is out, for the same reason as an address box. A member, a bill, an
+  agency and a national monitor each have a feed built from stored rows
+  when asked for (`app/entity_feeds.py`: fixed templates, no model, ids on
+  what the entry is, never on a slug or URL), nginx-cached like the rest.
+  A page offers its most specific feed first — `pageMetadata({ feed })` in
+  `src/lib/site.ts` (a state's ballot page its state's feed, `/congress`
+  the Congress feed, a member's profile, a bill or an agency its own, an
+  issue page its monitor's or else the Action Center feed) — and links it
+  visibly (`FollowFeed`); a new page with a feed of its own should do the
+  same.
 - **In, server-side only:** the Census geocoder and Google Civic's
   `voterInfoQuery`, called from the pipeline (and, for the town selector,
   from the API, cached 12 hours) with **our own** fixed,
@@ -1456,12 +1460,18 @@ Each issue's actions are fixed templates around stored data:
   open-only rule).
 
 The Today tab's open comment periods are ranked by salience, not deadline
-(`api/action.open_comments_salience`): documents a recent issue links, then
-rules before notices, then by the Federal Register's own reader count
+(`comment_periods.salience`, shared with agency pages and Explore's
+open-comments list): documents a recent issue links, then rules before
+notices and Paperwork Reduction Act notices last, then by the Federal
+Register's own reader count
 (`ExploreDocument.fr_page_views`, read once a day by the Action Center —
 `_refresh_open_comment_views` — not by the nightly Explore refresh, whose
 module is fingerprinted). Citations were measured and rejected as the
-signal: airworthiness directives carry hundreds of boilerplate ones.
+signal: airworthiness directives carry hundreds of boilerplate ones. A
+paperwork notice is the Register's own table-of-contents subject for PRA
+collections (`fr_toc_subject`, read with the page views), never a title
+word: 303 of 615 open on 2026-10-17, precision 303/303, recall 303/304.
+Agency pages and Explore fold them under "Paperwork notices (N)".
 
 Feed descriptions are **stripped of HTML** as they are parsed
 (`news_feeds._strip_html`): the WordPress-backed feeds put real markup in
@@ -2144,6 +2154,7 @@ the pending list).
 | Committee routing for issues (rules' jurisdictions + labelled issues) | `backend/app/committee_routing.py`, `backend/app/data/committee_*.json`, `backend/scripts/fetch_committee_jurisdictions.py`, `backend/scripts/calibrate_committee_routing.py` |
 | Issue principal actor + weekly actor concentration (admin) | `backend/app/pipeline/analyze/story_actor.py`, `GET /api/admin/actor-concentration`, `frontend/src/components/admin/ActionCenterDashboard.tsx` |
 | Justice record and appointer estimate (not scored, justice v3) | `backend/app/pipeline/justice_pipeline.py`, `backend/app/pipeline/analyze/justice_loyalty.py` |
+| The Court page (`/court`: Martin-Quinn line, agreement grid, splits by term, decision lineups) and each justice's case list | `backend/app/services/court_service.py`, `backend/app/api/court.py`, `frontend/src/app/court/page.tsx`, `frontend/src/components/court/`, `frontend/src/components/scorecard/JusticeCases.tsx` |
 | Election cycle pipeline (candidates, financials, ballot measures, coverage) | `backend/app/pipeline/election_pipeline.py` |
 | What shapes a race (seat lean among all seats, FEC contribution categories, state CSV; descriptive, no forecast) | `backend/app/race_context.py`, `frontend/src/components/elections/ballot/RaceContext.tsx`, `RaceMoneyBars.tsx` |
 | Election phase (campaign / election day / results) + results grace period | `backend/app/election_phase.py` |

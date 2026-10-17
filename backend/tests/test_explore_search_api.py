@@ -350,3 +350,23 @@ async def test_no_query_with_commentable_lists_open_comment_periods_closing_soon
     body = json.loads((await _search(indexed_db, q=None, commentable=True)).body)
 
     assert [r["id"] for r in body["results"]] == [sooner.id, later.id]
+
+
+async def test_open_comment_periods_fold_paperwork_notices_apart(indexed_db, monkeypatch):
+    """Rules first, as the Today tab orders them; a Paperwork Reduction Act
+    notice under the Register's heading goes to `paperwork`, not the list."""
+    monkeypatch.setattr(explore_search, "comment_period_today", lambda: "2026-10-12")
+    url = "https://www.regulations.gov/commenton/X-1"
+    notice = _add(indexed_db, title="Hearing", doc_type="Notice", date="2026-10-01", comment_url=url,
+                  comments_close_on="2026-10-13", fr_page_views=500)
+    rule = _add(indexed_db, title="Rule", doc_type="Proposed Rule", date="2026-10-01", comment_url=url,
+                comments_close_on="2026-11-30", summary="This rule limits a pesticide. It also sets dates.")
+    renewal = _add(indexed_db, title="Renewal", doc_type="Notice", date="2026-10-01", comment_url=url,
+                   comments_close_on="2026-10-20", fr_toc_subject=explore_search.comment_periods.PAPERWORK_TOC_SUBJECT)
+
+    body = json.loads((await _search(indexed_db, q=None, commentable=True)).body)
+
+    assert [r["id"] for r in body["results"]] == [rule.id, notice.id]
+    assert body["paperwork"]["count"] == 1 and [r["id"] for r in body["paperwork"]["results"]] == [renewal.id]
+    assert body["results"][0]["snippet"] == "This rule limits a pesticide."
+    assert body["results"][0]["commentWindow"]["daysLeft"] == 49

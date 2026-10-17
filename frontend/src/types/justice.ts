@@ -52,6 +52,9 @@ export interface Justice {
   /** Martin-Quinn position per term, [[term, position], ...], oldest first:
    *  shown, not scored. Negative is liberal, positive conservative. */
   idealPoints: [number, number][];
+  /** The terms the voting record covers (those with decided cases stored),
+   *  oldest first. Optional: a response cached before it shipped has none. */
+  recordTerms?: number[];
 }
 
 /** A sitting justice, listed by seniority and not ranked (justice v3). */

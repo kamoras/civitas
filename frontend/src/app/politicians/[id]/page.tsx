@@ -3,7 +3,7 @@ import { notFound, permanentRedirect } from "next/navigation";
 import type { PoliticianProfile } from "@/types/politicians";
 import type { RepresentationScoreBreakdown } from "@/types/scoreBreakdown";
 import { fetchRecord } from "@/lib/ssrPayload";
-import { absoluteUrl, notFoundMetadata, pageMetadata } from "@/lib/site";
+import { absoluteUrl, memberFeed, notFoundMetadata, pageMetadata } from "@/lib/site";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
 import { describeProfile, personJsonLd } from "@/lib/seo";
 import ThisWeekStrip from "@/components/shared/ThisWeekStrip";
@@ -74,6 +74,12 @@ export async function generateMetadata({
     path,
     type: "profile",
     images: [{ url: ogImage, width: 1200, height: 630, alt: profile.identity.name }],
+    // A member of Congress has a feed of their own; a president or justice
+    // has none.
+    feed:
+      profile.branch === "senate" || profile.branch === "house"
+        ? memberFeed(profile.id, profile.identity.name)
+        : undefined,
   });
 }
 

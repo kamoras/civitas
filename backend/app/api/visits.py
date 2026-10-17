@@ -517,7 +517,7 @@ def _visitor_hash(ip: str, salt: bytes) -> str:
 _KNOWN_STATIC_PATHS = {
     "/", "/about", "/accessibility", "/action", "/bills", "/changelog",
     "/compare", "/developers", "/environmental", "/explore", "/feedback", "/feeds", "/leaderboard",
-    "/politicians", "/elections", "/congress", "/congress/bills", "/agencies",
+    "/politicians", "/elections", "/congress", "/congress/bills", "/agencies", "/court",
     # /scorecard has no page anymore (renamed) but old Bluesky posts still
     # link to it — kept here so that 404 traffic stays visibly labeled
     # "/scorecard" instead of draining into the unlabeled "/other" bucket.

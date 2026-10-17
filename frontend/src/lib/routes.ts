@@ -1,4 +1,5 @@
 import { ABOUT_CHAPTERS, ABOUT_OVERVIEW_HREF } from "./aboutPages";
+import { COURT_HREF } from "./court";
 
 /**
  * Shared hrefs for in-app navigation targets that need a specific URL shape.
@@ -138,6 +139,12 @@ export const SECTIONS = {
       { key: "budget", label: "Budgets", href: "/agencies#budget" },
       { key: "comments", label: "Open comment periods", href: "/explore?comment=open" },
     ],
+  },
+  court: {
+    label: "Court",
+    href: COURT_HREF,
+    match: [COURT_HREF],
+    tabs: [{ key: "court", label: "Justices and decisions", href: COURT_HREF }],
   },
   politicians: {
     label: "Politicians",

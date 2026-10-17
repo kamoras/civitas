@@ -59,7 +59,7 @@ async def search_explore(
         None, min_length=2, max_length=200,
         description=(
             "Search query. Optional with politician_id or agency (that member's or agency's documents, "
-            "newest first) or with commentable=true (every open comment period, closing soonest first)"
+            "newest first) or with commentable=true (every open comment period, rules first; paperwork notices apart)"
         ),
     ),
     doc_type: str | None = Query(None, description="Filter by document type"),
@@ -112,7 +112,8 @@ async def search_explore(
         ))
         return JSONResponse(
             content={"query": "", "results": outcome["results"], "count": outcome["count"],
-                     "semanticUnavailable": False, "channels": outcome["channels"]},
+                     "semanticUnavailable": False, "channels": outcome["channels"],
+                     **({"paperwork": outcome["paperwork"]} if "paperwork" in outcome else {})},
             headers={"Cache-Control": "public, max-age=60, stale-while-revalidate=60"},
         )
 

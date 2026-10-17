@@ -26,6 +26,7 @@ const FIGURES: SectionFigures = {
     comments: { open: 185 },
   },
   politicians: { directory: { senators: 100, representatives: 433 } },
+  court: { court: { term: 2025, cases: 57, unanimous: 24 } },
   elections: {
     ballots: { states: 51, date: "2026-11-03", phase: "campaign", daysUntil: 18 },
     map: { available: false, reason: MAP_OFF },
@@ -45,6 +46,19 @@ describe("sectionPreview", () => {
     expect(sectionPreview(FIGURES, "elections", "redistricting")?.caption).toBe(
       "states vote on new House lines in 2026"
     );
+  });
+
+  it("words the Court's latest term, and says so before any is read or from an older backend", () => {
+    expect(sectionPreview(FIGURES, "court", "court")).toEqual({
+      figure: "57",
+      caption: "cases decided in the 2025 term, 24 unanimous",
+    });
+    expect(sectionPreview({ ...FIGURES, court: { court: null } }, "court", "court")?.figure).toBe(
+      "Not yet"
+    );
+    const older = { ...FIGURES } as Partial<typeof FIGURES>;
+    delete older.court;
+    expect(sectionPreview(older as typeof FIGURES, "court", "court")).toBeNull();
   });
 
   it("never shows a bare zero for something not read or not happening", () => {

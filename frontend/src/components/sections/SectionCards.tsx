@@ -29,6 +29,7 @@ const SOURCES: Partial<Record<SectionKey, string>> = {
   elections:
     "State election offices (official counts for the archive's map check); Civitas election map; enacted House maps",
   agencies: "Federal Register; USAspending.gov",
+  court: "Supreme Court Database; Oyez; Martin-Quinn scores",
 };
 
 /**
