@@ -7,15 +7,15 @@ every stored position (California's 54 members took 4.5 s, 1.6 s with it).
 Additive only (one index), so the previous image runs unchanged against
 the migrated schema.
 
-Revision ID: 0061
-Revises: 0060
+Revision ID: 0062
+Revises: 0061
 Create Date: 2026-10-17
 """
 from alembic import op
 
 
-revision = '0061'
-down_revision = '0060'
+revision = '0062'
+down_revision = '0061'
 branch_labels = None
 depends_on = None
 
