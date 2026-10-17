@@ -2307,7 +2307,10 @@ the pending list).
   descriptions; `/developers` and the MCP tools are generated from exactly
   that, so nothing else needs editing. `tests/test_public_api_contract.py`
   must cover the new endpoint, since those routes return `JSONResponse` and
-  FastAPI would otherwise never check the body against the documented shape.
+  FastAPI would otherwise never check the body against the documented shape. A CSV download (`…/x.csv`) declares
+  `response_class=CsvResponse` and `_CSV_RESPONSES`, and is written and
+  documented from one column list (`_csv`, `_csv_doc`): the contract test
+  checks its header against that list, and it is not an MCP tool.
 - **Read path must stay lightweight**: never load the embedding model or LLM on
   API read requests (GET endpoints). All ML inference happens at pipeline write
   time. Anything a response needs that takes a model — the Action Center's
