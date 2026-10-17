@@ -705,13 +705,13 @@ NY14_NEWSLETTER = NewsArticle(
     # The shape of the 2026-10-17 post (production race_coverage_items 9858):
     # a newsletter whose lead item names a New York House candidate in full,
     # campaigning in another state, over a list of unrelated stories.
-    title="Vance and Ocasio-Cortez face off in Michigan, previewing possible 2028 match-up",
+    title="Hale and Rivas-Cole face off in Michigan, previewing possible 2028 match-up",
     url="https://thehill.com/newsletters/morning-report/6153128-vance-ocasio-cortez-michigan-2028/",
     source_name="The Hill",
     summary=(
         "In today's issue: \u25aa Zacharia confirms she didn't pass bar exam \u25aa Livestreamed "
         "execution called off \u25aa Elections offices receive suspicious letters \u25aa AI companies "
-        "receive subpoenas Rep. Alexandria Ocasio-Cortez (D-N.Y.) and Vice President Vance are "
+        "receive subpoenas Rep. Alexandria Rivas-Cole (D-N.Y.) and Vice President Hale are "
         "lending their star power to frontline candidates in Michigan, offering an early glimpse "
         "into what could be a potential..."
     ),
@@ -720,7 +720,7 @@ NY14_NEWSLETTER = NewsArticle(
 
 def _seed_ny14(db):
     _race(db, "2026-HOUSE-NY-14", "NY", office="H")
-    _candidate(db, "H8NY15148", "2026-HOUSE-NY-14", "OCASIO-CORTEZ, ALEXANDRIA")
+    _candidate(db, "H8NY15148", "2026-HOUSE-NY-14", "RIVAS-COLE, ALEXANDRIA")
     _candidate(db, "H6NY14002", "2026-HOUSE-NY-14", "RIVAL, PAT", party="REP")
     db.commit()
 
@@ -735,14 +735,14 @@ class TestAStoryMustNameTheRace:
 
     def test_a_candidate_campaigning_elsewhere_is_not_coverage_of_the_race(self, db_session):
         _seed_ny14(db_session)
-        assert self._basis(db_session, "Alexandria Ocasio-Cortez rallies voters in Michigan") is None
+        assert self._basis(db_session, "Alexandria Rivas-Cole rallies voters in Michigan") is None
         # A party-and-state tag is the member's label, not the race.
-        assert self._basis(db_session, "Rep. Alexandria Ocasio-Cortez (D-N.Y.) weighs a 2028 bid") is None
+        assert self._basis(db_session, "Rep. Alexandria Rivas-Cole (D-N.Y.) weighs a 2028 bid") is None
 
     def test_the_state_or_an_opponent_names_the_race(self, db_session):
         _seed_ny14(db_session)
-        assert self._basis(db_session, "Alexandria Ocasio-Cortez opens a New York campaign office") == "full_name"
-        assert self._basis(db_session, "Alexandria Ocasio-Cortez and Rival meet in a debate") == "full_name"
+        assert self._basis(db_session, "Alexandria Rivas-Cole opens a New York campaign office") == "full_name"
+        assert self._basis(db_session, "Alexandria Rivas-Cole and Rival meet in a debate") == "full_name"
 
     def test_a_namesake_is_not_an_opponent(self, db_session):
         """Three candidates named Dan Sullivan ran in one race: another
@@ -764,10 +764,10 @@ class TestDigestsAreNotRaceCoverage:
     async def test_a_newsletter_is_dropped_even_when_it_names_the_race(self, db_session):
         _seed_ny14(db_session)
         article = NewsArticle(
-            title="Ocasio-Cortez and Rival clash in New York debate",
+            title="Rivas-Cole and Rival clash in New York debate",
             url="https://thehill.com/newsletters/campaign/1-ocasio-cortez-rival-debate/",
             source_name="The Hill",
-            summary="Alexandria Ocasio-Cortez and Pat Rival met in a New York debate.",
+            summary="Alexandria Rivas-Cole and Pat Rival met in a New York debate.",
         )
         with patch.object(election_coverage, "fetch_news_articles", return_value=[article]):
             assert await election_coverage.ingest_race_coverage(db_session) == 0
@@ -782,14 +782,14 @@ class TestDigestsAreNotRaceCoverage:
             ),
             RaceCoverageItem(
                 race_id="2026-HOUSE-NY-14", source_type="news", source_name="The Hill",
-                title="Alexandria Ocasio-Cortez sees her White House chances grow",
+                title="Alexandria Rivas-Cole sees her White House chances grow",
                 url="https://thehill.com/homenews/campaign/2-white-house/",
                 summary="Some Democrats are confident about a 2028 run.",
                 matched_candidate_id="H8NY15148", match_basis="full_name", relevance=0.41,
             ),
             RaceCoverageItem(
                 race_id="2026-HOUSE-NY-14", source_type="news", source_name="The Hill",
-                title="Alexandria Ocasio-Cortez and Pat Rival meet in New York debate",
+                title="Alexandria Rivas-Cole and Pat Rival meet in New York debate",
                 url="https://thehill.com/homenews/campaign/3-debate/",
                 summary="The two met on Tuesday.",
                 matched_candidate_id="H8NY15148", match_basis="full_name", relevance=0.6,

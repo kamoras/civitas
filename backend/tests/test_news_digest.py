@@ -12,7 +12,7 @@ def _article(title, summary="", url="https://example.com/2026/10/17/story"):
 
 
 @pytest.mark.parametrize("title", [
-    "Collins, Jackson clash in first Maine Senate debate: 3 takeaways",
+    "Corbin, Jarvis clash in first Maine Senate debate: 3 takeaways",
     "4 takeaways from the Gluesenkamp-Perez debate",
 ])
 def test_one_events_takeaways_are_one_story(title):
@@ -45,7 +45,7 @@ def test_a_pbs_sign_off_is_not_an_item():
 
 def test_a_newsletter_is_still_a_digest():
     article = _article(
-        "Vance and Ocasio-Cortez face off in Michigan",
+        "Hale and Rivas-Cole face off in Michigan",
         "In today's issue: ▪ Zacharia confirms she didn't pass bar exam ▪ Livestreamed execution called off",
         url="https://thehill.com/newsletters/morning-report/6153128-vance/",
     )

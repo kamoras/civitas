@@ -66,7 +66,7 @@ def _issue_signature(title: str, facts: list[str]) -> set[str]:
     define it; two rows that merely sound alike share only the generic
     tokens this strips."""
     text = _DATE_RE.sub(" ", f"{title} {' '.join(facts)}").translate(_APOSTROPHES)
-    # A possessive is the same entity: "Trump" and "Trump's" counted as two
+    # A possessive is the same entity: "Doe" and "Doe's" counted as two
     # shared tokens matched unrelated stories about one person (2026-10-08).
     tokens = {
         _POSSESSIVE_SUFFIX_RE.sub("", m.group(0).lower())

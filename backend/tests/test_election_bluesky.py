@@ -571,22 +571,22 @@ class TestRefusal:
     candidate campaigning in Michigan, at relevance 0.424."""
 
     NEWSLETTER = dict(
-        title="Vance and Ocasio-Cortez face off in Michigan, previewing possible 2028 match-up",
+        title="Hale and Rivas-Cole face off in Michigan, previewing possible 2028 match-up",
         url="https://thehill.com/newsletters/morning-report/6153128-vance-ocasio-cortez-michigan-2028/",
         summary=(
             "In today's issue: ▪ Zacharia confirms she didn't pass bar exam ▪ Livestreamed "
             "execution called off ▪ Elections offices receive suspicious letters Rep. Alexandria "
-            "Ocasio-Cortez (D-N.Y.) and Vice President Vance are lending their star power to "
+            "Rivas-Cole (D-N.Y.) and Vice President Hale are lending their star power to "
             "frontline candidates in Michigan..."
         ),
     )
 
     def _seed(self, db, **item):
         race = _race(db, "2026-HOUSE-NY-14", "NY", office="H")
-        _candidate(db, "H8NY15148", "2026-HOUSE-NY-14", "OCASIO-CORTEZ, ALEXANDRIA")
+        _candidate(db, "H8NY15148", "2026-HOUSE-NY-14", "RIVAS-COLE, ALEXANDRIA")
         _candidate(db, "H6NY14002", "2026-HOUSE-NY-14", "RIVAL, PAT")
         fields = dict(
-            title="Alexandria Ocasio-Cortez and Pat Rival clash in New York debate",
+            title="Alexandria Rivas-Cole and Pat Rival clash in New York debate",
             url="https://thehill.com/homenews/campaign/1-debate/",
             summary="The two candidates met on Tuesday.", relevance=0.6,
             matched_candidate_id="H8NY15148",
@@ -611,8 +611,8 @@ class TestRefusal:
 
     def test_a_name_without_the_race_is_refused(self, db_session):
         why = election_bluesky.refusal(*self._seed(
-            db_session, title="Alexandria Ocasio-Cortez rallies voters in Michigan",
-            summary="Rep. Alexandria Ocasio-Cortez (D-N.Y.) campaigned for candidates there."))
+            db_session, title="Alexandria Rivas-Cole rallies voters in Michigan",
+            summary="Rep. Alexandria Rivas-Cole (D-N.Y.) campaigned for candidates there."))
         assert "not the race" in why
 
     def test_relevance_below_the_calibrated_threshold_is_refused(self, db_session):
