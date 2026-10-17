@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { SECTIONS, inSection, sectionSubpages, type SectionKey } from "@/lib/routes";
 import { BSKY_PROFILE_URL } from "@/lib/site";
-import RecordsBand from "./RecordsBand";
+import RecordsBand, { RunStatusSquare } from "./RecordsBand";
 import SiteSearch from "@/components/search/SiteSearch";
 import YourStatePicker from "./YourStatePicker";
 
@@ -246,6 +246,66 @@ function SectionItem({
   );
 }
 
+/**
+ * A phone's header hides while the reader scrolls down and comes back on any
+ * scroll up (mobile spec P8): at rest it was 10% of every screen. Never
+ * within the first screen, never with reduced motion asked for (it stays
+ * put), never while focus is in it (any focus there shows it, WCAG 2.4.11),
+ * and never while the menu or a sheet is open. Only in the MENU layout
+ * (under 56rem). Tells the page through `data-header-hidden` on <html>, so
+ * what sits under the header (the section bar, the Action Center's tabs)
+ * moves up to the top edge with it.
+ */
+export function useHideOnScroll(
+  header: React.RefObject<HTMLElement | null>,
+  menuOpen: boolean
+): boolean {
+  const [hidden, setHidden] = useState(false);
+  useEffect(() => {
+    const el = header.current;
+    if (!el || typeof window.matchMedia !== "function") return;
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const phone = window.matchMedia("(max-width: 55.99rem)");
+    let last = window.scrollY;
+    let frame = 0;
+    const blocked = () =>
+      menuOpen ||
+      still.matches ||
+      !phone.matches ||
+      el.contains(document.activeElement) ||
+      document.body.style.overflow === "hidden";
+    const check = () => {
+      frame = 0;
+      const y = window.scrollY;
+      if (blocked() || y < window.innerHeight) setHidden(false);
+      else if (y > last + 4) setHidden(true);
+      else if (y < last - 4) setHidden(false);
+      last = y;
+    };
+    const onScroll = () => {
+      if (!frame) frame = requestAnimationFrame(check);
+    };
+    const show = () => setHidden(false);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    el.addEventListener("focusin", show);
+    still.addEventListener?.("change", show);
+    phone.addEventListener?.("change", show);
+    if (blocked()) show();
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      el.removeEventListener("focusin", show);
+      still.removeEventListener?.("change", show);
+      phone.removeEventListener?.("change", show);
+      cancelAnimationFrame(frame);
+    };
+  }, [header, menuOpen]);
+  useEffect(() => {
+    document.documentElement.toggleAttribute("data-header-hidden", hidden);
+    return () => document.documentElement.removeAttribute("data-header-hidden");
+  }, [hidden]);
+  return hidden;
+}
+
 export default function Navbar() {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -260,6 +320,8 @@ export default function Navbar() {
   const logoRef = useRef<HTMLAnchorElement>(null);
   const rowRef = useRef<HTMLDivElement>(null);
   const rowFits = useRowFits(barRef, logoRef, rowRef);
+  const headerRef = useRef<HTMLElement>(null);
+  const hidden = useHideOnScroll(headerRef, menuOpen);
   // MENU's breakpoint, or always MENU when the row doesn't fit.
   const menuOnly = rowFits ? "min-[56rem]:hidden" : "";
 
@@ -270,11 +332,13 @@ export default function Navbar() {
 
   useEffect(() => {
     if (!menuOpen || !menuRef.current) return;
-    // The panel's first control, in reading order: the state picker at its
-    // top, then the sections. Starting on the first link skipped the
-    // picker, which Tab then reached only after every link.
-    const first = menuRef.current.querySelector<HTMLElement>("select, a[href], button");
-    first?.focus();
+    // The panel itself, named "Site menu", so Tab's first stop is the
+    // state picker at its top, then the sections. Never the picker: a phone
+    // browser opens a native select's list when it takes focus, so MENU
+    // popped the state list open on every tap. (Starting on the first link
+    // instead skipped the picker, which Tab then reached only after every
+    // link.)
+    menuRef.current.focus();
   }, [menuOpen]);
 
   useEffect(() => {
@@ -291,7 +355,8 @@ export default function Navbar() {
       if (focusable.length === 0) return;
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
+      const onPanel = document.activeElement === menuRef.current;
+      if (e.shiftKey && (onPanel || document.activeElement === first)) {
         e.preventDefault();
         last.focus();
       } else if (!e.shiftKey && document.activeElement === last) {
@@ -305,9 +370,12 @@ export default function Navbar() {
 
   return (
     <header
+      ref={headerRef}
       role="banner"
       // Solid, not a translucent blur: the header is paper, not glass.
-      className="fixed top-0 left-0 right-0 z-50 bg-surface-base"
+      className={`fixed top-0 left-0 right-0 z-50 bg-surface-base transition-transform duration-200 motion-reduce:transition-none ${
+        hidden ? "-translate-y-full" : ""
+      }`}
     >
       {/*
         The band lives inside the fixed header rather than above it so every
@@ -335,23 +403,27 @@ export default function Navbar() {
               wraps, the buttons right-aligned on a second row, and
               HeaderClearance moves the pages' clearance down with it: one
               row clipped every page there (WCAG 1.4.10). */}
-          <Link
-            ref={logoRef}
-            href="/"
-            aria-label="Civitas Research"
-            className="group inline-flex min-h-6 items-center gap-2.5 text-ink-hi"
-          >
-            <span className="font-pixel text-xs tracking-widest transition-colors group-hover:text-phos sm:text-sm min-[56rem]:text-xs xl:text-sm">
-              CIVITAS
-            </span>
-            <span
-              aria-hidden="true"
-              className="hidden h-3.5 border-l border-ink-min/60 @min-[20rem]:inline sm:h-4"
-            />
-            <span className="hidden font-mono text-xs tracking-[0.18em] text-ink-lo @min-[20rem]:inline sm:tracking-[0.3em]">
-              RESEARCH
-            </span>
-          </Link>
+          {/* Under 56rem the records band is this square, left of the mark. */}
+          <span className="flex items-center gap-1">
+            <RunStatusSquare />
+            <Link
+              ref={logoRef}
+              href="/"
+              aria-label="Civitas Research"
+              className="group inline-flex min-h-6 items-center gap-2.5 text-ink-hi"
+            >
+              <span className="font-pixel text-xs tracking-widest transition-colors group-hover:text-phos sm:text-sm min-[56rem]:text-xs xl:text-sm">
+                CIVITAS
+              </span>
+              <span
+                aria-hidden="true"
+                className="hidden h-3.5 border-l border-ink-min/60 @min-[20rem]:inline sm:h-4"
+              />
+              <span className="hidden font-mono text-xs tracking-[0.18em] text-ink-lo @min-[20rem]:inline sm:tracking-[0.3em]">
+                RESEARCH
+              </span>
+            </Link>
+          </span>
 
           {/*
           One row from 56rem (896 px at the default text size), compact
@@ -435,7 +507,10 @@ export default function Navbar() {
           <div
             ref={menuRef}
             id="mobile-menu"
-            className={`${menuOnly} max-h-[calc(100dvh-5.5rem)] overflow-y-auto overscroll-contain bg-surface-base/[0.98] border-t border-white/[0.07] px-6 pt-2 pb-6`}
+            role="region"
+            aria-label="Site menu"
+            tabIndex={-1}
+            className={`${menuOnly} outline-none max-h-[calc(100dvh-3.5rem)] min-[56rem]:max-h-[calc(100dvh-5.5rem)] overflow-y-auto overscroll-contain bg-surface-base/[0.98] border-t border-white/[0.07] px-6 pt-2 pb-6`}
           >
             <div className="border-b border-white/[0.07] py-3">
               <YourStatePicker size="lg" />

@@ -1,6 +1,7 @@
+import React from "react";
 import { describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import Navbar from "./Navbar";
+import Navbar, { useHideOnScroll } from "./Navbar";
 import Footer from "./Footer";
 import { SECTIONS, sectionSubpages, type SectionKey } from "@/lib/routes";
 
@@ -8,7 +9,7 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/elections/map",
   useRouter: () => ({ push: vi.fn() }),
 }));
-vi.mock("./RecordsBand", () => ({ default: () => null }));
+vi.mock("./RecordsBand", () => ({ default: () => null, RunStatusSquare: () => null }));
 
 const KEYS = Object.keys(SECTIONS) as SectionKey[];
 
@@ -112,8 +113,14 @@ describe("Navbar", () => {
     render(<Navbar />);
     fireEvent.click(screen.getByRole("button", { name: "Open navigation menu" }));
     const menu = document.getElementById("mobile-menu")!;
-    // Focus starts on the panel's first control, the state picker.
-    expect(within(menu).getByLabelText("Your state")).toHaveFocus();
+    // Focus starts on the panel itself, never the state picker: a phone
+    // opens a native select's list when it takes focus.
+    expect(menu).toHaveFocus();
+    expect(menu).toHaveAccessibleName("Site menu");
+    expect(document.activeElement?.tagName).not.toBe("SELECT");
+    // Shift+Tab from the panel stays in it, on its last control.
+    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+    expect(within(menu).getAllByRole("link").at(-1)).toHaveFocus();
     for (const key of KEYS) {
       const subs = sectionSubpages(key);
       if (!subs.length) continue;
@@ -194,5 +201,78 @@ describe("Footer", () => {
       expect(hrefs).toContain(SECTIONS[key].href);
       for (const t of sectionSubpages(key)) expect(hrefs).toContain(t.href);
     }
+  });
+});
+
+describe("useHideOnScroll (a phone's header)", () => {
+  function Harness({ menuOpen = false }: { menuOpen?: boolean }) {
+    const ref = React.useRef<HTMLElement>(null);
+    const hidden = useHideOnScroll(ref, menuOpen);
+    return (
+      <header ref={ref} data-hidden={String(hidden)}>
+        <button type="button">in the header</button>
+      </header>
+    );
+  }
+  function media(reduced: boolean) {
+    // jsdom has no matchMedia: the hook leaves the header alone without it.
+    window.matchMedia = ((q: string) => ({
+      matches: q.includes("reduce") ? reduced : true,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia;
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
+      cb(0);
+      return 0;
+    });
+  }
+  function scroll(y: number) {
+    act(() => {
+      Object.defineProperty(window, "scrollY", { configurable: true, value: y });
+      window.dispatchEvent(new Event("scroll"));
+    });
+  }
+  const state = () => document.querySelector("header")!.getAttribute("data-hidden");
+
+  it("hides on scroll down past the first screen and comes back on scroll up", () => {
+    media(false);
+    render(<Harness />);
+    scroll(300);
+    expect(state()).toBe("false"); // still within the first screen
+    scroll(2000);
+    scroll(2400);
+    expect(state()).toBe("true");
+    expect(document.documentElement.hasAttribute("data-header-hidden")).toBe(true);
+    scroll(2300);
+    expect(state()).toBe("false");
+    expect(document.documentElement.hasAttribute("data-header-hidden")).toBe(false);
+    vi.restoreAllMocks();
+  });
+
+  it("shows when focus goes into it", () => {
+    media(false);
+    render(<Harness />);
+    scroll(2000);
+    scroll(2400);
+    expect(state()).toBe("true");
+    act(() => screen.getByRole("button", { name: "in the header" }).focus());
+    expect(state()).toBe("false");
+    vi.restoreAllMocks();
+  });
+
+  it("never hides with reduced motion, or with the menu open", () => {
+    media(true);
+    const { unmount } = render(<Harness />);
+    scroll(2000);
+    scroll(2400);
+    expect(state()).toBe("false");
+    unmount();
+    vi.restoreAllMocks();
+    media(false);
+    render(<Harness menuOpen />);
+    scroll(2000);
+    scroll(2400);
+    expect(state()).toBe("false");
+    vi.restoreAllMocks();
   });
 });
