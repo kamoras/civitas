@@ -197,6 +197,16 @@ const PREVIEWS: Record<string, Record<string, (f: SectionFigures) => Preview>> =
       };
     },
   },
+  court: {
+    // Destructuring an older backend's answer (no `court`) throws: no figure.
+    court: ({ court: { court } }) =>
+      court
+        ? {
+            figure: n(court.cases),
+            caption: `${plural(court.cases, "case")} decided in the ${court.term} term, ${n(court.unanimous)} unanimous`,
+          }
+        : { figure: "Not yet", caption: "no Supreme Court decision has been read yet" },
+  },
   explore: {
     search: ({ explore: { search } }) =>
       search.documents > 0

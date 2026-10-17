@@ -166,7 +166,7 @@ def test_the_run_reports_when_loyalty_was_not_measured(db_session):
          patch("app.pipeline.justice_pipeline.fetch_case_votes", AsyncMock(return_value=[])), \
          patch("app.pipeline.justice_pipeline._measure_loyalty", AsyncMock(return_value=(None, "x could not be read"))):
         result = asyncio.run(run_justice_pipeline(db_session))
-    assert result == {"justices": 1, "votes": 0, "loyalty_unmeasured": "x could not be read"}
+    assert result == {"justices": 1, "votes": 0, "loyalty_unmeasured": "x could not be read", "positions_unread": False}
 
 
 def test_unmeasured_loyalty_names_every_source_that_was_down(db_session):

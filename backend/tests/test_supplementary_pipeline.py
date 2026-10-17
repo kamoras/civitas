@@ -202,6 +202,15 @@ class TestSupplementaryPipelineRunTracking:
              patch("app.pipeline.supplementary_pipeline.resolve_ops_alert") as resolve:
             _run(db_session, justice_result={"justices": 9, "loyalty_unmeasured": None})
         alert.assert_not_called()
+        assert [c.args for c in resolve.call_args_list] == [("justice-loyalty-unmeasured",), ("justice-positions-unread",)]
+
+    def test_unread_martin_quinn_positions_send_an_alert(self, db_session):
+        with patch("app.pipeline.supplementary_pipeline.send_ops_alert") as alert, \
+             patch("app.pipeline.supplementary_pipeline.resolve_ops_alert") as resolve:
+            _run(db_session, justice_result={"justices": 9, "loyalty_unmeasured": None, "positions_unread": True})
+        [call] = alert.call_args_list
+        assert call.args[0] == "Martin-Quinn positions not read"
+        assert call.kwargs["condition"] == "justice-positions-unread"
         resolve.assert_called_once_with("justice-loyalty-unmeasured")
 
     def test_committee_leadership_skipped_outside_weekly_cadence_when_not_missing(self, db_session):

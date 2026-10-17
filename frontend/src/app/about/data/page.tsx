@@ -171,12 +171,16 @@ export default function DataChapter() {
           <Facts>
             <Fact label="Oyez · supremecourt.gov">
               Cases, justices&apos; votes in a term the Supreme Court Database doesn&apos;t cover
-              yet, and official slip opinions.
+              yet, and official slip opinions. Oyez is shared under Creative Commons
+              Attribution-NonCommercial 4.0; slip opinions are public domain.
             </Fact>
             <Fact label="Supreme Court Database · Federal Judicial Center · Martin-Quinn">
               Every justice&apos;s votes in orally argued cases (the voting record, and the cases
-              the federal government argued for the score, with Epstein and Posner&apos;s coding
-              through 2014); nomination dates; each justice&apos;s position per term. A confirmed
+              the federal government argued for the appointer estimate, with Epstein and
+              Posner&apos;s coding through 2014); nomination dates; each justice&apos;s position per
+              term with its 95% credible interval. The Database is shared under Creative Commons
+              Attribution-NonCommercial 3.0 United States; Martin and Quinn publish their scores
+              with no licence stated, and they are cited as Martin and Quinn (2002). A confirmed
               federal judge&apos;s nomination page links the Federal Judicial Center&apos;s
               biography where its directory has exactly one judge with the same court, nomination
               date and surname.

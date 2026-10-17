@@ -274,13 +274,19 @@ export default function PresidentsAndJusticesChapter() {
           the nomination date, from the Federal Judicial Center.
         </P>
         <P>
-          Each justice&apos;s Martin-Quinn position (where they sit, liberal to conservative) and
-          voting record over the last four terms are shown too, not scored. The voting record is
-          read from the Supreme Court Database for every term its newest release covers, all orally
-          argued cases, and from the Oyez Project only for a term after that, since Oyez enters
-          votes case by case and had entered 13 of one term&apos;s 59 decided cases more than a year
-          on. When Oyez lists a justice twice in one decision, the vote counts once if the entries
-          agree and is left out if they don&apos;t.
+          Each justice&apos;s Martin-Quinn position (where they sit, liberal to conservative, with
+          its 95% credible interval) and voting record are shown too, not scored, with every case on
+          the record listed: the side the justice took and the opinion they wrote. The record reads
+          the current term and the three before it, and each page names the terms that have decided
+          cases, since a term that has just begun has none. The{" "}
+          <Link href="/court">Court page</Link> puts the sitting justices on one line, shows how
+          often each pair voted together and how the Court split term by term, and lists each
+          decision&apos;s majority and dissent. The voting record is read from the Supreme Court
+          Database for every term its newest release covers, all orally argued cases, and from the
+          Oyez Project only for a term after that, since Oyez enters votes case by case and had
+          entered 13 of one term&apos;s 59 decided cases more than a year on. When Oyez lists a
+          justice twice in one decision, the vote counts once if the entries agree and is left out
+          if they don&apos;t.
         </P>
         <P>
           Also tested and not adopted: splitting &ldquo;other presidents&rdquo; into the

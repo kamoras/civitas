@@ -1427,6 +1427,8 @@ class JusticeSchema(CamelModel):
     loyalty: JusticeLoyaltySchema | None = None
     # Martin-Quinn position per term, [[term, position], ...]: shown, not scored.
     ideal_points: list[tuple[int, float]] = []
+    # The terms the voting record covers: those with decided cases stored.
+    record_terms: list[int] = []
 
 
 class JusticeLeaderboardEntry(CamelModel):

@@ -28,6 +28,8 @@ export interface SectionFigures {
     comments: { open: number };
   };
   politicians: { directory: { senators: number; representatives: number } };
+  /** The latest term with decided cases stored; null before any. */
+  court: { court: { term: number; cases: number; unanimous: number } | null };
   elections: {
     ballots: { states: number; date: string; phase: string; daysUntil: number };
     map:
