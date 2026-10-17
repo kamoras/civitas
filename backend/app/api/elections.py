@@ -890,10 +890,61 @@ def member_on_ballot(db: Session, bioguide_id: str | None) -> dict | None:
         race = cand.race
         complete = _race_complete(_ballot_marker(db, race.state, race.cycle_year), race.state, race.id)
         listed = _confirmed_or_all(race.candidates, race.state, complete)
-        if any(c.member_bioguide == bioguide_id for c in listed):
+        # Confirmed nominees only: a race whose nominees aren't read yet
+        # lists every FEC filer, and a member who filed and then retired
+        # is not "on the ballot" (member_seat_race says what is known).
+        if any(c.confirmed_general for c in listed) and any(c.member_bioguide == bioguide_id for c in listed):
             return {"raceId": race.id, "cycleYear": race.cycle_year, "state": race.state,
                     "office": race.office, "district": race.district}
     return None
+
+
+def member_seat_race(db: Session, state: str, district: int | None, bioguide_id: str | None) -> dict | None:
+    """The race for a sitting House member's own seat on the site's
+    election ballot, and where the member stands in it, or None when no
+    race for that seat is on file (or the Congress that election seats is
+    already sitting, when the member tables may hold its winners):
+    {raceId, cycleYear, state, office, district, redrawn, status,
+    certified, sourceName}.
+
+    `status`, from stored rows only (never inferred from news or a
+    primary we didn't read): "nominee" when the member is among the
+    seat's confirmed nominees; "notNominee" when nominees are confirmed
+    and the member isn't one; "unconfirmed" when the state's nominees
+    aren't read yet. `certified` says the confirmation is the state's
+    complete list of who is on the November ballot (the ballot-basis
+    marker), not its primary results, and `sourceName` names whichever it
+    is. On a redrawn map (`redrawn`) the race is the district with the
+    member's number on the new lines, which is not the district they were
+    elected in."""
+    cycle = active_election(db).cycle
+    if elected_congress_sits(cycle):
+        return None
+    race = (
+        db.query(Race)
+        .filter(Race.cycle_year == cycle, Race.office == "H", Race.state == state,
+                Race.district == (district or 0), Race.is_special.is_(False))
+        .options(selectinload(Race.candidates))
+        .first()
+    )
+    if race is None:
+        return None
+    marker = _ballot_marker(db, state, cycle)
+    complete = _race_complete(marker, state, race.id)
+    listed = _confirmed_or_all(race.candidates, state, complete)
+    confirmed = any(c.confirmed_general for c in listed)
+    if not confirmed:
+        status = "unconfirmed"
+    elif bioguide_id and any(c.member_bioguide == bioguide_id for c in listed):
+        status = "nominee"
+    else:
+        status = "notNominee"
+    source = (marker or {}).get("sourceName") if complete else None
+    return {
+        "raceId": race.id, "cycleYear": cycle, "state": state, "office": "H", "district": race.district,
+        "redrawn": state in redrawn_states(cycle), "status": status, "certified": confirmed and complete,
+        "sourceName": source or (source_for_state(state) or {}).get("source_name") or None,
+    }
 
 
 def _ballot_candidate(
