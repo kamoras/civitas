@@ -20,6 +20,10 @@ every cited page to confirm the quoted passage is still on it:
 
   - "verified": the quote is on the election authority's own page;
   - "statute": the quote is in the statute's official text;
+  - "republished": the item's own source couldn't be read (a wall or an
+    outage), and the quote is on a county election office's printing of
+    the same deadline (`republished`), labelled as such on the page. The
+    own source is tried first on every run.
 
 An item whose page could not be read (a bot wall, which is never worked
 around -- AGENTS.md section 7 -- or an outage) or no longer carries the
@@ -130,6 +134,9 @@ def resolve(item: dict, election: dt.date, where: str) -> dict:
         sys.exit(f"{where}: source needs type official|statute and url")
     if not src.get("quote"):
         sys.exit(f"{where}: source needs the quoted passage that states the rule")
+    rep = item.get("republished")
+    if rep and not all(rep.get(f) for f in ("publisher", "url", "quote")):
+        sys.exit(f"{where}: republished needs publisher, url and quote")
     out = dict(item)
     stated = _date(item.get("date"), where)
     if item.get("daysBefore") is not None:
@@ -239,6 +246,9 @@ def carry(sources: dict, election: dt.date) -> tuple[dict, dict[str, list[str]]]
                 counted = old - dt.timedelta(days=int(item["daysBefore"]))
                 moves.setdefault(counted, counted + shift)
             moved["source"] = {**item["source"], "quote": redate_quote(item["source"]["quote"], moves, (old.year, election.year))}
+            if item.get("republished"):
+                moved["republished"] = {**item["republished"], "quote": redate_quote(
+                    item["republished"]["quote"], moves, (old.year, election.year))}
             if why:
                 lost.append(f"{item['kind']}/{item.get('method', '')}: {why}")
             else:
@@ -256,10 +266,60 @@ def carry(sources: dict, election: dt.date) -> tuple[dict, dict[str, list[str]]]
     return out, dropped
 
 
+def official_host(host: str, cited: set[str]) -> bool:
+    """A government host: .gov, a state.xx.us name, or the domain of a host
+    the state's own deadline citations already use (D.C.'s dcboe.org)."""
+    host = (host or "").lower()
+    domain = ".".join(host.split(".")[-2:])
+    return (host.endswith(".gov") or re.search(r"\.state\.[a-z]{2}\.us$", host) is not None
+            or domain in {".".join(h.split(".")[-2:]) for h in cited})
+
+
+def check_register(entry: dict, cited: set[str], client: httpx.Client, cache: pathlib.Path | None,
+                   today: str) -> tuple[dict | None, str | None]:
+    """(what the page may link, why it may not). The register page must
+    answer on an official host, before and after redirects, and read as a
+    registration page; one behind a bot wall is kept, marked unconfirmed
+    (a wall is never worked around, and the page then says it couldn't
+    check), never one that answers 404 or lands elsewhere: that one is
+    left out, named on stderr, and the page links vote.gov. A `none` entry
+    (a state with no registration) is held to its quote like a deadline."""
+    url = entry.get("url") or ""
+    out = {"url": url, "publisher": entry.get("publisher"), "checkedOn": today}
+    if not official_host(httpx.URL(url).host, cited):
+        return None, f"{url} is not on an official government host"
+    if entry.get("none"):
+        text, how = fetch(url, client, cache)
+        if text is None or not entry.get("quote") or normalise(entry["quote"]) not in text:
+            return None, f"no-registration quote not verified ({how if text is None else 'quote not on the page'}, {url})"
+        return {**out, "none": True, "status": "verified"}, None
+    r = None
+    for _ in range(2):  # once more after a refusal or a dropped connection, which come and go
+        try:
+            r = client.get(url, headers=BROWSER_HEADERS, follow_redirects=True, timeout=30)
+        except httpx.HTTPError as exc:
+            r, failed = None, type(exc).__name__
+            continue
+        if r.status_code < 400 or is_bot_challenge(r):
+            break
+    if r is None:
+        return None, f"{url}: fetch failed ({failed})"
+    if is_bot_challenge(r):
+        return {**out, "status": "blocked"}, None
+    if r.status_code >= 400:
+        return None, f"{url}: HTTP {r.status_code}"
+    if not official_host(r.url.host, cited):
+        return None, f"{url} redirects off an official host, to {r.url}"
+    if "regist" not in str(r.url).lower() and "regist" not in r.text.lower():
+        return None, f"{url} does not read as a registration page"
+    return {**out, "status": "verified"}, None
+
+
 def build(sources: dict, client: httpx.Client, cache: pathlib.Path | None, strict: bool = True) -> dict:
     election = dt.date.fromisoformat(sources["electionDate"])
     today = dt.date.today().isoformat()
     pages: dict[str, tuple[str | None, str]] = {}
+    errors: list[str] = []
     states = {}
     for code, entry in sorted(sources["states"].items()):
         if not entry.get("timeZone"):
@@ -273,6 +333,24 @@ def build(sources: dict, client: httpx.Client, cache: pathlib.Path | None, stric
             if src["url"] not in pages:
                 pages[src["url"]] = fetch(src["url"], client, cache)
             text, how = pages[src["url"]]
+            rep = item.get("republished")
+            republished = None
+            if text is None and rep:
+                # The item's own source can't be read (a wall or an outage,
+                # never a page that answered without the passage): the same
+                # deadline as a county election office prints it, labelled
+                # on the page. Read again every run, so the state's own
+                # source is used again the run it answers.
+                if rep["url"] not in pages:
+                    pages[rep["url"]] = fetch(rep["url"], client, cache)
+                rtext, rhow = pages[rep["url"]]
+                if rtext is not None and normalise(rep["quote"]) in rtext:
+                    republished = {"publisher": rep["publisher"], "stateSource": src["url"], "stateSourceRead": how}
+                    print(f"{code}[{i}] {item['kind']}: {src['url']} unread ({how}); as published by "
+                          f"{rep['publisher']}", file=sys.stderr)
+                    text, src = rtext, {"type": "official", **rep}
+                    item["source"] = src
+            item.pop("republished", None)
             if text is None or normalise(src["quote"]) not in text:
                 why = how if text is None else "quote not on the page"
                 if not strict:
@@ -281,22 +359,40 @@ def build(sources: dict, client: httpx.Client, cache: pathlib.Path | None, stric
                     print(f"{code}[{i}] {item['kind']}: not carried ({why}, {src['url']})", file=sys.stderr)
                     entry = {**entry, "incomplete": True}
                     continue
-                sys.exit(f"{code}[{i}] {item['kind']}: not verified ({why}, {src['url']}); "
-                         "fix the citation or drop the item -- nothing was written")
+                errors.append(f"{code}[{i}] {item['kind']}: not verified ({why}, {src['url']})")
+                continue
             item["verification"] = {
-                "status": "verified" if src["type"] == "official" else "statute",
+                "status": "republished" if republished else "verified" if src["type"] == "official" else "statute",
                 "checkedOn": today,
+                **({"republished": republished} if republished else {}),
             }
             items.append(item)
         if not items and not strict and entry.get("items"):
             entry = {**entry, "unread": "None of its deadlines could be carried to this election."}
         states[code] = {"timeZone": entry["timeZone"], "items": items}
+        if entry.get("register"):
+            cited = {httpx.URL(i["source"]["url"]).host for i in entry.get("items") or []}
+            reg, why = check_register(entry["register"], cited, client, cache, today)
+            if why:
+                # Never linked, but not a reason to hold back the deadlines:
+                # the page links vote.gov instead. Named, so it gets fixed.
+                print(f"{code} register: not linked ({why}); vote.gov instead", file=sys.stderr)
+            else:
+                states[code]["register"] = reg
         if entry.get("unread"):
             states[code]["unread"] = True
         if entry.get("note"):
             states[code]["note"] = entry["note"]
         if entry.get("incomplete"):
             states[code]["incomplete"] = True
+    fallback = None
+    if sources.get("registerFallback"):
+        fallback, why = check_register(sources["registerFallback"], set(), client, cache, today)
+        if why:
+            print(f"registerFallback: not linked ({why})", file=sys.stderr)
+    if errors:
+        # Every failure at once, so one run names everything to fix.
+        sys.exit("\n".join(errors) + "\nfix each citation or drop the item -- nothing was written")
     return {
         "_source": (
             "Each state's (and D.C.'s) election authority's own pages, or its statute where that "
@@ -313,9 +409,14 @@ def build(sources: dict, client: httpx.Client, cache: pathlib.Path | None, stric
             "voting window's first day (endDate its last); for ballot_return with basis "
             "'postmarked', date is the postmark deadline and endDate the day it must arrive by. "
             "time/endTime: the hour on that day, when the source states one, else the day's end. "
-            "countedDate: the 'N days before' count, kept beside a date the state moved."
+            "countedDate: the 'N days before' count, kept beside a date the state moved. "
+            "register: the state's page for registering to vote (status verified, or blocked: behind a "
+            "bot wall, so unconfirmed; none: true where the state has no registration, quoted); "
+            "registerFallback: vote.gov, for a state without one."
         ),
         "electionDate": election.isoformat(),
+        "builtOn": today,
+        "registerFallback": fallback,
         "states": states,
     }
 

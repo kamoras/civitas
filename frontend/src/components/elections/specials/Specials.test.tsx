@@ -270,6 +270,24 @@ describe("the calendar", () => {
   });
 });
 
+describe("CalendarList state filter", () => {
+  it("lists every state the API names, one whose deadlines couldn't be read included", () => {
+    render(
+      <CalendarList
+        cal={{
+          ...CAL,
+          states: [
+            { state: "NY", stateName: "New York", deadlinesRead: false, register: null },
+            { state: "TX", stateName: "Texas", deadlinesRead: true, register: null },
+          ],
+        }}
+      />
+    );
+    const options = screen.getAllByRole("option").map((o) => o.textContent);
+    expect(options).toEqual(["Every state", "New York (deadlines not read)", "Texas"]);
+  });
+});
+
 describe("OffSeasonLead", () => {
   it("leads with the specials and what is next, and says when the calendar is unread", () => {
     const { rerender } = render(<OffSeasonLead board={board()} cal={CAL} />);

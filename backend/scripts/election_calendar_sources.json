@@ -1,5 +1,5 @@
 {
- "_about": "Input to build_election_calendar.py: each state's (and D.C.'s) voter deadlines for the general election, as its election authority or its statute states them. Each item cites the page that says so, with a passage quoted verbatim (as the script's --text normalises it) so the script can confirm the page still says it. Sources are the state's own pages or statute, never an aggregator; a page behind a bot wall is never worked around (AGENTS.md section 7): cite the statute, or leave the item out, since the script refuses an item it cannot verify. A state with no readable official source carries `unread` (why, never served) and no items. Researched 2026-10-12/13. A state's `_research` (never served) says how its items were sourced. Edit an item, then rerun the script.",
+ "_about": "Input to build_election_calendar.py: each state's (and D.C.'s) voter deadlines for the general election, as its election authority or its statute states them. Each item cites the page that says so, with a passage quoted verbatim (as the script's --text normalises it) so the script can confirm the page still says it. Sources are the state's own pages or statute, never an aggregator; a page behind a bot wall is never worked around (AGENTS.md section 7): cite the statute, or leave the item out, since the script refuses an item it cannot verify. A state with no readable official source carries `unread` (why, never served) and no items. Researched 2026-10-12/13. A state's `_research` (never served) says how its items were sourced. Edit an item, then rerun the script. `register` names the state's page for registering to vote (its online registration where it has one, else its registration page); the script checks it answers on the state's own domain, and a page behind a bot wall is kept but marked unconfirmed. `none` with a quote states a state has no registration. `registerFallback` is vote.gov, for a state with no entry. An item may name `republished` (publisher, url, quote): a county election office's printing of the same deadline, read only when the item's own source can't be read (a wall or an outage, never a page that answered without the passage), and labelled on the page.",
  "electionDate": "2026-11-03",
  "states": {
   "AK": {
@@ -89,7 +89,11 @@
       "quote": "the ballot may not be counted unless it is received by the close of business on the 10th day after the election. if the ballot is postmarked, it must be postmarked on or before election day."
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://voterregistration.alaska.gov/",
+    "publisher": "Alaska Division of Elections"
+   }
   },
   "AL": {
    "timeZone": "America/Chicago",
@@ -191,7 +195,11 @@
       "quote": "if hand-delivered, the ballot must be in the office of the absentee election manager by the close of business (but no later than 5 p.m.) on the day prior to the election."
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://www.sos.alabama.gov/alabama-votes/voter/register-to-vote",
+    "publisher": "Alabama Secretary of State"
+   }
   },
   "AR": {
    "timeZone": "America/Chicago",
@@ -295,7 +303,11 @@
       "quote": "personally deliver absentee ballots to the county clerk is no later than the close of regular business hours on the friday before the election."
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://www.sos.arkansas.gov/elections/voter-information/voter-registration-information",
+    "publisher": "Arkansas Secretary of State"
+   }
   },
   "AZ": {
    "timeZone": "America/Phoenix",
@@ -359,7 +371,11 @@
      }
     }
    ],
-   "_research": "azsos.gov blocks automated reads, so every item cites Arizona statute. Any voter may request an early (mail) ballot."
+   "_research": "azsos.gov blocks automated reads, so every item cites Arizona statute. Any voter may request an early (mail) ballot.",
+   "register": {
+    "url": "https://azsos.gov/elections/voters/registering-vote",
+    "publisher": "Arizona Secretary of State"
+   }
   },
   "CA": {
    "timeZone": "America/Los_Angeles",
@@ -460,7 +476,11 @@
       "quote": "november 3 is the last day to vote in-person or return a ballot by 8:00 p.m."
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://registertovote.ca.gov/",
+    "publisher": "California Secretary of State"
+   }
   },
   "CO": {
    "timeZone": "America/Denver",
@@ -548,7 +568,11 @@
       "quote": "postmarks do not count; ballots must be in the hands of the county clerk by 7:00 pm on election day in order to be counted."
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://www.sos.state.co.us/voter/pages/pub/olvr/verifyNewVoter.xhtml",
+    "publisher": "Colorado Secretary of State"
+   }
   },
   "CT": {
    "timeZone": "America/New_York",
@@ -650,7 +674,11 @@
       "quote": "to be counted, absentee ballots must be received by the close of polls on the day of the election, which is 8:00 pm."
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://voterregistration.ct.gov/",
+    "publisher": "Connecticut Secretary of the State"
+   }
   },
   "DC": {
    "timeZone": "America/New_York",
@@ -754,7 +782,11 @@
       "quote": "friday, october 9, 2026 at 11:00 a.m. - tuesday, november 3, 2026 at 8:00 p.m. [tentative] period during which mail ballot drop boxes are available for use."
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://www.dcboe.org/voters/register-to-vote/register-update-voter-registration",
+    "publisher": "D.C. Board of Elections"
+   }
   },
   "DE": {
    "timeZone": "America/New_York",
@@ -829,7 +861,11 @@
      }
     }
    ],
-   "_research": "Delaware has no same-day registration. Absentee voting requires a qualifying reason. The Department's pages give one registration deadline for all methods (online, mail, in person) and do not state a separate postmark rule."
+   "_research": "Delaware has no same-day registration. Absentee voting requires a qualifying reason. The Department's pages give one registration deadline for all methods (online, mail, in person) and do not state a separate postmark rule.",
+   "register": {
+    "url": "https://ivote.de.gov/",
+    "publisher": "Delaware Department of Elections"
+   }
   },
   "FL": {
    "timeZone": "America/Chicago",
@@ -917,7 +953,11 @@
       "quote": "a returned voted ballot must be received, regardless of postmark, by the supervisor of elections' office no later than 7:00 pm (local time) on election day."
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://registertovoteflorida.gov/",
+    "publisher": "Florida Division of Elections"
+   }
   },
   "GA": {
    "timeZone": "America/New_York",
@@ -933,7 +973,7 @@
       "type": "official",
       "publisher": "State of Georgia (georgia.gov)",
       "url": "https://georgia.gov/georgia-election-guide",
-      "quote": "voter registration deadlineapril 20, 2026october 5, 2026"
+      "quote": "voter registration deadlineapril 20october 5"
      }
     },
     {
@@ -946,7 +986,7 @@
       "type": "official",
       "publisher": "State of Georgia (georgia.gov)",
       "url": "https://georgia.gov/georgia-election-guide",
-      "quote": "early voting periodapril 27 to may 15october 13 to 30election day"
+      "quote": "early voting periodapril 27 - may 15october 13 - 30"
      }
     },
     {
@@ -992,7 +1032,11 @@
      }
     }
    ],
-   "_research": "sos.ga.gov blocks automated reads; these items cite the State of Georgia's official portal (georgia.gov). Any voter may request an absentee ballot. Absentee drop boxes are open only inside early voting sites during early voting hours."
+   "_research": "sos.ga.gov blocks automated reads; these items cite the State of Georgia's official portal (georgia.gov). Any voter may request an absentee ballot. Absentee drop boxes are open only inside early voting sites during early voting hours.",
+   "register": {
+    "url": "https://georgia.gov/register-vote",
+    "publisher": "State of Georgia (georgia.gov)"
+   }
   },
   "HI": {
    "timeZone": "Pacific/Honolulu",
@@ -1053,7 +1097,11 @@
       "quote": "ballots must be received by the county elections division by close of voting, 7:00 p.m."
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://olvr.hawaii.gov/",
+    "publisher": "Hawaii Office of Elections"
+   }
   },
   "IA": {
    "timeZone": "America/Chicago",
@@ -1165,7 +1213,11 @@
       "quote": "marked absentee ballots must be returned to the county auditor's office by the time polls close on election day, november 3, at 8:00 p.m."
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://sos.iowa.gov/elections/voterinformation/voterregistration.html",
+    "publisher": "Iowa Secretary of State"
+   }
   },
   "ID": {
    "timeZone": "America/Los_Angeles",
@@ -1270,7 +1322,11 @@
       "quote": "voted absentee ballots must be received - by the county clerk - by 8 p.m. for the nov. 3 election."
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://votertools.voteidaho.gov/TEDElectionLink/VoterServices/wizard/ovr",
+    "publisher": "Idaho Secretary of State"
+   }
   },
   "IL": {
    "timeZone": "America/Chicago",
@@ -1382,7 +1438,11 @@
       "quote": "tuesday, november 17, 2026 vote by mail ballot counting - last day last day for the election authority to complete the tabulation of vote by mail ballots that were: 1) postmarked by election day"
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://ova.elections.il.gov/",
+    "publisher": "Illinois State Board of Elections"
+   }
   },
   "IN": {
    "timeZone": "America/Chicago",
@@ -1470,7 +1530,11 @@
       "quote": "deadline, by 6 p.m., prevailing local time, for a county election board in all counties to receive an absentee ballot by mail, hand-delivery, fax, or electronic mail, on election day."
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://indianavoters.in.gov/",
+    "publisher": "Indiana Election Division"
+   }
   },
   "KS": {
    "timeZone": "America/Denver",
@@ -1570,7 +1634,11 @@
       "quote": "voters who vote by mail can return their advance ballot to their county election office by taking it to any polling place within their county before the close of polls on election day."
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://www.kdor.ks.gov/apps/voterreg/default.aspx",
+    "publisher": "Kansas Secretary of State and Department of Revenue"
+   }
   },
   "KY": {
    "timeZone": "America/Chicago",
@@ -1658,7 +1726,11 @@
       "quote": "• mail-in absentee ballots must be received by the county clerk before 6 p.m. prevailing time."
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://elect.ky.gov/Resources/Pages/Registration.aspx",
+    "publisher": "Kentucky State Board of Elections"
+   }
   },
   "LA": {
    "timeZone": "America/Chicago",
@@ -1745,7 +1817,11 @@
       "quote": "general and disabled voters: voted ballots must be received by your parish registrar of voters by 4:30 p.m. cst on the day before election day."
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://voterportal.sos.la.gov/VoterRegistration",
+    "publisher": "Louisiana Secretary of State"
+   }
   },
   "MA": {
    "timeZone": "America/New_York",
@@ -1849,7 +1925,11 @@
      }
     }
    ],
-   "_research": "The Secretary of the Commonwealth's site blocks automated reading; all items are from the General Laws. No same-day registration was found: registration closes 10 days before Election Day. Hours for early voting vary by city or town."
+   "_research": "The Secretary of the Commonwealth's site blocks automated reading; all items are from the General Laws. No same-day registration was found: registration closes 10 days before Election Day. Hours for early voting vary by city or town.",
+   "register": {
+    "url": "https://www.sec.state.ma.us/ovr/",
+    "publisher": "Secretary of the Commonwealth of Massachusetts"
+   }
   },
   "MD": {
    "timeZone": "America/New_York",
@@ -1994,7 +2074,11 @@
       "quote": "mail-in ballots must be postmarked or placed in a designated ballot drop box by 8:00 pm on november 03, 2026."
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://elections.maryland.gov/voter_registration/index.html",
+    "publisher": "Maryland State Board of Elections"
+   }
   },
   "ME": {
    "timeZone": "America/New_York",
@@ -2093,7 +2177,11 @@
       "quote": "voted absentee ballots must be received by the municipal clerk by 8 p.m. on november 3, 2026."
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://registertovote.sos.maine.gov/",
+    "publisher": "Maine Secretary of State"
+   }
   },
   "MI": {
    "timeZone": "America/Chicago",
@@ -2209,7 +2297,11 @@
      }
     }
    ],
-   "_research": "The Secretary of State's site blocks automated reading; all items are from the Michigan Compiled Laws. From 14 days before through Election Day you can register in person at your city or township clerk's office with proof of residency."
+   "_research": "The Secretary of State's site blocks automated reading; all items are from the Michigan Compiled Laws. From 14 days before through Election Day you can register in person at your city or township clerk's office with proof of residency.",
+   "register": {
+    "url": "https://mvic.sos.state.mi.us/RegisterVoter",
+    "publisher": "Michigan Secretary of State"
+   }
   },
   "MN": {
    "timeZone": "America/Chicago",
@@ -2311,7 +2403,11 @@
       "quote": "if delivered in person, the signature envelope must be submitted to the county auditor or municipal clerk by 5:00 p.m. on election day."
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://mnvotes.sos.mn.gov/VoterRegistration/index",
+    "publisher": "Minnesota Secretary of State"
+   }
   },
   "MO": {
    "timeZone": "America/Chicago",
@@ -2396,7 +2492,11 @@
       "quote": "all proper votes on each absentee ballot received by an election authority at or before the time fixed by law for the closing of the polls on election day shall be counted."
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://s1.sos.mo.gov/elections/goVoteMissouri/register",
+    "publisher": "Missouri Secretary of State"
+   }
   },
   "MS": {
    "timeZone": "America/Chicago",
@@ -2442,7 +2542,11 @@
       "quote": "postmark deadline: absentee ballots returned by mail must be postmarked on or before election day and received by the circuit clerk's office within five (5) business days. 10th"
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://www.sos.ms.gov/elections-voting/voter-registration-information",
+    "publisher": "Mississippi Secretary of State"
+   }
   },
   "MT": {
    "timeZone": "America/Denver",
@@ -2474,8 +2578,8 @@
      "source": {
       "type": "official",
       "publisher": "Montana Secretary of State",
-      "url": "https://sosmt.gov/elections/faq/",
-      "quote": "what are the deadlines for the close of regular registration for the federal primary and general elections? regular registration closes 30 days before the election."
+      "url": "https://sosmt.gov/wp-content/uploads/wpfd/preview_files/2026-Federal-Election-Calendar(6fec86338c652319befedd4fd798de5b).pdf",
+      "quote": "30 days before any election close of regular voter registration."
      }
     },
     {
@@ -2517,10 +2621,10 @@
      "date": "2026-11-02",
      "time": "12:00",
      "source": {
-      "type": "official",
-      "publisher": "Montana Secretary of State",
-      "url": "https://sosmt.gov/elections/absentee/",
-      "quote": "applications must be received by the county election office by noon the day before the election."
+      "type": "statute",
+      "publisher": "Montana Legislature (MCA 13-13-211)",
+      "url": "https://leg.mt.gov/bills/mca/title_0130/chapter_0130/part_0020/section_0110/0130-0130-0020-0110.html",
+      "quote": "an application for an absentee ballot must be made before noon on the day before the election."
      }
     },
     {
@@ -2531,14 +2635,18 @@
      "date": "2026-11-03",
      "time": "20:00",
      "source": {
-      "type": "official",
-      "publisher": "Montana Secretary of State",
-      "url": "https://sosmt.gov/elections/absentee/",
-      "quote": "absentee ballots must be received at the election office or polling place by 8:00 p.m. on election day."
+      "type": "statute",
+      "publisher": "Montana Legislature (MCA 13-13-201)",
+      "url": "https://leg.mt.gov/bills/mca/title_0130/chapter_0130/part_0020/section_0010/0130-0130-0020-0010.html",
+      "quote": "each elector shall return it in a manner that ensures the ballot is received prior to 8 p.m. on election day."
      }
     }
    ],
-   "_research": "Montana has no online voter registration. After regular registration closes, late registration runs through Election Day at the place your county names; late registrants must get their ballot in person. A court order blocks SB 490 (Saturday-before registration)."
+   "_research": "Montana has no online voter registration. After regular registration closes, late registration runs through Election Day at the place your county names; late registrants must get their ballot in person. A court order blocks SB 490 (Saturday-before registration).",
+   "register": {
+    "url": "https://sosmt.gov/elections/",
+    "publisher": "Montana Secretary of State"
+   }
   },
   "NC": {
    "timeZone": "America/New_York",
@@ -2629,7 +2737,11 @@
       "quote": "nov. 3: absentee ballot return deadline (7:30 p.m.).*"
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://www.ncsbe.gov/registering/how-register",
+    "publisher": "North Carolina State Board of Elections"
+   }
   },
   "ND": {
    "timeZone": "America/Denver",
@@ -2676,7 +2788,13 @@
       "quote": "absentee ballots must be received by the county auditor by close of polls on election day."
      }
     }
-   ]
+   ],
+   "register": {
+    "none": true,
+    "url": "https://www.sos.nd.gov/sites/default/files/documents/news/2026-general-election-media-info-aug26.pdf",
+    "publisher": "North Dakota Secretary of State",
+    "quote": "north dakota does not have voter registration."
+   }
   },
   "NE": {
    "timeZone": "America/Denver",
@@ -2761,7 +2879,11 @@
       "quote": "must arrive at the county election official's office by the closing of the polls on election day (8:00 pm central time / 7:00 pm mountain time)"
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://www.nebraska.gov/apps-sos-voter-registration/",
+    "publisher": "Nebraska Secretary of State"
+   }
   },
   "NH": {
    "timeZone": "America/New_York",
@@ -2944,7 +3066,11 @@
      }
     }
    ],
-   "_research": "No same-day registration. Mail-in ballot applications can also be made online at vote.nj.gov; the state calendar gives the by-mail deadline, and the online one is not separately stated on the pages read."
+   "_research": "No same-day registration. Mail-in ballot applications can also be made online at vote.nj.gov; the state calendar gives the by-mail deadline, and the online one is not separately stated on the pages read.",
+   "register": {
+    "url": "https://www.nj.gov/state/elections/voter-registration.shtml",
+    "publisher": "New Jersey Division of Elections"
+   }
   },
   "NM": {
    "timeZone": "America/Denver",
@@ -3019,7 +3145,11 @@
       "quote": "ballots must be returned to the county clerk or voter's precinct by 7:00 p.m. on election day to be counted"
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://www.sos.nm.gov/voting-and-elections/voter-registration-information/",
+    "publisher": "New Mexico Secretary of State"
+   }
   },
   "NV": {
    "timeZone": "America/Los_Angeles",
@@ -3121,11 +3251,135 @@
      }
     }
    ],
-   "_research": "Every active registered voter is mailed a ballot; no request needed. The Secretary of State's site is behind a bot wall, so these items cite Nevada Revised Statutes chapter 293 (rev. 9/9/2026)."
+   "_research": "Every active registered voter is mailed a ballot; no request needed. The Secretary of State's site is behind a bot wall, so these items cite Nevada Revised Statutes chapter 293 (rev. 9/9/2026).",
+   "register": {
+    "url": "https://www.registertovotenv.gov/",
+    "publisher": "Nevada Secretary of State"
+   }
   },
   "NY": {
    "timeZone": "America/New_York",
-   "unread": "elections.ny.gov (State Board of Elections) answers a Cloudflare challenge (403); nysenate.gov and the legislature's legislation API refuse automated reads too, and the LRS statute site timed out (checked 2026-10-12/13). No deadline could be read from any official source, so none is published."
+   "_research": "Cited to the Election Law (nysenate.gov). That site, like the State Board of Elections' (elections.ny.gov) and vote.gov, answers a Cloudflare challenge some of the time (2026-10-12/16), so each item also names `republished`: the same deadline as the Board of Elections in the City of New York (the election authority for the city's five counties) prints it for this election. The script reads the statute first on every run and uses the republication only while the statute can't be read, labelled as such. Early voting dates are not on a page that could be read, so none is listed.",
+   "note": "Early voting sites and hours are set by your county board of elections.",
+   "items": [
+    {
+     "kind": "registration",
+     "method": "in_person",
+     "rule": "Register in person by the 10th day before Election Day.",
+     "daysBefore": 10,
+     "date": "2026-10-24",
+     "source": {
+      "type": "statute",
+      "publisher": "New York Election Law § 5-210",
+      "url": "https://www.nysenate.gov/legislation/laws/ELN/5-210",
+      "quote": "received no laterthan the tenth day before such election, or delivered in person to suchboard of elections not later than the tenth day before such election"
+     },
+     "republished": {
+      "publisher": "Board of Elections in the City of New York",
+      "url": "https://www.vote.nyc/page/registration-deadlines",
+      "quote": "last day to register to vote in person isoctober 24, 2026"
+     }
+    },
+    {
+     "kind": "registration",
+     "method": "mail",
+     "basis": "received",
+     "rule": "Mailed registration forms must be received by the 10th day before Election Day.",
+     "daysBefore": 10,
+     "date": "2026-10-24",
+     "source": {
+      "type": "statute",
+      "publisher": "New York Election Law § 5-210",
+      "url": "https://www.nysenate.gov/legislation/laws/ELN/5-210",
+      "quote": "received no laterthan the tenth day before such election, or delivered in person to suchboard of elections not later than the tenth day before such election"
+     },
+     "republished": {
+      "publisher": "Board of Elections in the City of New York",
+      "url": "https://www.vote.nyc/page/registration-deadlines",
+      "quote": "applications to register by mail must be received byoctober 24, 2026"
+     }
+    },
+    {
+     "kind": "absentee_request",
+     "method": "any",
+     "basis": "received",
+     "rule": "Applications for an early mail or absentee ballot sent by mail or online must be received by the 10th day before Election Day.",
+     "daysBefore": 10,
+     "date": "2026-10-24",
+     "source": {
+      "type": "statute",
+      "publisher": "New York Election Law § 8-400",
+      "url": "https://www.nysenate.gov/legislation/laws/ELN/8-400",
+      "quote": "must bereceived by the board of elections not later than the tenth day beforethe election for which a ballot is first requested."
+     },
+     "republished": {
+      "publisher": "Board of Elections in the City of New York",
+      "url": "https://www.vote.nyc/page/absentee-voting",
+      "quote": "last day for board of elections to receive application or letter of application by mail or online portal is october 24, 2026"
+     }
+    },
+    {
+     "kind": "absentee_request",
+     "method": "in_person",
+     "rule": "Apply in person at your county board of elections up to the day before Election Day.",
+     "daysBefore": 1,
+     "date": "2026-11-02",
+     "source": {
+      "type": "statute",
+      "publisher": "New York Election Law § 8-400",
+      "url": "https://www.nysenate.gov/legislation/laws/ELN/8-400",
+      "quote": "must be received bysuch board not later than the day before such election."
+     },
+     "republished": {
+      "publisher": "Board of Elections in the City of New York",
+      "url": "https://www.vote.nyc/page/absentee-voting",
+      "quote": "last day to apply in person at your county board of elections is november 2, 2026"
+     }
+    },
+    {
+     "kind": "ballot_return",
+     "method": "mail",
+     "basis": "postmarked",
+     "rule": "A mailed ballot must be postmarked by Election Day and arrive within 7 days.",
+     "daysBefore": 0,
+     "date": "2026-11-03",
+     "source": {
+      "type": "statute",
+      "publisher": "New York Election Law § 8-412",
+      "url": "https://www.nysenate.gov/legislation/laws/ELN/8-412",
+      "quote": "not later thanthe day of the election and received by such board of elections notlater than seven days following the day of election"
+     },
+     "republished": {
+      "publisher": "Board of Elections in the City of New York",
+      "url": "https://www.vote.nyc/page/absentee-voting",
+      "quote": "put it in the mail ensuring it receives a postmark no later than november 3, 2026."
+     },
+     "endDate": "2026-11-10"
+    },
+    {
+     "kind": "ballot_return",
+     "method": "in_person",
+     "rule": "Drop off your ballot at your county board of elections or a poll site before the polls close (9 p.m.) on Election Day.",
+     "daysBefore": 0,
+     "date": "2026-11-03",
+     "time": "21:00",
+     "source": {
+      "type": "statute",
+      "publisher": "New York Election Law § 8-412",
+      "url": "https://www.nysenate.gov/legislation/laws/ELN/8-412",
+      "quote": "absenteeballots received by it before the close of the polls on election day"
+     },
+     "republished": {
+      "publisher": "Board of Elections in the City of New York",
+      "url": "https://www.vote.nyc/page/absentee-voting",
+      "quote": "drop off your ballot to your county board of elections office no later than november 3, 2026 by 9pm."
+     }
+    }
+   ],
+   "register": {
+    "url": "https://dmv.ny.gov/more-info/electronic-voter-registration-application",
+    "publisher": "New York State DMV"
+   }
   },
   "OH": {
    "timeZone": "America/New_York",
@@ -3204,7 +3458,11 @@
      }
     }
    ],
-   "_research": "The Secretary of State's site is behind a bot wall, so these items cite the Ohio Revised Code (codes.ohio.gov). No same-day registration. Online registration also closes at the 30-day deadline. As of SB 293 (effective March 20, 2026), mailed absentee ballots must arrive by close of polls; the old postmark grace period no longer applies."
+   "_research": "The Secretary of State's site is behind a bot wall, so these items cite the Ohio Revised Code (codes.ohio.gov). No same-day registration. Online registration also closes at the 30-day deadline. As of SB 293 (effective March 20, 2026), mailed absentee ballots must arrive by close of polls; the old postmark grace period no longer applies.",
+   "register": {
+    "url": "https://olvr.ohiosos.gov/",
+    "publisher": "Ohio Secretary of State"
+   }
   },
   "OK": {
    "timeZone": "America/Chicago",
@@ -3308,7 +3566,11 @@
       "quote": "hand-delivered absentee ballots must be received by the county election board no later than the close of business, the monday before the election."
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://oklahoma.gov/elections/voter-registration.html",
+    "publisher": "Oklahoma State Election Board"
+   }
   },
   "OR": {
    "timeZone": "America/Los_Angeles",
@@ -3383,7 +3645,11 @@
       "quote": "last day to return ballots using a drop box: november 3 at 8 p.m."
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://sos.oregon.gov/voting/Pages/registration.aspx",
+    "publisher": "Oregon Secretary of State"
+   }
   },
   "PA": {
    "timeZone": "America/New_York",
@@ -3459,7 +3725,11 @@
       "quote": "the deadline for county elections offices to receive completed mail ballots is 8 p.m. on election day, nov. 3. mail ballots received after that time will not be counted."
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://www.pa.gov/services/vote/register-to-vote",
+    "publisher": "Commonwealth of Pennsylvania"
+   }
   },
   "RI": {
    "timeZone": "America/New_York",
@@ -3537,7 +3807,11 @@
      }
     }
    ],
-   "_research": "The Rhode Island Department of State voter site (vote.sos.ri.gov) blocks automated reads; registration items are from state law and the Board of Elections. There is no same-day registration in a non-presidential election. Any voter may vote by mail without an excuse."
+   "_research": "The Rhode Island Department of State voter site (vote.sos.ri.gov) blocks automated reads; registration items are from state law and the Board of Elections. There is no same-day registration in a non-presidential election. Any voter may vote by mail without an excuse.",
+   "register": {
+    "url": "https://elections.ri.gov/voter-resources",
+    "publisher": "Rhode Island Board of Elections"
+   }
   },
   "SC": {
    "timeZone": "America/New_York",
@@ -3629,7 +3903,11 @@
       "quote": "ballots must be received by the county voter registration office by 7:00 p.m. on election day"
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://scvotes.gov/voters/register-to-vote/",
+    "publisher": "South Carolina Election Commission"
+   }
   },
   "SD": {
    "timeZone": "America/Denver",
@@ -3706,7 +3984,11 @@
       "quote": "your voted ballot must be received by your county election official on election day in enough time to deliver your ballot to your voting precinct before the polls close"
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://sdsos.gov/elections-voting/voting/register-to-vote/default.aspx",
+    "publisher": "South Dakota Secretary of State"
+   }
   },
   "TN": {
    "timeZone": "America/Chicago",
@@ -3796,7 +4078,11 @@
       "quote": "you must mail your ballot in time for your county election commission to receive it no later than the close of polls on election day"
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://ovr.govote.tn.gov/",
+    "publisher": "Tennessee Secretary of State"
+   }
   },
   "TX": {
    "timeZone": "America/Denver",
@@ -3874,7 +4160,11 @@
       "quote": "last day to receive ballot by mail tuesday, november 3, 2026 (election day) at 7:00 p.m. if carrier envelope is not postmarked, or wednesday, november 4, 2026 (next business day after election day) at 5:00 p.m. if carrier envelope is postmarked by 7:00 p.m."
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://www.votetexas.gov/register-to-vote/index.html",
+    "publisher": "Texas Secretary of State"
+   }
   },
   "UT": {
    "timeZone": "America/Denver",
@@ -3964,7 +4254,11 @@
       "quote": "your mail ballot must received by the clerk's office on or before 8:00 p.m. on election day"
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://vote.utah.gov/register-to-vote/",
+    "publisher": "Utah Lieutenant Governor"
+   }
   },
   "VA": {
    "timeZone": "America/New_York",
@@ -4069,7 +4363,11 @@
       "quote": "if you are returning your ballot by mail, it must be postmarked on or before election day and received by your general registrar's office by noon on the third day following the election"
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://vote.elections.virginia.gov/Registration/Eligibility",
+    "publisher": "Virginia Department of Elections"
+   }
   },
   "VT": {
    "timeZone": "America/New_York",
@@ -4129,7 +4427,11 @@
       "quote": "return your ballot to your town clerk's office before the office closes on the day before the election, or bring it to your polling place before 7 p.m. on election day"
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://sos.vermont.gov/elections/voters/registration/",
+    "publisher": "Vermont Secretary of State"
+   }
   },
   "WA": {
    "timeZone": "America/Los_Angeles",
@@ -4232,7 +4534,11 @@
       "quote": "november 3 general election - deposit your ballot in an official drop box by 8 p.m. on election day"
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://www.sos.wa.gov/elections/voters/voter-registration/register-vote-washington",
+    "publisher": "Washington Secretary of State"
+   }
   },
   "WI": {
    "timeZone": "America/Chicago",
@@ -4336,7 +4642,11 @@
      }
     }
    ],
-   "_research": "The Wisconsin Elections Commission site (elections.wi.gov) blocks automated reads, so every date here is computed from state statute. Early voting is in-person absentee voting at your municipal clerk's office; dates and hours vary by municipality."
+   "_research": "The Wisconsin Elections Commission site (elections.wi.gov) blocks automated reads, so every date here is computed from state statute. Early voting is in-person absentee voting at your municipal clerk's office; dates and hours vary by municipality.",
+   "register": {
+    "url": "https://myvote.wi.gov/en-us/Register-To-Vote",
+    "publisher": "Wisconsin Elections Commission"
+   }
   },
   "WV": {
    "timeZone": "America/New_York",
@@ -4438,7 +4748,11 @@
       "quote": "november 2, 2026 - deadline to hand-deliver absentee ballot to the clerk's office"
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://ovr.sos.wv.gov/Register/Landing",
+    "publisher": "West Virginia Secretary of State"
+   }
   },
   "WY": {
    "timeZone": "America/Denver",
@@ -4523,7 +4837,15 @@
       "quote": "all absentee ballots must be received in the county clerk's office no later than 7:00 p.m. on election day"
      }
     }
-   ]
+   ],
+   "register": {
+    "url": "https://sos.wyo.gov/Elections/State/RegisteringToVote.aspx",
+    "publisher": "Wyoming Secretary of State"
+   }
   }
+ },
+ "registerFallback": {
+  "url": "https://vote.gov/",
+  "publisher": "Vote.gov (U.S. General Services Administration)"
  }
 }

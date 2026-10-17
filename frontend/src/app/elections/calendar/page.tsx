@@ -12,6 +12,7 @@ import FollowFeed from "@/components/shared/FollowFeed";
 import SpecialsBoardView from "@/components/elections/specials/Specials";
 import { longDate } from "@/lib/specials";
 import CalendarList from "@/components/elections/specials/CalendarList";
+import ClosingSoon from "@/components/elections/ClosingSoon";
 import { INLINE_LINK } from "@/lib/controlStyles";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
@@ -66,21 +67,15 @@ export default async function ElectionCalendarPage() {
             feed={TOPIC_FEEDS.elections}
           />
 
-          <section
-            id="specials-board"
-            aria-labelledby="specials"
-            className="mt-8 border border-phos/20 bg-surface px-4 pb-4"
-          >
-            <h2
-              id="specials"
-              className="border-b border-white/[0.07] py-2.5 font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
-            >
-              Special elections
-            </h2>
-            <SpecialsBoardView board={board} />
-          </section>
+          {cal.registrationClosing && (
+            <ClosingSoon
+              rows={cal.registrationClosing}
+              days={cal.closingSoonDays}
+              className="mt-8 border border-phos/20 bg-surface px-4 py-3"
+            />
+          )}
 
-          <section aria-labelledby="dates" className="mt-10">
+          <section aria-labelledby="dates" className="mt-8">
             <h2
               id="dates"
               className="border-b border-white/15 pb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
@@ -90,6 +85,20 @@ export default async function ElectionCalendarPage() {
             <div className="mt-4">
               <CalendarList cal={cal} />
             </div>
+          </section>
+
+          <section
+            id="specials-board"
+            aria-labelledby="specials"
+            className="mt-10 border border-phos/20 bg-surface px-4 pb-4"
+          >
+            <h2
+              id="specials"
+              className="border-b border-white/[0.07] py-2.5 font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
+            >
+              Special elections
+            </h2>
+            <SpecialsBoardView board={board} />
           </section>
 
           <section className="mt-10 border-t border-white/[0.09] pt-4 text-xs leading-relaxed text-ink-min">

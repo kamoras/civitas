@@ -465,15 +465,49 @@ export interface VoterDeadline {
   closesOn: string;
   source: { publisher: string | null; url: string; type: "official" | "statute" };
   verification: {
-    /** The generator refuses any item it could not verify, so there is no
-     * third state. */
-    status: "verified" | "statute";
+    /** The generator refuses any item it could not verify. "republished":
+     * read from a county election office's printing while the state's own
+     * source couldn't be read (labelled on the page). */
+    status: "verified" | "statute" | "republished";
     checkedOn?: string;
     detail?: string;
   };
 }
 
+/** Where to register (backend voter_calendar._register_link): the state's
+ *  own page, checked by the calendar's build script, else vote.gov. */
+export interface RegisterLink {
+  url: string;
+  publisher: string | null;
+  /** False when a bot wall kept the check from reading the page: linked,
+   *  and worded as unconfirmed. */
+  confirmed: boolean;
+  /** False for the vote.gov fallback. */
+  statePage: boolean;
+}
+
+/** The first thing said about registering: by when and how, or that the
+ *  state has none (North Dakota), or same-day registration only. */
+export interface RegistrationLine {
+  status: "open" | "same_day" | "closed" | "none";
+  sentence: string;
+  closesOn: string | null;
+  daysLeft: number | null;
+  countdown: string | null;
+  /** The same-day or late registration that follows the deadline, in the
+   *  state's own words. */
+  sameDay: string | null;
+  source: { publisher: string | null; url: string; type: string } | null;
+}
+
 export interface VoterCalendar {
+  /** Absent from an older API. */
+  registration?: RegistrationLine | null;
+  /** Set when deadlines were read from a county election office's printing
+   *  because the state's own source couldn't be: whose, and why. */
+  republished?: string | null;
+  register?: RegisterLink | null;
+  electionDay?: string;
   timeZone: string;
   localToday: string;
   note: string | null;

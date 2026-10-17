@@ -198,6 +198,17 @@ export default async function ElectionsChapter() {
           Deadlines are counted on the state&apos;s own clock. A deadline that has passed stays on
           the page and says so, with the ways to register that are still open.
         </P>
+        <P>
+          Each state page leads with how and by when to register (&ldquo;Register online by Mon, Oct
+          19&rdquo;), the days left, and a link to the state election office&apos;s own registration
+          page. We check each link answers on the state&apos;s own site when the list is rebuilt. If
+          the site blocks automated checks, the link is still shown, marked as one we couldn&apos;t
+          confirm. With no state page on file, the link is vote.gov, the federal government&apos;s
+          registration directory. Where a state lets you register at the polls, the page says so in
+          the state&apos;s words. North Dakota has no voter registration, and its page says that.
+          The elections page and the homepage list every state whose registration closes in the next
+          10 days.
+        </P>
       </Section>
 
       <Section id="special-elections" title="Special elections and the calendar">

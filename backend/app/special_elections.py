@@ -38,7 +38,7 @@ from app.pipeline.fetch.election_results import live_results_states
 from app.pipeline.fetch.poll_close import last_poll_close, state_zone
 from app.state_names import STATE_NAMES
 from app.time_utils import EASTERN, congress_in_session, utcnow
-from app.voter_calendar import CLOSED, calendar_for_state
+from app.voter_calendar import CLOSED, CLOSING_SOON_DAYS, calendar_for_state, registration_closing
 
 CALENDAR_HREF = "/elections/calendar"
 FEC_CALENDAR_URL = "https://www.fec.gov/data/election-dates/"
@@ -323,15 +323,22 @@ def election_calendar(db: Session, now: datetime | None = None) -> dict:
 
     election = active_election(db, today)
     deadlines = []
+    # Every state and DC, for the state filter: a state whose deadlines
+    # couldn't be read is still listed, and says so, never left out.
+    states = []
     for state in sorted(STATE_NAMES):
         cal = calendar_for_state(state, election.election_day, now)
+        states.append({"state": state, "stateName": STATE_NAMES[state],
+                       "deadlinesRead": bool(cal and cal["items"] and not cal["unread"]),
+                       "register": (cal or {}).get("register")})
         for item in (cal or {}).get("items") or []:
             if item["status"] == CLOSED and item["closesOn"] < lo:
                 continue
             deadlines.append({
                 "state": state, "stateName": STATE_NAMES[state], "kind": item["kind"], "label": item["label"],
                 "sentence": item["sentence"], "date": item["closesOn"], "status": item["status"],
-                "daysLeft": item["daysLeft"], "source": item["source"],
+                "daysLeft": item["daysLeft"], "source": item["source"], "republishedBy": item["republishedBy"],
+                "register": cal["register"] if item["kind"] == "registration" and item["status"] != CLOSED else None,
             })
     deadlines.sort(key=lambda d: (d["date"], d["state"]))
 
@@ -362,6 +369,9 @@ def election_calendar(db: Session, now: datetime | None = None) -> dict:
         "elections": elections,
         "voterDeadlines": deadlines,
         "voterDeadlinesFor": election.election_day.isoformat(),
+        "states": states,
+        "registrationClosing": registration_closing(election.election_day, now),
+        "closingSoonDays": CLOSING_SOON_DAYS,
         "fecDeadlines": fec,
         "nextThirtyDays": sum(1 for d in upcoming_dates if d <= soon),
         "nextDate": upcoming_dates[0] if upcoming_dates else None,
