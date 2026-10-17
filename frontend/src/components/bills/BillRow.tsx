@@ -72,7 +72,7 @@ export default function BillRow({ bill }: { bill: BillInFlight }) {
         <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5 text-xs text-ink-lo">
           <Link
             href={`/politicians/${bill.sponsorId}`}
-            className="flex min-h-6 shrink-0 items-center gap-1 hover:text-phos"
+            className="flex min-h-6 min-w-0 items-center gap-1 hover:text-phos"
           >
             {bill.sponsorThumbnailUrl && (
               <Photo
@@ -80,11 +80,11 @@ export default function BillRow({ bill }: { bill: BillInFlight }) {
                 lazy
                 alt=""
                 sizes="16px"
-                className="h-4 w-4 border border-white/[0.07] object-cover object-[center_25%]"
+                className="h-4 w-4 shrink-0 border border-white/[0.07] object-cover object-[center_25%]"
               />
             )}
-            <span className={`px-1 border text-xs ${party.className}`}>{party.label}</span>
-            <span className="text-ink">{bill.sponsorName}</span>
+            <span className={`shrink-0 px-1 border text-xs ${party.className}`}>{party.label}</span>
+            <span className="min-w-0 break-words text-ink">{bill.sponsorName}</span>
           </Link>
           <span className="text-ink-min">· {bill.sponsorState}</span>
           <span className="text-ink-min">· {bill.chamber === "senate" ? "Senate" : "House"}</span>
