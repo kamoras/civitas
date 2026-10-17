@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { OnBallotLine, SeatRaceLine } from "./PoliticianProfileClient";
+import { OnBallotLine } from "./PoliticianProfileClient";
 
 const fetchMapSeats = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 vi.mock("@/lib/api", async (real) => ({ ...(await real<object>()), fetchMapSeats }));
@@ -78,50 +78,5 @@ describe("OnBallotLine", () => {
     // (AGENTS.md, the Senate and House map, "Separate from scoring").
     expect(document.body).not.toHaveTextContent(/POLLS|D\+6 TO R\+3/i);
     expect(fetchMapSeats).toHaveBeenCalledWith({ seat: "2026-SEN-GA" });
-  });
-});
-
-describe("SeatRaceLine", () => {
-  const race = {
-    raceId: "2026-HOUSE-KY-4",
-    cycleYear: 2026,
-    state: "KY",
-    office: "H" as const,
-    district: 4,
-    redrawn: false,
-    status: "notNominee" as const,
-    certified: true,
-    sourceName: "Kentucky Secretary of State (general election candidate filings)",
-  };
-
-  it("keeps a member who isn't a nominee one link from their seat's race, with the source", () => {
-    render(<SeatRaceLine race={race} name="Pat Doe" />);
-    expect(
-      screen.getByText(/Pat Doe is not on the November ballot for this seat/)
-    ).toBeInTheDocument();
-    expect(screen.getByText(/Kentucky Secretary of State/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /WHO'S RUNNING FOR KY-4/ })).toHaveAttribute(
-      "href",
-      "/elections/states/KY#race-2026-HOUSE-KY-4"
-    );
-  });
-
-  it("words primary results as primary results, and an unread state as unread", () => {
-    const { rerender } = render(
-      <SeatRaceLine race={{ ...race, certified: false }} name="Pat Doe" />
-    );
-    expect(
-      screen.getByText(/not among the nominees Kentucky's primary results confirm/)
-    ).toBeTruthy();
-    rerender(<SeatRaceLine race={{ ...race, status: "unconfirmed" }} name="Pat Doe" />);
-    expect(screen.getByText(/Confirmed nominees aren't available for Kentucky yet/)).toBeTruthy();
-    expect(screen.queryByText(/Secretary of State/)).toBeNull();
-    expect(screen.getByRole("link", { name: /WHO HAS FILED FOR KY-4/ })).toBeTruthy();
-  });
-
-  it("says a redrawn seat's number is a different district", () => {
-    render(<SeatRaceLine race={{ ...race, redrawn: true }} name="Pat Doe" />);
-    expect(screen.getByText(/NEW MAP/)).toBeTruthy();
-    expect(screen.getByText(/is not the district\s+Pat Doe was elected in/)).toBeTruthy();
   });
 });

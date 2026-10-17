@@ -205,14 +205,12 @@ async def _party_results(
         return choices
 
     records = []
-    # A House district this party primaried is decided here, never by its
-    # endorsement (_merge_house), even when no winner can be named.
-    contested: set[str] = {_house_contest(d) for d in congress_races.values()}
     for office_id, district in congress_races.items():
         won = pick_nominee(_choices(office_id), runoff_threshold_pct=None)
         record = federal_record("H", district, party, won[0]) if won else None
         if record:
             records.append(record)
+    contested: set[str] = set()
     for office_id, (code, seat) in statewide_races.items():
         contested.add(code)
         won = pick_nominee(_choices(office_id), runoff_threshold_pct=None)
@@ -298,18 +296,19 @@ def _checked_labels(page, words: list[dict]) -> set[str]:
     return checked
 
 
-def _endorsed_pages(pdf_bytes: bytes):
-    """(office as typed, name as typed, party) for every page of a
-    certificate PDF that is an endorsement and nothing else. A
-    15%-eligibility certificate is not a nomination (it is the right to
-    force a primary) and is skipped; so is a page whose party or name
-    can't be read (a scanned page has no typed text)."""
+def parse_endorsements(pdf_bytes: bytes) -> list[dict]:
+    """Every ENDORSED statewide nominee in one certificate PDF, as
+    {"office", "district", "party", "last_name"}. A 15%-eligibility
+    certificate is not a nomination (it is the right to force a primary)
+    and is skipped; so is any page whose party or office can't be read,
+    or whose office isn't statewide."""
+    records = []
     with pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
         for page in pdf.pages:
             words = page.extract_words()
             office_text = _typed_between(page, words, "Party:", "Registrar")
             name = _typed_between(page, words, "Information:", "authorize")
-            if not name:
+            if not office_text or not name:
                 continue
             checked = _checked_labels(page, words)
             # Exactly one kind of certificate: "Endorsed" alone. A form
@@ -319,33 +318,15 @@ def _endorsed_pages(pdf_bytes: bytes):
             parties = {p for p in (normalize_party(label) for label in checked) if p}
             if len(parties) != 1:
                 continue
-            yield office_text or "", name, parties.pop()
-
-
-def parse_endorsements(pdf_bytes: bytes) -> list[dict]:
-    """Every ENDORSED statewide nominee in one certificate PDF, as
-    {"office", "district", "party", "last_name"}: _endorsed_pages, less
-    any page whose office isn't a statewide one."""
-    records = []
-    for office_text, name, party in _endorsed_pages(pdf_bytes):
-        office = parse_statewide_office(office_text)
-        name = clean_display_name(name)
-        if office is None or not name:
-            continue
-        records.append({"office": office[0], "district": office[1], "party": party, "last_name": name})
+            office = parse_statewide_office(office_text)
+            name = clean_display_name(name)
+            if office is None or not name:
+                continue
+            records.append({
+                "office": office[0], "district": office[1],
+                "party": parties.pop(), "last_name": name,
+            })
     return records
-
-
-def parse_house_endorsements(pdf_bytes: bytes, district: int) -> list[dict]:
-    """Every ENDORSED nominee in one congressional district's certificates
-    (the Secretary of the State posts one PDF per district, its district
-    in the file's own path). The office line is free text the party
-    typed ("Congress 1", "U.S. House of Representatives 2nd", "CD 4 U.S.
-    Congress"), so the district comes from the file, never from it."""
-    return [
-        record for _office, name, party in _endorsed_pages(pdf_bytes)
-        if (record := federal_record("H", district, party, name))
-    ]
 
 
 def _links(page: str, pattern: str, year: int) -> set[str]:
@@ -353,11 +334,12 @@ def _links(page: str, pattern: str, year: int) -> set[str]:
     return {html.unescape(m.group(1)) for m in re.finditer(regex, page)}
 
 
-async def _year_page(client: httpx.AsyncClient, year: int, spec: dict) -> tuple[str, str] | None:
-    """(url, html) of the year's endorsement page, or None when it can't be
-    found or read. Two hops, nothing pinned: the endorsement index links
-    one page per year (its slug is spelled differently from year to
-    year)."""
+async def _endorsed_nominees(client: httpx.AsyncClient, year: int, spec: dict) -> list[dict] | None:
+    """Every endorsed statewide nominee for `year`, or None when the
+    certificates can't be found or read. Two hops, nothing pinned: the
+    endorsement index links one page per year (its slug is spelled
+    differently from year to year), and that page links the combined
+    statewide certificates."""
     index_url = spec.get("index_url")
     if not index_url:
         return None
@@ -370,72 +352,8 @@ async def _year_page(client: httpx.AsyncClient, year: int, spec: dict) -> tuple[
         return None
     year_url = urljoin(index_url, year_pages.pop())
     page = await fetch_text_with_retry(client, _rate_limiter, year_url, f"CT endorsements {year}")
-    return (year_url, page) if page is not None else None
-
-
-async def _endorsed_house(client: httpx.AsyncClient, year: int, spec: dict) -> list[dict] | None:
-    """Every endorsed U.S. House nominee for `year`, one certificate PDF
-    per district, or None when the page or a certificate can't be read.
-    A district whose certificates are scanned (no typed text) gives none."""
-    found = await _year_page(client, year, spec)
-    if found is None:
+    if page is None:
         return None
-    year_url, page = found
-    regex = (spec.get("congressional_link_regex") or "").replace("{year}", str(year))
-    links = {(html.unescape(m.group(1)), int(m.group(2))) for m in re.finditer(regex, page)}
-    if not links:
-        logger.info("CT endorsement page for %d links no congressional certificates", year)
-        return None
-    records: list[dict] = []
-    for url, district in sorted(links, key=lambda x: x[1]):
-        resp = await fetch_with_retry(
-            client, _rate_limiter, "GET", urljoin(year_url, url), timeout=60.0,
-            log_label=f"CT congressional endorsements {year} CD {district}",
-        )
-        if resp is None:
-            return None
-        try:
-            records.extend(await asyncio.to_thread(parse_house_endorsements, resp.content, district))
-        except Exception:  # noqa: BLE001 - an unreadable PDF is a failed read, not a crash
-            logger.warning("CT endorsement certificate %s was not a readable PDF", url)
-            return None
-    return records
-
-
-def _merge_house(primaried: dict[str, set[str]], endorsed: list[dict]) -> list[dict]:
-    """The House nominees no primary decided: a district a party PRIMARIED
-    is the primary's (read with the primary results), any other goes to
-    the party's endorsed candidate. In 2026 most districts drew no primary
-    in either party, so the primary results named 3 of the 10 major-party
-    nominees. Two endorsements for one party's seat publish neither."""
-    by_seat: dict[tuple[int, str], list[dict]] = {}
-    for rec in endorsed:
-        by_seat.setdefault((rec["district"], rec["party"]), []).append(rec)
-    out = []
-    for (district, party), recs in sorted(by_seat.items()):
-        if _house_contest(district) in primaried.get(party, set()):
-            continue
-        if len({r["display_name"] for r in recs}) != 1:
-            logger.warning("CT: %d endorsements for the %s CD %d nomination", len(recs), party, district)
-            continue
-        out.append(recs[0])
-    return out
-
-
-def _house_contest(district: int | None) -> str:
-    """How a primaried House district is named among a party's contested
-    offices (beside the statewide office codes, which never collide)."""
-    return f"house-{district}"
-
-
-async def _endorsed_nominees(client: httpx.AsyncClient, year: int, spec: dict) -> list[dict] | None:
-    """Every endorsed statewide nominee for `year`, or None when the
-    certificates can't be found or read: the year's page (_year_page)
-    links the combined statewide certificates."""
-    found = await _year_page(client, year, spec)
-    if found is None:
-        return None
-    year_url, page = found
     pdf_urls = sorted(_links(page, spec.get("statewide_link_regex") or "", year))
     if not pdf_urls:
         logger.info("CT endorsement page for %d links no statewide certificates", year)
@@ -503,8 +421,6 @@ async def fetch_confirmed_candidates(
 
     results: list[dict] = []
     statewide_results: list[dict] = []
-    # Per party, the statewide offices and House districts its primary
-    # contested (a party that held no primary has no entry).
     primaried: dict[str, set[str]] = {}
     for primary, party in ((dem, "D"), (rep, "R")):
         if primary is None:
@@ -540,13 +456,4 @@ async def fetch_confirmed_candidates(
             logger.warning("CT statewide endorsements for %d could not be read", year)
             return None
         results.extend(_merge_statewide(primaried, statewide_results, endorsed))
-    if (source.get("endorsements") or {}).get("congressional_link_regex"):
-        house = await _endorsed_house(client, year, source["endorsements"])
-        if house is None:
-            # Without them a district no primary decided would lose its
-            # stored nominees (the sync unconfirms whoever a read leaves
-            # out): fail the run, as for the statewide certificates.
-            logger.warning("CT congressional endorsements for %d could not be read", year)
-            return None
-        results.extend(_merge_house(primaried, house))
     return results

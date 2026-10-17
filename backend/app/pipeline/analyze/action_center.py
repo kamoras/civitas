@@ -60,6 +60,7 @@ from app.models import (
 )
 from app.pipeline.analyze import action_metrics
 from app.committee_routing import route_committees
+from app import roll_call_links
 from app.pipeline.analyze.bluesky_spotlight import post_daily_spotlight
 from app.pipeline.analyze.early_signal import (
     CONFIRMATION_WINDOW_HOURS,
@@ -5974,6 +5975,16 @@ def _run_refresh(db: Session) -> int:
         db.commit()
     except Exception:
         logger.exception("Backfilling issues' new facts failed")
+        db.rollback()
+
+    # Related votes in Congress (app/roll_call_links.py): matched here, where
+    # both models are loaded, for the last week's issues and monitor updates
+    # and a bounded batch of older ones never matched.
+    try:
+        roll_call_links.refresh_links(db, today)
+        db.commit()
+    except Exception:
+        logger.exception("Matching issues to roll calls failed")
         db.rollback()
 
     # Stage 4: Post new/surging issues to Bluesky.

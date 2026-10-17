@@ -1635,6 +1635,10 @@ class ActionIssue(Base):
     summary_source: Mapped[str | None] = mapped_column(String, nullable=True)
     summary_source_url: Mapped[str | None] = mapped_column(String, nullable=True)
     related_monitor_slugs: Mapped[str] = mapped_column(Text, default="[]")
+    # The roll calls this story is related to ("Related votes in Congress"),
+    # as JSON refs ("senate-119-2-244"), matched by app/roll_call_links.py in
+    # the hourly refresh. NULL: not matched yet (the refresh backfills).
+    related_roll_call_refs: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     # Unused: the "This concerns me / Not a priority" vote that counted into
     # these was removed in 2026-09. Still mapped, with their default, because
     # they are NOT NULL and the image before this one still reads them; the
@@ -1922,6 +1926,9 @@ class MonitorUpdate(Base):
     source_name: Mapped[str] = mapped_column(String(200), default="")
     article_title: Mapped[str] = mapped_column(String(500), default="")
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    # Roll calls related to this update (app/roll_call_links.py), as JSON
+    # refs; the monitor's "On the record" is their union. NULL: not matched.
+    roll_call_refs: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
 
     monitor = relationship("NationalMonitor", back_populates="updates")
 
