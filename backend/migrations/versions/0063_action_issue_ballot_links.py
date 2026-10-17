@@ -8,16 +8,16 @@ links a row.
 Additive only (one nullable column), so the previous image runs unchanged
 against the migrated schema.
 
-Revision ID: 0061
-Revises: 0060
+Revision ID: 0063
+Revises: 0062
 Create Date: 2026-10-17
 """
 from alembic import op
 import sqlalchemy as sa
 
 
-revision = '0061'
-down_revision = '0060'
+revision = '0063'
+down_revision = '0062'
 branch_labels = None
 depends_on = None
 
