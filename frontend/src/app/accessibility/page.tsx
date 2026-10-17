@@ -104,7 +104,9 @@ export default function AccessibilityPage() {
                 <Item label="Focus">
                   The element with keyboard focus always shows a 2px cyan outline, and the page
                   scrolls so it is never hidden under the fixed header, or under a phone&apos;s
-                  section bar.
+                  section bar. A phone&apos;s header comes back whenever focus moves into it. Its
+                  data status is a small square beside the name, a button that reads out and shows
+                  the whole status line.
                 </Item>
                 <Item label="Contrast">
                   Text colours come from a fixed palette with no dimmer shades to reach for. The
@@ -129,7 +131,8 @@ export default function AccessibilityPage() {
                 </Item>
                 <Item label="Motion">
                   With reduced motion turned on in your system settings, animations stop,
-                  transitions are instant and the page jumps instead of scrolling smoothly.
+                  transitions are instant and the page jumps instead of scrolling smoothly. On a
+                  phone the header, which otherwise slides away while you scroll down, stays put.
                 </Item>
                 <Item label="Windows High Contrast">
                   In forced-colours mode, decorative colour effects that would smear text are

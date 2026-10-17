@@ -1,6 +1,7 @@
+import React from "react";
 import { describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import Navbar from "./Navbar";
+import Navbar, { useHideOnScroll } from "./Navbar";
 import Footer from "./Footer";
 import { SECTIONS, sectionSubpages, type SectionKey } from "@/lib/routes";
 
@@ -8,7 +9,7 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/elections/map",
   useRouter: () => ({ push: vi.fn() }),
 }));
-vi.mock("./RecordsBand", () => ({ default: () => null }));
+vi.mock("./RecordsBand", () => ({ default: () => null, RunStatusSquare: () => null }));
 
 const KEYS = Object.keys(SECTIONS) as SectionKey[];
 
@@ -200,5 +201,78 @@ describe("Footer", () => {
       expect(hrefs).toContain(SECTIONS[key].href);
       for (const t of sectionSubpages(key)) expect(hrefs).toContain(t.href);
     }
+  });
+});
+
+describe("useHideOnScroll (a phone's header)", () => {
+  function Harness({ menuOpen = false }: { menuOpen?: boolean }) {
+    const ref = React.useRef<HTMLElement>(null);
+    const hidden = useHideOnScroll(ref, menuOpen);
+    return (
+      <header ref={ref} data-hidden={String(hidden)}>
+        <button type="button">in the header</button>
+      </header>
+    );
+  }
+  function media(reduced: boolean) {
+    // jsdom has no matchMedia: the hook leaves the header alone without it.
+    window.matchMedia = ((q: string) => ({
+      matches: q.includes("reduce") ? reduced : true,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia;
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
+      cb(0);
+      return 0;
+    });
+  }
+  function scroll(y: number) {
+    act(() => {
+      Object.defineProperty(window, "scrollY", { configurable: true, value: y });
+      window.dispatchEvent(new Event("scroll"));
+    });
+  }
+  const state = () => document.querySelector("header")!.getAttribute("data-hidden");
+
+  it("hides on scroll down past the first screen and comes back on scroll up", () => {
+    media(false);
+    render(<Harness />);
+    scroll(300);
+    expect(state()).toBe("false"); // still within the first screen
+    scroll(2000);
+    scroll(2400);
+    expect(state()).toBe("true");
+    expect(document.documentElement.hasAttribute("data-header-hidden")).toBe(true);
+    scroll(2300);
+    expect(state()).toBe("false");
+    expect(document.documentElement.hasAttribute("data-header-hidden")).toBe(false);
+    vi.restoreAllMocks();
+  });
+
+  it("shows when focus goes into it", () => {
+    media(false);
+    render(<Harness />);
+    scroll(2000);
+    scroll(2400);
+    expect(state()).toBe("true");
+    act(() => screen.getByRole("button", { name: "in the header" }).focus());
+    expect(state()).toBe("false");
+    vi.restoreAllMocks();
+  });
+
+  it("never hides with reduced motion, or with the menu open", () => {
+    media(true);
+    const { unmount } = render(<Harness />);
+    scroll(2000);
+    scroll(2400);
+    expect(state()).toBe("false");
+    unmount();
+    vi.restoreAllMocks();
+    media(false);
+    render(<Harness menuOpen />);
+    scroll(2000);
+    scroll(2400);
+    expect(state()).toBe("false");
+    vi.restoreAllMocks();
   });
 });

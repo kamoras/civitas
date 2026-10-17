@@ -37,6 +37,24 @@
 
      Change the header's height, change this, and every page follows. */
   --header-clearance: 6rem;
+  /* The header's own height, for what sits directly under it; HeaderClearance
+     sets the measured value. */
+  --header-h: 5.375rem;
+}
+
+/* Under 56rem (the MENU layout) the records band folds into a status square
+   beside the wordmark, so the header is the 51px bar alone (mobile spec P8). */
+@media (max-width: 55.99rem) {
+  :root {
+    --header-clearance: 3.75rem;
+    --header-h: 3.25rem;
+  }
+}
+
+/* The phone header hides on scroll down (Navbar's useHideOnScroll); what sits
+   under it reads this and moves up to the top edge. */
+html[data-header-hidden] {
+  --header-shown-h: 0px;
 }
 
 /* ===== BASE STYLES ===== */

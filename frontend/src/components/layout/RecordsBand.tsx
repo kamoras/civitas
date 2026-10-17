@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { fetchPipelineStatus } from "@/lib/api";
 import type { PipelineStatus } from "@/lib/api";
 import { parseUtc } from "@/lib/formatting";
@@ -167,10 +167,9 @@ export function __resetStatusCache() {
   statusInFlight = null;
 }
 
-/** `aside`: what the band carries on its right where the desktop row is
- *  shown (56rem, as Navbar); below that it is in MENU and the band is the
- *  status line alone. */
-export default function RecordsBand({ aside }: { aside?: React.ReactNode }) {
+/** The run status, from the module cache: one request for the band and the
+ *  phone's status square. */
+function useRunStatus(): { status: PipelineStatus | null; loaded: boolean } {
   const [status, setStatus] = useState<PipelineStatus | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -195,7 +194,11 @@ export default function RecordsBand({ aside }: { aside?: React.ReactNode }) {
       active = false;
     };
   }, []);
+  return { status, loaded };
+}
 
+/** The status line: "FILED … · COMPLETE", or the link that failed and when. */
+function StatusLine({ status, loaded }: { status: PipelineStatus | null; loaded: boolean }) {
   const state = describeRunState(status);
   // Only a run that actually completed gets a "FILED" stamp, and with a link
   // named as failed it says how many links it covers: "FILED" alone beside
@@ -207,7 +210,82 @@ export default function RecordsBand({ aside }: { aside?: React.ReactNode }) {
   const atShort = state.at ? formatRunTime(state.at) : null;
 
   return (
-    <div className="border-b-3 border-ink-min/60 bg-surface-base">
+    <span className="font-mono text-xs tracking-[0.06em] text-ink-lo lg:tracking-[0.16em]">
+      {loaded ? (
+        <>
+          {/* One line at every width: the fixed header's 96px clearance
+              (`--header-clearance`) allows no wrap. So the phone line
+              (288px at 320) is the short form, "SUPPLEMENTARY DATA
+              FAILED · 4/5 FILED", with the time from 360px and UTC from
+              370px; from `sm` the full words and dates; the filed time
+              from `lg`. Two or more failed links name the first and
+              count the rest (on a phone, the count alone: "3 DATA RUNS
+              FAILED"), every name in the link's title and its
+              accessible name. Measured for
+              every link and state, one to five failed, at 320, 360, 375,
+              640, 1024 and 1280. */}
+          {state.complete ? (
+            <>
+              {filedAt && (
+                <>
+                  FILED {filedAt}
+                  <Dot />
+                </>
+              )}
+              <span className={state.tone}>{state.label}</span>
+            </>
+          ) : total > 0 ? (
+            <>
+              <Link
+                href="/about/data#nightly-runs"
+                title={state.everyName ?? undefined}
+                className={`${state.tone} underline decoration-dotted underline-offset-2 hover:decoration-solid`}
+              >
+                <span className="hidden sm:inline">{state.label}</span>
+                <span className="sm:hidden">{state.short}</span>
+                {state.everyName && <span className="sr-only"> ({state.everyName})</span>}
+                {at && (
+                  <>
+                    {" "}
+                    <span className="hidden sm:inline">{at}</span>
+                    {/* From 360px: at 320, "SUPPLEMENTARY DATA FAILED"
+                        leaves no room for it on the one line. */}
+                    <span className="hidden min-[360px]:inline sm:hidden">
+                      {atShort}
+                      <span className="hidden min-[370px]:inline"> UTC</span>
+                    </span>
+                  </>
+                )}
+              </Link>
+              <Dot />
+              <span className="sm:hidden">
+                {done}/{total} FILED
+              </span>
+              <span className="hidden sm:inline">
+                {done} OF {total} FILED
+                {filedAt && <span className="hidden lg:inline"> {filedAt}</span>}
+              </span>
+            </>
+          ) : (
+            <span className={state.tone}>{state.label}</span>
+          )}
+        </>
+      ) : (
+        <span className="text-ink-min">READING RUN STATUS…</span>
+      )}
+    </span>
+  );
+}
+
+/** `aside`: what the band carries on its right where the desktop row is
+ *  shown (56rem, as Navbar); below that it is in MENU. Below 56rem the band
+ *  itself folds into the status square beside the wordmark (`RunStatusSquare`):
+ *  it was 34px of a phone's 86px sticky header on every screen (mobile spec
+ *  P8). */
+export default function RecordsBand({ aside }: { aside?: React.ReactNode }) {
+  const { status, loaded } = useRunStatus();
+  return (
+    <div className="hidden border-b-3 border-ink-min/60 bg-surface-base min-[56rem]:block">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-6 gap-y-1 px-4 py-2 sm:px-6">
         {/* No "PUBLIC RECORDS OFFICE" label (2026-10): Civitas is a
             volunteer-run open source project, not an office, and a
@@ -221,72 +299,77 @@ export default function RecordsBand({ aside }: { aside?: React.ReactNode }) {
           page's own content on every client-side navigation. It is ambient
           provenance, not an update the reader asked for.
         */}
-        <span className="font-mono text-xs tracking-[0.06em] text-ink-lo lg:tracking-[0.16em]">
-          {loaded ? (
-            <>
-              {/* One line at every width: the fixed header's 96px clearance
-                  (`--header-clearance`) allows no wrap. So the phone line
-                  (288px at 320) is the short form, "SUPPLEMENTARY DATA
-                  FAILED · 4/5 FILED", with the time from 360px and UTC from
-                  370px; from `sm` the full words and dates; the filed time
-                  from `lg`. Two or more failed links name the first and
-                  count the rest (on a phone, the count alone: "3 DATA RUNS
-                  FAILED"), every name in the link's title and its
-                  accessible name. Measured for
-                  every link and state, one to five failed, at 320, 360, 375,
-                  640, 1024 and 1280. */}
-              {state.complete ? (
-                <>
-                  {filedAt && (
-                    <>
-                      FILED {filedAt}
-                      <Dot />
-                    </>
-                  )}
-                  <span className={state.tone}>{state.label}</span>
-                </>
-              ) : total > 0 ? (
-                <>
-                  <Link
-                    href="/about/data#nightly-runs"
-                    title={state.everyName ?? undefined}
-                    className={`${state.tone} underline decoration-dotted underline-offset-2 hover:decoration-solid`}
-                  >
-                    <span className="hidden sm:inline">{state.label}</span>
-                    <span className="sm:hidden">{state.short}</span>
-                    {state.everyName && <span className="sr-only"> ({state.everyName})</span>}
-                    {at && (
-                      <>
-                        {" "}
-                        <span className="hidden sm:inline">{at}</span>
-                        {/* From 360px: at 320, "SUPPLEMENTARY DATA FAILED"
-                            leaves no room for it on the one line. */}
-                        <span className="hidden min-[360px]:inline sm:hidden">
-                          {atShort}
-                          <span className="hidden min-[370px]:inline"> UTC</span>
-                        </span>
-                      </>
-                    )}
-                  </Link>
-                  <Dot />
-                  <span className="sm:hidden">
-                    {done}/{total} FILED
-                  </span>
-                  <span className="hidden sm:inline">
-                    {done} OF {total} FILED
-                    {filedAt && <span className="hidden lg:inline"> {filedAt}</span>}
-                  </span>
-                </>
-              ) : (
-                <span className={state.tone}>{state.label}</span>
-              )}
-            </>
-          ) : (
-            <span className="text-ink-min">READING RUN STATUS…</span>
-          )}
-        </span>
+        <StatusLine status={status} loaded={loaded} />
         {aside && <div className="hidden min-[56rem]:block">{aside}</div>}
       </div>
     </div>
+  );
+}
+
+/**
+ * The records band on a phone: a 10px square left of the wordmark, filled
+ * when every run completed and hollow otherwise (the tone says which kind of
+ * trouble), in a 44px button whose name is the whole status line. A tap opens
+ * the line under the header bar; Escape, a second tap or a tap elsewhere
+ * closes it. Not a live region, like the band.
+ */
+/** The square's edge for each status tone, written out for Tailwind's scan. */
+const SQUARE_TONE: Record<string, string> = {
+  "text-signal-red": "border-signal-red",
+  "text-signal-amber": "border-signal-amber",
+  "text-ink-min": "border-ink-min",
+};
+
+export function RunStatusSquare() {
+  const { status, loaded } = useRunStatus();
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLSpanElement>(null);
+  const id = useId();
+  const state = describeRunState(status);
+  const filedAt = status?.filedAt ? formatRunTimestamp(status.filedAt) : null;
+  const words = !loaded
+    ? "Reading run status"
+    : state.complete
+      ? `${filedAt ? `Filed ${filedAt}, ` : ""}${state.label.toLowerCase()}`
+      : `${state.label.toLowerCase()}${state.everyName ? ` (${state.everyName})` : ""}, ${status?.linksCompleted ?? 0} of ${status?.links?.length ?? 0} filed`;
+  const tone = !loaded
+    ? "border-ink-min"
+    : state.complete
+      ? "border-phos bg-phos"
+      : (SQUARE_TONE[state.tone] ?? "border-ink-min");
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    const onDown = (e: PointerEvent) =>
+      box.current && !box.current.contains(e.target as Node) && setOpen(false);
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onDown);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onDown);
+    };
+  }, [open]);
+
+  return (
+    <span ref={box} className="-my-3 -ml-3 flex min-[56rem]:hidden">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={id}
+        aria-label={`Data status: ${words}`}
+        onClick={() => setOpen((o) => !o)}
+        className="inline-flex min-h-11 min-w-11 items-center justify-center"
+      >
+        <span aria-hidden="true" className={`block h-2.5 w-2.5 border-2 ${tone}`} />
+      </button>
+      <span
+        id={id}
+        hidden={!open}
+        className="absolute inset-x-0 top-full border-b-3 border-ink-min/60 bg-surface-base px-4 py-2"
+      >
+        <StatusLine status={status} loaded={loaded} />
+      </span>
+    </span>
   );
 }

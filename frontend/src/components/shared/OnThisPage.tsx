@@ -120,8 +120,8 @@ export default function OnThisPage() {
     <nav
       aria-label="Sections on this page"
       data-on-this-page=""
-      className={`${pinned ? "flex" : "hidden"} fixed inset-x-0 z-40 border-b-3 border-ink-min/60 bg-surface-base sm:hidden`}
-      style={{ top: "var(--header-h, 5.375rem)" }}
+      className={`${pinned ? "flex" : "hidden"} fixed inset-x-0 z-40 transition-[top] duration-200 motion-reduce:transition-none border-b-3 border-ink-min/60 bg-surface-base sm:hidden`}
+      style={{ top: "var(--header-shown-h, var(--header-h))" }}
     >
       <div className="mx-auto flex h-11 w-full items-center justify-between gap-3 px-4">
         <p className="min-w-0 truncate font-mono text-[0.8125rem] uppercase tracking-[0.08em] text-ink-hi">
