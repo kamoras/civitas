@@ -4,6 +4,7 @@ import { shortDate } from "@/lib/congress";
 import { stateBallotHref } from "@/lib/elections";
 import { CALENDAR_HREF } from "@/lib/routes";
 import RegisterLink from "@/components/elections/RegisterLink";
+import YourStateClosing from "@/components/elections/YourStateClosing";
 
 function when(r: RegistrationClosing): string {
   if (r.daysLeft === 0) return "Closes today";
@@ -60,6 +61,7 @@ export default function ClosingSoon({
             In {rows.length} {rows.length === 1 ? "state" : "states"}, registration closes in the
             next {days} days.
           </p>
+          <YourStateClosing rows={rows} />
           <ol className="mt-2 flex flex-col gap-2">
             {Array.from(byDay.entries()).map(([day, states]) => (
               <li key={day} className="border-t border-white/[0.09] pt-2 first:border-t-0">
