@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import Navbar from "./Navbar";
-import Footer from "./Footer";
 import { SECTIONS, sectionSubpages, type SectionKey } from "@/lib/routes";
 
 vi.mock("next/navigation", () => ({
@@ -189,13 +188,13 @@ describe("Navbar row overflow guard", () => {
   });
 });
 
-describe("Footer", () => {
-  it("has a column for every section, with its pages", () => {
-    render(<Footer />);
-    const nav = screen.getByRole("navigation", { name: "Footer navigation" });
-    const hrefs = within(nav)
-      .getAllByRole("link")
-      .map((l) => l.getAttribute("href"));
+describe("Navbar markup with every menu closed", () => {
+  // The footer no longer repeats the sections' pages, so the header's closed
+  // desktop panels (`hidden`, display: none) are where a crawler finds them:
+  // they must be in the markup before anything opens.
+  it("holds a link to every section's pages", () => {
+    render(<Navbar />);
+    const hrefs = [...document.querySelectorAll("header a")].map((a) => a.getAttribute("href"));
     for (const key of KEYS) {
       expect(hrefs).toContain(SECTIONS[key].href);
       for (const t of sectionSubpages(key)) expect(hrefs).toContain(t.href);
