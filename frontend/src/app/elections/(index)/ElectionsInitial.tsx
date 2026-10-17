@@ -4,6 +4,7 @@ import { createContext, useContext } from "react";
 import type { ElectionPhaseInfo, PviMap } from "@/types/election";
 import type { ElectionCalendar, SpecialsBoard } from "@/types/specials";
 import type { ArchiveIndex } from "@/types/electionArchive";
+import type { FecDeadlineEvent, NewCongress, NextField } from "@/types/nextCycle";
 
 /** What the server already read for /elections (elections/layout.tsx): the
  * lean map and which mode the page is in, so the masthead, map and state
@@ -28,6 +29,12 @@ export interface ElectionsInitial {
   calendar: ElectionCalendar | null;
   /** The archive's index, read after the count settles (post-certification). */
   archive?: ArchiveIndex | null;
+  /** The next cycle's FEC registrations, between cycles and in primary season. */
+  field?: NextField | null;
+  /** How the sitting Congress compares, in the off-season. */
+  newCongress?: NewCongress | null;
+  /** The FEC's reporting deadline the page leads with around its day. */
+  fecDeadline?: FecDeadlineEvent | null;
   /** The server's clock when it rendered, so the countdown reads the same
    * on the server and in the browser. */
   renderedAt: number;

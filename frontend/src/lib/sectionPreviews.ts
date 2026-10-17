@@ -46,7 +46,7 @@ function president(f: SectionFigures["congress"]["president"]): Preview {
  * the About chapters) has no entry. A figure the site can't give yet says
  * what it is waiting on: an empty default is content.
  */
-const PREVIEWS: Record<string, Record<string, (f: SectionFigures) => Preview>> = {
+const PREVIEWS: Record<string, Record<string, (f: SectionFigures) => Preview | null>> = {
   action: {
     today: ({ action: { today } }) =>
       today.date
@@ -194,6 +194,24 @@ const PREVIEWS: Record<string, Record<string, (f: SectionFigures) => Preview>> =
     // The archive's card leads with the public check of the map: how many
     // official margins fell inside its ranges. Before the first archive, or
     // before any count is official, it says so, never a bare 0.
+    // The FEC's next reporting deadline: a recurring event, worded around
+    // its day (backend next_cycle.deadline_event).
+    calendar: ({ elections: { calendar } }) => {
+      if (calendar === undefined) throw new Error("older backend");
+      const d = calendar.deadline;
+      if (!d) return null;
+      const what = d.label ?? d.reportType;
+      if (d.status === "due_today") return { figure: "Today", caption: `FEC ${what} reports due` };
+      if (d.status === "passed")
+        return {
+          figure: dated(d.date),
+          caption: `FEC ${what} reports were due · every date and deadline ahead`,
+        };
+      return {
+        figure: dated(d.date),
+        caption: `next FEC filing deadline: ${what} reports · every date and deadline ahead`,
+      };
+    },
     archive: ({ elections: { archive, ballots } }) => {
       if (archive === undefined) throw new Error("older backend");
       if (!archive)

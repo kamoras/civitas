@@ -14,6 +14,9 @@ import ResultsOverview from "@/components/elections/results/ResultsOverview";
 import OffSeasonLead from "@/components/elections/specials/OffSeasonLead";
 import ArchiveLead from "@/components/elections/season/ArchiveLead";
 import PrimariesLead from "@/components/elections/season/PrimariesLead";
+import FecDeadlineCard from "@/components/elections/season/FecDeadlineCard";
+import NewCongress from "@/components/elections/season/NewCongress";
+import NextField from "@/components/elections/season/NextField";
 import { electionTitle, formatPvi, pviColor, stateBallotHref } from "@/lib/elections";
 import { formatUtcDate } from "@/lib/formatting";
 import {
@@ -468,6 +471,14 @@ export default function ElectionsPage() {
           {primarySeason && season && (
             <PrimariesLead season={season} cal={initial?.calendar ?? null} />
           )}
+
+          {campaignMode && <FecDeadlineCard event={initial?.fecDeadline ?? null} />}
+
+          {season?.season === "off_season" && campaignMode && (
+            <NewCongress data={initial?.newCongress ?? null} />
+          )}
+
+          {(betweenCycles || primarySeason) && <NextField field={initial?.field ?? null} />}
 
           {resultsMode && results && (
             <ResultsOverview

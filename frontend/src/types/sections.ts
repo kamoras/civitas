@@ -5,6 +5,7 @@
 
 import type { AccountabilitySummary } from "@/types/mapAccountability";
 import type { Season } from "@/types/specials";
+import type { FecDeadlineEvent } from "@/types/nextCycle";
 
 export interface SectionFigures {
   action: {
@@ -48,6 +49,9 @@ export interface SectionFigures {
     /** Which stretch of the calendar the section is in (optional: an older
      *  backend's answer has none). */
     season?: Season;
+    /** The FEC's reporting deadline the calendar leads with (optional: an
+     *  older backend's answer has none). */
+    calendar?: { deadline: FecDeadlineEvent | null };
   };
   explore: { search: { documents: number } };
 }

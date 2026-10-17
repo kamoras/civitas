@@ -106,7 +106,7 @@ class TestReadingTheSources:
         assert db_session.get(FecReportingDeadline, "2027-06-01-12P").rows == 2
         # Only one pre-primary date is in a window starting after January 2,
         # but the type is due on two dates in its year: not shown as a date.
-        shown = se._national_deadlines(
+        shown = se.national_deadlines(
             db_session, db_session.query(FecReportingDeadline).filter(
                 FecReportingDeadline.due_date > "2027-01-05").all())
         assert [r.report_type for r in shown] == ["Q1"]
