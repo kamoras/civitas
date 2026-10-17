@@ -2,6 +2,7 @@
 (fetch/amendment_purpose.py) and served beside the vote."""
 
 import asyncio
+from datetime import datetime, timedelta
 
 from app.models import RollCall
 from app.pipeline.fetch import amendment_purpose
@@ -136,7 +137,6 @@ def test_a_day_of_unpublished_house_votes_never_stalls_the_back_catalogue(db_ses
 
 
 def test_a_permanent_404_backs_off_and_never_heads_every_batch(db_session, monkeypatch, freeze_utcnow):
-    from datetime import datetime, timedelta
 
     dead = _rc(db_session, "senate", 400, "On the Amendment S.Amdt. 9", "Smith Amdt. No. 9")
     start = datetime(2026, 10, 1, 12, 0)
