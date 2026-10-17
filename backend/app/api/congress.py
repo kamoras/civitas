@@ -3,7 +3,7 @@
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
-from fastapi.responses import JSONResponse
+from app.api.response_helpers import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.api.response_helpers import cached_json
@@ -11,7 +11,8 @@ from app.database import get_db
 from app.models import RollCall
 from app.pipeline.congress_activity import eastern_today
 from app.services import committee_record, congress_service
-from app.services.bill_record import parse_bill_id, vote_detail
+from app.bill_ids import canonical_bill_id
+from app.services.bill_record import vote_detail
 
 router = APIRouter(prefix="/congress")
 
@@ -134,9 +135,12 @@ def committee_search(
     (all of them), a bill (named anywhere in the entry, as Civitas names it:
     S.465), kind and Congress. A `q` that is one bill number is read as that
     bill (committee_record.search)."""
-    if bill is not None and parse_bill_id(bill.upper()) is None:
-        raise HTTPException(status_code=422, detail="Expected a bill as Civitas names it, e.g. S.465")
+    # Any spelling of a bill ("S. 465", "s465"), read as Civitas names it.
+    if bill is not None:
+        bill = canonical_bill_id(bill)
+        if bill is None:
+            raise HTTPException(status_code=422, detail="Expected a bill, e.g. S.465 or H.R. 1")
     return cached_json(committee_record.search(
-        db, chamber=chamber, committee=committee, q=q, bill=bill.upper() if bill else None, kind=kind,
+        db, chamber=chamber, committee=committee, q=q, bill=bill, kind=kind,
         congress=congress, page=page, per_page=per_page,
     ), max_age=_TTL_S)

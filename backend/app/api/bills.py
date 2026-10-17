@@ -3,7 +3,7 @@ Bills-in-flight API — all bills currently moving through Congress,
 unioned across the Senate and House, for the process-flow visualization.
 """
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import JSONResponse
+from app.api.response_helpers import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.api.rate_limit import UpstreamRouteLimit, declares_itself_a_crawler, try_spend_upstream
