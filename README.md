@@ -1596,7 +1596,7 @@ with its official copy (`notHeld`, `services/explore_coverage.not_held`): an
 executive order numbered below the oldest held reads "Executive orders before
 May 23, 2025 aren't held here", with a link to the Federal Register. Each
 document type's first and last date held is in `GET /api/explore/stats`
-(`coverage`) and on the search page, under the box. EXPLORE_EVAL_NUMBERS
+(`coverage`) and on the search page, under the box. Known-item probes of 400 sampled documents (2026-10-16 database), hybrid, before and after: docket R@1 0.667 → 1.000 (18 probes); Record citation R@1 0.000 → 0.184, R@20 0.000 → 0.923 (196; every speech in a granule shares its first page); identifier lifted from a document's text MRR 0.640 → 0.695; FR citation MRR 0.906 → 0.911; title, paraphrase, rare, passage and FR document number unchanged; ALL MRR 0.593 → 0.631. Of 40 identifiers the corpus does not hold, every one got documents back before and none was told it isn't held; after, 13 got documents back (each citing it) and all 40 were told.
 
 **Why rank fusion rather than score blending.** Cosine distance and BM25 live
 on unrelated scales; min-max normalising each makes the blend depend on

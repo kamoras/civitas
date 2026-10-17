@@ -252,7 +252,7 @@ citation ("172 Cong. Rec. H5836") and granule. An identifier-only query asks
 the keyword channel for the identifier as written, never for any one of its
 words, and an identifier no document is known by gets a `notHeld` note (why,
 and the official copy) instead of documents that share a word with it
-(`services/explore_coverage.py`). EXPLORE_EVAL_NUMBERS
+(`services/explore_coverage.py`). Known-item probes of 400 sampled documents (2026-10-16 database), hybrid, before and after: docket R@1 0.667 → 1.000 (18 probes); Record citation R@1 0.000 → 0.184, R@20 0.000 → 0.923 (196; every speech in a granule shares its first page); identifier lifted from a document's text MRR 0.640 → 0.695; FR citation MRR 0.906 → 0.911; title, paraphrase, rare, passage and FR document number unchanged; ALL MRR 0.593 → 0.631. Of 40 identifiers the corpus does not hold, every one got documents back before and none was told it isn't held; after, 13 got documents back (each citing it) and all 40 were told.
 
 **Half the engine can be down and search still works — and says so.** The
 vector index records which model built it, and a mismatch at startup drops the
