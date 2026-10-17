@@ -889,6 +889,76 @@ describe("bill page layers", () => {
   });
 });
 
+describe("bill page: a long summary and the page's sections", () => {
+  // Backlog 7 #10: H.R. 1 printed its whole CRS summary and its votes
+  // started 55.6 screens down.
+  const long = {
+    ...record,
+    summary: {
+      ...record.summary!,
+      paragraphs: [
+        "One Big Act",
+        "This bill does the first thing.",
+        ...Array.from(
+          { length: 30 },
+          (_, i) => `Section ${i} does something ${"word ".repeat(20)}`
+        ),
+      ],
+    },
+  };
+
+  it("keeps the title line and first paragraph open, the rest behind one disclosure", () => {
+    render(
+      <BillPageView
+        billId="S.4668"
+        canonicalPath="/congress/bills/S.4668"
+        record={long}
+        detail={null}
+        stageName={null}
+      />
+    );
+    const section = screen.getByRole("heading", { name: "Summary" }).closest("section")!;
+    const toggle = within(section).getByText(/^Read the full CRS summary \(\d[\d,]* words\)$/);
+    const details = toggle.closest("details")!;
+    expect(details.open).toBe(false);
+    expect(within(section).getByText("One Big Act").closest("details")).toBeNull();
+    expect(within(details).getByText(/^Section 0 does/)).toBeTruthy();
+  });
+
+  it("prints a short summary whole", () => {
+    render(
+      <BillPageView
+        billId="S.4668"
+        canonicalPath="/congress/bills/S.4668"
+        record={record}
+        detail={null}
+        stageName={null}
+      />
+    );
+    expect(screen.queryByText(/Read the full CRS summary/)).toBeNull();
+  });
+
+  it("lists the page's sections under the title, the votes with their count", () => {
+    render(
+      <BillPageView
+        billId="S.4668"
+        canonicalPath="/congress/bills/S.4668"
+        record={long}
+        detail={null}
+        stageName={null}
+      />
+    );
+    const nav = screen.getByRole("navigation", { name: "On this page" });
+    const links = within(nav).getAllByRole("link");
+    expect(links.map((a) => a.getAttribute("href"))).toEqual(
+      expect.arrayContaining(["#summary", "#votes", "#history", "#text", "#sources"])
+    );
+    expect(within(nav).getByRole("link", { name: /Votes/ }).textContent).toMatch(/recorded/);
+    for (const a of links)
+      expect(document.getElementById(a.getAttribute("href")!.slice(1))).toBeTruthy();
+  });
+});
+
 describe("bill page: finding one's own members", () => {
   const person = (i: number) => ({
     name: `Rep. Member${i}, Pat [D-OH-${i}]`,
