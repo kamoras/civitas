@@ -138,7 +138,7 @@ export default function RaceResearch({
       <div
         role="tablist"
         aria-label="Research this race"
-        className="flex gap-2"
+        className="flex flex-wrap gap-2"
         onKeyDown={onKeyDown}
       >
         {tabs.map((t, i) => {

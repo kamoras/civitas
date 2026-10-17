@@ -30,7 +30,7 @@ export default function ScoreWeightBar() {
           <div key={p.key} className={p.fill} style={{ width: `${share(p.key) * 100}%` }} />
         ))}
       </div>
-      <figcaption className="mt-3 grid gap-2 sm:grid-cols-3">
+      <figcaption className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
         {PARTS.map((p) => (
           <span key={p.key} className="flex items-baseline gap-2 text-sm text-ink">
             <span aria-hidden="true" className={`h-2.5 w-2.5 shrink-0 ${p.fill}`} />
