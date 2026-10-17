@@ -393,6 +393,26 @@ Disjoint headline items alone would have dropped all 12 single stories with
 the 16 briefings, so the body half is what makes it precise. Its known miss
 is the live blog, left to the coherence and on-topic checks downstream.
 
+That miss mattered once a live blog titled an issue: on 2026-10-16 a
+"Live updates: <a press secretary's exit>; <a campaign rally>" headline
+titled issue 806 over a PBS report of the exit already titling issue 805,
+and the rally held the two titles to 0.557, under the 0.62 a shared
+source needs. The live blog's own kicker is what makes its headline
+readable: `_multi_story_headline` is the kicker over two or more items
+naming disjoint entities. On 2,642 distinct headlines (feed articles, race
+coverage, stored issues, every composed issue title; 2026-10-17), 48 have
+disjoint items; the 20 with a kicker are all live blogs, and of the 28
+without one, 12 are single stories. It misses 5 live blogs whose items share
+a name or whose second item names nobody. Such a headline no longer titles
+an issue or gives it a headline claim, and matching compares it story by
+story (805's title and 806's first story: 0.672; the invented-name pair in
+`test_a_live_blog_title_agrees_on_its_shared_story` scores 0.606 whole and
+0.679 for its first story). Replayed over every stored
+issue (2026-06-20 to 10-16), the duplicate pass marks one more row, 806 as a
+duplicate of 805, and nothing else changes; the write-time matcher matches
+806 to 805, and picks a different one of two identical-title copies in two
+other cases.
+
 ## Limits
 
 One labeller, so no agreement figure; the ambiguous 12% is where a second
