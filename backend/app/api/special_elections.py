@@ -9,6 +9,9 @@ from app.api.response_helpers import CACHE_TTL_DETAIL_S, CACHE_TTL_LIST_S, cache
 from app.database import get_db
 from app.election_phase import election_today, season
 from app.next_cycle import deadline_event, field, new_congress
+from app.pipeline.fetch.ballot_lookup import lookup_for_state
+from app.state_ballot_scope import odd_year_elections
+from app.state_names import STATE_NAMES
 from app.special_elections import election_calendar, specials_board
 
 router = APIRouter(prefix="/elections")
@@ -57,3 +60,19 @@ def congress_compared(db: Session = Depends(get_db)):
 def fec_deadline(db: Session = Depends(get_db)):
     """The FEC's reporting deadline the elections pages lead with, or null."""
     return cached_json({"deadline": deadline_event(db, election_today())}, max_age=CACHE_TTL_LIST_S)
+
+
+@router.get("/odd-year")
+def odd_year():
+    """The states holding regular state elections in the coming odd year
+    (this year when it is odd), and which kinds of contest, by the state
+    constitution or law the scope file cites; each with its election
+    office's link. Civitas lists no candidates or counts for these."""
+    today = election_today()
+    year = today.year if today.year % 2 else today.year + 1
+    states = [
+        {**row, "stateName": STATE_NAMES.get(row["state"], row["state"]),
+         "office": {k: v for k, v in lookup_for_state(row["state"]).items() if k in ("url", "label", "sourceName")}}
+        for row in odd_year_elections(year)
+    ]
+    return cached_json({"year": year, "states": states}, max_age=CACHE_TTL_LIST_S)

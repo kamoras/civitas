@@ -266,6 +266,14 @@ export default async function ElectionsChapter() {
           official fields; gender, race and the like aren&apos;t in an official record, so none is
           shown.
         </P>
+        <P>
+          Between cycles the page also lists the states that hold regular state elections in the
+          coming odd year, by their own constitutions and laws, with a link to each state&apos;s
+          election office. Civitas doesn&apos;t list those contests&apos; candidates or read their
+          counts, and the page says so. A redistricting watch says whether the next general&apos;s
+          House maps are settled, and how each map in force got there: an act of the legislature, a
+          vote, a commission plan or a court order, each with its official source.
+        </P>
       </Section>
 
       <Section id="not-your-ballot" title="Why it isn’t “your ballot”">

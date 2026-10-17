@@ -24,6 +24,7 @@ from collections import Counter, defaultdict
 from app import district_lean
 from app.live_results.sync import _maps
 from app.pipeline.fetch.district_pvi import district_pvi_for_congress
+from app.state_names import STATE_NAMES
 
 logger = logging.getLogger(__name__)
 
@@ -253,4 +254,38 @@ def new_district_notes(state: str, cycle: int) -> dict[int, dict]:
             "unchanged": r["unchanged"],
         }
         for r in changes["newDistricts"]
+    }
+
+
+# How a map in force was set, as the file's `kind` records it.
+MAP_KINDS = ("act", "ballot_measure", "commission", "court_order")
+
+
+def watch(next_cycle: int) -> dict:
+    """The redistricting watch: which House maps are in force and how each
+    was set (its act, vote, commission plan or court order, from the official
+    source the file cites), the day the newest was settled, and whether the
+    next cycle's maps are confirmed yet. A cycle not in the file votes on the
+    newest earlier cycle's maps (live_results.sync.redrawn_states), so an
+    unconfirmed next cycle is said as that, never as "no change"."""
+    maps = _maps()
+    cycles = sorted(int(c) for c in maps if c.isdigit())
+    in_force_cycle = max((c for c in cycles if c <= next_cycle), default=None)
+    entries = []
+    for st, entry in sorted((maps.get(str(in_force_cycle)) or {}).items() if in_force_cycle else []):
+        src = entry.get("source") or {}
+        entries.append({
+            "state": st, "stateName": STATE_NAMES.get(st, st), "map": entry.get("map"),
+            "kind": entry.get("kind") if entry.get("kind") in MAP_KINDS else None,
+            "settled": entry.get("settled"), "reason": entry.get("reason"),
+            "source": {"title": src.get("title"), "issuedBy": src.get("issuedBy"), "url": src.get("url")},
+        })
+    return {
+        "nextCycle": next_cycle,
+        # Whether the file confirms the next cycle's maps (an empty entry
+        # confirms no state redrew).
+        "confirmed": str(next_cycle) in maps,
+        "inForceCycle": in_force_cycle,
+        "maps": sorted(entries, key=lambda e: e["settled"] or "", reverse=True),
+        "lastSettled": max((e["settled"] for e in entries if e["settled"]), default=None),
     }

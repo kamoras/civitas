@@ -4,7 +4,8 @@ import { createContext, useContext } from "react";
 import type { ElectionPhaseInfo, PviMap } from "@/types/election";
 import type { ElectionCalendar, SpecialsBoard } from "@/types/specials";
 import type { ArchiveIndex } from "@/types/electionArchive";
-import type { FecDeadlineEvent, NewCongress, NextField } from "@/types/nextCycle";
+import type { FecDeadlineEvent, NewCongress, NextField, OddYearStates } from "@/types/nextCycle";
+import type { RedistrictingWatch } from "@/types/redistricting";
 
 /** What the server already read for /elections (elections/layout.tsx): the
  * lean map and which mode the page is in, so the masthead, map and state
@@ -35,6 +36,10 @@ export interface ElectionsInitial {
   newCongress?: NewCongress | null;
   /** The FEC's reporting deadline the page leads with around its day. */
   fecDeadline?: FecDeadlineEvent | null;
+  /** The redistricting watch and the coming odd year's state elections,
+   * between cycles. */
+  redistrictingWatch?: RedistrictingWatch | null;
+  oddYear?: OddYearStates | null;
   /** The server's clock when it rendered, so the countdown reads the same
    * on the server and in the browser. */
   renderedAt: number;
