@@ -1162,7 +1162,7 @@ function LeaderboardContent({ initial }: { initial: LeaderboardInitial | null })
                           onClick={() => handleSort(key)}
                           aria-pressed={active}
                           title={active ? "Click to reverse sort direction" : undefined}
-                          className={`px-2 py-0.5 border text-xs transition-all ${
+                          className={`inline-flex min-h-6 items-center px-2 py-0.5 border text-xs transition-all ${
                             active
                               ? "border-signal-amber/40 text-signal-amber"
                               : "border-white/[0.07] text-ink-lo hover:border-white/30 hover:text-ink"
