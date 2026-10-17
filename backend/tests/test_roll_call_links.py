@@ -7,11 +7,24 @@ import pathlib
 
 import numpy as np
 from fastapi import Response
+from sqlalchemy import text
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from app import roll_call_links as rcl
 from app.api.action import _build_issue_response, get_issue_members, get_monitor, issue_roll_calls
 from app.issue_ids import to_public_id
-from app.models import ActionIssue, ApiCache, MonitorUpdate, NationalMonitor, Representative, RollCall, RollCallPosition
+from app.models import (
+    ActionIssue,
+    ApiCache,
+    LearnedClassification,
+    MonitorUpdate,
+    NationalMonitor,
+    Representative,
+    RollCall,
+    RollCallLinkLabel,
+    RollCallPosition,
+)
+from app.pipeline import senate_pipeline
 
 
 def test_calibration_matches_the_examples():
@@ -144,6 +157,7 @@ def test_unmatched_rows_are_backfilled_in_bounded_batches(db_session, monkeypatc
 
 def test_a_new_calibration_resets_every_stored_link(db_session, monkeypatch):
     monkeypatch.setattr(rcl, "BACKFILL_PER_RUN", 0)
+    rcl.refresh_links(db_session, "2026-10-16", encode=_FAKE, cal=_CAL)  # records the calibration in use
     issue = ActionIssue(date="2026-06-01", rank=1, title="Iran war", summary="s", related_roll_call_refs="[]")
     db_session.add(issue)
     db_session.flush()
@@ -154,6 +168,16 @@ def test_a_new_calibration_resets_every_stored_link(db_session, monkeypatch):
     db_session.refresh(issue)
     assert issue.related_roll_call_refs is None
     assert db_session.query(ApiCache).filter(ApiCache.tier == "roll-call-links").count() == 1
+
+
+def test_a_new_calibration_relinks_the_rows_it_reset(db_session):
+    _vote(db_session, 10, "2026-06-01", "Remove Armed Forces from hostilities with Iran")
+    issue = ActionIssue(date="2026-06-01", rank=1, title="Iran war", summary="s", related_roll_call_refs="[]")
+    db_session.add(issue)
+    db_session.flush()
+    rcl.refresh_links(db_session, "2026-10-16", encode=_FAKE, cal=_CAL)
+    db_session.refresh(issue)
+    assert json.loads(issue.related_roll_call_refs) == ["senate-119-2-10"]
 
 
 def test_an_issue_serves_its_linked_votes_and_each_members_vote_on_them(db_session):
@@ -203,8 +227,6 @@ async def test_a_monitor_serves_its_votes_on_the_record_oldest_first(db_session)
 def test_matching_lives_outside_the_fingerprinted_code():
     """app/roll_call_links.py is not under app/pipeline/, so the
     analysis-code hash never reads it, and no hashed module imports it."""
-    from app.pipeline import senate_pipeline
-
     app_dir = pathlib.Path(senate_pipeline.__file__).resolve().parent.parent
     assert pathlib.Path(rcl.__file__).resolve().parent == app_dir
     hashed = [
@@ -260,8 +282,6 @@ def test_each_newly_matched_story_with_a_vote_in_its_window_is_counted_for_drift
 
 
 def test_a_structural_link_is_kept_as_a_data_supplied_label(db_session):
-    from app.models import RollCallLinkLabel
-
     _vote(db_session, 250, "2026-09-28", "A bill to protect student athletes")
     db_session.query(RollCall).filter_by(number=250).update({"bill_id": "S.4668"})
     _vote(db_session, 251, "2026-09-28", "Establishing the congressional budget")
@@ -277,3 +297,38 @@ def test_a_structural_link_is_kept_as_a_data_supplied_label(db_session):
     assert label.issue_id == issue.id and label.source == "bill_named"
     assert json.loads(label.related) == ["senate-119-2-250"]
     assert set(json.loads(label.candidates)) == {"senate-119-2-250", "senate-119-2-251"}
+
+
+def test_no_write_is_held_through_the_embedding(file_sessionmaker):
+    """The hourly refresh runs beside the nightly chain, and SQLite has one
+    writer: every write here comes after the models. At each encode a
+    second connection must get the write lock at once."""
+    db = file_sessionmaker()
+    _vote(db, 244, "2026-09-24", "Remove Armed Forces from hostilities with Iran")
+    db.add(ActionIssue(date="2026-09-24", rank=1, title="Iran war vote", summary="s",
+                       related_bill_ids=json.dumps([{"id": "S.1", "congress": 119}])))
+    db.add(ActionIssue(date="2026-06-01", rank=1, title="Iran war", summary="s", related_roll_call_refs="[]"))
+    db.commit()
+    got_lock = []
+
+    def encode(texts):
+        other = file_sessionmaker()
+        try:
+            other.execute(text("PRAGMA busy_timeout = 200"))
+            other.execute(sqlite_insert(LearnedClassification).values(
+                entity_name=f"E{len(got_lock)}", entity_type="donor_type", value="INDIVIDUAL",
+                confidence=1.0, source="fec").on_conflict_do_nothing())
+            other.commit()
+            got_lock.append(True)
+        except Exception:
+            other.rollback()
+            got_lock.append(False)
+        finally:
+            other.close()
+        return _encode(texts)
+
+    # A new calibration: the reset and the marker are writes too.
+    rcl.refresh_links(db, "2026-09-26", encode={m: encode for m in rcl.MODELS}, cal={**_CAL, "data_hash": "new"})
+    db.commit()
+    db.close()
+    assert got_lock and all(got_lock), got_lock

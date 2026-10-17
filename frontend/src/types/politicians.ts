@@ -132,6 +132,31 @@ export interface PoliticianProfile {
     office: "S" | "H";
     district: number | null;
   } | null;
+  /** A House member's own seat's race on the site's election ballot, and
+   * where the member stands in it, from stored rows only (backend
+   * member_seat_race). Null for a senator, a seat with no race on file,
+   * or an older backend. */
+  seatRace?: SeatRace | null;
+}
+
+export interface SeatRace {
+  raceId: string;
+  cycleYear: number;
+  state: string;
+  office: "H";
+  district: number | null;
+  /** The state's map was redrawn: the race is this number on the new lines. */
+  redrawn: boolean;
+  /** "nominee": a confirmed nominee here; "notNominee": nominees are
+   * confirmed and the member isn't one; "unconfirmed": the state's
+   * nominees aren't read yet. */
+  status: "nominee" | "notNominee" | "unconfirmed";
+  /** The confirmation is the state's complete November ballot list, not
+   * its primary results. */
+  certified: boolean;
+  /** The source of the confirmation (or of the reading that hasn't
+   * confirmed anyone yet). */
+  sourceName: string | null;
 }
 
 /** GET /api/politicians/house-districts: a state's House districts by

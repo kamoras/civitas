@@ -12,7 +12,7 @@ import { formerOfficeNotice } from "@/lib/officeStatus";
 import { issueDateLabel } from "@/lib/formatting";
 import { houseSeatLabel, stateBallotHref } from "@/lib/elections";
 import { STATE_NAMES } from "@/lib/stateCodes";
-import type { PoliticianProfile, GovernmentDoc } from "@/types/politicians";
+import type { PoliticianProfile, GovernmentDoc, SeatRace } from "@/types/politicians";
 import type { PresidentScoreBreakdown, RepresentationScoreBreakdown } from "@/types/scoreBreakdown";
 import type { Senator } from "@/types/senator";
 import type { President } from "@/types/president";
@@ -152,6 +152,11 @@ export default function PoliticianProfileClient({
                   (Elections, the state, the House box, the district), and
                   on a redrawn map under a different district number. */}
               {profile.onBallot && <OnBallotLine race={profile.onBallot} />}
+              {profile.seatRace &&
+                profile.seatRace.status !== "nominee" &&
+                profile.seatRace.raceId !== profile.onBallot?.raceId && (
+                  <SeatRaceLine race={profile.seatRace} name={profile.identity.name} />
+                )}
               {supportLine}
               {isMember && (
                 // Keyed by member: moving between two profiles reuses this
@@ -376,6 +381,47 @@ export function OnBallotLine({ race }: { race: NonNullable<PoliticianProfile["on
       </Link>
       <SeatOnMapLine raceId={race.raceId} />
     </p>
+  );
+}
+
+/** A House member's own seat when they aren't a confirmed nominee for it:
+ * the seat's race is still one link away, with what the record says about
+ * the member (never a reason it doesn't state, such as a lost primary). */
+export function SeatRaceLine({ race, name }: { race: SeatRace; name: string }) {
+  const state = STATE_NAMES[race.state] ?? race.state;
+  const seat = houseSeatLabel(race.state, race.district ?? 0);
+  const status =
+    race.status === "unconfirmed"
+      ? `Confirmed nominees aren't available for ${state} yet`
+      : race.certified
+        ? `${name} is not on the November ballot for this seat`
+        : `${name} is not among the nominees ${state}'s primary results confirm for this seat`;
+  return (
+    <div className="mb-3 border border-white/15 bg-surface px-3 py-2 text-sm text-ink">
+      <p className="font-mono text-xs tracking-[0.08em] text-ink-lo">
+        THIS SEAT · {race.cycleYear} BALLOT · {seat}
+        {race.redrawn && <span className="text-ink-min"> (NEW MAP)</span>}
+      </p>
+      <p className="mt-1">
+        {status}
+        {race.sourceName && race.status !== "unconfirmed" && (
+          <span className="text-ink-lo"> (source: {race.sourceName})</span>
+        )}
+        .{" "}
+        {race.redrawn && (
+          <span className="text-ink-lo">
+            {state}&apos;s House map was redrawn, so {seat} on the new map is not the district{" "}
+            {name} was elected in.{" "}
+          </span>
+        )}
+        <Link
+          href={`${stateBallotHref(race.state)}#race-${race.raceId}`}
+          className="inline-flex min-h-6 items-center font-mono text-xs tracking-[0.08em] text-signal-cyan hover:text-phos"
+        >
+          {race.status === "unconfirmed" ? "WHO HAS FILED" : "WHO'S RUNNING"} FOR {seat} →
+        </Link>
+      </p>
+    </div>
   );
 }
 

@@ -65,6 +65,21 @@ from typing import Callable
 import numpy as np
 
 from app import calibration_drift
+from app.models import (
+    ActionIssue,
+    Candidate,
+    Justice,
+    MonitorUpdate,
+    President,
+    Representative,
+    RollCall,
+    RollCallLinkLabel,
+    Senator,
+)
+from app.person_names import record_name
+from app.pipeline.cache import api_cache_get, api_cache_set
+from app.pipeline.transform.normalize_votes import is_housekeeping
+from app.pipeline.vector_store import get_embedding_model, get_similarity_model
 
 # Days from the story's date: a roll call from three days before to two
 # after is a candidate (a story the day or two after a vote, or a preview of
@@ -176,8 +191,6 @@ def window_dates(story_day: str) -> tuple[str, str]:
 
 
 def encoders() -> dict[str, Callable[[list[str]], np.ndarray]]:
-    from app.pipeline.vector_store import get_embedding_model, get_similarity_model
-
     def enc(get):
         return lambda texts: get().encode(texts, show_progress_bar=False, normalize_embeddings=True)
 
@@ -256,9 +269,7 @@ def name_forms(name: str) -> set[str]:
     first given name or a quoted nickname with the surname ("Donald J.
     Trump" -> "donald j trump", "donald trump"; FEC's "SMITH, JOHN Q" ->
     "john q smith", "john smith"), folded to lower case and no accents."""
-    from app.pipeline.analyze.action_center import _record_name
-
-    rec = _record_name(name)
+    rec = record_name(name)
     if not rec.surname:
         return set()
     forms = {" ".join([*rec.given, rec.surname])}
@@ -275,12 +286,10 @@ class NameMask:
     too often a word, a place or someone else (policy_relevance.OfficialNames)."""
 
     def __init__(self, names, president: str | None = None):
-        from app.pipeline.analyze.action_center import _record_name
-
         forms: set[str] = set()
         for n in names:
             forms |= name_forms(n)
-        if president and (surname := _record_name(president).surname):
+        if president and (surname := record_name(president).surname):
             forms.add(surname)
         ordered = sorted(forms, key=len, reverse=True)
         # Words of a form may be split by spaces or an initial's period.
@@ -292,8 +301,6 @@ class NameMask:
 
     @classmethod
     def from_db(cls, db) -> "NameMask":
-        from app.models import Candidate, Justice, President, Representative, RollCall, Senator
-
         names = [n for model in (Senator, Representative, Justice, President, Candidate)
                  for (n,) in db.query(model.name)]
         names += [m.group(1) for (t,) in db.query(RollCall.title).filter(RollCall.chamber == "senate")
@@ -313,42 +320,49 @@ def refresh_links(db, today: str, encode=None, cal: dict | None = None) -> int:
     Action Center refresh, where both models are loaded; the API only reads
     the stored refs."""
 
-    from app.models import ActionIssue, MonitorUpdate, RollCall
-    from app.pipeline.cache import api_cache_get, api_cache_set
-    from app.pipeline.transform.normalize_votes import is_housekeeping
-
     cal = cal or calibration()
     version = _version(cal)
-    if (api_cache_get(db, _MARKER_TIER, _MARKER_KEY, max_age_hours=_MARKER_HOURS) or {}).get("version") != version:
-        db.query(ActionIssue).update({ActionIssue.related_roll_call_refs: None}, synchronize_session=False)
-        db.query(MonitorUpdate).update({MonitorUpdate.roll_call_refs: None}, synchronize_session=False)
-    # Rewritten every run, so the 60-day api_cache prune never takes it.
-    api_cache_set(db, _MARKER_TIER, _MARKER_KEY, {"version": version}, commit=False)
+    # A new calibration redoes every stored link: those rows count as
+    # unmatched below, and are reset with the writes at the end.
+    reset = (api_cache_get(db, _MARKER_TIER, _MARKER_KEY, max_age_hours=_MARKER_HOURS) or {}).get("version") != version
 
+    # Reads and model work first. Nothing here writes, so the SQLite write
+    # lock is not taken until the embedding is done (database.py,
+    # WRITE_HOLD_WARN_S): the refresh runs beside the nightly chain.
     since = str(date.fromisoformat(today) - timedelta(days=RECHECK_DAYS))
     rows: list = []
     for model, col in ((ActionIssue, ActionIssue.related_roll_call_refs), (MonitorUpdate, MonitorUpdate.roll_call_refs)):
         rows += db.query(model).filter(model.date >= since).all()
-        rows += (
-            db.query(model).filter(col.is_(None), model.date < since)
-            .order_by(model.date.desc(), model.id.desc()).limit(BACKFILL_PER_RUN).all()
-        )
+        older = db.query(model).filter(model.date < since)
+        if not reset:
+            older = older.filter(col.is_(None))
+        rows += older.order_by(model.date.desc(), model.id.desc()).limit(BACKFILL_PER_RUN).all()
+    first_time = [reset or _stored(r) is None for r in rows]
+    scored: list[tuple[list[str], float | None]] = []
+    votes: list[tuple[str, str, str]] = []
+    mask = None
+    if rows:
+        days = [r.date for r in rows]
+        lo, hi = window_dates(min(days))[0], window_dates(max(days))[1]
+        mask = NameMask.from_db(db)
+        votes = [
+            (roll_call_ref(rc.chamber, rc.congress, rc.session, rc.number), rc.date,
+             mask(roll_call_text(rc.question, rc.title, rc.amendment_purpose)))
+            for rc in db.query(RollCall).filter(RollCall.date >= lo, RollCall.date <= hi)
+            if linkable(rc.question, rc.amendment_purpose) and not is_housekeeping(rc.question, rc.chamber)
+        ]
+        titles = [r.title if isinstance(r, ActionIssue) else r.article_title for r in rows]
+        stories = [(r.date, mask(story_text(t or ""))) for r, t in zip(rows, titles)]
+        scored = link_scored(stories, votes, encode=encode, cal=cal)
+
+    # Writes, after every model call.
+    if reset:
+        db.query(ActionIssue).update({ActionIssue.related_roll_call_refs: None}, synchronize_session="evaluate")
+        db.query(MonitorUpdate).update({MonitorUpdate.roll_call_refs: None}, synchronize_session="evaluate")
+    # Rewritten every run, so the 60-day api_cache prune never takes it.
+    api_cache_set(db, _MARKER_TIER, _MARKER_KEY, {"version": version}, commit=False)
     if not rows:
         return 0
-    days = [r.date for r in rows]
-    lo, hi = window_dates(min(days))[0], window_dates(max(days))[1]
-    votes = [
-        (roll_call_ref(rc.chamber, rc.congress, rc.session, rc.number), rc.date,
-         roll_call_text(rc.question, rc.title, rc.amendment_purpose))
-        for rc in db.query(RollCall).filter(RollCall.date >= lo, RollCall.date <= hi)
-        if linkable(rc.question, rc.amendment_purpose) and not is_housekeeping(rc.question, rc.chamber)
-    ]
-    titles = [r.title if isinstance(r, ActionIssue) else r.article_title for r in rows]
-    mask = NameMask.from_db(db)
-    votes = [(ref, day, mask(text)) for ref, day, text in votes]
-    stories = [(r.date, mask(story_text(t or ""))) for r, t in zip(rows, titles)]
-    first_time = [_stored(r) is None for r in rows]
-    scored = link_scored(stories, votes, encode=encode, cal=cal)
     # The drift check (app/calibration_drift.py) counts each story once,
     # when it is first matched and has a vote in its window: the hourly
     # recheck of the last week would count a story about 168 times, and a
@@ -359,8 +373,7 @@ def refresh_links(db, today: str, encode=None, cal: dict | None = None) -> int:
             cal["threshold"],
         )
     record_structural_labels(db, [r for r in rows if isinstance(r, ActionIssue)], votes, mask)
-    links = [refs for refs, _ in scored]
-    for r, refs in zip(rows, links):
+    for r, (refs, _) in zip(rows, scored):
         value = json.dumps(refs)
         if isinstance(r, ActionIssue):
             r.related_roll_call_refs = value
@@ -385,8 +398,6 @@ def record_structural_labels(db, issues: list, votes: list[tuple[str, str, str]]
     per issue, rewritten as the window fills. There was no such label when
     the calibration was first fitted (0 article-named bills, 2 primary
     sources among 550 issues), which is why its labels are by hand."""
-    from app.models import RollCall, RollCallLinkLabel
-
     in_window_votes = {ref: (day, text) for ref, day, text in votes}
     written = 0
     for issue in issues:
