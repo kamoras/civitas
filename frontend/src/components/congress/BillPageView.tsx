@@ -291,9 +291,9 @@ export default function BillPageView({
                           className="inline-flex min-h-6 items-center px-1 uppercase tracking-[0.12em] underline decoration-white/30 underline-offset-4 hover:text-phos"
                         >
                           {name}
-                          {count && (
-                            <span className="ml-1 normal-case text-ink-min">({count})</span>
-                          )}
+                          {/* Text, not a margin: a margin left the link's
+                              name as "Votes(47 recorded)". */}
+                          {count && ` (${count})`}
                         </a>
                       </li>
                     ))}

@@ -953,7 +953,7 @@ describe("bill page: a long summary and the page's sections", () => {
     expect(links.map((a) => a.getAttribute("href"))).toEqual(
       expect.arrayContaining(["#summary", "#votes", "#history", "#text", "#sources"])
     );
-    expect(within(nav).getByRole("link", { name: /Votes/ }).textContent).toMatch(/recorded/);
+    expect(within(nav).getByRole("link", { name: /^Votes \(.+\)$/ })).toBeTruthy();
     for (const a of links)
       expect(document.getElementById(a.getAttribute("href")!.slice(1))).toBeTruthy();
   });
