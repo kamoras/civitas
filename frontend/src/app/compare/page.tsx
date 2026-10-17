@@ -46,7 +46,14 @@ const SCORE_LABELS: Record<ScoreKey, string> = {
 
 function ScoreBar({ value, colorClass }: { value: number; colorClass: string }) {
   return (
-    <span className={`font-mono text-xs tracking-tight ${colorClass}`} aria-hidden="true">
+    // Sized to the screen, capped at text-xs: twenty block characters at
+    // 200% text (24px) were 400px wide in a 200px column on a 640px screen,
+    // and pushed the row off the page (WCAG 1.4.4). The bar is decoration;
+    // the number beside it is the value, and it does grow with the text.
+    <span
+      className={`font-mono text-[clamp(6px,1vw,0.75rem)] tracking-tight ${colorClass}`}
+      aria-hidden="true"
+    >
       {asciiScoreBar(value)}
     </span>
   );
