@@ -96,8 +96,14 @@ describe("Navbar", () => {
     render(<Navbar />);
     fireEvent.click(screen.getByRole("button", { name: "Open navigation menu" }));
     const menu = document.getElementById("mobile-menu")!;
-    // Focus starts on the panel's first control, the state picker.
-    expect(within(menu).getByLabelText("Your state")).toHaveFocus();
+    // Focus starts on the panel itself, never the state picker: a phone
+    // opens a native select's list when it takes focus.
+    expect(menu).toHaveFocus();
+    expect(menu).toHaveAccessibleName("Site menu");
+    expect(document.activeElement?.tagName).not.toBe("SELECT");
+    // Shift+Tab from the panel stays in it, on its last control.
+    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+    expect(within(menu).getAllByRole("link").at(-1)).toHaveFocus();
     for (const key of KEYS) {
       const subs = sectionSubpages(key);
       if (!subs.length) continue;

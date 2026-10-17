@@ -336,11 +336,13 @@ export default function Navbar() {
 
   useEffect(() => {
     if (!menuOpen || !menuRef.current) return;
-    // The panel's first control, in reading order: the state picker at its
-    // top, then the sections. Starting on the first link skipped the
-    // picker, which Tab then reached only after every link.
-    const first = menuRef.current.querySelector<HTMLElement>("select, a[href], button");
-    first?.focus();
+    // The panel itself, named "Site menu", so Tab's first stop is the
+    // state picker at its top, then the sections. Never the picker: a phone
+    // browser opens a native select's list when it takes focus, so MENU
+    // popped the state list open on every tap. (Starting on the first link
+    // instead skipped the picker, which Tab then reached only after every
+    // link.)
+    menuRef.current.focus();
   }, [menuOpen]);
 
   useEffect(() => {
@@ -357,7 +359,8 @@ export default function Navbar() {
       if (focusable.length === 0) return;
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
+      const onPanel = document.activeElement === menuRef.current;
+      if (e.shiftKey && (onPanel || document.activeElement === first)) {
         e.preventDefault();
         last.focus();
       } else if (!e.shiftKey && document.activeElement === last) {
@@ -520,7 +523,10 @@ export default function Navbar() {
           <div
             ref={menuRef}
             id="mobile-menu"
-            className={`${menuOnly} max-h-[calc(100dvh-5.5rem)] overflow-y-auto overscroll-contain bg-surface-base/[0.98] border-t border-white/[0.07] px-6 pt-2 pb-6`}
+            role="region"
+            aria-label="Site menu"
+            tabIndex={-1}
+            className={`${menuOnly} outline-none max-h-[calc(100dvh-5.5rem)] overflow-y-auto overscroll-contain bg-surface-base/[0.98] border-t border-white/[0.07] px-6 pt-2 pb-6`}
           >
             <div className="border-b border-white/[0.07] py-3">
               <YourStatePicker size="lg" />
