@@ -501,7 +501,7 @@ class TestIncumbentRecordLink:
     def test_a_member_on_the_ballot_is_found_from_their_profile(self, db_session):
         _race(db_session, "2026-SEN-GA", "GA")
         _candidate(db_session, "S6GA00001", "2026-SEN-GA", "MCBRIDE, LUCY",
-                   incumbent_challenge="C", member_bioguide="M000001")
+                   incumbent_challenge="C", member_bioguide="M000001", confirmed_general=True)
         db_session.commit()
 
         assert elections.member_on_ballot(db_session, "M000001") == {
@@ -514,10 +514,71 @@ class TestIncumbentRecordLink:
         _senator(db_session, "lucy-mcbride", "Lucy McBride", "GA", bioguide_id="M000001")
         _race(db_session, "2026-SEN-GA", "GA")
         _candidate(db_session, "S6GA00001", "2026-SEN-GA", "MCBRIDE, LUCY",
+                   incumbent_challenge="I", member_bioguide="M000001", confirmed_general=True)
+        db_session.commit()
+
+        body = _body(get_politician("lucy-mcbride", db_session))
+        assert body["onBallot"]["raceId"] == "2026-SEN-GA"
+        assert body["seatRace"] is None  # senators: no seat class to key a race on
+
+    def test_a_filer_whose_state_confirmed_no_one_is_not_called_on_the_ballot(self, db_session):
+        """A race whose nominees aren't read lists every FEC filer, and a
+        member who filed and then retired would read as "on the ballot"."""
+        _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
+        _candidate(db_session, "H6GA06001", "2026-HOUSE-GA-6", "MCBRIDE, LUCY",
                    incumbent_challenge="I", member_bioguide="M000001")
         db_session.commit()
 
-        assert _body(get_politician("lucy-mcbride", db_session))["onBallot"]["raceId"] == "2026-SEN-GA"
+        assert elections.member_on_ballot(db_session, "M000001") is None
+        seat = elections.member_seat_race(db_session, "GA", 6, "M000001")
+        assert seat["status"] == "unconfirmed"
+        assert seat["raceId"] == "2026-HOUSE-GA-6"
+
+    def test_a_member_not_among_the_nominees_keeps_the_link_to_their_seat(self, db_session):
+        """Retiring, running for another office or beaten in a primary: the
+        constituents still get from "my representative" to who replaces
+        them, with what the stored rows say and no reason they don't."""
+        _representative(db_session, "lucy-mcbride", "Lucy McBride", "GA", 6, bioguide_id="M000001")
+        _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
+        _candidate(db_session, "H6GA06001", "2026-HOUSE-GA-6", "MCBRIDE, LUCY",
+                   incumbent_challenge="I", member_bioguide="M000001")
+        _candidate(db_session, "H6GA06002", "2026-HOUSE-GA-6", "ROE, PAT", confirmed_general=True)
+        db_session.commit()
+
+        body = _body(get_politician("lucy-mcbride", db_session))
+        assert body["onBallot"] is None
+        seat = body["seatRace"]
+        assert seat["raceId"] == "2026-HOUSE-GA-6"
+        assert seat["status"] == "notNominee"
+        assert seat["redrawn"] is False
+        assert seat["sourceName"]  # the confirmation is attributed
+
+    def test_a_certified_list_says_so(self, db_session):
+        from app.pipeline.cache import api_cache_set
+        from app.pipeline.fetch.state_candidates_common import BALLOT_BASIS_TIER, ballot_basis_key
+        api_cache_set(db_session, BALLOT_BASIS_TIER, ballot_basis_key("GA", 2026), {
+            "complete": True, "races": [], "sourceName": "Georgia Secretary of State (certified list)",
+            "checkedAt": "2026-09-29T00:00:00Z",
+        })
+        _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
+        _candidate(db_session, "H6GA06002", "2026-HOUSE-GA-6", "ROE, PAT", confirmed_general=True)
+        db_session.commit()
+
+        seat = elections.member_seat_race(db_session, "GA", 6, "M000001")
+        assert seat["certified"] is True
+        assert seat["sourceName"] == "Georgia Secretary of State (certified list)"
+
+    def test_a_confirmed_nominee_is_one(self, db_session):
+        _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
+        _candidate(db_session, "H6GA06001", "2026-HOUSE-GA-6", "MCBRIDE, LUCY",
+                   incumbent_challenge="I", member_bioguide="M000001", confirmed_general=True)
+        db_session.commit()
+
+        assert elections.member_seat_race(db_session, "GA", 6, "M000001")["status"] == "nominee"
+        assert elections.member_on_ballot(db_session, "M000001")["raceId"] == "2026-HOUSE-GA-6"
+
+    def test_no_race_on_file_is_no_seat_race(self, db_session):
+        assert elections.member_seat_race(db_session, "GA", 6, "M000001") is None
 
     def test_a_member_whose_primary_others_won_is_not_on_the_ballot(self, db_session):
         """Confirmed nominees exist and the member is not one of them: the
