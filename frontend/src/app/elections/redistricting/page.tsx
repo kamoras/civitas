@@ -10,6 +10,7 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
 import { SeatStrip } from "@/components/redistricting/RedistrictingView";
+import RedistrictingWatch from "@/components/redistricting/RedistrictingWatch";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
@@ -136,6 +137,8 @@ export default async function RedistrictingIndexPage() {
               </ul>
             </section>
           )}
+
+          <RedistrictingWatch watch={index?.watch} />
 
           <p className="mt-8 max-w-2xl text-xs leading-relaxed text-ink-min">
             Lean is Cook PVI: how a district voted for president relative to the nation, on the same

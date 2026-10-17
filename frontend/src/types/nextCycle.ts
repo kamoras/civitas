@@ -63,3 +63,17 @@ export interface FecDeadlineEvent {
   leads: boolean;
   source: string;
 }
+
+/** GET /api/elections/odd-year: the states holding regular state elections
+ * in the coming odd year, by the constitution or law the scope file cites. */
+export interface OddYearStates {
+  year: number;
+  states: {
+    state: string;
+    stateName: string;
+    kinds: string[];
+    words: string[];
+    why: string | null;
+    office: { url: string; label: string; sourceName: string };
+  }[];
+}
