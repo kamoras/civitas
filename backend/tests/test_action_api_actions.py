@@ -10,6 +10,7 @@ from unittest.mock import patch
 from fastapi import Response
 
 from app.api.action import _build_issue_response, get_open_comments
+from app.comment_periods import PAPERWORK_TOC_SUBJECT
 from app.models import ActionIssue, ExploreDocument, Representative, RollCall, Senator
 from app.services.explore_keys import public_key
 
@@ -62,11 +63,11 @@ def test_a_committee_action_names_the_current_chair_and_ranking_member(db_sessio
     assert committee["rankingMember"]["id"] == "s-rank"
 
 
-def _doc(id_, doc_type, views, close="2026-11-01"):
+def _doc(id_, doc_type, views, close="2026-11-01", toc=None, summary=""):
     return ExploreDocument(
-        id=id_, doc_type=doc_type, source="Federal Register", title=f"Doc {id_}", summary="", body="b",
+        id=id_, doc_type=doc_type, source="Federal Register", title=f"Doc {id_}", summary=summary, body="b",
         date="2026-10-01", chamber="Regulatory", comment_url="https://www.regulations.gov/x",
-        comments_close_on=close, fr_page_views=views, external_id=f"fr-reg-2026-{id_}",
+        comments_close_on=close, fr_page_views=views, external_id=f"fr-reg-2026-{id_}", fr_toc_subject=toc,
     )
 
 
@@ -85,6 +86,19 @@ def test_open_comments_lead_with_linked_documents_then_rules_by_readers_then_not
     with patch("app.api.action.comment_period_today", return_value="2026-10-11"):
         items = get_open_comments(Response(), db=db_session)
     assert [i["id"] for i in items] == [4, 3, 2, 5, 1]
+
+
+def test_a_paperwork_notice_comes_after_every_other_notice(db_session):
+    db_session.add_all([
+        _doc(1, "Notice", 9_000, toc=PAPERWORK_TOC_SUBJECT, summary="The agency will renew a form. More."),
+        _doc(2, "Notice", 10),
+    ])
+    db_session.commit()
+    with patch("app.api.action.comment_period_today", return_value="2026-10-11"):
+        items = get_open_comments(Response(), db=db_session)
+    assert [(i["id"], i["paperwork"]) for i in items] == [(2, False), (1, True)]
+    assert items[1]["firstSentence"] == "The agency will renew a form."
+    assert items[1]["commentWindow"]["daysLeft"] == 21
 
 
 def test_a_roll_call_issue_leads_with_its_vote_page_here(db_session):

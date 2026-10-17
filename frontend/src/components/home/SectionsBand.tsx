@@ -12,6 +12,7 @@ export const BAND: SectionKey[] = [
   "congress",
   "elections",
   "agencies",
+  "court",
   "action",
   "politicians",
   "explore",

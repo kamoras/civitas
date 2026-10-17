@@ -1460,12 +1460,18 @@ Each issue's actions are fixed templates around stored data:
   open-only rule).
 
 The Today tab's open comment periods are ranked by salience, not deadline
-(`api/action.open_comments_salience`): documents a recent issue links, then
-rules before notices, then by the Federal Register's own reader count
+(`comment_periods.salience`, shared with agency pages and Explore's
+open-comments list): documents a recent issue links, then rules before
+notices and Paperwork Reduction Act notices last, then by the Federal
+Register's own reader count
 (`ExploreDocument.fr_page_views`, read once a day by the Action Center —
 `_refresh_open_comment_views` — not by the nightly Explore refresh, whose
 module is fingerprinted). Citations were measured and rejected as the
-signal: airworthiness directives carry hundreds of boilerplate ones.
+signal: airworthiness directives carry hundreds of boilerplate ones. A
+paperwork notice is the Register's own table-of-contents subject for PRA
+collections (`fr_toc_subject`, read with the page views), never a title
+word: 303 of 615 open on 2026-10-17, precision 303/303, recall 303/304.
+Agency pages and Explore fold them under "Paperwork notices (N)".
 
 Feed descriptions are **stripped of HTML** as they are parsed
 (`news_feeds._strip_html`): the WordPress-backed feeds put real markup in
@@ -2148,6 +2154,7 @@ the pending list).
 | Committee routing for issues (rules' jurisdictions + labelled issues) | `backend/app/committee_routing.py`, `backend/app/data/committee_*.json`, `backend/scripts/fetch_committee_jurisdictions.py`, `backend/scripts/calibrate_committee_routing.py` |
 | Issue principal actor + weekly actor concentration (admin) | `backend/app/pipeline/analyze/story_actor.py`, `GET /api/admin/actor-concentration`, `frontend/src/components/admin/ActionCenterDashboard.tsx` |
 | Justice record and appointer estimate (not scored, justice v3) | `backend/app/pipeline/justice_pipeline.py`, `backend/app/pipeline/analyze/justice_loyalty.py` |
+| The Court page (`/court`: Martin-Quinn line, agreement grid, splits by term, decision lineups) and each justice's case list | `backend/app/services/court_service.py`, `backend/app/api/court.py`, `frontend/src/app/court/page.tsx`, `frontend/src/components/court/`, `frontend/src/components/scorecard/JusticeCases.tsx` |
 | Election cycle pipeline (candidates, financials, ballot measures, coverage) | `backend/app/pipeline/election_pipeline.py` |
 | What shapes a race (seat lean among all seats, FEC contribution categories, state CSV; descriptive, no forecast) | `backend/app/race_context.py`, `frontend/src/components/elections/ballot/RaceContext.tsx`, `RaceMoneyBars.tsx` |
 | Election phase (campaign / election day / results) + results grace period | `backend/app/election_phase.py` |
