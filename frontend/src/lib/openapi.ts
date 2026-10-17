@@ -154,12 +154,12 @@ export function nestedObject(schema: Schema, spec: Spec): Schema | null {
   return target.properties ? target : null;
 }
 
-/** The 200 response's body schema, resolved. */
 /** A CSV download (a spreadsheet's file, not an MCP tool): its 200 is text/csv. */
 export function isCsv(op: Operation): boolean {
   return !!op.responses["200"]?.content?.["text/csv"];
 }
 
+/** The 200 response's body schema, resolved. */
 export function responseSchema(op: Operation, spec: Spec): Schema | null {
   const body = op.responses["200"]?.content?.["application/json"]?.schema;
   return body ? resolve(body, spec) : null;

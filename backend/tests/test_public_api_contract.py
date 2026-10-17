@@ -8,6 +8,8 @@ against its documented schema; the Public* schemas forbid extra fields,
 so drift in either direction fails here.
 """
 
+import csv as csv_module
+import io as io_module
 import json
 from datetime import datetime
 
@@ -15,7 +17,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.api import public
+from app.api import public, public_mcp
 from app.api.router import api_router
 from app.database import get_db
 from app.models import (
@@ -617,9 +619,6 @@ def test_agencies_and_open_comment_periods(client, monkeypatch):
 
 
 def _csv_rows(client, path, **params):
-    import csv as csv_module
-    import io as io_module
-
     resp = client.get(f"/api/public/v1{path}", params=params)
     assert resp.status_code == 200, resp.text
     assert resp.headers["content-type"].startswith("text/csv")
@@ -688,7 +687,5 @@ def test_the_index_and_spec_name_the_data_license(client, monkeypatch):
 
 
 def test_csv_downloads_are_not_mcp_tools():
-    from app.api import public_mcp
-
     names = set(public_mcp._operations())
     assert "senators_csv" not in names and "list_senators" in names and "get_roll_call" in names
