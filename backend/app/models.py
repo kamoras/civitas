@@ -2939,6 +2939,11 @@ class RollCall(Base):
     # purpose (amendment_purpose).
     amendment: Mapped[str | None] = mapped_column(String(24), nullable=True)
     amendment_purpose: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # When the purpose was last asked for, and how many times in a row the
+    # record had no such file (not published yet, a 404): the back-off
+    # before asking again (fetch/amendment_purpose.py).
+    amendment_checked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    amendment_misses: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
 
 class RollCallPosition(Base):

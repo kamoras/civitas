@@ -122,7 +122,7 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
                 <AmendmentPurpose vote={vote} chamber={vote.chamber} />
               </header>
 
-              <div className="grid gap-8 border border-white/15 bg-surface p-4 sm:p-5 lg:grid-cols-[18rem_minmax(0,1fr)]">
+              <div className="grid grid-cols-[minmax(0,1fr)] gap-8 border border-white/15 bg-surface p-4 sm:p-5 lg:grid-cols-[18rem_minmax(0,1fr)]">
                 <div className="flex flex-col gap-3">
                   <ResultLabel result={voteResult(vote)} rejected={vote.rejected} />
                   {vote.kind === "election" && vote.candidates?.length ? (

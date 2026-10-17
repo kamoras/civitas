@@ -65,7 +65,7 @@ function SectionHead({
   shareable?: boolean;
 }) {
   return (
-    <div className="flex items-baseline justify-between gap-3">
+    <div className="flex flex-wrap items-baseline justify-between gap-3">
       <h2 id={id} className="font-display text-2xl font-extrabold text-ink-hi">
         {title}
         {count !== undefined && (
@@ -371,7 +371,7 @@ export default function BillPageView({
                 {record && (
                   <a
                     href={record.congressGovUrl}
-                    className="font-mono text-xs uppercase tracking-[0.12em] text-ink-lo hover:text-phos"
+                    className="inline-flex min-h-6 w-fit items-center font-mono text-xs uppercase tracking-[0.12em] text-ink-lo hover:text-phos"
                   >
                     On Congress.gov
                   </a>
@@ -605,7 +605,7 @@ export default function BillPageView({
                   )}
                   <Link
                     href="/congress/committees"
-                    className="font-mono text-xs tracking-[0.1em] text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
+                    className="inline-flex min-h-6 w-fit items-center font-mono text-xs tracking-[0.1em] text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
                   >
                     Search every committee meeting and report →
                   </Link>
@@ -628,12 +628,12 @@ export default function BillPageView({
                               </span>
                             )}
                           </span>
-                          <span className="flex gap-4 font-mono text-xs uppercase tracking-[0.1em]">
+                          <span className="flex flex-wrap gap-x-4 font-mono text-xs uppercase tracking-[0.1em]">
                             {Object.entries(t.formats).map(([fmt, url]) => (
                               <a
                                 key={fmt}
                                 href={url}
-                                className="text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
+                                className="inline-flex min-h-6 min-w-6 items-center justify-center text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
                               >
                                 {fmt === "Formatted Text"
                                   ? "Read"

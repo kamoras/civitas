@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import axe from "axe-core";
+import config from "../../../tailwind.config";
 import AmendmentPurpose from "./AmendmentPurpose";
 import SeatChart from "./SeatChart";
 import BillJourney from "./BillJourney";
@@ -167,5 +168,32 @@ describe("VotePanel without a roll call", () => {
     expect(screen.queryByText("No recorded votes on this bill in either chamber.")).toBeNull();
     expect(screen.getByText(/No roll call was taken on this bill/)).toBeTruthy();
     expect(screen.getByText(passage[0].sentence)).toBeTruthy();
+  });
+});
+
+describe("chart marks", () => {
+  // WCAG 1.4.11: each mark a reader must tell apart is 3:1 or more on every
+  // ground the chart and the journey sit on. The site has one theme (dark).
+  const palette = (config.theme?.extend?.colors ?? {}) as Record<string, Record<string, string>>;
+  const lum = (hex: string) => {
+    const [r, g, b] = [1, 3, 5].map((i) => {
+      const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+      return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const ratio = (a: string, b: string) => {
+    const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m);
+    return (x + 0.05) / (y + 0.05);
+  };
+  it.each([
+    ["phos", "mid"],
+    ["signal", "red"],
+    ["signal", "cyan"],
+    ["ink", "lo"],
+    ["ink", "min"],
+  ])("%s-%s is 3:1 or more on every surface", (group, step) => {
+    for (const ground of Object.values(palette.surface))
+      expect(ratio(palette[group][step], ground)).toBeGreaterThanOrEqual(3);
   });
 });

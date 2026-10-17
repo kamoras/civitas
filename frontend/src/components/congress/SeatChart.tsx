@@ -42,7 +42,7 @@ export default function SeatChart({
       byParty.set(m.party || "?", [...(byParty.get(m.party || "?") ?? []), m]);
   const shown = ORDER.filter((b) => parties.some((p) => p[b] > 0));
   return (
-    <figure className="flex flex-col gap-3">
+    <figure className="flex min-w-0 flex-col gap-3">
       <figcaption className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
         The {chamberName}, one dot per member
       </figcaption>
@@ -71,39 +71,43 @@ export default function SeatChart({
           ))}
         </div>
       </div>
-      <table className="w-full max-w-md text-left font-mono text-xs tabular-nums">
-        <caption className="sr-only">How each party voted</caption>
-        <thead>
-          <tr className="text-ink-min">
-            <th scope="col" className="py-1 pr-3 font-normal uppercase tracking-[0.1em]">
-              Party
-            </th>
-            {shown.map((b) => (
-              <th
-                key={b}
-                scope="col"
-                className="py-1 pr-3 text-right font-normal uppercase tracking-[0.1em]"
-              >
-                {MARK[b].label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {parties.map((p) => (
-            <tr key={p.party} className="border-t border-white/[0.07] text-ink-lo">
-              <th scope="row" className="py-1 pr-3 font-sans text-sm font-normal text-ink">
-                {PARTY_NAME[p.party] ?? p.party}
+      {/* At a large text size the table scrolls in its own box (reachable by
+          keyboard) rather than widening the page. */}
+      <div role="region" aria-label="How each party voted" tabIndex={0} className="overflow-x-auto">
+        <table className="w-full max-w-md text-left font-mono text-xs tabular-nums">
+          <caption className="sr-only">How each party voted</caption>
+          <thead>
+            <tr className="text-ink-min">
+              <th scope="col" className="py-1 pr-3 font-normal uppercase tracking-[0.1em]">
+                Party
               </th>
               {shown.map((b) => (
-                <td key={b} className="py-1 pr-3 text-right">
-                  {p[b]}
-                </td>
+                <th
+                  key={b}
+                  scope="col"
+                  className="py-1 pr-3 text-right font-normal uppercase tracking-[0.1em]"
+                >
+                  {MARK[b].label}
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {parties.map((p) => (
+              <tr key={p.party} className="border-t border-white/[0.07] text-ink-lo">
+                <th scope="row" className="py-1 pr-3 font-sans text-sm font-normal text-ink">
+                  {PARTY_NAME[p.party] ?? p.party}
+                </th>
+                {shown.map((b) => (
+                  <td key={b} className="py-1 pr-3 text-right">
+                    {p[b]}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </figure>
   );
 }

@@ -80,24 +80,102 @@ def test_fill_stores_what_was_read_and_leaves_a_failed_read_unread(db_session, m
     monkeypatch.setattr(amendment_purpose, "_house", house_read)
     out = asyncio.run(amendment_purpose.fill_amendment_purposes(None, db_session))
 
-    assert out == {"read": 2, "failed": 1, "status": "failed"}
+    assert out == {"read": 2, "waiting": 0, "failed": 1, "status": "failed"}
     db_session.refresh(senate), db_session.refresh(house), db_session.refresh(concur)
     assert senate.amendment == "S.Amdt. 6805" and senate.amendment_purpose.startswith("To increase")
-    # An outage is not "no purpose stated": the row stays unread.
+    # An outage is not "no purpose stated": the row stays unread, and due.
     assert house.amendment is None and house.amendment_purpose is None
+    assert house.amendment_checked_at is None
     assert concur.amendment == "" and concur.amendment_purpose == ""
 
 
-def test_the_source_down_stops_the_run(db_session, monkeypatch):
+def test_a_chamber_down_stops_only_that_chamber(db_session, monkeypatch):
     for n in range(1, 6):
         _rc(db_session, "house", n, "On Agreeing to the Amendment")
+    older = _rc(db_session, "senate", 9, "On the Amendment S.Amdt. 1", "Smith Amdt. No. 1")
+    older.date = "2026-01-02"
+    db_session.commit()
+    asked = []
 
     async def down(client, db, rc):
+        asked.append(rc.number)
         return None
 
+    async def senate_read(client, rc):
+        return amendment_purpose.parse_senate(_SENATE_XML)
+
     monkeypatch.setattr(amendment_purpose, "_house", down)
+    monkeypatch.setattr(amendment_purpose, "_senate", senate_read)
     out = asyncio.run(amendment_purpose.fill_amendment_purposes(None, db_session))
-    assert out == {"read": 0, "failed": amendment_purpose._FAILURES_TO_STOP, "status": "failed"}
+    assert len(asked) == amendment_purpose._FAILURES_TO_STOP
+    assert out["read"] == 1 and out["failed"] == amendment_purpose._FAILURES_TO_STOP
+    db_session.refresh(older)
+    assert older.amendment == "S.Amdt. 6805"
+
+
+def test_a_day_of_unpublished_house_votes_never_stalls_the_back_catalogue(db_session, monkeypatch):
+    """Congress.gov publishes a House vote's house-vote record a day or so
+    late. Three or more of the newest votes not there yet used to end every
+    run at the top of the batch."""
+    for n in (300, 301, 302, 303):
+        _rc(db_session, "house", n, "On Agreeing to the Amendment")
+    old = [_rc(db_session, "house", n, "On Agreeing to the Amendment") for n in (10, 11)]
+    for rc in old:
+        rc.date = "2026-03-01"
+    db_session.commit()
+
+    async def house_read(client, db, rc):
+        return amendment_purpose.NOT_THERE if rc.number >= 300 else ("H.Amdt. 9", "To do a thing.")
+
+    monkeypatch.setattr(amendment_purpose, "_house", house_read)
+    out = asyncio.run(amendment_purpose.fill_amendment_purposes(None, db_session))
+    assert out == {"read": 2, "waiting": 4, "failed": 0, "status": "ok"}
+    assert all(rc.amendment == "H.Amdt. 9" for rc in old)
+    # The unpublished rows wait their day: the next run asks for none of them.
+    assert amendment_purpose.candidates(db_session) == []
+
+
+def test_a_permanent_404_backs_off_and_never_heads_every_batch(db_session, monkeypatch, freeze_utcnow):
+    from datetime import datetime, timedelta
+
+    dead = _rc(db_session, "senate", 400, "On the Amendment S.Amdt. 9", "Smith Amdt. No. 9")
+    start = datetime(2026, 10, 1, 12, 0)
+    freeze_utcnow(start)
+
+    async def gone(client, rc):
+        return amendment_purpose.NOT_THERE
+
+    monkeypatch.setattr(amendment_purpose, "_senate", gone)
+    seen = []
+    for day in range(0, 40):
+        freeze_utcnow(start + timedelta(days=day))
+        if dead in amendment_purpose.candidates(db_session):
+            seen.append(day)
+            asyncio.run(amendment_purpose.fill_amendment_purposes(None, db_session))
+    # Asked on days 0, 1, 3, 7, 15 and 31: after a day, then twice as long.
+    assert seen == [0, 1, 3, 7, 15, 31]
+    db_session.refresh(dead)
+    assert dead.amendment is None and dead.amendment_misses == 6
+
+
+def test_the_senates_missing_file_is_not_there_not_a_failure():
+    class _Resp:
+        def __init__(self, status, content=b""):
+            self.status_code, self.content = status, content
+
+    async def run(resp):
+        async def fake(*a, **k):
+            return resp
+        amendment_purpose.fetch_with_retry, real = fake, amendment_purpose.fetch_with_retry
+        try:
+            return await amendment_purpose._senate(None, RollCall(source_url="https://example.test/x.xml"))
+        finally:
+            amendment_purpose.fetch_with_retry = real
+
+    assert asyncio.run(run(_Resp(404))) is amendment_purpose.NOT_THERE
+    # senate.gov's redirect to an HTML "not available" page
+    assert asyncio.run(run(_Resp(200, b"<html><body>Not available</body></html>"))) is amendment_purpose.NOT_THERE
+    assert asyncio.run(run(None)) is None
 
 
 def test_the_vote_carries_its_purpose_only_when_on_an_amendment(db_session):
