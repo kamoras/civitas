@@ -1,0 +1,76 @@
+{
+  "_source": "scripts/calibrate_site_search.py on a copy of the production database of 2026-10-08 (the agency list synced 2026-10-16; no nominations: the copy predates them) (2026-10-16): parameters fitted on half the entities' known-item probes, measured on the other half.",
+  "params": {
+    "prefix_credit": 0.7,
+    "fuzzy_credit": 0.7,
+    "label_floor": 0.45,
+    "importance_weight": 0.05,
+    "direct_margin": 0.3,
+    "direct_floor": 0.6
+  },
+  "wrong_direct_target": 0.005,
+  "wrong_direct_type_cap": 0.0,
+  "held_out": {
+    "acronym": {
+      "probes": 214,
+      "success_at_1": 1.0,
+      "direct_hit_rate": 0.936,
+      "wrong_direct_rate": 0.0
+    },
+    "deep": {
+      "probes": 409,
+      "success_at_1": 1.0,
+      "direct_hit_rate": 0.998,
+      "wrong_direct_rate": 0.0
+    },
+    "document": {
+      "probes": 385,
+      "success_at_1": 0.974,
+      "direct_hit_rate": 0.925,
+      "wrong_direct_rate": 0.0
+    },
+    "identifier": {
+      "probes": 415,
+      "success_at_1": 1.0,
+      "direct_hit_rate": 1.0,
+      "wrong_direct_rate": 0.0
+    },
+    "name": {
+      "probes": 395,
+      "success_at_1": 1.0,
+      "direct_hit_rate": 0.969,
+      "wrong_direct_rate": 0.0
+    },
+    "page": {
+      "probes": 75,
+      "success_at_1": 1.0,
+      "direct_hit_rate": 0.932,
+      "wrong_direct_rate": 0.0
+    },
+    "prefix": {
+      "probes": 397,
+      "success_at_8": 1.0
+    },
+    "surname": {
+      "probes": 292,
+      "success_at_1": 1.0,
+      "direct_hit_rate": 0.983,
+      "wrong_direct_rate": 0.0
+    },
+    "typo": {
+      "probes": 403,
+      "success_at_1": 0.998,
+      "direct_hit_rate": 0.729,
+      "wrong_direct_rate": 0.0
+    },
+    "all": {
+      "probes": 2588,
+      "direct_hit_rate": 0.932,
+      "wrong_direct_rate": 0.0
+    },
+    "latency_ms": {
+      "p50": 6.2,
+      "p95": 24.8
+    }
+  }
+}
