@@ -1855,7 +1855,13 @@ it keeps, each enforced by a test (`tests/test_forecast_model.py`,
   never re-rounds them.
 - **Wording.** Ranges and frequencies, never "wins", "favored" or
   "projected". The implied chances exist only for the method section's
-  calibration table.
+  calibration table, which is party blind (`model.calibration_table`):
+  binned by the chance of the side a range leaned toward, whichever party,
+  and the same with the parties swapped. Nothing shown frames a figure
+  around one party ("went to the Democrat", a raw signed margin); the
+  internal R-positive sign convention stays inside the math. The method
+  section leads with a short plain summary; the full method sits behind a
+  disclosure.
 - **No year in the code.** Article titles, the fieldwork floor, the House
   lines and every label (CSV header and filename, page titles, the method's
   presidential window) come from `active_election().cycle` and the data
