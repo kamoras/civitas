@@ -62,10 +62,28 @@ export function scriptSubject(issue: ActionIssue): { text: string; bill: boolean
   };
 }
 
+/** A member's recorded vote on one of the issue's roll calls. */
+export interface RecordedVote {
+  v: IssueVote;
+  position: string;
+}
+
+/** "On September 24, 2026, Sen. Doe voted Nay on H.Con.Res. 89." for the
+ *  newest of the member's votes on the issue's roll calls; the measure is
+ *  the bill's number, or the record's title or question when it has none. */
+export function recordLine(who: string, record: RecordedVote[]): string | null {
+  const newest = record[0];
+  if (!newest) return null;
+  const on = newest.v.billLabel || newest.v.title || newest.v.question;
+  const day = formatUtcDate(newest.v.date, { month: "long", day: "numeric", year: "numeric" });
+  return `On ${day}, ${who} voted ${newest.position} on ${on}.`;
+}
+
 /**
  * A fixed call script: who is calling, about what, and what they want to
  * know or ask for. Every word is this template's or the record's (a bill
- * number, a quoted line and its outlet, the member's name). Support and
+ * number, a quoted line and its outlet, the member's name, the member's
+ * recorded vote on the issue's newest related roll call). Support and
  * oppose are offered only for a bill, the one thing a member can vote yes or
  * no on, and are worded alike; the reader's own name and town stay
  * bracketed for them to fill in.
@@ -74,10 +92,12 @@ export function callScript(
   issue: ActionIssue,
   member: { name: string; chamber: string },
   stateName: string,
-  position: Position
+  position: Position,
+  record: RecordedVote[] = []
 ): string {
   const subject = scriptSubject(issue);
   const who = `${title(member)} ${member.name}`;
+  const recorded = recordLine(who, record);
   const ask =
     position === "support"
       ? `I support it, and I ask ${who} to vote yes.`
@@ -87,6 +107,7 @@ export function callScript(
   return [
     `Hello. My name is [your name], and I live in [your town], ${stateName}.`,
     `I am calling about ${subject.text}.`,
+    ...(recorded ? [recorded] : []),
     ask,
     "Thank you.",
   ].join("\n");
@@ -100,17 +121,19 @@ function Script({
   issue,
   member,
   stateName,
+  record,
 }: {
   issue: ActionIssue;
   member: IssueMember;
   stateName: string;
+  record: RecordedVote[];
 }) {
   const [position, setPosition] = useState<Position>("ask");
   const [copied, copy, feedback] = useCopyFeedback(1500, {
     copied: "Call script copied.",
     failed: "This browser wouldn't copy it. Select the script and copy it instead.",
   });
-  const text = callScript(issue, member, stateName, position);
+  const text = callScript(issue, member, stateName, position, record);
   const choices: [Position, string][] = scriptSubject(issue).bill
     ? [
         ["ask", "Ask"],
@@ -173,7 +196,7 @@ function MemberRow({
   const [scriptOpen, setScriptOpen] = useState(false);
   const who = `${title(member)} ${member.name}`;
   const scriptId = useId();
-  const record = votes.flatMap((v) => {
+  const record: RecordedVote[] = votes.flatMap((v) => {
     const position = member.positions[`${v.chamber}-${v.congress}-${v.session}-${v.number}`];
     return position ? [{ v, position }] : [];
   });
@@ -249,7 +272,9 @@ function MemberRow({
         );
       })}
       <div id={scriptId}>
-        {scriptOpen && <Script issue={issue} member={member} stateName={stateName} />}
+        {scriptOpen && (
+          <Script issue={issue} member={member} stateName={stateName} record={record} />
+        )}
       </div>
     </li>
   );
