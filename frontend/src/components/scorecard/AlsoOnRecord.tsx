@@ -5,6 +5,7 @@ import { fetchRepStockTrades, fetchSenatorStockTrades } from "@/lib/api";
 import { countLobbiedBills } from "@/lib/lobbying";
 import type { Senator } from "@/types/senator";
 import { onThisPage } from "@/lib/onThisPage";
+import { labelCase } from "@/lib/controlStyles";
 
 export type RecordView = "trades" | "donorVotes" | "positions";
 
@@ -42,6 +43,8 @@ function Tile({
  *  API's (the trades endpoint's total and late count, the stored
  *  donor-vote overlaps with the bills their lobbying filings name, and
  *  policy positions). */
+const ALSO = "Also on record, not part of the score";
+
 export default function AlsoOnRecord({
   member,
   chamber,
@@ -76,9 +79,9 @@ export default function AlsoOnRecord({
       <h2
         id="also-on-record"
         {...onThisPage("Also on record")}
-        className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min"
+        className={`font-mono tracking-[0.14em] text-ink-min ${labelCase(ALSO)}`}
       >
-        Also on record, not part of the score
+        {ALSO}
       </h2>
       <div className="grid gap-4 sm:grid-cols-3">
         <Tile

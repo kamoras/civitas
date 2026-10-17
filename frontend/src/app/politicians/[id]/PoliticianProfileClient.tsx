@@ -27,6 +27,7 @@ import { fetchMapSeats } from "@/lib/api";
 import PresidentialSupportSection from "@/components/presidentialSupport/PresidentialSupportSection";
 import OnThisPage from "@/components/shared/OnThisPage";
 import { onThisPage } from "@/lib/onThisPage";
+import { LONG_LABEL } from "@/lib/controlStyles";
 
 const DOC_TYPE_LABELS: Record<string, string> = {
   "Senate Floor Speech": "FLOOR SPEECH",
@@ -234,10 +235,10 @@ export default function PoliticianProfileClient({
                 <div className="mt-3 text-center">
                   <Link
                     href={`/politicians?branch=${branch}&state=${identity.state}`}
-                    className="font-mono text-xs text-ink-min hover:text-phos transition-colors tracking-widest"
+                    className={`font-mono tracking-widest text-ink-min transition-colors hover:text-phos ${LONG_LABEL}`}
                   >
-                    COMPARE ALL {identity.stateName ?? identity.state}{" "}
-                    {branch === "senate" ? "SENATORS" : "REPRESENTATIVES"} →
+                    Compare all {identity.stateName ?? identity.state}{" "}
+                    {branch === "senate" ? "senators" : "representatives"} →
                   </Link>
                 </div>
               )}
@@ -255,9 +256,9 @@ export default function PoliticianProfileClient({
           {/* Active Issues */}
           {activeIssues.length > 0 && (
             <SectionBlock title="In the Action Center" id="in-the-action-center">
-              <p className="font-mono text-xs text-ink-min tracking-widest mb-3">
-                CURRENTLY ACTIVE IN {activeIssues.length} ISSUE
-                {activeIssues.length !== 1 ? "S" : ""}
+              <p className={`mb-3 font-mono tracking-widest text-ink-min ${LONG_LABEL}`}>
+                Currently active in {activeIssues.length} issue
+                {activeIssues.length !== 1 ? "s" : ""}
               </p>
               <div className="space-y-3">
                 {activeIssues.map((issue) => (
@@ -293,9 +294,9 @@ export default function PoliticianProfileClient({
           {/* Government Record */}
           {governmentRecord.totalDocs > 0 && (
             <SectionBlock title="Government record" id="government-record">
-              <p className="font-mono text-xs text-ink-min tracking-widest mb-3">
-                {governmentRecord.totalDocs} DOCUMENT{governmentRecord.totalDocs !== 1 ? "S" : ""}{" "}
-                ON PUBLIC RECORD · VERBATIM SOURCE LINKS
+              <p className={`mb-3 font-mono tracking-widest text-ink-min ${LONG_LABEL}`}>
+                {governmentRecord.totalDocs} document{governmentRecord.totalDocs !== 1 ? "s" : ""}{" "}
+                on public record · verbatim source links
               </p>
               {governmentRecord.recentDocs.map((doc) => (
                 <DocRow key={doc.id} doc={doc} />
@@ -303,9 +304,9 @@ export default function PoliticianProfileClient({
               {governmentRecord.totalDocs > 5 && (
                 <Link
                   href={`/explore?politician_id=${profile.id}`}
-                  className="block mt-3 font-mono text-xs text-ink-min hover:text-phos transition-colors tracking-widest"
+                  className={`mt-3 block font-mono tracking-widest text-ink-min transition-colors hover:text-phos ${LONG_LABEL}`}
                 >
-                  VIEW ALL {governmentRecord.totalDocs} DOCUMENTS →
+                  View all {governmentRecord.totalDocs} documents →
                 </Link>
               )}
             </SectionBlock>

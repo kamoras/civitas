@@ -1,6 +1,9 @@
 import { usableRecord } from "@/lib/ssrPayload";
 import { pct } from "@/lib/presidentialSupport";
 import type { MemberSupport } from "@/types/presidentialSupport";
+import { labelCase } from "@/lib/controlStyles";
+
+const LEAD = "With the president's stated position";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
@@ -35,11 +38,18 @@ export default async function PresidentialSupportLine({ memberId }: { memberId: 
   if (!data) return null;
   const verdict = data.comparedWithExpected ? VERDICT[data.comparedWithExpected] : null;
   return (
-    <p className="mb-3 border border-white/15 bg-surface px-3 py-2 font-mono text-xs tracking-[0.08em] text-ink-lo">
-      WITH THE PRESIDENT&apos;S STATED POSITION · {data.withPresident} OF {data.votes} VOTES (
-      {pct(data.rate)}){verdict ? ` · ${verdict.toUpperCase()}` : ""} ·{" "}
+    // Written in sentence case with the count set bright: on a phone it reads
+    // as a sentence (it was three lines of 12px caps), and caps from 640px up.
+    <p
+      className={`mb-3 border border-white/15 bg-surface px-3 py-2 font-mono tracking-[0.08em] text-ink-lo ${labelCase(LEAD)}`}
+    >
+      {LEAD}:{" "}
+      <span className="text-ink-hi">
+        {data.withPresident} of {data.votes}
+      </span>{" "}
+      votes ({pct(data.rate)}){verdict ? `, ${verdict}` : ""}.{" "}
       <a href="#ps-heading" className="inline-block min-h-[24px] text-signal-cyan hover:text-phos">
-        THE VOTES →
+        The votes →
       </a>
     </p>
   );
