@@ -3,6 +3,7 @@ import { connection } from "next/server";
 import type { LiveResults, PviMap, RaceSummary } from "@/types/election";
 import type { ElectionCalendar, SpecialsBoard } from "@/types/specials";
 import type { ArchiveIndex } from "@/types/electionArchive";
+import type { FecDeadlineEvent, NewCongress, NextField } from "@/types/nextCycle";
 import { TOPIC_FEEDS, pageMetadata } from "@/lib/site";
 import { describeElections } from "@/lib/seo";
 import { everyLiveStateVoting, showsResults } from "@/lib/results";
@@ -115,13 +116,25 @@ async function readInitial(): Promise<ElectionsInitial> {
   // The season's own lead (election_phase.season): the calendar between
   // cycles and through the primaries, the archive once the count settles.
   const season = specials?.season?.season;
-  const [calendar, archive] = await Promise.all([
-    specials?.season?.betweenCycles || season === "ramp"
-      ? fetchJson<ElectionCalendar>("/api/elections/calendar")
-      : null,
+  const between = !!specials?.season?.betweenCycles;
+  const [calendar, archive, field, newCongress, fec] = await Promise.all([
+    between || season === "ramp" ? fetchJson<ElectionCalendar>("/api/elections/calendar") : null,
     season === "post_certification" ? fetchJson<ArchiveIndex>("/api/elections/archive") : null,
+    between || season === "ramp" ? fetchJson<NextField>("/api/elections/field") : null,
+    season === "off_season" ? fetchJson<NewCongress>("/api/elections/new-congress") : null,
+    fetchJson<{ deadline: FecDeadlineEvent | null }>("/api/elections/fec-deadline"),
   ]);
-  return { pvi, phase, specials, calendar, archive, renderedAt };
+  return {
+    pvi,
+    phase,
+    specials,
+    calendar,
+    archive,
+    field,
+    newCongress,
+    fecDeadline: fec?.deadline ?? null,
+    renderedAt,
+  };
 }
 
 export default async function ElectionsLayout({ children }: { children: React.ReactNode }) {

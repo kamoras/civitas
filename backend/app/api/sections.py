@@ -25,6 +25,7 @@ from app.api.this_week import election
 from app.database import get_db
 from app.election_calendar import next_election_day
 from app.election_phase import election_today, season
+from app.next_cycle import deadline_event
 from app.models import (
     Agency,
     AgencyBudget,
@@ -142,6 +143,9 @@ def elections(db: Session) -> dict:
         # Which stretch of the calendar the section is in, and so which of
         # its pages lead (election_phase.season).
         "season": season(db).as_json(),
+        # The FEC's reporting deadline the calendar leads with (null with
+        # none stored).
+        "calendar": {"deadline": deadline_event(db, election_today())},
     }
 
 

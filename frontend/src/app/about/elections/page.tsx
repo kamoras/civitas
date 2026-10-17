@@ -254,6 +254,18 @@ export default async function ElectionsChapter() {
           boundary comes from the law (election day, January 3) or from the FEC&apos;s election
           calendar, never a typed date.
         </P>
+        <P>
+          Between cycles the page also shows who has registered with the FEC for the next one, and
+          which seats the FEC lists as open. Registering is not a place on the ballot, so until a
+          state confirms its list, its page says &ldquo;registered with the FEC&rdquo;, never
+          &ldquo;on the ballot&rdquo;. A member who hasn&apos;t filed is said to have no filing,
+          never to be retiring: no official record says so. Around each FEC reporting deadline the
+          page leads with it. And once a new Congress is seated, it compares the new members with
+          the last Congress: who is new to each chamber, who came from the other one, and the median
+          age by birth year, from each member&apos;s Congress.gov record. Those are the only
+          official fields; gender, race and the like aren&apos;t in an official record, so none is
+          shown.
+        </P>
       </Section>
 
       <Section id="not-your-ballot" title="Why it isn’t “your ballot”">

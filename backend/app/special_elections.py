@@ -282,7 +282,7 @@ def _average(measured: list[float], of: int, today: date) -> dict:
             "sentence": sentence}
 
 
-def _national_deadlines(db: Session, rows: list[FecReportingDeadline]) -> list[FecReportingDeadline]:
+def national_deadlines(db: Session, rows: list[FecReportingDeadline]) -> list[FecReportingDeadline]:
     """The reporting deadlines that fall on one date for every filer: a
     report type the FEC lists on a single due date in its whole report year
     (counted over every stored row of that year, not only those shown). A
@@ -348,7 +348,7 @@ def election_calendar(db: Session, now: datetime | None = None) -> dict:
         .all()
     )
     fec = []
-    for r in _national_deadlines(db, reports):
+    for r in national_deadlines(db, reports):
         due = date.fromisoformat(r.due_date)
         fec.append({
             "date": r.due_date, "reportType": r.report_type, "label": r.label, "reportYear": r.report_year,
