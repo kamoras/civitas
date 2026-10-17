@@ -1,6 +1,6 @@
 """Special elections, vacant seats and the federal election calendar, as the
 pages show them: the specials board, each special's swing against its seat's
-lean, the calendar, and which season /elections is in.
+lean and the calendar. Which season /elections is in is election_phase.season.
 
 Everything here is computed from stored data (fetch/special_elections.py,
 live_results/specials.py, voter_calendar.py) on a read; nothing is typed by
@@ -29,7 +29,6 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.orm import Session
 
 from app import broadcast, district_lean
-from app.election_calendar import new_congress_day, previous_election_day
 from app.election_phase import active_election
 from app.live_results.specials import COUNTED_TYPES
 from app.models import BroadcastPost, FecReportingDeadline, FederalElectionDate, SeatVacancy
@@ -380,33 +379,6 @@ def election_calendar(db: Session, now: datetime | None = None) -> dict:
             "reportingDates": {"url": FEC_REPORTING_URL, "readOn": max((r.read_on for r in reports), default=None)},
         },
     }
-
-
-def season(db: Session, today: date) -> dict:
-    """Which lead /elections takes: "results" through the results window,
-    "post_election" from its end to January 3, "off_season" from then to the
-    cycle's first federal primary (the FEC's calendar; with none stored, any
-    odd year), else "campaign". The page leads with the specials and the
-    calendar in the two between-cycles seasons."""
-    election = active_election(db, today)
-    first_primary = (
-        db.query(FederalElectionDate.election_date)
-        .filter(FederalElectionDate.election_year == election.cycle, FederalElectionDate.type_code == "P")
-        .order_by(FederalElectionDate.election_date)
-        .limit(1)
-        .scalar()
-    )
-    held = previous_election_day(today)
-    if election.shows_results:
-        name = "results"
-    elif held is not None and today < new_congress_day(held):
-        name = "post_election"
-    elif first_primary is not None:
-        name = "off_season" if today.isoformat() < first_primary else "campaign"
-    else:
-        name = "off_season" if today.year % 2 else "campaign"
-    return {"season": name, "betweenCycles": name in ("post_election", "off_season"),
-            "cycle": election.cycle, "firstPrimary": first_primary}
 
 
 def publish_new_specials(db: Session, new_ids: list[str], today: date | None = None) -> int:

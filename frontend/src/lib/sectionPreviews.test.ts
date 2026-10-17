@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sectionPreview } from "./sectionPreviews";
+import { leadOrder, sectionPreview, seasonLead } from "./sectionPreviews";
 import { SECTIONS } from "./routes";
 import type { SectionFigures } from "@/types/sections";
 
@@ -140,5 +140,62 @@ describe("sectionPreview", () => {
         expect(sectionPreview(FIGURES, section, t)).not.toBeNull();
       }
     }
+  });
+
+  it("words the ballots card by season, never a countdown two years off", () => {
+    const season = (over: Record<string, unknown>) =>
+      ({
+        ...FIGURES,
+        elections: {
+          ...FIGURES.elections,
+          ballots: { states: 51, date: "2028-11-07", phase: "campaign", daysUntil: 690 },
+          season: {
+            season: "off_season",
+            betweenCycles: true,
+            cycle: 2028,
+            electionDay: "2028-11-07",
+            heldCycle: 2026,
+            until: null,
+            firstPrimary: null,
+            lastPrimary: null,
+            lead: ["calendar", "archive", "ballots", "redistricting", "map"],
+            ...over,
+          },
+        },
+      }) as SectionFigures;
+    expect(
+      sectionPreview(season({ season: "post_certification" }), "elections", "ballots")
+    ).toEqual({
+      figure: "2026",
+      caption: "the 2026 election as recorded · next general Nov 7, 2028",
+    });
+    expect(sectionPreview(season({}), "elections", "ballots")?.caption).toMatch(
+      /primaries aren't on the FEC's calendar yet/
+    );
+    expect(
+      sectionPreview(season({ firstPrimary: "2028-01-15" }), "elections", "ballots")?.figure
+    ).toBe("Jan 15, 2028");
+    expect(
+      sectionPreview(season({ season: "ramp", betweenCycles: false }), "elections", "ballots")
+        ?.caption
+    ).toMatch(/^days to Election Day.*primaries under way$/);
+  });
+});
+
+describe("leadOrder", () => {
+  const tabs = SECTIONS.elections.tabs.map((t) => ({ key: t.key as string }));
+  it("orders by the season's lead and drops nothing", () => {
+    expect(leadOrder(tabs, ["calendar", "archive"]).map((t) => t.key)).toEqual([
+      "calendar",
+      "archive",
+      "ballots",
+      "map",
+      "redistricting",
+    ]);
+    expect(leadOrder(tabs, undefined)).toEqual(tabs);
+  });
+  it("reads the season's lead for the elections section only", () => {
+    expect(seasonLead(FIGURES, "congress")).toBeUndefined();
+    expect(seasonLead(null, "elections")).toBeUndefined();
   });
 });

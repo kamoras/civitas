@@ -3,6 +3,7 @@
 import { createContext, useContext } from "react";
 import type { ElectionPhaseInfo, PviMap } from "@/types/election";
 import type { ElectionCalendar, SpecialsBoard } from "@/types/specials";
+import type { ArchiveIndex } from "@/types/electionArchive";
 
 /** What the server already read for /elections (elections/layout.tsx): the
  * lean map and which mode the page is in, so the masthead, map and state
@@ -23,8 +24,10 @@ export interface ElectionsInitial {
    * general elections it leads the page, with the calendar. Null when the
    * server couldn't read it. */
   specials: SpecialsBoard | null;
-  /** The calendar, read only between general elections. */
+  /** The calendar, read between general elections and in primary season. */
   calendar: ElectionCalendar | null;
+  /** The archive's index, read after the count settles (post-certification). */
+  archive?: ArchiveIndex | null;
   /** The server's clock when it rendered, so the countdown reads the same
    * on the server and in the browser. */
   renderedAt: number;

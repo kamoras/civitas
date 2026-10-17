@@ -237,8 +237,22 @@ export default async function ElectionsChapter() {
           seat&apos;s usual vote (the same lean the seat map uses). The gap is the swing, in points
           toward one party. A seat&apos;s usual vote comes from presidential elections, so a swing
           mixes the national mood with the race itself. It is a measure of what happened, not a
-          forecast. Between general elections, the elections page leads with all of this instead of
-          a countdown.
+          forecast.
+        </P>
+      </Section>
+
+      <Section id="seasons" title="What leads, and when">
+        <P>
+          The elections page changes what comes first as the calendar turns. It never hides a page;
+          it only changes the order. In the campaign, the ballot and the countdown lead. On election
+          night and through the count, the count leads. Once the count has settled, the election
+          just held leads, as the archive kept it, with how many races its states list as official,
+          until the new Congress is seated on January 3. From then until the next cycle&apos;s first
+          primary or caucus, the special elections, empty seats and the calendar lead, with a
+          countdown to that first primary rather than to a general two years off. From the first
+          primary to the last congressional primary or runoff, the primaries ahead lead. Each
+          boundary comes from the law (election day, January 3) or from the FEC&apos;s election
+          calendar, never a typed date.
         </P>
       </Section>
 

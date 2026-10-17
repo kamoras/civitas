@@ -4,6 +4,7 @@
  *  null is a figure the site can't give yet, never a zero. */
 
 import type { AccountabilitySummary } from "@/types/mapAccountability";
+import type { Season } from "@/types/specials";
 
 export interface SectionFigures {
   action: {
@@ -44,6 +45,9 @@ export interface SectionFigures {
       stillCounting: boolean;
       accountability: AccountabilitySummary | null;
     } | null;
+    /** Which stretch of the calendar the section is in (optional: an older
+     *  backend's answer has none). */
+    season?: Season;
   };
   explore: { search: { documents: number } };
 }

@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, CACHE_TTL_LIST_S, cached_json
 from app.database import get_db
-from app.election_phase import election_today
-from app.special_elections import election_calendar, season, specials_board
+from app.election_phase import season
+from app.special_elections import election_calendar, specials_board
 
 router = APIRouter(prefix="/elections")
 
@@ -20,7 +20,7 @@ def specials(db: Session = Depends(get_db)):
     the seat's usual vote once settled), the average swing over the year's
     specials, and the season /elections is in."""
     return cached_json(
-        {**specials_board(db), "season": season(db, election_today())},
+        {**specials_board(db), "season": season(db).as_json()},
         max_age=CACHE_TTL_DETAIL_S,
     )
 
@@ -31,6 +31,6 @@ def calendar(db: Session = Depends(get_db)):
     election authority's), and the FEC's reporting deadlines, from the month
     just gone to a year ahead, each with its status on the state's clock."""
     return cached_json(
-        {**election_calendar(db), "season": season(db, election_today())},
+        {**election_calendar(db), "season": season(db).as_json()},
         max_age=CACHE_TTL_LIST_S,
     )

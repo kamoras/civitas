@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { connection } from "next/server";
 import type { LiveResults, PviMap, RaceSummary } from "@/types/election";
 import type { ElectionCalendar, SpecialsBoard } from "@/types/specials";
+import type { ArchiveIndex } from "@/types/electionArchive";
 import { TOPIC_FEEDS, pageMetadata } from "@/lib/site";
 import { describeElections } from "@/lib/seo";
 import { everyLiveStateVoting, showsResults } from "@/lib/results";
@@ -88,8 +89,8 @@ async function fetchPvi(): Promise<PviMap | null> {
   }
 }
 
-// The specials board (with the season), and between general elections the
-// calendar it leads with. Null when the backend can't answer: the page then
+// The specials board (with the season), and the calendar or archive the
+// season leads with. Null when the backend can't answer: the page then
 // stays on the campaign frame it would otherwise show.
 async function fetchJson<T>(path: string): Promise<T | null> {
   try {
@@ -111,10 +112,16 @@ async function readInitial(): Promise<ElectionsInitial> {
     fetchPhase(renderedAt),
     fetchJson<SpecialsBoard>("/api/elections/specials"),
   ]);
-  const calendar = specials?.season?.betweenCycles
-    ? await fetchJson<ElectionCalendar>("/api/elections/calendar")
-    : null;
-  return { pvi, phase, specials, calendar, renderedAt };
+  // The season's own lead (election_phase.season): the calendar between
+  // cycles and through the primaries, the archive once the count settles.
+  const season = specials?.season?.season;
+  const [calendar, archive] = await Promise.all([
+    specials?.season?.betweenCycles || season === "ramp"
+      ? fetchJson<ElectionCalendar>("/api/elections/calendar")
+      : null,
+    season === "post_certification" ? fetchJson<ArchiveIndex>("/api/elections/archive") : null,
+  ]);
+  return { pvi, phase, specials, calendar, archive, renderedAt };
 }
 
 export default async function ElectionsLayout({ children }: { children: React.ReactNode }) {

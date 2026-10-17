@@ -1707,6 +1707,11 @@ January 3 (20th Amendment), and only then rolls to the next cycle.
 `active_election()` is the one answer for the pipeline's cycle, the API's
 `electionDate`/`phase` and the season jobs — never `next_election_day()`
 directly, which flips to the next cycle the night polls close.
+`election_phase.season()` refines it into the six stretches the elections
+pages lead by (campaign, election night, results, post-certification to
+January 3, off-season to the cycle's first primary on the FEC's calendar,
+and the primaries' ramp to the last congressional primary): read it for any
+"what leads now" decision, never a second copy of these boundaries.
 
 In that window a five-minute job (`scheduler._election_results_sync`) reads
 each covered state's own election-night feed — Clarity, Tally ENR, TotalVote,

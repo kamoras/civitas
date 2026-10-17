@@ -39,8 +39,13 @@ export default function DeadlineRibbon({
   const start = Math.min(day(today), ...items.map((d) => day(d.date)));
   const span = Math.max(end - start, 1);
   const at = (iso: string) => `${(Math.min(Math.max(day(iso) - start, 0), span) / span) * 100}%`;
-  const width = (from: string, to: string) =>
-    `${(Math.max(day(to) - Math.max(day(from), start), 0.6) / span) * 100}%`;
+  // Clipped to the track at both ends: a window that runs past election day
+  // (mail ballots received after it) used to push the page sideways.
+  const width = (from: string, to: string) => {
+    const left = Math.min(Math.max(day(from) - start, 0), span);
+    const w = Math.max(Math.min(day(to), end) - Math.max(day(from), start), 0.6);
+    return `${(Math.min(w, span - left) / span) * 100}%`;
+  };
   const now = day(today);
   const pct = (iso: string) => (Math.min(Math.max(day(iso) - start, 0), span) / span) * 100;
   // A label kept inside the track: left-aligned near the start, right-aligned

@@ -24,7 +24,7 @@ from app.api.response_helpers import cached_json
 from app.api.this_week import election
 from app.database import get_db
 from app.election_calendar import next_election_day
-from app.election_phase import election_today
+from app.election_phase import election_today, season
 from app.models import (
     Agency,
     AgencyBudget,
@@ -113,7 +113,7 @@ def _president(db: Session, chamber: str) -> dict | None:
 def elections(db: Session) -> dict:
     e = election(db)
     try:
-        data = current_map()
+        data = current_map(db)
         seats = data["chambers"]["senate"]["seats"]
         ranged = [s for s in seats if s["status"] == "range"]
         seat_map = {
@@ -139,6 +139,9 @@ def elections(db: Session) -> dict:
         # the official count; null before the first archive (the card then
         # names the election it starts with, from `ballots`).
         "archive": latest_check(db),
+        # Which stretch of the calendar the section is in, and so which of
+        # its pages lead (election_phase.season).
+        "season": season(db).as_json(),
     }
 
 
