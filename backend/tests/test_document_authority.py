@@ -15,10 +15,14 @@ from app.models import ExploreDocument
 from app.pipeline.analyze.document_authority import (
     build_citation_graph,
     compute_document_authority,
+    congressional_record_identifiers,
     declared_identifiers,
+    docket_identifiers,
     extract_citations,
     is_identifier_query,
     pagerank,
+    query_record_identifiers,
+    record_volume,
     update_document_authority,
 )
 
@@ -369,7 +373,6 @@ class TestStreamedGraph:
 
 class TestRecordIdentifiers:
     def test_a_comment_link_names_its_docket_and_document(self):
-        from app.pipeline.analyze.document_authority import docket_identifiers
         assert docket_identifiers("http://www.regulations.gov/commenton/IRS-2026-1090-0001") == {
             "docket:IRS-2026-1090-0001", "docket:IRS-2026-1090"}
         assert "docket:FDA-2018-N-3240" in docket_identifiers(
@@ -381,7 +384,6 @@ class TestRecordIdentifiers:
         assert docket_identifiers(None) == set()
 
     def test_a_speech_is_known_by_its_record_page_and_granule(self):
-        from app.pipeline.analyze.document_authority import congressional_record_identifiers, record_volume
         assert congressional_record_identifiers("crec-v1-CREC-2026-09-16-pt1-PgH5836-3-213d7a94") == {
             "crec:172-H5836", "crecgranule:CREC-2026-09-16-PT1-PGH5836-3"}
         assert record_volume(2025, 1, 3) == 171
@@ -390,7 +392,6 @@ class TestRecordIdentifiers:
         assert congressional_record_identifiers("fr-reg-2026-1") == set()
 
     def test_queries_name_them(self):
-        from app.pipeline.analyze.document_authority import query_record_identifiers
         assert query_record_identifiers("irs-2026-1090") == {"docket:IRS-2026-1090"}
         assert query_record_identifiers("172 Cong. Rec. S5190") == {"crec:172-S5190"}
         assert is_identifier_query("IRS-2026-1090")
