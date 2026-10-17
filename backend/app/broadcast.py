@@ -54,11 +54,12 @@ import pathlib
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 import httpx
 
+from app import retractions
 from app.config import settings
 from app.contact import SELF_FETCH_USER_AGENT
 from app.models import BroadcastPost
@@ -296,7 +297,7 @@ def fill_missing_cards(db: Session) -> int:
         .filter(
             BroadcastPost.card_image.is_(None),
             BroadcastPost.published_at >= utcnow() - CARD_BACKFILL_WINDOW,
-            BroadcastPost.subject.notin_(withdrawn_subjects()),
+            not_withdrawn(),
         )
         .order_by(BroadcastPost.id)
         .all()
@@ -400,7 +401,7 @@ def deliver_pending(db: Session) -> int:
                 BroadcastPost.bsky_last_attempt_at.is_(None),
                 BroadcastPost.bsky_last_attempt_at <= utcnow() - RETRY_AFTER,
             ),
-            BroadcastPost.subject.notin_(withdrawn_subjects()),
+            not_withdrawn(),
             BroadcastPost.kind.notin_(NO_RETRY_KINDS),
             # Bounds the scan; the checks below are the rule.
             BroadcastPost.published_at >= utcnow() - HELD_MAX_AGE,
@@ -433,9 +434,19 @@ def withdrawn_subjects() -> frozenset[str]:
     """Subjects of posts about withdrawn issues (app/retractions.py): kept
     in the table, since they were published, but never served in a feed or
     sent anywhere again."""
-    from app.retractions import entries
+    return frozenset(f"issue:{public_id}" for entry in retractions.entries() for public_id in entry["publicIds"])
 
-    return frozenset(f"issue:{public_id}" for entry in entries() for public_id in entry["publicIds"])
+
+def not_withdrawn():
+    """SQL for "this post was not withdrawn" (app/retractions.py): neither
+    about a withdrawn issue nor itself withdrawn (a race post, which shares
+    its subject with that race's other posts, is withdrawn by its id). A
+    withdrawn post stays in the table, since it was published, but is never
+    served in a feed or sent anywhere again."""
+    return and_(
+        BroadcastPost.subject.notin_(withdrawn_subjects()),
+        BroadcastPost.id.notin_(retractions.withdrawn_post_ids()),
+    )
 
 
 def was_published(db: Session, subject: str) -> bool:
