@@ -974,15 +974,19 @@ What this rules in and out:
   join documented in `scripts/fetch_state_leg_crosswalk.py`). Building
   those crosswalks is real work, and doing it is the price of not asking.
 - **In:** following Civitas without an account. The Atom feeds (`/feeds`)
-  are pulled, and a topic or state is chosen by which URL a reader
-  subscribes to, so there is no subscriber list to keep. A push channel
-  that would need one (email, web push, per-server webhooks) is out, for
-  the same reason as an address box. A page offers its most specific
-  feed first — `pageMetadata({ feed })` in `src/lib/site.ts` (a state's
-  ballot page its state's feed, `/congress` the Congress feed, an issue
-  page the Action Center feed) — and the state ballot and Congress pages
-  link it visibly (`FollowFeed`); a new page with a feed of its own should
-  do the same.
+  are pulled, and a topic, state or one followed thing is chosen by which
+  URL a reader subscribes to, so there is no subscriber list to keep. A
+  push channel that would need one (email, web push, per-server webhooks)
+  is out, for the same reason as an address box. A member, a bill, an
+  agency and a national monitor each have a feed built from stored rows
+  when asked for (`app/entity_feeds.py`: fixed templates, no model, ids on
+  what the entry is, never on a slug or URL), nginx-cached like the rest.
+  A page offers its most specific feed first — `pageMetadata({ feed })` in
+  `src/lib/site.ts` (a state's ballot page its state's feed, `/congress`
+  the Congress feed, a member's profile, a bill or an agency its own, an
+  issue page its monitor's or else the Action Center feed) — and links it
+  visibly (`FollowFeed`); a new page with a feed of its own should do the
+  same.
 - **In, server-side only:** the Census geocoder and Google Civic's
   `voterInfoQuery`, called from the pipeline (and, for the town selector,
   from the API, cached 12 hours) with **our own** fixed,

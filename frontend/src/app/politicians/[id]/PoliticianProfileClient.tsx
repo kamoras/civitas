@@ -1,5 +1,7 @@
 "use client";
 
+import FollowFeed from "@/components/shared/FollowFeed";
+import { memberFeed } from "@/lib/site";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
@@ -115,6 +117,15 @@ export default function PoliticianProfileClient({
             <span className="mx-2">/</span>
             <span className="text-ink-lo">{branchLabel(branch)}</span>
           </div>
+          {isMember && (
+            // The member's own feed (the one the <head> names first): votes,
+            // sponsored bills' actions, score changes and disclosures.
+            <FollowFeed
+              className="-mt-4 mb-6"
+              subject={identity.name}
+              feed={memberFeed(profile.id, identity.name)}
+            />
+          )}
 
           {/* Left-office banner — wording is branch-specific, see officeStatus.ts */}
           {formerOffice && (

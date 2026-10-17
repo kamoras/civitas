@@ -18,7 +18,8 @@ import VotePanel from "./VotePanel";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
-import { absoluteUrl } from "@/lib/site";
+import { absoluteUrl, billFeed } from "@/lib/site";
+import FollowFeed from "@/components/shared/FollowFeed";
 import { ordinal } from "@/components/scorecard/format";
 import { exploreHref } from "@/lib/exploreHref";
 
@@ -224,6 +225,16 @@ export default function BillPageView({
                     ))}
                   </p>
                 ) : null}
+                {(record?.congress ?? detail?.congress) && (
+                  // The bill's own feed (the <head> names it first): each
+                  // action and roll call. Left out of a shared picture.
+                  <div data-share-exclude>
+                    <FollowFeed
+                      subject={label}
+                      feed={billFeed(record?.congress ?? detail!.congress, billId, label)}
+                    />
+                  </div>
+                )}
                 {lead && summary && (
                   <div className="flex flex-col gap-1.5">
                     <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">

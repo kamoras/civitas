@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { absoluteUrl, notFoundMetadata, pageMetadata } from "@/lib/site";
+import { absoluteUrl, agencyFeed, notFoundMetadata, pageMetadata } from "@/lib/site";
+import FollowFeed from "@/components/shared/FollowFeed";
 import { agencyJsonLd, describeAgency } from "@/lib/seo";
 import { fetchAgency } from "@/lib/agencyServer";
 import { fiscalYearLabel, money, readOn } from "@/lib/agencies";
@@ -24,7 +25,11 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const { slug } = await params;
   const agency = await fetchAgency(slug);
   if (!agency) return notFoundMetadata("Agency not found", "No federal agency by this name.");
-  return pageMetadata({ ...describeAgency(agency), path: agencyHref(agency.slug) });
+  return pageMetadata({
+    ...describeAgency(agency),
+    path: agencyHref(agency.slug),
+    feed: agencyFeed(agency.slug, agency.name),
+  });
 }
 
 // While documents are still being linked to their agencies, an empty list
@@ -286,6 +291,8 @@ export default async function AgencyPage({ params }: PageProps) {
             >
               {about[0] && <p>{about[0]}</p>}
             </PageMasthead>
+            {/* Its rules and comment periods as a feed, its sub-agencies' too. */}
+            <FollowFeed className="-mt-4 mb-8" subject={a.name} feed={agencyFeed(a.slug, a.name)} />
 
             <Overview a={a} />
 

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import type { BillDetail } from "@/types/bill";
 import type { BillRecord } from "@/types/congress";
 import { fetchRecord } from "@/lib/ssrPayload";
-import { absoluteUrl, notFoundMetadata, pageMetadata } from "@/lib/site";
+import { absoluteUrl, billFeed, notFoundMetadata, pageMetadata } from "@/lib/site";
 import { describeBill, legislationJsonLd } from "@/lib/seo";
 import { fetchBillCommitteeRecord, fetchBillRecord } from "@/lib/congressServer";
 import { billCanonicalPath, currentCongress, parseCongressParam } from "@/lib/congress";
@@ -81,6 +81,11 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
   // "/congress/bills/S.1?congress=119" resolve to the same bill and must not
   // index as two pages; an earlier Congress's bill keeps its ?congress=.
   const path = billCanonicalPath(billId, record?.congress ?? detail!.congress);
+  const feed = billFeed(
+    record?.congress ?? detail!.congress,
+    billId,
+    record?.billLabel ?? detail?.billId ?? billId
+  );
   if (detail) {
     const meta = describeBill(detail, record?.billLabel ?? detail.billId);
     return pageMetadata({
@@ -97,6 +102,7 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
           alt: meta.title,
         },
       ],
+      feed,
     });
   }
   const named = record!.shortTitle || record!.title;
@@ -108,6 +114,7 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
       `${record!.billLabel} in the ${ordinal(record!.congress)} Congress.`,
     path,
     type: "article",
+    feed,
   });
 }
 

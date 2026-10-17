@@ -280,3 +280,19 @@ def test_the_pipeline_restarting_is_an_answer_not_a_bad_gateway():
     for pattern, body in to_pipeline:
         assert re.search(r"error_page[^;]*\b502\b[^;]*\b504\b[^;]*= @(pipeline_restarting|summary_wait);", body), pattern
     assert "return 503" in public[public.index("location @pipeline_restarting"):]
+
+
+@pytest.mark.parametrize("path", [
+    "/feed/members/jane-doe.xml", "/feed/bills/119/HR.1.xml", "/feed/agencies/dept.xml", "/feed/monitors/a-story.xml",
+])
+def test_a_followed_things_feed_is_cached_and_its_misses_are_limited(path):
+    """A feed per member, bill, agency and monitor (app/entity_feeds.py) is
+    built from the database on a miss: answered from nginx's cache, its
+    misses through the rate-limited hop to the backend's /api/feed route."""
+    public, internal = _servers()
+    outer = _match(_locations(public), path)
+    assert outer[1] == "/feed/" and "proxy_cache " in outer[3] and outer[2] == _MISSES_HOP
+    assert "rewrite ^/feed/(.*)$ /api/feed/$1 break;" in outer[3]
+    inner = _match(_locations(internal), "/api" + path)
+    assert inner is not None and "limit_req zone=" in inner[3]
+    assert route(path) == "backend_upstream"
