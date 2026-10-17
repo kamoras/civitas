@@ -3,7 +3,7 @@
 import { displayScore } from "@/lib/formatting";
 import {
   districtName,
-  matchesDistrictQuery,
+  filterDistricts,
   placeDistrictSummary,
   stateBallotHref,
 } from "@/lib/elections";
@@ -313,12 +313,11 @@ function PoliticiansPageContent() {
   const countyMatches = useMemo(
     () =>
       linesReady && county.trim()
-        ? houseLines!.districts.filter((d) =>
-            matchesDistrictQuery(
-              { district: null, areas: [...d.counties, ...(d.places ?? [])], candidates: [] },
-              county
-            )
-          )
+        ? filterDistricts(houseLines!.districts, county, (d) => ({
+            district: null,
+            areas: [...d.counties, ...(d.places ?? [])],
+            candidates: [],
+          }))
         : [],
     [linesReady, houseLines, county]
   );

@@ -931,8 +931,9 @@ shape for a project whose entire premise is that a voter can research their
 ballot without handing anything over. The box was also redundant — the
 district rows already showed each district's counties and its sitting
 representative, which is what a person can actually recall unprompted, so
-the replacement is a client-side filter over those (`matchesDistrictQuery`
-in `frontend/src/lib/elections.ts`).
+the replacement is a client-side filter over those (`filterDistricts`
+in `frontend/src/lib/elections.ts`: a place named in full keeps only the
+districts holding it, so the list agrees with the status line).
 
 What this rules in and out:
 
