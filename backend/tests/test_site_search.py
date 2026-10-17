@@ -16,7 +16,9 @@ from app.main import DropQueryString
 from app.models import ActionIssue, Agency, Race, Representative, Senator, SponsoredBill
 from app.site_search import answer, identifier_keys, rank
 from app.site_search_index import (
+    CONTEXT_MAX,
     Entity,
+    _clip,
     collect_entities,
     district_code,
     normalize,
@@ -263,8 +265,6 @@ def test_every_site_page_is_indexed(db_session):
 
 
 def test_long_context_lines_are_cut_at_a_word():
-    from app.site_search_index import CONTEXT_MAX, _clip
-
     title = "To amend the Internal Revenue Code of 1986 " * 20
     out = _clip(title)
     assert len(out) <= CONTEXT_MAX + 1 and out.endswith("…") and not out[:-1].endswith(" ")
