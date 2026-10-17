@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
-import type { BillRecordVote, CoveragePart, VoteDetail } from "@/types/congress";
+import type { BillPassage, BillRecordVote, CoveragePart, VoteDetail } from "@/types/congress";
 import { CHAMBER_NAME, resultTone, rollCallHref, shortDate, voteResult } from "@/lib/congress";
 import { TallyText, VoteCount } from "./ReportParts";
 import VoteMembers, { PartyBar } from "./VoteMembers";
+import AmendmentPurpose from "./AmendmentPurpose";
 
 const TONE = { yes: "text-phos-mid", no: "text-signal-red", neutral: "text-ink-lo" } as const;
 
@@ -22,6 +23,7 @@ export default function VotePanel({
   unreadable = false,
   coverage,
   named = [],
+  passage = [],
 }: {
   votes: BillRecordVote[];
   congress: number;
@@ -29,6 +31,8 @@ export default function VotePanel({
   unreadable?: boolean;
   /** Whether Civitas holds the bill's Congress's roll calls (bill_coverage). */
   coverage?: CoveragePart;
+  /** How each chamber decided the bill (bill_journey.passage). */
+  passage?: BillPassage[];
   /** The roll calls the bill's history names, each linked to the chamber's
    * own record: what a reader follows when the votes aren't held here. */
   named?: {
@@ -105,6 +109,26 @@ export default function VotePanel({
         </div>
       );
     }
+    // Half of all laws pass with no roll call: by unanimous consent or a
+    // voice vote. Say how, from the actions, never "no votes".
+    if (passage.length && passage.every((p) => p.method !== "rollCall"))
+      return (
+        <div className="flex flex-col gap-2 text-[15px] text-ink">
+          <p className="text-ink-lo">
+            No roll call was taken on this bill, so no names are recorded:
+          </p>
+          <ul className="flex flex-col gap-1.5">
+            {passage.map((p) => (
+              <li
+                key={`${p.chamber}-${p.date}-${p.kind}`}
+                className="border-l-2 border-white/20 pl-3"
+              >
+                {p.sentence}
+              </li>
+            ))}
+          </ul>
+        </div>
+      );
     return (
       <p className="text-[15px] text-ink-lo">No recorded votes on this bill in either chamber.</p>
     );
@@ -133,7 +157,10 @@ export default function VotePanel({
                   </span>
                   <span className="text-ink-min">{shortDate(v.date)}</span>
                 </span>
-                <span className="text-[15px] leading-snug text-ink">{v.question}</span>
+                <span className="flex min-w-0 flex-col gap-1">
+                  <span className="text-[15px] leading-snug text-ink">{v.question}</span>
+                  <AmendmentPurpose vote={v} chamber={v.chamber} compact />
+                </span>
                 <span className="col-start-2 flex flex-col items-start gap-1 pr-2 sm:col-start-auto sm:items-end">
                   <span
                     className={`font-mono text-xs uppercase tracking-[0.1em] ${TONE[resultTone(v.rejected)]}`}

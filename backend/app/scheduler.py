@@ -38,6 +38,8 @@ from app.pipeline import bill_refresh
 from app.pipeline.fetch import nominations
 from app.pipeline.fetch import bill_display_titles
 from app.pipeline.fetch.agencies import run_agency_sync
+from app.pipeline.fetch.amendment_purpose import fill_amendment_purposes
+from app.http_client import make_async_client
 from app.services.bill_service import warm_bill_collection_cache
 
 if TYPE_CHECKING:
@@ -711,6 +713,15 @@ def _data_refresh() -> None:
     _start_job(_run, name="data-refresh")
 
 
+async def _fill_amendment_purposes() -> dict:
+    db = SessionLocal()
+    try:
+        async with make_async_client() as client:
+            return await fill_amendment_purposes(client, db)
+    finally:
+        db.close()
+
+
 def _congress_activity_sync() -> None:
     """The /congress record: new roll calls, today's floor logs and the
     Daily Digest (pipeline/congress_activity.py). Half-hourly all year:
@@ -739,6 +750,13 @@ def _congress_activity_sync() -> None:
                 )
             except Exception:
                 logger.exception("Congress sync failed")
+            # What each amendment voted on would do, from the record
+            # (fetch/amendment_purpose.py): after the sync, so a vote stored
+            # this run is read this run.
+            try:
+                logger.info("Amendment purposes: %s", loop.run_until_complete(_fill_amendment_purposes()))
+            except Exception:
+                logger.exception("Reading amendment purposes failed")
             finally:
                 loop.close()
             # The day's Bluesky post, once its Digest has made it final.

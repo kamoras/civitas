@@ -2931,6 +2931,19 @@ class RollCall(Base):
     bill_id: Mapped[str | None] = mapped_column(String(24), nullable=True, index=True)
     source_url: Mapped[str] = mapped_column(String(300), default="")
     fetched_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    # The amendment the vote was on, as the record numbers it ("S.Amdt.
+    # 6805", "H.Amdt. 258"), and its purpose verbatim: the Senate's
+    # <amendment_purpose>, Congress.gov's `purpose` for a House amendment
+    # (fetch/amendment_purpose.py). NULL: not read yet. "": read, and the
+    # vote isn't on an amendment (amendment) or the record states no
+    # purpose (amendment_purpose).
+    amendment: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    amendment_purpose: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # When the purpose was last asked for, and how many times in a row the
+    # record had no such file (not published yet, a 404): the back-off
+    # before asking again (fetch/amendment_purpose.py).
+    amendment_checked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    amendment_misses: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
 
 class RollCallPosition(Base):

@@ -9,6 +9,20 @@
       "url": "/politicians"
     },
     {
+      "id": "bill-journey",
+      "date": "2026-10-17",
+      "title": "How a bill got there",
+      "summary": "Each bill page maps its path from introduction to law with dates, says how each chamber passed it, by roll call, voice vote or unanimous consent, and explains the procedural steps in plain words.",
+      "url": "/congress/bills"
+    },
+    {
+      "id": "amendment-purpose",
+      "date": "2026-10-17",
+      "title": "What each amendment vote was about",
+      "summary": "A vote on an amendment now quotes the amendment's official purpose from the record, and each roll call page shows the chamber as a seat chart, one dot per member.",
+      "url": "/congress"
+    },
+    {
       "id": "register-to-vote",
       "date": "2026-10-16",
       "title": "Where to register, and by when",

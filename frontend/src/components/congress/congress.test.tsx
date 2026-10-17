@@ -632,8 +632,11 @@ describe("roll call page", () => {
     render(<RollCallView vote={quorum} path="/congress/votes/house/119/1/1" />);
     expect(screen.getByText("Quorum call")).toBeTruthy();
     expect(screen.getByText("433 present")).toBeTruthy();
-    expect(screen.getByText("219 present · 1 NV")).toBeTruthy();
-    expect(screen.getByText("Republicans: 219 present, 1 not voting")).toHaveClass("sr-only");
+    // The seat chart's table: present and not voting, no yea or nay column.
+    const table = screen.getByRole("table", { name: "How each party voted" });
+    const rows = within(table).getAllByRole("row");
+    expect(rows[0].textContent).toBe("PartyPresentNot voting");
+    expect(rows[1].textContent).toBe("Republicans2191");
     expect(screen.queryByText("Passed")).toBeNull();
     expect(screen.queryByText("0–0")).toBeNull();
   });
