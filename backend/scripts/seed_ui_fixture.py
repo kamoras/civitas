@@ -136,7 +136,17 @@ def seed(db) -> None:
         db.add(M.Justice(id=f"J{i}", name=name, last_name=name.split()[-1], is_active=True,
                          score_loyalty=rng.randint(30, 90), loyalty=rng.uniform(-0.1, 0.2), loyalty_se=0.04,
                          loyalty_votes_in=rng.randint(100, 400), loyalty_votes_out=rng.randint(100, 400),
-                         loyalty_rate_in=0.55, loyalty_rate_out=0.5, loyalty_through_term=2025))
+                         loyalty_rate_in=0.55, loyalty_rate_out=0.5, loyalty_through_term=2025,
+                         ideal_points=json.dumps([[2024, -1.5 + 1.5 * i, -2.0 + 1.5 * i, -1.0 + 1.5 * i]])))
+    # A few decided cases, so /court's line, heatmap and lineups and each
+    # justice's case list are audited with data: two unanimous, one split.
+    for n, (decided, dissent) in enumerate((("2025-06-02", ()), ("2025-06-20", (0,)), ("2025-06-27", ()))):
+        for i in range(3):
+            side = "minority" if i in dissent else "majority"
+            db.add(M.JusticeVote(justice_id=f"J{i}", case_id=f"scotus-2025-25-{n + 1}", case_name=f"Example v. Case {n + 1}",
+                                 case_term="2025", decided_date=decided, vote=side,
+                                 opinion_type="majority" if side == "majority" and i == 1 else ("dissent" if side == "minority" else "none"),
+                                 is_unanimous=not dissent, majority_votes=3 - len(dissent), minority_votes=len(dissent)))
 
     # A state voting on new House lines (redrawn_congressional_maps.json),
     # so the ballot page's "what changed" link, the redistricting pages and

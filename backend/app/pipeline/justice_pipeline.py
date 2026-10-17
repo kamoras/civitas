@@ -275,6 +275,9 @@ async def run_justice_pipeline(db: Session) -> dict:
     retired = retire_departed_justices(db, active_ids, service_ended(listed or []))
     logger.info("=== Justice pipeline complete: %d justices, %d votes ===", len(justices), len(all_votes))
     return {"justices": len(justices), "votes": len(all_votes), "loyalty_unmeasured": unmeasured_why,
+            # The Martin-Quinn file couldn't be read: the stored positions
+            # stand, and the run says so rather than going quietly stale.
+            "positions_unread": measured is not None and measured["ideal"] is None,
             **({"retired": retired} if retired else {})}
 
 
