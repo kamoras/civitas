@@ -5194,10 +5194,11 @@ def _find_matching_issue(
 # - **The seat named.** "Alaska's Senate race", "Georgia's 2nd District":
 #   the results gate's seat phrases (action_center.race_named), which
 #   already tell a legislature's seats and other states' names apart.
-# - **The state, in an election story.** A state named in the headline of a
-#   story whose class vote (story_actor.story_class) is an election: the
-#   link is then the state's voter information alone, with no race, so it
-#   can be off-topic but never says a race is on a ballot when it isn't.
+#
+# A state is linked only through one of its races. A state named in the
+# headline of a story the class vote calls an election was also linked,
+# alone, until review: 16 of 22 such links on the stored issues were on
+# topic, under the site's precision bar, so that path was dropped.
 #
 # Measured on the stored issues: see docs/research/action-center-ballot-links.md.
 
@@ -5211,12 +5212,9 @@ _BALLOT_STATE_RE = re.compile(
 )
 _BALLOT_STATE_CODE = {n.lower(): c for c, n in STATE_NAMES.items()}
 
-# The relevance examples' category for an election story (story_class).
-ELECTION_CLASS = "us_election"
-
 # How a link was made, most specific first (one race keeps its best).
-BALLOT_CANDIDATE, BALLOT_SURNAME, BALLOT_SEAT, BALLOT_STATE = "candidate", "surname", "seat", "state"
-_BALLOT_VIA_ORDER = {BALLOT_CANDIDATE: 0, BALLOT_SURNAME: 1, BALLOT_SEAT: 2, BALLOT_STATE: 3}
+BALLOT_CANDIDATE, BALLOT_SURNAME, BALLOT_SEAT = "candidate", "surname", "seat"
+_BALLOT_VIA_ORDER = {BALLOT_CANDIDATE: 0, BALLOT_SURNAME: 1, BALLOT_SEAT: 2}
 
 
 def states_named(text: str) -> list[str]:
@@ -5285,13 +5283,9 @@ def _ballot_full_name(text: str, nominee: _Nominee) -> str | None:
     return next((m.group(0) for m in pattern.finditer(folded) if _name_cased(m)), None)
 
 
-def ballot_links(db: Session, cycle: int, title: str, summary: str, facts: list[str],
-               election_story=None) -> list[dict]:
+def ballot_links(db: Session, cycle: int, title: str, summary: str, facts: list[str]) -> list[dict]:
     """The issue's ballot links: [{"state", "raceId", "candidate", "via"}],
-    a race's best link first, then any state named alone. `election_story`
-    is called (at most once, only when a state is named in the headline and
-    no race was linked) to say whether the story's class vote is an
-    election; it embeds the story, so it is passed in rather than run here."""
+    the races it names, each by its best link."""
     lines = [title or "", summary or "", *(str(f) for f in facts or [])]
     text = "\n".join(lines)
     named = set(states_named(text))
@@ -5331,12 +5325,7 @@ def ballot_links(db: Session, cycle: int, title: str, summary: str, facts: list[
         for race in db.query(Race).filter(Race.cycle_year == cycle, Race.state == state):
             if race.id not in found and race_named(race.id, text, db, need_candidate=False):
                 add(race, BALLOT_SEAT, None)
-    links = sorted(found.values(), key=lambda link: (_BALLOT_VIA_ORDER[link["via"]], link["raceId"]))
-    linked_states = {link["state"] for link in links}
-    headline = [s for s in states_named(title) if s not in linked_states]
-    if headline and election_story is not None and election_story():
-        links += [{"state": s, "raceId": None, "candidate": None, "via": BALLOT_STATE} for s in headline]
-    return links
+    return sorted(found.values(), key=lambda link: (_BALLOT_VIA_ORDER[link["via"]], link["raceId"]))
 
 
 def _run_periodic_bluesky_posts(db: Session) -> None:
@@ -6007,10 +5996,7 @@ def _run_refresh(db: Session) -> int:
         # weekly actor concentration.
         actor = _principal_actor(title, summary, related_officials)
         # The states and races it names, for its ballot line (ballot_links).
-        issue_ballot_links = ballot_links(
-            db, ballot_cycle, title, summary, facts,
-            election_story=lambda t=title, s=summary: _is_election_story(t, s),
-        )
+        issue_ballot_links = ballot_links(db, ballot_cycle, title, summary, facts)
 
         # Find the matching existing issue across all recent issues (2-day
         # lookback, any rank). Same STORY → same row, regardless of rank
@@ -6259,15 +6245,6 @@ def _principal_actor(title: str, summary: str, officials: list[dict]) -> str:
     )
 
 
-def _is_election_story(title: str, summary: str) -> bool:
-    """Whether the story's class vote (story_actor.story_class, over the
-    relevance gate's labelled examples) is an election."""
-    return story_actor.story_class(
-        _embed_texts_sim([f"{title}. {summary}"])[0],
-        _relevance_reference(), [e["category"] for e in relevance_examples()],
-    ) == f"class:{ELECTION_CLASS}"
-
-
 def link_issue_ballots(db: Session, cycle: int) -> int:
     """Match ballot links (ballot_links) for every news issue that has none
     yet: the rows from before the column existed."""
@@ -6281,10 +6258,7 @@ def link_issue_ballots(db: Session, cycle: int) -> int:
             facts = json.loads(row.facts or "[]")
         except (TypeError, ValueError):
             facts = []
-        row.ballot_links = json.dumps(ballot_links(
-            db, cycle, row.title, row.summary or "", facts,
-            election_story=lambda r=row: _is_election_story(r.title, r.summary or ""),
-        ))
+        row.ballot_links = json.dumps(ballot_links(db, cycle, row.title, row.summary or "", facts))
     if rows:
         db.commit()
         logger.info("Linked %d earlier issues to the ballot", len(rows))

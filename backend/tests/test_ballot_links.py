@@ -36,9 +36,8 @@ def races(db_session):
     return db_session
 
 
-def links(db, title, summary="", facts=(), election=False):
-    return [(link["via"], link["raceId"] or link["state"], link["candidate"])
-            for link in ballot_links(db, 2026, title, summary, list(facts), election_story=lambda: election)]
+def links(db, title, summary="", facts=()):
+    return [(link["via"], link["raceId"], link["candidate"]) for link in ballot_links(db, 2026, title, summary, list(facts))]
 
 
 def test_states_named_longest_first_and_not_the_capital():
@@ -77,10 +76,8 @@ def test_the_seat_phrase(races):
     assert not race_named("2026-SEN-AK", "Alaska state Senate race tightens", races, need_candidate=False)
 
 
-def test_a_state_alone_only_in_an_election_story(races):
-    title = "Agency sues California over mail ballots"
-    assert links(races, title, election=False) == []
-    assert links(races, title, election=True) == [("state", "CA", None)]
+def test_a_state_alone_links_nothing(races):
+    assert links(races, "Agency sues California over mail ballots") == []
 
 
 def test_served_with_the_state_voter_information(monkeypatch):

@@ -58,15 +58,12 @@ describe("OnTheBallot", () => {
     expect(r.violations.map((v) => v.id)).toEqual([]);
   });
 
-  it("says Voting in, not On the ballot, for a state with no race, and no register link once closed", () => {
+  it("gives the next deadline, and no register link once registration closes", () => {
     render(
       <OnTheBallot
         ballot={[
           {
             ...GA,
-            state: "CA",
-            stateName: "California",
-            races: [],
             deadline: {
               kind: "early_voting",
               sentence: "Early voting ends Monday, November 2",
@@ -78,8 +75,9 @@ describe("OnTheBallot", () => {
         ]}
       />
     );
-    expect(screen.getByText("Voting in")).toBeInTheDocument();
-    expect(screen.queryByText("On the ballot")).toBeNull();
+    expect(
+      screen.getByRole("link", { name: "Early voting ends Monday, November 2 (17 days left)" })
+    ).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /^Register:/ })).toBeNull();
     expect(
       screen.getByRole("link", { name: /Find your election office: USAGov/ })

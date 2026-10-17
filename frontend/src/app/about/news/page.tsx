@@ -219,8 +219,7 @@ export default function NewsChapter() {
           its election office and links to register and to check your registration. A race is linked
           only when the story names one of its confirmed nominees (in full, or by surname beside the
           state&apos;s name when no other nominee there shares it) or the seat itself (&quot;the
-          Michigan Senate race&quot;). A state named in the headline of an election story gets its
-          voter information alone, worded &quot;Voting in&quot;, with no race claimed.
+          Michigan Senate race&quot;). A state named without one of its races is not linked.
         </P>
         <More label="How the committee is chosen">
           <P>

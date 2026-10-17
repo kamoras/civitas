@@ -17,9 +17,9 @@ official lookup (`app/ballot_links.py`). The rules, most specific first:
 | Nominee by full name | a confirmed nominee named in the headline, summary or facts (the results gate's matcher); a full name nominees of two races share counts only beside its state | 58 | 58 (the named person is that race's nominee) |
 | Surname beside its state | the state's only nominee of that surname, never written after another capitalised word | 1 | 1 |
 | Seat phrase | "Michigan Senate race", "Georgia's 2nd District" (the results gate's grammar, no candidate required) | 5 | 5 |
-| State in an election story | a state in the headline of a story whose class vote is `us_election` | 22 | 16 on-topic |
+| State in an election story (dropped) | a state in the headline of a story whose class vote is `us_election` | 22 | 16 on topic |
 
-86 links on 76 of the 548 issues. One judge (the author), reading each
+64 race links on 55 of the 548 issues. One judge (the author), reading each
 issue's text; no threshold was fitted to these judgements.
 
 - The first three rules are entity matches against stored rows and made no
@@ -31,20 +31,18 @@ issue's text; no threshold was fitted to these judgements.
 - A nominee named in a story that is not about the election (a senator on a
   budget hearing) still links that race. The link is true, and says whose race
   it is.
-- The state rule's six off-topic links (an airport renamed, a state
-  school-board vote, a primary calendar two cycles out) come from the class vote, which
-  reads some state stories as elections. That rule makes no claim about a
-  race: the line reads "Voting in <state>" and gives the state's voter
-  information. The class vote also misses a story on a federal suit over one
-  state's mail ballots (`us_courts`), while the next day's story on the same
-  dispute is linked. The vote's share
-  doesn't separate them (an off-topic link at 0.80, an on-topic one at 0.67),
-  so no cut was added.
-- Of the eight election stories in the last 30 days, six now link: three
-  Senate races by a nominee named (one by surname beside the state) and
-  three states alone. Unlinked: the first story on a federal suit over one
-  state's mail ballots, and a roundup of "6 key states", which names no
-  state in its headline.
+- A fourth rule was measured and dropped: a state named in the headline of a
+  story the class vote calls an election, linked alone with its voter
+  information. Its six off-topic links (an airport renamed, a state
+  school-board vote, a primary calendar two cycles out) came from the class
+  vote reading some state stories as elections; 16 of 22 (73%, exact lower
+  95% bound 0.50) is under the site's 0.80 bar, and the vote's share doesn't
+  separate them (an off-topic link at 0.80, an on-topic one at 0.67), so no
+  cut could tighten it. A state is linked only through one of its races.
+- Of the eight election stories in the last 30 days, three now link, each a
+  Senate race by a nominee named (one by surname beside the state). The
+  other five name a state but no nominee or seat phrase the rules read, and
+  stay unlinked rather than risk the dropped rule's noise.
 
 ## Single-fact issues
 

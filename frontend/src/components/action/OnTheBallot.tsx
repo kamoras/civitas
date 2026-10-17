@@ -43,9 +43,7 @@ function Lookup({ lookup, stateName }: { lookup: IssueBallot["lookup"]; stateNam
  * (each opening on the state's ballot page), the voter calendar's next
  * deadline (registration while it is open) and the state's own register
  * and lookup links. Matched from the issue's own words when it was written
- * and served with today's deadlines
- * (backend app/ballot_links.py); a state named with no race reads "Voting
- * in ...", never "on the ballot".
+ * and served with today's deadlines (backend app/ballot_links.py).
  */
 export default function OnTheBallot({ ballot }: { ballot: IssueBallot[] | undefined }) {
   if (!ballot?.length) return null;
@@ -57,7 +55,7 @@ export default function OnTheBallot({ ballot }: { ballot: IssueBallot[] | undefi
           className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-b border-white/[0.07] py-3 text-[15px] text-ink"
         >
           <span className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
-            {b.races.length ? "On the ballot" : "Voting in"}
+            On the ballot
           </span>
           <Link
             href={stateBallotHref(b.state)}

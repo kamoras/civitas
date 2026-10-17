@@ -1,8 +1,7 @@
 """Action Center issues: the states and races they name
 
 Adds `action_issues.ballot_links`, the states and races an issue's own
-words name (a nominee by name, a seat phrase, a state in an election
-story), matched when the hourly refresh writes the issue and served with
+words name (a nominee by name, a seat phrase), matched when the hourly refresh writes the issue and served with
 the state's voter deadlines and official links. NULL until the refresh
 links a row.
 

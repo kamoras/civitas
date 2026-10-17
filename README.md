@@ -548,14 +548,13 @@ Every hour at :15
        │         name (action_center.ballot_links): a confirmed nominee by
        │         full name (a name two races' nominees share only beside its
        │         state), a state's only nominee of a surname beside the
-       │         state's name, a seat phrase ("Michigan Senate race"), or a
-       │         state in the headline of a story the class vote calls an
-       │         election. The issue shows "On the ballot: Georgia · Senate
+       │         state's name, or a seat phrase ("Michigan Senate race"). The issue shows "On the ballot: Georgia · Senate
        │         race (Roe) · <next deadline> · Register · Check your
        │         registration" from the voter calendar and the state's own
        │         lookup, read when served (app/ballot_links.py). Measured on
        │         548 stored issues: 64 race links, every named person that
-       │         race's nominee; 16 of 22 state-only links on topic
+       │         race's nominee; a state alone is never linked (16 of 22
+       │         such links were on topic, under the bar)
        │         (docs/research/action-center-ballot-links.md)
        ▼
   5. EXTRACT ─── The model LOCATES an assertion in one article; it never
