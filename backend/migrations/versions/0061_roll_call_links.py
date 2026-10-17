@@ -4,16 +4,16 @@ the data-supplied labels for recalibrating that link
 Additive only (two nullable columns and a new table), so the previous image
 runs unchanged against the migrated schema.
 
-Revision ID: 0060
-Revises: 0059
+Revision ID: 0061
+Revises: 0060
 Create Date: 2026-10-17
 """
 from alembic import op
 import sqlalchemy as sa
 
 
-revision = '0060'
-down_revision = '0059'
+revision = '0061'
+down_revision = '0060'
 branch_labels = None
 depends_on = None
 
