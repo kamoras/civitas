@@ -1767,7 +1767,7 @@ class TimelineEntrySchema(CamelModel):
 
 class PublicRollCallPositionSchema(_PublicModel):
     last_name: str = Field(description="The member's surname as the chamber's record prints it (the House Clerk "
-                                       "adds the state where two members share one: \"Joyce (PA)\")")
+                                       "adds the state where two members share one: \"Doe (TX)\")")
     first_name: str | None = Field(description="As the Senate's record prints it; null on a House roll call")
     name: str | None = Field(description="A representative's own full name where Civitas has a page for them (the "
                                          "Clerk prints only a surname); null for a senator, whose record prints "
@@ -1900,8 +1900,21 @@ class PublicNominationSchema(_PublicModel):
     site_url: str = _SITE_URL
 
 
+class PublicNominationBackfillSchema(_PublicModel):
+    complete: bool = Field(description="Whether the daily read has reached every nomination of the Congress. "
+                                       "False: total and every count are of the nominations read so far (the "
+                                       "oldest updates first), not the Congress's whole number")
+    read: int = Field(description="Nominations read so far")
+    expected: int | None = Field(description="About how many the Congress has, as Congress.gov counts them; null "
+                                             "before the first read")
+    nights_left: int | None = Field(description="Daily reads expected before the rest are in; null when complete "
+                                                "or unknown")
+
+
 class PublicNominationPageSchema(_PublicModel):
     congress: int
+    backfill: PublicNominationBackfillSchema = Field(description="Whether the list is the Congress's whole record "
+                                                                 "yet")
     total: int
     page: int
     per_page: int

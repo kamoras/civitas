@@ -98,6 +98,7 @@ from app.state_names import STATE_NAMES
 from app.time_utils import comment_period_today
 from app.services.pagination import paginate_bounds
 from app.api.agencies import children_of, descendants, document_counts
+from app.ordinals import ordinal
 from app.services import court_service, nomination_service
 from app.services.bill_record import bill_votes, canonical_bill_id, party_breakdown, vote_detail
 from app.services.explore_keys import public_key
@@ -948,6 +949,28 @@ def get_bill_votes(
 # ---------------------------------------------------------------------------
 
 _NO_ROLL_CALL = "No roll call recorded with that chamber, Congress, session and number"
+_ROLL_CALL_404 = {404: {"description": "No roll call recorded with that number in a Congress Civitas holds; or, for "
+                                       "a Congress it doesn't hold, a detail saying so and which Congresses it "
+                                       "holds (not held, which is not none)"}}
+
+
+def _roll_call_or_404(db: Session, chamber: str, congress: int, session: int, number: int) -> RollCall:
+    """The stored roll call, or a 404 that says which absence it is: a
+    Congress Civitas doesn't hold is "not held" with the window it does
+    hold (the rule congress_service.bill_coverage states for pages), never
+    "no roll call recorded"."""
+    held = roll_call_congresses(db)
+    if congress not in held:
+        window = (f"Civitas holds roll calls from the {ordinal(held[0])} Congress on" if held
+                  else "Civitas holds no roll calls yet")
+        raise HTTPException(status_code=404, detail=(
+            f"Not held: {window}, so this {ordinal(congress)} Congress roll call isn't held here. The chamber's "
+            "own record has it (Senate.gov or the House Clerk)."))
+    rc = db.query(RollCall).filter_by(chamber=chamber, congress=congress, session=session,
+                                      number=number).one_or_none()
+    if rc is None:
+        raise HTTPException(status_code=404, detail=_NO_ROLL_CALL)
+    return rc
 _RollCallChamber = Literal["senate", "house"]
 
 
@@ -958,7 +981,7 @@ def _tallied(rc: dict, congress: int | None = None) -> dict:
 
 
 @router.get("/roll-calls/{chamber}/{congress}/{session}/{number}", response_model=PublicRollCallDetailSchema,
-            responses={404: {"description": _NO_ROLL_CALL}}, tags=["Roll calls"],
+            responses=_ROLL_CALL_404, tags=["Roll calls"],
             summary="One roll call, with every member's position")
 def get_roll_call(
     _rl: PublicReadLimit,
@@ -974,11 +997,7 @@ def get_roll_call(
     gives them and their Civitas id where Civitas has a page for them. A
     member's votes across roll calls: /senators/{id}/votes and
     /representatives/{id}/votes."""
-    rc = db.query(RollCall).filter_by(chamber=chamber, congress=congress, session=session,
-                                      number=number).one_or_none()
-    if rc is None:
-        raise HTTPException(status_code=404, detail=_NO_ROLL_CALL)
-    d = vote_detail(db, rc)
+    d = vote_detail(db, _roll_call_or_404(db, chamber, congress, session, number))
     positions = [{
         "lastName": m["lastName"], "firstName": m["firstName"], "name": m["name"], "party": m["party"],
         "state": m["state"], "district": m["district"], "position": m["position"], "bucket": m["bucket"],
@@ -1062,8 +1081,8 @@ def list_presidents(_rl: PublicReadLimit, request: Request, db: Session = Depend
 def get_president_record(
     _rl: PublicReadLimit,
     request: Request,
-    president_id: str = Path(description="The president's id, as in their Civitas URL (name and number, e.g. "
-                                         "lincoln-16)"),
+    president_id: str = Path(description="The president's id, as in their Civitas URL (surname and number, as "
+                                         "/presidents lists it, e.g. doe-52)"),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     """The president's scores, term, approval, economic figures and executive
@@ -1171,14 +1190,19 @@ def list_nominations(
     """The Congress's nominations as Congress.gov records them, newest action
     first, with each one's status and days from receipt to confirmation.
     Read daily; until the first full read of a Congress, the list is the
-    part read so far."""
+    part read so far, and `backfill.complete` is false."""
     congress = congress or settings.CURRENT_CONGRESS
     first = nomination_service.list_nominations(db, congress, status=status, kind=kind, page=1, per_page=per_page)
     total_pages, page = _paged(first["total"], page, per_page)
     found = first if page == 1 else nomination_service.list_nominations(
         db, congress, status=status, kind=kind, page=page, per_page=per_page)
     return _pub_json({
-        "congress": congress, "total": found["total"], "page": page, "perPage": per_page, "totalPages": total_pages,
+        "congress": congress,
+        # Until the daily read has reached every nomination, the list is a
+        # sample: say so, so partial data never reads as the whole Congress.
+        "backfill": nomination_service.backfill(
+            db, congress, db.query(Nomination).filter(Nomination.congress == congress).count()),
+        "total": found["total"], "page": page, "perPage": per_page, "totalPages": total_pages,
         "entries": [_nomination(i) for i in found["items"]],
     }, request, max_age=CACHE_TTL_DETAIL_S)
 

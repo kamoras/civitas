@@ -1948,7 +1948,10 @@ counted, so the party-line figure can be checked against the record;
 `chamberRollCalls` is how many roll calls the chamber held. Every roll call the API gives carries `siteUrl`, its page, and
 `/roll-calls/{chamber}/{congress}/{session}/{number}` lists every member's
 position on it with the id the chamber's record gives them (bioguide in the
-House, LIS in the Senate) and their Civitas id where there is a page. The
+House, LIS in the Senate) and their Civitas id where there is a page. A roll call of a Congress Civitas
+doesn't hold is a 404 that says "Not held" with the Congresses held (never
+"no roll call recorded"), and `/nominations` carries `backfill.complete`, false
+while the daily read hasn't reached the whole Congress. The
 justices' case records carry the Supreme Court Database's and Oyez's
 non-commercial terms in their documentation (CC BY-NC).
 

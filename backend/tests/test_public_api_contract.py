@@ -134,9 +134,9 @@ def client(db_session, fixed_ranking, monkeypatch):
                             with_president=1, votes=1, expected=None),
     ])
     db_session.add_all([
-        President(id="adams-2", name="John Adams", party="F", number=2, term_start="1797-03-04",
+        President(id="example-2", name="Avery Example", party="F", number=2, term_start="1797-03-04",
                   term_end="1801-03-04", score_public_mandate=40, score_effectiveness=50, score_historical_legacy=60),
-        President(id="jefferson-3", name="Thomas Jefferson", party="DR", number=3, term_start="1801-03-04",
+        President(id="sample-3", name="Blair Sample", party="DR", number=3, term_start="1801-03-04",
                   term_end="1809-03-04", score_public_mandate=70, score_effectiveness=60, score_historical_legacy=80),
         President(id="placeholder-99", name="Pat Placeholder", party="R", number=99, term_start="2025-01-20",
                   is_current=True, score_public_mandate=55, score_effectiveness=50),
@@ -195,7 +195,7 @@ def _body(client, path, **params):
     ("/roll-calls/senate/119/1/5", {}, PublicRollCallDetailSchema),
     ("/roll-calls", {"chamber": "senate"}, PublicRollCallPageSchema),
     ("/presidents", {}, PublicPresidentListSchema),
-    ("/presidents/adams-2", {}, PublicPresidentSchema),
+    ("/presidents/example-2", {}, PublicPresidentSchema),
     ("/justices", {}, PublicJusticeListSchema),
     ("/justices/jane_q_placeholder", {}, PublicJusticeSchema),
     ("/justices/jane_q_placeholder/cases", {}, PublicJusticeCasesSchema),
@@ -324,7 +324,7 @@ def test_comment_url_only_while_the_period_is_open(client, db_session, monkeypat
 
 # A value for each path parameter, and the query a route can't answer without.
 _PATH_VALUES = {"senator_id": "S000001", "rep_id": "R000001", "bill_id": "HR.1", "chamber": "senate",
-                "congress": "119", "session": "1", "number": "5", "president_id": "adams-2",
+                "congress": "119", "session": "1", "number": "5", "president_id": "example-2",
                 "justice_id": "jane_q_placeholder", "citation": "PN12", "slug": "placeholder-department"}
 _REQUIRED_QUERY = {"search": {"q": "wildfire"}, "roll-calls": {"chamber": "senate"}}
 
@@ -557,8 +557,8 @@ def test_roll_calls_are_listed_newest_first_and_a_congress_not_held_says_so(clie
 
 def test_presidents_rank_the_former_and_list_a_sitting_one_unranked(client):
     entries = _body(client, "/presidents")["entries"]
-    assert [(e["id"], e["rank"]) for e in entries] == [("jefferson-3", 1), ("adams-2", 2), ("placeholder-99", None)]
-    assert entries[0]["siteUrl"].endswith("/politicians/jefferson-3")
+    assert [(e["id"], e["rank"]) for e in entries] == [("sample-3", 1), ("example-2", 2), ("placeholder-99", None)]
+    assert entries[0]["siteUrl"].endswith("/politicians/sample-3")
     assert _body(client, "/presidents/placeholder-99")["rank"] is None
 
 
@@ -583,6 +583,23 @@ def test_a_nomination_and_its_vote(client, db_session):
     assert detail["committee"] == {"code": "SSGA00", "name": "Placeholder Committee"}
     assert [rc["number"] for rc in detail["rollCalls"]] == [12]
     assert _body(client, "/nominations", status="pending")["entries"] == []
+
+
+def test_a_nominations_list_says_when_it_is_only_part_of_the_congress(client):
+    """Until the daily read has reached every nomination, the list is a
+    sample: backfill.complete says so (never read: no marker yet)."""
+    backfill = _body(client, "/nominations")["backfill"]
+    assert backfill["complete"] is False and backfill["read"] == 1
+
+
+def test_a_roll_call_of_a_congress_not_held_says_not_held(client):
+    """Not held, with the window held, never "no roll call recorded"
+    (the rule pages follow since #1064)."""
+    resp = client.get("/api/public/v1/roll-calls/senate/100/1/5")
+    assert resp.status_code == 404
+    assert resp.json()["detail"].startswith("Not held: Civitas holds roll calls from the 119th Congress on")
+    missing = client.get("/api/public/v1/roll-calls/senate/119/1/999")
+    assert missing.status_code == 404 and missing.json()["detail"].startswith("No roll call recorded")
 
 
 def test_agencies_and_open_comment_periods(client, monkeypatch):
