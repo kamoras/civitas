@@ -236,11 +236,14 @@ def _calibration(evaluation: dict) -> dict:
         "coverage95": evaluation["coverage95"],
         "coverage80Fundamentals": evaluation.get("coverage80Fundamentals"),
         "meanAbsError": evaluation["meanAbsError"],
-        "table": evaluation["calibration"],
+        # Party blind (model.calibration_table); None from a fit written
+        # before the bins changed, until its refit.
+        "table": evaluation["calibration"] if model.calibration_current(evaluation["calibration"]) else None,
         "seatTotals": evaluation["seatTotals"],
-        # Cycles whose Democratic seat count fell outside the central 90%
+        # Cycles whose seat count by party fell outside the central 90%
         # band that independent races would give (1.645 standard
-        # deviations): the measured reason the map adds up no total.
+        # deviations; in two-party races one party's miss is the other's):
+        # the measured reason the map adds up no total.
         "seatTotalsOutside90": sum(
             1 for t in evaluation["seatTotals"]
             if abs(t["actualDem"] - t["expectedDem"]) > 1.6448536269514722 * t["independentSd"]),

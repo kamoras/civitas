@@ -38,35 +38,144 @@ export function leanCountsSentence(c: LeanContext): string {
   return `${c.moreDemocratic} of ${c.of} ${c.unit} lean more Democratic, ${c.moreRepublican} more Republican${same}.`;
 }
 
-/** One square per seat of its kind, most Democratic-leaning first: those
- * leaning further Democratic, those level with this seat, this seat, then
- * those leaning further Republican. Tinted by which side of THIS seat they
- * lean, not by party, and this seat in ink. */
-function LeanSquares({ context }: { context: LeanContext }) {
-  const cells = [
-    ...Array<string>(context.moreDemocratic).fill("bg-dem-blue/45"),
-    ...Array<string>(context.same).fill("bg-white/35"),
-    "bg-ink-hi outline outline-1 outline-offset-1 outline-ink-hi",
-    ...Array<string>(context.moreRepublican).fill("bg-rep-red/45"),
-  ];
-  const cols =
-    context.unit === "states"
-      ? "grid-cols-[repeat(25,minmax(0,1fr))] sm:grid-cols-[repeat(50,minmax(0,1fr))]"
-      : "grid-cols-[repeat(58,minmax(0,1fr))]";
+/** Every seat of its kind on one left-to-right axis of lean against the
+ * nation, most Democratic at the left: a column per figure, one mark per
+ * seat stacked in it, this seat's column outlined and labelled. Marks are
+ * tinted by the sign of each seat's OWN lean (blue D, red R, grey EVEN),
+ * and the EVEN line and the D+/R+ end labels say the same without colour.
+ * One SVG scaled to the width, so it is one row at any width: it was a
+ * grid of squares that wrapped into rows (58 a row, 25 on a phone), which
+ * broke the axis the labels under it described, and tinted seats by which
+ * side of THIS seat they fell, so a D+19 seat showed a sea of red.
+ * Every figure is the backend's (leanContext.distribution). */
+const AXIS_W = 1000;
+const AXIS_H = 60;
+
+function LeanAxis({ context, seatLabel }: { context: LeanContext; seatLabel: string }) {
+  const dist = context.distribution;
+  if (!dist?.length) return null;
+  const lo = dist[0].lean;
+  const hi = dist[dist.length - 1].lean;
+  const colW = AXIS_W / (hi - lo + 1);
+  const tallest = Math.max(...dist.map((d) => d.count));
+  const markH = AXIS_H / tallest;
+  const at = (lean: number) => ((lean - lo + 0.5) * colW) / AXIS_W;
+  const seat = at(context.seatLean);
+  const even = lo <= 0 && hi >= 0 ? at(0) : null;
+  const tint = (lean: number) =>
+    lean < 0 ? "fill-dem-blue" : lean > 0 ? "fill-rep-red" : "fill-ink-lo";
+  const summary = `Every ${context.unit === "states" ? "state" : "district"}'s lean, from ${dist[0].label} to ${dist[dist.length - 1].label}; this seat, ${seatLabel}, marked. ${leanCountsSentence(context)}`;
   return (
-    <div role="img" aria-label={leanCountsSentence(context)} className="mt-2">
-      <div className={`grid gap-[2px] ${cols}`} aria-hidden="true">
-        {cells.map((cls, i) => (
-          <span key={i} className={`aspect-square ${cls}`} />
-        ))}
+    <div className="mt-3">
+      <div role="img" aria-label={summary} data-testid="lean-axis">
+        <div
+          className="relative h-5 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-hi"
+          aria-hidden="true"
+        >
+          <span
+            className="absolute bottom-0 whitespace-nowrap"
+            // The ▼ over the seat's column: half its width back past the edge.
+            style={
+              seat <= 0.5
+                ? { left: `${seat * 100}%`, transform: "translateX(-0.3em)" }
+                : { right: `${(1 - seat) * 100}%`, transform: "translateX(0.3em)" }
+            }
+          >
+            {seat <= 0.5 ? `▼ this seat · ${seatLabel}` : `this seat · ${seatLabel} ▼`}
+          </span>
+        </div>
+        <svg
+          viewBox={`0 0 ${AXIS_W} ${AXIS_H}`}
+          preserveAspectRatio="none"
+          className="block h-12 w-full"
+          aria-hidden="true"
+        >
+          {dist.map((d) =>
+            Array.from({ length: d.count }, (_, k) => (
+              <rect
+                key={`${d.lean}-${k}`}
+                data-lean={d.lean}
+                className={tint(d.lean)}
+                x={(d.lean - lo) * colW + colW * 0.1}
+                width={colW * 0.8}
+                y={AXIS_H - (k + 1) * markH + markH * 0.1}
+                height={markH * 0.8}
+              />
+            ))
+          )}
+          {even != null && (
+            <line
+              x1={even * AXIS_W}
+              x2={even * AXIS_W}
+              y1={0}
+              y2={AXIS_H}
+              className="stroke-ink-min"
+              strokeDasharray="3 3"
+              vectorEffect="non-scaling-stroke"
+            />
+          )}
+          <rect
+            data-seat
+            x={(context.seatLean - lo) * colW}
+            width={colW}
+            y={0}
+            height={AXIS_H}
+            className="fill-none stroke-ink-hi"
+            strokeWidth={2}
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
+        <div
+          className="relative mt-1 flex justify-between gap-2 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-min"
+          aria-hidden="true"
+        >
+          <span>← {dist[0].label}</span>
+          {even != null && even > 0.2 && even < 0.8 && (
+            <span className="absolute -translate-x-1/2" style={{ left: `${even * 100}%` }}>
+              EVEN
+            </span>
+          )}
+          <span>{dist[dist.length - 1].label} →</span>
+        </div>
       </div>
-      <div
-        className="mt-1 flex justify-between font-mono text-[10px] uppercase tracking-[0.12em] text-ink-min"
-        aria-hidden="true"
-      >
-        <span>← more Democratic</span>
-        <span>more Republican →</span>
-      </div>
+      <details className="mt-2" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
+        <summary className="inline-flex min-h-6 cursor-pointer items-center font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos">
+          Seats at each lean, as a table
+        </summary>
+        <div
+          role="region"
+          aria-label={`${context.unit === "states" ? "States" : "Districts"} at each lean`}
+          tabIndex={0}
+          className="mt-1 max-h-48 overflow-y-auto"
+        >
+          <table className="font-mono text-xs text-ink-lo">
+            <thead>
+              <tr>
+                <th scope="col" className="pr-6 text-left font-normal text-ink-min">
+                  Lean
+                </th>
+                <th scope="col" className="text-right font-normal text-ink-min">
+                  {context.unit === "states" ? "States" : "Districts"}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {dist.map((d) => (
+                <tr
+                  key={d.lean}
+                  className={d.lean === context.seatLean ? "text-ink-hi" : undefined}
+                >
+                  <td className="pr-6">
+                    {d.label}
+                    {d.lean === context.seatLean ? " (this seat)" : ""}
+                  </td>
+                  <td className="text-right">{d.count}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
     </div>
   );
 }
@@ -193,7 +302,7 @@ export default function RaceContext({
         {lean && usual && (
           <Row label={`The seat · ${usual.label}`}>
             {leanSentence(usualPoints(usual.label), lean.unit)} {leanCountsSentence(lean)}
-            <LeanSquares context={lean} />
+            <LeanAxis context={lean} seatLabel={usual.label} />
             <p className="mt-2 text-[13px]">
               {usual.source === "computed"
                 ? `Computed by Civitas from open precinct returns, on this election's district lines: the figure the ${race.cycleYear} map shows, used in no score.`
@@ -214,7 +323,7 @@ export default function RaceContext({
         {lean && !usual && race.pvi != null && (
           <Row label={`The seat · Cook PVI ${formatPvi(race.pvi)}`}>
             {leanSentence(race.pvi, lean.unit)} {leanCountsSentence(lean)}
-            <LeanSquares context={lean} />
+            <LeanAxis context={lean} seatLabel={formatPvi(race.pvi)} />
             <p className="mt-2 text-[13px]">
               Cook&apos;s figure: Civitas has no computed lean for this seat on these lines.
             </p>
