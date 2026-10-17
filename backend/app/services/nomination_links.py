@@ -29,8 +29,8 @@ def _name(n: dict) -> str:
     return f"{full} ({n['state']})" if n.get("state") else full
 
 
-def nominee_names(row: Nomination, limit: int = LIST_NAMES) -> list[str]:
-    """The first `limit` nominees as published: "Jane Q. Doe (TX)"."""
+def nominee_names(row: Nomination, limit: int | None = LIST_NAMES) -> list[str]:
+    """The first `limit` nominees (every one for None) as published: "Jane Q. Doe (TX)"."""
     names = [n for p in json.loads(row.nominees or "[]") for n in p.get("names", [])]
     return [_name(n) for n in names[:limit]]
 

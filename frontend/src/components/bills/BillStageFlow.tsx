@@ -59,7 +59,7 @@ export default function BillStageFlow({
               onClick={() => onSelectStage(isActive ? null : code)}
               aria-pressed={isActive}
               title={`${info?.name ?? code}: ${count.toLocaleString()} bill${count === 1 ? "" : "s"} (${share}% of all bills tracked)`}
-              className={`group -mx-2 flex items-center gap-3 border-l-2 px-2 py-1.5 text-left transition-colors ${
+              className={`group -mx-2 flex flex-wrap items-center gap-x-3 gap-y-1 border-l-2 px-2 py-1.5 text-left transition-colors ${
                 isActive ? `bg-white/5 ${style.rule}` : "border-l-transparent hover:bg-white/[0.03]"
               }`}
             >
@@ -71,14 +71,17 @@ export default function BillStageFlow({
                   COMMI…". `truncate` stays as a guard for a longer stage name
                   arriving from /config, not as the normal case. */}
               <span
-                className={`w-40 shrink-0 truncate text-xs font-mono uppercase tracking-wider ${
+                className={`w-40 max-w-full shrink-0 truncate text-xs font-mono uppercase tracking-wider ${
                   isActive ? style.text : "text-ink-lo"
                 }`}
               >
                 {info?.name ?? code}
               </span>
 
-              <span className="relative flex-1 h-3.5 bg-phos/[0.06] overflow-hidden">
+              {/* min-w-24 with the row's flex-wrap: at a large text size the
+                  bar and count drop under the label instead of pushing the
+                  row 156 px past a phone (200% text). */}
+              <span className="relative min-w-24 flex-1 h-3.5 bg-phos/[0.06] overflow-hidden">
                 <span
                   className={`absolute inset-y-0 left-0 transition-[width] duration-300 ${style.bar} ${
                     isActive ? "opacity-100" : "opacity-75"

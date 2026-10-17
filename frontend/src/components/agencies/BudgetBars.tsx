@@ -18,9 +18,12 @@ export function BudgetBar({ row }: { row: Row }) {
   );
   return (
     <li className="py-1.5">
-      <div className="flex items-baseline justify-between gap-3 text-sm">
+      {/* Wraps: the figure moves under the name when both don't fit, and
+          wraps itself ("FY2026 not yet reported · ..." ran past a phone at
+          200% text when it couldn't shrink). */}
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
         <span className="min-w-0 break-words">{name}</span>
-        <span className="shrink-0 font-mono text-xs tabular-nums text-ink-lo">
+        <span className="ml-auto font-mono text-xs tabular-nums text-ink-lo">
           {row.reported ? (
             <>
               {money(row.budgetAuthority)}

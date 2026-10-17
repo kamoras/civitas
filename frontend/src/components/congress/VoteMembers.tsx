@@ -121,7 +121,7 @@ export default function VoteMembers({
   return (
     <div className="flex flex-col gap-4">
       {states.length > 1 && (
-        <label className="flex w-fit flex-col gap-1 font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
+        <label className="flex w-fit max-w-full flex-col gap-1 font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
           State
           <select
             value={state}
@@ -148,7 +148,7 @@ export default function VoteMembers({
           {showAll ? "Hide the names" : `Show all ${members.length} members' votes`}
         </button>
       )}
-      <div id={listId} className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      <div id={listId} className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
         {groups.map(({ key, label, tone, has }) => {
           const group = shown.filter(has);
           if (!group.length) return null;

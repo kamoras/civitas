@@ -142,9 +142,9 @@ def compose(kind: str, race: Race, d: dict, budget: int = MAX_POST_CHARS) -> str
         # bar for raising one — has nothing to correct, and "no longer
         # shows the seat changing party" said then was false.
         if leader and d.get("heldBy") and leader.get("party") == d.get("heldBy"):
-            head = f"Update on {label}: {_who(leader)} is ahead again, so the seat no longer shows a change of party"
+            head = f"{label}: {_who(leader)} is ahead again, so the seat no longer shows a change of party"
         elif not leader and (d.get("votesCounted") or 0) > 0:
-            head = f"Update on {label}: the count is now tied, so the seat no longer shows a change of party"
+            head = f"{label}: the count is now tied, so the seat no longer shows a change of party"
         else:
             return None
         # A count the state hasn't listed as official says so, as every

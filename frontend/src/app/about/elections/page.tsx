@@ -108,15 +108,18 @@ export default async function ElectionsChapter() {
           <strong>The seat.</strong> Its lean is the figure the election map shows, computed by
           Civitas with Cook&apos;s formula (Cook&apos;s own PVI is shown beside it as a
           cross-check): how much more Republican or Democratic it voted than the nation in the last
-          two presidential elections. Beside it, one square for every seat of its kind, from the
-          most Democratic-leaning to the most Republican: every U.S. House district on the lines
-          this election is fought on, or the 50 states for a Senate race. The count of seats leaning
-          further each way is worked out on the server from the same table the lean comes from. A
-          district that only has its state&apos;s figure is not placed among districts, and from
-          election day the lean is not shown at all, so that it can&apos;t be read as a call on the
-          count. A House district&apos;s figure is computed from precinct returns and used in no
-          score (<A href="/about/data#computed-lean">how it is computed</A>); where Civitas has
-          none, the page shows Cook&apos;s, labelled as Cook&apos;s.
+          two presidential elections. Under it, every seat of its kind on one axis of lean against
+          the nation, from the most Democratic-leaning at the left, through EVEN, to the most
+          Republican: every U.S. House district on the lines this election is fought on, or the 50
+          states for a Senate race. Each seat is one mark, stacked with the seats of the same lean,
+          coloured by the side its own lean falls on, and this seat&apos;s column is outlined; the
+          same counts are in a table beside it. The count of seats leaning further each way, and
+          every seat&apos;s lean on the axis, are worked out on the server from the same table the
+          lean comes from. A district that only has its state&apos;s figure is not placed among
+          districts, and from election day the lean is not shown at all, so that it can&apos;t be
+          read as a call on the count. A House district&apos;s figure is computed from precinct
+          returns and used in no score (<A href="/about/data#computed-lean">how it is computed</A>);
+          where Civitas has none, the page shows Cook&apos;s, labelled as Cook&apos;s.
         </P>
         <P>
           <strong>The money.</strong> Each candidate&apos;s contributions are split into the
@@ -158,14 +161,17 @@ export default async function ElectionsChapter() {
           attributed to Silver Bulletin as its terms ask), refitted automatically when a new copy of
           that archive passes Civitas&apos;s checks, and checked on election cycles the fit never
           saw, including the newest cycle predicted from the earlier ones alone; the map&apos;s own
-          method section shows how often its ranges held the result, and why there is no seat total.
-          The archive&apos;s polls reach only the final weeks before election day, so further out
-          the map shows each seat&apos;s structural range alone, labelled fundamentals only, with
-          its polls listed beside it. It has nothing to do with Representation Scores, which measure
-          a member&apos;s record, not an election. Only Democrat-versus-Republican races whose
-          November ballot Civitas has confirmed get a range. The House fit covers every cycle from
-          2018 whose House results the FEC has compiled, with each district&apos;s lean rebuilt from
-          precinct returns as it stood before each election, on the lines it was held on.
+          method section opens with a short summary and keeps the full method behind a disclosure:
+          how often its ranges held the result, a calibration table that treats both parties the
+          same way (when a range leaned one way by this much, how often that side carried the seat),
+          and why there is no seat total. The archive&apos;s polls reach only the final weeks before
+          election day, so further out the map shows each seat&apos;s structural range alone,
+          labelled fundamentals only, with its polls listed beside it. It has nothing to do with
+          Representation Scores, which measure a member&apos;s record, not an election. Only
+          Democrat-versus-Republican races whose November ballot Civitas has confirmed get a range.
+          The House fit covers every cycle from 2018 whose House results the FEC has compiled, with
+          each district&apos;s lean rebuilt from precinct returns as it stood before each election,
+          on the lines it was held on.
         </P>
         <P>
           This year&apos;s polls come from Wikipedia&apos;s race articles. The poll figures and the

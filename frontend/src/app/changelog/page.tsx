@@ -61,7 +61,7 @@ async function NewOnTheSite() {
           <li
             key={f.id}
             id={`new-${f.id}`}
-            className="grid gap-1 py-3 sm:grid-cols-[9rem_1fr] sm:gap-4"
+            className="grid grid-cols-1 gap-1 py-3 sm:grid-cols-[9rem_1fr] sm:gap-4"
           >
             <time
               dateTime={f.date}
@@ -191,7 +191,10 @@ export default function ChangelogPage() {
                 {CURRENT.map(
                   ({ family: f, version: v }) =>
                     v && (
-                      <div key={f} className="grid gap-1 py-3 sm:grid-cols-[13rem_1fr] sm:gap-4">
+                      <div
+                        key={f}
+                        className="grid grid-cols-1 gap-1 py-3 sm:grid-cols-[13rem_1fr] sm:gap-4"
+                      >
                         <dt className="font-mono text-xs uppercase tracking-[0.08em] text-signal-amber sm:pt-0.5">
                           {f}
                         </dt>

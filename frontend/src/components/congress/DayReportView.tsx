@@ -248,7 +248,7 @@ export default function DayReportView({
                 : null
             }
           />
-          <div className="mt-8 grid gap-8 md:grid-cols-2">
+          <div className="mt-8 grid grid-cols-1 gap-8 md:grid-cols-2">
             <FigureGroup name="Senate">
               <Figure
                 value={senate.counts.recordVotes}
@@ -294,7 +294,7 @@ export default function DayReportView({
               />
             </FigureGroup>
           </div>
-          <div className="mt-10 grid gap-12 md:grid-cols-2">
+          <div className="mt-10 grid grid-cols-1 gap-12 md:grid-cols-2">
             <ChamberColumn day={senate} />
             <ChamberColumn day={house} />
           </div>

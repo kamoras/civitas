@@ -56,7 +56,7 @@ def test_posts_the_newest_entry_in_the_template(db_session, setup):
     (post,) = _features(db_session)
     assert post.subject == "feature:new-map"
     assert post.title == "New on Civitas Research: A map"
-    assert sent == [("New on Civitas Research: A map. Each seat on a map.", "https://civitas-research.org/map")]
+    assert sent == [("New: A map. Each seat on a map.", "https://civitas-research.org/map")]
 
 
 def test_once_per_entry_and_one_a_day(db_session, setup, freeze_utcnow):
