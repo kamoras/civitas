@@ -25,14 +25,15 @@ describe("Masthead voter links", () => {
 });
 
 describe("Masthead with a state chosen in the header", () => {
-  it("goes straight to that state's members and ballot", () => {
+  it("goes straight to that state's members and ballot, named for it", () => {
     sessionStorage.setItem(YOUR_STATE_KEY, "OH");
     render(<Masthead />);
     const voters = screen.getByRole("navigation", { name: "For voters" });
     const href = (name: string) =>
       [...voters.querySelectorAll("a")].find((a) => a.textContent === name)!.getAttribute("href");
-    expect(href("YOUR MEMBERS")).toBe("/politicians?state=OH");
-    expect(href("YOUR BALLOT")).toBe("/elections/states/OH");
+    // Named for the state (2.4.4), not "your".
+    expect(href("OHIO'S MEMBERS")).toBe("/politicians?state=OH");
+    expect(href("OHIO'S BALLOT")).toBe("/elections/states/OH");
   });
 });
 
