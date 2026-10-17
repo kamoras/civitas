@@ -1586,9 +1586,25 @@ the publishers supply, never hand labels (`fit_broadcast_cut`): stored feed
 articles filed under a video section of their site (The Hill's
 `/video-clips/`, BBC's `/news/videos/`) against the same feeds' other
 articles, F1-maximising, because the labels are noisy (The Hill files some
-livestreams as news). A live blog ("Live updates:") is a report and is left
-alone. `articles_dropped_broadcast` and `clusters_only_broadcast` are the
-counters.
+livestreams as news). A live blog ("Live updates:") is a report and stays in
+its cluster, but one whose headline lists several stories — the kicker over
+two or more items naming disjoint entities (`_multi_story_headline`) — never
+titles an issue or lends it its headline claim: the issue takes the next
+single story's headline, and a cluster of nothing else waits for one (issue
+806, 2026-10-16, "Live updates: Zacharia exits White House post; Trump stumps
+for Collins in Georgia", put a second story on the page and kept it from
+matching the PBS-titled issue on the first). On 2,642 headlines the shape
+with a kicker was 20 of 20 live blogs; without one, 12 of 28 were single
+stories. When matching, a row titled that way is compared story by story
+(`_shared_source_title_sim`), and a shared article whose headline titled the
+existing issue matches it outright (`source_titles`); the duplicate pass
+never keeps such a row as its story's representative, and a current row it
+marks a duplicate of another current row leaves the Action Center
+(`issues_retired_duplicate`). A shared source alone still does not decide:
+of 97 stored pairs within two days sharing one, 62 had titles below
+`SHARED_SOURCE_TITLE_SIM`, all but 805/806 different stories from before
+the claim layer. `articles_dropped_broadcast`, `clusters_only_broadcast` and
+`clusters_only_multi_story` are the counters.
 
 This has to happen here because once several stories share one article the
 boundary between them is not recoverable later — cluster coherence filtering
