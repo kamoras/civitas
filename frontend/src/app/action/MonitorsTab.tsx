@@ -9,6 +9,8 @@ import { formatUtcDate, policyAreaLabel, safeHref } from "@/lib/formatting";
 import { SECTION_HEADING, TEXT_LINK } from "@/components/action/IssueEnrichment";
 import type { MonitorUpdate, NationalMonitor } from "@/lib/api";
 import { scrollBehavior } from "@/lib/motion";
+import FollowFeed from "@/components/shared/FollowFeed";
+import { monitorFeed } from "@/lib/site";
 
 /** "Sep 29 at 9:14 AM" from the update's own timestamp, else its date. */
 function updateTime(update: MonitorUpdate): string {
@@ -212,6 +214,11 @@ function MonitorRow({
           <p className="mt-2 font-mono text-xs tracking-[0.08em] text-ink-min">
             Tracking since {shortDate(monitor.createdAt)}
           </p>
+          <FollowFeed
+            className="mt-2"
+            subject="this monitor"
+            feed={monitorFeed(monitor.slug, monitor.title)}
+          />
           <MonitorUpdates slug={monitor.slug} title={monitor.title} />
         </div>
       )}

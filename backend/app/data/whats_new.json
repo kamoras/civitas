@@ -9,6 +9,13 @@
       "url": "/action?tab=monitors"
     },
     {
+      "id": "follow-one-thing",
+      "date": "2026-10-17",
+      "title": "Follow one member, bill, agency or story",
+      "summary": "Each member of Congress, bill, federal agency and tracked story has its own feed of votes, actions, rules and updates, so a reader can follow just one without an account.",
+      "url": "/feeds"
+    },
+    {
       "id": "comment-periods-rules-first",
       "date": "2026-10-17",
       "title": "Comment periods lead with rules",
