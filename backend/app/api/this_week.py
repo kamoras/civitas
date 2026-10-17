@@ -166,10 +166,9 @@ def _issues_by_document(db: Session, today: date) -> dict[int, str]:
     return out
 
 
-def comment_deadlines(db: Session) -> list[dict]:
-    """The next few comment deadlines worth a reader's time: rules an Action
-    Center issue cites first, then rules other documents cite, then any
-    other rule, each tier soonest deadline first."""
+def _open_rules(db: Session) -> tuple[str, list[tuple[int, ExploreDocument]], dict[int, str]]:
+    """Today on the deadline's own clock, every open rule with its tier
+    (templated series left out), and the issue citing each in the news."""
     today = comment_period_today()
     docs = db.query(ExploreDocument).filter(
         ExploreDocument.doc_type.in_(_RULE_TYPES),
@@ -187,20 +186,36 @@ def comment_deadlines(db: Session) -> list[dict]:
             return None
         return 1 if (d.cited_by_count or 0) > 0 else 2
 
-    ranked = sorted(
-        ((t, d) for d in docs if (t := tier(d)) is not None),
-        key=lambda td: (td[0], td[1].comments_close_on, td[1].id),
-    )
-    return [
-        {
-            "id": d.id, "key": public_key(d.external_id, d.id), "title": d.title, "docType": d.doc_type, "agencyName": d.agency_name,
-            "commentsCloseOn": d.comments_close_on, "commentUrl": d.comment_url,
-            "daysLeft": (date.fromisoformat(d.comments_close_on) - date.fromisoformat(today)).days,
-            "issueId": in_news.get(d.id),
-            "citedBy": (d.cited_by_count or 0) if t == 1 else 0,
-        }
-        for t, d in ranked[:DEADLINES_SHOWN]
-    ]
+    return today, [(t, d) for d in docs if (t := tier(d)) is not None], in_news
+
+
+def _deadline_row(t: int, d: ExploreDocument, today: str, in_news: dict[int, str]) -> dict:
+    return {
+        "id": d.id, "key": public_key(d.external_id, d.id), "title": d.title, "docType": d.doc_type, "agencyName": d.agency_name,
+        "commentsCloseOn": d.comments_close_on, "commentUrl": d.comment_url,
+        "daysLeft": (date.fromisoformat(d.comments_close_on) - date.fromisoformat(today)).days,
+        "issueId": in_news.get(d.id),
+        "citedBy": (d.cited_by_count or 0) if t == 1 else 0,
+    }
+
+
+def comment_deadlines(db: Session) -> dict:
+    """The comment deadlines worth a reader's time, and the next one.
+
+    ``worth``: rules an Action Center issue cites first, then rules other
+    documents cite, then any other rule, each tier soonest deadline first.
+    ``next``: the soonest of those same rules whatever its tier, a rule
+    closing today included (today is the deadline's own clock, Eastern):
+    the strip's "next comment deadline" is that one, not the first of
+    ``worth``, which named a rule four days out while two closed that day.
+    """
+    today, rules, in_news = _open_rules(db)
+    ranked = sorted(rules, key=lambda td: (td[0], td[1].comments_close_on, td[1].id))
+    soonest = min(rules, key=lambda td: (td[1].comments_close_on, td[0], td[1].id), default=None)
+    return {
+        "worth": [_deadline_row(t, d, today, in_news) for t, d in ranked[:DEADLINES_SHOWN]],
+        "next": _deadline_row(*soonest, today, in_news) if soonest else None,
+    }
 
 
 # ── Election ──────────────────────────────────────────────────────
@@ -226,8 +241,10 @@ def election(db: Session) -> dict:
 
 @router.get("/this-week")
 def this_week(db: Session = Depends(get_db)) -> JSONResponse:
+    deadlines = comment_deadlines(db)
     return cached_json({
         "election": election(db),
         "congress": congress_week(db),
-        "commentDeadlines": comment_deadlines(db),
+        "commentDeadlines": deadlines["worth"],
+        "nextCommentDeadline": deadlines["next"],
     }, max_age=_TTL_S)
