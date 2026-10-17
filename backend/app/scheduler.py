@@ -242,9 +242,80 @@ def triggered_chain(chain_id: int):
     from app.pipeline_chain import run_chain
 
     async def chain() -> None:
-        await run_chain(nightly_links(), reporter("Triggered"), busy=pipelines_running, chain_id=chain_id)
+        await run_chain(nightly_links(), reporter("Triggered"), busy=pipelines_running, chain_id=chain_id,
+                        name="Triggered")
 
     return chain
+
+
+# How old an interrupted chain may be and still be resumed: within a day,
+# every link before the one it was on ran within the day too, so if the
+# resumed chain is still going at the next nightly run (which then leaves
+# the night to it, as to a trigger), no pipeline's data is a day stale.
+RESUME_WITHIN = timedelta(days=1)
+
+
+def resume_interrupted_chain() -> None:
+    """At the pipeline process's start: resume a chain the last process died
+    in (app.pipeline_chain.take_cut), from the link it was on, which runs
+    again from its start (a killed run's row was swept stale). Once: a
+    resumed chain cut short again is alerted, not resumed — the link may be
+    what kills the process. Not one older than RESUME_WITHIN (the nightly
+    run has the data by then), nor one whose link this release no longer
+    has. A deploy never lands here mid-chain (check-and-deploy.sh waits for
+    pipelineChainIsRunning) unless the chain was wedged — and resuming the
+    wedged link once on the release that fixes it is what's wanted."""
+    from app.ops_alerts import send_ops_alert
+    from app.pipeline_chain import claim, release, run_chain, take_cut
+
+    cut = take_cut()
+    if cut is None:
+        return
+    links = nightly_links()
+    labels = [link.label for link in links]
+    where = f"The {cut.name.lower()} pipeline chain started {cut.started_at:%Y-%m-%d %H:%M} UTC"
+    if cut.link not in labels:
+        logger.warning("%s was cut short in a %s link this release doesn't have — not resumed", where, cut.link)
+        return
+    if cut.resumed:
+        send_ops_alert(
+            "Resumed pipeline chain cut short again",
+            f"{where} was cut short by a restart, resumed, and cut short again in its {cut.link} link: "
+            f"it is not resumed a second time, since the {cut.link} run may be what stops the process "
+            "(memory, a health-check kill). Pipelines from that link on did not run; the next nightly run "
+            "tries them.",
+            dedupe_key=f"chain-cut-again-{cut.started_at:%Y-%m-%d}",
+            condition="chain-cut-again",
+        )
+        return
+    if utcnow() - cut.started_at > RESUME_WITHIN:
+        logger.info("%s was cut short in its %s link over a day ago — left to the nightly run", where, cut.link)
+        return
+    chain_id = claim()
+    if chain_id is None:  # Nothing else runs this early in the process: defensive.
+        logger.warning("%s was cut short in its %s link; another chain holds the slot — not resumed",
+                       where, cut.link)
+        return
+    logger.warning("%s was cut short by a restart in its %s link — resuming it from there", where, cut.link)
+    rest = links[labels.index(cut.link):]
+
+    def _run() -> None:
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(run_chain(
+                rest, reporter("Resumed"), busy=pipelines_running, chain_id=chain_id, name=cut.name,
+                started_at=cut.started_at, resumed=True,
+            ))
+        except BaseException:
+            logger.exception("Resumed pipeline chain stopped")
+        finally:
+            loop.close()
+
+    try:
+        start_writer(_run, name="resumed-pipeline-chain")
+    except WritesHeld as held:
+        release(chain_id)
+        logger.warning("%s was cut short in its %s link; not resumed: %s", where, cut.link, held)
 
 
 def _nightly_pipeline() -> None:
@@ -308,7 +379,9 @@ def _nightly_pipeline() -> None:
         try:
             # None: a triggered chain is running the same five pipelines,
             # and reports them — tonight is left to it.
-            if loop.run_until_complete(run_chain(nightly_links(), reporter("Nightly"), busy=pipelines_running)) is not None:
+            if loop.run_until_complete(run_chain(
+                nightly_links(), reporter("Nightly"), busy=pipelines_running, name="Nightly",
+            )) is not None:
                 # The whole chain's alert, from before each link had its own.
                 resolve_ops_alert("nightly-crashed")
         except BaseException as e:
