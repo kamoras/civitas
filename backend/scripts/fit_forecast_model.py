@@ -66,13 +66,13 @@ Run from the repo (network on the first run, cached):
 from __future__ import annotations
 
 import argparse
+import asyncio
 import csv
 import io
 import json
 import re
 import sys
 import unicodedata
-import urllib.request
 import zipfile
 from collections import defaultdict
 from difflib import SequenceMatcher
@@ -87,8 +87,11 @@ from app.atomic_write import runtime_data_path  # noqa: E402
 from app.contact import BOT_USER_AGENT  # noqa: E402
 from app.forecast import model  # noqa: E402
 from app.forecast import training_polls as tp  # noqa: E402
+from app.http_client import make_async_client  # noqa: E402
 from app.pipeline.fetch.election_results import ranked_choice_states  # noqa: E402
+from app.pipeline.fetch.http_utils import DEFAULT_MAX_RETRIES, fetch_with_retry  # noqa: E402
 from app.pipeline.fetch.state_candidates_tabular import _xlsx_rows, xlsx_sheet_as_first  # noqa: E402
+from app.pipeline.rate_limiter import RateLimiter  # noqa: E402
 from app.state_names import STATE_NAMES  # noqa: E402
 
 DATA = Path(__file__).resolve().parents[1] / "app" / "data"
@@ -119,11 +122,29 @@ CLERK = "https://clerk.house.gov"
 CLERK_ELECTION_INFO = CLERK + "/Members/ViewElectionInformation"
 
 
+# Every download goes through the backend's retrying fetch: a dropped
+# connection (the FEC's bulk files did it twice in one refit, 2026-10-17)
+# is retried with backoff instead of failing the whole refit.
+_LIMITER = RateLimiter(2.0, name="fit_forecast_model")
+DOWNLOAD_TIMEOUT_S = 120.0
+
+
+def download(url: str) -> bytes:
+    """The body at `url`, retried with backoff (http_utils.fetch_with_retry);
+    stops the run once the retries are spent, never returning an empty body."""
+    async def get() -> bytes | None:
+        async with make_async_client(headers={"User-Agent": BOT_USER_AGENT}) as client:
+            resp = await fetch_with_retry(client, _LIMITER, "GET", url, timeout=DOWNLOAD_TIMEOUT_S)
+            return None if resp is None else resp.content
+    body = asyncio.run(get())
+    if body is None:
+        raise SystemExit(f"{url}: no answer after {DEFAULT_MAX_RETRIES} attempts")
+    return body
+
+
 def fetch(url: str, dest: Path) -> bytes:
     if not dest.exists():
-        req = urllib.request.Request(url, headers={"User-Agent": BOT_USER_AGENT})
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            dest.write_bytes(resp.read())
+        dest.write_bytes(download(url))
     return dest.read_bytes()
 
 
@@ -131,10 +152,7 @@ def medsl_file(doi: str) -> tuple[str, str]:
     """(download URL, file name) of the data file in the newest version of a
     MEDSL Dataverse dataset: the one named for its year span
     ("1976-2024-senate-state"), in its original format."""
-    req = urllib.request.Request(f"{DATAVERSE}/api/datasets/:persistentId/?persistentId={doi}",
-                                 headers={"User-Agent": BOT_USER_AGENT})
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        version = json.loads(resp.read())["data"]["latestVersion"]
+    version = json.loads(download(f"{DATAVERSE}/api/datasets/:persistentId/?persistentId={doi}"))["data"]["latestVersion"]
     for f in version["files"]:
         df = f["dataFile"]
         name = df.get("originalFileName") or df["filename"]
