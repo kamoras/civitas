@@ -33,10 +33,12 @@ from app.schemas import (
     STOCK_ACT_DISCLOSURE_DEADLINE_DAYS,
 )
 from app.services._scorecard_common import (
+    latest_snapshot,
     pac_share_pct,
     party_line_counts,
     related_votes,
     score_breakdown,
+    score_method,
     vote_period_start,
     vote_search,
 )
@@ -123,6 +125,7 @@ def build_rep_response(rep: Representative, _db: Session = None) -> Representati
     initials = _compute_initials(rep.name) or rep.initials
 
     return RepresentativeSchema(
+        **(score_method(latest_snapshot(_db, "representative", rep.id)) if _db is not None else {}),
         id=rep.id,
         name=rep.name,
         bioguide_id=rep.bioguide_id,
