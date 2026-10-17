@@ -41,7 +41,7 @@ export default function ContestBox({
           {subtitle && <p className="mt-0.5 text-[13px] text-ink-lo">{subtitle}</p>}
         </div>
         {(instruction || shareId) && (
-          <span className="flex shrink-0 items-center gap-3">
+          <span className="flex flex-wrap items-center gap-3">
             {instruction && <span className="font-mono text-xs text-ink-lo">{instruction}</span>}
             {shareId && <ShareSectionButton label={title} anchor={shareAnchor ?? null} />}
           </span>
