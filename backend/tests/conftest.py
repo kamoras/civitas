@@ -577,9 +577,23 @@ def _fast_tests_offline():
 
 
 @pytest.fixture(autouse=True)
-def _slow_test_running(request):
+def _slow_test_running(request, monkeypatch):
+    """Whether the test now running may load the real model, and, for a
+    fast test, no model a slow test already loaded: vector_store keeps the
+    loaded model in a module global, so the guard above (which refuses to
+    construct one) let a fast test that ran after a slow test in the same
+    process use the real model anyway. The Action Center's candidate-pool
+    tests then had their claims judged restatements of each other by the
+    real similarity model and published nothing, after
+    test_broadcast_kicker's real-model test, and passed alone. Hidden for
+    the fast test only; slow tests keep reusing the loaded model."""
     global _SLOW_TEST_RUNNING
     _SLOW_TEST_RUNNING = request.node.get_closest_marker("slow") is not None
+    if not _SLOW_TEST_RUNNING:
+        from app.pipeline import vector_store
+
+        monkeypatch.setattr(vector_store, "_model", None)
+        monkeypatch.setattr(vector_store, "_similarity_model", None)
     yield
     _SLOW_TEST_RUNNING = False
 

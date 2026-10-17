@@ -374,7 +374,7 @@ export default function StateResults({
         )
       )}
       {houseRows.length > 0 && races.length > 0 && (
-        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_26rem]">
+        <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_26rem]">
           <section
             aria-labelledby="house-results-heading"
             className="min-w-0 border border-white/[0.09] bg-surface"
