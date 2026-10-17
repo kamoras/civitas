@@ -217,3 +217,63 @@ def test_matching_lives_outside_the_fingerprinted_code():
             if isinstance(node, ast.ImportFrom):
                 assert node.module != "app.roll_call_links", py
                 assert not (node.module == "app" and any(a.name == "roll_call_links" for a in node.names)), py
+
+
+def test_names_are_masked_in_both_texts_and_left_out_of_what_is_compared():
+    mask = rcl.NameMask(["Jane Q. Doe", "ROE, RICHARD A", "Ann Example"], president="Donald J. Trump")
+    assert mask("Jane Doe confirmed; Richard Roe objects") == "[name] confirmed; [name] objects"
+    assert mask("Jane Q. Doe, of Ohio, to be Attorney General") == "[name], of Ohio, to be Attorney General"
+    assert mask("Trump's plan") == "[name]'s plan"
+    # A bare surname other than the sitting president's is a word or someone else.
+    assert mask("Doe and Example") == "Doe and Example"
+    assert rcl.story_text("[name] confirmed as attorney general") == "confirmed as attorney general"
+    assert rcl.roll_call_text("On the Nomination PN1", "[name], of Ohio, to be Attorney General") == (
+        ", of Ohio, to be Attorney General")
+
+
+def test_no_checked_in_example_names_a_person_the_site_records(db_session):
+    """The examples are masked (AGENTS.md: no named politicians in checked-in
+    files); every name NameMask would mask is already a mask."""
+    ex = rcl.examples()
+    mask = rcl.NameMask(["Donald J. Trump"], president="Donald J. Trump")
+    texts = [t for i in ex["items"] for t in (i["title"], i["summary"])]
+    texts += [t for v in ex["roll_calls"].values() for t in (v["title"], v.get("purpose") or "")]
+    assert all(mask(t) == t for t in texts)
+    assert sum("[name]" in t for t in texts) > 100
+
+
+def test_each_newly_matched_story_with_a_vote_in_its_window_is_counted_for_drift(db_session, monkeypatch):
+    seen = []
+    monkeypatch.setattr(rcl.calibration_drift, "observe", lambda gate, scores, t: seen.append((gate, list(scores), t)))
+    _vote(db_session, 244, "2026-09-24", "Remove Armed Forces from hostilities with Iran")
+    db_session.add_all([
+        ActionIssue(date="2026-09-24", rank=1, title="Iran war vote", summary="s"),
+        ActionIssue(date="2026-06-01", rank=1, title="No votes that week", summary="s"),
+    ])
+    db_session.flush()
+    rcl.refresh_links(db_session, "2026-09-26", encode=_FAKE, cal=_CAL)
+    assert seen == [("roll_call_links", [1.0], 0.5)]
+    # The hourly recheck of an already matched story is not counted again.
+    rcl.refresh_links(db_session, "2026-09-26", encode=_FAKE, cal=_CAL)
+    assert seen[-1] == ("roll_call_links", [], 0.5)
+    assert "roll_call_links" in rcl.calibration_drift.GATES
+
+
+def test_a_structural_link_is_kept_as_a_data_supplied_label(db_session):
+    from app.models import RollCallLinkLabel
+
+    _vote(db_session, 250, "2026-09-28", "A bill to protect student athletes")
+    db_session.query(RollCall).filter_by(number=250).update({"bill_id": "S.4668"})
+    _vote(db_session, 251, "2026-09-28", "Establishing the congressional budget")
+    issue = ActionIssue(date="2026-09-29", rank=1, title="Senate passes the college sports bill", summary="s",
+                        related_bill_ids=json.dumps([{"id": "S.4668", "congress": 119, "name": "S. 4668"}]))
+    plain = ActionIssue(date="2026-09-29", rank=1, title="Another story", summary="s")
+    db_session.add_all([issue, plain])
+    db_session.flush()
+
+    rcl.refresh_links(db_session, "2026-09-30", encode=_FAKE, cal=_CAL)
+
+    (label,) = db_session.query(RollCallLinkLabel).all()
+    assert label.issue_id == issue.id and label.source == "bill_named"
+    assert json.loads(label.related) == ["senate-119-2-250"]
+    assert set(json.loads(label.candidates)) == {"senate-119-2-250", "senate-119-2-251"}

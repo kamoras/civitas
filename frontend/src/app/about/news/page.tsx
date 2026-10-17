@@ -231,11 +231,12 @@ export default function NewsChapter() {
             How close is close enough was set on 9,868 story-and-vote pairs read and marked by hand
             (642 stories from April to October 2026), at the point where the site is most confident
             that the links shown are right, which has to clear its bar for anything stated as fact
-            (being confident at least 80% are right). Tested on months the setting never saw, 43 of
-            44 links were right, and it found about one related vote in six: it prefers saying
-            nothing to guessing. A monitor&apos;s &ldquo;On the record&rdquo; chart shows every vote
-            linked to its updates over its life, one square per vote, higher for more yeas than
-            nays, with the same votes in a table.
+            (being confident at least 80% are right). Tested on months the setting never saw, 53 of
+            57 links were right, and it found about one related vote in five: it prefers saying
+            nothing to guessing. People&apos;s names are left out of both texts before they are
+            compared, so a story is matched by what it is about, not who is in it. A monitor&apos;s
+            &ldquo;On the record&rdquo; chart shows every vote linked to its updates over its life,
+            one square per vote, higher for more yeas than nays, with the same votes in a table.
           </P>
         </More>
         <More label="How the committee is chosen">

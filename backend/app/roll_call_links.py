@@ -31,8 +31,20 @@ against every such roll call. It is where the precision's exact
 (Clopper-Pearson) lower 95% bound peaks, which must be at least 0.80 (the
 Action Center's bar for anything shown as fact); the same choice made on
 three blocks of dates and scored on the fourth is the held-out figure.
-Measured 2026-10-17: 0.64; held out, 43 of 44 links right (precision 0.98,
-exact bound 0.88), recall 0.18: it prefers saying nothing to guessing.
+Measured 2026-10-17 on the masked examples: 0.64; held out, 53 of 57
+links right (precision 0.93, exact bound 0.83), recall 0.22: it prefers
+saying nothing to guessing.
+
+Why hand labels: no data-supplied label existed. The articles named a bill
+one of the candidate votes was on in 0 of the replay's stories, and a vote's
+record was an issue's primary source in 2 (the committee-routing precedent).
+Every structural link found from now on is kept as one
+(record_structural_labels, RollCallLinkLabel) for the next recalibration.
+
+Person names are masked as NAME_MASK in both texts (NameMask: every name the
+site holds a record of) and left out of what is compared, as they are in the
+checked-in examples. The gate's pass rate is watched by the calibration-drift
+check (DRIFT_GATE, app/calibration_drift.py).
 When the peak misses the bar nothing is linked (`threshold` is null). Rerun the script when the examples change:
 test_calibration_matches_the_examples fails until you do.
 
@@ -46,10 +58,13 @@ from __future__ import annotations
 import hashlib
 import json
 import pathlib
+import re
 from datetime import date, timedelta
 from typing import Callable
 
 import numpy as np
+
+from app import calibration_drift
 
 # Days from the story's date: a roll call from three days before to two
 # after is a candidate (a story the day or two after a vote, or a preview of
@@ -60,6 +75,10 @@ WINDOW = (-3, 2)
 _DATA_DIR = pathlib.Path(__file__).resolve().parent / "data"
 EXAMPLES_PATH = _DATA_DIR / "roll_call_link_examples.json"
 CALIBRATION_PATH = _DATA_DIR / "roll_call_link_calibration.json"
+
+# The name this gate's decisions are counted under by the calibration-drift
+# check (app/calibration_drift.GATES).
+DRIFT_GATE = "roll_call_links"
 
 # How each chamber's record words the question on an amendment vote (the
 # same forms presidential_support reads).
@@ -100,7 +119,15 @@ def story_text(title: str) -> str:
     monitor update's article title). Measured on the replay: adding the
     verified lede lowered the best exact bound (0.88 to 0.85 with the vote's
     title alone), and adding an issue's facts lowered it further."""
-    return title.strip()
+    return _unmasked(title)
+
+
+def _unmasked(text: str) -> str:
+    """TEXT with each NAME_MASK left out. Masked names are what neither side
+    is compared on: kept as a token, the mask made every story naming
+    someone close to every nomination vote ("[name], of Florida, to be
+    ..."), and the best exact bound fell from 0.92 to 0.79."""
+    return re.sub(r"\s+", " ", text.replace(NAME_MASK, " ")).strip()
 
 
 def is_amendment_vote(question: str | None) -> bool:
@@ -117,8 +144,8 @@ def roll_call_text(question: str | None, title: str | None, purpose: str | None 
     embedded as its stated purpose (RollCall.amendment_purpose, the record's
     own words), and "" when none is stored."""
     if is_amendment_vote(question):
-        return (purpose or "").strip()
-    return (title or question or "").strip()
+        return _unmasked(purpose or "")
+    return _unmasked(title or question or "")
 
 
 def linkable(question: str | None, purpose: str | None = None) -> bool:
@@ -163,20 +190,20 @@ def scores(story_vecs: dict[str, np.ndarray], vote_vecs: dict[str, np.ndarray]) 
     return sum(story_vecs[m] @ vote_vecs[m].T for m in MODELS) / len(MODELS)
 
 
-def link(stories: list[tuple[str, str]], votes: list[tuple[str, str, str]],
-         encode: dict[str, Callable[[list[str]], np.ndarray]] | None = None,
-         cal: dict | None = None) -> list[list[str]]:
-    """For each story (its ISO day, its story_text), the refs of the votes
+def link_scored(stories: list[tuple[str, str]], votes: list[tuple[str, str, str]],
+                encode: dict[str, Callable[[list[str]], np.ndarray]] | None = None,
+                cal: dict | None = None) -> list[tuple[list[str], float | None]]:
+    """For each story (its ISO day, its story_text): the refs of the votes
     (ref, ISO day, roll_call_text) in its window that clear the calibrated
-    threshold, best first. [] for every story when the calibration met no
-    threshold."""
+    threshold, best first, and its best score (None when no vote is in its
+    window). No links for any story when the calibration met no threshold.
+    The caller passes linkable votes only (linkable())."""
     cal = cal or calibration()
     threshold = cal.get("threshold")
-    out: list[list[str]] = [[] for _ in stories]
+    out: list[tuple[list[str], float | None]] = [([], None) for _ in stories]
     if threshold is None or not stories or not votes:
         return out
     pairs = [[j for j, (_, day, _) in enumerate(votes) if in_window(sd, day)] for sd, _ in stories]
-    # `votes` are linkable ones (the caller filters with linkable()).
     wanted_votes = sorted({j for js in pairs for j in js})
     wanted_stories = [i for i, js in enumerate(pairs) if js]
     if not wanted_votes:
@@ -187,9 +214,17 @@ def link(stories: list[tuple[str, str]], votes: list[tuple[str, str, str]],
     s = scores(sv, vv)
     col = {j: c for c, j in enumerate(wanted_votes)}
     for row, i in enumerate(wanted_stories):
-        hits = [(s[row, col[j]], votes[j][0]) for j in pairs[i] if s[row, col[j]] >= threshold]
-        out[i] = [ref for _, ref in sorted(hits, reverse=True)]
+        scored = [(float(s[row, col[j]]), votes[j][0]) for j in pairs[i]]
+        hits = sorted(((sc, ref) for sc, ref in scored if sc >= threshold), reverse=True)
+        out[i] = ([ref for _, ref in hits], max(sc for sc, _ in scored))
     return out
+
+
+def link(stories: list[tuple[str, str]], votes: list[tuple[str, str, str]],
+         encode: dict[str, Callable[[list[str]], np.ndarray]] | None = None,
+         cal: dict | None = None) -> list[list[str]]:
+    """link_scored's refs alone."""
+    return [refs for refs, _ in link_scored(stories, votes, encode, cal)]
 
 
 # Rows re-matched every run: a story's window ends WINDOW[1] days after it,
@@ -204,6 +239,67 @@ BACKFILL_PER_RUN = 200
 # them all to unmatched, and the backfill redoes them.
 _MARKER_TIER, _MARKER_KEY = "roll-call-links", "calibration"
 _MARKER_HOURS = 24 * 365
+
+
+# What a person's name becomes in both texts before they are compared, and in
+# the checked-in examples: a story is linked to a vote by what it is about,
+# not who is in it, and no checked-in file names a politician (AGENTS.md,
+# evergreen files). The same mask as the relevance gate's seed.
+NAME_MASK = "[name]"
+# The Senate's nomination vote title: "<Name>, of <State>, to be ..."
+# (trend_evidence reads it the same way).
+_NOMINEE_TITLE = re.compile(r"^([^,]+),\s+of\s+")
+
+
+def name_forms(name: str) -> set[str]:
+    """How a recorded name is printed in a headline: the whole name, and the
+    first given name or a quoted nickname with the surname ("Donald J.
+    Trump" -> "donald j trump", "donald trump"; FEC's "SMITH, JOHN Q" ->
+    "john q smith", "john smith"), folded to lower case and no accents."""
+    from app.pipeline.analyze.action_center import _record_name
+
+    rec = _record_name(name)
+    if not rec.surname:
+        return set()
+    forms = {" ".join([*rec.given, rec.surname])}
+    forms |= {f"{g} {rec.surname}" for g in [*rec.given[:1], *rec.nicknames] if len(g) > 1}
+    return {f for f in forms if " " in f}
+
+
+class NameMask:
+    """Replaces every name of a person the site holds a record of with
+    NAME_MASK: members of Congress (past and sitting), justices,
+    presidents, candidates, and the nominees the Senate's own roll-call
+    titles name; and the sitting president's surname alone, as the
+    relevance gate masks it. A bare surname is not masked otherwise: it is
+    too often a word, a place or someone else (policy_relevance.OfficialNames)."""
+
+    def __init__(self, names, president: str | None = None):
+        from app.pipeline.analyze.action_center import _record_name
+
+        forms: set[str] = set()
+        for n in names:
+            forms |= name_forms(n)
+        if president and (surname := _record_name(president).surname):
+            forms.add(surname)
+        ordered = sorted(forms, key=len, reverse=True)
+        # Words of a form may be split by spaces or an initial's period.
+        alternatives = "|".join(r"[\s.]+".join(map(re.escape, f.split())) for f in ordered)
+        self._pattern = re.compile(rf"(?<![\w'])({alternatives})(?!\w)", re.IGNORECASE) if ordered else None
+
+    def __call__(self, text: str) -> str:
+        return self._pattern.sub(NAME_MASK, text) if self._pattern and text else (text or "")
+
+    @classmethod
+    def from_db(cls, db) -> "NameMask":
+        from app.models import Candidate, Justice, President, Representative, RollCall, Senator
+
+        names = [n for model in (Senator, Representative, Justice, President, Candidate)
+                 for (n,) in db.query(model.name)]
+        names += [m.group(1) for (t,) in db.query(RollCall.title).filter(RollCall.chamber == "senate")
+                  if t and (m := _NOMINEE_TITLE.match(t))]
+        president = db.query(President.name).filter(President.is_current.is_(True)).scalar()
+        return cls(names, president)
 
 
 def _version(cal: dict) -> str:
@@ -248,7 +344,22 @@ def refresh_links(db, today: str, encode=None, cal: dict | None = None) -> int:
         if linkable(rc.question, rc.amendment_purpose) and not is_housekeeping(rc.question, rc.chamber)
     ]
     titles = [r.title if isinstance(r, ActionIssue) else r.article_title for r in rows]
-    links = link([(r.date, story_text(t or "")) for r, t in zip(rows, titles)], votes, encode=encode, cal=cal)
+    mask = NameMask.from_db(db)
+    votes = [(ref, day, mask(text)) for ref, day, text in votes]
+    stories = [(r.date, mask(story_text(t or ""))) for r, t in zip(rows, titles)]
+    first_time = [_stored(r) is None for r in rows]
+    scored = link_scored(stories, votes, encode=encode, cal=cal)
+    # The drift check (app/calibration_drift.py) counts each story once,
+    # when it is first matched and has a vote in its window: the hourly
+    # recheck of the last week would count a story about 168 times, and a
+    # day with no votes (a recess) decides nothing.
+    if cal.get("threshold") is not None:
+        calibration_drift.observe(
+            DRIFT_GATE, [best for (_, best), new in zip(scored, first_time) if new and best is not None],
+            cal["threshold"],
+        )
+    record_structural_labels(db, [r for r in rows if isinstance(r, ActionIssue)], votes, mask)
+    links = [refs for refs, _ in scored]
     for r, refs in zip(rows, links):
         value = json.dumps(refs)
         if isinstance(r, ActionIssue):
@@ -257,6 +368,66 @@ def refresh_links(db, today: str, encode=None, cal: dict | None = None) -> int:
             r.roll_call_refs = value
     db.flush()
     return len(rows)
+
+
+def _stored(row) -> str | None:
+    return row.related_roll_call_refs if hasattr(row, "related_roll_call_refs") else row.roll_call_refs
+
+
+def record_structural_labels(db, issues: list, votes: list[tuple[str, str, str]], mask: NameMask) -> int:
+    """Keep, as data-supplied labels for the next recalibration, every issue
+    that reached a vote structurally: its primary source is the vote's own
+    record (a roll-call draft), or its articles named a bill by number or
+    short title (related_bill_ids) and a vote in its window was on that bill
+    in that Congress. Each label is the issue's masked headline, every
+    linkable vote in its window with its masked text (the candidates), and
+    the structurally linked ones (`related`), in RollCallLinkLabel, one row
+    per issue, rewritten as the window fills. There was no such label when
+    the calibration was first fitted (0 article-named bills, 2 primary
+    sources among 550 issues), which is why its labels are by hand."""
+    from app.models import RollCall, RollCallLinkLabel
+
+    in_window_votes = {ref: (day, text) for ref, day, text in votes}
+    written = 0
+    for issue in issues:
+        bills = {(b["id"].upper(), b["congress"]) for b in _bill_entries(issue.related_bill_ids)}
+        if not bills and not issue.primary_source_url:
+            continue
+        lo, hi = window_dates(issue.date)
+        related, sources = [], set()
+        for rc in db.query(RollCall).filter(RollCall.date >= lo, RollCall.date <= hi):
+            ref = roll_call_ref(rc.chamber, rc.congress, rc.session, rc.number)
+            if ref not in in_window_votes:
+                continue
+            if issue.primary_source_url and rc.source_url == issue.primary_source_url:
+                related.append(ref)
+                sources.add("primary_source")
+            elif ((rc.bill_id or "").upper(), rc.congress) in bills:
+                related.append(ref)
+                sources.add("bill_named")
+        if not related:
+            continue
+        candidates = {ref: text for ref, (day, text) in in_window_votes.items() if in_window(issue.date, day)}
+        row = db.query(RollCallLinkLabel).filter_by(issue_id=issue.id).one_or_none()
+        if row is None:
+            row = RollCallLinkLabel(issue_id=issue.id)
+            db.add(row)
+        row.date = issue.date
+        row.story = mask(story_text(issue.title or ""))
+        row.source = ",".join(sorted(sources))
+        row.related = json.dumps(sorted(related))
+        row.candidates = json.dumps(candidates, sort_keys=True)
+        written += 1
+    return written
+
+
+def _bill_entries(raw: str | None) -> list[dict]:
+    try:
+        value = json.loads(raw) if raw else []
+    except ValueError:
+        return []
+    return [b for b in value if isinstance(b, dict) and b.get("id") and isinstance(b.get("congress"), int)] \
+        if isinstance(value, list) else []
 
 
 def parse_ref(ref: str) -> tuple[str, int, int, int] | None:

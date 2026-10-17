@@ -1914,6 +1914,28 @@ class NationalMonitor(Base):
                            order_by="desc(MonitorUpdate.date), desc(MonitorUpdate.created_at)")
 
 
+class RollCallLinkLabel(Base):
+    """A data-supplied label for the story-to-vote link (app/roll_call_links.
+    record_structural_labels): an issue that reached a vote structurally (its
+    primary source is the vote's record, or its articles named the bill a
+    vote in its window was on), kept for the next recalibration of
+    roll_call_links. One row per issue, rewritten as votes arrive."""
+    __tablename__ = "roll_call_link_labels"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    issue_id: Mapped[int] = mapped_column(Integer, nullable=False, unique=True, index=True)
+    date: Mapped[str] = mapped_column(String(10), nullable=False)
+    # The issue's headline with person names masked (roll_call_links.NameMask).
+    story: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # "primary_source", "bill_named" or both, comma-joined.
+    source: Mapped[str] = mapped_column(String(40), nullable=False, default="")
+    # JSON refs of the structurally linked votes.
+    related: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    # JSON {ref: the vote's masked text} for every linkable vote in the window.
+    candidates: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    recorded_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
 class MonitorUpdate(Base):
     """A dated development in a monitored national concern, sourced from articles."""
     __tablename__ = "monitor_updates"

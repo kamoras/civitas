@@ -1394,6 +1394,12 @@ reasons are in `scheduler._hourly_action_refresh`); only an overlapping
 refresh of its own holds it back. The hourly bill refresh still stands down
 for the Senate and House runs, which rewrite the rows it updates.
 
+A gate's labels come from the data wherever the data supplies one (the
+relevance gate's publisher labels above). Hand labels are the exception, used
+only where it was checked that no data-supplied label exists (committee
+routing; the story-to-vote link, `app/roll_call_links.py`), and such a gate
+records each data-supplied label that turns up later for its next refit.
+
 Running beside the chain makes it a second writer on SQLite's one write
 lock, so **no refresh stage holds a write transaction across slow work**
 (a model call, an embedding pass, a network fetch): each stage commits
@@ -1467,7 +1473,16 @@ the hourly refresh and stored as refs (`ActionIssue.related_roll_call_refs`,
 (so the members panel and call script use them) and a monitor's
 `onTheRecord`. Worded as related, never as a cause. An amendment vote is
 compared by its stated purpose (`RollCall.amendment_purpose`) and is never
-linked without one: its title names only the sponsor.
+linked without one: its title names only the sponsor. Its labels are by hand
+**only because no data-supplied label exists** (in the replay, 0 stories'
+articles named a bill a candidate vote was on, and 2 issues had a vote
+record as their primary source; the committee-routing precedent). Every
+structural link found from now on is kept as a data-supplied label
+(`RollCallLinkLabel`, `record_structural_labels`); recalibrate from those
+once there are enough. Person names are `[name]` in the examples and in live
+text (`NameMask`), and the mask is left out of what is compared. The gate is
+registered with the calibration-drift check (`roll_call_links` in
+`calibration_drift.GATES`).
 
 The Today tab's open comment periods are ranked by salience, not deadline
 (`api/action.open_comments_salience`): documents a recent issue links, then
