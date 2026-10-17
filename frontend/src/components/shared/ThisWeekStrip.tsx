@@ -4,7 +4,10 @@ import type { CommentDeadline, StateNextDeadline, ThisWeek } from "@/types/thisW
 import { countdownText } from "@/components/elections/VoterCalendar";
 import { rollCallHref, shortDate, voteResult, weekHref } from "@/lib/congress";
 import { stateBallotHref } from "@/lib/elections";
+import ClosingSoon from "@/components/elections/ClosingSoon";
+import RegisterLink from "@/components/elections/RegisterLink";
 import { STATE_NAMES } from "@/lib/stateCodes";
+import { exploreHref } from "@/lib/exploreHref";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
@@ -115,6 +118,12 @@ function DeadlineRow({ d }: { d: StateNextDeadline }) {
       </Link>
       <span className="text-ink-lo">: {d.sentence}</span>
       {left && <span className="ml-1 font-mono text-xs text-phos">{left}</span>}
+      {d.register && (
+        <>
+          {" "}
+          <RegisterLink link={d.register} showNote={false} className="ml-1 text-xs" />
+        </>
+      )}
     </li>
   );
 }
@@ -134,7 +143,7 @@ function StateDeadlines({ rows }: { rows: StateNextDeadline[] }) {
       </ul>
       {rest.length > 0 && (
         <details className="group">
-          <summary className="cursor-pointer list-none font-mono text-xs text-ink-hi underline decoration-white/30 underline-offset-4 hover:text-phos [&::-webkit-details-marker]:hidden">
+          <summary className="inline-flex min-h-6 cursor-pointer list-none items-center font-mono text-xs text-ink-hi underline decoration-white/30 underline-offset-4 hover:text-phos [&::-webkit-details-marker]:hidden">
             Every state&apos;s next deadline
             <span aria-hidden="true" className="ml-1 inline-block group-open:rotate-180">
               &#9662;
@@ -201,6 +210,15 @@ function FullStrip({ data }: { data: ThisWeek }) {
               <StatePicker states={election.states} compact={false} />
             </div>
           </details>
+          {election.registrationClosing && (
+            <ClosingSoon
+              rows={election.registrationClosing}
+              days={election.closingSoonDays}
+              headingLevel={3}
+              className="pt-2"
+              compact
+            />
+          )}
           {election.deadlines && election.deadlines.length > 0 && (
             <StateDeadlines rows={election.deadlines} />
           )}
@@ -240,7 +258,10 @@ function FullStrip({ data }: { data: ThisWeek }) {
               ))}
             </ul>
           )}
-          <Link href={weekHref(congress.weekStart)} className={`font-mono text-xs ${LINK}`}>
+          <Link
+            href={weekHref(congress.weekStart)}
+            className={`inline-flex min-h-6 w-fit items-center font-mono text-xs ${LINK}`}
+          >
             What Congress did this week &rarr;
           </Link>
         </div>
@@ -258,7 +279,7 @@ function FullStrip({ data }: { data: ThisWeek }) {
                 return (
                   <li key={d.id} className="text-sm leading-snug">
                     <Link
-                      href={`/explore/${d.id}`}
+                      href={exploreHref(d)}
                       className="line-clamp-2 text-ink-hi hover:underline"
                     >
                       {d.title}
@@ -272,7 +293,10 @@ function FullStrip({ data }: { data: ThisWeek }) {
               })}
             </ul>
           )}
-          <Link href="/explore?comment=open" className={`font-mono text-xs ${LINK}`}>
+          <Link
+            href="/explore?comment=open"
+            className={`inline-flex min-h-6 w-fit items-center font-mono text-xs ${LINK}`}
+          >
             Every open comment period &rarr;
           </Link>
         </div>
@@ -310,14 +334,14 @@ function CompactStrip({ data, pageDate }: { data: ThisWeek; pageDate?: string })
         {next && (
           <span>
             Next comment deadline:{" "}
-            <Link href={`/explore/${next.id}`} className={LINK}>
+            <Link href={exploreHref(next)} className={LINK}>
               {next.title.length > 70 ? `${next.title.slice(0, 67).trimEnd()}...` : next.title}
             </Link>{" "}
             ({shortDate(next.commentsCloseOn)})
           </span>
         )}
         <details className="group open:basis-full">
-          <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden text-ink-hi underline decoration-white/30 underline-offset-4 hover:text-phos">
+          <summary className="inline-flex min-h-6 cursor-pointer list-none items-center [&::-webkit-details-marker]:hidden text-ink-hi underline decoration-white/30 underline-offset-4 hover:text-phos">
             {line.pick}
             <span aria-hidden="true" className="ml-1 inline-block group-open:rotate-180">
               &#9662;

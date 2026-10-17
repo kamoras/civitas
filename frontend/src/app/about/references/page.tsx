@@ -27,7 +27,7 @@ export default function ReferencesChapter() {
           <li
             key={id}
             id={id}
-            className="scroll-mt-[var(--header-clearance)] border-l-3 border-white/[0.09] pl-4 text-sm leading-relaxed text-ink-lo target:border-signal-cyan target:text-ink"
+            className="border-l-3 border-white/[0.09] pl-4 text-sm leading-relaxed text-ink-lo target:border-signal-cyan target:text-ink"
           >
             <span className="block font-mono text-xs uppercase tracking-[0.08em] text-signal-amber">
               {ref.short}

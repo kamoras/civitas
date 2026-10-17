@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import SearchCombobox from "./SearchCombobox";
+import { trapTab } from "@/lib/focusedDialog";
 
 /**
  * The header's way into site search: a link to /search (which works with
@@ -23,26 +24,19 @@ export default function SiteSearch({ className = "" }: { className?: string }) {
   const navigating = useRef(false);
 
   // The modal makes the page behind it inert, but Tab past the last
-  // control would still reach the browser's own toolbar: wrap it instead,
-  // as the site's other dialogs do (components/shared/Modal.tsx).
+  // control would still reach the browser's own toolbar: wrap it with the
+  // site's shared trap (lib/focusedDialog.ts), as its other dialogs do.
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       const dialog = dialogRef.current;
-      if (e.key !== "Tab" || !dialog) return;
-      const focusable = [
-        ...dialog.querySelectorAll<HTMLElement>("a[href], button:not([disabled]), input"),
-      ].filter((el) => !el.closest("[hidden]"));
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
+      if (!dialog) return;
+      trapTab(
+        e,
+        [...dialog.querySelectorAll<HTMLElement>("a[href], button:not([disabled]), input")].filter(
+          (el) => !el.closest("[hidden]")
+        )
+      );
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);

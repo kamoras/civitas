@@ -24,6 +24,7 @@ import {
 } from "@/lib/results";
 import { describeInterval, RESULTS_POLL_MS, RETRY_BACKOFF_MS } from "@/hooks/useLiveResults";
 import type { LiveRaceResult, LiveResults, StateBallot } from "@/types/election";
+import { scrollBehavior } from "@/lib/motion";
 
 /**
  * The top of a state page from election day on: this state's count, read
@@ -431,7 +432,7 @@ export default function StateResults({
                 // Move focus with the scroll, so a keyboard or screen-reader
                 // user who picked a district lands on its row.
                 const row = document.getElementById(`result-${raceId}`);
-                row?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+                row?.scrollIntoView?.({ behavior: scrollBehavior(), block: "center" });
                 row?.focus({ preventScroll: true });
               }}
             />

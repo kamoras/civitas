@@ -75,6 +75,36 @@ export function stateFeed(code: string, name: string): Feed {
   return { url: `/feed/states/${code.toUpperCase()}.xml`, title: `Civitas Research: ${name}` };
 }
 
+/** One followed thing's feed (backend app/entity_feeds.py; paths from
+ *  api/feed.py member_feed_path and its siblings, titled as the feed titles
+ *  itself). A member: votes, sponsored bills' actions, score changes and
+ *  disclosures. */
+export function memberFeed(id: string, name: string): Feed {
+  return { url: `/feed/members/${encodeURIComponent(id)}.xml`, title: `Civitas Research: ${name}` };
+}
+
+/** A bill of one Congress: each action and roll call. `label` as the Record
+ *  prints the number ("H.R. 1"). */
+export function billFeed(congress: number, billId: string, label: string): Feed {
+  return { url: `/feed/bills/${congress}/${billId}.xml`, title: `Civitas Research: ${label}` };
+}
+
+/** An agency, with its sub-agencies: rules and comment periods. */
+export function agencyFeed(slug: string, name: string): Feed {
+  return {
+    url: `/feed/agencies/${encodeURIComponent(slug)}.xml`,
+    title: `Civitas Research: ${name}`,
+  };
+}
+
+/** A national monitor: each sourced update. */
+export function monitorFeed(slug: string, title: string): Feed {
+  return {
+    url: `/feed/monitors/${encodeURIComponent(slug)}.xml`,
+    title: `Civitas Research: ${title}`,
+  };
+}
+
 /**
  * `alternates.types` for a page: its own, most specific feed first (a reader
  * or browser extension given the page commonly offers the first link it

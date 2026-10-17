@@ -3,6 +3,7 @@ import { connection } from "next/server";
 import type { Notable, NotableEntry } from "@/types/notable";
 import { rollCallHref, shortDate, weekHref } from "@/lib/congress";
 import { fetchSectionFigures } from "@/components/sections/SectionCards";
+import AmendmentPurpose from "@/components/congress/AmendmentPurpose";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
@@ -87,19 +88,36 @@ function Entry({ entry }: { entry: NotableEntry }) {
           {what}
           {v.title && v.title !== v.question ? ` · ${v.title}` : ""}
         </p>
+        {v.amendment && (
+          <div className="mt-1">
+            <AmendmentPurpose vote={v} chamber={v.chamber} compact />
+          </div>
+        )}
       </div>
       <p className="flex flex-wrap gap-x-4 md:flex-col md:items-end md:gap-0">
-        <Link href={rollCallHref(v)} className={COMMAND}>
+        {/* Named in full for a screen reader, which otherwise hears "left
+            bracket roll call right bracket" once per entry with nothing to
+            tell them apart. The visible words stay in the name (WCAG 2.5.3). */}
+        <Link
+          href={rollCallHref(v)}
+          aria-label={`${v.chamber === "senate" ? "Senate" : "House"} roll call ${v.number}`}
+          className={COMMAND}
+        >
           [ ROLL CALL ]
         </Link>
         {entry.kind === "loneBreak" && entry.memberId && (
-          <Link href={`/politicians/${entry.memberId}`} className={COMMAND}>
+          <Link
+            href={`/politicians/${entry.memberId}`}
+            aria-label={entry.memberName}
+            className={COMMAND}
+          >
             [ {entry.memberName.toUpperCase()} ]
           </Link>
         )}
         {entry.kind === "loneBreak" && entry.memberId && entry.compareWithId && (
           <Link
             href={`/compare?leftId=${entry.memberId}&leftChamber=senate&rightId=${entry.compareWithId}&rightChamber=senate`}
+            aria-label={`Compare ${entry.memberName} vs. ${entry.compareWithName ?? "the state's other senator"}`}
             className={COMMAND}
           >
             [ VS. {(entry.compareWithName ?? "").toUpperCase()} ]
@@ -119,13 +137,12 @@ export function OnTheRecordList({
 }) {
   return (
     <section aria-labelledby="on-the-record" className="mx-auto mt-8 max-w-7xl px-4 sm:px-6">
-      <h2
-        id="on-the-record"
-        className="flex flex-wrap items-baseline justify-between gap-x-4 border-b border-white/15 pb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
-      >
-        <span>
+      {/* The week's link sits beside the heading, not in it: inside, it made
+          the heading's name "On the record Week of ...: every roll call". */}
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 border-b border-white/15 pb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
+        <h2 id="on-the-record">
           {recess ? `Last week of business: ${shortDate(data.weekStart)}` : "On the record"}
-        </span>
+        </h2>
         <Link
           href={weekHref(data.weekStart)}
           className="normal-case tracking-[0.06em] underline decoration-white/30 underline-offset-4 hover:text-phos"
@@ -133,7 +150,7 @@ export function OnTheRecordList({
           {recess ? "Every roll call" : `Week of ${shortDate(data.weekStart)}: every roll call`}{" "}
           &rarr;
         </Link>
-      </h2>
+      </div>
       <ul>
         {data.entries.map((e) => (
           <Entry

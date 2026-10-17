@@ -10,6 +10,10 @@ import {
   TITLE_TEMPLATE,
   pageMetadata,
   stateFeed,
+  memberFeed,
+  billFeed,
+  agencyFeed,
+  monitorFeed,
 } from "./site";
 
 describe("metaDescription", () => {
@@ -75,6 +79,19 @@ describe("pageMetadata", () => {
     ).toMatchObject({
       "application/atom+xml": [{ url: "/feed/congress.xml" }, { url: FEED_PATH }],
     });
+  });
+
+  it("names one followed thing's feed at the path the backend serves it on", () => {
+    // backend api/feed.py member_feed_path, bill_feed_path, agency_feed_path, monitor_feed_path
+    expect(memberFeed("jane-doe", "Jane Doe")).toEqual({
+      url: "/feed/members/jane-doe.xml",
+      title: "Civitas Research: Jane Doe",
+    });
+    expect(billFeed(119, "HR.1", "H.R. 1").url).toBe("/feed/bills/119/HR.1.xml");
+    expect(agencyFeed("agriculture-department", "Agriculture Department").url).toBe(
+      "/feed/agencies/agriculture-department.xml"
+    );
+    expect(monitorFeed("a story", "A Story").url).toBe("/feed/monitors/a%20story.xml");
   });
 
   it("marks missing records noindex", () => {

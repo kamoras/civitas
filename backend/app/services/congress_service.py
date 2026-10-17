@@ -16,7 +16,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models import CongressDay, CongressEvent, RepSponsoredBill, RollCall, SponsoredBill
+from app.models import CongressDay, CongressEvent, ExploreDocument, RepSponsoredBill, RollCall, SponsoredBill
 from app.ordinals import ordinal
 from app.pipeline.congress_activity import digest_cursor, eastern_today, last_run
 from app.pipeline.fetch.daily_digest import words_to_int
@@ -186,10 +186,20 @@ def _event(e: CongressEvent) -> dict:
     }
 
 
+def amendment_fields(rc: RollCall) -> dict:
+    """The amendment a vote was on and its purpose as the record states it
+    (fetch/amendment_purpose.py): both null for a vote not on one, or one
+    not read yet; a purpose of "" is a record that states none."""
+    on_one = bool(rc.amendment)
+    return {"amendment": rc.amendment if on_one else None,
+            "amendmentPurpose": rc.amendment_purpose if on_one else None}
+
+
 def _vote(rc: RollCall, shaped: dict | None = None) -> dict:
     """`shaped`: the roll call's roll_call_shape.shape, read by the caller
     (shapes) where it can be an election, which needs its positions."""
     return {
+        **amendment_fields(rc),
         "chamber": rc.chamber, "congress": rc.congress, "session": rc.session, "number": rc.number,
         "date": rc.date, "question": rc.question, "title": rc.title, "result": rc.result,
         "rejected": rc.rejected, "majorityRequirement": rc.majority_requirement,
@@ -414,7 +424,14 @@ def bill_coverage(db: Session, congress: int) -> dict:
     first_congress = congress_of_date(first.isoformat()) if first else None
     n = ordinal(congress)
     votes = congress in held
-    floor = congress == settings.CURRENT_CONGRESS
+    # Floor speeches are read for the sitting Congress and kept after it
+    # (explore_pipeline._purge_old_format_speeches): held from the first
+    # Congress any were read in.
+    first_speech = (db.query(func.min(ExploreDocument.date))
+                    .filter(ExploreDocument.doc_type.in_(("Senate Floor Speech", "House Floor Speech"))).scalar())
+    speech_congress = congress_of_date(first_speech) if first_speech else None
+    floor = congress == settings.CURRENT_CONGRESS or (
+        speech_congress is not None and speech_congress <= congress <= settings.CURRENT_CONGRESS)
     digest = first_congress is not None and congress >= first_congress
     return {
         "votes": {"held": votes, "sentence": None if votes else (
@@ -422,8 +439,9 @@ def bill_coverage(db: Session, congress: int) -> dict:
             "votes aren't held here. The chambers' own records have them, at Senate.gov and the House Clerk."
             if held else "Civitas holds no roll calls yet.")},
         "floor": {"held": floor, "sentence": None if floor else (
-            f"Civitas keeps the sitting {ordinal(settings.CURRENT_CONGRESS)} Congress's floor speeches only, so "
-            f"this {n} Congress bill's floor debate isn't held here. The Congressional Record at GovInfo has it.")},
+            f"Civitas holds floor speeches from the {ordinal(speech_congress or settings.CURRENT_CONGRESS)} "
+            f"Congress on, so this {n} Congress bill's floor debate isn't held here. The Congressional Record "
+            "at GovInfo has it.")},
         "digest": {"held": digest, "sentence": None if digest else (
             f"Civitas's record of Congress starts {_full_date(first)}, so this {n} Congress bill's days in the "
             "Congressional Record and its committee entries aren't held here."

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { AgencyDocument } from "@/types/agency";
 import { describeDaysLeftOn, formatUtcDate, safeHref } from "@/lib/formatting";
+import { exploreHref } from "@/lib/exploreHref";
+import CommentWindowBar from "@/components/shared/CommentWindowBar";
 
 const day = (iso: string) =>
   formatUtcDate(iso, { year: "numeric", month: "short", day: "numeric" }, "en-US");
@@ -26,16 +28,23 @@ export default function AgencyDocList({
             {d.docType} · {day(d.date)}
           </p>
           <Link
-            href={`/explore/${d.id}`}
+            href={exploreHref(d)}
             className="mt-1 block text-sm leading-snug text-ink-hi hover:text-phos"
           >
             {d.title}
           </Link>
+          {showDeadline && d.firstSentence && (
+            // The abstract's opening sentence, as the Register printed it.
+            <p className="mt-1 text-sm leading-snug text-ink">{d.firstSentence}</p>
+          )}
+          {showDeadline && d.commentWindow && (
+            <CommentWindowBar period={d.commentWindow} className="mt-2" />
+          )}
           {showDeadline && d.commentsCloseOn && (
             <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
               <span className="text-signal-cyan">
-                Comments close {day(d.commentsCloseOn)} (
-                {describeDaysLeftOn(d.commentsCloseOn, today)})
+                Comments close {day(d.commentsCloseOn)}
+                {d.commentWindow ? "" : ` (${describeDaysLeftOn(d.commentsCloseOn, today)})`}
               </span>
               {d.commentUrl && (
                 <a

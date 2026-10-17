@@ -18,7 +18,10 @@ import {
   fetchCurrentPresident,
   fetchJusticeLeaderboard,
   fetchLeaderboardSpread,
+  fetchCourt,
 } from "@/lib/api";
+import { COURT_HREF, courtLead } from "@/lib/court";
+import type { Court } from "@/types/court";
 import ScoreSpreadStrip from "@/components/leaderboard/ScoreSpreadStrip";
 import { getScoreColor, getScoreBgColor } from "@/lib/representation";
 import MetricTooltip from "@/components/checker/MetricTooltip";
@@ -39,6 +42,7 @@ import {
   signedPoints,
 } from "@/lib/justices";
 import { houseSeatLabel } from "@/lib/elections";
+import { HeldScoreTag } from "@/components/scorecard/HeldScore";
 
 type PartyFilter = "ALL" | "D" | "R" | "I";
 type SortKey = "score" | "pac_dollars" | "pac_pct" | "ideology" | "leadership";
@@ -120,7 +124,7 @@ function ThinDataTag({ dims }: { dims?: string[] }) {
   const which = dims.map((d) => SCORE_TERMS[d as ScoreKey]?.label ?? asLabel(d)).join(", ");
   return (
     <span
-      title={`Little data behind: ${which}. That part of the score is mostly a pull toward 50.`}
+      title={`Little data behind: ${which}. That part of the score is mostly a pull toward a middle value.`}
       className="ml-2 inline-block border border-signal-amber/40 px-1 font-mono text-xs tracking-[0.08em] text-signal-amber"
     >
       THIN DATA<span className="sr-only">: little data behind {which}</span>
@@ -542,23 +546,46 @@ function JusticeLeaderboard({
   entries,
   loading,
   error,
+  court,
 }: {
   entries: JusticeLeaderboardEntry[];
   loading: boolean;
   error: string | null;
+  court: Court | null;
 }) {
   const router = useRouter();
   if (loading) return <LeaderboardLoading label="LOADING SCOTUS DATA..." />;
   if (error) return <LeaderboardError message={error} />;
+  // Leads with what the record shows about the Court as a whole (the API's
+  // counts); the appointer estimate, which the research can't tell from no
+  // effect, is under Methods below.
+  const lead = court ? courtLead(court) : null;
+  const measured = entries.filter((e) => appointerEstimate(e.loyalty));
 
   return (
     <>
-      <div className="mb-4 border border-white/25 bg-surface px-5 py-4 font-sans text-sm leading-relaxed text-ink">
+      <div className="mb-4 flex flex-col gap-2 border border-white/25 border-t-[3px] border-t-ink-hi bg-surface px-5 py-4 font-sans leading-relaxed text-ink">
+        {lead ? (
+          <p className="text-lg text-ink-hi">
+            <span className="font-display text-3xl font-extrabold tabular-nums">{lead.figure}</span>{" "}
+            {lead.headline} <span className="text-base text-ink">{lead.detail}</span>
+          </p>
+        ) : null}
+        <p className="text-base">
+          <Link
+            href={COURT_HREF}
+            className="text-ink-hi underline decoration-white/30 underline-offset-4 hover:text-phos"
+          >
+            The Court page
+          </Link>
+          : where each justice sits left to right, who votes with whom, and every recent
+          decision&apos;s majority and dissent.
+        </p>
         <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
           Not ranked · not scored
         </p>
-        <p className="mt-2">
-          {NOT_SCORED_REASON} {COURT_FINDING}{" "}
+        <p className="text-sm text-ink-lo">
+          {NOT_SCORED_REASON}{" "}
           <a href={JUSTICE_RESEARCH_URL} className="underline underline-offset-2 hover:text-phos">
             The research
           </a>
@@ -587,8 +614,8 @@ function JusticeLeaderboard({
                 <th scope="col" className="px-3 py-3 text-right w-24">
                   MAJORITY
                 </th>
-                <th scope="col" className="px-3 py-3 text-right w-56">
-                  UNDER APPOINTER, POINTS (95% CI)
+                <th scope="col" className="px-3 py-3 text-right w-24">
+                  DISSENT
                 </th>
               </tr>
             </thead>
@@ -625,7 +652,7 @@ function JusticeLeaderboard({
                       {entry.majorityPct.toFixed(0)}%
                     </td>
                     <td className="px-3 py-3 text-right tabular-nums text-ink">
-                      {loyaltyPoints(entry.loyalty) ?? "not yet measured"}
+                      {entry.dissentPct.toFixed(0)}%
                     </td>
                   </tr>
                 );
@@ -652,9 +679,8 @@ function JusticeLeaderboard({
                     </span>
                   </div>
                   <div className="mt-0.5 text-xs text-ink-lo">
-                    {loyaltyPoints(entry.loyalty) != null
-                      ? `${loyaltyPoints(entry.loyalty)} points under the appointing president`
-                      : "not yet measured"}
+                    {entry.casesDecided} cases · {entry.majorityPct.toFixed(0)}% in the majority ·{" "}
+                    {entry.dissentPct.toFixed(0)}% in dissent
                   </div>
                 </div>
               </Link>
@@ -663,13 +689,56 @@ function JusticeLeaderboard({
         </div>
       </div>
 
-      <div className="mt-4 space-y-1 text-center">
-        <p className="font-sans text-xs text-ink-lo">
-          Points under the appointing president: how much more often the justice sided with the
-          federal government while that president was in office (Epstein and Posner, 2016), with its
-          95% confidence interval. Information, not a ranking. Click any row to view full profile.
+      <p className="mt-3 text-center font-sans text-xs text-ink-lo">
+        Cases, majority and dissent: orally argued cases on each justice&apos;s record. Click any
+        row to view the full profile.
+      </p>
+
+      <section
+        aria-labelledby="scotus-methods"
+        className="mt-6 border border-white/25 bg-surface px-5 py-4 font-sans text-sm leading-relaxed text-ink"
+      >
+        <h2 id="scotus-methods" className="text-base font-bold text-ink-hi">
+          Methods: votes under the appointing president
+        </h2>
+        <p className="mt-2">
+          {COURT_FINDING} The research behind that finding measured, for each justice, how much more
+          often they sided with the federal government while the appointing president was in office
+          (Epstein and Posner, 2016), with its 95% confidence interval. Each estimate below is shown
+          as information, not loyalty: a justice&apos;s years under the appointing president are
+          always their first, and windows of the same length later in a career produce differences
+          about as large. An interval that includes 0 cannot be told from no effect.
         </p>
-      </div>
+        {measured.length > 0 && (
+          <table className="mt-3 w-full font-mono text-sm">
+            <caption className="sr-only">
+              Each justice&apos;s estimate, in points, with its 95% confidence interval
+            </caption>
+            <thead>
+              <tr className="border-b border-white/[0.07] text-left text-xs uppercase text-ink-lo">
+                <th scope="col" className="py-1.5 pr-3 font-normal">
+                  Justice
+                </th>
+                <th scope="col" className="py-1.5 text-right font-normal">
+                  Points (95% CI)
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {measured.map((e) => (
+                <tr key={e.id} className="border-b border-white/[0.07]">
+                  <th scope="row" className="py-1.5 pr-3 text-left font-normal text-ink">
+                    {e.name}
+                  </th>
+                  <td className="py-1.5 text-right tabular-nums text-ink">
+                    {loyaltyPoints(e.loyalty)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
     </>
   );
 }
@@ -869,6 +938,7 @@ function LeaderboardContent({ initial }: { initial: LeaderboardInitial | null })
     initial?.justices ? { key: "justices", data: initial.justices } : undefined
   );
   const justiceEntries = justices.data ?? EMPTY_JUSTICES;
+  const court = useAsyncData("court", branch === "scotus" ? () => fetchCourt() : null);
   const justiceError = justices.error;
   const justiceLoading = justices.loading;
 
@@ -1011,6 +1081,7 @@ function LeaderboardContent({ initial }: { initial: LeaderboardInitial | null })
               entries={justiceEntries}
               loading={justiceLoading}
               error={justiceError}
+              court={court.data ?? null}
             />
           )}
 
@@ -1169,7 +1240,7 @@ function LeaderboardContent({ initial }: { initial: LeaderboardInitial | null })
                                 isTopTen ? "border-l-2 border-l-signal-red/30" : ""
                               }`}
                               tabIndex={0}
-                              aria-label={`View profile for ${entry.name}, ${entry.state}, rank ${rank}${tiedWith(score) > 1 ? `, shared by ${tiedWith(score)}` : ""}, score ${displayScore(score)}${entry.thinData?.length ? ", thin data" : ""}`}
+                              aria-label={`View profile for ${entry.name}, ${entry.state}, rank ${rank}${tiedWith(score) > 1 ? `, shared by ${tiedWith(score)}` : ""}, score ${displayScore(score)}${entry.thinData?.length ? ", thin data" : ""}${entry.representationScore.held ? `, held from the ${entry.representationScore.held.scoredOn ?? "earlier"} run` : ""}`}
                               {...rowNavProps(router, `/politicians/${entry.id}`)}
                               {...hoverProps(score)}
                             >
@@ -1184,6 +1255,7 @@ function LeaderboardContent({ initial }: { initial: LeaderboardInitial | null })
                                   {entry.name}
                                 </span>
                                 <ThinDataTag dims={entry.thinData} />
+                                <HeldScoreTag held={entry.representationScore.held} />
                               </td>
                               <td className="px-3 py-3 text-center">
                                 <span
@@ -1260,6 +1332,7 @@ function LeaderboardContent({ initial }: { initial: LeaderboardInitial | null })
                             <div className="flex items-center gap-2">
                               <span className="text-ink-hi text-sm truncate">{entry.name}</span>
                               <ThinDataTag dims={entry.thinData} />
+                              <HeldScoreTag held={entry.representationScore.held} />
                               <span
                                 className={`text-xs px-1 border shrink-0 ${(PARTY_BADGE[entry.party] ?? PARTY_BADGE.I).className}`}
                               >
@@ -1354,8 +1427,9 @@ function LeaderboardContent({ initial }: { initial: LeaderboardInitial | null })
                     Scores are shrunk toward a neutral value when data is thin: members with limited
                     public data are not penalized or rewarded for it.{" "}
                     <span className="font-mono text-signal-amber">THIN DATA</span> marks a member
-                    with too little data behind a part of the score for it to be more than that pull
-                    toward 50.{" "}
+                    with too little data behind a part of the score for it to be more than that
+                    pull. <span className="font-mono text-signal-amber">HELD</span> marks a score
+                    kept from an earlier run because the latest run couldn&apos;t score the member.{" "}
                     <Link
                       href="/about/scores#overall"
                       className="underline decoration-white/30 underline-offset-4 hover:text-phos"

@@ -34,6 +34,18 @@ describe("layout stability", () => {
     expect(missing).toEqual([]);
   });
 
+  it("scrolls focus and anchors clear of the fixed header with one rule", () => {
+    // WCAG 2.4.11: a control focused by Shift+Tab, or an #anchor, is scrolled
+    // to below the header, not under it. A scroll-mt-* on a target would add
+    // to the padding and land it a header's height too low.
+    const css = readFileSync(join(SRC, "app", "globals.css"), "utf8");
+    expect(css).toMatch(/html\s*\{[^}]*scroll-padding-top:\s*var\(--header-clearance\)/);
+    const offenders = sourceFiles(SRC).filter((file) =>
+      /\bscroll-mt-/.test(readFileSync(file, "utf8"))
+    );
+    expect(offenders).toEqual([]);
+  });
+
   it("lays out page columns with fr tracks, never a 12-column grid", () => {
     // A 12-column grid has eleven gaps; at a doubled text size the rem gaps
     // alone (11 x 4.5rem for gap-9) are wider than a 768 px screen, so the

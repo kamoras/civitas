@@ -12,6 +12,8 @@ import FollowFeed from "@/components/shared/FollowFeed";
 import SpecialsBoardView from "@/components/elections/specials/Specials";
 import { longDate } from "@/lib/specials";
 import CalendarList from "@/components/elections/specials/CalendarList";
+import ClosingSoon from "@/components/elections/ClosingSoon";
+import { INLINE_LINK } from "@/lib/controlStyles";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
@@ -65,21 +67,15 @@ export default async function ElectionCalendarPage() {
             feed={TOPIC_FEEDS.elections}
           />
 
-          <section
-            id="specials-board"
-            aria-labelledby="specials"
-            className="mt-8 scroll-mt-[var(--header-clearance)] border border-phos/20 bg-surface px-4 pb-4"
-          >
-            <h2
-              id="specials"
-              className="border-b border-white/[0.07] py-2.5 font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
-            >
-              Special elections
-            </h2>
-            <SpecialsBoardView board={board} />
-          </section>
+          {cal.registrationClosing && (
+            <ClosingSoon
+              rows={cal.registrationClosing}
+              days={cal.closingSoonDays}
+              className="mt-8 border border-phos/20 bg-surface px-4 py-3"
+            />
+          )}
 
-          <section aria-labelledby="dates" className="mt-10">
+          <section aria-labelledby="dates" className="mt-8">
             <h2
               id="dates"
               className="border-b border-white/15 pb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
@@ -91,11 +87,25 @@ export default async function ElectionCalendarPage() {
             </div>
           </section>
 
+          <section
+            id="specials-board"
+            aria-labelledby="specials"
+            className="mt-10 border border-phos/20 bg-surface px-4 pb-4"
+          >
+            <h2
+              id="specials"
+              className="border-b border-white/[0.07] py-2.5 font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
+            >
+              Special elections
+            </h2>
+            <SpecialsBoardView board={board} />
+          </section>
+
           <section className="mt-10 border-t border-white/[0.09] pt-4 text-xs leading-relaxed text-ink-min">
             <p>
               Election dates and special elections:{" "}
               {fec ? (
-                <a href={fec} className="text-signal-cyan hover:text-phos" rel="noopener">
+                <a href={fec} className={INLINE_LINK} rel="noopener">
                   the FEC&apos;s election calendar
                 </a>
               ) : (
@@ -107,7 +117,7 @@ export default async function ElectionCalendarPage() {
               deadlines: each state&apos;s election office or its election law, for the{" "}
               {longDate(cal.voterDeadlinesFor)} election. Reporting deadlines:{" "}
               {reports ? (
-                <a href={reports} className="text-signal-cyan hover:text-phos" rel="noopener">
+                <a href={reports} className={INLINE_LINK} rel="noopener">
                   the FEC
                 </a>
               ) : (

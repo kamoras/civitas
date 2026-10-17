@@ -24,10 +24,12 @@ from app.api.response_helpers import (
 from app.database import get_db, off_loop
 from app.member_ids import resolve_member_id
 from app.api.agencies import agency_options, children_of, descendants
-from app.models import Agency, ExploreDocument
-from app.pipeline.analyze.document_authority import declared_identifiers
+from app.models import Agency, ExploreDocument, Representative, Senator
+from app.pipeline.analyze.document_authority import congressional_record_identifiers, declared_identifiers
 from app.pipeline.fetch.fr_rulemaking import MAX_BODY_LEN
 from app.services.explore_matches import explore_matches
+from app.services.explore_coverage import coverage_windows
+from app.services.explore_keys import KEY_RE, find_by_key, public_key
 from app.services.explore_search import browse_documents, hybrid_search
 from app.services.bill_record import SPEECH_DOC_TYPES, speech_bills
 from app.time_utils import comment_period_today
@@ -57,7 +59,7 @@ async def search_explore(
         None, min_length=2, max_length=200,
         description=(
             "Search query. Optional with politician_id or agency (that member's or agency's documents, "
-            "newest first) or with commentable=true (every open comment period, closing soonest first)"
+            "newest first) or with commentable=true (every open comment period, rules first; paperwork notices apart)"
         ),
     ),
     doc_type: str | None = Query(None, description="Filter by document type"),
@@ -110,7 +112,8 @@ async def search_explore(
         ))
         return JSONResponse(
             content={"query": "", "results": outcome["results"], "count": outcome["count"],
-                     "semanticUnavailable": False, "channels": outcome["channels"]},
+                     "semanticUnavailable": False, "channels": outcome["channels"],
+                     **({"paperwork": outcome["paperwork"]} if "paperwork" in outcome else {})},
             headers={"Cache-Control": "public, max-age=60, stale-while-revalidate=60"},
         )
 
@@ -151,6 +154,9 @@ async def search_explore(
             # says so rather than presenting a partial answer as a whole one.
             "semanticUnavailable": outcome["semanticUnavailable"],
             "channels": outcome["channels"],
+            # Identifiers the query names that no document here is known
+            # by, each with why and where it is (explore_coverage.not_held).
+            "notHeld": outcome.get("notHeld", []),
         },
         # A partial answer (keyword channel only) is kept only as long as a
         # failed fetch is (response_helpers.FAILURE_RETRY_S): the index is
@@ -199,6 +205,7 @@ async def explore_stats(db: Session = Depends(get_db)):
     """Return counts of explore documents by type and chamber."""
     total, type_counts, chamber_counts, open_for_comment = await off_loop(db, _explore_counts)
     agencies = await off_loop(db, agency_options)
+    windows = await off_loop(db, coverage_windows)
     return JSONResponse(
         content={
             "totalDocuments": total,
@@ -207,6 +214,9 @@ async def explore_stats(db: Session = Depends(get_db)):
             "openForComment": open_for_comment,
             # The agency filter's options (agencies.agency_options).
             "agencies": agencies,
+            # Each document type's first and last date held: the corpus
+            # starts where each feed's ingest did (explore_coverage).
+            "coverage": windows,
         },
         headers={"Cache-Control": "public, max-age=300, stale-while-revalidate=300"},
     )
@@ -225,16 +235,33 @@ def explore_matches_route(
     return cached_json(explore_matches(db, q), max_age=CACHE_TTL_DETAIL_S)
 
 
-async def _load_document(db: Session, doc_id: int) -> ExploreDocument | None:
-    """The document, read off the event loop on a session of its own
+async def _load_document(db: Session, doc_ref: int | str) -> ExploreDocument | None:
+    """The document by row id or by its permanent key (services/
+    explore_keys.py), read off the event loop on a session of its own
     (off_loop) and detached from it, its columns loaded."""
     def read(session):
-        doc = session.query(ExploreDocument).filter(ExploreDocument.id == doc_id).first()
+        if isinstance(doc_ref, int) or doc_ref.isdigit():
+            doc = session.query(ExploreDocument).filter(ExploreDocument.id == int(doc_ref)).first()
+        else:
+            doc = find_by_key(session, doc_ref)
         if doc is not None:
             session.expunge(doc)
         return doc
 
     return await off_loop(db, read)
+
+
+def _speaker_name(db: Session, doc: ExploreDocument) -> str:
+    """A floor speech's speaker by full name, for its citation; the
+    Record's surname when the speaker isn't a member Civitas holds."""
+    if doc.doc_type not in SPEECH_DOC_TYPES:
+        return ""
+    model = Senator if doc.chamber == "Senate" else Representative
+    if doc.politician_id:
+        name = db.query(model.name).filter(model.id == doc.politician_id).scalar()
+        if name:
+            return name
+    return doc.politician_name or ""
 
 
 # Floor speeches read whole from the Record carry this id prefix
@@ -275,16 +302,25 @@ def fr_reference(doc: ExploreDocument) -> dict:
     }
 
 
-@router.get("/{doc_id}")
-async def get_explore_document(doc_id: int, db: Session = Depends(get_db)):
-    """Return full details for a single explore document."""
-    doc = await _load_document(db, doc_id)
+@router.get("/{doc_ref}")
+async def get_explore_document(doc_ref: str, db: Session = Depends(get_db)):
+    """Return full details for a single explore document, by its permanent
+    key ("fr-2026-17123") or its row id. `key` is the address to link and
+    cite: the page answers a row id with a permanent redirect to it."""
+    doc_ref = str(doc_ref)
+    if not (doc_ref.isdigit() or KEY_RE.match(doc_ref)):
+        raise HTTPException(status_code=404, detail="Document not found")
+    doc = await _load_document(db, doc_ref)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
+    speaker = await off_loop(db, lambda session: _speaker_name(session, doc))
+    record_cites = sorted(i.split(":", 1)[1] for i in congressional_record_identifiers(doc.external_id)
+                          if i.startswith("crec:"))
 
     return JSONResponse(
         content={
             "id": doc.id,
+            "key": public_key(doc.external_id, doc.id),
             "title": doc.title,
             "summary": doc.summary,
             "body": doc.body,
@@ -303,6 +339,10 @@ async def get_explore_document(doc_id: int, db: Session = Depends(get_db)):
             # A floor speech's bill, from the Record heading it was given under.
             "bills": speech_bills(doc.title, doc.date) if doc.doc_type in SPEECH_DOC_TYPES else [],
             **fr_reference(doc),
+            # A floor speech's Record citation ("172 Cong. Rec. H5836") and
+            # speaker, for "Cite this".
+            "crCitation": " Cong. Rec. ".join(record_cites[0].split("-", 1)) if record_cites else "",
+            "speakerName": speaker,
         },
         headers={"Cache-Control": "public, max-age=300, stale-while-revalidate=300"},
     )

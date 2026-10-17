@@ -104,6 +104,7 @@ from app.pipeline.vector_store import (
 )
 from app.pipeline.analyze.lobbying_records import bill_mentions, names_bill
 from app.services.bill_service import bill_title_lists, names_phrase, short_title_index
+from app.services.explore_keys import keys_for_ids, public_key
 from app.time_utils import comment_period_today, eastern_date, utcnow
 from app.timeline_entries import without_repeat_leads
 
@@ -768,7 +769,7 @@ def _record_generation_sample(
 _ISSUE_UPDATE_ATTRS = (
     "title", "summary", "facts", "actions", "source_urls",
     "source_names", "policy_areas", "related_bill_ids",
-    "related_explore_ids", "related_senators", "related_officials",
+    "related_explore_ids", "related_explore_keys", "related_senators", "related_officials",
     "primary_article_date", "image_url", "image_alt", "image_credit",
 )
 
@@ -1273,8 +1274,10 @@ def _build_actions_from_data(
         actions.append({
             "text": f"Comment by {close.strftime('%B')} {close.day}",
             "type": "comment_period",
-            "url": f"/explore/{doc['id']}#comment",
+            "url": f"/explore/{doc['key']}#comment",
             "docId": doc["id"],
+            # The permanent key: the row id can be replaced (services/explore_keys.py).
+            "docKey": doc["key"],
             "closesOn": doc["comments_close_on"],
         })
 
@@ -2857,13 +2860,14 @@ def open_comment_filter():
 
 def _open_comment_docs(title: str, related_docs: list[dict], db: Session) -> list[dict]:
     """Rules open for comment that are about this issue, as
-    {"id", "title", "comments_close_on"}: the issue's related documents that
+    {"id", "key", "title", "comments_close_on"}: the issue's related documents that
     are open, then open rules whose titles clear the same title-similarity
     bar related documents do (EXPLORE_TITLE_MIN_SIM). The related-document
     search ranks every document type, so an open rule rarely reaches its top
     three on its own."""
     rows = db.query(
         ExploreDocument.id, ExploreDocument.title, ExploreDocument.comments_close_on, ExploreDocument.doc_type,
+        ExploreDocument.external_id,
     ).filter(open_comment_filter()).all()
     open_by_id = {r.id: r for r in rows}
     picked = [open_by_id[d["id"]] for d in related_docs if d["id"] in open_by_id]
@@ -2886,7 +2890,8 @@ def _open_comment_docs(title: str, related_docs: list[dict], db: Session) -> lis
                 break
             logger.info("Open comment period linked: sim=%.3f '%s'", sim, r.title[:60])
             picked.append(r)
-    return [{"id": r.id, "title": r.title, "comments_close_on": r.comments_close_on}
+    return [{"id": r.id, "key": public_key(r.external_id, r.id), "title": r.title,
+             "comments_close_on": r.comments_close_on}
             for r in picked[:MAX_COMMENT_ACTIONS]]
 
 
@@ -2901,9 +2906,12 @@ FR_VIEWS_REFRESH_HOURS = 24
 
 
 def _refresh_open_comment_views(db: Session) -> int:
-    """Store the Register's reader count on every open Federal Register
-    document, at most once per FR_VIEWS_REFRESH_HOURS. Returns how many rows
-    changed. A failed request changes nothing and is retried next hour."""
+    """Store the Register's reader count and table-of-contents subject on
+    every open Federal Register document, at most once per
+    FR_VIEWS_REFRESH_HOURS. Returns how many rows changed. A failed request
+    changes nothing and is retried next hour. The subject is what tells a
+    paperwork notice from other notices (app/comment_periods.py); read here
+    rather than at ingest, whose module is fingerprinted."""
     if api_cache_get(db, _FR_VIEWS_CACHE_TIER, _FR_VIEWS_CACHE_KEY, max_age_hours=FR_VIEWS_REFRESH_HOURS):
         return 0
     rows = db.query(ExploreDocument).filter(
@@ -2913,18 +2921,26 @@ def _refresh_open_comment_views(db: Session) -> int:
 
     async def _fetch():
         async with make_async_client(headers={"User-Agent": BOT_USER_AGENT}) as client:
-            return await fetch_fr_metadata(client, list(by_number), ["document_number", "page_views"])
+            return await fetch_fr_metadata(
+                client, list(by_number), ["document_number", "page_views", "toc_subject", "toc_doc"],
+            )
 
     got = asyncio.run(_fetch()) if by_number else ({}, set())
     if got is None:
         return 0
     changed = 0
     for number, doc in got[0].items():
-        views = (doc.get("page_views") or {}).get("count")
         row = by_number.get(number)
-        if row is not None and isinstance(views, int) and row.fr_page_views != views:
-            row.fr_page_views = views
-            changed += 1
+        if row is None:
+            continue
+        views = (doc.get("page_views") or {}).get("count")
+        # The Register gives toc_doc alone when the subject has no sub-entry.
+        subject = doc.get("toc_subject") or doc.get("toc_doc") or None
+        fresh = {"fr_page_views": views if isinstance(views, int) else row.fr_page_views, "fr_toc_subject": subject}
+        moved = {k: v for k, v in fresh.items() if getattr(row, k) != v}
+        for k, v in moved.items():
+            setattr(row, k, v)
+        changed += bool(moved)
     db.commit()
     api_cache_set(db, _FR_VIEWS_CACHE_TIER, _FR_VIEWS_CACHE_KEY, {"documents": len(by_number), "changed": changed},
                   normal_ttl_hours=FR_VIEWS_REFRESH_HOURS)
@@ -5827,6 +5843,8 @@ def _run_refresh(db: Session) -> int:
             "policy_areas": json.dumps(policy_areas),
             "related_bill_ids": json.dumps(resolved_bills),
             "related_explore_ids": json.dumps(related_explore_ids),
+            # By permanent key too: the ids are rows, which get replaced.
+            "related_explore_keys": json.dumps(keys_for_ids(db, related_explore_ids)),
             "related_senators": json.dumps(related_senators),
             "related_officials": json.dumps(related_officials),
             "primary_article_date": primary_article_date,

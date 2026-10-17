@@ -8,7 +8,7 @@ import { Summary, Point, Section, P, List, Item, More, A } from "@/components/ab
 export const metadata = pageMetadata({
   title: "Feeds",
   description:
-    "Everything Civitas publishes, as Atom feeds: Action Center issues, Congress's day and week, the daily member spotlight, the record behind a trending topic, race news, election-night counts and new features, by topic or by state. No sign-up.",
+    "Everything Civitas publishes, as Atom feeds: Action Center issues, Congress's day and week, the daily member spotlight, race news and new features, by topic or by state, and a feed for one member, bill, agency or story. No sign-up.",
   path: "/feeds",
 });
 
@@ -22,6 +22,8 @@ const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 interface FeedIndex {
   feeds: { slug: string; title: string; description: string; path: string }[];
   states: { code: string; name: string; path: string }[];
+  /** A feed for one followed thing (backend api/feed.py FOLLOWED). */
+  followed?: { kind: string; title: string; description: string; pattern: string; where: string }[];
 }
 
 /** The feed list is the backend's (app/broadcast.py FEEDS), not a copy. */
@@ -81,10 +83,10 @@ export default async function FeedsPage() {
                 the hours U.S. users are most active; a feed has them at once.
               </Point>
               <Point>
-                Follow everything, one topic or one state. Choosing a feed is your filter, so there
-                is nothing to set up here. A state&apos;s ballot page links its state&apos;s feed,
-                and the Congress pages the Congress feed. Give a feed reader a state, Congress or
-                issue page and it is offered that page&apos;s own feed first.
+                Follow everything, one topic, one state, or one thing: a member of Congress, a bill,
+                a federal agency or a story the Action Center tracks. Choosing a feed is your
+                filter, so there is nothing to set up here. Each of those pages links its own feed,
+                and a feed reader given the page is offered that feed first.
               </Point>
               <Point>
                 There is nothing to sign up for and no list of who follows. Reading a feed is the
@@ -134,6 +136,25 @@ export default async function FeedsPage() {
                 </More>
               )}
             </Section>
+
+            {index?.followed && index.followed.length > 0 && (
+              <Section id="one-thing" title="Follow one member, bill, agency or story">
+                <P>
+                  These feeds aren&apos;t posts: each entry is a fixed sentence around the official
+                  record as Civitas stores it, linking the page here and the source it comes from.
+                  They are built from the record when asked for, so an entry can change if the
+                  record it restates is corrected; its id stays the same.
+                </P>
+                <List>
+                  {index.followed.map((k) => (
+                    <Item key={k.kind} label={k.title}>
+                      {k.description} {k.where} Its address is{" "}
+                      <code className="font-mono text-xs break-all">{absoluteUrl(k.pattern)}</code>.
+                    </Item>
+                  ))}
+                </List>
+              </Section>
+            )}
 
             <Section id="using" title="How to follow one">
               <List>

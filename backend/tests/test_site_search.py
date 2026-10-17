@@ -12,10 +12,16 @@ import pytest
 
 from app import site_search
 from app.api import search as search_api
+from app.main import DropQueryString
 from app.models import ActionIssue, Agency, Race, Representative, Senator, SponsoredBill
 from app.site_search import answer, identifier_keys, rank
 from app.site_search_index import (
-    Entity, collect_entities, district_code, normalize, refresh_index, stored_fingerprint,
+    Entity,
+    collect_entities,
+    district_code,
+    normalize,
+    refresh_index,
+    stored_fingerprint,
     write_index,
 )
 from app.time_utils import utcnow
@@ -302,7 +308,6 @@ def test_api_before_the_index_exists(monkeypatch, tmp_path, db_session):
 # ── Privacy: queries are never logged ────────────────────────────
 
 def test_access_log_drops_query_strings():
-    from app.main import DropQueryString
 
     record = logging.LogRecord("uvicorn.access", logging.INFO, __file__, 1, '%s - "%s %s HTTP/%s" %d',
                                ("1.2.3.4:5", "GET", "/api/search/suggest?q=elizabeth+warren", "1.1", 200), None)

@@ -22,7 +22,7 @@ from datetime import date, datetime, time
 from zoneinfo import ZoneInfo
 
 from app.atomic_write import runtime_data_path
-from app.file_cache import Uncached, files_stamp, read_json_preferring
+from app.file_cache import Uncached, files_stamp, read_json
 from app.state_names import STATE_NAMES
 from app.time_utils import utcnow
 
@@ -40,17 +40,40 @@ _WINDOWS = {"early_voting", "same_day_registration"}
 _stamp = None
 
 
+def _newest(paths: tuple) -> dict:
+    """Of the copies that hold a calendar, the one for the latest election,
+    then the latest built (`builtOn`; a copy without it counts as oldest),
+    the refreshed one on a tie. The weekly refresh only rebuilds every few
+    days, so a calendar shipped in the image after it (a state added, a
+    citation fixed) is used at once rather than after the next refresh."""
+    best, unreadable = None, False
+    for path in paths:
+        try:
+            data = read_json(path)
+        except OSError:
+            unreadable = True
+            continue
+        if not (isinstance(data, dict) and "states" in data):
+            continue
+        key = (data.get("electionDate") or "", data.get("builtOn") or "")
+        if best is None or key > (best.get("electionDate") or "", best.get("builtOn") or ""):
+            best = data
+    if unreadable:
+        raise Uncached(best or {})
+    return best or {}
+
+
 def _load() -> dict:
-    """The calendar in use: the refreshed copy on the data volume (rebuilt
-    for each election by app/data_refresh.py), else the bundled one at
-    _PATH. Re-read when either file changes, so the API process sees a
-    refresh the pipeline process wrote."""
+    """The calendar in use: the newer of the refreshed copy on the data
+    volume (rebuilt for each election by app/data_refresh.py) and the
+    bundled one at _PATH (_newest). Re-read when either file changes, so
+    the API process sees a refresh the pipeline process wrote."""
     global _cache, _stamp
     paths = (runtime_data_path(_PATH.name), _PATH)
     stamp = files_stamp(paths)
     if _cache is None or stamp != _stamp:
         try:
-            _cache = read_json_preferring(*paths, default={}, accept=lambda d: isinstance(d, dict) and "states" in d)
+            _cache = _newest(paths)
         except Uncached as unreadable:
             return unreadable.value
         _stamp = stamp
@@ -169,6 +192,7 @@ def _item(item: dict, now: datetime, today: date, zone: ZoneInfo) -> dict:
         "_closes": closes,
         "source": {"publisher": src.get("publisher"), "url": src["url"], "type": src["type"]},
         "verification": item["verification"],
+        "republishedBy": (item["verification"].get("republished") or {}).get("publisher"),
     }
 
 
@@ -196,6 +220,80 @@ def _registration_summary(items: list[dict]) -> str | None:
     if not still:
         return f"{gone}. No way to register for this election is still open."
     return f"{gone}. Still open: {left}."
+
+
+# How a registration deadline reads as an instruction, by method.
+_REGISTER_HOW = {"online": "Register online", "mail": "Mail your registration", "in_person": "Register in person",
+                 "any": "Register"}
+# Registration closing within this many days is listed in the "closing
+# soon" strips (/elections and the homepage's This week).
+CLOSING_SOON_DAYS = 10
+
+
+def long_date(d: date) -> str:
+    return f"{d:%a}, {d:%b} {d.day}"
+
+
+def _registration_line(items: list[dict], entry: dict, state: str) -> dict | None:
+    """The first thing a page says about registering: by when, and how,
+    from the deadlines the file verified. The regular deadline that closes
+    last (online is listed first on a tie), and the same-day or late
+    registration that follows it in the state's own words; once regular
+    registration has closed, the same-day rule alone, or that registration
+    is closed. A state with no registration (North Dakota) says so from its
+    quoted source. None where the file read no registration deadline."""
+    name = STATE_NAMES.get(state.upper(), state)
+    if (entry.get("register") or {}).get("none"):
+        return {"status": "none", "sentence": f"{name} does not have voter registration.",
+                "closesOn": None, "daysLeft": None, "countdown": None, "sameDay": None, "source": None}
+    regular = [i for i in items if i["kind"] == "registration"]
+    same_day = [i for i in items if i["kind"] == "same_day_registration" and i["status"] != CLOSED]
+    open_regular = [i for i in regular if i["status"] == OPEN]
+    after = same_day[0]["rule"] if same_day else None
+    if open_regular:
+        last = max(open_regular, key=lambda i: (i["_closes"], i.get("method") == "online"))
+        when = f"{long_date(date.fromisoformat(last['closesOn']))}{_clock(last.get('time'))}"
+        basis = {"postmarked": " (postmark date)", "received": " (must arrive)"}.get(last.get("basis") or "", "") \
+            if last.get("method") in ("mail", "any", None) else ""
+        sentence = f"{_REGISTER_HOW.get(last.get('method') or 'any', 'Register')} by {when}{basis}"
+        return {"status": OPEN, "sentence": sentence, "closesOn": last["closesOn"], "daysLeft": last["daysLeft"],
+                "countdown": last["countdown"], "sameDay": after, "source": last["source"]}
+    if same_day:
+        first = same_day[0]
+        lead = "Regular registration has closed. " if regular else ""
+        return {"status": "same_day", "sentence": f"{lead}{first['rule']}", "closesOn": first["closesOn"],
+                "daysLeft": first["daysLeft"], "countdown": first["countdown"], "sameDay": None,
+                "source": first["source"]}
+    if regular:
+        return {"status": CLOSED, "sentence": "Registration for this election has closed.", "closesOn": None,
+                "daysLeft": None, "countdown": None, "sameDay": None, "source": None}
+    return None
+
+
+def _register_link(entry: dict, data: dict) -> dict | None:
+    """Where to register: the state's own page the build script checked,
+    else vote.gov. `confirmed` is false where a bot wall kept the check
+    from reading it (the page says so, as for the voter lookup)."""
+    reg = entry.get("register") or data.get("registerFallback")
+    if not reg or reg.get("none"):
+        return None
+    return {"url": reg["url"], "publisher": reg.get("publisher"), "confirmed": reg.get("status") == "verified",
+            "statePage": reg is entry.get("register")}
+
+
+def _republished(items: list[dict], state: str) -> str | None:
+    """Said visibly when deadlines were read from a county election office's
+    printing because the state's own source couldn't be (the build script
+    tries the state's own first, every run): whose printing, and why."""
+    reps = [i["verification"].get("republished") for i in items if i["verification"]["status"] == "republished"]
+    if not reps:
+        return None
+    name = STATE_NAMES.get(state.upper(), state)
+    publishers = sorted({r["publisher"] for r in reps})
+    walled = all("bot wall" in (r.get("stateSourceRead") or "") for r in reps)
+    which = "These deadlines are" if len(reps) == len(items) else f"{len(reps)} of these deadlines are"
+    why = "blocks automated reads" if walled else "couldn't be read when the list was rebuilt"
+    return f"{which} as published by the {' and the '.join(publishers)}; {name}'s own source {why}."
 
 
 def _note(entry: dict, state: str) -> str | None:
@@ -226,12 +324,17 @@ def calendar_for_state(state: str, election_day: date, now: datetime | None = No
     items = [_item(i, local_now, today, zone) for i in entry.get("items") or []]
     items.sort(key=lambda i: (i["_closes"], i["kind"]))
     nxt = next((i for i in items if i["status"] != CLOSED), None)
+    line = _registration_line(items, entry, state)
     return {
         "timeZone": entry["timeZone"],
         "localToday": today.isoformat(),
         "note": _note(entry, state),
         "next": {k: v for k, v in nxt.items() if k != "_closes"} if nxt else None,
         "registrationSummary": _registration_summary(items),
+        "registration": line,
+        "republished": _republished(items, state),
+        "register": _register_link(entry, data),
+        "electionDay": election_day.isoformat(),
         "items": [{k: v for k, v in i.items() if k != "_closes"} for i in items],
         # A state none of whose deadlines could be read from an official
         # source lists none, rather than dates from anywhere else, and says
@@ -252,7 +355,26 @@ def next_deadlines(election_day: date, now: datetime | None = None) -> list[dict
             n = cal["next"]
             rows.append({"state": state, "sentence": n["sentence"], "countdown": n["countdown"],
                          "status": n["status"], "daysLeft": n["daysLeft"], "kind": n["kind"],
-                         "closesOn": n["closesOn"]})
+                         "closesOn": n["closesOn"],
+                         "register": cal["register"] if n["kind"] == "registration" else None})
     rows.sort(key=lambda r: (r["closesOn"], r["state"]))
     return rows
 
+
+
+def registration_closing(election_day: date, now: datetime | None = None,
+                         within: int = CLOSING_SOON_DAYS) -> list[dict]:
+    """The states whose regular registration closes within `within` days
+    on their own clock (today included), soonest first, each with how to
+    register and whether same-day registration follows."""
+    rows = []
+    for state in sorted((_load().get("states") or {})):
+        cal = calendar_for_state(state, election_day, now)
+        line = (cal or {}).get("registration")
+        if not line or line["status"] != OPEN or line["daysLeft"] is None or line["daysLeft"] > within:
+            continue
+        rows.append({"state": state, "stateName": STATE_NAMES.get(state, state), "sentence": line["sentence"],
+                     "closesOn": line["closesOn"], "daysLeft": line["daysLeft"], "countdown": line["countdown"],
+                     "sameDay": line["sameDay"], "register": cal["register"]})
+    rows.sort(key=lambda r: (r["closesOn"], r["state"]))
+    return rows

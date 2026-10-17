@@ -3,15 +3,10 @@
 import Link from "next/link";
 import { useId, useMemo, useState } from "react";
 import type { PartySplit, VoteMember } from "@/types/congress";
-import { PARTY_COLORS } from "@/lib/partyStyles";
+import { PARTY_COLORS, PARTY_PLURAL } from "@/lib/partyStyles";
 import { houseSeatLabel } from "@/lib/elections";
 
-const PARTY_NAME: Record<string, string> = {
-  R: "Republicans",
-  D: "Democrats",
-  I: "Independents",
-  ID: "Independents",
-};
+const PARTY_NAME = PARTY_PLURAL;
 const BUCKETS: { key: VoteMember["bucket"]; label: string; tone: string }[] = [
   { key: "yea", label: "Yea", tone: "text-phos-mid" },
   { key: "nay", label: "Nay", tone: "text-signal-red" },

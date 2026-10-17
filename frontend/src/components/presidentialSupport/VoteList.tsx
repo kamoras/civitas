@@ -19,7 +19,7 @@ export default function VoteList({ votes, member }: { votes: SupportRollCall[]; 
       {votes.map((v) => {
         const bill = billPageHref(v.billId, v.congress);
         return (
-          <li key={voteAnchor(v)} id={voteAnchor(v)} className="scroll-mt-24 py-3">
+          <li key={voteAnchor(v)} id={voteAnchor(v)} className="py-3">
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
               <span>{shortDate(v.date)}</span>
               {bill ? (

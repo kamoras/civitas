@@ -9,6 +9,8 @@ import { chamberColor, chamberBorder, chamberLabel } from "@/lib/chamber";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import CopyText from "@/components/CopyText";
 import CiteThis from "@/components/shared/CiteThis";
+import { exploreCitedSource } from "@/lib/citedSources";
+import { exploreHref } from "@/lib/exploreHref";
 import { billCanonicalPath } from "@/lib/congress";
 import AgencyLink from "@/components/agencies/AgencyLink";
 import {
@@ -633,7 +635,7 @@ export default function ExploreDocumentView({
           {/* id="comment": every "Comment →" link (search results, the
               Action Center, the homepage deadlines) points here. */}
           {commentOpen && (
-            <div id="comment" className="scroll-mt-24 border border-phos/40 p-5 mb-6 bg-phos/5">
+            <div id="comment" className="border border-phos/40 p-5 mb-6 bg-phos/5">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
@@ -905,7 +907,7 @@ export default function ExploreDocumentView({
           <section
             id="cite"
             aria-labelledby="cite-heading"
-            className="scroll-mt-24 mt-8 flex flex-col gap-2 border-t border-white/[0.07] pt-6"
+            className="mt-8 flex flex-col gap-2 border-t border-white/[0.07] pt-6"
           >
             <h2
               id="cite-heading"
@@ -920,7 +922,15 @@ export default function ExploreDocumentView({
                 label="Federal Register document number"
               />
             )}
-            <CiteThis title={doc.title} date={doc.date} path={`/explore/${doc.id}`} />
+            {doc.crCitation && (
+              <CopyText text={doc.crCitation} label="Congressional Record citation" />
+            )}
+            <CiteThis
+              title={doc.title}
+              date={doc.date}
+              path={exploreHref(doc)}
+              source={exploreCitedSource(doc, sourceUrl)}
+            />
           </section>
 
           {/* Source attribution */}

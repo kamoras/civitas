@@ -28,7 +28,7 @@ from app.pipeline import explore_pipeline
 from app.pipeline.explore_pipeline import (
     _backfill_rulemaking_bodies,
     _ingest_floor_speeches,
-    _purge_out_of_scope_speeches,
+    _purge_old_format_speeches,
     _stable_hash,
     _strip_page_markers,
     run_explore_pipeline,
@@ -304,20 +304,21 @@ OLD = "senate-floor-SMITH-{}-aaaaaaaa"  # the format before SPEECH_FORMAT
 NEW = "crec-v1-CREC-{}-pt1-PgS1-ab12cd34"
 
 
-class TestOutOfScopeSpeechPurge:
-    """Speeches are the sitting Congress's (119 in tests). An older
-    format's go only where the read frontier has passed."""
+class TestOldFormatSpeechPurge:
+    """Speeches of past Congresses stay: their addresses are cited. An
+    older format's go only where the read frontier has passed."""
 
-    def test_outside_the_congress_goes_whatever_the_frontier(self, db_session):
+    def test_past_congresses_are_kept(self, db_session):
         db_session.add_all([
-            _speech_doc(1, NEW.format("1996-07-10"), "1996-07-10"),  # a reprocessed issue
             _speech_doc(2, NEW.format("2024-06-11"), "2024-06-11"),  # the last Congress
+            _speech_doc(4, OLD.format("2024-06-12"), "2024-06-12"),  # its old format too
             _speech_doc(3, OLD.format("2026-05-19"), "2026-05-19"),
             _regulatory_doc("A rule from 1996.", doc_id=5),
         ])
         db_session.commit()
-        assert _purge_out_of_scope_speeches(db_session, None) == 2
-        assert {d.id for d in db_session.query(ExploreDocument)} == {3, 5}
+        assert _purge_old_format_speeches(db_session, None) == 0
+        assert _purge_old_format_speeches(db_session, "2025-01-03") == 1  # only 2026's old format
+        assert {d.id for d in db_session.query(ExploreDocument)} == {2, 4, 5}
 
     def test_an_old_format_goes_only_on_or_after_the_frontier(self, db_session):
         db_session.add_all([
@@ -326,7 +327,7 @@ class TestOutOfScopeSpeechPurge:
             _speech_doc(3, NEW.format("2026-09-24"), "2026-09-24"),
         ])
         db_session.commit()
-        assert _purge_out_of_scope_speeches(db_session, "2026-09-01") == 1
+        assert _purge_old_format_speeches(db_session, "2026-09-01") == 1
         assert {d.id for d in db_session.query(ExploreDocument)} == {1, 3}
 
 

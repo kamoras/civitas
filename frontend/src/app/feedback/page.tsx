@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Navbar from "@/components/layout/Navbar";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import Footer from "@/components/layout/Footer";
@@ -27,6 +27,13 @@ export default function FeedbackPage() {
   const [status, setStatus] = useState<Status>("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [issueUrl, setIssueUrl] = useState<string | null>(null);
+  // The form is replaced by the thank-you once it is sent, which took the
+  // focused button with it and left a screen reader on nothing: focus moves
+  // to the message instead.
+  const thanks = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (status === "success") thanks.current?.focus();
+  }, [status]);
 
   /** The page the reporter came from, read at submit time rather than stored.
    *  It was captured into state by a mount effect purely so it could be read
@@ -80,7 +87,7 @@ export default function FeedbackPage() {
           <div className="border border-t-0 border-white/[0.07] bg-surface-base p-6">
             {status === "success" ? (
               <div className="text-center py-8 space-y-4">
-                <p className="font-mono text-base text-ink-hi">
+                <p ref={thanks} tabIndex={-1} className="font-mono text-base text-ink-hi">
                   Thanks: your feedback has been received.
                 </p>
                 {issueUrl && (
@@ -146,10 +153,14 @@ export default function FeedbackPage() {
                     minLength={MESSAGE_MIN}
                     maxLength={MESSAGE_MAX}
                     rows={6}
+                    aria-describedby="message-hint"
                     placeholder="Describe what you were trying to do, what happened, and what you expected instead."
                     className="w-full font-mono text-sm bg-surface-base border border-white/[0.07] focus:border-phos/40 text-ink-hi placeholder:text-ink-min px-3 py-2 outline-none resize-y"
                   />
-                  <p className="font-mono text-xs mt-1 flex items-center justify-between">
+                  <p
+                    id="message-hint"
+                    className="font-mono text-xs mt-1 flex items-center justify-between"
+                  >
                     {/* The button disables below MESSAGE_MIN with nothing on
                         the page saying why — reported live as "blocked from
                         submitting" with no visible cause. This is the cause,
@@ -168,7 +179,9 @@ export default function FeedbackPage() {
                 </div>
 
                 {status === "error" && (
-                  <p className="font-mono text-xs text-signal-red">{errorMessage}</p>
+                  <p role="alert" className="font-mono text-xs text-signal-red">
+                    {errorMessage}
+                  </p>
                 )}
 
                 <button

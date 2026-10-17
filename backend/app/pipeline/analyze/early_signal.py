@@ -47,6 +47,7 @@ from app.pipeline.house_pipeline import roll_call_year
 from app.pipeline.transform.normalize_votes import vote_date_iso
 from app.services.bill_service import names_phrase, short_title
 from app.services.congress_service import bill_label
+from app.sentences import SENTENCE_END, ends_sentence
 from app.time_utils import eastern_date, utcnow
 
 logger = logging.getLogger(__name__)
@@ -520,32 +521,13 @@ _ABSTRACT_SUMMARY_CHARS = 400
 _TITLE_ABSTRACT_CHARS = 200
 
 
-# A period that ends a word like these doesn't end the sentence. The dotted
-# forms ("U.S.", "U.S.C.") and initials are caught by shape in _ends_sentence.
-_ABBREVIATIONS = frozenset({
-    "mr", "mrs", "ms", "dr", "st", "jr", "sr", "inc", "co", "corp", "ltd",
-    "no", "nos", "sec", "secs", "pub", "vol", "fig", "dept", "gov", "gen",
-})
-_SENTENCE_END = re.compile(r"[.?!](?=\s+[\"“(]?[A-Z])")
-
-
-def _ends_sentence(text: str, at: int) -> bool:
-    """Whether the mark at `at` (followed by a capitalised word) ends a
-    sentence: not the period of an initial ("John Q. Public"), a dotted
-    abbreviation ("the U.S. Fish and Wildlife Service") or a title."""
-    if text[at] != ".":
-        return True
-    word = text[:at].rsplit(" ", 1)[-1].lstrip("(\"“")
-    return not ("." in word or len(word) == 1 or word.lower() in _ABBREVIATIONS)
-
-
 def _first_sentences(text: str, limit: int) -> str:
     """The abstract's opening sentences, whole, within `limit` characters;
     empty when even the first is longer."""
     text = " ".join((text or "").split())
     if len(text) <= limit:
         return text
-    ends = [m.start() for m in _SENTENCE_END.finditer(text, 0, limit) if _ends_sentence(text, m.start())]
+    ends = [m.start() for m in SENTENCE_END.finditer(text, 0, limit) if ends_sentence(text, m.start())]
     return text[:ends[-1] + 1] if ends else ""
 
 

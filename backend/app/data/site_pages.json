@@ -24,6 +24,8 @@
     {"label": "Leaderboard", "href": "/leaderboard", "section": "Politicians", "aliases": ["rankings", "scores"]},
     {"label": "Compare members", "href": "/compare", "section": "Politicians", "aliases": ["compare"]},
     {"label": "Compare presidents", "href": "/compare/presidents", "section": "Politicians", "aliases": ["presidents"]},
+    {"label": "Court", "href": "/court", "section": "Court", "aliases": ["supreme court", "scotus"]},
+    {"label": "Justices and decisions", "href": "/court", "section": "Court", "aliases": ["justices", "supreme court decisions"]},
     {"label": "Elections", "href": "/elections", "section": "Elections", "aliases": []},
     {"label": "Ballots by state", "href": "/elections", "section": "Elections", "aliases": ["my ballot", "ballot", "sample ballot"]},
     {"label": "Seat map", "href": "/elections/map?chamber=senate&view=usual", "section": "Elections", "aliases": ["election map", "map", "results map"]},

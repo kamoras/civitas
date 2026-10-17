@@ -177,7 +177,7 @@ describe("ExplorePage", () => {
       expect.objectContaining({ commentableOnly: true })
     );
     expect(screen.getByRole("heading", { level: 2 })).toHaveTextContent(
-      /1 open comment period.*sorted by closing date/
+      /1 open comment period.*sorted by rules first, then readers/
     );
   });
 

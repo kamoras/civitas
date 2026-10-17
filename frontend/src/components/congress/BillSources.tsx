@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { BillDetail } from "@/types/bill";
 import type { BillRecord } from "@/types/congress";
 import CiteThis from "@/components/shared/CiteThis";
+import { congressGovCitedSource } from "@/lib/citedSources";
 import { longDate } from "@/lib/congress";
 import { ordinal } from "@/components/scorecard/format";
 
@@ -81,7 +82,7 @@ export default function BillSources({
       aria-labelledby="sources"
       className="flex flex-col gap-6 border border-white/25 bg-surface p-5"
     >
-      <h2 id="sources" className="scroll-mt-28 font-display text-2xl font-extrabold text-ink-hi">
+      <h2 id="sources" className="font-display text-2xl font-extrabold text-ink-hi">
         Sources, data and citation
       </h2>
       <dl className="grid gap-x-4 gap-y-2 text-sm sm:grid-cols-[7rem_minmax(0,1fr)]">
@@ -129,7 +130,9 @@ export default function BillSources({
           </h3>
           <CiteThis
             title={`${label}${title && title !== label ? `: ${title}` : ""}${congress ? ` (${ordinal(congress)} Congress)` : ""}`}
+            date={record?.introducedDate ?? detail?.introducedDate ?? null}
             path={canonicalPath}
+            source={congressGovCitedSource("U.S. Congress", record?.congressGovUrl)}
           />
         </div>
       </div>

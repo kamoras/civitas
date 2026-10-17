@@ -20,6 +20,7 @@ import {
   fetchRankedChoiceStates,
   stateNameList,
 } from "@/lib/liveStates";
+import { INLINE_LINK } from "@/lib/controlStyles";
 
 // The live-count state list below is read from the backend (fetchLiveStates),
 // every five minutes (LIVE_STATES_REVALIDATE_S). A literal: Next reads it
@@ -197,13 +198,24 @@ export default async function ElectionsChapter() {
           Deadlines are counted on the state&apos;s own clock. A deadline that has passed stays on
           the page and says so, with the ways to register that are still open.
         </P>
+        <P>
+          Each state page leads with how and by when to register (&ldquo;Register online by Mon, Oct
+          19&rdquo;), the days left, and a link to the state election office&apos;s own registration
+          page. We check each link answers on the state&apos;s own site when the list is rebuilt. If
+          the site blocks automated checks, the link is still shown, marked as one we couldn&apos;t
+          confirm. With no state page on file, the link is vote.gov, the federal government&apos;s
+          registration directory. Where a state lets you register at the polls, the page says so in
+          the state&apos;s words. North Dakota has no voter registration, and its page says that.
+          The elections page and the homepage list every state whose registration closes in the next
+          10 days.
+        </P>
       </Section>
 
       <Section id="special-elections" title="Special elections and the calendar">
         <P>
           When a seat in Congress falls empty, a special election fills it, often in a month with no
           other federal election. The{" "}
-          <Link href={CALENDAR_HREF} className="text-signal-cyan hover:text-phos">
+          <Link href={CALENDAR_HREF} className={INLINE_LINK}>
             calendar
           </Link>{" "}
           lists the seats empty today, from the House Clerk&apos;s and the Senate&apos;s own member
@@ -362,7 +374,9 @@ export default async function ElectionsChapter() {
           <Item label="Nominees from primary results">
             Stands in until a state certifies. It can&apos;t see a nominee who never ran in a
             primary (one a party convention chose, or a Libertarian, Green or independent
-            candidate), so the page says &ldquo;nominees&rdquo;, not &ldquo;the ballot&rdquo;.
+            candidate), so the page says &ldquo;nominees&rdquo;, not &ldquo;the ballot&rdquo;. Where
+            a state publishes its parties&apos; endorsements (Connecticut&apos;s certificates of
+            party endorsement), a district no primary decided takes the endorsed nominee from them.
           </Item>
           <Item label="A primary ballot">Before the primary, the people running in it.</Item>
           <Item label="Campaign filings">
@@ -440,7 +454,11 @@ export default async function ElectionsChapter() {
               House member running for the Senate) was listed with no link to their record; the race
               now links it, named as what they are now (&ldquo;House member, GA-6&rdquo;), never as
               the seat&apos;s incumbent. A member&apos;s own profile now links to the race they are
-              on the ballot in.
+              on the ballot in, and a House member always links to the race for their own seat: 59
+              members who aren&apos;t nominees there (retiring, running for another office, or
+              beaten in a primary) had no link at all. Their profile says they aren&apos;t among the
+              confirmed nominees, naming the source, and never a reason the record doesn&apos;t
+              state.
             </Item>
             <Item label="Parties">
               Where a state prints a party Civitas has no code for (California&apos;s Peace and

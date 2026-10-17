@@ -2,6 +2,8 @@
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import CommentWindowBar from "@/components/shared/CommentWindowBar";
+import PaperworkFold from "@/components/shared/PaperworkFold";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import PageMasthead from "@/components/layout/PageMasthead";
@@ -14,6 +16,7 @@ import {
   fetchExploreMatches,
   fetchExploreStats,
   splitHighlights,
+  type ExploreNotHeld,
   type ExploreResult,
   type ExploreStats,
 } from "@/lib/api";
@@ -24,6 +27,7 @@ import { useAsyncData } from "@/hooks/useAsyncData";
 import { BOXED_CONTROL } from "@/lib/controlStyles";
 import { billPageHref } from "@/lib/congress";
 import MatchGroups from "@/components/explore/MatchGroups";
+import { exploreHref } from "@/lib/exploreHref";
 
 type ChamberFilter = "all" | "Senate" | "House" | "Executive" | "Judicial" | "Regulatory";
 
@@ -93,7 +97,7 @@ function Snippet({ text }: { text: string }) {
 }
 
 function ResultCard({ result, query }: { result: ExploreResult; query: string }) {
-  const detailHref = `/explore/${result.id}?q=${encodeURIComponent(query)}`;
+  const detailHref = `${exploreHref(result)}?q=${encodeURIComponent(query)}`;
   const commentOpen = isCommentOpen(result);
   const remaining = commentOpen ? commentDaysLeft(result.commentsCloseOn) : 0;
 
@@ -130,6 +134,9 @@ function ResultCard({ result, query }: { result: ExploreResult; query: string })
             its opening sentence does. Results only the semantic channel
             found have no matched terms, and fall back to the summary. */}
         <Snippet text={result.snippet || result.summary} />
+        {commentOpen && result.commentWindow && (
+          <CommentWindowBar period={result.commentWindow} className="mb-2" />
+        )}
 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3 flex-wrap">
@@ -171,6 +178,59 @@ function ResultCard({ result, query }: { result: ExploreResult; query: string })
           {remaining === 0 ? "closes today" : `${remaining} day${remaining !== 1 ? "s" : ""} left`}
         </Link>
       )}
+    </div>
+  );
+}
+
+/** What Explore holds, by type, from when: each feed's ingest started on a
+ * date of its own, so a document older than that isn't here. A disclosure
+ * whose summary is static text, so the list arriving with the counts moves
+ * nothing on the page. */
+function CoverageWindows({ stats }: { stats: ExploreStats | null }) {
+  const windows = stats?.coverage ?? [];
+  return (
+    <details className="mt-3 font-mono text-xs text-ink-lo">
+      <summary className="inline-flex min-h-6 cursor-pointer items-center hover:text-phos">
+        What Explore holds, and from when
+      </summary>
+      {windows.length > 0 ? (
+        <ul className="mt-2 space-y-1">
+          {windows.map((w) => (
+            <li key={w.label}>
+              {w.label}: {formatDate(w.from)} to {formatDate(w.to)} ·{" "}
+              <span className="tabular-nums">{w.count.toLocaleString("en-US")}</span>
+            </li>
+          ))}
+          <li className="text-ink-min">
+            Older documents are at the Federal Register, GovInfo and the Supreme Court.
+          </li>
+        </ul>
+      ) : (
+        <p className="mt-2">Loading what is held…</p>
+      )}
+    </details>
+  );
+}
+
+/** Identifiers the search names that nothing here is: why, and where the
+ * official copy is, in place of a list of documents that only share a word
+ * with them. */
+function NotHeldNote({ notes, cited }: { notes: ExploreNotHeld[]; cited: boolean }) {
+  return (
+    <div role="status" className="mb-4 border border-signal-amber/30 bg-signal-amber/5 px-3 py-2">
+      {notes.map((n) => (
+        <p key={n.identifier} className="text-sm text-ink-hi">
+          {n.sentence}{" "}
+          <a
+            href={n.url}
+            className="text-signal-amber underline underline-offset-4 hover:text-phos"
+          >
+            Find {n.identifier} at {n.source}
+          </a>
+          .
+        </p>
+      ))}
+      {cited && <p className="mt-1 text-xs text-ink-lo">The results below cite it.</p>}
     </div>
   );
 }
@@ -482,11 +542,7 @@ function ExplorePageInner() {
           </PageMasthead>
 
           {/* Search form */}
-          <form
-            ref={formRef}
-            onSubmit={handleSubmit}
-            className="mb-6 scroll-mt-[var(--header-clearance)]"
-          >
+          <form ref={formRef} onSubmit={handleSubmit} className="mb-6 ">
             <div className="panel">
               <TerminalTitlebar title="Query" />
               <div className="p-4">
@@ -521,6 +577,7 @@ function ExplorePageInner() {
                 </div>
               </div>
             </div>
+            <CoverageWindows stats={stats} />
           </form>
 
           {/* Filters */}
@@ -718,6 +775,10 @@ function ExplorePageInner() {
             </div>
           )}
 
+          {!loading && searched && (resp?.notHeld?.length ?? 0) > 0 && (
+            <NotHeldNote notes={resp!.notHeld!} cited={results.length > 0} />
+          )}
+
           {/* The members and bills the search names. A bill number is
               among them: searched as text, it ranks documents that only
               share its digits above the bill. */}
@@ -777,9 +838,8 @@ function ExplorePageInner() {
                   </>
                 ) : (
                   <>
-                    {results.length === RESULT_LIMIT ? "The " : ""}
+                    {results.length === RESULT_LIMIT ? "The first " : ""}
                     {results.length} open comment period{results.length !== 1 ? "s" : ""}
-                    {results.length === RESULT_LIMIT ? " closing soonest" : ""}
                   </>
                 )}
                 {submitted?.commentableOnly && (resultsFor || politicianId) && (
@@ -791,7 +851,7 @@ function ExplorePageInner() {
                 <span className="text-ink-min ml-2">
                   · sorted by{" "}
                   {!resultsFor && !politicianId && (!agency || submitted?.commentableOnly)
-                    ? "closing date"
+                    ? "rules first, then readers"
                     : !resultsFor || submitted?.sort === "date"
                       ? "newest first"
                       : "relevance"}
@@ -802,6 +862,15 @@ function ExplorePageInner() {
                   <ResultCard key={r.id} result={r} query={resultsFor} />
                 ))}
               </div>
+              {resp?.paperwork && (
+                <PaperworkFold count={resp.paperwork.count} shown={resp.paperwork.results.length}>
+                  <div className="mt-3 space-y-3">
+                    {resp.paperwork.results.map((r) => (
+                      <ResultCard key={r.id} result={r} query={resultsFor} />
+                    ))}
+                  </div>
+                </PaperworkFold>
+              )}
             </div>
           )}
 
@@ -819,9 +888,11 @@ function ExplorePageInner() {
                   <>No comment periods are open right now</>
                 )}
               </p>
-              <p className="text-ink-lo text-xs">
-                Try a broader search term or adjust your filters.
-              </p>
+              {!resp?.notHeld?.length && (
+                <p className="text-ink-lo text-xs">
+                  Try a broader search term or adjust your filters.
+                </p>
+              )}
             </div>
           )}
 

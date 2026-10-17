@@ -18,6 +18,18 @@ export interface SponsoredBill {
   commemorative?: boolean;
 }
 
+/** An earlier run's score the member keeps because the latest run
+ *  couldn't score them. */
+export interface HeldScore {
+  /** The run (YYYY-MM-DD) that couldn't score the member. */
+  failedOn: string;
+  /** What that run couldn't read ("FEC filings"), or null. */
+  source: string | null;
+  /** The run whose scores the member keeps, and its scoring version. */
+  scoredOn: string | null;
+  algorithmVersion: string | null;
+}
+
 export interface Senator {
   id: string;
   name: string;
@@ -52,6 +64,13 @@ export interface Senator {
       /** "neutral:few-votes" | "neutral:no-party" | "neutral:no-expectation" | "shrunk:<share kept>" | "full" */
       constituentAlignmentVotePart?: string;
     };
+    /** Set when the latest run couldn't score the member, so these are an
+     *  earlier run's scores (score_keeping.held). Absent from responses
+     *  served before it existed. */
+    held?: HeldScore | null;
+    /** Weighted dimensions with "low" data behind them
+     *  (score_display.thin_dimensions). */
+    thinData?: string[];
   };
   funding: {
     totalRaised: number;

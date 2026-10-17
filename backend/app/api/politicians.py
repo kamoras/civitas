@@ -31,7 +31,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
-from app.api.elections import member_on_ballot
+from app.api.elections import member_on_ballot, member_seat_race
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, PARTY_QUERY_PATTERN, cached_json
 from app.config import settings
 from app.database import get_db
@@ -46,6 +46,7 @@ from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.score_display import displayed_rank, displayed_score
 from app.services.senator_service import STATE_NAMES
 from app.time_utils import eastern_date
+from app.services.explore_keys import public_key
 
 logger = logging.getLogger(__name__)
 
@@ -492,6 +493,7 @@ def _get_gov_record(politician_id: str, db: Session) -> dict:
         "recentDocs": [
             {
                 "id": d.id,
+                "key": public_key(d.external_id, d.id),
                 "docType": d.doc_type,
                 "title": d.title,
                 "date": d.date,
@@ -620,4 +622,9 @@ def get_politician(politician_id: str, db: Session = Depends(get_db)) -> JSONRes
         # ballot (their own seat, or another office), so "is my member up,
         # and against whom?" is one link from the profile.
         "onBallot": member_on_ballot(db, entity.bioguide_id) if branch in ("senate", "house") else None,
+        # A House member's own seat's race, and whether they are a
+        # confirmed nominee in it: a member not running keeps the link to
+        # who might replace them.
+        "seatRace": member_seat_race(db, entity.state, entity.district, entity.bioguide_id)
+        if branch == "house" else None,
     })

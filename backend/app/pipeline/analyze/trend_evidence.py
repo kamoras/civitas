@@ -73,6 +73,7 @@ from app.pipeline.analyze.action_center import (
 )
 from app.pipeline.fetch.congress import congress_first_year
 from app.services.bill_record import canonical_bill_id
+from app.services.explore_keys import issue_doc_ids, public_key
 
 # The pinned cosine for an issue match and a member's bill: the trend-post
 # design's decision, not a fit. It is only one of the gates (the relevance
@@ -205,7 +206,7 @@ class RecordIndex:
                       congress=row.congress, parties=self.sponsor_party(row.bill_id))
 
     def document_record(self, d: ExploreDocument) -> Record:
-        return Record("document", f"document:{d.id}", d.date[:10], f"{_SITE}/explore/{d.id}", d.title)
+        return Record("document", f"document:{d.id}", d.date[:10], f"{_SITE}/explore/{public_key(d.external_id, d.id)}", d.title)
 
     def issue_record(self, issue: ActionIssue) -> Record:
         try:
@@ -308,9 +309,10 @@ def find_evidence(
                 for bill in json.loads(issue.related_bill_ids or "[]"):
                     if bill.get("id") and int(bill.get("congress") or index.congress) == index.congress:
                         linked += index.records_for_bill(bill["id"], latest)
-                doc_ids = [int(x) for x in json.loads(issue.related_explore_ids or "[]")]
             except (ValueError, TypeError):
-                doc_ids = []
+                pass
+            # By stored key (explore_keys.issue_doc_ids): rows get replaced.
+            doc_ids = issue_doc_ids(index.db, issue.related_explore_ids, issue.related_explore_keys)
             if doc_ids:
                 docs = index.db.query(ExploreDocument).filter(
                     ExploreDocument.id.in_(doc_ids), ExploreDocument.doc_type.in_(OFFICIAL_DOCUMENT_TYPES)).all()

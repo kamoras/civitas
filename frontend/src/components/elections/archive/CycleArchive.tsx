@@ -136,7 +136,7 @@ function RaceEntry({ race, record }: { race: ArchivedRace; record: ArchiveRecord
     <li
       id={`race-${race.id}`}
       tabIndex={-1}
-      className="scroll-mt-[var(--header-clearance)] border-b border-white/[0.07] px-4 py-4 last:border-b-0 focus:outline-none focus-visible:ring-1 focus-visible:ring-phos/60"
+      className="border-b border-white/[0.07] px-4 py-4 last:border-b-0 focus:outline-none focus-visible:ring-1 focus-visible:ring-phos/60"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h4 className="font-display text-base font-bold text-ink-hi">
@@ -280,11 +280,7 @@ export default function CycleArchive({
         ))}
       </dl>
 
-      <section
-        id="final-map"
-        aria-labelledby="final-map-title"
-        className="scroll-mt-[var(--header-clearance)] space-y-4"
-      >
+      <section id="final-map" aria-labelledby="final-map-title" className="space-y-4">
         <div>
           <h2
             id="final-map-title"
@@ -313,11 +309,7 @@ export default function CycleArchive({
         <MapAccountability data={accountability} pageUrl={`${pageUrl}#map-check`} />
       )}
 
-      <section
-        id="by-state"
-        aria-labelledby="by-state-title"
-        className="scroll-mt-[var(--header-clearance)] space-y-6"
-      >
+      <section id="by-state" aria-labelledby="by-state-title" className="space-y-6">
         <div>
           <h2
             id="by-state-title"
@@ -356,7 +348,7 @@ export default function CycleArchive({
               key={s.state}
               id={`state-${s.state}`}
               aria-labelledby={`state-${s.state}-title`}
-              className="scroll-mt-[var(--header-clearance)] space-y-3"
+              className="space-y-3"
             >
               <h3
                 id={`state-${s.state}-title`}

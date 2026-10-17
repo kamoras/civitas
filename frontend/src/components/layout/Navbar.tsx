@@ -313,8 +313,8 @@ export default function Navbar() {
         The band lives inside the fixed header rather than above it so every
         page picks it up without touching its own layout: the header is ~79px
         tall with the band, and all 19 pages already clear a fixed navbar with
-        `--header-clearance` (6rem). Keep it to one line on mobile — a second line would
-        push past that margin.
+        `--header-clearance` (6rem). Keep it to one line on mobile at ordinary sizes; at
+        a large text size the bar wraps and HeaderClearance follows it.
       */}
       <RecordsBand aside={<YourStatePicker />} />
       {/* The skip link is the root layout's, ahead of everything: a second
@@ -322,12 +322,19 @@ export default function Navbar() {
       <nav aria-label="Main navigation" className="relative border-b-3 border-white/15">
         <div
           ref={barRef}
-          className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between"
+          className="@container max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-y-2 [&>:last-child]:ml-auto"
         >
           {/* The lockup: the pixel mark, the site's one use of that face,
               and RESEARCH beside it in the mono, after a hairline. */}
-          {/* Under 360 px RESEARCH would push MENU off the bar, so the mark
-              stands alone there; the link's name is the full one. */}
+          {/* In a bar under 20rem wide (a 320 px phone at the default text
+              size) RESEARCH would push MENU off the bar, so the mark stands
+              alone there; the link's name is the full one. A container
+              query in rem, so a larger text size drops it sooner, whichever
+              way the reader enlarged the text. Where even the mark and the buttons can't
+              share a row (a phone at 200% text: 185 + 227 px in 256), the bar
+              wraps, the buttons right-aligned on a second row, and
+              HeaderClearance moves the pages' clearance down with it: one
+              row clipped every page there (WCAG 1.4.10). */}
           <Link
             ref={logoRef}
             href="/"
@@ -339,9 +346,9 @@ export default function Navbar() {
             </span>
             <span
               aria-hidden="true"
-              className="hidden h-3.5 border-l border-ink-min/60 min-[360px]:inline sm:h-4"
+              className="hidden h-3.5 border-l border-ink-min/60 @min-[20rem]:inline sm:h-4"
             />
-            <span className="hidden font-mono text-xs tracking-[0.18em] text-ink-lo min-[360px]:inline sm:tracking-[0.3em]">
+            <span className="hidden font-mono text-xs tracking-[0.18em] text-ink-lo @min-[20rem]:inline sm:tracking-[0.3em]">
               RESEARCH
             </span>
           </Link>

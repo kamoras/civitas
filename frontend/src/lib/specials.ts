@@ -1,4 +1,5 @@
 import type { DayStatus, ElectionCalendar } from "@/types/specials";
+import type { RegisterLink } from "@/types/election";
 import { formatUtcDate, safeHref } from "@/lib/formatting";
 
 /** How an election day's status reads on the page (the status itself is
@@ -26,6 +27,8 @@ export interface CalendarEntry {
   status: string;
   passed: boolean;
   href?: string;
+  /** Where to register, on an open registration deadline. */
+  register?: RegisterLink;
   /** What a run of same-day entries is called when every state is shown
    * ("General election", "Voter deadlines"); a special stands alone. */
   kind?: string;
@@ -49,10 +52,11 @@ export function calendarEntries(cal: ElectionCalendar): CalendarEntry[] {
       date: d.date,
       state: d.state,
       tag: "DEADLINE" as const,
-      text: `${d.stateName}: ${d.sentence}`,
+      text: `${d.stateName}: ${d.sentence}${d.republishedBy ? ` (as published by the ${d.republishedBy})` : ""}`,
       status: d.status === "closed" ? "PASSED" : d.status === "open" ? "OPEN" : "UPCOMING",
       passed: d.status === "closed",
       href: safeHref(d.source.url),
+      register: d.register ?? undefined,
       kind: "Voter deadlines",
     })),
     ...cal.fecDeadlines.map((f) => ({

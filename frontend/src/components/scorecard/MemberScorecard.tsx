@@ -174,7 +174,7 @@ export default function MemberScorecard({
             glance={<AtAGlance breakdown={breakdown} scores={scores} />}
           />
 
-          <div className="grid items-stretch gap-5 lg:grid-cols-3">
+          <div className="grid grid-cols-[minmax(0,1fr)] items-stretch gap-5 lg:grid-cols-3">
             <FundingColumn
               funding={member.funding}
               dimension={breakdown?.fundingIndependence}

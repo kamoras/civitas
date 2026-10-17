@@ -42,7 +42,16 @@ export interface CongressEvent {
   chamber: Chamber;
 }
 
-export interface RollCallSummary extends RollCallShape {
+/** The amendment a vote was on and its purpose as the record states it
+ * (backend fetch/amendment_purpose.py): both null for a vote not on one,
+ * or not read yet; a purpose of "" is a record that states none. Optional
+ * for an older backend. */
+export interface AmendmentFields {
+  amendment?: string | null;
+  amendmentPurpose?: string | null;
+}
+
+export interface RollCallSummary extends RollCallShape, AmendmentFields {
   chamber: Chamber;
   congress: number;
   session: number;
@@ -255,7 +264,7 @@ export interface CongressCoverage {
   rollCallSources: Record<Chamber, string>;
 }
 
-export interface BillRecordVote extends RollCallShape {
+export interface BillRecordVote extends RollCallShape, AmendmentFields {
   chamber: Chamber;
   session: number;
   number: number;
@@ -280,7 +289,14 @@ export interface FloorDebate {
   /** The Record's heading, verbatim. */
   heading: string;
   /** Each member once, at their first turn; `speeches` counts their turns. */
-  speakers: { speaker: string; politicianId: string | null; speechId: number; speeches: number }[];
+  speakers: {
+    speaker: string;
+    politicianId: string | null;
+    speechId: number;
+    /** The speech's permanent Explore key (optional only for an older backend). */
+    speechKey?: string;
+    speeches: number;
+  }[];
 }
 
 export interface BillRecord {
@@ -302,14 +318,26 @@ export interface BillRecord {
   cosponsors: BillPerson[];
   cboCostEstimates: { title: string; description: string; pubDate: string; url: string }[];
   summary: { actionDesc: string; actionDate: string; paragraphs: string[] } | null;
+  /** Congress.gov's actions, newest first, with same-day twins folded
+   * (backend bill_journey.fold_actions). */
   actions: {
     date: string;
     text: string;
     type: string;
+    /** Its action codes, every twin's. Optional for an older backend. */
+    codes?: string[];
+    /** The glossary's term and plain meaning for its code; null where the
+     * glossary has none. */
+    term?: string | null;
+    meaning?: string | null;
     /** `sourceUrl`: the chamber's own record of the roll call (null when
      * the action doesn't say which), the link for a vote Civitas doesn't hold. */
     rollCalls: { chamber: string; number: number; session: number; sourceUrl?: string | null }[];
   }[];
+  /** How each chamber decided the bill, oldest first. Optional for an older backend. */
+  passage?: BillPassage[];
+  /** The bill's path, dated from its actions; null without actions. */
+  journey?: BillJourney | null;
   textVersions: { type: string; date: string; formats: Record<string, string> }[];
   votes: BillRecordVote[];
   /** Floor speeches whose Record heading names this bill, grouped by day,
@@ -364,4 +392,35 @@ export interface CommitteeSummary {
   name: string;
   meetings: number;
   latest: string;
+}
+
+/** How one chamber decided a bill (backend bill_journey.passage). */
+export interface BillPassage {
+  chamber: Chamber;
+  kind: "passed" | "failed" | "agreed";
+  date: string;
+  method: "unanimousConsent" | "withoutObjection" | "voiceVote" | "rollCall" | null;
+  /** The House's suspension of the rules: two thirds of those voting. */
+  twoThirds: boolean;
+  methodTerm: string | null;
+  methodMeaning: string | null;
+  /** The backend's plain sentence ("Passed the Senate by unanimous consent on ..."). */
+  sentence: string;
+  /** The action, verbatim. */
+  text: string;
+  rollCall: { chamber: string; number: number; session: number; sourceUrl?: string | null } | null;
+}
+
+export interface BillJourneyStop {
+  key: string;
+  label: string;
+  status: "done" | "current" | "skipped" | "failed" | "ahead";
+  date: string | null;
+  detail: string | null;
+  /** Time since the stop before ("9 months later"), worded by the backend. */
+  after: string | null;
+}
+
+export interface BillJourney {
+  stops: BillJourneyStop[];
 }

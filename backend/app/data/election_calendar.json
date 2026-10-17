@@ -1,7 +1,14 @@
 {
- "_source": "Each state's (and D.C.'s) election authority's own pages, or its statute where that authority's site could not be read; cited per item. Built 2026-10-12 by backend/scripts/build_election_calendar.py from scripts/election_calendar_sources.json, which re-read every cited page and checked its quoted passage is on it (verification.status: verified = on the authority's page, statute = in the statute's official text). An item that could not be verified is never written; a state with unread: true has no deadline read from any official source, and lists none.",
- "_use": "Read by app/voter_calendar.py. Dates are local to timeZone (a state spanning two zones uses the one where a deadline passes last). date: the deadline, or an early voting window's first day (endDate its last); for ballot_return with basis 'postmarked', date is the postmark deadline and endDate the day it must arrive by. time/endTime: the hour on that day, when the source states one, else the day's end. countedDate: the 'N days before' count, kept beside a date the state moved.",
+ "_source": "Each state's (and D.C.'s) election authority's own pages, or its statute where that authority's site could not be read; cited per item. Built 2026-10-16 by backend/scripts/build_election_calendar.py from scripts/election_calendar_sources.json, which re-read every cited page and checked its quoted passage is on it (verification.status: verified = on the authority's page, statute = in the statute's official text). An item that could not be verified is never written; a state with unread: true has no deadline read from any official source, and lists none.",
+ "_use": "Read by app/voter_calendar.py. Dates are local to timeZone (a state spanning two zones uses the one where a deadline passes last). date: the deadline, or an early voting window's first day (endDate its last); for ballot_return with basis 'postmarked', date is the postmark deadline and endDate the day it must arrive by. time/endTime: the hour on that day, when the source states one, else the day's end. countedDate: the 'N days before' count, kept beside a date the state moved. register: the state's page for registering to vote (status verified, or blocked: behind a bot wall, so unconfirmed; none: true where the state has no registration, quoted); registerFallback: vote.gov, for a state without one.",
  "electionDate": "2026-11-03",
+ "builtOn": "2026-10-16",
+ "registerFallback": {
+  "url": "https://vote.gov/",
+  "publisher": "Vote.gov (U.S. General Services Administration)",
+  "checkedOn": "2026-10-16",
+  "status": "verified"
+ },
  "states": {
   "AK": {
    "timeZone": "America/Adak",
@@ -22,7 +29,7 @@
      "countedDate": "2026-10-04",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -41,7 +48,7 @@
      "countedDate": "2026-10-04",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -59,7 +66,7 @@
      "countedDate": "2026-10-04",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -78,7 +85,7 @@
      "countedDate": "2026-10-19",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -97,7 +104,7 @@
      "countedDate": "2026-10-24",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -115,10 +122,16 @@
      },
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://voterregistration.alaska.gov/",
+    "publisher": "Alaska Division of Elections",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Any voter may vote absentee. A by-electronic-transmission ballot can be requested until 5 p.m. Alaska time the day before Election Day. Overseas mail ballots have until the 15th day after the election."
   },
   "AL": {
@@ -139,7 +152,7 @@
      "countedDate": "2026-10-19",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -158,7 +171,7 @@
      "countedDate": "2026-10-19",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -176,7 +189,7 @@
      "countedDate": "2026-10-19",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -195,7 +208,7 @@
      "countedDate": "2026-10-27",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -214,7 +227,7 @@
      "countedDate": "2026-10-29",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -232,7 +245,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -250,10 +263,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://www.sos.alabama.gov/alabama-votes/voter/register-to-vote",
+    "publisher": "Alabama Secretary of State",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Alabama has no early in-person voting; absentee voting requires an excuse."
   },
   "AR": {
@@ -276,7 +295,7 @@
      "countedDate": "2026-10-04",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -295,7 +314,7 @@
      "countedDate": "2026-10-04",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -315,7 +334,7 @@
      "countedDate": "2026-10-19",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -334,7 +353,7 @@
      "countedDate": "2026-10-27",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -351,7 +370,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -369,7 +388,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -386,10 +405,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://www.sos.arkansas.gov/elections/voter-information/voter-registration-information",
+    "publisher": "Arkansas Secretary of State",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Arkansas has no online voter registration. Absentee voting requires an excuse."
   },
   "AZ": {
@@ -411,7 +436,7 @@
      "countedDate": "2026-10-05",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -429,7 +454,7 @@
      },
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -449,7 +474,7 @@
      "countedDate": "2026-10-23",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -467,10 +492,16 @@
      },
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://azsos.gov/elections/voters/registering-vote",
+    "publisher": "Arizona Secretary of State",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Any voter may request an early (mail) ballot."
   },
   "CA": {
@@ -491,7 +522,7 @@
      "countedDate": "2026-10-19",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -510,7 +541,7 @@
      "countedDate": "2026-10-19",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -528,7 +559,7 @@
      "countedDate": "2026-10-19",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -546,7 +577,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -563,7 +594,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -581,7 +612,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -599,10 +630,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://registertovote.ca.gov/",
+    "publisher": "California Secretary of State",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Every active registered voter is mailed a ballot (mailing starts by October 5); no request needed."
   },
   "CO": {
@@ -623,7 +660,7 @@
      "countedDate": "2026-10-26",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -642,7 +679,7 @@
      "countedDate": "2026-10-26",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -660,7 +697,7 @@
      "countedDate": "2026-10-26",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -678,7 +715,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -697,7 +734,7 @@
      "countedDate": "2026-10-19",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -715,10 +752,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://www.sos.state.co.us/voter/pages/pub/olvr/verifyNewVoter.xhtml",
+    "publisher": "Colorado Secretary of State",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Every active registered voter is mailed a ballot (packets go out by October 9); no request needed. Registering after October 26 means voting in person at a voter service and polling center."
   },
   "CT": {
@@ -740,7 +783,7 @@
      "countedDate": "2026-10-16",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -759,7 +802,7 @@
      "countedDate": "2026-10-16",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -778,7 +821,7 @@
      "countedDate": "2026-10-16",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -795,7 +838,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -812,7 +855,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -831,7 +874,7 @@
      "countedDate": "2026-11-02",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -849,10 +892,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://voterregistration.ct.gov/",
+    "publisher": "Connecticut Secretary of the State",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Under Public Act 26-42, any voter may request an absentee ballot without an excuse."
   },
   "DC": {
@@ -874,7 +923,7 @@
      "countedDate": "2026-10-13",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -893,7 +942,7 @@
      "countedDate": "2026-10-13",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -910,7 +959,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -928,7 +977,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -947,7 +996,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -965,7 +1014,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -983,10 +1032,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://www.dcboe.org/voters/register-to-vote/register-update-voter-registration",
+    "publisher": "D.C. Board of Elections",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Every registered voter is mailed a ballot; no request needed. Voters away from D.C. may ask for a ballot at another address; such requests must be received by October 19."
   },
   "DE": {
@@ -1006,7 +1061,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1024,7 +1079,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1041,7 +1096,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1059,7 +1114,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1077,10 +1132,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://ivote.de.gov/",
+    "publisher": "Delaware Department of Elections",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Delaware has no same-day sign-up to vote. You need a reason the law accepts to vote absentee."
   },
   "FL": {
@@ -1101,7 +1162,7 @@
      "countedDate": "2026-10-05",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1120,7 +1181,7 @@
      "countedDate": "2026-10-05",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1138,7 +1199,7 @@
      "countedDate": "2026-10-05",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1155,7 +1216,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1175,7 +1236,7 @@
      "countedDate": "2026-10-22",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1193,10 +1254,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://registertovoteflorida.gov/",
+    "publisher": "Florida Division of Elections",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Any voter may vote by mail. Early voting is October 24-31 in every county; a county may add days as early as October 19 and as late as November 1."
   },
   "GA": {
@@ -1212,12 +1279,12 @@
       "type": "official",
       "publisher": "State of Georgia (georgia.gov)",
       "url": "https://georgia.gov/georgia-election-guide",
-      "quote": "voter registration deadlineapril 20, 2026october 5, 2026"
+      "quote": "voter registration deadlineapril 20october 5"
      },
      "countedDate": "2026-10-05",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1230,11 +1297,11 @@
       "type": "official",
       "publisher": "State of Georgia (georgia.gov)",
       "url": "https://georgia.gov/georgia-election-guide",
-      "quote": "early voting periodapril 27 to may 15october 13 to 30election day"
+      "quote": "early voting periodapril 27 - may 15october 13 - 30"
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1253,7 +1320,7 @@
      "countedDate": "2026-10-23",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1271,7 +1338,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1289,10 +1356,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://georgia.gov/register-vote",
+    "publisher": "State of Georgia (georgia.gov)",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Any voter may request an absentee ballot. Absentee drop boxes are open only inside early voting sites during early voting hours."
   },
   "HI": {
@@ -1314,7 +1387,7 @@
      "countedDate": "2026-10-26",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1332,7 +1405,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1349,7 +1422,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1367,10 +1440,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://olvr.hawaii.gov/",
+    "publisher": "Hawaii Office of Elections",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Every registered voter is mailed a ballot (arriving by October 16); no request needed. A request to send the ballot to a different address is due October 27. The Office of Elections says voters may register online at any time."
   },
   "IA": {
@@ -1391,7 +1470,7 @@
      "countedDate": "2026-10-19",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1410,7 +1489,7 @@
      "countedDate": "2026-10-19",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1429,7 +1508,7 @@
      "countedDate": "2026-10-19",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1445,7 +1524,7 @@
      },
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1461,7 +1540,7 @@
      },
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1477,7 +1556,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1497,7 +1576,7 @@
      "countedDate": "2026-10-19",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1515,10 +1594,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://sos.iowa.gov/elections/voterinformation/voterregistration.html",
+    "publisher": "Iowa Secretary of State",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Missed the deadline? You can still sign up and vote in person at the county auditor's office, or at your polling place on Election Day. Bring proof of who you are and where you live."
   },
   "ID": {
@@ -1539,7 +1624,7 @@
      "countedDate": "2026-10-23",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1559,7 +1644,7 @@
      "countedDate": "2026-10-23",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1578,7 +1663,7 @@
      "countedDate": "2026-10-23",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1596,7 +1681,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1614,7 +1699,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1634,7 +1719,7 @@
      "countedDate": "2026-10-23",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1652,10 +1737,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://votertools.voteidaho.gov/TEDElectionLink/VoterServices/wizard/ovr",
+    "publisher": "Idaho Secretary of State",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Any voter may vote absentee. Early voting is offered only in counties that choose to; start dates vary by county (October 13 or later)."
   },
   "IL": {
@@ -1676,7 +1767,7 @@
      "countedDate": "2026-10-18",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1694,7 +1785,7 @@
      "countedDate": "2026-10-06",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1713,7 +1804,7 @@
      "countedDate": "2026-10-06",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1729,7 +1820,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1745,7 +1836,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1764,7 +1855,7 @@
      "countedDate": "2026-10-29",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1783,7 +1874,7 @@
      "countedDate": "2026-11-02",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1801,10 +1892,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://ova.elections.il.gov/",
+    "publisher": "Illinois State Board of Elections",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Missed the deadline? You can still sign up and vote, through Election Day, at your election office or at sites it names."
   },
   "IN": {
@@ -1825,7 +1922,7 @@
      "countedDate": "2026-10-05",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1844,7 +1941,7 @@
      "countedDate": "2026-10-05",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1862,7 +1959,7 @@
      "countedDate": "2026-10-05",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1879,7 +1976,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1899,7 +1996,7 @@
      "countedDate": "2026-10-22",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1917,10 +2014,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://indianavoters.in.gov/",
+    "publisher": "Indiana Election Division",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Indiana has no same-day registration. Early voting is in-person absentee voting at the county clerk's office or satellite sites."
   },
   "KS": {
@@ -1941,7 +2044,7 @@
      "countedDate": "2026-10-13",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1959,7 +2062,7 @@
      "countedDate": "2026-10-13",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1978,7 +2081,7 @@
      "countedDate": "2026-10-13",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -1995,7 +2098,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2014,7 +2117,7 @@
      "countedDate": "2026-10-27",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2032,7 +2135,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2049,10 +2152,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://www.kdor.ks.gov/apps/voterreg/default.aspx",
+    "publisher": "Kansas Secretary of State and Department of Revenue",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Kansas has no same-day registration. Mail-ballot return: state law says close of polls, but a court injunction (stay denied) requires counting ballots postmarked by Election Day that arrive by the Friday mail."
   },
   "KY": {
@@ -2074,7 +2183,7 @@
      "countedDate": "2026-10-05",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2093,7 +2202,7 @@
      "countedDate": "2026-10-05",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2111,7 +2220,7 @@
      "countedDate": "2026-10-05",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2127,7 +2236,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2147,7 +2256,7 @@
      "countedDate": "2026-10-20",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2165,10 +2274,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://elect.ky.gov/Resources/Pages/Registration.aspx",
+    "publisher": "Kentucky State Board of Elections",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Kentucky has no same-day registration. Voting by mail requires a qualifying excuse. Excused in-person absentee voting runs Oct 21-23 and 26-28 for voters with a qualifying reason; no-excuse early voting is Oct 29-31."
   },
   "LA": {
@@ -2187,7 +2302,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2203,7 +2318,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2220,7 +2335,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2238,7 +2353,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2258,7 +2373,7 @@
      "countedDate": "2026-10-30",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2278,10 +2393,16 @@
      "countedDate": "2026-11-02",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://voterportal.sos.la.gov/VoterRegistration",
+    "publisher": "Louisiana Secretary of State",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Louisiana has no same-day registration. Voting by mail is limited to voters who qualify (for example age 65+, disability, or away from the parish); see the Secretary of State's absentee rules."
   },
   "MA": {
@@ -2303,7 +2424,7 @@
      "countedDate": "2026-10-24",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2322,7 +2443,7 @@
      "countedDate": "2026-10-24",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2341,7 +2462,7 @@
      "countedDate": "2026-10-24",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2357,7 +2478,7 @@
      },
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2375,7 +2496,7 @@
      },
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2394,7 +2515,7 @@
      },
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2412,10 +2533,16 @@
      },
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://www.sec.state.ma.us/ovr/",
+    "publisher": "Secretary of the Commonwealth of Massachusetts",
+    "checkedOn": "2026-10-16",
+    "status": "blocked"
+   },
    "note": "Registration closes 10 days before Election Day; there is no same-day registration. Early voting hours vary by city or town."
   },
   "MD": {
@@ -2437,7 +2564,7 @@
      "countedDate": "2026-10-13",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2456,7 +2583,7 @@
      "countedDate": "2026-10-13",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2475,7 +2602,7 @@
      "countedDate": "2026-10-13",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2491,7 +2618,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2509,7 +2636,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2528,7 +2655,7 @@
      "countedDate": "2026-10-27",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2547,7 +2674,7 @@
      "countedDate": "2026-10-27",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2565,7 +2692,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2584,7 +2711,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2602,10 +2729,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://elections.maryland.gov/voter_registration/index.html",
+    "publisher": "Maryland State Board of Elections",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Missed the Oct 13 deadline? You can still sign up and vote in person at an early voting center in your county (Oct 22-29) or at your polling place on Election Day. Bring proof of where you live."
   },
   "ME": {
@@ -2627,7 +2760,7 @@
      "countedDate": "2026-10-13",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2646,7 +2779,7 @@
      "countedDate": "2026-10-13",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2663,7 +2796,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2680,7 +2813,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2696,7 +2829,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2713,7 +2846,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2731,10 +2864,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://registertovote.sos.maine.gov/",
+    "publisher": "Maine Secretary of State",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Maine has same-day registration: you can register in person at your town office or city hall up to and including Election Day. Early voting is in-person absentee voting at the town clerk's office."
   },
   "MI": {
@@ -2755,7 +2894,7 @@
      "countedDate": "2026-10-19",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2774,7 +2913,7 @@
      "countedDate": "2026-10-19",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2792,7 +2931,7 @@
      "countedDate": "2026-10-19",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2809,7 +2948,7 @@
      },
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2825,7 +2964,7 @@
      },
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2845,7 +2984,7 @@
      "countedDate": "2026-10-30",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2865,7 +3004,7 @@
      "countedDate": "2026-11-02",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2883,10 +3022,16 @@
      },
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://mvic.sos.state.mi.us/RegisterVoter",
+    "publisher": "Michigan Secretary of State",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "From 14 days before through Election Day you can register in person at your city or township clerk's office with proof of residency."
   },
   "MN": {
@@ -2908,7 +3053,7 @@
      "countedDate": "2026-10-13",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2928,7 +3073,7 @@
      "countedDate": "2026-10-13",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2947,7 +3092,7 @@
      "countedDate": "2026-10-13",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2963,7 +3108,7 @@
      },
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2981,7 +3126,7 @@
      "countedDate": "2026-09-18",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -2999,7 +3144,7 @@
      },
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3017,10 +3162,16 @@
      },
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://mnvotes.sos.mn.gov/VoterRegistration/index",
+    "publisher": "Minnesota Secretary of State",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "You can register when you vote, at an early voting location or your polling place on Election Day. No fixed deadline to request a mail ballot is stated; the Secretary of State recommends applying by October 20."
   },
   "MO": {
@@ -3039,7 +3190,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3056,7 +3207,7 @@
      },
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3073,7 +3224,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3090,7 +3241,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3108,7 +3259,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3126,10 +3277,16 @@
      },
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://s1.sos.mo.gov/elections/goVoteMissouri/register",
+    "publisher": "Missouri Secretary of State",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Missouri has no same-day registration. No-excuse absentee voting is in person only; voting absentee by mail requires a qualifying reason."
   },
   "MS": {
@@ -3148,7 +3305,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3165,7 +3322,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3184,10 +3341,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://www.sos.ms.gov/elections-voting/voter-registration-information",
+    "publisher": "Mississippi Secretary of State",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Mississippi has no online registration, no same-day registration and no no-excuse early voting. Absentee voting requires a qualifying reason; in-person absentee voting at the circuit clerk's office ends at noon Saturday, October 31. No statewide deadline to request a mail ballot is stated."
   },
   "MT": {
@@ -3211,7 +3374,7 @@
      "countedDate": "2026-10-04",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3224,13 +3387,13 @@
      "source": {
       "type": "official",
       "publisher": "Montana Secretary of State",
-      "url": "https://sosmt.gov/elections/faq/",
-      "quote": "what are the deadlines for the close of regular registration for the federal primary and general elections? regular registration closes 30 days before the election."
+      "url": "https://sosmt.gov/wp-content/uploads/wpfd/preview_files/2026-Federal-Election-Calendar(6fec86338c652319befedd4fd798de5b).pdf",
+      "quote": "30 days before any election close of regular voter registration."
      },
      "countedDate": "2026-10-04",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3248,7 +3411,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3269,7 +3432,7 @@
      "countedDate": "2026-10-04",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3281,15 +3444,15 @@
      "date": "2026-11-02",
      "time": "12:00",
      "source": {
-      "type": "official",
-      "publisher": "Montana Secretary of State",
-      "url": "https://sosmt.gov/elections/absentee/",
-      "quote": "applications must be received by the county election office by noon the day before the election."
+      "type": "statute",
+      "publisher": "Montana Legislature (MCA 13-13-211)",
+      "url": "https://leg.mt.gov/bills/mca/title_0130/chapter_0130/part_0020/section_0110/0130-0130-0020-0110.html",
+      "quote": "an application for an absentee ballot must be made before noon on the day before the election."
      },
      "countedDate": "2026-11-02",
      "verification": {
-      "status": "verified",
-      "checkedOn": "2026-10-12"
+      "status": "statute",
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3300,17 +3463,23 @@
      "date": "2026-11-03",
      "time": "20:00",
      "source": {
-      "type": "official",
-      "publisher": "Montana Secretary of State",
-      "url": "https://sosmt.gov/elections/absentee/",
-      "quote": "absentee ballots must be received at the election office or polling place by 8:00 p.m. on election day."
+      "type": "statute",
+      "publisher": "Montana Legislature (MCA 13-13-201)",
+      "url": "https://leg.mt.gov/bills/mca/title_0130/chapter_0130/part_0020/section_0010/0130-0130-0020-0010.html",
+      "quote": "each elector shall return it in a manner that ensures the ballot is received prior to 8 p.m. on election day."
      },
      "verification": {
-      "status": "verified",
-      "checkedOn": "2026-10-12"
+      "status": "statute",
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://sosmt.gov/elections/",
+    "publisher": "Montana Secretary of State",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Montana has no online voter registration. After regular registration closes, late registration runs through Election Day at the place your county names; late registrants must get their ballot in person."
   },
   "NC": {
@@ -3332,7 +3501,7 @@
      "countedDate": "2026-10-09",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3351,7 +3520,7 @@
      "countedDate": "2026-10-09",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3369,7 +3538,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3387,7 +3556,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3407,7 +3576,7 @@
      "countedDate": "2026-10-20",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3425,10 +3594,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://www.ncsbe.gov/registering/how-register",
+    "publisher": "North Carolina State Board of Elections",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "You can sign up and vote the same day only during early voting, not on Election Day. Military and overseas voters have other deadlines."
   },
   "ND": {
@@ -3450,7 +3625,7 @@
      "countedDate": "2026-10-19",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3469,7 +3644,7 @@
      "countedDate": "2026-11-02",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3486,10 +3661,17 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://www.sos.nd.gov/sites/default/files/documents/news/2026-general-election-media-info-aug26.pdf",
+    "publisher": "North Dakota Secretary of State",
+    "checkedOn": "2026-10-16",
+    "none": true,
+    "status": "verified"
+   },
    "note": "North Dakota does not have voter registration; bring valid ID to vote. Early voting is a county option: for 2026 it is offered only in Burleigh, Cass, Grand Forks, Morton, Stark, Stutsman and Ward counties. Poll closing times vary by county."
   },
   "NE": {
@@ -3508,7 +3690,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3525,7 +3707,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3542,7 +3724,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3559,7 +3741,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3577,7 +3759,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3595,10 +3777,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://www.nebraska.gov/apps-sos-voter-registration/",
+    "publisher": "Nebraska Secretary of State",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Nebraska has no same-day registration. Times are local: deadlines stated as 8 p.m. Central are 7 p.m. in Mountain-time counties."
   },
   "NH": {
@@ -3618,7 +3806,7 @@
      },
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3638,7 +3826,7 @@
      "countedDate": "2026-11-02",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3658,7 +3846,7 @@
      "countedDate": "2026-11-02",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3676,7 +3864,7 @@
      },
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
@@ -3700,7 +3888,7 @@
      "countedDate": "2026-10-13",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3719,7 +3907,7 @@
      "countedDate": "2026-10-13",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3738,7 +3926,7 @@
      "countedDate": "2026-10-13",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3755,7 +3943,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3774,7 +3962,7 @@
      "countedDate": "2026-10-27",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3794,7 +3982,7 @@
      "countedDate": "2026-11-02",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3813,7 +4001,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3831,10 +4019,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://www.nj.gov/state/elections/voter-registration.shtml",
+    "publisher": "New Jersey Division of Elections",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "No same-day registration. You can also apply for a mail-in ballot online at vote.nj.gov."
   },
   "NM": {
@@ -3855,7 +4049,7 @@
      "countedDate": "2026-10-06",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3873,7 +4067,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3892,7 +4086,7 @@
      "countedDate": "2026-10-06",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3911,7 +4105,7 @@
      "countedDate": "2026-10-20",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3929,10 +4123,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://www.sos.nm.gov/voting-and-elections/voter-registration-information/",
+    "publisher": "New Mexico Secretary of State",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Missed the deadline? You can still sign up and vote the same day in person: at your county clerk's office, at some early voting sites, or at any polling place in your county on Election Day."
   },
   "NV": {
@@ -3954,7 +4154,7 @@
      "countedDate": "2026-10-06",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3972,7 +4172,7 @@
      "countedDate": "2026-10-06",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -3988,7 +4188,7 @@
      },
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4006,7 +4206,7 @@
      },
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4023,7 +4223,7 @@
      },
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4042,7 +4242,7 @@
      },
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4060,16 +4260,142 @@
      },
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://www.registertovotenv.gov/",
+    "publisher": "Nevada Secretary of State",
+    "checkedOn": "2026-10-16",
+    "status": "blocked"
+   },
    "note": "Every active registered voter is mailed a ballot; no request needed."
   },
   "NY": {
    "timeZone": "America/New_York",
-   "items": [],
-   "unread": true
+   "items": [
+    {
+     "kind": "registration",
+     "method": "in_person",
+     "rule": "Register in person by the 10th day before Election Day.",
+     "daysBefore": 10,
+     "date": "2026-10-24",
+     "source": {
+      "type": "statute",
+      "publisher": "New York Election Law § 5-210",
+      "url": "https://www.nysenate.gov/legislation/laws/ELN/5-210",
+      "quote": "received no laterthan the tenth day before such election, or delivered in person to suchboard of elections not later than the tenth day before such election"
+     },
+     "countedDate": "2026-10-24",
+     "verification": {
+      "status": "statute",
+      "checkedOn": "2026-10-16"
+     }
+    },
+    {
+     "kind": "registration",
+     "method": "mail",
+     "basis": "received",
+     "rule": "Mailed registration forms must be received by the 10th day before Election Day.",
+     "daysBefore": 10,
+     "date": "2026-10-24",
+     "source": {
+      "type": "statute",
+      "publisher": "New York Election Law § 5-210",
+      "url": "https://www.nysenate.gov/legislation/laws/ELN/5-210",
+      "quote": "received no laterthan the tenth day before such election, or delivered in person to suchboard of elections not later than the tenth day before such election"
+     },
+     "countedDate": "2026-10-24",
+     "verification": {
+      "status": "statute",
+      "checkedOn": "2026-10-16"
+     }
+    },
+    {
+     "kind": "absentee_request",
+     "method": "any",
+     "basis": "received",
+     "rule": "Applications for an early mail or absentee ballot sent by mail or online must be received by the 10th day before Election Day.",
+     "daysBefore": 10,
+     "date": "2026-10-24",
+     "source": {
+      "type": "statute",
+      "publisher": "New York Election Law § 8-400",
+      "url": "https://www.nysenate.gov/legislation/laws/ELN/8-400",
+      "quote": "must bereceived by the board of elections not later than the tenth day beforethe election for which a ballot is first requested."
+     },
+     "countedDate": "2026-10-24",
+     "verification": {
+      "status": "statute",
+      "checkedOn": "2026-10-16"
+     }
+    },
+    {
+     "kind": "absentee_request",
+     "method": "in_person",
+     "rule": "Apply in person at your county board of elections up to the day before Election Day.",
+     "daysBefore": 1,
+     "date": "2026-11-02",
+     "source": {
+      "type": "statute",
+      "publisher": "New York Election Law § 8-400",
+      "url": "https://www.nysenate.gov/legislation/laws/ELN/8-400",
+      "quote": "must be received bysuch board not later than the day before such election."
+     },
+     "countedDate": "2026-11-02",
+     "verification": {
+      "status": "statute",
+      "checkedOn": "2026-10-16"
+     }
+    },
+    {
+     "kind": "ballot_return",
+     "method": "mail",
+     "basis": "postmarked",
+     "rule": "A mailed ballot must be postmarked by Election Day and arrive within 7 days.",
+     "daysBefore": 0,
+     "date": "2026-11-03",
+     "source": {
+      "type": "statute",
+      "publisher": "New York Election Law § 8-412",
+      "url": "https://www.nysenate.gov/legislation/laws/ELN/8-412",
+      "quote": "not later thanthe day of the election and received by such board of elections notlater than seven days following the day of election"
+     },
+     "endDate": "2026-11-10",
+     "countedDate": "2026-11-03",
+     "verification": {
+      "status": "statute",
+      "checkedOn": "2026-10-16"
+     }
+    },
+    {
+     "kind": "ballot_return",
+     "method": "in_person",
+     "rule": "Drop off your ballot at your county board of elections or a poll site before the polls close (9 p.m.) on Election Day.",
+     "daysBefore": 0,
+     "date": "2026-11-03",
+     "time": "21:00",
+     "source": {
+      "type": "statute",
+      "publisher": "New York Election Law § 8-412",
+      "url": "https://www.nysenate.gov/legislation/laws/ELN/8-412",
+      "quote": "absenteeballots received by it before the close of the polls on election day"
+     },
+     "countedDate": "2026-11-03",
+     "verification": {
+      "status": "statute",
+      "checkedOn": "2026-10-16"
+     }
+    }
+   ],
+   "register": {
+    "url": "https://dmv.ny.gov/more-info/electronic-voter-registration-application",
+    "publisher": "New York State DMV",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
+   "note": "Early voting sites and hours are set by your county board of elections."
   },
   "OH": {
    "timeZone": "America/New_York",
@@ -4091,7 +4417,7 @@
      "countedDate": "2026-10-04",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4111,7 +4437,7 @@
      "countedDate": "2026-10-04",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4129,7 +4455,7 @@
      },
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4148,7 +4474,7 @@
      "countedDate": "2026-10-27",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4166,10 +4492,16 @@
      },
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://olvr.ohiosos.gov/",
+    "publisher": "Ohio Secretary of State",
+    "checkedOn": "2026-10-16",
+    "status": "blocked"
+   },
    "note": "No same-day registration. Online registration also closes at the 30-day deadline. Mailed absentee ballots must now arrive by the close of polls; a postmark is no longer enough (state law as of March 20, 2026)."
   },
   "OK": {
@@ -4190,7 +4522,7 @@
      "countedDate": "2026-10-09",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4208,7 +4540,7 @@
      "countedDate": "2026-10-09",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4227,7 +4559,7 @@
      "countedDate": "2026-10-09",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4246,7 +4578,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4266,7 +4598,7 @@
      "countedDate": "2026-10-19",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4284,7 +4616,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4303,10 +4635,16 @@
      "countedDate": "2026-11-02",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://oklahoma.gov/elections/voter-registration.html",
+    "publisher": "Oklahoma State Election Board",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Oklahoma has no same-day sign-up to vote."
   },
   "OR": {
@@ -4328,7 +4666,7 @@
      "countedDate": "2026-10-13",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4347,7 +4685,7 @@
      "countedDate": "2026-10-13",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4365,7 +4703,7 @@
      "countedDate": "2026-10-13",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4383,7 +4721,7 @@
      },
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4401,10 +4739,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://sos.oregon.gov/voting/Pages/registration.aspx",
+    "publisher": "Oregon Secretary of State",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Every active registered voter is mailed a ballot (from October 14); no request needed. Oregon has no early in-person voting period or same-day registration; county elections offices are open 7 a.m. to 8 p.m. on Election Day."
   },
   "PA": {
@@ -4426,7 +4770,7 @@
      "countedDate": "2026-10-19",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4445,7 +4789,7 @@
      "countedDate": "2026-10-19",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4463,7 +4807,7 @@
      "countedDate": "2026-10-19",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4483,7 +4827,7 @@
      "countedDate": "2026-10-27",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4501,10 +4845,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://www.pa.gov/services/vote/register-to-vote",
+    "publisher": "Commonwealth of Pennsylvania",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "No same-day registration and no formal early voting period. Instead, once your county's ballots are ready, you can apply for, mark and return a mail ballot in one visit to your county election office (on-demand mail ballot voting) until 5 p.m. October 27; the start date varies by county."
   },
   "RI": {
@@ -4525,7 +4875,7 @@
      "countedDate": "2026-10-04",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4544,7 +4894,7 @@
      "countedDate": "2026-10-04",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4564,7 +4914,7 @@
      "countedDate": "2026-10-14",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4584,7 +4934,7 @@
      "countedDate": "2026-10-13",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4602,10 +4952,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://elections.ri.gov/voter-resources",
+    "publisher": "Rhode Island Board of Elections",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "There is no same-day registration in a non-presidential election. Any voter may vote by mail without an excuse."
   },
   "SC": {
@@ -4626,7 +4982,7 @@
      "countedDate": "2026-10-04",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4646,7 +5002,7 @@
      "countedDate": "2026-10-05",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4664,7 +5020,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4683,7 +5039,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4703,7 +5059,7 @@
      "countedDate": "2026-10-23",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4721,10 +5077,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://scvotes.gov/voters/register-to-vote/",
+    "publisher": "South Carolina Election Commission",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "South Carolina requires an excuse to vote absentee; early in-person voting is open to all voters. Registration is closed 30 days before the election (Sunday, Oct. 4 in 2026)."
   },
   "SD": {
@@ -4747,7 +5109,7 @@
      "countedDate": "2026-10-19",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4766,7 +5128,7 @@
      "countedDate": "2026-10-19",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4786,7 +5148,7 @@
      "countedDate": "2026-09-18",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4804,7 +5166,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4821,10 +5183,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://sdsos.gov/elections-voting/voting/register-to-vote/default.aspx",
+    "publisher": "South Dakota Secretary of State",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "South Dakota has no online voter registration and no same-day registration. Early voting is in-person absentee voting at the county auditor's office. Registration forms cannot be faxed or emailed."
   },
   "TN": {
@@ -4846,7 +5214,7 @@
      "countedDate": "2026-10-04",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4866,7 +5234,7 @@
      "countedDate": "2026-10-04",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4885,7 +5253,7 @@
      "countedDate": "2026-10-04",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4904,7 +5272,7 @@
      "countedDate": "2026-10-14",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4923,7 +5291,7 @@
      "countedDate": "2026-10-24",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4940,10 +5308,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://ovr.govote.tn.gov/",
+    "publisher": "Tennessee Secretary of State",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Tennessee has no same-day registration. Voting absentee by mail requires a reason set by law; early in-person voting is open to everyone. Mailed ballots cannot be hand-delivered."
   },
   "TX": {
@@ -4966,7 +5340,7 @@
      "countedDate": "2026-10-04",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -4985,7 +5359,7 @@
      "countedDate": "2026-10-04",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5002,7 +5376,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5021,7 +5395,7 @@
      "countedDate": "2026-10-23",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5041,10 +5415,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://www.votetexas.gov/register-to-vote/index.html",
+    "publisher": "Texas Secretary of State",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Texas has no online registration for new voters (existing voters can update an address online through Texas.gov) and no same-day registration. Voting by mail is limited to voters who qualify under state law."
   },
   "UT": {
@@ -5066,7 +5446,7 @@
      "countedDate": "2026-10-23",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5086,7 +5466,7 @@
      "countedDate": "2026-10-23",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5105,7 +5485,7 @@
      "countedDate": "2026-10-23",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5122,7 +5502,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5141,7 +5521,7 @@
      "countedDate": "2026-10-20",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5159,10 +5539,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://vote.utah.gov/register-to-vote/",
+    "publisher": "Utah Lieutenant Governor",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Active registered voters are mailed a ballot automatically (ballots mailed starting Oct. 13), so no request is needed. A voter who is not mailed one can request a ballot by 5 p.m. Oct. 27. Mail ballots must now arrive by 8 p.m. on Election Day; a postmark is not enough."
   },
   "VA": {
@@ -5183,7 +5569,7 @@
      "countedDate": "2026-10-23",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5202,7 +5588,7 @@
      "countedDate": "2026-10-23",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5221,7 +5607,7 @@
      "countedDate": "2026-10-23",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5238,7 +5624,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5257,7 +5643,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5277,7 +5663,7 @@
      "countedDate": "2026-10-23",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5296,10 +5682,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://vote.elections.virginia.gov/Registration/Eligibility",
+    "publisher": "Virginia Department of Elections",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Any voter may vote early or by mail without a reason. After the Oct. 23 deadline you can still register and vote in person with a provisional ballot."
   },
   "VT": {
@@ -5318,7 +5710,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5336,7 +5728,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5355,7 +5747,7 @@
      "countedDate": "2026-09-19",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5373,10 +5765,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://sos.vermont.gov/elections/voters/registration/",
+    "publisher": "Vermont Secretary of State",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Vermont mails a ballot to every active registered voter by Oct. 1, so no request is needed. You can register any day up to and including Election Day. Polls close at 7 p.m."
   },
   "WA": {
@@ -5397,7 +5795,7 @@
      "countedDate": "2026-10-26",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5416,7 +5814,7 @@
      "countedDate": "2026-10-26",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5433,7 +5831,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5451,7 +5849,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5471,7 +5869,7 @@
      "countedDate": "2026-10-16",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5489,7 +5887,7 @@
      },
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5507,10 +5905,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://www.sos.wa.gov/elections/voters/voter-registration/register-vote-washington",
+    "publisher": "Washington Secretary of State",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Every registered voter is mailed a ballot (mailed by Oct. 16); no request needed. Return envelopes have prepaid postage. Results are certified 21 days after the general election."
   },
   "WI": {
@@ -5532,7 +5936,7 @@
      "countedDate": "2026-10-14",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5551,7 +5955,7 @@
      "countedDate": "2026-10-14",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5568,7 +5972,7 @@
      },
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5585,7 +5989,7 @@
      },
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5604,7 +6008,7 @@
      "countedDate": "2026-10-20",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5624,7 +6028,7 @@
      "countedDate": "2026-10-29",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5642,10 +6046,16 @@
      },
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://myvote.wi.gov/en-us/Register-To-Vote",
+    "publisher": "Wisconsin Elections Commission",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Early voting is in-person absentee voting at your municipal clerk's office; dates and hours vary by city, village or town."
   },
   "WV": {
@@ -5667,7 +6077,7 @@
      "countedDate": "2026-10-13",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5686,7 +6096,7 @@
      "countedDate": "2026-10-13",
      "verification": {
       "status": "statute",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5704,7 +6114,7 @@
      "countedDate": "2026-10-13",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5723,7 +6133,7 @@
      "countedDate": "2026-10-21",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5742,7 +6152,7 @@
      "countedDate": "2026-10-28",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5760,7 +6170,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5777,10 +6187,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://ovr.sos.wv.gov/Register/Landing",
+    "publisher": "West Virginia Secretary of State",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Voting absentee by mail in West Virginia requires an eligible reason; early in-person voting is open to everyone. No same-day registration."
   },
   "WY": {
@@ -5799,7 +6215,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5815,7 +6231,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5833,7 +6249,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5852,7 +6268,7 @@
      "countedDate": "2026-10-06",
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5869,7 +6285,7 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     },
     {
@@ -5887,10 +6303,16 @@
      },
      "verification": {
       "status": "verified",
-      "checkedOn": "2026-10-12"
+      "checkedOn": "2026-10-16"
      }
     }
    ],
+   "register": {
+    "url": "https://sos.wyo.gov/Elections/State/RegisteringToVote.aspx",
+    "publisher": "Wyoming Secretary of State",
+    "checkedOn": "2026-10-16",
+    "status": "verified"
+   },
    "note": "Wyoming has no online voter registration. Mailed registration forms must be notarized (except for military and overseas voters). Early voting is in-person absentee voting at the county clerk's office."
   }
  }

@@ -119,9 +119,17 @@ export default function ScoresChapter() {
             parts&apos; weights, and the reference values the nightly run measured: the seat&apos;s
             lean, the break rate expected of the party there, the chamber&apos;s typical PAC share
             and bill record. The Representation Score is the weighted sum of the stored part scores,
-            exactly; each part recomputes from its components to within the rounding of one decimal.
-            No key is needed: see the <A href="/developers">API reference</A>, or the link under
-            &ldquo;Methods, data and citation&rdquo; on any profile.
+            exactly. Each part is the weighted average of its components given in percent, plus the
+            points any other component adds: a senator&apos;s constituent approval adds 30% of its
+            distance from 50 (an approval of 74 adds 7.2 points, one of 30 takes 6). The total is
+            rounded and kept within 0 to 100, so a sum below 0 is shown as 0. The components are the
+            ones the nightly run worked out when it stored the score, so they recompute it to within
+            the rounding of one decimal even after a bill moves the next morning; where today&apos;s
+            records would give a different score, the breakdown says so, and the next run scores
+            them. A member the latest run couldn&apos;t score keeps the score of the last run that
+            could, marked HELD with that run&apos;s date and method on the profile, the leaderboard
+            and the compare page. No key is needed: see the <A href="/developers">API reference</A>,
+            or the link under &ldquo;Methods, data and citation&rdquo; on any profile.
           </P>
         </Sub>
         <Sub title="Thin records and missing data">

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { ElectionCalendar } from "@/types/specials";
 import { calendarEntries, longDate, type CalendarEntry as Entry } from "@/lib/specials";
+import RegisterLink from "@/components/elections/RegisterLink";
 import { useYourState } from "@/hooks/useYourState";
 
 type Row = Entry & { group?: Entry[] };
@@ -66,11 +67,19 @@ export default function CalendarList({ cal }: { cal: ElectionCalendar }) {
     if (next) yours.setState(next);
   };
   const all = calendarEntries(cal);
-  const states = Array.from(
-    new Map(
-      [...cal.elections, ...cal.voterDeadlines].map((e) => [e.state, e.stateName] as const)
-    ).entries()
-  ).sort((a, b) => a[1].localeCompare(b[1]));
+  // Every state and DC from the API, a state whose deadlines couldn't be
+  // read included and labelled; an older API's list from the entries.
+  const states: [string, string][] = cal.states
+    ? cal.states.map((s) => [
+        s.state,
+        s.deadlinesRead ? s.stateName : `${s.stateName} (deadlines not read)`,
+      ])
+    : Array.from(
+        new Map(
+          [...cal.elections, ...cal.voterDeadlines].map((e) => [e.state, e.stateName] as const)
+        ).entries()
+      );
+  states.sort((a, b) => a[1].localeCompare(b[1]));
   const state = picked ?? (states.some(([code]) => code === yours.state) ? yours.state : "");
   const shown = state ? all.filter((e) => e.state === state || e.state === null) : groupByDay(all);
   const ahead = shown.filter((e) => !e.passed);
@@ -104,14 +113,28 @@ export default function CalendarList({ cal }: { cal: ElectionCalendar }) {
                   ) : (
                     g.text
                   )}
+                  {g.register && (
+                    <>
+                      {" "}
+                      <RegisterLink link={g.register} showNote={false} className="ml-1" />
+                    </>
+                  )}
                 </li>
               ))}
             </ul>
           </details>
         ) : e.href ? (
-          <a href={e.href} className="inline-block py-1 hover:text-phos">
-            {e.text}
-          </a>
+          <>
+            <a href={e.href} className="inline-block py-1 hover:text-phos">
+              {e.text}
+            </a>
+            {e.register && (
+              <>
+                {" "}
+                <RegisterLink link={e.register} showNote={false} className="ml-1" />
+              </>
+            )}
+          </>
         ) : (
           e.text
         )}
@@ -139,6 +162,15 @@ export default function CalendarList({ cal }: { cal: ElectionCalendar }) {
           ))}
         </select>
       </label>
+      {/* The list below changes as the state does; say so to a screen reader
+          (WCAG 4.1.3), which hears nothing of a filter otherwise. */}
+      <p role="status" className="sr-only">
+        {ahead.length} {ahead.length === 1 ? "entry" : "entries"} ahead
+        {state
+          ? ` for ${states.find(([code]) => code === state)?.[1] ?? state}`
+          : " in every state"}
+        {passed.length ? `, ${passed.length} passed in the last month` : ""}.
+      </p>
       {ahead.length === 0 && (
         <p className="mt-4 text-sm text-ink-lo">
           Nothing ahead on the calendar{state ? " for this state" : ""} in the year to{" "}

@@ -46,7 +46,7 @@ describe("OnTheRecordList", () => {
   it("prints the backend's sentences and links each to its roll call", () => {
     render(<OnTheRecordList data={data} />);
     expect(screen.getByText(data.entries[0].sentence)).toBeTruthy();
-    const rollCalls = screen.getAllByRole("link", { name: "[ ROLL CALL ]" });
+    const rollCalls = screen.getAllByRole("link", { name: "Senate roll call 252" });
     expect(rollCalls.map((a) => a.getAttribute("href"))).toEqual([
       "/congress/votes/senate/119/2/252",
       "/congress/votes/senate/119/2/252",
@@ -55,12 +55,12 @@ describe("OnTheRecordList", () => {
 
   it("offers the member and the state's other senator side by side", () => {
     render(<OnTheRecordList data={data} />);
-    expect(screen.getByRole("link", { name: "[ PAT LONE ]" }).getAttribute("href")).toBe(
+    expect(screen.getByRole("link", { name: "Pat Lone" }).getAttribute("href")).toBe(
       "/politicians/pat-lone"
     );
-    expect(screen.getByRole("link", { name: "[ VS. SAM OTHER ]" }).getAttribute("href")).toBe(
-      "/compare?leftId=pat-lone&leftChamber=senate&rightId=sam-other&rightChamber=senate"
-    );
+    expect(
+      screen.getByRole("link", { name: "Compare Pat Lone vs. Sam Other" }).getAttribute("href")
+    ).toBe("/compare?leftId=pat-lone&leftChamber=senate&rightId=sam-other&rightChamber=senate");
   });
 
   it("links a vote on no bill to its own page too", () => {
@@ -69,7 +69,7 @@ describe("OnTheRecordList", () => {
       entries: [{ ...data.entries[0], vote: { ...vote, billId: null } }],
     };
     render(<OnTheRecordList data={nomination} />);
-    expect(screen.getByRole("link", { name: "[ ROLL CALL ]" }).getAttribute("href")).toBe(
+    expect(screen.getByRole("link", { name: "Senate roll call 252" }).getAttribute("href")).toBe(
       "/congress/votes/senate/119/2/252"
     );
   });
@@ -80,6 +80,14 @@ describe("OnTheRecordList", () => {
     rerender(<OnTheRecordList data={data} recess />);
     const heading = screen.getByRole("heading", { level: 2 });
     expect(heading.textContent).toMatch(/^Last week of business: /);
-    expect(heading.querySelector("a")?.textContent).toMatch(/^Every roll call/);
+    expect(heading.querySelector("a")).toBeNull();
+    expect(screen.getByRole("link", { name: /^Every roll call/ })).toBeTruthy();
+  });
+});
+
+describe("OnTheRecordList headings", () => {
+  it("names its heading by the heading alone, with the week's link beside it", () => {
+    render(<OnTheRecordList data={data} />);
+    expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("On the record");
   });
 });

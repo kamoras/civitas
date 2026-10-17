@@ -3,7 +3,7 @@
 import asyncio
 import logging
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.api.auth import check_pipeline_token
@@ -13,6 +13,7 @@ from app.api.response_helpers import (
     CACHE_TTL_LIST_S,
     cached_json as _cached_json,
 )
+from app.services import court_service
 from app.services.justice_service import (
     get_all_justices,
     get_justice,
@@ -55,6 +56,21 @@ def _run_pipeline_background():
         logger.error("Justice pipeline failed: %s", e, exc_info=True)
     finally:
         db.close()
+
+
+@router.get("/{justice_id}/cases")
+def cases(
+    justice_id: str,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=court_service.MAX_PER_PAGE),
+    db: Session = Depends(get_db),
+):
+    """One justice's votes, newest first: the side, the opinion written and
+    the Court's split, with each case's sources."""
+    result = court_service.justice_cases(db, justice_id, page, per_page)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Justice not found")
+    return _cached_json(result, max_age=CACHE_TTL_DETAIL_S)
 
 
 @router.get("/{justice_id}")

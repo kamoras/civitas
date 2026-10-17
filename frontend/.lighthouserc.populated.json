@@ -22,7 +22,9 @@
         "http://localhost:3000/elections/redistricting/UT",
         "http://localhost:3000/politicians/R-UT1",
         "http://localhost:3000/feeds",
-        "http://localhost:3000/developers"
+        "http://localhost:3000/developers",
+        "http://localhost:3000/court",
+        "http://localhost:3000/politicians/J0"
       ],
       "settings": {
         "onlyCategories": ["accessibility", "seo"],

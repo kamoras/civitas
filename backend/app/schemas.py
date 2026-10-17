@@ -48,6 +48,14 @@ class IndustryDonationSchema(CamelModel):
     percentage: float = Field(description="Share of the breakdown's total, 0-100, rounded to a whole number")
 
 
+class HeldScoreSchema(CamelModel):
+    failed_on: str = Field(description="The run (YYYY-MM-DD) that could not score the member")
+    source: str | None = Field(description="What that run could not read (\"FEC filings\", \"Congress.gov\"), or "
+                                           "null when the failure names no source")
+    scored_on: str | None = Field(description="The run (YYYY-MM-DD) whose scores the member keeps")
+    algorithm_version: str | None = Field(description="The scoring version of that run")
+
+
 class RepresentationScoreSchema(CamelModel):
     funding_independence: float = Field(
         description="0-100: how free the member is from PAC and large-donor dependence. Weighted into overall")
@@ -72,6 +80,13 @@ class RepresentationScoreSchema(CamelModel):
                           'legislativeEffectivenessBills, where that score\'s bills came from: "fetched:<date>" (read '
                           'that day), "carried:<date>" (this run couldn\'t read them; the bills read on that date) or '
                           '"unavailable" (none known, so the bill part is not measured)')
+    held: HeldScoreSchema | None = Field(
+        None, description="Set when the latest run could not score the member, so these scores are an earlier "
+                          "run's (scoredOn, algorithmVersion), which other members' may not share")
+    thin_data: list[str] = Field(
+        default_factory=list,
+        description="Weighted dimensions whose confidence is \"low\": too little source data for the dimension "
+                    "to be more than a pull toward a neutral 50")
 
 
 class PolicyAreaDetail(CamelModel):
@@ -987,7 +1002,11 @@ class PublicHistorySchema(_PublicModel):
 
 
 class PublicSearchResultSchema(_PublicModel):
-    id: int = Field(description="The document's id on Civitas (siteUrl)")
+    id: int = Field(description="The document's row id on Civitas. Not permanent: link and cite by key")
+    key: str = Field(description="The document's permanent id, from its official identifier: \"fr-2026-17123\" "
+                                 "(Federal Register document number), \"crec-\" and the Congressional Record "
+                                 "granule for a floor speech, \"scotus-\" and the docket for an opinion. "
+                                 "Its page is siteUrl, /explore/{key}")
     title: str
     date: str = Field(description="YYYY-MM-DD")
     doc_type: str = Field(description="One of the doc_type filter's values")
@@ -1013,12 +1032,23 @@ class PublicSearchResultSchema(_PublicModel):
     duplicate_count: int = Field(description="Near-identical copies folded into this result")
 
 
+class PublicNotHeldSchema(_PublicModel):
+    identifier: str = Field(description="The identifier as it is written, e.g. \"Executive Order 14148\"")
+    sentence: str = Field(description="Why it isn't here: before the corpus starts, or not read yet")
+    url: str = Field(description="Its official source")
+    source: str = Field(description="That source's name")
+
+
 class PublicSearchResponseSchema(_PublicModel):
     query: str
     results: list[PublicSearchResultSchema] = Field(description="Best match first")
     count: int = Field(description="Results returned (at most the request's limit), not a total")
     partial: bool = Field(description="True when only the exact-words search could answer, so the ranking is incomplete")
     index_building: bool = Field(description="True while the search index is being built; results are empty until it is")
+    not_held: list[PublicNotHeldSchema] = Field(description="Each identifier the query names (an executive order, FR "
+                                                         "citation or document number, RIN, docket, Congressional "
+                                                         "Record citation) that no document here is known by, with "
+                                                         "where its official copy is. Results, if any, cite it")
 
 
 _BREAKDOWN_RULE = (
@@ -1035,17 +1065,39 @@ class PublicScoreComponentSchema(_PublicModel):
                                             "and then it is left out and the others carry its weight")
     combines: Literal["mean", "points"] = Field(
         description="mean: takes part in the weighted mean; points: adds weight x (score - 50) points to it")
+    points: float | None = Field(
+        None, description="A points component: the points it adds to the weighted mean (negative: takes away), "
+                          "weight x (score - 50) to one decimal; absent otherwise")
     detail: str = Field(description="How the component was worked out, with the member's figures and the "
                                     "reference values it was compared against")
+
+
+class PublicSinceScoredSchema(_PublicModel):
+    score: int = Field(description="The dimension's score recomputed now on today's records")
+    bills_changed: int | None = Field(
+        description="Legislative Effectiveness: how many bills reached a new furthest stage (or were introduced) "
+                    "after the run; null for other dimensions, or when the change is not in the bills")
+    scored_at: str | None = Field(description="When the run worked the stored score out, UTC (YYYY-MM-DDTHH:MMZ)")
 
 
 class PublicScoreDimensionSchema(_PublicModel):
     stored_score: float = Field(description="The dimension's score on the record (representationScore), "
                                             "from the last scoring run")
-    score: int = Field(description="The score recomputed now from the components below, by: " + _BREAKDOWN_RULE
-                                   + ". Equal to storedScore unless something changed since the run (a later "
-                                   "run part-way through, or a code change: compare algorithmVersion with "
-                                   "recomputedWith)")
+    score: int = Field(description="The score the components below give, by: " + _BREAKDOWN_RULE
+                                   + ". With basis \"scored\" they are the components the run that stored the "
+                                   "score worked out, so this equals storedScore")
+    sum: float | None = Field(description="The components combined by that rule before rounding and the 0-100 "
+                                          "clamp, from the components as published (one decimal); null when none "
+                                          "was measured")
+    clamped: bool = Field(description="True when sum fell outside 0-100 and the score was held at the bound")
+    basis: Literal["scored", "recomputed"] = Field(
+        description="scored: the components the run that stored the score worked out, kept with it. recomputed: "
+                    "worked out now from the stored inputs with recomputedWith's code, for a score stored before "
+                    "its run's components were kept; it can then differ from storedScore")
+    since_scored: PublicSinceScoredSchema | None = Field(
+        description="Set when the score, recomputed now on today's records, would differ: records changed after "
+                    "the run (a bill's stage, say), which the next nightly run scores. Null when it would not, or "
+                    "basis is recomputed")
     weight_in_overall: float | None = Field(
         description="Its weight in representationScore.overall; null for an informational dimension")
     components: list[PublicScoreComponentSchema] = Field(
@@ -1114,7 +1166,8 @@ class PublicScoreBreakdownSchema(_PublicModel):
     site_url: str = _SITE_URL
     algorithm_version: str | None = _ALGORITHM_VERSION
     scored_on: str | None = _SCORED_ON
-    recomputed_with: str = Field(description="The scoring version the breakdown was recomputed with now")
+    recomputed_with: str = Field(description="The scoring version today's recompute used (sinceScored, and a "
+                                             "dimension whose basis is recomputed)")
     overall: float = Field(description="representationScore.overall: sum(weights[k] x dimensions[k].storedScore), "
                                        "rounded to 2 decimals")
     weights: dict[str, float] = Field(description="Each weighted dimension's weight in overall (they sum to 1)")
@@ -1389,6 +1442,8 @@ class JusticeSchema(CamelModel):
     loyalty: JusticeLoyaltySchema | None = None
     # Martin-Quinn position per term, [[term, position], ...]: shown, not scored.
     ideal_points: list[tuple[int, float]] = []
+    # The terms the voting record covers: those with decided cases stored.
+    record_terms: list[int] = []
 
 
 class JusticeLeaderboardEntry(CamelModel):
@@ -1413,6 +1468,8 @@ class JusticeLeaderboardEntry(CamelModel):
 
 class RelatedExploreDoc(CamelModel):
     id: int
+    # The document's permanent address, /explore/{key} (services/explore_keys.py).
+    key: str | None = None
     title: str
     doc_type: str
     date: str
@@ -1473,6 +1530,8 @@ class ActionItemSchema(CamelModel):
     # comment_period: the Explore document and when its comment period
     # closes (served only while open, the #903 rule).
     doc_id: int | None = None
+    # Its permanent key, /explore/{key} (services/explore_keys.py).
+    doc_key: str | None = None
     closes_on: str | None = None
     # contact_committee
     committee: CommitteeContactSchema | None = None

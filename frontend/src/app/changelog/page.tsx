@@ -45,7 +45,7 @@ async function NewOnTheSite() {
   }
   if (!features.length) return null;
   return (
-    <section aria-labelledby="new-h" className="scroll-mt-[var(--header-clearance)]">
+    <section aria-labelledby="new-h">
       <h2
         id="new-h"
         className="font-display text-2xl font-bold leading-tight tracking-[-0.01em] text-ink-hi"
@@ -106,11 +106,7 @@ const anchor = (v: ScoreVersion) => v.version.toLowerCase().replace(/[^a-z0-9]+/
 function Entry({ v }: { v: ScoreVersion }) {
   const id = anchor(v);
   return (
-    <article
-      id={id}
-      aria-labelledby={`${id}-h`}
-      className="scroll-mt-[var(--header-clearance)] border-t border-white/[0.09] pt-6"
-    >
+    <article id={id} aria-labelledby={`${id}-h`} className="border-t border-white/[0.09] pt-6">
       <p className="font-mono text-xs uppercase tracking-[0.16em] text-signal-cyan">
         {v.version} · released <time dateTime={v.date}>{released(v.date)}</time>
       </p>

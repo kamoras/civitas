@@ -38,6 +38,8 @@ import { countIsOfficial } from "@/lib/developing";
 import { tabControl } from "@/lib/controlStyles";
 import { issuesUrl } from "@/lib/routes";
 import AgencyLink from "@/components/agencies/AgencyLink";
+import { exploreHref } from "@/lib/exploreHref";
+import { scrollBehavior } from "@/lib/motion";
 
 /** Plain status line, the loading state the records pages use: no pulse. */
 function Status({ children }: { children: React.ReactNode }) {
@@ -157,7 +159,7 @@ function HeroIssue({
 
   useEffect(() => {
     if (isDeepLinked && heroRef.current) {
-      heroRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+      heroRef.current.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
     }
   }, [isDeepLinked]);
 
@@ -165,7 +167,7 @@ function HeroIssue({
     <article
       ref={heroRef}
       {...{ [SHARE_SECTION_ATTR]: `issue-${issue.publicId}` }}
-      className="scroll-mt-[calc(var(--header-clearance)+3rem)] border border-white/25 border-t-3 bg-surface p-5 sm:p-8"
+      className="border border-white/25 border-t-3 bg-surface p-5 sm:p-8"
     >
       <IssueMeta issue={issue} lead="Top issue" />
       <h2 className="mb-4 mt-3 text-balance font-display text-2xl font-bold leading-tight text-ink-hi sm:text-[28px]">
@@ -199,7 +201,7 @@ function SecondaryIssue({
       setExpanded(true);
       // Delay slightly so the panel renders before scrolling
       const t = setTimeout(() => {
-        cardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        cardRef.current?.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
       }, 100);
       return () => clearTimeout(t);
     }
@@ -213,11 +215,7 @@ function SecondaryIssue({
 
   return (
     <li className="border-b border-white/[0.07]">
-      <article
-        ref={cardRef}
-        {...{ [SHARE_SECTION_ATTR]: `issue-${issue.publicId}` }}
-        className="scroll-mt-[calc(var(--header-clearance)+3rem)]"
-      >
+      <article ref={cardRef} {...{ [SHARE_SECTION_ATTR]: `issue-${issue.publicId}` }}>
         <h3>
           <button
             onClick={handleToggle}
@@ -302,18 +300,24 @@ function OpenComments() {
                 {item.docType?.replace(/_/g, " ")}
               </span>
               <Link
-                href={`/explore/${item.id}`}
+                href={exploreHref(item)}
                 className="mt-0.5 block font-display text-[15px] leading-snug text-ink-hi hover:underline"
               >
                 {item.title}
               </Link>
+              {item.firstSentence && (
+                // The abstract's opening sentence, as the Register printed it.
+                <span className="mt-1 block font-display text-sm leading-snug text-ink-lo">
+                  {item.firstSentence}
+                </span>
+              )}
             </span>
             <span className="text-right">
               <span className="block whitespace-nowrap font-mono text-xs tracking-[0.06em] text-signal-amber">
                 {describeDaysLeft(item.commentsCloseOn, loaded.asOf)}
               </span>
               <Link
-                href={`/explore/${item.id}#comment`}
+                href={`${exploreHref(item)}#comment`}
                 className={`${TEXT_LINK} mt-1 inline-block`}
               >
                 Comment →
@@ -671,6 +675,7 @@ function ActionPageInner() {
           <div
             role="tablist"
             aria-label="Action Center sections"
+            data-sticky-subnav
             className="sticky top-[82px] z-30 -mx-4 mb-8 mt-6 flex gap-0 overflow-x-auto overflow-y-hidden border-b border-white/15 bg-surface-base/95 px-4 backdrop-blur-sm sm:mx-0 sm:px-0"
             onKeyDown={(e) => {
               const tabs = TABS.map((t) => t.id);

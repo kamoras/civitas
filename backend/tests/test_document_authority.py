@@ -15,10 +15,14 @@ from app.models import ExploreDocument
 from app.pipeline.analyze.document_authority import (
     build_citation_graph,
     compute_document_authority,
+    congressional_record_identifiers,
     declared_identifiers,
+    docket_identifiers,
     extract_citations,
     is_identifier_query,
     pagerank,
+    query_record_identifiers,
+    record_volume,
     update_document_authority,
 )
 
@@ -365,3 +369,36 @@ class TestStreamedGraph:
         assert seen["is_lazy"] is True
         assert seen["count"] == 6
         assert result["documents"] == 6
+
+
+class TestRecordIdentifiers:
+    def test_a_comment_link_names_its_docket_and_document(self):
+        assert docket_identifiers("http://www.regulations.gov/commenton/IRS-2026-1090-0001") == {
+            "docket:IRS-2026-1090-0001", "docket:IRS-2026-1090"}
+        assert "docket:FDA-2018-N-3240" in docket_identifiers(
+            "https://www.regulations.gov/commenton/FDA-2018-N-3240-0377")
+        assert "docket:DOD-2026-OS-0662" in docket_identifiers(
+            "https://www.regulations.gov/commenton/DOD-2026-OS-0662-0001")
+        # A catch-all docket names no rulemaking.
+        assert docket_identifiers("http://www.regulations.gov/commenton/DOL_FRDOC_0001-2659") == set()
+        assert docket_identifiers(None) == set()
+
+    def test_a_speech_is_known_by_its_record_page_and_granule(self):
+        assert congressional_record_identifiers("crec-v1-CREC-2026-09-16-pt1-PgH5836-3-213d7a94") == {
+            "crec:172-H5836", "crecgranule:CREC-2026-09-16-PT1-PGH5836-3"}
+        assert record_volume(2025, 1, 3) == 171
+        # January 1 and 2 still belong to the session before.
+        assert record_volume(2026, 1, 2) == 171
+        assert congressional_record_identifiers("fr-reg-2026-1") == set()
+
+    def test_queries_name_them(self):
+        assert query_record_identifiers("irs-2026-1090") == {"docket:IRS-2026-1090"}
+        assert query_record_identifiers("172 Cong. Rec. S5190") == {"crec:172-S5190"}
+        assert is_identifier_query("IRS-2026-1090")
+        assert is_identifier_query("172 Cong. Rec. H5836")
+        assert not is_identifier_query("trump accounts")
+
+    def test_declared_with_the_comment_link(self):
+        assert "docket:IRS-2026-1090" in declared_identifiers(
+            "fr-reg-2026-17123", "T", "Proposed Rule", None,
+            comment_url="http://www.regulations.gov/commenton/IRS-2026-1090-0001")

@@ -85,6 +85,7 @@ from app.pipeline.run_checks import (
     alert_member_failures,
     alert_unread_sponsorship,
     persist_ground_truth_failures,
+    record_member_holds,
     run_calibration_check,
 )
 from app.pipeline.bill_refresh import keep_newer_latest_actions
@@ -133,7 +134,8 @@ from app.pipeline.analyze.cross_reference import analyze_senator_batch, precompu
 from app.pipeline.analyze.donor_classifier_ai import classify_donors_hybrid
 from app.pipeline.analyze.ollama_client import get_llm_stats, reset_client, reset_stats
 from app.pipeline.analyze.policy_alignment import clear_alignment_cache
-from app.pipeline.analyze.score_calculator import calculate_confidence, calculate_scores
+from app.score_keeping import stored_breakdown
+from app.pipeline.analyze.score_calculator import calculate_confidence, calculate_scores, explain_scores
 from app.pipeline.live_references import (
     live_constituent_reference_measured,
     live_funding_reference,
@@ -229,6 +231,9 @@ def upsert_senator(db: Session, data: dict) -> None:
         # (calculate_confidence). Never persisted for senators before
         # v6.15 — only the House wrote it — so senators served none.
         "score_confidence": json.dumps(corruption.get("confidence") or {}),
+        "score_breakdown": stored_breakdown(corruption.get("breakdown")),
+        # Scored by this run, so no longer held from an earlier one.
+        "score_held": None,
         "total_raised": funding.get("totalRaised") or 0,
         "total_contributions": funding.get("totalContributions"),
         "caucus_party": (data.get("votingRecord") or {}).get("effectiveParty"),
@@ -2222,6 +2227,9 @@ async def run_senate_pipeline(
                 }
                 corruption_score = calculate_scores(temp_senator)
                 corruption_score["confidence"] = calculate_confidence(temp_senator)
+                # The same scores' arithmetic, kept with them: what the
+                # breakdown serves (services/_scorecard_common).
+                corruption_score["breakdown"] = explain_scores(temp_senator)
 
                 result = build_senator(
                     senator,
@@ -2378,6 +2386,7 @@ async def run_senate_pipeline(
 
         alert_if_lda_down(lda_totals, "senate")
         alert_member_failures("senate", member_failures, close_when_clean=not senator_filter)
+        record_member_holds(db, Senator, "senator", member_failures)
         alert_unread_sponsorship(
             "senate", unread_bills, carried_senators,
             [p.get("bioguideId") or "?" for p in senator_prepared if p.get("sponsoredBillsUnavailable")],

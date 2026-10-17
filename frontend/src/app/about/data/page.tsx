@@ -65,7 +65,13 @@ export default function DataChapter() {
               description, nominees, committee, hearings and every action in Congress.gov&apos;s own
               words, on <A href="/congress/nominations">the nominations pages</A>. Its status
               (pending, confirmed, returned, withdrawn) is read from Congress.gov&apos;s action
-              codes, and each roll call that names a nomination links to it.
+              codes, and each roll call that names a nomination links to it. A bill&apos;s path
+              (introduced, committee, each chamber, the President, law) and how each chamber passed
+              it (a roll call, a voice vote or unanimous consent) are read from the same action
+              codes and the chamber&apos;s own wording; the plain meaning beside a procedural step
+              comes from a fixed glossary keyed by its action code, never written by a model. A vote
+              on a House amendment shows the amendment&apos;s purpose from its Congress.gov record,
+              word for word.
             </Fact>
             <Fact label="FEC (fec.gov)">
               Campaign finance: individual and PAC contributions, committee filings and types,
@@ -73,13 +79,14 @@ export default function DataChapter() {
             </Fact>
             <Fact label="Senate.gov & House Clerk">
               Roll-call votes with every member&apos;s position, each shown on its own page
-              (nominations included) and linked to the chamber&apos;s record, and each
-              chamber&apos;s live floor log. Held from the first day of Civitas&apos;s record of
-              Congress, as are the Daily Digest&apos;s days, and a page outside it says where the
-              record starts; a bill of an earlier Congress says its votes aren&apos;t held and links
-              each roll call to the chamber&apos;s record. A Senate tie the Vice President broke is
-              shown with the Vice President&apos;s vote, an election of the Speaker by each
-              candidate&apos;s votes, and a quorum call as the members present, with no result.
+              (nominations included) and linked to the chamber&apos;s record, with a Senate
+              amendment&apos;s purpose quoted from the roll call itself, and each chamber&apos;s
+              live floor log. Held from the first day of Civitas&apos;s record of Congress, as are
+              the Daily Digest&apos;s days, and a page outside it says where the record starts; a
+              bill of an earlier Congress says its votes aren&apos;t held and links each roll call
+              to the chamber&apos;s record. A Senate tie the Vice President broke is shown with the
+              Vice President&apos;s vote, an election of the Speaker by each candidate&apos;s votes,
+              and a quorum call as the members present, with no result.
             </Fact>
             <Fact label="unitedstates/congress-legislators">
               Committee seats and party leadership titles, an open dataset refreshed weekly. It
@@ -164,12 +171,16 @@ export default function DataChapter() {
           <Facts>
             <Fact label="Oyez · supremecourt.gov">
               Cases, justices&apos; votes in a term the Supreme Court Database doesn&apos;t cover
-              yet, and official slip opinions.
+              yet, and official slip opinions. Oyez is shared under Creative Commons
+              Attribution-NonCommercial 4.0; slip opinions are public domain.
             </Fact>
             <Fact label="Supreme Court Database · Federal Judicial Center · Martin-Quinn">
               Every justice&apos;s votes in orally argued cases (the voting record, and the cases
-              the federal government argued for the score, with Epstein and Posner&apos;s coding
-              through 2014); nomination dates; each justice&apos;s position per term. A confirmed
+              the federal government argued for the appointer estimate, with Epstein and
+              Posner&apos;s coding through 2014); nomination dates; each justice&apos;s position per
+              term with its 95% credible interval. The Database is shared under Creative Commons
+              Attribution-NonCommercial 3.0 United States; Martin and Quinn publish their scores
+              with no licence stated, and they are cited as Martin and Quinn (2002). A confirmed
               federal judge&apos;s nomination page links the Federal Judicial Center&apos;s
               biography where its directory has exactly one judge with the same court, nomination
               date and surname.
@@ -435,9 +446,14 @@ export default function DataChapter() {
           </Item>
           <Item label="Keywords">
             A keyword index
-            <Cite id="robertson2009" />, the only way to find an executive order number or a docket.
-            A document&apos;s own Federal Register citation or document number finds that document
-            first.
+            <Cite id="robertson2009" />, for exact words. A document&apos;s own identifier finds
+            that document first: its Federal Register citation or document number, an executive
+            order or proclamation number, a regulation identifier number, the Regulations.gov docket
+            it takes comments in (&ldquo;IRS-2026-1090&rdquo;), or a floor speech&apos;s
+            Congressional Record citation (&ldquo;172 Cong. Rec. H5836&rdquo;). A search that is
+            only an identifier matches it as written, and when no document here is known by it the
+            page says so, and where the official copy is, instead of listing documents that only
+            share a word with it.
           </Item>
           <Item label="Recency">A newer document is usually the more useful answer.</Item>
           <Item label="Authority">
@@ -446,6 +462,15 @@ export default function DataChapter() {
             rulemaking, not a document, and doesn&apos;t count.
           </Item>
         </List>
+        <P>
+          Each kind of document is held from the day Civitas began reading it, not from the start of
+          the record: the search page lists each kind&apos;s first and last date under the search
+          box. Floor speeches are kept after their Congress ends. Every document&apos;s page is at
+          an address made from its official identifier (its Federal Register document number, its
+          Congressional Record granule, its Supreme Court docket), which stays the same when the
+          document is read again, and &ldquo;Cite this&rdquo; credits the agency, the chamber or the
+          Court that issued it, with Civitas as where it was read.
+        </P>
         <P>
           Copies of the same document are collapsed (a recurring notice that only opens the same way
           is not a copy), and no single member or agency can crowd the top results: the rest are

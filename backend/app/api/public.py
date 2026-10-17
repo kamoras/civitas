@@ -338,14 +338,6 @@ def _history(db: Session, entity_type: str, model, member_id: str, request: Requ
 
 
 
-# Components that move a dimension's score by weight x (score - 50) rather
-# than taking part in its weighted mean: Constituent approval adds or takes
-# points around 50 (score_calculator._constituent_alignment_core). Keyed by
-# label because the breakdown carries no other marker;
-# test_public_score_breakdown recomputes every dimension from these, so a
-# renamed component fails there.
-POINTS_COMPONENTS = frozenset({"Constituent approval"})
-
 # The dimensions a breakdown covers, with each one's stored column.
 _BREAKDOWN_DIMENSIONS = {
     "fundingIndependence": "score_funding_independence",
@@ -389,10 +381,11 @@ def _breakdown(db: Session, model, entity_type: str, member_id: str, request: Re
             "storedScore": getattr(member, column),
             "score": part["score"],
             "weightInOverall": SCORE_WEIGHTS.get(key),
-            "components": [
-                {**c, "combines": "points" if c["label"] in POINTS_COMPONENTS else "mean"}
-                for c in part.get("components") or []
-            ],
+            "components": part.get("components") or [],
+            "sum": part.get("sum"),
+            "clamped": part.get("clamped", False),
+            "basis": part.get("basis", "recomputed"),
+            "sinceScored": part.get("sinceScored"),
             "note": part.get("note"),
             "finding": part.get("finding"),
             "facts": part.get("facts"),
@@ -434,8 +427,11 @@ _BREAKDOWN_DOC = (
     "components with their weights, scores and the figures behind them, how they combine, the dimension "
     "weights, and the population and seat reference values the components were compared against, as the "
     "last run measured them.\n\n"
-    "`overall` is the sum of `weights[k]` x `dimensions[k].storedScore`. Each dimension's `score` is "
-    "recomputed from its components by the rule on `score`; `storedScore` is the score on the record."
+    "`overall` is the sum of `weights[k]` x `dimensions[k].storedScore`. Each dimension's components are the "
+    "ones the run that stored its score worked out (`basis`), and give `score` by the rule on `score`: their "
+    "weighted mean, plus weight x (score - 50) for each `points` component, rounded and clamped to 0-100 "
+    "(`sum` is the value before both, `clamped` says when the clamp applied). When today's records would give "
+    "a different score, `sinceScored` says so."
 )
 
 _PREFLIGHT_HEADERS = {**_CORS_HEADERS, "Access-Control-Max-Age": "3600"}
@@ -988,7 +984,7 @@ async def search_documents(
     ))
     if not outcome["indexReady"]:
         return _pub_json(
-            {"query": q, "results": [], "count": 0, "partial": False, "indexBuilding": True},
+            {"query": q, "results": [], "count": 0, "partial": False, "indexBuilding": True, "notHeld": []},
             request, max_age=0,
         )
 
@@ -1004,11 +1000,12 @@ async def search_documents(
         # The keyword channel marks matched terms with control characters
         # for the site's renderer; a public client gets plain text.
         result["snippet"] = (result.get("snippet") or "").replace(HIGHLIGHT_START, "").replace(HIGHLIGHT_END, "")
-        result["siteUrl"] = f"{SITE_URL}/explore/{result['id']}"
+        result["siteUrl"] = f"{SITE_URL}/explore/{result['key']}"
     # Keyword channel only (the vector index missing or mid-rebuild): a
     # partial answer, kept no longer than a failed fetch is.
     partial = bool(outcome["semanticUnavailable"])
     return _pub_json(
-        {"query": q, "results": results, "count": len(results), "partial": partial, "indexBuilding": False},
+        {"query": q, "results": results, "count": len(results), "partial": partial, "indexBuilding": False,
+         "notHeld": outcome.get("notHeld", [])},
         request, max_age=FAILURE_RETRY_S if partial else CACHE_TTL_SEARCH_S,
     )

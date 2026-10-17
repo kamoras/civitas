@@ -151,7 +151,7 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
                 {...{ [SHARE_SECTION_ATTR]: "at-a-glance" }}
                 id="at-a-glance"
                 aria-labelledby="glance-title"
-                className="flex scroll-mt-28 flex-col gap-6"
+                className="flex flex-col gap-6"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <h2
@@ -232,11 +232,7 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
               </section>
             )}
 
-            <section
-              id="list"
-              aria-labelledby="list-title"
-              className="flex scroll-mt-28 flex-col gap-4"
-            >
+            <section id="list" aria-labelledby="list-title" className="flex flex-col gap-4">
               <h2 id="list-title" className="font-display text-2xl font-extrabold text-ink-hi">
                 {complete ? "Every nomination" : "Nominations read so far"}
               </h2>

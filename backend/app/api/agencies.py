@@ -18,8 +18,9 @@ from collections import Counter
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
+from app import comment_periods
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, CACHE_TTL_LIST_S, cached_json
 from app.database import get_db
 from app.issue_ids import to_public_id
@@ -29,6 +30,7 @@ from app.pipeline.fetch.agencies import FR_SOURCE, USASPENDING_SOURCE, linking_p
 from app.pipeline.fetch.fr_rulemaking import FR_TYPE_LABELS
 from app.retractions import retraction_for_issue
 from app.time_utils import comment_period_today
+from app.services.explore_keys import public_key
 
 router = APIRouter(prefix="/agencies")
 
@@ -222,6 +224,7 @@ def _doc(d: ExploreDocument, today: str) -> dict:
     is_open = bool(d.comment_url and d.comments_close_on and d.comments_close_on >= today)
     return {
         "id": d.id,
+        "key": public_key(d.external_id, d.id),
         "title": d.title,
         "docType": d.doc_type,
         "date": d.date,
@@ -230,7 +233,19 @@ def _doc(d: ExploreDocument, today: str) -> dict:
         "url": d.url or "",
         "commentsCloseOn": d.comments_close_on or "",
         "commentUrl": d.comment_url if is_open else "",
+        # For an open period: the abstract's opening sentence, verbatim, and
+        # the window from publication to deadline (app/comment_periods).
+        "firstSentence": comment_periods.first_sentence(d.summary) if is_open else None,
+        "commentWindow": comment_periods.comment_window(d.date, d.comments_close_on, today) if is_open else None,
     }
+
+
+_OPEN_COLUMNS = (
+    ExploreDocument.id, ExploreDocument.title, ExploreDocument.doc_type, ExploreDocument.date,
+    ExploreDocument.agency_name, ExploreDocument.agency_slug, ExploreDocument.url, ExploreDocument.summary,
+    ExploreDocument.comments_close_on, ExploreDocument.comment_url, ExploreDocument.fr_page_views,
+    ExploreDocument.fr_toc_subject,
+)
 
 
 def _documents(db: Session, slugs: list[str], today: str) -> dict:
@@ -240,12 +255,21 @@ def _documents(db: Session, slugs: list[str], today: str) -> dict:
                          ExploreDocument.comments_close_on >= today)
     by_type = dict(base.with_entities(ExploreDocument.doc_type, func.count(ExploreDocument.id))
                    .group_by(ExploreDocument.doc_type))
+    # Every open period of the agency (tens, not thousands), without bodies:
+    # rules first, paperwork notices folded apart (comment_periods.salience).
+    open_docs = sorted(open_q.options(load_only(*_OPEN_COLUMNS)).all(), key=comment_periods.salience)
+    paperwork = [d for d in open_docs if comment_periods.is_paperwork(d.doc_type, d.fr_toc_subject)]
+    others = [d for d in open_docs if not comment_periods.is_paperwork(d.doc_type, d.fr_toc_subject)]
     return {
         "total": sum(by_type.values()),
         "byType": by_type,
-        "openComments": [_doc(d, today) for d in open_q.order_by(
-            ExploreDocument.comments_close_on.asc(), ExploreDocument.id.desc()).limit(SHOWN)],
-        "openCommentsCount": open_q.count(),
+        "openComments": [_doc(d, today) for d in others[:SHOWN]],
+        "openCommentsCount": len(open_docs),
+        # Paperwork Reduction Act notices, closing soonest first: renewals of
+        # forms the agency collects, listed under their own fold.
+        "paperworkNotices": [_doc(d, today) for d in sorted(
+            paperwork, key=lambda d: (d.comments_close_on, -d.id))[:SHOWN]],
+        "paperworkCount": len(paperwork),
         # As in the directory: while documents are still being linked to
         # their agency, every count here is a count so far.
         "linking": linking_progress(db),
@@ -298,19 +322,25 @@ def _action_issues(db: Session, slugs: list[str]) -> list[dict]:
     first: the issue's own record of which documents it drew on
     (related_explore_ids), never a match on its words. Left out: withdrawn
     issues, duplicates of another, and drafts taken down unconfirmed."""
-    doc_ids = {i for (i,) in db.query(ExploreDocument.id).filter(ExploreDocument.agency_slug.in_(slugs))}
+    agency_docs = db.query(ExploreDocument.id, ExploreDocument.external_id).filter(
+        ExploreDocument.agency_slug.in_(slugs)).all()
+    doc_ids = {i for i, _ in agency_docs}
     if not doc_ids:
         return []
+    # By permanent key where the issue stored one (services/explore_keys.py):
+    # a row id can name another document after the row is replaced.
+    doc_keys = {public_key(ext, i) for i, ext in agency_docs}
     out = []
     rows = (db.query(ActionIssue.id, ActionIssue.title, ActionIssue.date, ActionIssue.related_explore_ids,
-                     ActionIssue.status, ActionIssue.is_current)
+                     ActionIssue.related_explore_keys, ActionIssue.status, ActionIssue.is_current)
             .filter(ActionIssue.related_explore_ids != "[]", ActionIssue.duplicate_of_id.is_(None))
             .order_by(ActionIssue.date.desc(), ActionIssue.id.desc()))
-    for issue_id, title, day, related, status, is_current in rows:
+    for issue_id, title, day, related, related_keys, status, is_current in rows:
         if status == ActionIssueStatus.DEVELOPING and not is_current:
             continue
         try:
-            cited = set(json.loads(related or "[]")) & doc_ids
+            keys = json.loads(related_keys or "[]")
+            cited = set(keys) & doc_keys if keys else set(json.loads(related or "[]")) & doc_ids
         except (ValueError, TypeError):
             continue
         public_id = to_public_id(issue_id)

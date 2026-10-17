@@ -6,6 +6,7 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import CiteThis from "@/components/shared/CiteThis";
+import { congressGovCitedSource } from "@/lib/citedSources";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
@@ -178,7 +179,7 @@ export default async function NominationPage({ params }: PageProps) {
               {...{ [SHARE_SECTION_ATTR]: "nomination" }}
               id="nomination"
               aria-labelledby="nomination-title"
-              className="flex scroll-mt-28 flex-col gap-6"
+              className="flex flex-col gap-6"
             >
               <header className="flex flex-col gap-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -238,10 +239,7 @@ export default async function NominationPage({ params }: PageProps) {
 
             {n.finalVote && (
               <section aria-labelledby="senators" className="flex flex-col gap-4">
-                <h2
-                  id="senators"
-                  className="scroll-mt-28 font-display text-2xl font-extrabold text-ink-hi"
-                >
+                <h2 id="senators" className="font-display text-2xl font-extrabold text-ink-hi">
                   How each senator voted
                 </h2>
                 <p className="text-sm text-ink-lo">
@@ -327,7 +325,12 @@ export default async function NominationPage({ params }: PageProps) {
               </p>
             </section>
 
-            <CiteThis title={title} date={n.receivedDate} path={path} />
+            <CiteThis
+              title={title}
+              date={n.receivedDate}
+              path={path}
+              source={congressGovCitedSource("U.S. Senate", n.congressGovUrl)}
+            />
           </div>
         </main>
         <BackToTop />

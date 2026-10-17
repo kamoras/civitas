@@ -22,7 +22,8 @@ import {
   WhatYouCanDo,
 } from "@/components/action/IssueEnrichment";
 import ShareButtons from "@/components/action/ShareButtons";
-import { TOPIC_FEEDS, absoluteUrl, notFoundMetadata, pageMetadata } from "@/lib/site";
+import { TOPIC_FEEDS, absoluteUrl, monitorFeed, notFoundMetadata, pageMetadata } from "@/lib/site";
+import FollowFeed from "@/components/shared/FollowFeed";
 import { articleJsonLd } from "@/lib/seo";
 import JsonLd from "@/components/seo/JsonLd";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
@@ -88,6 +89,15 @@ function Withdrawn({ retraction }: { retraction: Retraction }) {
   );
 }
 
+/** The feed that follows this story: its national monitor's, when one
+ *  tracks it, else the Action Center's. */
+function storyFeed(issue: ActionIssue) {
+  const monitor = issue.relatedMonitors?.[0];
+  return monitor
+    ? { subject: "this story", feed: monitorFeed(monitor.slug, monitor.title) }
+    : { subject: "the Action Center", feed: TOPIC_FEEDS.issues };
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -123,7 +133,7 @@ export async function generateMetadata({
     // coverage confirms it, and may expire unconfirmed. It stays readable
     // here, but isn't offered to search engines as a finished story.
     noindex: issue.status === "developing",
-    feed: TOPIC_FEEDS.issues,
+    feed: storyFeed(issue).feed,
   });
 }
 
@@ -175,7 +185,7 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
           <header
             id="summary"
             {...{ [SHARE_SECTION_ATTR]: "summary" }}
-            className="mt-6 scroll-mt-[var(--header-clearance)] border-b-3 border-ink-min/60 pb-6"
+            className="mt-6 border-b-3 border-ink-min/60 pb-6"
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               {/* issueDateLabel inside: firstSurfaced, then "updated" when the
@@ -205,6 +215,10 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
               </div>
             )}
             <IssueTags issue={issue} className="mt-4" />
+            {/* Not part of a shared picture of the summary. */}
+            <div data-share-exclude>
+              <FollowFeed className="mt-4" {...storyFeed(issue)} />
+            </div>
           </header>
 
           <div className="mt-8">
@@ -237,11 +251,7 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
           {/* Media coverage: lines quoted from the sources, each with its
               outlet — or, for an election-results issue, the count. */}
           {issue.facts?.length > 0 && (
-            <div
-              id={factsId}
-              {...{ [SHARE_SECTION_ATTR]: factsId }}
-              className="scroll-mt-[var(--header-clearance)]"
-            >
+            <div id={factsId} {...{ [SHARE_SECTION_ATTR]: factsId }}>
               <Coverage
                 issue={issue}
                 className="mt-10"

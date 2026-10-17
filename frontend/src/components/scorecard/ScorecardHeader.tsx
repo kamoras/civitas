@@ -12,6 +12,7 @@ import ScoreTrendSection from "@/components/checker/ScoreTrendSection";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import Photo from "@/components/Photo";
+import { HeldScoreNote, ThinDataNote } from "@/components/scorecard/HeldScore";
 
 /**
  * `min-h-6` for WCAG 2.2 SC 2.5.8 (24x24 targets): the links sit in a
@@ -81,7 +82,7 @@ export default function ScorecardHeader({
     <header
       id="overview"
       {...{ [SHARE_SECTION_ATTR]: "overview" }}
-      className={`grid scroll-mt-[var(--header-clearance)] gap-6 border border-white/25 border-t-[3px] bg-surface px-5 py-6 font-sans sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:grid-rows-[auto_1fr] ${PARTY_BORDER[member.party]}`}
+      className={`grid grid-cols-[minmax(0,1fr)] gap-6 border border-white/25 border-t-[3px] bg-surface px-5 py-6 font-sans sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:grid-rows-[auto_1fr] ${PARTY_BORDER[member.party]}`}
     >
       {/* Three blocks in reading order for a phone — who, the score, then
           how to reach them; on a desktop the score takes the right column
@@ -90,7 +91,7 @@ export default function ScorecardHeader({
           surname that still doesn't fit hyphenates at a syllable rather than
           splitting anywhere (it once had 146px at 320px beside a full-size
           photo, and split mid-word). */}
-      <div className="flex min-w-0 flex-row gap-3 sm:gap-5 lg:col-start-1 lg:row-start-1">
+      <div className="flex min-w-0 flex-row flex-wrap gap-3 sm:gap-5 lg:col-start-1 lg:row-start-1">
         {thumbnailUrl ? (
           <Photo
             src={thumbnailUrl}
@@ -102,7 +103,10 @@ export default function ScorecardHeader({
         ) : (
           initials
         )}
-        <div className="flex min-w-0 flex-col gap-2">
+        {/* At least 12rem beside the photo, or under it: at a large text
+            size on a phone the name had about 110 px beside the photo and
+            broke mid-word (WCAG 1.4.10). */}
+        <div className="flex min-w-0 flex-1 basis-48 flex-col gap-2">
           <Title
             lang="en"
             className="break-words text-2xl font-extrabold leading-tight text-ink-hi [hyphens:auto] sm:text-4xl"
@@ -131,30 +135,32 @@ export default function ScorecardHeader({
 
       <div className="flex flex-col gap-2 border-t border-white/[0.12] pt-5 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
         <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-          <MetricTooltip text="The weighted average of the three scores below. 100 means full representation of the constituents by these measures; a score near 50 often means limited data.">
+          <MetricTooltip text="The weighted average of the three scores below. 100 means full representation of the constituents by these measures. 50 is not the middle member: see where this score sits in the chamber just below.">
             Representation Score
           </MetricTooltip>
         </p>
-        <div className="flex items-baseline gap-4">
+        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2">
           <span
             className={`font-display text-6xl font-extrabold leading-none sm:text-7xl ${getScoreColor(overall)}`}
           >
             {overall}
           </span>
-          <div className="flex flex-col gap-1">
+          <div className="flex min-w-0 flex-col gap-1 [overflow-wrap:anywhere]">
             <span className={`font-mono text-sm tracking-[0.1em] ${getScoreColor(overall)}`}>
               {getScoreLabel(overall)}
             </span>
             {rank && (
               <Link
                 href={`/leaderboard?branch=${chamber}`}
-                className="font-mono text-[13px] text-ink-lo underline underline-offset-2 hover:text-phos"
+                className="inline-flex min-h-6 w-fit items-center font-mono text-[13px] text-ink-lo underline underline-offset-2 hover:text-phos"
               >
                 #{rank.rank} of {rank.of} {chamber === "senate" ? "senators" : "representatives"}
               </Link>
             )}
           </div>
         </div>
+        <HeldScoreNote held={member.representationScore.held} />
+        <ThinDataNote dims={member.representationScore.thinData} />
         {glance}
         {standing}
         <ScoreTrendSection entityId={member.id} entityType={chamber} />

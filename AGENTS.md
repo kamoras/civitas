@@ -605,8 +605,10 @@ here: **do not change a ranking weight because a result set looks better.**
 
 `backend/scripts/evaluate_explore_search.py` is the instrument. It reports
 MRR and Recall@k for each channel and for the fusion, broken out by query
-style (title / paraphrase / identifier / rare-term / passage), against the
-live index. Run it before and after, and say what moved. Every probe is built
+style (title / paraphrase / identifier / the document's own FR citation,
+document number, docket and Record citation / rare-term / passage), and how
+often an identifier the corpus does not hold gets documents back, against
+the live index. Run it before and after, and say what moved. Every probe is built
 from the document's own words (the "paraphrase" style is a bag of its most
 frequent words, not a rewording), so keyword leads semantic by construction
 and identifier probes are near zero for any encoder: compare the semantic
@@ -876,7 +878,7 @@ Corollaries that follow from the same rule, all enforced in code:
   NULL — **never derived from the title**. The obvious derivation ("yes
   enacts it") inverts on a veto referendum, where approving retains the law
   under challenge.
-- Voter deadlines follow the same rule (`app/data/election_calendar.json`): each read from the state election authority's own page or its statute, quoted, and re-checked by `scripts/build_election_calendar.py` — never an aggregator, never a date typed without its rule, and never an item the script could not verify (it refuses to write one; a state with no readable official source is `unread` and lists no dates). A "N days before" date is counted by the script and shown beside the rule; status is computed on the state's own clock; a passed deadline is rendered as passed, never dropped.
+- Voter deadlines follow the same rule (`app/data/election_calendar.json`): each read from the state election authority's own page or its statute, quoted, and re-checked by `scripts/build_election_calendar.py` — never an aggregator, never a date typed without its rule, and never an item the script could not verify (it refuses to write one; a state with no readable official source is `unread` and lists no dates). Where to register is the same file's `register` link, fetched by the script and kept only on an official host (one behind a bot wall kept, worded unconfirmed; vote.gov where a state has none). A "N days before" date is counted by the script and shown beside the rule; status is computed on the state's own clock; a passed deadline is rendered as passed, never dropped.
 - Absence must be able to say *which* absence it is. `MeasureCoverage` carries
   `confirmed_none` vs `not_yet_covered` / `ingest_failed`, because an empty
   measures section on a page about a state's ballot reads as "nothing to
@@ -984,15 +986,19 @@ What this rules in and out:
   join documented in `scripts/fetch_state_leg_crosswalk.py`). Building
   those crosswalks is real work, and doing it is the price of not asking.
 - **In:** following Civitas without an account. The Atom feeds (`/feeds`)
-  are pulled, and a topic or state is chosen by which URL a reader
-  subscribes to, so there is no subscriber list to keep. A push channel
-  that would need one (email, web push, per-server webhooks) is out, for
-  the same reason as an address box. A page offers its most specific
-  feed first — `pageMetadata({ feed })` in `src/lib/site.ts` (a state's
-  ballot page its state's feed, `/congress` the Congress feed, an issue
-  page the Action Center feed) — and the state ballot and Congress pages
-  link it visibly (`FollowFeed`); a new page with a feed of its own should
-  do the same.
+  are pulled, and a topic, state or one followed thing is chosen by which
+  URL a reader subscribes to, so there is no subscriber list to keep. A
+  push channel that would need one (email, web push, per-server webhooks)
+  is out, for the same reason as an address box. A member, a bill, an
+  agency and a national monitor each have a feed built from stored rows
+  when asked for (`app/entity_feeds.py`: fixed templates, no model, ids on
+  what the entry is, never on a slug or URL), nginx-cached like the rest.
+  A page offers its most specific feed first — `pageMetadata({ feed })` in
+  `src/lib/site.ts` (a state's ballot page its state's feed, `/congress`
+  the Congress feed, a member's profile, a bill or an agency its own, an
+  issue page its monitor's or else the Action Center feed) — and links it
+  visibly (`FollowFeed`); a new page with a feed of its own should do the
+  same.
 - **In, server-side only:** the Census geocoder and Google Civic's
   `voterInfoQuery`, called from the pipeline (and, for the town selector,
   from the API, cached 12 hours) with **our own** fixed,
@@ -1476,12 +1482,18 @@ Each issue's actions are fixed templates around stored data:
   open-only rule).
 
 The Today tab's open comment periods are ranked by salience, not deadline
-(`api/action.open_comments_salience`): documents a recent issue links, then
-rules before notices, then by the Federal Register's own reader count
+(`comment_periods.salience`, shared with agency pages and Explore's
+open-comments list): documents a recent issue links, then rules before
+notices and Paperwork Reduction Act notices last, then by the Federal
+Register's own reader count
 (`ExploreDocument.fr_page_views`, read once a day by the Action Center —
 `_refresh_open_comment_views` — not by the nightly Explore refresh, whose
 module is fingerprinted). Citations were measured and rejected as the
-signal: airworthiness directives carry hundreds of boilerplate ones.
+signal: airworthiness directives carry hundreds of boilerplate ones. A
+paperwork notice is the Register's own table-of-contents subject for PRA
+collections (`fr_toc_subject`, read with the page views), never a title
+word: 303 of 615 open on 2026-10-17, precision 303/303, recall 303/304.
+Agency pages and Explore fold them under "Paperwork notices (N)".
 
 Feed descriptions are **stripped of HTML** as they are parsed
 (`news_feeds._strip_html`): the WordPress-backed feeds put real markup in
@@ -2000,6 +2012,30 @@ set re-alerts and replaces it, and a run with no failures closes it
 (2026-10-09: one senator failed every night from v6.31 on, with only the
 run's failure count to show for it).
 
+The page says so too. `run_checks.record_member_holds` marks each failed
+member's row (`score_held`: the run that failed, the source it couldn't
+read when the exception names one, and the run and method version of the
+score kept, from the member's latest snapshot), and the profile, the
+leaderboard and compare show it beside the score ("Score from the
+2026-10-14 run (method v6.34): the 2026-10-16 run couldn't read FEC
+filings"); the next run that scores the member clears it. A held member
+keeps the *whole* scorecard of that run: the startup rescores
+(`constituent_rescore`, `les_rescore`) skip them, and give every member they
+do rescore a snapshot of the score it now shows, so every stored score can
+be cited to a run (2026-10-16: a rescore had moved a held senator's score
+to one no snapshot recorded).
+
+Each stored score keeps the arithmetic that produced it: both chamber runs
+store `explain_scores` over the same input as `calculate_scores` in
+`score_breakdown`, and the rescores replace the part they rewrite. The
+breakdown endpoints serve that (`basis: "scored"`), recompute on today's
+records beside it, and report a dimension that would now come out
+differently (`sinceScored`, with how many bills moved for Legislative
+Effectiveness) instead of showing components for a number that isn't on the
+page (2026-10-16: two senators' bills became law after the night's run, and
+the recomputed components gave 86 and 68 beside scores of 75 and 57).
+`app/score_keeping.py` holds both, outside `pipeline/`.
+
 The ANALYZE phase runs members one at a time: `precompute_senator_analysis()`
 (`cross_reference.py`) does the member's embedding work, then
 `analyze_senator_batch()` consumes it and scoring follows. There is no
@@ -2140,6 +2176,7 @@ the pending list).
 | Committee routing for issues (rules' jurisdictions + labelled issues) | `backend/app/committee_routing.py`, `backend/app/data/committee_*.json`, `backend/scripts/fetch_committee_jurisdictions.py`, `backend/scripts/calibrate_committee_routing.py` |
 | Issue principal actor + weekly actor concentration (admin) | `backend/app/pipeline/analyze/story_actor.py`, `GET /api/admin/actor-concentration`, `frontend/src/components/admin/ActionCenterDashboard.tsx` |
 | Justice record and appointer estimate (not scored, justice v3) | `backend/app/pipeline/justice_pipeline.py`, `backend/app/pipeline/analyze/justice_loyalty.py` |
+| The Court page (`/court`: Martin-Quinn line, agreement grid, splits by term, decision lineups) and each justice's case list | `backend/app/services/court_service.py`, `backend/app/api/court.py`, `frontend/src/app/court/page.tsx`, `frontend/src/components/court/`, `frontend/src/components/scorecard/JusticeCases.tsx` |
 | Election cycle pipeline (candidates, financials, ballot measures, coverage) | `backend/app/pipeline/election_pipeline.py` |
 | What shapes a race (seat lean among all seats, FEC contribution categories, state CSV; descriptive, no forecast) | `backend/app/race_context.py`, `frontend/src/components/elections/ballot/RaceContext.tsx`, `RaceMoneyBars.tsx` |
 | Election phase (campaign / election day / results) + results grace period | `backend/app/election_phase.py` |
@@ -2161,6 +2198,7 @@ the pending list).
 | Presidential nominations (daily Congress.gov sync, FJC join, list/stats/detail, roll-call links) | `backend/app/pipeline/fetch/nominations.py`, `backend/app/services/nomination_service.py`, `services/nomination_links.py`, `backend/app/api/nominations.py`, `frontend/src/app/congress/nominations/` |
 | Site search: entity index (write time), identifier parser, ranking, direct navigation, section anchors | `backend/app/site_search_index.py`, `backend/app/site_search.py`, `backend/app/api/search.py`, `backend/app/data/site_pages.json`, `backend/app/data/site_search_sections.json`, `backend/scripts/calibrate_site_search.py`, `frontend/src/components/search/`, `frontend/src/app/search/page.tsx` |
 | Explore hybrid search ranking (RRF fusion, priors, dedup, diversity) | `backend/app/services/explore_search.py` |
+| Explore permanent addresses (`/explore/{key}` from the official identifier; old row ids 308 to it), coverage windows and "not held here" notes | `backend/app/services/explore_keys.py`, `backend/app/services/explore_coverage.py`, `frontend/src/lib/exploreHref.ts` |
 | Explore keyword index (FTS5 + BM25F) | `backend/app/pipeline/lexical_index.py` |
 | Document citation graph + PageRank authority | `backend/app/pipeline/analyze/document_authority.py` |
 | Search-quality evaluation harness | `backend/scripts/evaluate_explore_search.py` |
@@ -2193,7 +2231,7 @@ the pending list).
 | SEO: per-route metadata, canonicals, JSON-LD, sitemap | `frontend/src/lib/site.ts`, `frontend/src/lib/seo.ts`, `frontend/src/app/sitemap.ts`, `backend/app/api/sitemap.py` |
 | Frontend types | `frontend/src/types/` |
 | Metric explanations (tooltips on all scorecard metrics) | `frontend/src/components/checker/MetricTooltip.tsx` |
-| Detail pages' two layers: chamber strip, scorecard in short, methods ledger, bill stage ladder and sources, "cite this" | `frontend/src/components/scorecard/ChamberStrip.tsx`, `AtAGlance.tsx`, `MethodsLedger.tsx`, `frontend/src/components/congress/StageLadder.tsx`, `BillSources.tsx`, `frontend/src/components/shared/CiteThis.tsx`; data from `api/politicians.py` (`_chamber_field`, `_scored_on`) and `bill_service.stage_milestones` |
+| Detail pages' two layers: chamber strip, scorecard in short, methods ledger, bill stage ladder and sources, "cite this", held and thin-data marks | `frontend/src/components/scorecard/ChamberStrip.tsx`, `AtAGlance.tsx`, `MethodsLedger.tsx`, `HeldScore.tsx`, `frontend/src/components/congress/StageLadder.tsx`, `BillSources.tsx`, `frontend/src/components/shared/CiteThis.tsx` (a government document or record cites its issuer: `frontend/src/lib/citedSources.ts`); data from `api/politicians.py` (`_chamber_field`, `_scored_on`) and `bill_service.stage_milestones` |
 | Action Center issue parts (shared with `/issue/[id]`: meta, tags, "What you can do", coverage, sources) | `frontend/src/components/action/IssueEnrichment.tsx` |
 | Leaderboard spread strip, ties and thin-data marks | `backend/app/api/leaderboard.py`, `backend/app/score_display.py` (`score_spread`, `thin_dimensions`), `frontend/src/components/leaderboard/ScoreSpreadStrip.tsx` |
 | Site navigation: sections, main menu, footer, section tabs, hub cards and the homepage index | `frontend/src/lib/routes.ts` (`SECTIONS`), `frontend/src/components/layout/Navbar.tsx`, `Footer.tsx`, `SectionTabs.tsx`, `frontend/src/components/sections/SectionCards.tsx`, `frontend/src/components/home/SectionsBand.tsx`, `frontend/src/lib/sectionPreviews.ts`, `backend/app/api/sections.py` |
@@ -2355,6 +2393,17 @@ the pending list).
   first screen while a client-fetched page loads and then jumps away (CLS
   0.58-0.80 on /action, /elections and Explore documents before 2026-10-14).
   `layoutStability.test.ts` fails on a `<main>` without the id.
+- **Reflow at 200% text (WCAG 1.4.10).** On a phone at 200% text the header's
+  wordmark and its SEARCH and MENU buttons can't share one row, so the bar
+  wraps, and `HeaderClearance` (root layout) moves `--header-clearance` down
+  to the measured header; at ordinary sizes it leaves the stylesheet's 6rem
+  alone. Width-dependent choices inside a component are container queries in
+  rem (`@min-[20rem]:` on the bar), which follow a larger text size however
+  the reader set it. A grid that can be narrower than its content needs
+  `grid-cols-[minmax(0,1fr)]` (an implicit column is as wide as its widest
+  child), and a label in a narrow box needs `min-w-0` with
+  `[overflow-wrap:anywhere]`. Until 2026-10 every page's header, and the
+  scorecard header, ran past a 320-375 px screen at 200% text.
 - Large tab components are code-split with `next/dynamic` to reduce initial
   bundle size (e.g., Action Center tabs load on demand). Use in-memory
   `cachedFetch` from `src/lib/api.ts` for API calls that benefit from
@@ -2412,7 +2461,12 @@ the pending list).
   inherited by every page and declare the whole site a duplicate of the
   homepage). A section layout's canonical is inherited the same way, so a
   dynamic child (`/politicians/[id]`, `/explore/[id]`…) must set its own,
-  taken from the record, not the request's spelling. Its 404 can't (a
+  taken from the record, not the request's spelling. An Explore document's
+  is its permanent key (`services/explore_keys.py`: the FR document
+  number, the Record granule, the Court's docket), never its row id, which
+  the pipeline can replace; every other address for it answers a 308 to
+  the key, and links, the sitemap, the public API's `siteUrl` and "Cite
+  this" use the key (`exploreHref`). Its 404 can't (a
   route's `notFound()` discards its page's metadata; the head comes from
   the layouts above), so a section whose index page is a client component
   keeps that page's metadata in a layout inside an `(index)` route group
@@ -2495,6 +2549,60 @@ says so (`shown`/`movedSince`), a bill page states its stage's base rate
 forecast for the bill), the Ongoing tab lists recently closed monitors, and
 `/compare` offers pairs that need no picking. Never fill the gap with model
 text or a visitor's input (§7, §8).
+
+#### Accessibility: WCAG 2.2 AA is a merge requirement (2026-10)
+
+Accessibility outranks styling. A change that fails WCAG 2.2 Level AA is not
+merged, however it looks; when a design and a criterion disagree, the design
+moves. `/accessibility` states this target and the known gaps; a change that
+closes or opens one updates that page in the same PR.
+
+How to check, before asking for review:
+
+- **`npm test`**: the jsdom axe tests (scorecards, Congress reports, the
+  state ballot, the voter calendar, the maps) and
+  `src/lib/wcagContrast.test.ts`, which computes the WCAG ratio of every text
+  token on every ground and of every `text-*`/`bg-*` pair written together in
+  one class string (each variant: `hover:`, `aria-selected:`...) from
+  `tailwind.config.ts`, and fails below 4.5:1 (3:1 for large text). A colour
+  that fails is fixed in the token or the pair, never with an opacity tweak at
+  one call site.
+- **`npm run build && npm run test:a11y -- .lighthouserc.populated.json`**
+  (`scripts/axe-routes.mjs`, also run by the Lighthouse workflow on both of
+  its route lists): every axe rule tagged WCAG 2.0, 2.1 or 2.2 A/AA, in
+  Chrome, at 320px and 1280px, plus no horizontal scroll at 320px. A new
+  route or page type goes into the Lighthouse configs so both gates see it.
+  The workflow is not a required GitHub check, so read its result on the PR.
+- **By hand, on a production build**, for what axe cannot see: keyboard
+  paths through anything interactive you touched (menus, tabs, disclosures,
+  drawers, dialogs, maps), Shift+Tab as well as Tab; focus visible and never
+  under the fixed header; 200% text at 1280px; text drawn inside SVG charts
+  and maps (axe does not measure it); hover and focus pop-ups; reduced
+  motion. Say in the PR what you checked and the result.
+
+Patterns that exist because they failed once:
+
+- **Focus Not Obscured (2.4.11)** is one rule: `html { scroll-padding-top }`
+  in `globals.css`, sized to the fixed header. Don't add `scroll-mt-*` to
+  anchor targets (it adds to the padding). A page with a sticky bar under the
+  header marks it `data-sticky-subnav`.
+- **Dialogs** trap Tab with `trapTab` (`src/lib/focusedDialog.ts`), which
+  also wraps when focus sits on the dialog or its heading. A check for "on
+  the first control" let Shift+Tab out of every dialog here.
+- **Links in running text** use `INLINE_LINK` (`src/lib/controlStyles.ts`):
+  underlined, since cyan is 1.1-1.3:1 against the ink around it.
+- **Labels on map tiles** carry `MAP_LABEL_HALO` (`src/lib/results.ts`); no
+  ink colour reads on every party fill.
+- **Hover content** stays open while the pointer moves onto it and closes on
+  Escape from anywhere (`MetricTooltip`); no `title` attribute as a tooltip.
+- **Scripted scrolling** takes `scrollBehavior()` (`src/lib/motion.ts`), so
+  reduced motion jumps instead of gliding.
+- **Targets** are 24x24 (`min-h-6`, or `h-6 w-6` with a negative margin, as
+  `MetricTooltip` does) unless they are links inside a sentence.
+- **A filter that changes a list** says so in a `role="status"` line
+  (`CalendarList`).
+- **A display or pixel face** is for the wordmark only, never body or data
+  text.
 
 ### Testing
 

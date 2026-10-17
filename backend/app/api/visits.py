@@ -517,7 +517,7 @@ def _visitor_hash(ip: str, salt: bytes) -> str:
 _KNOWN_STATIC_PATHS = {
     "/", "/about", "/accessibility", "/action", "/bills", "/changelog",
     "/compare", "/developers", "/environmental", "/explore", "/feedback", "/feeds", "/leaderboard",
-    "/politicians", "/elections", "/congress", "/congress/bills", "/agencies",
+    "/politicians", "/elections", "/congress", "/congress/bills", "/agencies", "/court",
     # The search results page: counted as the route alone (the path is
     # read without its query string), never what was searched for.
     "/search",

@@ -33,7 +33,9 @@ from app.pipeline.fetch.bill_display_titles import cached_display_titles, titles
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 from app.pipeline.transform.normalize_votes import resolve_senate_lis_ids
-from app.services.congress_service import bill_coverage, bill_days, bill_label
+from app.services import bill_journey
+from app.services.congress_service import amendment_fields, bill_coverage, bill_days, bill_label
+from app.services.explore_keys import public_key
 from app.services.nomination_links import nomination_votes
 from app.services.roll_call_shape import candidate_of, shape
 
@@ -409,6 +411,7 @@ def roll_call_summaries(db: Session, refs: list[str | None]) -> dict[str, dict]:
             "billId": rc.bill_id, "billLabel": bill_label(rc.bill_id), "sourceUrl": rc.source_url,
             **shape(rc, positions.get(rc.id, [])),
             "billShortTitle": short.get(rc.id),
+            **amendment_fields(rc),
             # What the vote decided about the nominations its question
             # names (a nomination has no bill); null for any other vote.
             "nominationVote": nominations.get(rc.id),
@@ -458,6 +461,7 @@ def vote_detail(db: Session, rc: RollCall, links: MemberLinks | None = None) -> 
         "yeas": rc.yeas, "nays": rc.nays, "present": rc.present, "notVoting": rc.not_voting,
         "billId": rc.bill_id, "billLabel": bill_label(rc.bill_id), "sourceUrl": rc.source_url,
         "billShortTitle": roll_call_short_titles(db, [rc]).get(rc.id),
+        **amendment_fields(rc),
         "nominationVote": nomination_votes(db, [rc]).get(rc.id),
         **shape(rc, positions),
         "parties": party_breakdown(positions), "members": members,
@@ -513,6 +517,7 @@ def bill_votes(db: Session, congress: int, bill_id: str) -> list[dict]:
         "yeas": rc.yeas, "nays": rc.nays, "present": rc.present, "notVoting": rc.not_voting,
         "sourceUrl": rc.source_url, **shape(rc, positions.get(rc.id, [])),
         "parties": party_breakdown(positions.get(rc.id, [])),
+        **amendment_fields(rc),
     } for rc in votes]
 
 
@@ -542,8 +547,8 @@ def floor_debate(db: Session, congress: int, bill_id: str) -> list[dict]:
     headings when the page is served; the speech text is never searched."""
     number = bill_id.split(".", 1)[-1]
     rows = (
-        db.query(ExploreDocument.id, ExploreDocument.title, ExploreDocument.date, ExploreDocument.chamber,
-                 ExploreDocument.politician_name, ExploreDocument.politician_id)
+        db.query(ExploreDocument.id, ExploreDocument.external_id, ExploreDocument.title, ExploreDocument.date,
+                 ExploreDocument.chamber, ExploreDocument.politician_name, ExploreDocument.politician_id)
         .filter(ExploreDocument.doc_type.in_(SPEECH_DOC_TYPES), ExploreDocument.title.contains(number))
         .order_by(ExploreDocument.date.desc(), ExploreDocument.id)
         .all()
@@ -560,7 +565,8 @@ def floor_debate(db: Session, congress: int, bill_id: str) -> list[dict]:
         # turn, with how many turns they took (each turn is a speech).
         key = r.politician_id or r.politician_name or r.id
         speaker = group["speakers"].setdefault(key, {
-            "speaker": r.politician_name or "", "politicianId": r.politician_id, "speechId": r.id, "speeches": 0,
+            "speaker": r.politician_name or "", "politicianId": r.politician_id, "speechId": r.id,
+            "speechKey": public_key(r.external_id, r.id), "speeches": 0,
         })
         speaker["speeches"] += 1
     return [{**g, "speakers": list(g["speakers"].values())} for g in groups.values()]
@@ -584,6 +590,11 @@ def shape_record(db: Session, congress: int, bill_id: str, raw: dict) -> dict:
     named = cached_display_titles(db, [(congress, bill_id, bill.get("title") or "")]).get(
         titles_key(congress, bill_id),
     )
+    actions = bill_journey.fold_actions(raw.get("actions") or [], lambda a: [
+        {"chamber": (v.get("chamber") or "").lower(), "number": v.get("rollNumber"),
+         "session": v.get("sessionNumber"), "sourceUrl": _roll_call_source(congress, v)}
+        for v in a.get("recordedVotes") or []
+    ])
     return {
         "billId": bill_id,
         "billLabel": bill_label(bill_id),
@@ -607,13 +618,11 @@ def shape_record(db: Session, congress: int, bill_id: str, raw: dict) -> dict:
             "actionDesc": latest_summary.get("actionDesc"), "actionDate": latest_summary.get("actionDate"),
             "paragraphs": summary_paragraphs(latest_summary.get("text") or ""),
         } if latest_summary else None),
-        "actions": [
-            {"date": a.get("actionDate"), "text": a.get("text"), "type": a.get("type"),
-             "rollCalls": [{"chamber": (v.get("chamber") or "").lower(), "number": v.get("rollNumber"),
-                            "session": v.get("sessionNumber"),
-                            "sourceUrl": _roll_call_source(congress, v)} for v in a.get("recordedVotes") or []]}
-            for a in raw.get("actions") or []
-        ],
+        # Same-day twins folded, each with its code's plain meaning; how
+        # each chamber decided it; and its path, dated (bill_journey).
+        "actions": actions,
+        "passage": bill_journey.passage(actions),
+        "journey": bill_journey.journey(actions, parse_bill_id(bill_id)[0]),
         "textVersions": [
             {"type": t.get("type"), "date": (t.get("date") or "")[:10],
              "formats": {f.get("type"): f.get("url") for f in t.get("formats") or []}}

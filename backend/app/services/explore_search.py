@@ -51,11 +51,13 @@ import re
 
 from sqlalchemy import text
 
+from app import comment_periods
 from app.models import ExploreDocument
 from app.pipeline.analyze.document_authority import (
     declared_identifiers,
     extract_citations,
     is_identifier_query,
+    query_record_identifiers,
 )
 from app.pipeline.explore_ranking import (
     candidate_pool,
@@ -66,6 +68,8 @@ from app.pipeline.explore_ranking import (
 )
 from app.pipeline.lexical_index import search_lexical
 from app.pipeline.vector_store import search_explore_documents
+from app.services.explore_coverage import not_held
+from app.services.explore_keys import public_key
 from app.time_utils import comment_period_today
 
 logger = logging.getLogger(__name__)
@@ -209,7 +213,7 @@ def _hydrate(db, doc_ids: list[int]) -> dict[int, dict]:
         placeholders = ", ".join(f":id{i}" for i in range(len(chunk)))
         params = {f"id{i}": doc_id for i, doc_id in enumerate(chunk)}
         rows.extend(db.execute(text(
-            f"""SELECT id, title, date, doc_type, source, politician_name,
+            f"""SELECT id, external_id, title, date, doc_type, source, politician_name,
                        politician_id, chamber, agency_name, agency_slug, url, summary,
                        comment_url, comments_close_on, cited_by_count, authority,
                        substr(coalesce(body, ''), 1, 400) AS body_head,
@@ -220,6 +224,8 @@ def _hydrate(db, doc_ids: list[int]) -> dict[int, dict]:
     return {
         int(row.id): {
             "id": int(row.id),
+            # The permanent address to link (services/explore_keys.py).
+            "key": public_key(row.external_id, int(row.id)),
             "title": row.title or "",
             "date": row.date or "",
             "docType": row.doc_type or "",
@@ -280,11 +286,38 @@ def _query_identifiers(query: str) -> set[str]:
     ("FR", "RIN"), so a document's prose "89 fr more" is no citation; a
     query is typed in any case, and upper-casing it first reads "91 fr
     48248" or "rin 2120-aa66" as the citation it can only be."""
-    found = extract_citations((query or "").upper())
+    found = extract_citations((query or "").upper()) | query_record_identifiers(query)
     bare = _BARE_FR_DOC_RE.fullmatch(query or "")
     if bare:
         found.add(f"frdoc:{bare.group(1)}")
     return found
+
+
+def _identifier_only(query: str) -> bool:
+    """A query that is nothing but identifiers, a bare FR document number
+    included: a lookup, not words to match."""
+    return is_identifier_query(query) or bool(_BARE_FR_DOC_RE.fullmatch(query or ""))
+
+
+# How each identifier is written in a document's text, as FTS5 phrases: the
+# keyword channel's query for an identifier-only search, so it returns the
+# documents that cite the identifier and not every document sharing a word
+# with it ("EO 14148" matched thirty other orders on "EO"). A Record
+# citation or granule appears in no document's text, so it has none.
+def _identifier_phrases(identifiers: set[str]) -> str:
+    phrases: list[str] = []
+    for ident in sorted(identifiers):
+        namespace, _, value = ident.partition(":")
+        if namespace == "eo":
+            phrases += [f"Executive Order {value}", f"EO {value}", f"E.O. {value}"]
+        elif namespace == "proc":
+            phrases.append(f"Proclamation {value}")
+        elif namespace == "fr":
+            volume, _, page = value.partition("-")
+            phrases.append(f"{volume} FR {page}")
+        elif namespace in ("frdoc", "rin", "docket"):
+            phrases.append(value)
+    return " ".join(f'"{p}"' for p in phrases)
 
 
 def _identifier_matches(
@@ -312,12 +345,15 @@ def _identifier_matches(
     wanted = _query_identifiers(query)
     if not wanted:
         return []
-    needles = sorted({ident.split(":", 1)[1] for ident in wanted})
+    # A Record citation's value ("172-H5836") is not in the row as written:
+    # its page ("H5836") is, in the granule the external id carries.
+    needles = sorted({ident.split(":", 1)[1].split("-", 1)[-1] if ident.startswith("crec:")
+                      else ident.split(":", 1)[1] for ident in wanted})
     clauses = " OR ".join(
-        f"identifiers LIKE :n{i} OR external_id LIKE :n{i} OR title LIKE :n{i}"
+        f"identifiers LIKE :n{i} OR external_id LIKE :n{i} OR title LIKE :n{i} OR comment_url LIKE :n{i}"
         for i in range(len(needles)))
     params: dict = {f"n{i}": f"%{needle}%" for i, needle in enumerate(needles)}
-    sql = (f"SELECT id, external_id, title, doc_type, identifiers "
+    sql = (f"SELECT id, external_id, title, doc_type, identifiers, comment_url "
            f"FROM explore_documents WHERE ({clauses})")
     if doc_type:
         sql += " AND doc_type = :doc_type"
@@ -335,7 +371,7 @@ def _identifier_matches(
     return [
         int(row.id) for row in rows
         if wanted & declared_identifiers(
-            row.external_id, row.title, row.doc_type, row.identifiers)
+            row.external_id, row.title, row.doc_type, row.identifiers, row.comment_url)
     ][:limit]
 
 
@@ -352,9 +388,9 @@ def browse_documents(
     """Documents with no query. One member's, or one agency's
     (`agency_slugs`: it and its sub-agencies), newest first: what a
     profile's or an agency page's "view all documents" link opens. With
-    neither, only `commentable` (every open comment period), closing
-    soonest first: a reader looking for a rule to comment on needs the next
-    deadline before the newest notice. Same response shape as hybrid_search, with no retrieval channel
+    neither, only `commentable` (every open comment period), rules first
+    and most read, as the Today tab orders them, with paperwork notices
+    apart under `paperwork` (app/comment_periods). Same response shape as hybrid_search, with no retrieval channel
     involved (so no distance, no matched terms)."""
     today = comment_period_today()
     query = db.query(ExploreDocument.id)
@@ -371,30 +407,60 @@ def browse_documents(
             ExploreDocument.comment_url.isnot(None), ExploreDocument.comment_url != "",
             ExploreDocument.comments_close_on >= today,
         )
-    order = (
-        (ExploreDocument.date.desc(), ExploreDocument.id.desc())
-        if politician_id is not None or (agency_slugs and not commentable)
-        else (ExploreDocument.comments_close_on.asc(), ExploreDocument.date.desc(), ExploreDocument.id.desc())
-    )
-    ids = [row.id for row in query.order_by(*order).limit(limit)]
-    hydrated = _hydrate(db, ids)
-    results = []
-    for doc_id in ids:
-        doc = hydrated.get(doc_id)
-        if doc is None:
-            continue
-        doc.pop("_authority", None)
-        doc.pop("_bodyHead", None)
-        doc.pop("_bodyLength", None)
-        doc.update(matchedBy=[], distance=None, snippet=doc["summary"], duplicateCount=0)
-        results.append(doc)
-    return {
+    paperwork_ids: list[int] = []
+    paperwork_count = 0
+    if commentable and politician_id is None:
+        # Every open period (hundreds at most), ordered as the Today tab
+        # orders them: rules first, paperwork notices folded apart, closing
+        # soonest first (app/comment_periods).
+        rows = query.with_entities(
+            ExploreDocument.id, ExploreDocument.doc_type, ExploreDocument.fr_toc_subject,
+            ExploreDocument.fr_page_views, ExploreDocument.comments_close_on,
+        ).all()
+        paperwork = sorted((r for r in rows if comment_periods.is_paperwork(r.doc_type, r.fr_toc_subject)),
+                           key=lambda r: (r.comments_close_on, -r.id))
+        others = sorted((r for r in rows if not comment_periods.is_paperwork(r.doc_type, r.fr_toc_subject)),
+                        key=comment_periods.salience)
+        ids = [r.id for r in others[:limit]]
+        paperwork_ids, paperwork_count = [r.id for r in paperwork[:limit]], len(paperwork)
+    else:
+        order = (
+            (ExploreDocument.date.desc(), ExploreDocument.id.desc())
+            if politician_id is not None or (agency_slugs and not commentable)
+            else (ExploreDocument.comments_close_on.asc(), ExploreDocument.date.desc(), ExploreDocument.id.desc())
+        )
+        ids = [row.id for row in query.order_by(*order).limit(limit)]
+    hydrated = _hydrate(db, ids + paperwork_ids)
+
+    def shaped(doc_ids: list[int]) -> list[dict]:
+        out = []
+        for doc_id in doc_ids:
+            doc = hydrated.get(doc_id)
+            if doc is None:
+                continue
+            doc.pop("_authority", None)
+            doc.pop("_bodyHead", None)
+            doc.pop("_bodyLength", None)
+            doc.update(matchedBy=[], distance=None, snippet=doc["summary"], duplicateCount=0)
+            if commentable:
+                # The abstract's opening sentence, verbatim, as the card's
+                # text, and the comment window from publication to deadline.
+                doc["snippet"] = comment_periods.first_sentence(doc["summary"]) or doc["summary"]
+                doc["commentWindow"] = comment_periods.comment_window(doc["date"], doc["commentsCloseOn"], today)
+            out.append(doc)
+        return out
+
+    results = shaped(ids)
+    outcome = {
         "results": results,
         "count": len(results),
         "indexReady": True,
         "semanticUnavailable": False,
         "channels": {"semantic": 0, "keyword": 0, "identifier": 0},
     }
+    if commentable and politician_id is None:
+        outcome["paperwork"] = {"count": paperwork_count, "results": shaped(paperwork_ids)}
+    return outcome
 
 
 def hybrid_search(
@@ -449,7 +515,8 @@ def hybrid_search(
     # middling outscored the keyword channel's exact hit at rank 1 — fused
     # R@1 on those probes was 0.25 against keyword's 0.65 (2026-10). The
     # channel abstains (an empty list, not None: it is not unavailable).
-    if is_identifier_query(query):
+    identifier_only = _identifier_only(query)
+    if identifier_only:
         semantic = []
     else:
         try:
@@ -461,8 +528,11 @@ def hybrid_search(
             logger.exception("Semantic channel failed")  # never the query (AGENTS.md §8)
             semantic = None
 
+    # An identifier-only query asks the keyword channel for the identifier as
+    # written, nothing looser (_identifier_phrases).
+    keyword_query = _identifier_phrases(_query_identifiers(query)) if identifier_only else query
     keyword = search_lexical(
-        db, query, limit=pool, doc_type=doc_type, chamber=effective_chamber,
+        db, keyword_query, limit=pool, doc_type=doc_type, chamber=effective_chamber,
         politician_id=politician_id, commentable_after=commentable_after,
         agency_slugs=agency_slugs,
     )
@@ -471,6 +541,12 @@ def hybrid_search(
         politician_id=politician_id, agency_slugs=agency_slugs,
     )
     exact_ids = set(exact)
+    # An identifier the query names that no document is known by: say so,
+    # with where the official copy is (explore_coverage.not_held). Only on
+    # an unfiltered search, where "not held" is what the miss means.
+    wanted = _query_identifiers(query)
+    unfiltered = not (doc_type or chamber or politician_id or commentable or agency_slugs)
+    held_note = not_held(db, wanted) if wanted and not exact and unfiltered else []
 
     # None (not []) from the semantic channel means the vector index is
     # missing or mid-rebuild, which is different from "it found nothing".
@@ -521,6 +597,7 @@ def hybrid_search(
             "semanticUnavailable": semantic_unavailable,
             "channels": {"semantic": len(semantic), "keyword": len(keyword),
                          "identifier": len(exact)},
+            "notHeld": held_note,
         }
 
     live_ids = {doc["id"] for doc in candidates}
@@ -646,4 +723,5 @@ def hybrid_search(
         "semanticUnavailable": semantic_unavailable,
         "channels": {"semantic": len(semantic), "keyword": len(keyword),
                      "identifier": len(exact)},
+        "notHeld": held_note,
     }

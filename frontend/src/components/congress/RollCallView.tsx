@@ -3,6 +3,7 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import CiteThis from "@/components/shared/CiteThis";
+import { rollCallCitedSource } from "@/lib/citedSources";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import { ordinal } from "@/components/scorecard/format";
@@ -13,6 +14,8 @@ import { absoluteUrl } from "@/lib/site";
 import SectionTabs from "@/components/layout/SectionTabs";
 import { ResultLabel, VoteCount } from "./ReportParts";
 import VoteMembers, { PartyBar } from "./VoteMembers";
+import AmendmentPurpose from "./AmendmentPurpose";
+import SeatChart from "./SeatChart";
 import { STATUS_LABEL, nominationHref } from "@/lib/nominations";
 import type { NominationVote, RollCallNomination } from "@/types/nomination";
 
@@ -86,7 +89,7 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
               {...{ [SHARE_SECTION_ATTR]: "vote" }}
               id="vote"
               aria-labelledby="vote-title"
-              className="flex scroll-mt-28 flex-col gap-6"
+              className="flex flex-col gap-6"
             >
               <header className="flex flex-col gap-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -117,9 +120,10 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
                   </p>
                 )}
                 {vote.nominationVote && <NominationLinks nv={vote.nominationVote} />}
+                <AmendmentPurpose vote={vote} chamber={vote.chamber} />
               </header>
 
-              <div className="grid gap-8 border border-white/15 bg-surface p-4 sm:p-5 lg:grid-cols-[18rem_minmax(0,1fr)]">
+              <div className="grid grid-cols-[minmax(0,1fr)] gap-8 border border-white/15 bg-surface p-4 sm:p-5 lg:grid-cols-[18rem_minmax(0,1fr)]">
                 <div className="flex flex-col gap-3">
                   <ResultLabel result={voteResult(vote)} rejected={vote.rejected} />
                   {vote.kind === "election" && vote.candidates?.length ? (
@@ -157,22 +161,25 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
                     )}
                   </dl>
                 </div>
-                <div className="flex flex-col gap-3">
-                  <h2 className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-                    By party
-                  </h2>
-                  {vote.parties.map((p) => (
-                    <PartyBar key={p.party} split={p} />
-                  ))}
-                </div>
+                {vote.kind === "election" ? (
+                  // An election of the Speaker is votes for names, not yea
+                  // and nay: each party's candidates, as the bars show them.
+                  <div className="flex flex-col gap-3">
+                    <h2 className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
+                      By party
+                    </h2>
+                    {vote.parties.map((p) => (
+                      <PartyBar key={p.party} split={p} />
+                    ))}
+                  </div>
+                ) : (
+                  <SeatChart members={vote.members} parties={vote.parties} chamberName={chamber} />
+                )}
               </div>
             </section>
 
             <section aria-labelledby="members" className="flex flex-col gap-4">
-              <h2
-                id="members"
-                className="scroll-mt-28 font-display text-2xl font-extrabold text-ink-hi"
-              >
+              <h2 id="members" className="font-display text-2xl font-extrabold text-ink-hi">
                 How each {MEMBERS[vote.chamber]} voted
                 <span className="ml-2 font-mono text-sm font-normal text-ink-min">
                   {vote.members.length}
@@ -185,10 +192,7 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
               aria-labelledby="sources"
               className="flex flex-col gap-6 border border-white/25 bg-surface p-5"
             >
-              <h2
-                id="sources"
-                className="scroll-mt-28 font-display text-2xl font-extrabold text-ink-hi"
-              >
+              <h2 id="sources" className="font-display text-2xl font-extrabold text-ink-hi">
                 Source and citation
               </h2>
               <div className="grid gap-8 lg:grid-cols-2">
@@ -224,9 +228,10 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
                     Cite this vote
                   </h3>
                   <CiteThis
-                    title={`${chamber} roll call ${vote.number}, ${ordinal(vote.congress)} Congress: ${subject}`}
+                    title={`Roll call vote ${vote.number}, ${ordinal(vote.congress)} Congress, ${ordinal(vote.session)} session: ${subject}`}
                     date={vote.date}
                     path={path}
+                    source={rollCallCitedSource(vote.chamber, vote.sourceUrl)}
                   />
                 </div>
               </div>

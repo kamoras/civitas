@@ -3,31 +3,40 @@ anyone to read with anything that reads a feed.
 
 Public at `/feed.xml` (everything), `/feed/<topic>.xml` (broadcast.FEEDS)
 and `/feed/states/<ST>.xml` (posts about one state: its races and its
-members' spotlights). nginx maps those onto these routes and caches them;
-Next's rewrites do the same where nginx isn't in front (`next dev`).
+members' spotlights). One followed thing has a feed too, built from stored
+rows when asked for (app/entity_feeds.py): `/feed/members/<id>.xml`,
+`/feed/bills/<congress>/<bill>.xml`, `/feed/agencies/<slug>.xml` and
+`/feed/monitors/<slug>.xml`. nginx maps those onto these routes and caches
+them, its misses through the api-misses limit; Next's rewrites do the same
+where nginx isn't in front (`next dev`).
 
 A feed is pulled, so serving one learns nothing about who reads it beyond
 what any page request does, and nothing here records a request
 (AGENTS.md §8). Picking a topic or a state is the reader's filter, carried
 in the URL they subscribe to.
 
-Read path only: one indexed query, no model.
+Read path only: indexed queries, no model, no fetch.
 """
 import hashlib
 import re
 from datetime import datetime
 from html import escape
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 from xml.etree import ElementTree as ET
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
+from app import entity_feeds
+from app.api.agencies import children_of, descendants
 from app.api.response_helpers import CACHE_TTL_LIST_S, cached_json
 from app.broadcast import FEEDS, KINDS, SITE_URL, withdrawn_subjects
 from app.database import get_db
-from app.models import BroadcastPost
+from app.entity_feeds import EntityFeed
+from app.member_ids import resolve_member_id
+from app.models import Agency, BroadcastPost
+from app.services.bill_record import canonical_bill_id
 from app.services.senator_service import STATE_NAMES
 from app import whats_new as whats_new_module
 
@@ -60,6 +69,24 @@ def feed_path(slug: str) -> str:
 
 def state_feed_path(state: str) -> str:
     return f"/feed/states/{state}.xml"
+
+
+# One followed thing's feed (app/entity_feeds.py). The frontend writes the
+# same paths (src/lib/site.ts memberFeed, billFeed, agencyFeed, monitorFeed).
+def member_feed_path(member_id: str) -> str:
+    return f"/feed/members/{quote(member_id)}.xml"
+
+
+def bill_feed_path(congress: int, bill_id: str) -> str:
+    return f"/feed/bills/{congress}/{bill_id}.xml"
+
+
+def agency_feed_path(slug: str) -> str:
+    return f"/feed/agencies/{quote(slug)}.xml"
+
+
+def monitor_feed_path(slug: str) -> str:
+    return f"/feed/monitors/{quote(slug)}.xml"
 
 
 def _clean(text: str | None) -> str:
@@ -158,7 +185,43 @@ def _matches(if_none_match: str | None, etag: str) -> bool:
     return "*" in tags or etag in tags
 
 
-def _atom_response(request: Request, body: bytes, posts: list[BroadcastPost]) -> Response:
+def render_entity_atom(feed: EntityFeed, path: str) -> bytes:
+    """An Atom 1.0 document for one followed thing (app/entity_feeds.py),
+    newest first: each entry links the Civitas page and its official source."""
+    self_url = f"{SITE_URL}{path}"
+    root = ET.Element("feed", {"xmlns": ATOM_NS})
+    _sub(root, "id", self_url)
+    _sub(root, "title", feed.title)
+    _sub(root, "subtitle", feed.subtitle)
+    _sub(root, "link", rel="self", type="application/atom+xml", href=self_url)
+    _sub(root, "link", rel="alternate", type="text/html", href=f"{SITE_URL}{feed.page}")
+    _sub(root, "updated", _rfc3339(feed.entries[0].when) if feed.entries else _EMPTY_FEED_UPDATED)
+    author = _sub(root, "author")
+    _sub(author, "name", "Civitas Research")
+    _sub(author, "uri", SITE_URL)
+    _sub(root, "icon", f"{SITE_URL}/apple-icon.png")
+    for e in feed.entries:
+        url = f"{SITE_URL}{e.url}"
+        entry = _sub(root, "entry")
+        _sub(entry, "id", e.id)
+        _sub(entry, "title", e.title)
+        _sub(entry, "link", rel="alternate", type="text/html", href=url)
+        stamp = _rfc3339(e.when)
+        _sub(entry, "published", stamp)
+        _sub(entry, "updated", stamp)
+        _sub(entry, "category", term=e.category, label=e.label)
+        if e.source_url:
+            _sub(entry, "link", rel="related", type="text/html", href=e.source_url)
+        parts = [f"<p>{escape(p)}</p>" for p in e.paragraphs]
+        parts.append(f'<p><a href="{escape(url)}">Read on Civitas Research</a></p>')
+        if e.source_url:
+            host = urlsplit(e.source_url).hostname or e.source_url
+            parts.append(f'<p>Source: <a href="{escape(e.source_url)}">{escape(host.removeprefix("www."))}</a></p>')
+        _sub(entry, "content", "".join(parts), type="html")
+    return b'<?xml version="1.0" encoding="utf-8"?>\n' + ET.tostring(root, encoding="utf-8")
+
+
+def _atom_response(request: Request, body: bytes, newest: datetime | None) -> Response:
     """The feed with validators, so a poller that sends them back gets a 304
     instead of the document (nginx answers these from its cache too)."""
     etag = f'"{hashlib.sha256(body).hexdigest()[:32]}"'
@@ -166,8 +229,8 @@ def _atom_response(request: Request, body: bytes, posts: list[BroadcastPost]) ->
         "Cache-Control": f"public, max-age={CACHE_TTL_LIST_S}, stale-while-revalidate={CACHE_TTL_LIST_S}",
         "ETag": etag,
     }
-    if posts:
-        headers["Last-Modified"] = posts[0].published_at.strftime("%a, %d %b %Y %H:%M:%S GMT")
+    if newest is not None:
+        headers["Last-Modified"] = newest.strftime("%a, %d %b %Y %H:%M:%S GMT")
     if _matches(request.headers.get("if-none-match"), etag):
         return Response(status_code=304, headers=headers)
     return Response(content=body, media_type=ATOM_MEDIA_TYPE, headers=headers)
@@ -198,7 +261,30 @@ def feed_index():
             {"code": code, "name": name, "path": state_feed_path(code)}
             for code, name in sorted(STATE_NAMES.items(), key=lambda kv: kv[1])
         ],
+        # A feed for one followed thing, linked from its page.
+        "followed": FOLLOWED,
     }, max_age=CACHE_TTL_LIST_S)
+
+
+FOLLOWED = [
+    {"kind": "member", "title": "A member of Congress",
+     "description": "Each roll-call vote this Congress with the member's position, the latest action on each bill "
+                    "the member sponsored, each change in the representation score between runs, and each new stock "
+                    "trade report or annual financial disclosure.",
+     "pattern": "/feed/members/<member id>.xml", "where": "Linked from each member's profile."},
+    {"kind": "bill", "title": "A bill",
+     "description": "Each action Congress records on the bill, with what the step means, and each roll call on it.",
+     "pattern": "/feed/bills/<congress>/<bill>.xml", "where": "Linked from each bill's page."},
+    {"kind": "agency", "title": "A federal agency",
+     "description": "Each proposed and final rule the agency or one under it publishes in the Federal Register, each "
+                    "comment period as it opens, and each one's last day.",
+     "pattern": "/feed/agencies/<agency>.xml", "where": "Linked from each agency's page."},
+    {"kind": "monitor", "title": "A story",
+     "description": "Each sourced update to a national monitor, an ongoing story the Action Center tracks, under the "
+                    "outlet's own headline.",
+     "pattern": "/feed/monitors/<monitor>.xml",
+     "where": "Linked from each monitor on the Action Center's Ongoing tab and from the issues it tracks."},
+]
 
 
 @router.get("/whats-new")
@@ -227,7 +313,7 @@ def state_feed(name: str, request: Request, db: Session = Depends(get_db)) -> Re
         path=state_feed_path(code),
         posts=posts,
     )
-    return _atom_response(request, body, posts)
+    return _atom_response(request, body, posts[0].published_at if posts else None)
 
 
 @router.get("/feed/{name}")
@@ -239,8 +325,56 @@ def topic_feed(name: str, request: Request, db: Session = Depends(get_db)) -> Re
         raise HTTPException(status_code=404, detail="No such feed")
     posts = _newest(db, BroadcastPost.kind.in_(feed.kinds))
     body = render_atom(title=feed.title, subtitle=feed.description, path=feed_path(slug), posts=posts)
-    return _atom_response(request, body, posts)
+    return _atom_response(request, body, posts[0].published_at if posts else None)
 
 
+def _entity_response(request: Request, feed: EntityFeed | None, path: str) -> Response:
+    if feed is None:
+        raise HTTPException(status_code=404, detail="No such feed")
+    return _atom_response(request, render_entity_atom(feed, path), feed.entries[0].when if feed.entries else None)
+
+
+def _xml_name(name: str) -> str:
+    if not name.endswith(".xml"):
+        raise HTTPException(status_code=404, detail="No such feed")
+    return name.removesuffix(".xml")
+
+
+@router.get("/feed/members/{name}")
+def member_feed(name: str, request: Request, db: Session = Depends(get_db)) -> Response:
+    """One member of Congress: roll-call votes, sponsored bills' latest
+    actions, score changes and disclosures. A renamed member's old id
+    serves the member's feed under its current address."""
+    member_id = resolve_member_id(db, _xml_name(name))
+    return _entity_response(request, entity_feeds.member_feed(db, member_id), member_feed_path(member_id))
+
+
+@router.get("/feed/bills/{congress}/{name}")
+def bill_feed(congress: int, name: str, request: Request, db: Session = Depends(get_db)) -> Response:
+    """One bill of one Congress ("/feed/bills/119/HR.1.xml"): its actions and roll calls."""
+    bill_id = canonical_bill_id(_xml_name(name))
+    if bill_id is None:
+        raise HTTPException(status_code=404, detail="No such feed")
+    return _entity_response(request, entity_feeds.bill_feed(db, congress, bill_id), bill_feed_path(congress, bill_id))
+
+
+@router.get("/feed/agencies/{name}")
+def agency_feed(name: str, request: Request, db: Session = Depends(get_db)) -> Response:
+    """One agency with its sub-agencies: rules and comment periods."""
+    slug = _xml_name(name)
+    slugs = descendants(children_of(db.query(Agency).all()), slug)
+    return _entity_response(request, entity_feeds.agency_feed(db, slug, slugs), agency_feed_path(slug))
+
+
+@router.get("/feed/monitors/{name}")
+def monitor_feed(name: str, request: Request, db: Session = Depends(get_db)) -> Response:
+    """One national monitor: each sourced update."""
+    slug = _xml_name(name)
+    return _entity_response(request, entity_feeds.monitor_feed(db, slug), monitor_feed_path(slug))
+
+
+for _path, _route in (("/feed/members/{name}", member_feed), ("/feed/bills/{congress}/{name}", bill_feed),
+                      ("/feed/agencies/{name}", agency_feed), ("/feed/monitors/{name}", monitor_feed)):
+    router.add_api_route(_path, _route, methods=["HEAD"], include_in_schema=False)
 router.add_api_route("/feed/states/{name}", state_feed, methods=["HEAD"], include_in_schema=False)
 router.add_api_route("/feed/{name}", topic_feed, methods=["HEAD"], include_in_schema=False)

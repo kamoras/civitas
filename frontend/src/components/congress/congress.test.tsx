@@ -632,8 +632,11 @@ describe("roll call page", () => {
     render(<RollCallView vote={quorum} path="/congress/votes/house/119/1/1" />);
     expect(screen.getByText("Quorum call")).toBeTruthy();
     expect(screen.getByText("433 present")).toBeTruthy();
-    expect(screen.getByText("219 present · 1 NV")).toBeTruthy();
-    expect(screen.getByText("Republicans: 219 present, 1 not voting")).toHaveClass("sr-only");
+    // The seat chart's table: present and not voting, no yea or nay column.
+    const table = screen.getByRole("table", { name: "How each party voted" });
+    const rows = within(table).getAllByRole("row");
+    expect(rows[0].textContent).toBe("PartyPresentNot voting");
+    expect(rows[1].textContent).toBe("Republicans2191");
     expect(screen.queryByText("Passed")).toBeNull();
     expect(screen.queryByText("0–0")).toBeNull();
   });
@@ -672,7 +675,7 @@ describe("bill page", () => {
         votes: notHeld(
           "Civitas holds roll calls from the 150th Congress on, so this bill's votes aren't held."
         ),
-        floor: notHeld("Civitas keeps the sitting Congress's floor speeches only."),
+        floor: notHeld("Civitas holds floor speeches from the 119th Congress on."),
         digest: notHeld("Civitas's record of Congress starts January 3, 2087."),
       },
     };
@@ -693,7 +696,7 @@ describe("bill page", () => {
       "https://clerk.house.gov/evs/2085/roll209.xml"
     );
     expect(
-      screen.getByText("Civitas keeps the sitting Congress's floor speeches only.")
+      screen.getByText("Civitas holds floor speeches from the 119th Congress on.")
     ).toBeTruthy();
     expect(screen.getByText("Civitas's record of Congress starts January 3, 2087.")).toBeTruthy();
     expect(screen.queryByText(/No committee meeting or report/)).toBeNull();
