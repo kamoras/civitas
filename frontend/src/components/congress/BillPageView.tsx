@@ -192,9 +192,9 @@ export default function BillPageView({
   // The page's sections, listed under the title: a long bill's summary and
   // path put its votes many screens down.
   const jumps: [string, string, string?][] = [
-    ["summary", "Summary"],
     ...(record?.journey ? [["journey", "Its path"] as [string, string]] : []),
     ["votes", "Votes", votesCount],
+    ["summary", "Summary"],
     ["history", "History"],
     ["committee", "In committee"],
     ["text", "Text"],
@@ -386,9 +386,30 @@ export default function BillPageView({
                 )}
               </header>
 
+              {/* The votes come straight after the bill's header, and before
+                  the sponsor box on a narrower screen: on a phone they sat
+                  after the cosponsors, the "this week" strip and the summary.
+                  Left out of the overview's shared picture, which is the
+                  header; the votes have their own. */}
+              <div className="min-w-0 lg:col-start-1" data-share-exclude>
+                <section className="flex flex-col gap-3" {...shareSection("votes")}>
+                  <SectionHead id="votes" title="Votes" count={votesCount} shareable />
+                  <VotePanel
+                    votes={record?.votes ?? []}
+                    congress={record?.congress ?? detail?.congress ?? 0}
+                    unreadable={!record}
+                    coverage={record?.coverage?.votes}
+                    named={record?.actions.flatMap((a) =>
+                      a.rollCalls.map((rc) => ({ ...rc, date: a.date }))
+                    )}
+                    passage={record?.passage}
+                  />
+                </section>
+              </div>
+
               <aside
                 aria-label="Sponsor and facts"
-                className="flex flex-col gap-4 border border-white/15 bg-surface p-4 text-sm"
+                className="flex flex-col gap-4 self-start border border-white/15 bg-surface p-4 text-sm lg:col-start-2 lg:row-span-2 lg:row-start-1"
               >
                 {record?.sponsors.length ? (
                   // On a phone the sponsor is named under the title instead.
@@ -477,11 +498,6 @@ export default function BillPageView({
               </aside>
             </div>
 
-            {/* Below the bill, not above it: a reader opened this page for
-                the bill, and on a phone the strip pushed its title down by a
-                third of the screen. */}
-            {strip && <div className="mt-10">{strip}</div>}
-
             <div className="mt-8 grid gap-12 lg:grid-cols-[minmax(0,1fr)_22rem]">
               <div className="flex min-w-0 flex-col gap-12">
                 <section className="flex flex-col gap-3" {...shareSection("summary")}>
@@ -501,20 +517,6 @@ export default function BillPageView({
                         : "The Congressional Research Service has not published a summary of this bill yet."}
                     </p>
                   )}
-                </section>
-
-                <section className="flex flex-col gap-3" {...shareSection("votes")}>
-                  <SectionHead id="votes" title="Votes" count={votesCount} shareable />
-                  <VotePanel
-                    votes={record?.votes ?? []}
-                    congress={record?.congress ?? detail?.congress ?? 0}
-                    unreadable={!record}
-                    coverage={record?.coverage?.votes}
-                    named={record?.actions.flatMap((a) =>
-                      a.rollCalls.map((rc) => ({ ...rc, date: a.date }))
-                    )}
-                    passage={record?.passage}
-                  />
                 </section>
 
                 {record?.floorDebate && (
@@ -771,6 +773,11 @@ export default function BillPageView({
                 )}
               </aside>
             </div>
+
+            {/* After the record, not above it: a reader opened this page for
+                the bill, and on a phone the strip pushed its votes down by a
+                screen. */}
+            {strip && <div className="mt-12">{strip}</div>}
 
             <div className="mt-12">
               <BillSources
