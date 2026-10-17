@@ -1912,6 +1912,20 @@ GET /api/public/v1/district-lean                 Every House district's computed
 GET /api/public/v1/presidential-support/{chamber}  How often each member votes with the
                                                  president's stated position, and the
                                                  rate expected for their seat
+GET /api/public/v1/roll-calls?chamber=           A chamber's roll calls in a Congress, newest first
+GET /api/public/v1/roll-calls/{chamber}/{congress}/{session}/{number}
+                                                 One roll call, with every member's position
+GET /api/public/v1/presidents                    Every president, ranked by Presidential Score
+GET /api/public/v1/presidents/{id}               One president's record
+GET /api/public/v1/justices                      The sitting justices (not scored)
+GET /api/public/v1/justices/{id}                 One justice's record
+GET /api/public/v1/justices/{id}/cases           A justice's vote in each case
+GET /api/public/v1/nominations                   Presidential nominations sent to the Senate
+GET /api/public/v1/nominations/{congress}/{citation}  One nomination, its actions and votes
+GET /api/public/v1/agencies                      Every federal agency, with its documents held
+GET /api/public/v1/agencies/{slug}               One agency
+GET /api/public/v1/comment-periods               Federal documents open for comment today,
+                                                 soonest deadline first
 GET /api/public/v1/                              Index: every endpoint, weights, links
 ```
 
@@ -1931,7 +1945,12 @@ not the profile's selection of votes (`key_votes`, about a fifth of the
 record). Each says whether it sided with the party, read as the scoring run
 reads it, and `countedAsBreak` marks the breaks Constituent Alignment
 counted, so the party-line figure can be checked against the record;
-`chamberRollCalls` is how many roll calls the chamber held.
+`chamberRollCalls` is how many roll calls the chamber held. Every roll call the API gives carries `siteUrl`, its page, and
+`/roll-calls/{chamber}/{congress}/{session}/{number}` lists every member's
+position on it with the id the chamber's record gives them (bioguide in the
+House, LIS in the Senate) and their Civitas id where there is a page. The
+justices' case records carry the Supreme Court Database's and Oyez's
+non-commercial terms in their documentation (CC BY-NC).
 
 A score can be reproduced from the API alone. `/breakdown` serves, for each
 dimension, the stored score, the components the run that stored it worked

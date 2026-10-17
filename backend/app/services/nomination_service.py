@@ -94,6 +94,7 @@ def summary(row: Nomination, agencies: dict[str, str] | None = None) -> dict:
         "receivedDate": row.received_date, "status": row.status, "statusDate": row.status_date,
         "latestAction": {"date": row.latest_action_date, "text": row.latest_action_text},
         "daysToConfirm": days_to_confirm(row),
+        "congressGovUrl": congress_gov_url(row),
     }
 
 
@@ -223,7 +224,6 @@ def detail(db: Session, congress: int, citation: str) -> dict | None:
         "committee": {"code": row.committee_code, "name": row.committee_name} if row.committee_code else None,
         "fjc": ({"judgeId": row.fjc_judge_id, "url": f"https://www.fjc.gov/node/{row.fjc_node_id}"}
                 if row.fjc_judge_id else None),
-        "congressGovUrl": congress_gov_url(row),
         "rollCalls": [{
             "chamber": rc.chamber, "congress": rc.congress, "session": rc.session, "number": rc.number,
             "date": rc.date, "question": rc.question, "label": vote_label(rc.question)[1],
