@@ -161,27 +161,6 @@ export function districtAreaLabel(
   return `${short.slice(0, shown).join(", ")} & ${short.length - shown} more`;
 }
 
-/** Does this district row match what the reader typed in the district
- * filter?
- *
- * Deliberately matches on the three things a reader plausibly knows
- * about themselves without being asked for an address: the city, town or
- * county they live in, a candidate's name (their representative's, when that member
- * is running again — a retiring member is on no row, and in a state that
- * redrew for this cycle the member's name finds the candidate's NEW
- * district, not necessarily the reader's), and the district number if
- * they happen to know it. Civitas never asks for
- * a street address, so the filter has to work from what a person can
- * recall unprompted — see the House section's own copy.
- *
- * `areas` is whatever place names that district is described by — the
- * counties and then the places (cities, towns, CDPs) on a U.S. House row,
- * the towns on a state legislative one.
- * Matching runs against that list IN FULL, not the truncated
- * districtAreaLabel display string: a reader typing "washington"
- * must still match a district whose label elided it behind "& 2 more".
- * Substring, compared through searchFold on both sides.
- */
 type DistrictRow = {
   /** A U.S. House district is a number (0 = at-large); a state
    * legislative one is a string, because "10A" and "10B" are real. */
@@ -214,6 +193,27 @@ export function filterDistricts<T>(rows: T[], query: string, toRow: (row: T) => 
   return rows.filter((r) => matchesDistrictQuery(toRow(r), query, whole));
 }
 
+/** Does this district row match what the reader typed in the district
+ * filter?
+ *
+ * Deliberately matches on the three things a reader plausibly knows
+ * about themselves without being asked for an address: the city, town or
+ * county they live in, a candidate's name (their representative's, when that member
+ * is running again — a retiring member is on no row, and in a state that
+ * redrew for this cycle the member's name finds the candidate's NEW
+ * district, not necessarily the reader's), and the district number if
+ * they happen to know it. Civitas never asks for
+ * a street address, so the filter has to work from what a person can
+ * recall unprompted — see the House section's own copy.
+ *
+ * `areas` is whatever place names that district is described by — the
+ * counties and then the places (cities, towns, CDPs) on a U.S. House row,
+ * the towns on a state legislative one.
+ * Matching runs against that list IN FULL, not the truncated
+ * districtAreaLabel display string: a reader typing "washington"
+ * must still match a district whose label elided it behind "& 2 more".
+ * Substring, compared through searchFold on both sides.
+ */
 export function matchesDistrictQuery(
   race: DistrictRow,
   query: string,
