@@ -560,11 +560,10 @@ def openapi_spec() -> JSONResponse:
 @router.get("/", response_model=PublicApiIndexSchema, tags=["Reference"], summary="What this API offers")
 def api_index(_rl: PublicReadLimit, request: Request) -> JSONResponse:
     """Every endpoint with a one-line summary, the rate limit and where the
-    documentation is. Built from the same spec, so it lists what exists.
-
-    Counted and answered with the rate-limit headers like every other
-    endpoint: the documentation says each answer carries them, and this
-    one went out without (2026-10-11)."""
+    documentation is. Built from the same spec, so it lists what exists."""
+    # Counted and answered with the rate-limit headers like every other
+    # endpoint: the documentation says each answer carries them, and this one
+    # went out without until 2026-10-11.
     endpoints = {
         f"{method.upper()} {path}": op.get("summary", "")
         for path, ops in openapi_spec_dict()["paths"].items()
@@ -611,11 +610,13 @@ def list_states(
 @router.get("/district-lean", response_model=PublicDistrictLeanSchema, tags=["Districts"],
             summary="Every House district's computed lean, on both maps")
 def get_district_lean(_rl: PublicReadLimit, request: Request) -> JSONResponse:
-    """Civitas's partisan lean for all 435 districts on the 119th Congress's
-    lines and on the 2026 lines, with Cook's published PVI beside each,
-    the method, every input and its license, each correction with its
-    certified source, and the agreement with Cook. The same districts as
-    CSV: `csvUrl`."""
+    """Civitas's partisan lean for all 435 districts on each map the table
+    covers (`congresses` names each by the Congress elected on it: the
+    lines the sitting members were elected on, and a newer map where a
+    state has redrawn), with Cook's published PVI beside each, the method,
+    every input and its license, each correction with its certified
+    source, and the agreement with Cook. The same districts as CSV:
+    `csvUrl`."""
     table = district_lean.published()
     if table is None:
         raise HTTPException(status_code=503, detail="The district lean table is unavailable")

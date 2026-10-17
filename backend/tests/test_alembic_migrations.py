@@ -354,3 +354,31 @@ def test_0040_drops_the_orphan_tables_where_an_old_database_has_them(patched_eng
         names = set(conn.execute(text("SELECT name FROM sqlite_master")).scalars())
     assert not names & {"alert_subscriptions", "ix_alert_subscriptions_email", "daily_themes",
                         "member_analysis_fingerprints"}
+
+
+def test_0061_rewrites_the_em_dash_description_and_http_comment_links(patched_engine):
+    database._run_migrations("0060")
+    old = ("Education accounts for 29% of this member's classifiable industry funding ($455,257) — a substantial "
+           "concentration, not a typical spread across many industries.")
+    with patched_engine.begin() as conn:
+        for table, owner, given in (("lobbying_matches", "senator_id", "donation_to_senator"),
+                                    ("rep_lobbying_matches", "representative_id", "donation_to_representative")):
+            conn.execute(text(f"INSERT INTO {table} ({owner}, lobbyist_org, industry, lobbying_spend, {given}, "
+                              "bills_influenced, description) VALUES ('M1', 'Org', 'EDUCATION', 0, 0, '[]', :d)"),
+                         {"d": old})
+        for title, url in (("T", "http://www.regulations.gov/commenton/X-1"),
+                           ("U", "https://www.regulations.gov/commenton/X-2")):
+            conn.execute(text(
+                "INSERT INTO explore_documents (doc_type, source, title, summary, body, date, policy_areas, "
+                "identifiers, authority, cited_by_count, created_at, comment_url) VALUES ('Proposed Rule', "
+                "'Federal Register', :t, '', '', '2026-10-01', '[]', '[]', 0, 0, '2026-10-01', :u)"),
+                {"t": title, "u": url})
+
+    database._run_migrations("0061")
+
+    with patched_engine.connect() as conn:
+        for table in ("lobbying_matches", "rep_lobbying_matches"):
+            (d,) = conn.execute(text(f"SELECT description FROM {table}")).one()
+            assert "—" not in d and "($455,257): a substantial concentration" in d
+        urls = conn.execute(text("SELECT comment_url FROM explore_documents ORDER BY title")).scalars().all()
+    assert urls == ["https://www.regulations.gov/commenton/X-1", "https://www.regulations.gov/commenton/X-2"]
