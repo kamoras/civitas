@@ -401,13 +401,22 @@ export default function ElectionsPage() {
 
           {/* The state chosen in the header, one tap from its ballot. */}
           {yours.state && (
-            <p className="mb-6 font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
-              Your state:{" "}
+            <p className="mb-6 flex flex-wrap items-center gap-x-4 font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
+              <span>
+                Your state:{" "}
+                <span className="text-ink-hi">{STATE_NAMES[yours.state] ?? yours.state}</span>
+              </span>
               <Link
                 href={stateBallotHref(yours.state)}
-                className="inline-flex min-h-6 items-center border-b border-phos-mid/40 text-phos-mid hover:text-phos"
+                className="inline-flex min-h-11 items-center border-b border-phos-mid/40 text-phos-mid hover:text-phos"
               >
-                {(STATE_NAMES[yours.state] ?? yours.state).toUpperCase()} BALLOT &rarr;
+                {(STATE_NAMES[yours.state] ?? yours.state).toUpperCase()}&apos;S BALLOT &rarr;
+              </Link>
+              <Link
+                href={`/politicians?state=${yours.state}`}
+                className="inline-flex min-h-11 items-center border-b border-phos-mid/40 text-phos-mid hover:text-phos"
+              >
+                {(STATE_NAMES[yours.state] ?? yours.state).toUpperCase()}&apos;S MEMBERS &rarr;
               </Link>
             </p>
           )}

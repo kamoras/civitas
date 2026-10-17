@@ -88,10 +88,14 @@ export default function AccessibilityPage() {
                   the navigation. In a set of tabs, the arrow keys, Home and End move between tabs
                   and Tab moves into the content. In the main navigation, the button beside each
                   section lists its pages as plain links; Escape closes the list and returns focus
-                  to the button, and moving focus away closes it too. The mobile menu, the share
-                  dialog, the map&apos;s seat sheet and the scorecard and ballot drawers keep focus
-                  inside while open (Tab and Shift+Tab both wrap), close on Escape, and return focus
-                  to what opened them. Map tiles are one keyboard stop per state, opened with Enter.
+                  to the button, and moving focus away closes it too. In the phone menu each
+                  section&apos;s pages open from a button beside it that says whether they are
+                  showing. Choosing your state says what it set, in a message a screen reader reads
+                  out, with links to that state&apos;s members and ballot. The mobile menu, the
+                  share dialog, the map&apos;s seat sheet and the scorecard and ballot drawers keep
+                  focus inside while open (Tab and Shift+Tab both wrap), close on Escape, and return
+                  focus to what opened them. Map tiles are one keyboard stop per state, opened with
+                  Enter.
                 </Item>
                 <Item label="Long pages on a phone">
                   A member&apos;s scorecard, a bill, a roll call, a state ballot, the Supreme Court

@@ -8,6 +8,7 @@ import { ELECTION_MAP_HREF } from "@/lib/electionMap";
 import { REDISTRICTING_HREF } from "@/lib/redistricting";
 import type { ElectionPhase } from "@/types/election";
 import { LONG_LABEL } from "@/lib/controlStyles";
+import { STATE_NAMES } from "@/lib/stateCodes";
 
 const VOTER_LINK =
   "inline-flex min-h-[24px] items-center border-b border-phos-mid/40 text-phos-mid hover:text-phos";
@@ -104,10 +105,12 @@ export default function Masthead({
             href={state ? `/politicians?state=${state}` : "/politicians"}
             className={VOTER_LINK}
           >
-            YOUR MEMBERS
+            {/* Named for the state when one is set: "OHIO'S MEMBERS", not a
+                "your" the reader has to trust (WCAG 2.4.4). */}
+            {state ? `${(STATE_NAMES[state] ?? state).toUpperCase()}'S MEMBERS` : "YOUR MEMBERS"}
           </Link>
           <Link href={state ? stateBallotHref(state) : "/elections"} className={VOTER_LINK}>
-            YOUR BALLOT
+            {state ? `${(STATE_NAMES[state] ?? state).toUpperCase()}'S BALLOT` : "YOUR BALLOT"}
           </Link>
           {electionLinks(electionPhase).map(({ href, label }) => (
             <Link key={label} href={href} className={VOTER_LINK}>

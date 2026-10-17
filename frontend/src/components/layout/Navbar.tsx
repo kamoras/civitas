@@ -309,6 +309,9 @@ export function useHideOnScroll(
 export default function Navbar() {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  // The section whose pages are open in the phone menu: null for the
+  // current section's, "" for none.
+  const [shownPages, setShownPages] = useState<SectionKey | "" | null>(null);
   // The desktop section whose pages are showing, and the page it was opened
   // on: a navigation by any route (a link, Back) closes it without an effect.
   const [opened, setOpened] = useState<{ section: SectionKey; path: string } | null>(null);
@@ -327,17 +330,16 @@ export default function Navbar() {
 
   const closeMenu = useCallback(() => {
     setMenuOpen(false);
+    setShownPages(null);
     toggleRef.current?.focus();
   }, []);
 
   useEffect(() => {
     if (!menuOpen || !menuRef.current) return;
     // The panel itself, named "Site menu", so Tab's first stop is the
-    // state picker at its top, then the sections. Never the picker: a phone
-    // browser opens a native select's list when it takes focus, so MENU
-    // popped the state list open on every tap. (Starting on the first link
-    // instead skipped the picker, which Tab then reached only after every
-    // link.)
+    // first section, then the rest, then the state picker after them. Never
+    // the picker: a phone browser opens a native select's list when it takes
+    // focus, so MENU popped the state list open on every tap.
     menuRef.current.focus();
   }, [menuOpen]);
 
@@ -512,32 +514,60 @@ export default function Navbar() {
             tabIndex={-1}
             className={`${menuOnly} outline-none max-h-[calc(100dvh-3.5rem)] min-[56rem]:max-h-[calc(100dvh-5.5rem)] overflow-y-auto overscroll-contain bg-surface-base/[0.98] border-t border-white/[0.07] px-6 pt-2 pb-6`}
           >
-            <div className="border-b border-white/[0.07] py-3">
-              <YourStatePicker size="lg" />
-            </div>
+            {/* Phone order (mobile spec P8): the sections first, as rows a
+                thumb can hit, each section's pages behind its own ▸ (the
+                current section's open); then the reader's state, which
+                says what it set and where to go next; then Bluesky. It was
+                25 caps links at one weight, the pages beside their
+                sections. */}
             <ul>
               {NAV.map((section) => {
                 const { label, href } = SECTIONS[section];
                 const active = inSection(section, pathname);
                 const subs = sectionSubpages(section);
+                const expanded = (shownPages ?? (active ? section : null)) === section;
+                const listId = `menu-pages-${section}`;
                 return (
-                  <li key={section} className="border-b border-white/[0.07] py-1">
-                    <Link
-                      href={href}
-                      aria-current={active ? "page" : undefined}
-                      onClick={closeMenu}
-                      className="flex min-h-11 items-center"
-                    >
-                      <span
-                        className={`tracking-widest ${navLinkClass(active, section === ACCENT, "sm")}`}
+                  <li key={section} className="border-b border-white/[0.07]">
+                    <div className="flex items-stretch">
+                      <Link
+                        href={href}
+                        aria-current={active ? "page" : undefined}
+                        onClick={closeMenu}
+                        className={`flex min-h-13 flex-1 items-center font-sans text-lg ${
+                          active
+                            ? "text-ink-hi underline decoration-2 underline-offset-[6px]"
+                            : section === ACCENT
+                              ? "text-ink-hi hover:text-phos"
+                              : "text-ink hover:text-ink-hi"
+                        }`}
                       >
-                        {label.toUpperCase()}
-                      </span>
-                    </Link>
+                        {label}
+                      </Link>
+                      {subs.length > 0 && (
+                        <button
+                          type="button"
+                          aria-expanded={expanded}
+                          aria-controls={listId}
+                          aria-label={`${label} pages`}
+                          onClick={() => setShownPages(expanded ? "" : section)}
+                          className="flex min-h-13 min-w-13 items-center justify-center text-ink-lo hover:text-ink-hi"
+                        >
+                          <span
+                            aria-hidden="true"
+                            className={`inline-block transition-transform motion-reduce:transition-none ${expanded ? "rotate-90" : ""}`}
+                          >
+                            ▸
+                          </span>
+                        </button>
+                      )}
+                    </div>
                     {subs.length > 0 && (
                       <ul
+                        id={listId}
+                        hidden={!expanded}
                         aria-label={`${label} pages`}
-                        className="mb-1 grid grid-cols-2 gap-x-4 border-l border-white/15 pl-3"
+                        className="mb-2 border-l border-white/15 pl-3"
                       >
                         {subs.map((t) => {
                           const current = currentSubpage(section, t.href, pathname);
@@ -560,6 +590,9 @@ export default function Navbar() {
                 );
               })}
             </ul>
+            <div className="border-b border-white/[0.07] py-3">
+              <YourStatePicker size="lg" onNavigate={closeMenu} />
+            </div>
             <a
               href={BSKY_PROFILE_URL}
               target="_blank"
