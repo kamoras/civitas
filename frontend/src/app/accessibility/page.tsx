@@ -146,7 +146,9 @@ export default function AccessibilityPage() {
                   Controls are at least 24×24 pixels, WCAG 2.2&apos;s minimum target size, or spaced
                   so a 24-pixel circle around each touches no other; links inside a sentence are the
                   exception the standard allows. On a phone the MENU button, the way to every
-                  section, is a 44×44 target around the word. Nothing needs dragging.
+                  section, is a 44×44 target around the word, and every standalone action (calling
+                  or writing a member, sharing, paging, a roll call&apos;s names) is 44 pixels tall.
+                  Nothing needs dragging.
                 </Item>
                 <Item label="Pop-up explanations">
                   A score&apos;s explanation opens on hover, focus or tap, stays open while the

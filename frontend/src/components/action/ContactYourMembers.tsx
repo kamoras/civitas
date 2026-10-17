@@ -37,8 +37,10 @@ import type { ActionIssue, IssueMember, IssueVote } from "@/types/action";
  */
 
 // The site's bracketed command style ("[ ROLL CALL ]"), at a 32px touch target.
+// 44px on a phone, where call, write and what to say are the issue's point
+// (mobile spec P10); 32px beside the text from 640px up.
 const COMMAND =
-  "inline-flex min-h-[32px] items-center font-mono text-xs tracking-[0.12em] text-phos-mid hover:text-phos";
+  "inline-flex min-h-11 sm:min-h-[32px] items-center font-mono text-xs tracking-[0.12em] text-phos-mid hover:text-phos";
 
 const STATES_BY_NAME = [...STATE_CODES].sort((a, b) =>
   STATE_NAMES[a].localeCompare(STATE_NAMES[b])

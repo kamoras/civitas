@@ -225,10 +225,14 @@ export default function VoteMembers({
                     return (
                       <li
                         key={`${m.lastName}-${m.state}-${m.firstName}`}
-                        className="flex items-baseline gap-2"
+                        className="flex items-center gap-2 sm:items-baseline"
                       >
                         {m.page ? (
-                          <Link href={m.page} className="text-ink hover:text-phos">
+                          // A 44px row on a phone (mobile spec P10).
+                          <Link
+                            href={m.page}
+                            className="inline-flex min-h-11 items-center text-ink hover:text-phos sm:min-h-0"
+                          >
                             {name}
                           </Link>
                         ) : (
