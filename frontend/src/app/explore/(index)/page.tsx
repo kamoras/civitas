@@ -324,6 +324,11 @@ function ExplorePageInner() {
   );
   const [stats, setStats] = useState<ExploreStats | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Focus the query box on arrival only with a mouse: on a touch screen it
+  // raised the keyboard over the page before the reader had seen it.
+  useEffect(() => {
+    if (window.matchMedia?.("(pointer: fine)").matches) inputRef.current?.focus();
+  }, []);
 
   // The search that is currently on screen, as a value. A deep-linked ?q= is
   // just this state's initial value, which is why there is no mount effect
@@ -565,7 +570,6 @@ function ExplorePageInner() {
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder="What issue are you concerned about?"
                     className="flex-1 bg-transparent text-ink-hi text-sm font-mono placeholder:text-ink-min outline-none focus-visible:ring-1 focus-visible:ring-signal-cyan caret-phos"
-                    autoFocus
                   />
                   <button
                     type="submit"
