@@ -2356,6 +2356,17 @@ the pending list).
   first screen while a client-fetched page loads and then jumps away (CLS
   0.58-0.80 on /action, /elections and Explore documents before 2026-10-14).
   `layoutStability.test.ts` fails on a `<main>` without the id.
+- **Reflow at 200% text (WCAG 1.4.10).** On a phone at 200% text the header's
+  wordmark and its SEARCH and MENU buttons can't share one row, so the bar
+  wraps, and `HeaderClearance` (root layout) moves `--header-clearance` down
+  to the measured header; at ordinary sizes it leaves the stylesheet's 6rem
+  alone. Width-dependent choices inside a component are container queries in
+  rem (`@min-[20rem]:` on the bar), which follow a larger text size however
+  the reader set it. A grid that can be narrower than its content needs
+  `grid-cols-[minmax(0,1fr)]` (an implicit column is as wide as its widest
+  child), and a label in a narrow box needs `min-w-0` with
+  `[overflow-wrap:anywhere]`. Until 2026-10 every page's header, and the
+  scorecard header, ran past a 320-375 px screen at 200% text.
 - Large tab components are code-split with `next/dynamic` to reduce initial
   bundle size (e.g., Action Center tabs load on demand). Use in-memory
   `cachedFetch` from `src/lib/api.ts` for API calls that benefit from

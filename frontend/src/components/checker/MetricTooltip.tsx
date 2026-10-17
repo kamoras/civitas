@@ -130,7 +130,12 @@ export default function MetricTooltip({ text, children }: MetricTooltipProps) {
     // counts at its full one-line width, and the button fell onto a line of
     // its own under every label long enough to wrap.
     <span ref={ref} className="relative inline-flex max-w-full flex-wrap items-center">
-      {children != null && <span className="grow basis-0">{children}</span>}
+      {children != null && (
+        // min-w-0 and overflow-wrap:anywhere: at a large text size in a narrow
+        // box, a label longer than the box breaks inside the word rather than
+        // running past it (WCAG 1.4.10).
+        <span className="min-w-0 grow basis-0 [overflow-wrap:anywhere]">{children}</span>
+      )}
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
