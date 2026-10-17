@@ -308,7 +308,10 @@ function FullStrip({ data }: { data: ThisWeek }) {
 function CompactStrip({ data, pageDate }: { data: ThisWeek; pageDate?: string }) {
   const { election, congress, commentDeadlines } = data;
   const line = electionLine(election);
-  const next = commentDeadlines[0];
+  // The soonest deadline (the backend's), not the first of the list, which
+  // ranks rules in the news first.
+  const next =
+    data.nextCommentDeadline === undefined ? commentDeadlines[0] : data.nextCommentDeadline;
   // On a page about another day, "This week … meets today" read as that
   // day's (2026-09-16's page, on 2026-10-15): say which day it is.
   const label =
@@ -337,7 +340,7 @@ function CompactStrip({ data, pageDate }: { data: ThisWeek; pageDate?: string })
             <Link href={exploreHref(next)} className={LINK}>
               {next.title.length > 70 ? `${next.title.slice(0, 67).trimEnd()}...` : next.title}
             </Link>{" "}
-            ({shortDate(next.commentsCloseOn)})
+            ({next.daysLeft === 0 ? "closes today" : shortDate(next.commentsCloseOn)})
           </span>
         )}
         <details className="group open:basis-full">
