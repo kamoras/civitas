@@ -73,7 +73,8 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
           <div className="mx-auto flex max-w-6xl flex-col gap-10">
             <div>
               <SectionTabs section="congress" active="reports" />
-              <nav aria-label="Breadcrumb" className="text-sm text-ink-lo">
+              {/* Under 640px the section row above names where this page sits. */}
+              <nav aria-label="Breadcrumb" className="hidden sm:block text-sm text-ink-lo">
                 <Link href="/congress" className="hover:text-phos">
                   Congress
                 </Link>

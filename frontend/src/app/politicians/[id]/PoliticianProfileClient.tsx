@@ -123,23 +123,22 @@ export default function PoliticianProfileClient({
             scrolls away (it lists the sections marked with onThisPage). */}
         <OnThisPage />
         <div className="max-w-7xl mx-auto">
-          {/* Breadcrumb */}
-          <div className="mb-6 font-mono text-xs text-ink-min">
-            <Link href="/politicians" className="hover:text-phos transition-colors">
-              ← POLITICIANS
-            </Link>
-            <span className="mx-2">/</span>
-            <span className="text-ink-lo">{branchLabel(branch)}</span>
+          {/* Breadcrumb, and the member's own feed on the same row (the one
+              the <head> names first: votes, sponsored bills' actions, score
+              changes and disclosures). One row, not two lines before the
+              member's name. */}
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4">
+            <div className="flex min-h-11 items-center font-mono text-xs text-ink-min">
+              <Link href="/politicians" className="hover:text-phos transition-colors">
+                ← POLITICIANS
+              </Link>
+              <span className="mx-2">/</span>
+              <span className="text-ink-lo">{branchLabel(branch)}</span>
+            </div>
+            {isMember && (
+              <FollowFeed subject={identity.name} feed={memberFeed(profile.id, identity.name)} />
+            )}
           </div>
-          {isMember && (
-            // The member's own feed (the one the <head> names first): votes,
-            // sponsored bills' actions, score changes and disclosures.
-            <FollowFeed
-              className="-mt-4 mb-6"
-              subject={identity.name}
-              feed={memberFeed(profile.id, identity.name)}
-            />
-          )}
 
           {/* Left-office banner — wording is branch-specific, see officeStatus.ts */}
           {formerOffice && (
