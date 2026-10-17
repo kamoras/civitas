@@ -2308,6 +2308,14 @@ the pending list).
   that, so nothing else needs editing. `tests/test_public_api_contract.py`
   must cover the new endpoint, since those routes return `JSONResponse` and
   FastAPI would otherwise never check the body against the documented shape.
+- **A bill's id has one spelling in every response** (`HR.997`, `SJRES.138`;
+  `app/bill_ids.py`). Stored records keep their source's spelling (a Senate
+  roll call names "H.R. 997"), so the API's `JSONResponse`
+  (`api/response_helpers.py`, also the app's and the API router's default
+  response class) rewrites every `billId` and `billIds` at render. API
+  modules import `JSONResponse` from there, never from FastAPI
+  (`tests/test_bill_ids.py`). The display label (`billLabel`, "H.R. 997") is
+  a separate field. Input takes any spelling through `canonical_bill_id`.
 - **Read path must stay lightweight**: never load the embedding model or LLM on
   API read requests (GET endpoints). All ML inference happens at pipeline write
   time. Anything a response needs that takes a model — the Action Center's
