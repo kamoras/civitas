@@ -58,7 +58,7 @@ def test_a_house_vote_names_its_amendment_by_congress_gov_number():
 
 
 def test_only_unread_votes_that_may_be_on_an_amendment_are_read(db_session):
-    on = _rc(db_session, "senate", 248, "On the Amendment S.Amdt. 6805 to S. 4668", "Booker Amdt. No. 6805")
+    on = _rc(db_session, "senate", 248, "On the Amendment S.Amdt. 6805 to S. 4668", "Smith Amdt. No. 6805")
     house = _rc(db_session, "house", 273, "On Agreeing to the Amendment")
     _rc(db_session, "senate", 250, "On the Cloture Motion", "A bill to do things")
     _rc(db_session, "senate", 251, "On the Amendment S.Amdt. 1", amendment="S.Amdt. 1", amendment_purpose="x")
@@ -66,7 +66,7 @@ def test_only_unread_votes_that_may_be_on_an_amendment_are_read(db_session):
 
 
 def test_fill_stores_what_was_read_and_leaves_a_failed_read_unread(db_session, monkeypatch):
-    senate = _rc(db_session, "senate", 248, "On the Amendment S.Amdt. 6805", "Booker Amdt. No. 6805")
+    senate = _rc(db_session, "senate", 248, "On the Amendment S.Amdt. 6805", "Smith Amdt. No. 6805")
     house = _rc(db_session, "house", 273, "On Agreeing to the Amendment")
     concur = _rc(db_session, "house", 274, "On Motion to Concur in the Senate Amendments")
 

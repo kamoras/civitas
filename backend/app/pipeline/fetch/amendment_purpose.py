@@ -1,6 +1,6 @@
 """What an amendment a roll call was on would do, in the record's own words.
 
-A vote on an amendment is titled by its sponsor and number ("Booker Amdt.
+A vote on an amendment is titled by its sponsor and number ("Smith Amdt.
 No. 6805"), and its question names the bill only by number ("... to S. 4668
 (No short title on file)"): neither says what the amendment does. The
 record does:

@@ -10,7 +10,7 @@ const SOURCE = {
 /**
  * What the amendment a vote was on would do, quoted from the record. A vote
  * on an amendment is otherwise titled only by its sponsor and number
- * ("Booker Amdt. No. 6805"). Nothing for a vote not on an amendment, or one
+ * ("Smith Amdt. No. 6805"). Nothing for a vote not on an amendment, or one
  * whose purpose isn't read yet; a record that states no purpose says so.
  */
 export default function AmendmentPurpose({
