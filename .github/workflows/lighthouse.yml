@@ -8,7 +8,9 @@ name: Lighthouse
 #      read — score tables, profiles, document and ballot pages — are
 #      audited with content. Only (1) ran until 2026-09, so no page with
 #      data had ever been checked.
-# Every audited route must score 100 on accessibility and SEO in both.
+# Every audited route must score 100 on accessibility and SEO in both, and
+# pass axe's WCAG 2.0/2.1/2.2 A and AA rules at 320px and 1280px
+# (frontend/scripts/axe-routes.mjs).
 # Performance and best-practices are intentionally out of scope: they swing
 # with CI machine load and would only add flake here.
 
@@ -61,6 +63,14 @@ jobs:
         env:
           BACKEND_URL: http://127.0.0.1:8000
 
+      - name: WCAG 2.2 AA (axe) — error/empty shells (no backend)
+        # Lighthouse's accessibility score runs part of axe and none of its
+        # WCAG 2.2 rules (target size); this runs all of WCAG 2.0-2.2 A/AA
+        # at 320px and 1280px, and fails on horizontal scroll at 320px.
+        run: npm run test:a11y -- .lighthouserc.json
+        env:
+          BACKEND_URL: http://127.0.0.1:8000
+
       - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
@@ -88,6 +98,11 @@ jobs:
 
       - name: Lighthouse — pages with data
         run: lhci autorun --config=.lighthouserc.populated.json
+        env:
+          BACKEND_URL: http://127.0.0.1:8000
+
+      - name: WCAG 2.2 AA (axe) — pages with data
+        run: npm run test:a11y -- .lighthouserc.populated.json
         env:
           BACKEND_URL: http://127.0.0.1:8000
 

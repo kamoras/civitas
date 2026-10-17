@@ -162,6 +162,15 @@ export default function CalendarList({ cal }: { cal: ElectionCalendar }) {
           ))}
         </select>
       </label>
+      {/* The list below changes as the state does; say so to a screen reader
+          (WCAG 4.1.3), which hears nothing of a filter otherwise. */}
+      <p role="status" className="sr-only">
+        {ahead.length} {ahead.length === 1 ? "entry" : "entries"} ahead
+        {state
+          ? ` for ${states.find(([code]) => code === state)?.[1] ?? state}`
+          : " in every state"}
+        {passed.length ? `, ${passed.length} passed in the last month` : ""}.
+      </p>
       {ahead.length === 0 && (
         <p className="mt-4 text-sm text-ink-lo">
           Nothing ahead on the calendar{state ? " for this state" : ""} in the year to{" "}

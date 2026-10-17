@@ -116,7 +116,7 @@ function BreakRow({ vote }: { vote: ListedBreak }) {
             // The bill's own page: its text, sponsor and every vote on it.
             <Link
               href={href}
-              className="line-clamp-2 underline decoration-white/20 underline-offset-2 hover:text-phos"
+              className="line-clamp-2 min-h-6 underline decoration-white/20 underline-offset-2 hover:text-phos"
               title={rc?.title || fallback}
             >
               {title}
@@ -133,7 +133,7 @@ function BreakRow({ vote }: { vote: ListedBreak }) {
           {rc?.question && (
             <Link
               href={rollCallHref(rc)}
-              className="block text-[13px] text-ink-lo underline decoration-white/20 underline-offset-2 hover:text-phos"
+              className="block min-h-6 text-[13px] leading-6 text-ink-lo underline decoration-white/20 underline-offset-2 hover:text-phos"
             >
               {rc.question}
             </Link>
