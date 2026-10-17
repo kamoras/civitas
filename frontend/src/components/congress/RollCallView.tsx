@@ -18,6 +18,8 @@ import AmendmentPurpose from "./AmendmentPurpose";
 import SeatChart from "./SeatChart";
 import { STATUS_LABEL, nominationHref } from "@/lib/nominations";
 import type { NominationVote, RollCallNomination } from "@/types/nomination";
+import OnThisPage from "@/components/shared/OnThisPage";
+import { onThisPage } from "@/lib/onThisPage";
 
 const LINK = "text-ink underline decoration-white/30 underline-offset-4 hover:text-phos";
 const SOURCE_NAME = { senate: "Senate.gov", house: "the House Clerk" } as const;
@@ -67,6 +69,7 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
       <div className="min-h-screen bg-surface-base font-sans text-ink-hi">
         <Navbar />
         <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
+          <OnThisPage />
           <div className="mx-auto flex max-w-6xl flex-col gap-10">
             <div>
               <SectionTabs section="congress" active="reports" />
@@ -89,6 +92,7 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
               {...{ [SHARE_SECTION_ATTR]: "vote" }}
               id="vote"
               aria-labelledby="vote-title"
+              {...onThisPage("The vote", voteTally(vote))}
               className="flex flex-col gap-6"
             >
               <header className="flex flex-col gap-3">
@@ -179,7 +183,11 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
             </section>
 
             <section aria-labelledby="members" className="flex flex-col gap-4">
-              <h2 id="members" className="font-display text-2xl font-extrabold text-ink-hi">
+              <h2
+                id="members"
+                {...onThisPage(`How each ${MEMBERS[vote.chamber]} voted`, vote.members.length)}
+                className="font-display text-2xl font-extrabold text-ink-hi"
+              >
                 How each {MEMBERS[vote.chamber]} voted
                 <span className="ml-2 font-mono text-sm font-normal text-ink-min">
                   {vote.members.length}
@@ -192,7 +200,11 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
               aria-labelledby="sources"
               className="flex flex-col gap-6 border border-white/25 bg-surface p-5"
             >
-              <h2 id="sources" className="font-display text-2xl font-extrabold text-ink-hi">
+              <h2
+                id="sources"
+                {...onThisPage("Source and citation")}
+                className="font-display text-2xl font-extrabold text-ink-hi"
+              >
                 Source and citation
               </h2>
               <div className="grid gap-8 lg:grid-cols-2">

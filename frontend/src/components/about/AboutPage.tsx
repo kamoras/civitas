@@ -5,6 +5,8 @@ import PageMasthead from "@/components/layout/PageMasthead";
 import Footer from "@/components/layout/Footer";
 import { ABOUT_CHAPTERS, ABOUT_OVERVIEW_HREF, adjacentChapters } from "@/lib/aboutPages";
 import { REFERENCES, type RefId } from "./references";
+import OnThisPage from "@/components/shared/OnThisPage";
+import { onThisPage } from "@/lib/onThisPage";
 
 /**
  * Shared frame and prose parts for the About section (see lib/aboutPages.ts
@@ -50,6 +52,7 @@ export function AboutPage({
     <>
       <Navbar />
       <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
+        <OnThisPage />
         {/* `font-sans`: this is reading, not data. The body element is
             `font-mono`, and prose that names no face inherits it. */}
         <div className="max-w-3xl mx-auto font-sans">
@@ -227,6 +230,7 @@ export function Section({
       )}
       <h2
         id={`${id}-h`}
+        {...onThisPage(title)}
         className="mt-1 font-display text-2xl font-bold leading-tight tracking-[-0.01em] text-ink-hi"
       >
         {title}

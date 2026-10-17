@@ -5,6 +5,7 @@ import type { Court } from "@/types/court";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import { heatColor, heatDomain, pairLookup, surname, termsPhrase } from "@/lib/court";
+import { onThisPage } from "@/lib/onThisPage";
 
 /**
  * How often each pair of sitting justices voted the same way: a grid in
@@ -27,6 +28,7 @@ export default function AgreementHeatmap({ court }: { court: Court }) {
     return (
       <section
         id="agreement"
+        {...onThisPage("Who votes with whom")}
         aria-labelledby="agreement-heading"
         className="border border-white/25 bg-surface px-4 py-5 sm:px-6"
       >
@@ -89,6 +91,7 @@ export default function AgreementHeatmap({ court }: { court: Court }) {
   return (
     <section
       id="agreement"
+      {...onThisPage("Who votes with whom")}
       aria-labelledby="agreement-heading"
       {...{ [SHARE_SECTION_ATTR]: "agreement" }}
       className="flex flex-col gap-4 border border-white/25 bg-surface px-4 py-5 sm:px-6"

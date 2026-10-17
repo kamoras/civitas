@@ -4,6 +4,7 @@ import { getScoreColor } from "@/lib/representation";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import MetricTooltip from "@/components/checker/MetricTooltip";
+import { onThisPage } from "@/lib/onThisPage";
 
 /** One of a member's three scored dimensions, as a column: its name, its
  *  share of the Representation Score, the score itself, and the evidence
@@ -46,6 +47,7 @@ export default function ScoreColumn({
     <section
       id={shareId}
       {...{ [SHARE_SECTION_ATTR]: shareId }}
+      {...onThisPage(title, shown ?? undefined)}
       className="flex flex-col border border-white/25 bg-surface font-sans"
     >
       <header className="flex items-end justify-between gap-3 border-b border-white/25 bg-surface-raised px-5 py-4">

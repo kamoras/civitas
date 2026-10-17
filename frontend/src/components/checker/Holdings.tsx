@@ -11,6 +11,7 @@ import { asOfPhrase, formatBracket, OWNER_LABEL } from "@/lib/disclosures";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR, shareMetaAttrs } from "@/lib/shareImage";
+import { onThisPage } from "@/lib/onThisPage";
 
 const HOLDINGS_PER_PAGE = 15;
 // The scorecard's panel sets the list beside the pie: a page about as tall
@@ -490,6 +491,7 @@ export default function Holdings({
       <section
         id="holdings"
         {...{ [SHARE_SECTION_ATTR]: "holdings" }}
+        {...onThisPage("Holdings")}
         {...shareMetaAttrs({
           source: `${data.reportLabel || "Latest annual report"}, financial disclosure (${SOURCE_LABEL[filer]})`,
           asOf: data.asOfDate ?? data.filedDate,
