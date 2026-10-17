@@ -421,6 +421,7 @@ export default function MethodsLedger({
                   `${api}/votes?per_page=100`,
                   "Every vote this Congress, with its roll call (JSON)",
                 ],
+                [`${api}/votes.csv`, "Every vote this Congress, as a spreadsheet (CSV)"],
                 [`${api}/history`, "Scores after every scoring run (JSON)"],
               ].map(([href, label]) => (
                 <li key={href} className="border-b border-white/[0.07] py-1.5">

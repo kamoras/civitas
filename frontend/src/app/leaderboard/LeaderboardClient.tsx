@@ -1027,7 +1027,13 @@ function LeaderboardContent({ initial }: { initial: LeaderboardInitial | null })
       >
         <PageMasthead
           className="mb-8"
-          eyebrow="Leaderboard · ranked by representation score"
+          eyebrow={
+            branch === "scotus"
+              ? "Leaderboard · not ranked"
+              : branch === "president"
+                ? "Leaderboard · ranked by Presidential Score"
+                : "Leaderboard · ranked by representation score"
+          }
           title="Leaderboard"
         >
           <p>
@@ -1040,7 +1046,9 @@ function LeaderboardContent({ initial }: { initial: LeaderboardInitial | null })
                   : "Senators"}{" "}
             {branch === "scotus"
               ? "by seniority: not ranked or scored."
-              : "ranked by constituent representation score."}
+              : branch === "president"
+                ? "ranked by Presidential Score."
+                : "ranked by constituent representation score."}
             {(branch === "senate" || branch === "house") && (
               <>
                 {" "}
@@ -1050,6 +1058,19 @@ function LeaderboardContent({ initial }: { initial: LeaderboardInitial | null })
                 >
                   How the score is computed
                 </Link>
+                .
+              </>
+            )}
+            {branch !== "scotus" && (
+              <>
+                {" "}
+                <a
+                  href={`/api/public/v1/${branch === "house" ? "representatives" : branch === "president" ? "presidents" : "senators"}.csv`}
+                  download
+                  className="underline decoration-white/30 underline-offset-4 hover:text-phos"
+                >
+                  Download the whole list (CSV)
+                </a>
                 .
               </>
             )}
