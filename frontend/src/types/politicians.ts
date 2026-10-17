@@ -66,6 +66,8 @@ export interface PoliticianActiveIssue {
 
 export interface GovernmentDoc {
   id: number;
+  /** The document's permanent Explore key (optional only for an older backend). */
+  key?: string;
   docType: string;
   title: string;
   date: string;

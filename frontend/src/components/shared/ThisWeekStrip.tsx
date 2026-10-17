@@ -7,6 +7,7 @@ import { stateBallotHref } from "@/lib/elections";
 import ClosingSoon from "@/components/elections/ClosingSoon";
 import RegisterLink from "@/components/elections/RegisterLink";
 import { STATE_NAMES } from "@/lib/stateCodes";
+import { exploreHref } from "@/lib/exploreHref";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
@@ -257,7 +258,10 @@ function FullStrip({ data }: { data: ThisWeek }) {
               ))}
             </ul>
           )}
-          <Link href={weekHref(congress.weekStart)} className={`font-mono text-xs ${LINK}`}>
+          <Link
+            href={weekHref(congress.weekStart)}
+            className={`inline-flex min-h-6 w-fit items-center font-mono text-xs ${LINK}`}
+          >
             What Congress did this week &rarr;
           </Link>
         </div>
@@ -275,7 +279,7 @@ function FullStrip({ data }: { data: ThisWeek }) {
                 return (
                   <li key={d.id} className="text-sm leading-snug">
                     <Link
-                      href={`/explore/${d.id}`}
+                      href={exploreHref(d)}
                       className="line-clamp-2 text-ink-hi hover:underline"
                     >
                       {d.title}
@@ -289,7 +293,10 @@ function FullStrip({ data }: { data: ThisWeek }) {
               })}
             </ul>
           )}
-          <Link href="/explore?comment=open" className={`font-mono text-xs ${LINK}`}>
+          <Link
+            href="/explore?comment=open"
+            className={`inline-flex min-h-6 w-fit items-center font-mono text-xs ${LINK}`}
+          >
             Every open comment period &rarr;
           </Link>
         </div>
@@ -327,7 +334,7 @@ function CompactStrip({ data, pageDate }: { data: ThisWeek; pageDate?: string })
         {next && (
           <span>
             Next comment deadline:{" "}
-            <Link href={`/explore/${next.id}`} className={LINK}>
+            <Link href={exploreHref(next)} className={LINK}>
               {next.title.length > 70 ? `${next.title.slice(0, 67).trimEnd()}...` : next.title}
             </Link>{" "}
             ({shortDate(next.commentsCloseOn)})

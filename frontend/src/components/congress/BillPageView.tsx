@@ -20,6 +20,7 @@ import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import { absoluteUrl } from "@/lib/site";
 import { ordinal } from "@/components/scorecard/format";
+import { exploreHref } from "@/lib/exploreHref";
 
 /** Cosponsors listed before the "All N cosponsors" disclosure. */
 const COSPONSORS_SHOWN = 8;
@@ -496,7 +497,7 @@ export default function BillPageView({
                                   <Fragment key={s.speechId}>
                                     {i > 0 && ", "}
                                     <Link
-                                      href={`/explore/${s.speechId}`}
+                                      href={exploreHref({ id: s.speechId, key: s.speechKey })}
                                       className="underline decoration-white/30 underline-offset-4 hover:text-phos"
                                     >
                                       {s.speaker || "Unnamed speaker"}

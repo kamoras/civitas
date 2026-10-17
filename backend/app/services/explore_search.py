@@ -56,6 +56,7 @@ from app.pipeline.analyze.document_authority import (
     declared_identifiers,
     extract_citations,
     is_identifier_query,
+    query_record_identifiers,
 )
 from app.pipeline.explore_ranking import (
     candidate_pool,
@@ -66,6 +67,8 @@ from app.pipeline.explore_ranking import (
 )
 from app.pipeline.lexical_index import search_lexical
 from app.pipeline.vector_store import search_explore_documents
+from app.services.explore_coverage import not_held
+from app.services.explore_keys import public_key
 from app.time_utils import comment_period_today
 
 logger = logging.getLogger(__name__)
@@ -209,7 +212,7 @@ def _hydrate(db, doc_ids: list[int]) -> dict[int, dict]:
         placeholders = ", ".join(f":id{i}" for i in range(len(chunk)))
         params = {f"id{i}": doc_id for i, doc_id in enumerate(chunk)}
         rows.extend(db.execute(text(
-            f"""SELECT id, title, date, doc_type, source, politician_name,
+            f"""SELECT id, external_id, title, date, doc_type, source, politician_name,
                        politician_id, chamber, agency_name, agency_slug, url, summary,
                        comment_url, comments_close_on, cited_by_count, authority,
                        substr(coalesce(body, ''), 1, 400) AS body_head,
@@ -220,6 +223,8 @@ def _hydrate(db, doc_ids: list[int]) -> dict[int, dict]:
     return {
         int(row.id): {
             "id": int(row.id),
+            # The permanent address to link (services/explore_keys.py).
+            "key": public_key(row.external_id, int(row.id)),
             "title": row.title or "",
             "date": row.date or "",
             "docType": row.doc_type or "",
@@ -280,11 +285,38 @@ def _query_identifiers(query: str) -> set[str]:
     ("FR", "RIN"), so a document's prose "89 fr more" is no citation; a
     query is typed in any case, and upper-casing it first reads "91 fr
     48248" or "rin 2120-aa66" as the citation it can only be."""
-    found = extract_citations((query or "").upper())
+    found = extract_citations((query or "").upper()) | query_record_identifiers(query)
     bare = _BARE_FR_DOC_RE.fullmatch(query or "")
     if bare:
         found.add(f"frdoc:{bare.group(1)}")
     return found
+
+
+def _identifier_only(query: str) -> bool:
+    """A query that is nothing but identifiers, a bare FR document number
+    included: a lookup, not words to match."""
+    return is_identifier_query(query) or bool(_BARE_FR_DOC_RE.fullmatch(query or ""))
+
+
+# How each identifier is written in a document's text, as FTS5 phrases: the
+# keyword channel's query for an identifier-only search, so it returns the
+# documents that cite the identifier and not every document sharing a word
+# with it ("EO 14148" matched thirty other orders on "EO"). A Record
+# citation or granule appears in no document's text, so it has none.
+def _identifier_phrases(identifiers: set[str]) -> str:
+    phrases: list[str] = []
+    for ident in sorted(identifiers):
+        namespace, _, value = ident.partition(":")
+        if namespace == "eo":
+            phrases += [f"Executive Order {value}", f"EO {value}", f"E.O. {value}"]
+        elif namespace == "proc":
+            phrases.append(f"Proclamation {value}")
+        elif namespace == "fr":
+            volume, _, page = value.partition("-")
+            phrases.append(f"{volume} FR {page}")
+        elif namespace in ("frdoc", "rin", "docket"):
+            phrases.append(value)
+    return " ".join(f'"{p}"' for p in phrases)
 
 
 def _identifier_matches(
@@ -312,12 +344,15 @@ def _identifier_matches(
     wanted = _query_identifiers(query)
     if not wanted:
         return []
-    needles = sorted({ident.split(":", 1)[1] for ident in wanted})
+    # A Record citation's value ("172-H5836") is not in the row as written:
+    # its page ("H5836") is, in the granule the external id carries.
+    needles = sorted({ident.split(":", 1)[1].split("-", 1)[-1] if ident.startswith("crec:")
+                      else ident.split(":", 1)[1] for ident in wanted})
     clauses = " OR ".join(
-        f"identifiers LIKE :n{i} OR external_id LIKE :n{i} OR title LIKE :n{i}"
+        f"identifiers LIKE :n{i} OR external_id LIKE :n{i} OR title LIKE :n{i} OR comment_url LIKE :n{i}"
         for i in range(len(needles)))
     params: dict = {f"n{i}": f"%{needle}%" for i, needle in enumerate(needles)}
-    sql = (f"SELECT id, external_id, title, doc_type, identifiers "
+    sql = (f"SELECT id, external_id, title, doc_type, identifiers, comment_url "
            f"FROM explore_documents WHERE ({clauses})")
     if doc_type:
         sql += " AND doc_type = :doc_type"
@@ -335,7 +370,7 @@ def _identifier_matches(
     return [
         int(row.id) for row in rows
         if wanted & declared_identifiers(
-            row.external_id, row.title, row.doc_type, row.identifiers)
+            row.external_id, row.title, row.doc_type, row.identifiers, row.comment_url)
     ][:limit]
 
 
@@ -449,7 +484,8 @@ def hybrid_search(
     # middling outscored the keyword channel's exact hit at rank 1 — fused
     # R@1 on those probes was 0.25 against keyword's 0.65 (2026-10). The
     # channel abstains (an empty list, not None: it is not unavailable).
-    if is_identifier_query(query):
+    identifier_only = _identifier_only(query)
+    if identifier_only:
         semantic = []
     else:
         try:
@@ -461,8 +497,11 @@ def hybrid_search(
             logger.exception("Semantic channel failed for %r", query)
             semantic = None
 
+    # An identifier-only query asks the keyword channel for the identifier as
+    # written, nothing looser (_identifier_phrases).
+    keyword_query = _identifier_phrases(_query_identifiers(query)) if identifier_only else query
     keyword = search_lexical(
-        db, query, limit=pool, doc_type=doc_type, chamber=effective_chamber,
+        db, keyword_query, limit=pool, doc_type=doc_type, chamber=effective_chamber,
         politician_id=politician_id, commentable_after=commentable_after,
         agency_slugs=agency_slugs,
     )
@@ -471,6 +510,12 @@ def hybrid_search(
         politician_id=politician_id, agency_slugs=agency_slugs,
     )
     exact_ids = set(exact)
+    # An identifier the query names that no document is known by: say so,
+    # with where the official copy is (explore_coverage.not_held). Only on
+    # an unfiltered search, where "not held" is what the miss means.
+    wanted = _query_identifiers(query)
+    unfiltered = not (doc_type or chamber or politician_id or commentable or agency_slugs)
+    held_note = not_held(db, wanted) if wanted and not exact and unfiltered else []
 
     # None (not []) from the semantic channel means the vector index is
     # missing or mid-rebuild, which is different from "it found nothing".
@@ -521,6 +566,7 @@ def hybrid_search(
             "semanticUnavailable": semantic_unavailable,
             "channels": {"semantic": len(semantic), "keyword": len(keyword),
                          "identifier": len(exact)},
+            "notHeld": held_note,
         }
 
     live_ids = {doc["id"] for doc in candidates}
@@ -646,4 +692,5 @@ def hybrid_search(
         "semanticUnavailable": semantic_unavailable,
         "channels": {"semantic": len(semantic), "keyword": len(keyword),
                      "identifier": len(exact)},
+        "notHeld": held_note,
     }

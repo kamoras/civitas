@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { absoluteUrl, notFoundMetadata, pageMetadata } from "@/lib/site";
 import ExploreDocumentView from "./ExploreDocumentView";
 import { fetchExploreDoc } from "./fetchDoc";
+import { exploreHref } from "@/lib/exploreHref";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -18,12 +19,13 @@ type PageProps = {
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { id } = await params;
   const doc = await fetchExploreDoc(id);
-  const path = `/explore/${encodeURIComponent(id)}`;
 
   if (!doc) {
     return notFoundMetadata("Document not found", "No record for this document.");
   }
 
+  // The canonical is the permanent key, whatever address was asked for.
+  const path = exploreHref(doc);
   const who = doc.politicianName || doc.agencyName;
   const byline = [doc.docType, who, doc.date].filter(Boolean).join(" · ");
   return pageMetadata({
@@ -47,11 +49,18 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 /** A document's page, its text rendered on the server. A missing document
  * is a real 404 and an outage an error page (AGENTS.md, Search metadata);
  * `?q=` is read here rather than with useSearchParams so the page is never
- * rendered without it. */
+ * rendered without it. Any address but the document's permanent key (its
+ * row id, from a link made before keys; a speech's copy the pipeline
+ * dropped) answers a permanent redirect (308) to the key, `?q=` kept. */
 export default async function ExploreDocumentPage({ params, searchParams }: PageProps) {
   const { id } = await params;
   const { q } = await searchParams;
   const doc = await fetchExploreDoc(id);
   if (!doc) notFound();
+  if (doc.key && doc.key !== id) {
+    permanentRedirect(
+      `${exploreHref(doc)}${typeof q === "string" && q ? `?q=${encodeURIComponent(q)}` : ""}`
+    );
+  }
   return <ExploreDocumentView key={doc.id} doc={doc} query={typeof q === "string" ? q : ""} />;
 }

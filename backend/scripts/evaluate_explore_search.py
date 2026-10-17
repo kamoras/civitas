@@ -19,7 +19,7 @@ broad topical query returns a *good* set. That question needs real
 labels, and a synthetic harness that pretended otherwise would be worse
 than no harness.
 
-Seven query styles are probed, because the whole argument for a hybrid
+Nine query styles are probed, because the whole argument for a hybrid
 engine is that different query shapes fail on different channels:
 
   title       the document's title words in order — the easy case
@@ -37,6 +37,12 @@ engine is that different query shapes fail on different channels:
               declared_identifiers): what a researcher holding a reference
               types, with exactly one right answer. Measured here only
               (`build_own_identifier_probes`), like passage
+  docket      the Regulations.gov docket its comment link names
+              ("IRS-2026-1090"); several documents of one rulemaking share
+              it, so R@1 understates
+  crcite      a floor speech's Congressional Record citation ("172 Cong.
+              Rec. H5836"), by the page its granule starts on; every
+              speech in that granule answers it
   rare        the document's least common terms measured against the rest
               of the corpus — the long tail, where IDF earns its keep
   passage     one sentence of the body, verbatim, from anywhere in it —
@@ -50,6 +56,11 @@ construction: semantic below keyword on ALL is expected, and identifier
 near zero is a property of encoders, not a defect. Compare the semantic
 channel with itself across a change to the index; synonymy, the case it
 exists for, needs real queries.
+
+Then identifiers the corpus does NOT hold (executive orders numbered just
+before the oldest held, document numbers from a year before any held):
+how many got documents back (none is right) and how many were told the
+identifier isn't held, with where it is.
 
 Reported per configuration: MRR (mean reciprocal rank of the target),
 Recall@1 / @5 / @20, and how often the target was missed entirely.
@@ -83,7 +94,11 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.models import Representative, Senator  # noqa: E402
-from app.pipeline.analyze.document_authority import declared_identifiers  # noqa: E402
+from app.pipeline.analyze.document_authority import (  # noqa: E402
+    congressional_record_identifiers,
+    declared_identifiers,
+    docket_identifiers,
+)
 from app.pipeline.lexical_index import search_lexical  # noqa: E402
 from app.pipeline.vector_store import search_explore_documents  # noqa: E402
 from app.services.bill_service import get_bills_in_flight  # noqa: E402
@@ -215,7 +230,48 @@ def build_own_identifier_probes(docs: list[dict]) -> list[dict]:
             elif namespace == "frdoc":
                 probes.append({"style": "frdoc", "doc_id": doc["id"],
                                "query": value})
+        # The docket its comment link names, as Regulations.gov prints it
+        # (one docket can hold several documents, so R@1 understates).
+        dockets = sorted(i.split(":", 1)[1] for i in docket_identifiers(doc.get("comment_url")))
+        if dockets:
+            probes.append({"style": "docket", "doc_id": doc["id"], "query": min(dockets, key=len)})
+        # A floor speech's Record citation, "172 Cong. Rec. H5836": every
+        # speech in a granule starting on that page answers it.
+        for ident in sorted(congressional_record_identifiers(doc.get("external_id"))):
+            namespace, _, value = ident.partition(":")
+            if namespace == "crec":
+                volume, _, page = value.partition("-")
+                probes.append({"style": "crcite", "doc_id": doc["id"],
+                               "query": f"{volume} Cong. Rec. {page}"})
     return probes
+
+
+def not_held_probes(rows) -> list[str]:
+    """Identifiers the corpus does not hold: the twenty executive orders
+    numbered just before the oldest one held, and Federal Register document
+    numbers from a year before every one held. Each should get no
+    unrelated document back."""
+    eos = sorted(
+        int(i.split(":", 1)[1]) for r in rows
+        for i in declared_identifiers(r.external_id, r.title, r.doc_type, r.identifiers) if i.startswith("eo:"))
+    probes = [f"EO {n}" for n in range(eos[0] - 20, eos[0])] if eos else []
+    years = sorted(int((r.external_id or "").rsplit("-", 2)[-2]) for r in rows
+                   if (r.external_id or "").startswith("fr-") and (r.external_id or "").rsplit("-", 2)[-2].isdigit())
+    if years:
+        probes += [f"{years[0] - 1}-{n:05d}" for n in range(10123, 30123, 1000)]
+    return probes
+
+
+def measure_not_held(db, queries: list[str]) -> dict:
+    """How many documents come back for identifiers not held (none is
+    right), and how often the response says the identifier isn't held."""
+    returned = noted = 0
+    for q in queries:
+        outcome = hybrid_search(db, q, limit=RANK_CUTOFF)
+        returned += bool(outcome["results"])
+        noted += bool(outcome.get("notHeld"))
+    n = len(queries) or 1
+    return {"n": len(queries), "with_results": returned / n, "noted": noted / n}
 
 
 def _transposed(word: str, rng: random.Random) -> str:
@@ -452,7 +508,7 @@ def main() -> int:
         rows = db.query(
             ExploreDocument.id, ExploreDocument.title, ExploreDocument.body,
             ExploreDocument.external_id, ExploreDocument.doc_type,
-            ExploreDocument.identifiers,
+            ExploreDocument.identifiers, ExploreDocument.comment_url,
         ).order_by(ExploreDocument.id).all()
         sample = random.sample(rows, min(args.samples, len(rows)))
 
@@ -467,7 +523,7 @@ def main() -> int:
         docs = [
             {"id": r.id, "title": r.title, "body": r.body,
              "external_id": r.external_id, "doc_type": r.doc_type,
-             "identifiers": r.identifiers}
+             "identifiers": r.identifiers, "comment_url": r.comment_url}
             for r in sample
         ]
         probes = (build_probes(docs, corpus_df, len(sample))
@@ -499,7 +555,7 @@ def main() -> int:
         print(header)
         print("-" * len(header))
         for style in ("title", "paraphrase", "identifier", "frcite", "frdoc",
-                      "rare", "passage", "ALL"):
+                      "docket", "crcite", "rare", "passage", "ALL"):
             if style not in by_style:
                 continue
             for config in CONFIGS:
@@ -509,6 +565,11 @@ def main() -> int:
                       f"{stats['r@5']:>8.3f}{stats['r@20']:>8.3f}"
                       f"{stats['missed']:>9.3f}")
             print()
+
+        held_out = measure_not_held(db, not_held_probes(rows))
+        print(f"not held    {held_out['n']} identifiers the corpus does not hold: "
+              f"{held_out['with_results']:.3f} got documents back, "
+              f"{held_out['noted']:.3f} were told it isn't held\n")
 
         print(HOW_TO_READ)
         _print_groups(db, member_rows, bill_rows, probes, rng)

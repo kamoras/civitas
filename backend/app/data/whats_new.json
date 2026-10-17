@@ -9,6 +9,13 @@
       "url": "/court"
     },
     {
+      "id": "explore-permanent-citations",
+      "date": "2026-10-17",
+      "title": "Permanent document links that cite the source",
+      "summary": "Each Explore document has a permanent address from its official identifier, cites the body that issued it, and is found first by its docket or Record page.",
+      "url": "/explore"
+    },
+    {
       "id": "member-seat-race",
       "date": "2026-10-17",
       "title": "A representative's seat on the ballot",

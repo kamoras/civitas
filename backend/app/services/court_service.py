@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.models import ExploreDocument, Justice, JusticeVote
 from app.photos import justice_photo
+from app.services.explore_keys import public_key
 from app.time_utils import utcnow
 
 # The Court's term begins on the first Monday in October (28 U.S.C. § 2)
@@ -83,7 +84,7 @@ def _links(case_id: str, term: str, doc: ExploreDocument | None) -> dict:
         # The Court's slip opinion, once posted; before that Explore holds
         # the docket page, which is not an opinion.
         "opinion": url if "/opinions/" in url else None,
-        "explore": f"/explore/{doc.id}" if doc else None,
+        "explore": f"/explore/{public_key(doc.external_id, doc.id)}" if doc else None,
     }
 
 

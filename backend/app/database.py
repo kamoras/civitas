@@ -1232,7 +1232,8 @@ def reset_all_data() -> dict:
             summary[table.name] = db.execute(wipe).rowcount
         # A kept issue's links to Explore documents name them by rowid, and
         # SQLite hands the rebuilt documents the same rowids again: left, the
-        # links would point at unrelated documents.
+        # links would point at unrelated documents. Their permanent keys
+        # (related_explore_keys) stay, and find the documents once re-read.
         db.execute(text("UPDATE action_issues SET related_explore_ids = '[]'"))
         # One transaction: a failure partway leaves nothing half-wiped. (The
         # reset's lease outlasts it unbeaten — lease.stale_after.)

@@ -9,6 +9,8 @@ import { chamberColor, chamberBorder, chamberLabel } from "@/lib/chamber";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import CopyText from "@/components/CopyText";
 import CiteThis from "@/components/shared/CiteThis";
+import { exploreCitedSource } from "@/lib/citedSources";
+import { exploreHref } from "@/lib/exploreHref";
 import { billCanonicalPath } from "@/lib/congress";
 import AgencyLink from "@/components/agencies/AgencyLink";
 import {
@@ -920,7 +922,15 @@ export default function ExploreDocumentView({
                 label="Federal Register document number"
               />
             )}
-            <CiteThis title={doc.title} date={doc.date} path={`/explore/${doc.id}`} />
+            {doc.crCitation && (
+              <CopyText text={doc.crCitation} label="Congressional Record citation" />
+            )}
+            <CiteThis
+              title={doc.title}
+              date={doc.date}
+              path={exploreHref(doc)}
+              source={exploreCitedSource(doc, sourceUrl)}
+            />
           </section>
 
           {/* Source attribution */}

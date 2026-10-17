@@ -46,6 +46,7 @@ from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.score_display import displayed_rank, displayed_score
 from app.services.senator_service import STATE_NAMES
 from app.time_utils import eastern_date
+from app.services.explore_keys import public_key
 
 logger = logging.getLogger(__name__)
 
@@ -492,6 +493,7 @@ def _get_gov_record(politician_id: str, db: Session) -> dict:
         "recentDocs": [
             {
                 "id": d.id,
+                "key": public_key(d.external_id, d.id),
                 "docType": d.doc_type,
                 "title": d.title,
                 "date": d.date,

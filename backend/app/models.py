@@ -1611,6 +1611,9 @@ class ActionIssue(Base):
     policy_areas: Mapped[str] = mapped_column(Text, default="[]")
     related_bill_ids: Mapped[str] = mapped_column(Text, default="[]")
     related_explore_ids: Mapped[str] = mapped_column(Text, default="[]")
+    # The same documents by permanent key (services/explore_keys.py), which
+    # outlives the row ids above: read back through explore_keys.issue_doc_ids.
+    related_explore_keys: Mapped[str] = mapped_column(Text, default="[]", server_default="[]")
     related_senators: Mapped[str] = mapped_column(Text, default="[]")
     related_officials: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     # Who the story is principally about (pipeline/analyze/story_actor.py):

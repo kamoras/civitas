@@ -118,12 +118,17 @@ export default function ChamberStrip({
           className="fill-ink-hi"
         />
       </svg>
-      <div className="relative h-4 font-mono text-xs tabular-nums text-ink-min" aria-hidden="true">
-        <span className="absolute left-0">{lo}</span>
-        <span className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap uppercase tracking-[0.12em]">
+      {/* A row, not three absolutely placed labels: at a large text size the
+          middle one wraps instead of running past the strip (WCAG 1.4.10). */}
+      <div
+        className="flex items-start justify-between gap-2 font-mono text-xs tabular-nums text-ink-min"
+        aria-hidden="true"
+      >
+        <span>{lo}</span>
+        <span className="min-w-0 text-center uppercase tracking-[0.12em]">
           All {rank.of} {members}
         </span>
-        <span className="absolute right-0">{hi}</span>
+        <span>{hi}</span>
       </div>
       <p className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs text-ink-lo">
         {field.partyMedian != null && (

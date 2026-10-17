@@ -1583,6 +1583,22 @@ number R@1 0.465 → 1.000; every other style unchanged. An FR citation is a pag
 and 34% of cited documents share their first page with another notice, so a
 citation can name up to four documents; all of them lead.
 
+**Dockets, Record citations, and what isn't held.** A rule is also known by
+the Regulations.gov docket its comment link names ("IRS-2026-1090", and the
+comment document "IRS-2026-1090-0001"; `document_authority.docket_identifiers`),
+and a floor speech by its Congressional Record citation, the page its GovInfo
+granule starts on ("172 Cong. Rec. H5836"), and the granule id itself
+(`congressional_record_identifiers`); "EO 14148" is read as the executive order
+it abbreviates. A query that is only identifiers asks the keyword channel for
+each identifier as written (`explore_search._identifier_phrases`): it used to
+match any word of it, so "EO 14148" returned thirty other orders on "EO". When
+no document is known by an identifier the query names, the response says so,
+with its official copy (`notHeld`, `services/explore_coverage.not_held`): an
+executive order numbered below the oldest held reads "Executive orders before
+May 23, 2025 aren't held here", with a link to the Federal Register. Each
+document type's first and last date held is in `GET /api/explore/stats`
+(`coverage`) and on the search page, under the box. Known-item probes of 400 sampled documents (2026-10-16 database), hybrid, before and after: docket R@1 0.667 → 1.000 (18 probes); Record citation R@1 0.000 → 0.184, R@20 0.000 → 0.923 (196; every speech in a granule shares its first page); identifier lifted from a document's text MRR 0.640 → 0.695; FR citation MRR 0.906 → 0.911; title, paraphrase, rare, passage and FR document number unchanged; ALL MRR 0.593 → 0.631. Of 40 identifiers the corpus does not hold, every one got documents back before and none was told it isn't held; after, 13 got documents back (each citing it) and all 40 were told.
+
 **Why rank fusion rather than score blending.** Cosine distance and BM25 live
 on unrelated scales; min-max normalising each makes the blend depend on
 whatever the best and worst scores happened to be for that one query.
@@ -1622,9 +1638,9 @@ cross-references the ranking is empty and the prior does nothing.
 **Ranking weights are measured, not asserted.** They live in
 `config_definitions.py` under "Explore search ranking".
 `backend/scripts/evaluate_explore_search.py` measures MRR and Recall@k for
-semantic, keyword and hybrid separately, using known-item retrieval over seven
-query styles (title, paraphrase, identifier, the document's own FR citation and
-document number, rare-term, passage) with relevance
+semantic, keyword and hybrid separately, using known-item retrieval over nine
+query styles (title, paraphrase, identifier, the document's own FR citation,
+document number, docket and Record citation, rare-term, passage) with relevance
 judgments derived from the corpus rather than hand-labelled. Change a weight,
 re-run it. Every probe is built from the document's own words, so the
 keyword channel leads by construction; compare the semantic channel with
@@ -1642,7 +1658,28 @@ load in the browser. The page says in one line what Civitas is, offers "Back to
 results" only to a reader who came from them (`?q=`), and closes with "Cite
 this": the document's own Federal Register citation and document number when
 it has them (`frCitation`, `frDocNumber`, read from the identifiers it is known
-by, `api/explore.py fr_reference`) and an APA-style reference to the page.
+by, `api/explore.py fr_reference`), a floor speech's Congressional Record
+citation (`crCitation`), and an APA-style reference that credits who issued
+the document (the agency in the Federal Register, the Executive Office of the
+President, the speaker in the Congressional Record, the Supreme Court), with
+its official URL, and names Civitas only as where it was accessed
+(`lib/citedSources.ts`). Roll calls cite the Senate or the House Clerk, bills
+and nominations Congress.gov; Civitas's own scorecards and analyses still cite
+Civitas, as a dataset with the method version.
+
+**Permanent addresses.** A document's page is `/explore/{key}`, the key made
+from its official identifier (`services/explore_keys.py`): `fr-2026-17123`
+for a Federal Register document, `crec-` plus the Record granule and a hash of
+the speaker's turn for a floor speech, `scotus-` plus the docket for an
+opinion. The row id it replaced was not permanent: the Register refresh
+removes provisional numbers, a re-read Record day replaces changed speeches,
+and every floor speech outside the sitting Congress was deleted, all 9,131 of
+them on each January 3. An old `/explore/{id}` answers a 308 to the key; the
+canonical, the sitemap, every link and the public API's `siteUrl` use it; a
+speech whose copy from an overlapping granule was dropped answers under the
+copy kept; and a key no document answers any more still links its official
+copy from the 404. Floor speeches are kept after their Congress
+(`explore_pipeline._purge_old_format_speeches`), about 120 MB a Congress.
 
 Bill text itself is not indexed here; it's used separately, title-only, for
 the tier-3 kNN bill-classification step in the scoring pipeline (see Phase 3

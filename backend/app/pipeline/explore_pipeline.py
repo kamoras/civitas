@@ -34,7 +34,6 @@ from app.models import ExploreDocument, Justice, President, Representative, Sena
 from app.config import settings
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.analyze.floor_speech import speech_flags, titled_speeches
-from app.pipeline.fetch.congress import congress_of_date
 from app.pipeline.fetch.congressional_record import (
     CHAMBERS,
     congress_start,
@@ -455,8 +454,8 @@ async def _backfill_rulemaking_bodies(db: Session) -> list[int]:
     return filled
 
 
-# Floor speeches, stored per day of the Record, for the whole sitting
-# Congress (AGENTS.md §6). Bump SPEECH_FORMAT when what a day becomes
+# Floor speeches, stored per day of the Record: read for the whole sitting
+# Congress (AGENTS.md §6), and kept after it (_purge_old_format_speeches). Bump SPEECH_FORMAT when what a day becomes
 # changes (the parse, the floor-business test, titles, the external_id):
 # every day is then read again, SPEECH_DAYS_PER_RUN a run, and each day's
 # documents are replaced as it is read — the old ones stay searchable
@@ -503,15 +502,19 @@ def _read_frontier(packages: list[str], read: set[str]) -> str | None:
     return congress_start(settings.CURRENT_CONGRESS).isoformat()
 
 
-def _purge_out_of_scope_speeches(db: Session, frontier: str | None) -> int:
-    """Delete floor speeches outside the sitting Congress, and those in an
-    older format dated on or after the read frontier.
+def _purge_old_format_speeches(db: Session, frontier: str | None) -> int:
+    """Delete floor speeches in an older format dated on or after the read
+    frontier.
 
-    Explore's speeches are the sitting Congress's, as every scored window
-    is (AGENTS.md §6). GovInfo's collection index lists packages by when
-    they were last modified, and speeches from a reprocessed 1996 issue
-    (six) and 2017 ones (two) reached the index that way (fixed at the
-    source in fetch_crec_packages).
+    Speeches of past Congresses are kept, never purged: each has a
+    permanent address that citations and shared links point at (services/
+    explore_keys.py), and a past Congress's Record does not change. Until
+    2026-10 every speech outside the sitting Congress was deleted, all of
+    them (9,131) at each January 3 rollover. Keeping them costs about 120 MB
+    a Congress on the Pi (2026-10-16: speech rows ~33 MB of
+    explore_documents, their share of explore_fts ~13 MB and of vectors.db
+    ~75 MB, for 19 months of the 119th). Only the sitting Congress is read
+    (fetch_crec_packages), so nothing older arrives.
 
     An older format's speech — before SPEECH_FORMAT, "senate-floor-"/
     "house-floor-" ids, each turn cut to 400/500 characters and titled
@@ -519,26 +522,24 @@ def _purge_out_of_scope_speeches(db: Session, frontier: str | None) -> int:
     day's documents are replaced). What this sweeps is what is left past
     the frontier, where every issue has been read: rows on a date with no
     issue. Nothing older than the frontier is touched, so search has no
-    gap while the back-fill runs.
+    gap while the back-fill runs, and a past Congress keeps the format it
+    was read in.
     """
+    if frontier is None:
+        return 0
     rows = (
         db.query(ExploreDocument.id, ExploreDocument.date, ExploreDocument.external_id)
-        .filter(ExploreDocument.doc_type.in_(_SPEECH_TYPES.values()))
+        .filter(ExploreDocument.doc_type.in_(_SPEECH_TYPES.values()), ExploreDocument.date >= frontier)
         .all()
     )
-    doomed = [
-        r.id for r in rows
-        if congress_of_date(r.date or "") != settings.CURRENT_CONGRESS
-        or (frontier is not None and (r.date or "") >= frontier
-            and not (r.external_id or "").startswith(_SPEECH_ID_PREFIX))
-    ]
+    doomed = [r.id for r in rows if not (r.external_id or "").startswith(_SPEECH_ID_PREFIX)]
     for i in range(0, len(doomed), 500):
         (db.query(ExploreDocument)
            .filter(ExploreDocument.id.in_(doomed[i:i + 500]))
            .delete(synchronize_session=False))
     db.commit()
     if doomed:
-        logger.info("Purged %d floor speeches outside the sitting Congress or in an old format", len(doomed))
+        logger.info("Purged %d floor speeches in an old format past the read frontier", len(doomed))
     return len(doomed)
 
 
@@ -578,7 +579,6 @@ async def _ingest_floor_speeches(db: Session, client: httpx.AsyncClient) -> dict
     packages = await fetch_crec_packages(client)
     if packages is None:
         logger.warning("Congressional Record index unavailable — floor speeches not updated this run")
-        _purge_out_of_scope_speeches(db, None)
         return added
     read = {p for p in packages
             if api_cache_get(db, "govinfo", _day_read_key(p), max_age_hours=_DAY_READ_TTL_HOURS)}
@@ -618,7 +618,7 @@ async def _ingest_floor_speeches(db: Session, client: httpx.AsyncClient) -> dict
     if dropped:
         logger.info("Congressional Record: removed %d speeches stored twice from overlapping granules", dropped)
     frontier = _read_frontier(packages, read)
-    _purge_out_of_scope_speeches(db, frontier)
+    _purge_old_format_speeches(db, frontier)
     logger.info("Congressional Record: %d of %d days read in format %s, frontier %s",
                 len(read), len(packages), SPEECH_FORMAT, frontier or "none yet")
     if failed:

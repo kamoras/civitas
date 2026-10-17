@@ -61,7 +61,7 @@ export default async function Holdings() {
         <h2 id="public-record-sources">Built from the public record</h2>
         <Link
           href="/about/data#sources"
-          className="normal-case tracking-[0.06em] underline decoration-white/30 underline-offset-4 hover:text-phos"
+          className="inline-flex min-h-6 items-center normal-case tracking-[0.06em] underline decoration-white/30 underline-offset-4 hover:text-phos"
         >
           Every source &rarr;
         </Link>

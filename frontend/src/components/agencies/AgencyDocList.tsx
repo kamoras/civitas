@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { AgencyDocument } from "@/types/agency";
 import { describeDaysLeftOn, formatUtcDate, safeHref } from "@/lib/formatting";
+import { exploreHref } from "@/lib/exploreHref";
 
 const day = (iso: string) =>
   formatUtcDate(iso, { year: "numeric", month: "short", day: "numeric" }, "en-US");
@@ -26,7 +27,7 @@ export default function AgencyDocList({
             {d.docType} · {day(d.date)}
           </p>
           <Link
-            href={`/explore/${d.id}`}
+            href={exploreHref(d)}
             className="mt-1 block text-sm leading-snug text-ink-hi hover:text-phos"
           >
             {d.title}

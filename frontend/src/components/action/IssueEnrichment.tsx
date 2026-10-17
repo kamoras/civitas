@@ -43,6 +43,7 @@ import Photo from "@/components/Photo";
 import ContactYourMembers from "@/components/action/ContactYourMembers";
 import TrackedLink from "@/components/action/TrackedLink";
 import AgencyLink from "@/components/agencies/AgencyLink";
+import { exploreHref } from "@/lib/exploreHref";
 
 /** Hairline section header: the one used by RecordIndex and /elections. */
 export const SECTION_HEADING =
@@ -565,7 +566,7 @@ function actionRows(issue: ActionIssue, today: string): ActionRow[] {
           .filter(Boolean)
           .join(" · ")
       ),
-      href: `/explore/${action.docId}#comment`,
+      href: `${exploreHref({ id: action.docId, key: action.docKey })}#comment`,
       internal: true,
       label: "Comment →",
       tap: "comment",
@@ -586,7 +587,7 @@ function actionRows(issue: ActionIssue, today: string): ActionRow[] {
           ? `${kind} · comments close ${formatUtcDate(doc.commentsCloseOn!, { month: "short", day: "numeric" })} · ${describeDaysLeftOn(doc.commentsCloseOn!, today)}`
           : `${kind} · ${doc.date}`
       ),
-      href: commentOpen ? `/explore/${doc.id}#comment` : `/explore/${doc.id}`,
+      href: commentOpen ? `${exploreHref(doc)}#comment` : exploreHref(doc),
       internal: true,
       label: commentOpen ? "Comment →" : "Document →",
       tap: commentOpen ? "comment" : undefined,

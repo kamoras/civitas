@@ -24,7 +24,7 @@ export function signedPosition(x: number): string {
 }
 
 /** The surname a lineup and the heatmap label a justice by: the API's
- *  last name without a suffix ("Alito, Jr." is "Alito"). */
+ *  last name without a suffix ("Smith, Jr." is "Smith"). */
 export function surname(j: Pick<CourtJustice, "lastName" | "name">): string {
   const last = (j.lastName || j.name).split(",")[0].trim();
   return last || j.name;

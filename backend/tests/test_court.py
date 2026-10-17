@@ -14,6 +14,8 @@ from fastapi.testclient import TestClient
 from app.database import get_db
 from app.main import app
 from app.models import ExploreDocument, Justice, JusticeVote
+from app.pipeline import justice_pipeline
+from app.pipeline.fetch import justice_records
 from app.services import court_service
 
 # Five made-up justices, left to right by their latest position.
@@ -137,7 +139,7 @@ def test_decisions_name_the_lineup_and_link_their_sources(db_session):
     assert d["name"] == "A v. B" and d["split"] == "3-2" and d["author"] == "middle"
     assert sorted(d["majority"]) == sorted(ALL[2:]) and sorted(d["minority"]) == sorted(ALL[:2])
     assert d["links"]["oyez"] == "https://www.oyez.org/cases/2024/23-191"
-    assert d["links"]["opinion"].endswith("23-191_x.pdf") and d["links"]["explore"].startswith("/explore/")
+    assert d["links"]["opinion"].endswith("23-191_x.pdf") and d["links"]["explore"].startswith("/explore/") and not d["links"]["explore"].removeprefix("/explore/").isdigit()
     [older] = _get(db_session, "/api/court/decisions?per_page=1&page=2").json()["decisions"]
     assert older["links"] == {"oyez": None, "opinion": None, "explore": None}
     assert older["name"] == "A V. B" and older["unanimous"] is True
@@ -191,7 +193,6 @@ def test_the_section_figure_is_the_latest_term_with_decisions(db_session):
 
 
 def test_martin_quinn_rows_carry_the_credible_interval(db_session):
-    from app.pipeline.fetch import justice_records
 
     csv_text = ('"term","justice","justiceName","post_mn","post_sd","post_med","post_025","post_975"\n'
                 '2024,1,"AJustice",0.5151,0.3,0.51,-0.0712,1.1\n'
@@ -202,7 +203,6 @@ def test_martin_quinn_rows_carry_the_credible_interval(db_session):
 
 
 def test_an_unread_martin_quinn_file_is_reported(db_session):
-    from app.pipeline import justice_pipeline
 
     measured = {"loyalty": {}, "term": 2024, "current": [], "cases": [], "ideal": None}
     listed = [{"identifier": "j1", "name": "J One", "last_name": "One",

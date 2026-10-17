@@ -26,8 +26,9 @@ database shows this week before the Congress's first months.
 
 **What isn't held is said, never shown as none** (`congress_service.coverage`,
 `bill_coverage`). The record starts with the back-fill's first day, the
-roll calls with the Congresses `roll_calls` holds, and Explore keeps the
-sitting Congress's floor speeches only. A bill of an earlier Congress says
+roll calls with the Congresses `roll_calls` holds, and Explore's floor
+speeches with the first Congress they were read in (they are kept after
+it). A bill of an earlier Congress says
 which of its votes, floor debate and Record days aren't held (and links
 each roll call its Congress.gov history names to the chamber's own record),
 the public API's `/bills/{id}/votes` carries `covered` and `heldCongresses`,
