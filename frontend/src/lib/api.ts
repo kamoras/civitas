@@ -10,7 +10,7 @@ import type { CommentWindow } from "@/types/commentWindow";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
 import type { Court, JusticeCasePage } from "@/types/court";
 import type { JusticeLeaderboardEntry } from "@/types/justice";
-import type { ActionIssuesResponse, IssueMembers } from "@/types/action";
+import type { ActionIssuesResponse, IssueMembers, IssueVote } from "@/types/action";
 import type { RedistrictedSeat } from "@/types/redistricting";
 import type { HouseDistrictsByCounty, PoliticianCard } from "@/types/politicians";
 import type { PaginatedBills } from "@/types/bill";
@@ -20,6 +20,7 @@ import type { Agreement } from "@/types/compare";
 import type { MemberSupport } from "@/types/presidentialSupport";
 import type { TrendPostsAudit } from "@/types/trendPosts";
 import type { MapSeatLines } from "@/types/electionMap";
+import type { SearchSuggestions } from "@/types/search";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 
@@ -2237,6 +2238,8 @@ export interface MonitorList {
 
 export interface NationalMonitorDetail extends NationalMonitor {
   updates: MonitorUpdate[];
+  /** Roll calls matched to the monitor's updates, oldest first: "On the record". */
+  onTheRecord?: IssueVote[];
 }
 
 export async function fetchMonitors(): Promise<MonitorList> {
@@ -2403,4 +2406,20 @@ export async function fetchRedistrictedSeat(
 export function redistrictingDownloads(state: string): { csv: string; json: string } {
   const base = `${API_BASE}/elections/redistricting/${encodeURIComponent(state)}`;
   return { csv: `${base}/overlap.csv`, json: base };
+}
+
+/** Site search's suggestions for what has been typed (the header's
+ * combobox). Not through cachedFetch: the browser's own private cache
+ * (Cache-Control: private) keeps an answer, and nothing typed is held in
+ * this module (AGENTS.md §8). */
+export async function fetchSearchSuggestions(
+  q: string,
+  signal?: AbortSignal
+): Promise<SearchSuggestions> {
+  const data = await requestJson<SearchSuggestions>(
+    `${API_BASE}/search/suggest?q=${encodeURIComponent(q)}`,
+    "Search suggestions",
+    { init: { signal } }
+  );
+  return { ...data, items: Array.isArray(data?.items) ? data.items : [] };
 }

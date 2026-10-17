@@ -6,6 +6,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { SECTIONS, inSection, sectionSubpages, type SectionKey } from "@/lib/routes";
 import { BSKY_PROFILE_URL } from "@/lib/site";
 import RecordsBand from "./RecordsBand";
+import SiteSearch from "@/components/search/SiteSearch";
 import YourStatePicker from "./YourStatePicker";
 
 // The main navigation is the SECTIONS table (lib/routes.ts): each section's
@@ -245,76 +246,9 @@ function SectionItem({
   );
 }
 
-const SEARCH_TOGGLE =
-  "inline-flex items-center font-mono tracking-widest text-ink-lo transition-colors hover:text-ink-hi aria-expanded:text-phos";
-
-/**
- * The site search, in the header on every page: a SEARCH button that opens
- * one labelled field under the bar. It was a "request a record" box in the
- * homepage's body, which asked a reader for input before showing them
- * anything; a header search is where readers look for one, and it serves
- * every page. A plain GET form to /search?q= (app/search/route.ts), a
- * labelled input and a submit button, so it works without JavaScript and
- * can be enhanced in place.
- */
-function SearchPanel({ onEscape }: { onEscape: () => void }) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  useEffect(() => inputRef.current?.focus(), []);
-  return (
-    <div id="site-search" className="border-t border-white/[0.07] bg-surface-base/[0.98]">
-      <form
-        role="search"
-        action="/search"
-        method="get"
-        className="mx-auto max-w-7xl px-4 py-3 sm:px-6"
-      >
-        <label
-          htmlFor="site-search-input"
-          className="block font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
-        >
-          Search the record
-        </label>
-        <div className="mt-2 flex items-end gap-3">
-          <input
-            ref={inputRef}
-            id="site-search-input"
-            type="search"
-            name="q"
-            // Escape closes the search and returns focus to its button.
-            onKeyDown={(e) => {
-              if (e.key === "Escape") onEscape();
-            }}
-            placeholder="Topic, document or bill number"
-            className="min-w-0 flex-1 border-0 border-b border-white/20 bg-transparent pb-1 font-mono text-sm text-ink-hi placeholder:text-ink-min focus:border-phos"
-          />
-          <button
-            type="submit"
-            className="inline-flex min-h-11 items-center font-mono text-sm tracking-[0.12em] text-phos-mid hover:text-phos"
-          >
-            [ SEARCH ]
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
 export default function Navbar() {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
-  // The toggle that opened the search, to take focus back on Escape (the
-  // row's or the MENU layout's, whichever is shown).
-  const searchToggleRef = useRef<HTMLButtonElement | null>(null);
-  const toggleSearch = (e: React.MouseEvent<HTMLButtonElement>) => {
-    searchToggleRef.current = e.currentTarget;
-    setMenuOpen(false);
-    setSearchOpen((o) => !o);
-  };
-  const closeSearch = useCallback(() => {
-    setSearchOpen(false);
-    searchToggleRef.current?.focus();
-  }, []);
   // The desktop section whose pages are showing, and the page it was opened
   // on: a navigation by any route (a link, Back) closes it without an effect.
   const [opened, setOpened] = useState<{ section: SectionKey; path: string } | null>(null);
@@ -470,37 +404,20 @@ export default function Navbar() {
             >
               [BSKY]
             </a>
-            <button
-              type="button"
-              onClick={toggleSearch}
-              aria-expanded={searchOpen}
-              aria-controls="site-search"
-              className={`${SEARCH_TOGGLE} min-h-6 text-xs`}
-            >
-              SEARCH
-            </button>
+            <SiteSearch className="min-h-6 text-xs" />
           </div>
 
           {/* Mobile hamburger. A 44x44 target (WCAG 2.5.8 asks 24, 2.5.5 44)
               around the same 20 px word: the negative margins give the
               padding back, so the bar's height and the word's place don't
               move. It was the 36x20 word alone, in the hardest thumb zone. */}
-          {/* The MENU layout's search, beside MENU: the same panel. */}
+          {/* The MENU layout's search, beside MENU: the same dialog. */}
           <div className={`${menuOnly} -my-3 flex items-center`}>
-            <button
-              type="button"
-              onClick={toggleSearch}
-              aria-expanded={searchOpen}
-              aria-controls="site-search"
-              className={`${SEARCH_TOGGLE} min-h-11 min-w-11 justify-center px-2 text-sm`}
-            >
-              SEARCH
-            </button>
+            <SiteSearch className="min-h-11 min-w-11 justify-center px-2 text-sm" />
             <button
               ref={toggleRef}
               className={`-mr-2 inline-flex min-h-11 min-w-11 items-center justify-center px-2 text-ink-lo hover:text-ink-hi font-mono text-sm tracking-widest transition-colors`}
               onClick={() => {
-                setSearchOpen(false);
                 if (menuOpen) closeMenu();
                 else setMenuOpen(true);
               }}
@@ -512,8 +429,6 @@ export default function Navbar() {
             </button>
           </div>
         </div>
-
-        {searchOpen && <SearchPanel onEscape={closeSearch} />}
 
         {/* Mobile menu: two levels, every section's pages listed under its
             hub, so any page is two taps from MENU (MENU, then the page).

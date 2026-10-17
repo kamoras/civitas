@@ -1,3 +1,4 @@
+import RelatedVotes from "@/components/action/RelatedVotes";
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -265,6 +266,7 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
             </div>
           )}
 
+          <RelatedVotes issue={issue} headingLevel="h2" className="mt-10" />
           <WhatYouCanDo issue={issue} today={today} headingLevel="h2" className="mt-10" />
 
           <div className="mt-10 flex flex-col gap-3 border-t border-white/[0.07] pt-4">

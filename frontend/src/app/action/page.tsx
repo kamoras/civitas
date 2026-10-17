@@ -1,5 +1,6 @@
 "use client";
 
+import RelatedVotes from "@/components/action/RelatedVotes";
 import { Suspense, useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -128,6 +129,7 @@ function IssueBody({
       )}
       <IssueTags issue={issue} onMonitor={onMonitor} />
 
+      <RelatedVotes issue={issue} headingLevel={headingLevel} />
       <WhatYouCanDo issue={issue} today={today} headingLevel={headingLevel} />
       <Coverage issue={issue} headingLevel={headingLevel} />
 

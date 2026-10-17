@@ -10,8 +10,9 @@ from app.api.response_helpers import cached_json
 from app.database import get_db
 from app.models import RollCall
 from app.pipeline.congress_activity import eastern_today
-from app.services import committee_record, congress_service
+from app.services import committee_record, congress_glance, congress_service
 from app.services.bill_record import parse_bill_id, vote_detail
+from app.state_names import STATE_NAMES
 
 router = APIRouter(prefix="/congress")
 
@@ -108,6 +109,29 @@ def vote(
     if rc is None:
         raise HTTPException(status_code=404, detail="Vote not recorded")
     return cached_json(vote_detail(db, rc), max_age=3600)
+
+
+@router.get("/glance")
+def glance(db: Session = Depends(get_db)) -> JSONResponse:
+    """The sitting Congress at a glance: the days each chamber sat, with
+    record votes, and how many of its bills reached each step
+    (congress_glance.glance)."""
+    return cached_json(congress_glance.glance(db), max_age=_TTL_S)
+
+
+@router.get("/members")
+def state_members(
+    state: str = Query(..., min_length=2, max_length=2, description="Two-letter state code the reader picked"),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """A state's sitting members with their record this Congress: roll
+    calls, missed votes, latest votes and bills (congress_glance.
+    state_members). The state is the reader's pick from a list, in the URL
+    and recorded nowhere (AGENTS.md section 8)."""
+    code = state.upper()
+    if code not in STATE_NAMES:
+        raise HTTPException(status_code=404, detail="No such state")
+    return cached_json({"state": code, "members": congress_glance.state_members(db, code)}, max_age=_TTL_S)
 
 
 @router.get("/committees")

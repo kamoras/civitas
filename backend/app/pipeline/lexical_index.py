@@ -420,7 +420,8 @@ def search_lexical(
     try:
         rows = db.execute(text(sql), params).fetchall()
     except Exception:
-        logger.warning("Explore keyword search failed for %r", query, exc_info=True)
+        # Never the query itself in the log (AGENTS.md §8).
+        logger.warning("Explore keyword search failed", exc_info=True)
         return []
 
     return [
