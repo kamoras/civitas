@@ -7,6 +7,7 @@ import { useYourState } from "@/hooks/useYourState";
 import { ELECTION_MAP_HREF } from "@/lib/electionMap";
 import { REDISTRICTING_HREF } from "@/lib/redistricting";
 import type { ElectionPhase } from "@/types/election";
+import { LONG_LABEL } from "@/lib/controlStyles";
 
 const VOTER_LINK =
   "inline-flex min-h-[24px] items-center border-b border-phos-mid/40 text-phos-mid hover:text-phos";
@@ -121,7 +122,9 @@ export default function Masthead({
         {/* Who pays for this, said once, flat out: it was a tilted rubber
             stamp, a prop that read as a gimmick. Plain mono, the record's
             own face. */}
-        <p className="mt-5 max-w-2xl font-mono text-xs uppercase leading-relaxed tracking-[0.1em] text-ink-lo">
+        <p
+          className={`mt-5 max-w-2xl font-mono leading-relaxed tracking-[0.1em] text-ink-lo ${LONG_LABEL}`}
+        >
           No party money. No PAC money. No ads, no accounts. Open source, self-hosted, run by
           volunteers.
         </p>

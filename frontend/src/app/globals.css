@@ -336,6 +336,39 @@ input:focus-visible {
   outline-offset: 2px;
 }
 
+/* ===== A PHONE'S TYPE SCALE (mobile spec P1, P2) =====
+   On a phone nothing a reader must read is under 13px. The site's data and
+   labels were 12px mono caps at 0.12-0.16em tracking: 72% of the
+   directory's text and half of a member page (2026-10-16), and at that
+   tracking 13px caps take the width of 17px text and break mid-phrase.
+   Under 640px `text-xs` is 13px, the 9-12px one-offs are too, and wide
+   tracking drops to 0.08em. Tokens, so every label follows; unlayered, so
+   they beat the utilities. SVG text keeps its size: a chart's labels are
+   laid out for it (P6 takes those one by one). Labels of four words or more
+   also go to sentence case on a phone, where they are written
+   (`labelCase` in lib/controlStyles.ts). */
+@media (max-width: 639.98px) {
+  :root {
+    --text-xs: 0.8125rem;
+    --tracking-widest: 0.08em;
+  }
+  :is(.text-\[9px\], .text-\[10px\], .text-\[11px\], .text-\[12px\]):not(svg *) {
+    font-size: 0.8125rem;
+  }
+  :is(
+    .tracking-\[0\.1em\],
+    .tracking-\[0\.11em\],
+    .tracking-\[0\.12em\],
+    .tracking-\[0\.14em\],
+    .tracking-\[0\.16em\],
+    .tracking-\[0\.18em\],
+    .tracking-\[0\.22em\],
+    .tracking-\[0\.3em\]
+  ) {
+    letter-spacing: 0.08em;
+  }
+}
+
 /* ===== EXTERNAL LINK A11Y =====
    Announce to screen readers that target="_blank" links open a new tab. */
 a[target="_blank"]::after {

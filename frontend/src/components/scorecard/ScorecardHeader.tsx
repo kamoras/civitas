@@ -14,6 +14,7 @@ import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import Photo from "@/components/Photo";
 import { HeldScoreNote, ThinDataNote } from "@/components/scorecard/HeldScore";
 import { onThisPage } from "@/lib/onThisPage";
+import { LONG_LABEL } from "@/lib/controlStyles";
 
 /**
  * `min-h-6` for WCAG 2.2 SC 2.5.8 (24x24 targets): the links sit in a
@@ -115,7 +116,9 @@ export default function ScorecardHeader({
           >
             {member.name}
           </Title>
-          <p className="font-mono text-xs uppercase tracking-[0.08em] text-ink-lo sm:tracking-[0.12em]">
+          <p
+            className={`font-mono tracking-[0.08em] text-ink-lo sm:tracking-[0.12em] ${LONG_LABEL}`}
+          >
             {office} · {place} · {PARTY_LABELS[member.party] ?? member.party} · {tenure}
           </p>
           {(leadershipTitle || member.sponsorshipDescription) && (
