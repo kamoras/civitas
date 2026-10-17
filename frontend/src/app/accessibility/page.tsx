@@ -130,7 +130,9 @@ export default function AccessibilityPage() {
                   Controls are at least 24×24 pixels, WCAG 2.2&apos;s minimum target size, or spaced
                   so a 24-pixel circle around each touches no other; links inside a sentence are the
                   exception the standard allows. On a phone the MENU button, the way to every
-                  section, is a 44×44 target around the word. Nothing needs dragging.
+                  section, is a 44×44 target around the word, and every text box and menu is 44
+                  pixels tall with 16-pixel text, so an iPhone doesn&apos;t zoom the page when one
+                  is tapped. Nothing needs dragging.
                 </Item>
                 <Item label="Pop-up explanations">
                   A score&apos;s explanation opens on hover, focus or tap, stays open while the
@@ -159,7 +161,8 @@ export default function AccessibilityPage() {
                   The same routes, on the same production build, are loaded in Chrome at 320 and
                   1280 pixels wide and checked against every axe-core rule for WCAG 2.0, 2.1 and 2.2
                   at levels A and AA, including colour contrast and target size. A page wider than a
-                  320-pixel screen fails too.
+                  320-pixel screen fails too, and so does a text box or menu under 16 pixels or 44
+                  pixels tall at that width.
                 </Item>
                 <Item label="axe-core, in the test suite">
                   The member, president and justice scorecards, the Congress report pages and the

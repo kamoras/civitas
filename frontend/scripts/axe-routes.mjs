@@ -18,6 +18,19 @@ const require = createRequire(import.meta.url);
 const AXE = readFileSync(require.resolve("axe-core/axe.min.js"), "utf8");
 const TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 const WIDTHS = [320, 1280];
+// Controls nobody types into, so iOS never zooms for them.
+const NOT_TYPED_INTO = [
+  "checkbox",
+  "radio",
+  "range",
+  "hidden",
+  "submit",
+  "button",
+  "reset",
+  "image",
+  "color",
+  "file",
+];
 
 const configPath = process.argv[2];
 if (!configPath) {
@@ -75,6 +88,24 @@ try {
         );
         if (over > 0)
           failures.push(`${path} @320px  reflow: page is ${over}px wider than the screen`);
+        // iOS zooms the page on focus into a control under 16px (globals.css,
+        // "Form controls on a phone"). Size is checked on every control in
+        // the page, shown or not; height on the ones laid out.
+        const small = await page.evaluate((skip) => {
+          const out = [];
+          for (const el of document.querySelectorAll("input, select, textarea")) {
+            if (skip.includes(el.type)) continue;
+            const fs = parseFloat(getComputedStyle(el).fontSize);
+            const r = el.getBoundingClientRect();
+            const name = el.id || el.name || el.getAttribute("aria-label") || el.tagName;
+            if (fs < 16) out.push(`${name}: ${fs}px text`);
+            else if (r.width > 0 && r.height < 43.5)
+              out.push(`${name}: ${Math.round(r.height)}px tall`);
+          }
+          return out;
+        }, NOT_TYPED_INTO);
+        for (const s of small)
+          failures.push(`${path} @320px  phone control under 16px or 44px: ${s}`);
       }
       console.log(`${path} @${width}px: ${violations.length} violation(s)`);
       await page.close();
