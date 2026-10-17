@@ -1185,7 +1185,8 @@ def _tallied(rc: dict, congress: int | None = None) -> dict:
 _POSITION_COLUMNS: Columns = [
     ("last_name", "the surname as the chamber's record prints it"),
     ("first_name", "as the Senate's record prints it; empty on a House roll call"),
-    ("name", "the member's full name where Civitas has a page for them"),
+    ("name", "a representative's full name where Civitas has a page for them; empty for a senator (first_name "
+             "and last_name give it) and a former representative"),
     ("party", "the party the record gives"), ("state", "two-letter state code"),
     ("district", "a representative's district (0 at-large) where known"),
     ("position", "as the chamber recorded it"),
