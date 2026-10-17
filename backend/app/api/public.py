@@ -981,7 +981,9 @@ def _member_votes_csv(db: Session, chamber: str, member_id: str, request: Reques
         rc = _roll_call(v["rollCall"]) or {}
         rows.append({
             "date": v["date"], "chamber": rc.get("chamber"), "congress": rc.get("congress"),
-            "session": rc.get("session"), "number": rc.get("number"), "bill_id": v["billId"],
+            "session": rc.get("session"), "number": rc.get("number"),
+            # The one spelling the JSON gives (a Senate roll call stores "H.R. 1").
+            "bill_id": canonical_bill_id(v["billId"]) or v["billId"],
             "bill_name": v["billName"], "question": rc.get("question"), "result": rc.get("result"),
             "vote": v["vote"], "voted_with_party": v["votedWithParty"], "party_leaning": v["partyLeaning"],
             "counted_as_break": v["countedAsBreak"], "policy_area": v["policyArea"],

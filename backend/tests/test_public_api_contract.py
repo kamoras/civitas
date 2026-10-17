@@ -659,6 +659,14 @@ def test_score_csv_is_the_leaderboard_with_its_method(client, db_session):
     assert float(doe["overall"]) == next(e for e in listed if e["id"] == "S000001")["representationScore"]["overall"]
 
 
+def test_votes_csv_names_bills_in_the_one_spelling(client, db_session):
+    db_session.query(KeyVote).filter_by(senator_id="S000001").update({"bill_id": "H.R. 1"})
+    db_session.query(RollCall).filter_by(id=1).update({"bill_id": None})
+    db_session.commit()
+    (row,) = _csv_rows(client, "/senators/S000001/votes.csv")
+    assert row["bill_id"] == "HR.1"
+
+
 def test_votes_csv_is_every_position(client):
     (row,) = _csv_rows(client, "/senators/S000001/votes.csv")
     assert (row["vote"], row["voted_with_party"], row["bill_id"], row["number"]) == ("Yea", "true", "HR.1", "5")
