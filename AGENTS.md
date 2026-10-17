@@ -1372,9 +1372,10 @@ more outlets whose lede compose() verified (`trend_poster.tragedy_issue_refusal`
 the post quotes that lede, credited to its outlet, under the neutrality gate
 and the loaded-language vote). The political-violence vote was removed
 2026-10-16: agents' shootings, deaths in detention and attacks on the
-Capitol are in scope, and the news answers them before any vote or document. Every word is template text, a
-stored record field, or the trend's name quoted and attributed to Bluesky — no
-model. Selection is party-blind (rank weight × match strength); each trend gets
+Capitol are in scope, and the news answers them before any vote or document. Every word is template text or a
+stored record field: the record's own line, then its date and source in
+parentheses (`trend_poster.record_sentences`), with no "trending" and no echo
+of the trend's name, so the line must stand alone — no model. Selection is party-blind (rank weight × match strength); each trend gets
 one `TrendCandidate` audit row with the parties of the members it names and of
 the record's sponsors, and `check_party_balance` alerts when the posted share
 diverges from the eligible pool's (exact binomial). The post's picture is the
