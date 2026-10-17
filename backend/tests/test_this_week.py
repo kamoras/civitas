@@ -116,7 +116,7 @@ class TestCommentDeadlines:
         ])
         db_session.add(ActionIssue(id=42, date="2026-10-08", rank=1, title="An issue", related_explore_ids="[3]"))
         db_session.commit()
-        r = tw.comment_deadlines(db_session)
+        r = tw.comment_deadlines(db_session)["worth"]
         assert [d["title"] for d in r] == ["Rule in the news", "Cited rule", "Uncited rule"]
         assert r[0]["issueId"] == to_public_id(42) and r[0]["daysLeft"] == 51
         assert r[1]["citedBy"] == 2 and r[1]["issueId"] is None
@@ -126,20 +126,48 @@ class TestCommentDeadlines:
         db_session.add_all([_rule(10 + i, f"Series {i}", "2026-10-20", rins=["2120-AA64"]) for i in range(3)])
         db_session.add(ActionIssue(id=43, date="2026-10-10", rank=1, title="An issue", related_explore_ids="[11]"))
         db_session.commit()
-        assert [d["id"] for d in tw.comment_deadlines(db_session)] == [11]
+        assert [d["id"] for d in tw.comment_deadlines(db_session)["worth"]] == [11]
 
     def test_a_draft_retired_unconfirmed_is_not_news(self, db_session):
         db_session.add(_rule(3, "Rule", "2026-12-01"))
         db_session.add(ActionIssue(id=45, date="2026-10-08", rank=1, title="Final rule: x", related_explore_ids="[3]",
                                    status="developing", is_current=False))
         db_session.commit()
-        assert tw.comment_deadlines(db_session)[0]["issueId"] is None
+        assert tw.comment_deadlines(db_session)["worth"][0]["issueId"] is None
 
     def test_an_old_issue_is_not_news(self, db_session):
         db_session.add(_rule(3, "Rule", "2026-12-01"))
         db_session.add(ActionIssue(id=44, date="2026-09-01", rank=1, title="Old", related_explore_ids="[3]"))
         db_session.commit()
-        assert tw.comment_deadlines(db_session)[0]["issueId"] is None
+        assert tw.comment_deadlines(db_session)["worth"][0]["issueId"] is None
+
+    def test_next_is_the_soonest_closing_today_included(self, db_session):
+        # Backlog 7 #15: the strip's "next comment deadline" named the rule
+        # in the news four days out while two rules closed that day.
+        db_session.add_all([
+            _rule(3, "Rule in the news", "2026-10-15"),
+            _rule(8, "Closes today", "2026-10-11"),
+            _rule(9, "Closes today too", "2026-10-11"),
+            *[_rule(20 + i, f"Series {i}", "2026-10-11", rins=["2120-AA64"]) for i in range(3)],
+        ])
+        db_session.add(ActionIssue(id=46, date="2026-10-10", rank=1, title="An issue", related_explore_ids="[3]"))
+        db_session.commit()
+        r = tw.comment_deadlines(db_session)
+        assert r["worth"][0]["title"] == "Rule in the news"
+        assert r["next"]["id"] == 8 and r["next"]["daysLeft"] == 0
+
+    def test_no_open_rule_has_no_next(self, db_session):
+        assert tw.comment_deadlines(db_session) == {"worth": [], "next": None}
+
+
+def test_next_deadline_is_on_the_deadlines_own_clock(db_session, freeze_utcnow):
+    # 02:00 UTC on the 17th is 22:00 Eastern on the 16th: a period closing
+    # on the 16th is still open and is the next deadline.
+    freeze_utcnow(datetime(2026, 10, 17, 2))
+    db_session.add_all([_rule(1, "Closes on the 16th", "2026-10-16"), _rule(2, "Later", "2026-10-20")])
+    db_session.commit()
+    nxt = tw.comment_deadlines(db_session)["next"]
+    assert nxt["id"] == 1 and nxt["daysLeft"] == 0
 
 
 def test_the_endpoint(db_session, freeze_utcnow, monkeypatch):
@@ -164,7 +192,7 @@ def test_the_endpoint(db_session, freeze_utcnow, monkeypatch):
     assert {d["state"] for d in deadlines} == set(body["election"]["states"]) - unread
     assert [d["closesOn"] for d in deadlines] == sorted(d["closesOn"] for d in deadlines)
     assert all(d["closesOn"] >= "2026-10-11" and d["sentence"] for d in deadlines)
-    assert body["commentDeadlines"] == []
+    assert body["commentDeadlines"] == [] and body["nextCommentDeadline"] is None
     assert body["congress"]["sentence"] == (
         "The Senate's next meeting is not on record yet. The House's next meeting is not on record yet."
     )

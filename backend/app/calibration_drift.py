@@ -60,6 +60,7 @@ GATES = {
     "trend_loaded": ("trend_gates_calibration.json", "trend names voted loaded"),
     "committee_routing": ("committee_routing_calibration.json", "issues routed to a committee"),
     "member_photo": ("member_photo_calibration.json", "members switched to the bioguide portrait"),
+    "roll_call_links": ("roll_call_link_calibration.json", "stories linked to a related vote in Congress"),
 }
 
 

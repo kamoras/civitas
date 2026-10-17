@@ -1420,6 +1420,12 @@ reasons are in `scheduler._hourly_action_refresh`); only an overlapping
 refresh of its own holds it back. The hourly bill refresh still stands down
 for the Senate and House runs, which rewrite the rows it updates.
 
+A gate's labels come from the data wherever the data supplies one (the
+relevance gate's publisher labels above). Hand labels are the exception, used
+only where it was checked that no data-supplied label exists (committee
+routing; the story-to-vote link, `app/roll_call_links.py`), and such a gate
+records each data-supplied label that turns up later for its next refit.
+
 Running beside the chain makes it a second writer on SQLite's one write
 lock, so **no refresh stage holds a write transaction across slow work**
 (a model call, an embedding pass, a network fetch): each stage commits
@@ -1480,6 +1486,29 @@ Each issue's actions are fixed templates around stored data:
   `type`) still open for comment whose title clears `EXPLORE_TITLE_MIN_SIM`
   (`_open_comment_docs`). The API drops it once the period closes (#903's
   open-only rule).
+
+**Related votes in Congress** (`app/roll_call_links.py`, outside `app/pipeline/`
+like `committee_routing`): each issue and monitor update is linked to the roll
+calls taken from three days before its date to two after whose measure title
+is close to its headline (mean of the two models' cosines at the calibrated
+threshold; `app/data/roll_call_link_calibration.json`, from hand-labelled
+pairs by `scripts/calibrate_roll_call_links.py`, under the precision rule; the
+test fails until the script is rerun after the examples change). Computed in
+the hourly refresh and stored as refs (`ActionIssue.related_roll_call_refs`,
+`MonitorUpdate.roll_call_refs`); the API reads them into `issue_roll_calls`
+(so the members panel and call script use them) and a monitor's
+`onTheRecord`. Worded as related, never as a cause. An amendment vote is
+compared by its stated purpose (`RollCall.amendment_purpose`) and is never
+linked without one: its title names only the sponsor. Its labels are by hand
+**only because no data-supplied label exists** (in the replay, 0 stories'
+articles named a bill a candidate vote was on, and 2 issues had a vote
+record as their primary source; the committee-routing precedent). Every
+structural link found from now on is kept as a data-supplied label
+(`RollCallLinkLabel`, `record_structural_labels`); recalibrate from those
+once there are enough. Person names are `[name]` in the examples and in live
+text (`NameMask`), and the mask is left out of what is compared. The gate is
+registered with the calibration-drift check (`roll_call_links` in
+`calibration_drift.GATES`).
 
 The Today tab's open comment periods are ranked by salience, not deadline
 (`comment_periods.salience`, shared with agency pages and Explore's
@@ -2215,6 +2244,7 @@ the pending list).
 | Enums, weights, industry codes | `backend/app/config_definitions.py` |
 | Senator service + paginated votes | `backend/app/services/senator_service.py` |
 | Action Center API | `backend/app/api/action.py` |
+| Related votes in Congress (story to roll call, at write time) + monitor "On the record" | `backend/app/roll_call_links.py`, `backend/scripts/calibrate_roll_call_links.py`, `backend/app/data/roll_call_link_*.json`, `frontend/src/components/action/RelatedVotes.tsx`, `OnTheRecord.tsx` |
 | Trend posts ("On the record"): getTrends reader, gates, pinned record matching, audit, record cards | `backend/app/pipeline/fetch/trending.py` (`fetch_bluesky_trends`), `analyze/trend_relevance.py`, `analyze/trend_evidence.py`, `analyze/trend_poster.py`, `backend/scripts/calibrate_trend_gates.py`, `backend/app/services/record_cards.py`, `backend/app/api/cards.py`, `frontend/src/app/api/og/route.tsx`, `frontend/src/components/admin/TrendPostsDashboard.tsx`, `docs/research/trend-posts.md` |
 | Publishing: every post stored, then sent to Bluesky; the Atom feeds | `backend/app/broadcast.py` (`publish`, `FEEDS`), `backend/app/api/feed.py`, `frontend/src/app/feeds/page.tsx`; the posting modules (`bluesky_poster.py`, `bluesky_spotlight.py`, `congress_bluesky.py`, `election_bluesky.py`, `trend_poster.py`) decide what and when; a post may carry its own image (`image_url`/`alt_text`, sent as an image embed with the link card as fallback); the hours a non-news post reaches Bluesky are `app/data/bluesky_post_windows.json` (`scripts/fetch_bluesky_activity.py`, `broadcast.SCHEDULED_KINDS`) |
 | Representative API routes | `backend/app/api/representatives.py` |
