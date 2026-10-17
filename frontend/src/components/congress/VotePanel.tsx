@@ -10,6 +10,10 @@ import AmendmentPurpose from "./AmendmentPurpose";
 
 const TONE = { yes: "text-phos-mid", no: "text-signal-red", neutral: "text-ink-lo" } as const;
 
+/** Votes listed before the "All N votes" disclosure. H.R. 1 has 47, which
+ *  put everything after them about 47 rows down a phone screen. */
+const VOTES_SHOWN = 5;
+
 function voteKey(v: { chamber: string; session: number; number: number }) {
   return `vote-${v.chamber}-${v.session}-${v.number}`;
 }
@@ -134,84 +138,103 @@ export default function VotePanel({
     );
   }
 
+  // The selected vote's split and members open under its own row: below
+  // the whole list, a phone reader tapped a vote and saw nothing change (the
+  // panel was 47 rows, about 4,700px, further down on H.R. 1).
+  const detailPanel = vote && (
+    <div className="flex flex-col gap-4 border border-white/15 bg-surface p-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-lo">
+            {CHAMBER_NAME[vote.chamber]} vote {vote.number} · {shortDate(vote.date)}
+          </p>
+          <p className="mt-1 text-lg font-bold text-ink-hi">
+            {vote.question}: {voteResult(vote).toLowerCase()}, <TallyText vote={vote} />
+          </p>
+        </div>
+        <Link
+          href={rollCallHref({ ...vote, congress })}
+          className="font-mono text-xs uppercase tracking-[0.12em] text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
+        >
+          Open the roll call &rarr;
+        </Link>
+      </div>
+      <div className="flex flex-col gap-2">
+        {vote.parties.map((p) => (
+          <PartyBar key={p.party} split={p} />
+        ))}
+      </div>
+      {failed && (
+        <p className="text-sm text-signal-amber">
+          Each member&apos;s vote could not be loaded. Try again shortly.
+        </p>
+      )}
+      {!detail && !failed && (
+        <p className="text-sm text-ink-lo">Loading each member&apos;s vote…</p>
+      )}
+      {detail && (
+        <div className="border-t border-white/[0.09] pt-4">
+          <VoteMembers members={detail.members} collapsible />
+        </div>
+      )}
+    </div>
+  );
+
+  const row = (v: BillRecordVote) => {
+    const key = voteKey(v);
+    const on = key === selected;
+    return (
+      <li key={key} id={key} className="border-b border-white/[0.09]">
+        <button
+          type="button"
+          aria-pressed={on}
+          onClick={() => setSelected(key)}
+          className={`grid w-full grid-cols-[6rem_minmax(0,1fr)] gap-x-4 gap-y-2 py-3 text-left transition-colors sm:grid-cols-[6rem_minmax(0,1fr)_9.5rem] ${
+            on ? "bg-white/[0.04]" : "hover:bg-white/[0.02]"
+          }`}
+        >
+          <span className="flex flex-col gap-1 pl-2 font-mono text-xs uppercase tracking-[0.1em] text-ink-lo">
+            <span>
+              {CHAMBER_NAME[v.chamber]} <span className="sr-only">roll call </span>
+              {v.number}
+            </span>
+            <span className="text-ink-min">{shortDate(v.date)}</span>
+          </span>
+          <span className="flex min-w-0 flex-col gap-1">
+            <span className="text-[15px] leading-snug text-ink">{v.question}</span>
+            <AmendmentPurpose vote={v} chamber={v.chamber} compact />
+          </span>
+          <span className="col-start-2 flex flex-col items-start gap-1 pr-2 sm:col-start-auto sm:items-end">
+            <span
+              className={`font-mono text-xs uppercase tracking-[0.1em] ${TONE[resultTone(v.rejected)]}`}
+            >
+              {voteResult(v)}
+            </span>
+            <VoteCount vote={v} />
+          </span>
+        </button>
+        {on && <div className="mb-3">{detailPanel}</div>}
+      </li>
+    );
+  };
+  const rest = votes.slice(VOTES_SHOWN);
+  // Open when a link to one of the folded votes selected it; only the link,
+  // so choosing a vote never shuts a list the reader opened.
+  const linkedIndex = votes.findIndex((v) => voteKey(v) === fromHash);
+
   return (
     <div className="flex flex-col gap-4">
-      <ul className="flex flex-col">
-        {votes.map((v) => {
-          const key = voteKey(v);
-          const on = key === selected;
-          return (
-            <li key={key} id={key} className="border-b border-white/[0.09]">
-              <button
-                type="button"
-                aria-pressed={on}
-                onClick={() => setSelected(key)}
-                className={`grid w-full grid-cols-[6rem_minmax(0,1fr)] gap-x-4 gap-y-2 py-3 text-left transition-colors sm:grid-cols-[6rem_minmax(0,1fr)_9.5rem] ${
-                  on ? "bg-white/[0.04]" : "hover:bg-white/[0.02]"
-                }`}
-              >
-                <span className="flex flex-col gap-1 pl-2 font-mono text-xs uppercase tracking-[0.1em] text-ink-lo">
-                  <span>
-                    {CHAMBER_NAME[v.chamber]} <span className="sr-only">roll call </span>
-                    {v.number}
-                  </span>
-                  <span className="text-ink-min">{shortDate(v.date)}</span>
-                </span>
-                <span className="flex min-w-0 flex-col gap-1">
-                  <span className="text-[15px] leading-snug text-ink">{v.question}</span>
-                  <AmendmentPurpose vote={v} chamber={v.chamber} compact />
-                </span>
-                <span className="col-start-2 flex flex-col items-start gap-1 pr-2 sm:col-start-auto sm:items-end">
-                  <span
-                    className={`font-mono text-xs uppercase tracking-[0.1em] ${TONE[resultTone(v.rejected)]}`}
-                  >
-                    {voteResult(v)}
-                  </span>
-                  <VoteCount vote={v} />
-                </span>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-
-      {vote && (
-        <div className="flex flex-col gap-4 border border-white/15 bg-surface p-4">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-lo">
-                {CHAMBER_NAME[vote.chamber]} vote {vote.number} · {shortDate(vote.date)}
-              </p>
-              <p className="mt-1 text-lg font-bold text-ink-hi">
-                {vote.question}: {voteResult(vote).toLowerCase()}, <TallyText vote={vote} />
-              </p>
-            </div>
-            <Link
-              href={rollCallHref({ ...vote, congress })}
-              className="font-mono text-xs uppercase tracking-[0.12em] text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
-            >
-              Open the roll call &rarr;
-            </Link>
-          </div>
-          <div className="flex flex-col gap-2">
-            {vote.parties.map((p) => (
-              <PartyBar key={p.party} split={p} />
-            ))}
-          </div>
-          {failed && (
-            <p className="text-sm text-signal-amber">
-              Each member&apos;s vote could not be loaded. Try again shortly.
-            </p>
-          )}
-          {!detail && !failed && (
-            <p className="text-sm text-ink-lo">Loading each member&apos;s vote…</p>
-          )}
-          {detail && (
-            <div className="border-t border-white/[0.09] pt-4">
-              <VoteMembers members={detail.members} collapsible />
-            </div>
-          )}
-        </div>
+      <ul className="flex flex-col">{votes.slice(0, VOTES_SHOWN).map(row)}</ul>
+      {rest.length > 0 && (
+        // A native disclosure, open when a link to one of these votes
+        // ("#vote-senate-2-243") selected it.
+        <details open={linkedIndex >= VOTES_SHOWN || undefined} className="group">
+          <summary className="inline-flex min-h-11 w-fit cursor-pointer list-none items-center font-mono text-xs uppercase tracking-[0.12em] text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos [&::-webkit-details-marker]:hidden">
+            <span className="group-open:hidden">All {votes.length} votes</span>
+            <span className="hidden group-open:inline">Show the latest {VOTES_SHOWN} only</span>
+          </summary>
+          <ul className="flex flex-col">{rest.map(row)}</ul>
+        </details>
       )}
     </div>
   );
