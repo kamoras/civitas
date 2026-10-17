@@ -3,7 +3,14 @@ import { connection } from "next/server";
 import type { LiveResults, PviMap, RaceSummary } from "@/types/election";
 import type { ElectionCalendar, SpecialsBoard } from "@/types/specials";
 import type { ArchiveIndex } from "@/types/electionArchive";
-import type { FecDeadlineEvent, NewCongress, NextField, OddYearStates } from "@/types/nextCycle";
+import type {
+  ElectionAdministration,
+  FecDeadlineEvent,
+  NewCongress,
+  NextField,
+  OddYearStates,
+  PresidentialContest,
+} from "@/types/nextCycle";
 import type { RedistrictingIndex } from "@/types/redistricting";
 import { TOPIC_FEEDS, pageMetadata } from "@/lib/site";
 import { describeElections } from "@/lib/seo";
@@ -118,15 +125,18 @@ async function readInitial(): Promise<ElectionsInitial> {
   // cycles and through the primaries, the archive once the count settles.
   const season = specials?.season?.season;
   const between = !!specials?.season?.betweenCycles;
-  const [calendar, archive, field, newCongress, fec, redistricting, oddYear] = await Promise.all([
-    between || season === "ramp" ? fetchJson<ElectionCalendar>("/api/elections/calendar") : null,
-    season === "post_certification" ? fetchJson<ArchiveIndex>("/api/elections/archive") : null,
-    between || season === "ramp" ? fetchJson<NextField>("/api/elections/field") : null,
-    season === "off_season" ? fetchJson<NewCongress>("/api/elections/new-congress") : null,
-    fetchJson<{ deadline: FecDeadlineEvent | null }>("/api/elections/fec-deadline"),
-    between ? fetchJson<RedistrictingIndex>("/api/elections/redistricting") : null,
-    between ? fetchJson<OddYearStates>("/api/elections/odd-year") : null,
-  ]);
+  const [calendar, archive, field, newCongress, fec, redistricting, oddYear, presidential, admin] =
+    await Promise.all([
+      between || season === "ramp" ? fetchJson<ElectionCalendar>("/api/elections/calendar") : null,
+      season === "post_certification" ? fetchJson<ArchiveIndex>("/api/elections/archive") : null,
+      between || season === "ramp" ? fetchJson<NextField>("/api/elections/field") : null,
+      season === "off_season" ? fetchJson<NewCongress>("/api/elections/new-congress") : null,
+      fetchJson<{ deadline: FecDeadlineEvent | null }>("/api/elections/fec-deadline"),
+      between ? fetchJson<RedistrictingIndex>("/api/elections/redistricting") : null,
+      between ? fetchJson<OddYearStates>("/api/elections/odd-year") : null,
+      fetchJson<PresidentialContest>("/api/elections/presidential"),
+      between ? fetchJson<ElectionAdministration>("/api/elections/administration") : null,
+    ]);
   return {
     pvi,
     phase,
@@ -138,6 +148,8 @@ async function readInitial(): Promise<ElectionsInitial> {
     fecDeadline: fec?.deadline ?? null,
     redistrictingWatch: redistricting?.watch ?? null,
     oddYear,
+    presidential,
+    administration: admin,
     renderedAt,
   };
 }

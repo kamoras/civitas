@@ -304,7 +304,9 @@ export function placeDistrictSummary(
  * someone with no FEC report for this election each say so. Read from the
  * figure, not `hasRaisedFunds`: the FEC's roster flag can say no money
  * while its totals report some (12 such candidates on 2026-10-08). */
-export function raisedLabel(c: BallotCandidate): string {
+export function raisedLabel(
+  c: Pick<CandidateSummary, "fecFiled" | "lastFinancialsSync" | "contributions">
+): string {
   if (c.fecFiled === false) return "no FEC filing";
   if (c.lastFinancialsSync == null) return "awaiting FEC sync";
   if (!c.contributions) return "no funds reported";

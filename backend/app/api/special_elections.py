@@ -2,12 +2,16 @@
 season /elections is in, and the next cycle (app.next_cycle). Every figure comes from app.special_elections,
 computed from stored data on the read (no model, no fetch)."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.response_helpers import CACHE_TTL_DETAIL_S, CACHE_TTL_LIST_S, cached_json
+from app.api.response_helpers import CACHE_TTL_DETAIL_S, CACHE_TTL_LIST_S, CACHE_TTL_REFERENCE_S, cached_json
 from app.database import get_db
 from app.election_phase import election_today, season
+from app import electoral_votes
+from app.api.elections import _candidate_summary
+from app.election_administration import administration
+from app.models import FederalElectionDate, Race
 from app.next_cycle import deadline_event, field, new_congress
 from app.pipeline.fetch.ballot_lookup import lookup_for_state
 from app.state_ballot_scope import odd_year_elections
@@ -76,3 +80,48 @@ def odd_year():
         for row in odd_year_elections(year)
     ]
     return cached_json({"year": year, "states": states}, max_age=CACHE_TTL_LIST_S)
+
+
+# How many of the presidential contest's registered candidates the page
+# lists, most money raised first; the count says how many there are.
+PRESIDENTIAL_SHOWN = 12
+
+
+@router.get("/presidential")
+def presidential(db: Session = Depends(get_db)):
+    """The presidential contest of the site's cycle, when it holds one:
+    electoral votes by state from the House apportionment, the candidates
+    registered with the FEC (its statutory candidates; each state certifies
+    who is on its own ballot), and the presidential primaries ahead on the
+    FEC's calendar. No count is read for it and no race is called."""
+    current = season(db)
+    cycle = current.cycle
+    body = {"cycle": cycle, "presidential": electoral_votes.is_presidential(cycle),
+            "nextPresidential": cycle + (-cycle) % 4, "electoralVotes": electoral_votes.summary()}
+    if body["presidential"]:
+        race = db.get(Race, f"{cycle}-PRES")
+        cands = sorted(race.candidates if race else [], key=lambda c: -(c.contributions or 0))
+        body["registered"] = len(cands)
+        body["candidates"] = [_candidate_summary(c) for c in cands[:PRESIDENTIAL_SHOWN]]
+        body["primaries"] = [
+            {"date": r.election_date, "state": r.state, "stateName": STATE_NAMES.get(r.state, r.state),
+             "label": r.type_label or r.type_code}
+            for r in db.query(FederalElectionDate).filter(
+                FederalElectionDate.office == "P", FederalElectionDate.election_year == cycle,
+                FederalElectionDate.is_special.is_(False),
+                FederalElectionDate.election_date >= election_today().isoformat(),
+            ).order_by(FederalElectionDate.election_date, FederalElectionDate.state).limit(PRESIDENTIAL_SHOWN)
+        ]
+    return cached_json(body, max_age=CACHE_TTL_LIST_S)
+
+
+@router.get("/administration")
+def election_administration():
+    """How the last federal general was run, by state: registration,
+    turnout, how people voted, and mail and provisional ballots rejected,
+    from the EAC's Election Administration and Voting Survey. Null figures
+    where a state's jurisdictions didn't all report."""
+    data = administration()
+    if data is None:
+        raise HTTPException(status_code=503, detail="The EAC survey file is missing")
+    return cached_json(data, max_age=CACHE_TTL_REFERENCE_S)

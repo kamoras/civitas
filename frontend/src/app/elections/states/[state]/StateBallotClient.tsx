@@ -1887,6 +1887,17 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                   {candidateCountLabel(federalCandidates.length, ballot.ballotBasis?.basis)}
                   {thirdParty > 0 && `, ${thirdParty} outside the two major parties`}
                   {withRecords > 0 && ` · ${withRecords} with a congressional voting record`}
+                  {ballot.electoralVotes != null && (
+                    <>
+                      {" · "}
+                      <Link
+                        href="/elections#president"
+                        className="inline-flex min-h-6 items-center underline decoration-white/30 hover:text-phos"
+                      >
+                        {ballot.electoralVotes} electoral votes for president
+                      </Link>
+                    </>
+                  )}
                   {ballot.statePvi !== null && !resultsMode && (
                     <>
                       {" · "}

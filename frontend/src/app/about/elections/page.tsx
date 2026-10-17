@@ -274,6 +274,15 @@ export default async function ElectionsChapter() {
           House maps are settled, and how each map in force got there: an act of the legislature, a
           vote, a commission plan or a court order, each with its official source.
         </P>
+        <P>
+          In a presidential year the page adds the presidential contest: each state&apos;s electoral
+          votes (its House seats plus two, three for the District of Columbia), the candidates
+          registered with the FEC, and the primaries and caucuses ahead. Civitas reads no
+          presidential count and calls no race. And between cycles it shows how the last election
+          was run, from the Election Assistance Commission&apos;s survey of every election office:
+          turnout, voting by mail, and how many mail and provisional ballots were rejected. A rate
+          is shown only where every office in a state reported.
+        </P>
       </Section>
 
       <Section id="not-your-ballot" title="Why it isn’t “your ballot”">
