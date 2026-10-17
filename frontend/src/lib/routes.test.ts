@@ -63,6 +63,8 @@ const NOT_IN_A_SECTION = new Set([
   "/environmental",
   "/feedback",
   "/feeds",
+  // Reached from the header's SEARCH on every page, not from a section.
+  "/search",
 ]);
 
 /** Every page route under app/: route groups dropped. */

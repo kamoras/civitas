@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { IssueTags, WhatYouCanDo } from "./IssueEnrichment";
-import { callScript } from "./ContactYourMembers";
+import { callScript, recordLine } from "./ContactYourMembers";
+import RelatedVotes from "./RelatedVotes";
 import type { ActionIssue, IssueMembers } from "@/types/action";
 import * as api from "@/lib/api";
 
@@ -420,7 +421,76 @@ describe("IssueTags", () => {
   });
 });
 
+describe("Related votes in Congress", () => {
+  it("lists each linked roll call with its result and a link to every member's vote", () => {
+    render(
+      <RelatedVotes
+        issue={issue({
+          relatedVotes: [
+            {
+              chamber: "senate",
+              congress: 119,
+              session: 2,
+              number: 244,
+              date: "2026-09-24",
+              question: "On the Concurrent Resolution H.Con.Res. 89",
+              result: "Concurrent Resolution Rejected",
+              billLabel: "H.Con.Res. 89",
+              title: "A concurrent resolution directing the President to remove Armed Forces",
+              yeas: 49,
+              nays: 50,
+              rejected: true,
+              margin: -1,
+            },
+          ],
+        })}
+      />
+    );
+    expect(screen.getByRole("heading", { name: "Related votes in Congress" })).toBeInTheDocument();
+    expect(screen.getByText(/H.Con.Res. 89 · A concurrent resolution/)).toBeInTheDocument();
+    expect(screen.getByText(/Concurrent Resolution Rejected 49–50/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Senate roll call 244/ })).toHaveAttribute(
+      "href",
+      "/congress/votes/senate/119/2/244"
+    );
+  });
+
+  it("renders nothing for an issue with no linked vote", () => {
+    const { container } = render(<RelatedVotes issue={issue({ relatedVotes: [] })} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+});
+
 describe("callScript", () => {
+  it("cites the member's recorded vote on the newest related roll call, from the record only", () => {
+    const vote = {
+      chamber: "senate" as const,
+      congress: 119,
+      session: 2,
+      number: 244,
+      date: "2026-09-24",
+      question: "On the Concurrent Resolution H.Con.Res. 89",
+      result: "Rejected",
+      billLabel: "H.Con.Res. 89",
+    };
+    const text = callScript(
+      issue({ summary: "A vote failed.", summarySource: "NPR" }),
+      { name: "Ann Ash", chamber: "senate" },
+      "Vermont",
+      "ask",
+      [{ v: vote, position: "Nay" }]
+    );
+    expect(text.split("\n")[2]).toBe(
+      "On September 24, 2026, Sen. Ann Ash voted Nay on H.Con.Res. 89."
+    );
+    expect(recordLine("Sen. Ann Ash", [])).toBeNull();
+    expect(
+      recordLine("Rep. Bo Birch", [
+        { v: { ...vote, billLabel: null, title: "A nominee" }, position: "Aye" },
+      ])
+    ).toBe("On September 24, 2026, Rep. Bo Birch voted Aye on A nominee.");
+  });
+
   const sen = { name: "Ann Ash", chamber: "senate" };
   const withBill = issue({
     relatedBills: [{ name: "S. 2403", id: "S.2403", url: "https://www.congress.gov/x" }],
