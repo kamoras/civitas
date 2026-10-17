@@ -9,12 +9,12 @@ from fastapi.testclient import TestClient
 
 from app.database import get_db
 from app.main import app
-from app.models import CongressDay, CongressEvent, RollCall
-from app.pipeline import congress_activity as ca
-from app.services import congress_service as cs
+from app.models import CongressDay, CongressEvent, ExploreDocument, RollCall
 from app.ordinals import ordinal
+from app.pipeline import congress_activity as ca
 from app.pipeline.fetch.congress import congress_first_year, congress_of_date
 from app.pipeline.fetch.floor_logs import house_roll_call_url, senate_roll_call_url
+from app.services import congress_service as cs
 from tests.congress_activity_helpers import _digest_responses, _fake_get
 
 # The first day the fixture week puts on record (its earliest roll call).
@@ -409,7 +409,6 @@ class TestCoverage:
     def test_floor_speeches_kept_from_a_past_congress_are_held(self, week_of_sept_21):
         # Speeches are kept after their Congress (explore_pipeline), so a
         # past Congress's floor debate is held once any of it was read.
-        from app.models import ExploreDocument
         held = congress_of_date(FIRST_DAY)
         past = held - 1
         assert cs.bill_coverage(week_of_sept_21, past)["floor"]["sentence"].startswith(
