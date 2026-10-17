@@ -2117,7 +2117,10 @@ touches `backend/requirements.txt` or `backend/app/pipeline/`.
 
 `conftest.py` holds the fast tests to that: in a test not marked slow,
 constructing a sentence-transformer raises at once and resolving any host
-but loopback fails at once, on CI as offline (`_fast_tests_offline`). Until
+but loopback fails at once, on CI as offline (`_fast_tests_offline`), and a
+model a slow test already loaded in the same process is hidden from it
+(`_slow_test_running`; until 2026-10-17 a fast test run after a slow one
+used the real model). Until
 2026-10 a fast test that reached the model downloaded it on CI and waited
 out the Hub client's retries offline (69 s a test), and one whose mocks
 missed a fetch read the live source on CI. The fetch modules' rate limiters
