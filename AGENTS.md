@@ -1551,7 +1551,9 @@ plus a day under five days, and neither raised a false alert. A feed with
 under a week of history has not shown a weekend yet, so the longest gap
 among feeds of its kind that have a week stands in.
 
-Then **multi-story digests are dropped at ingest** (`_digest_reason`) — an
+Then **multi-story digests are dropped at ingest** (`fetch/news_digest.digest_reason`,
+shared by every path that reads feed items: the Action Center and the election
+coverage ingest, which also re-checks its stored items and its posts) — an
 outlet's recurring briefing ("Up First", "Morning news brief", "The week in
 politics") is a single RSS item covering three to five unrelated stories, and
 every stage downstream treats it as one story. Four mechanical signals:
@@ -1575,7 +1577,11 @@ every stage downstream treats it as one story. Four mechanical signals:
   For the same reason an abbreviation's period ("U.S.", "Rep.") is not a
   sentence break, and photo credits and a broadcast sign-off ("… reports.")
   are not items: before 2026-10 those made 16 single stories in 627 feed
-  articles read as lists.
+  articles read as lists. A description the publisher cut ("…", "[…]") loses
+  its fragment the same way, and PBS's "joined <host> to discuss" sign-off is
+  not an item; "N takeaways" is not a digest title (every stored one was one
+  event's), "photos of the week" is (2026-10-17: 21 single stories in 1,457
+  stored race-coverage items and 20 in 875 feed articles were read as digests).
 - **A headline and body that tell the same unrelated stories**
   (`_parallel_stories`) — the two-story briefing the body check can't see
   ("<A>. And, <B>" over two teaser items): the headline's items name
@@ -2242,6 +2248,8 @@ the pending list).
 | Document citation graph + PageRank authority | `backend/app/pipeline/analyze/document_authority.py` |
 | Search-quality evaluation harness | `backend/scripts/evaluate_explore_search.py` |
 | News feed fetching (RSS) | `backend/app/pipeline/fetch/news_feeds.py` |
+| Multi-story digest detection (shared by the Action Center and race coverage) | `backend/app/pipeline/fetch/news_digest.py` |
+| Race coverage matching (full name plus the race) and the race-post checks (digest, race, certified ballot, labelled relevance threshold) | `backend/app/pipeline/analyze/election_coverage.py`, `analyze/election_bluesky.py` (`refusal`), `backend/scripts/calibrate_race_post_relevance.py`, `app/data/race_post_relevance*.json` |
 | Trending topic fetching | `backend/app/pipeline/fetch/trending.py` |
 | Donor-vote cross-referencing | `backend/app/pipeline/analyze/policy_alignment.py` |
 | Representative service + paginated votes | `backend/app/services/representative_service.py` |
