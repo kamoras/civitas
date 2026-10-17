@@ -4,6 +4,7 @@ import { shortDate } from "@/lib/congress";
 import DeadlineRibbon from "@/components/elections/DeadlineRibbon";
 import RegisterLink from "@/components/elections/RegisterLink";
 import { INLINE_LINK } from "@/lib/controlStyles";
+import { onThisPage } from "@/lib/onThisPage";
 
 /** "6 days left", "last day", "in 6 days": the backend's countdown, worded
  *  for a deadline or for a window that hasn't opened. */
@@ -144,6 +145,7 @@ export default function VoterCalendar({
       <section
         id="voter-deadlines"
         aria-labelledby="voter-deadlines-heading"
+        {...onThisPage("Voter deadlines")}
         className="mb-6 border border-white/15 bg-surface px-4 py-3"
       >
         {heading}
@@ -167,6 +169,7 @@ export default function VoterCalendar({
     <section
       id="voter-deadlines"
       aria-labelledby="voter-deadlines-heading"
+      {...onThisPage("Voter deadlines")}
       className="mb-6 border border-white/15 bg-surface px-4 py-3"
     >
       {heading}

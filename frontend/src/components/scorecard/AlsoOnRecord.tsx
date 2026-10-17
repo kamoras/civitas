@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { fetchRepStockTrades, fetchSenatorStockTrades } from "@/lib/api";
 import { countLobbiedBills } from "@/lib/lobbying";
 import type { Senator } from "@/types/senator";
+import { onThisPage } from "@/lib/onThisPage";
 
 export type RecordView = "trades" | "donorVotes" | "positions";
 
@@ -74,6 +75,7 @@ export default function AlsoOnRecord({
     <section className="flex flex-col gap-3" aria-labelledby="also-on-record">
       <h2
         id="also-on-record"
+        {...onThisPage("Also on record")}
         className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min"
       >
         Also on record, not part of the score

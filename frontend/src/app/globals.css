@@ -55,6 +55,15 @@ html {
 html:has([data-sticky-subnav]) {
   scroll-padding-top: calc(var(--header-clearance) + 3rem);
 }
+/* A phone's "on this page" bar (components/shared/OnThisPage.tsx) sits
+   under the header once the page's first section reaches it: a 2.75rem
+   (44px) target and its 3px ledger rule, in rem so it grows with a reader's
+   text size. A jump or a focused control lands below both (2.4.11). */
+@media (max-width: 639.98px) {
+  html:has([data-on-this-page]) {
+    scroll-padding-top: calc(var(--header-clearance) + 2.75rem + 3px);
+  }
+}
 
 body {
   color: var(--foreground);

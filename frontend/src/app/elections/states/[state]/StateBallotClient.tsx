@@ -80,6 +80,8 @@ import type {
   TownEntry,
 } from "@/types/election";
 import { INLINE_LINK } from "@/lib/controlStyles";
+import OnThisPage from "@/components/shared/OnThisPage";
+import { onThisPage } from "@/lib/onThisPage";
 
 // ── Detail content: what the drawer shows for each kind of contest ─────
 
@@ -1858,6 +1860,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
       <div className="min-h-screen bg-surface-base text-ink-hi">
         <Navbar />
         <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
+          <OnThisPage />
           <div className="mx-auto max-w-[1400px]">
             <SectionTabs section="elections" active="ballots" className="mb-4" />
             <Link
@@ -2066,7 +2069,12 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
 
             {/* Phone: the index of every contest, one line each; a contest
               opens on its own screen with Previous/Next. */}
-            <div className="lg:hidden" data-testid="ballot-index">
+            <div
+              className="lg:hidden"
+              data-testid="ballot-index"
+              id="contests"
+              {...onThisPage("Contests", contests.length)}
+            >
               <nav
                 aria-label="Contests on this ballot"
                 className="border border-white/25 bg-surface font-sans"
@@ -2147,7 +2155,11 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                   Research contest 1 →
                 </button>
               )}
-              <details className="mt-3 border border-white/25 bg-surface p-4">
+              <details
+                className="mt-3 border border-white/25 bg-surface p-4"
+                id="not-on-this-page"
+                {...onThisPage("Not on this page")}
+              >
                 <summary className="cursor-pointer text-sm font-bold text-ink-hi">
                   Not on this page
                 </summary>

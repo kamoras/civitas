@@ -20,6 +20,8 @@ import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import { absoluteUrl, billFeed } from "@/lib/site";
 import FollowFeed from "@/components/shared/FollowFeed";
+import OnThisPage from "@/components/shared/OnThisPage";
+import { onThisPage } from "@/lib/onThisPage";
 import { ordinal } from "@/components/scorecard/format";
 import { exploreHref } from "@/lib/exploreHref";
 
@@ -68,7 +70,11 @@ function SectionHead({
 }) {
   return (
     <div className="flex flex-wrap items-baseline justify-between gap-3">
-      <h2 id={id} className="font-display text-2xl font-extrabold text-ink-hi">
+      <h2
+        id={id}
+        {...onThisPage(title, count)}
+        className="font-display text-2xl font-extrabold text-ink-hi"
+      >
         {title}
         {count !== undefined && (
           // The comma is for a screen reader, which ran the two together
@@ -221,6 +227,7 @@ export default function BillPageView({
       <div className="min-h-screen bg-surface-base font-sans text-ink-hi">
         <Navbar />
         <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
+          <OnThisPage />
           <div className="mx-auto max-w-6xl">
             <SectionTabs section="congress" active="bills" />
             <nav aria-label="Breadcrumb" className="mb-4 text-sm text-ink-lo">
@@ -338,7 +345,7 @@ export default function BillPageView({
                   </div>
                 )}
                 {record?.journey && (
-                  <div id="journey">
+                  <div id="journey" {...onThisPage("Its path")}>
                     <BillJourney journey={record.journey} passage={record.passage} />
                   </div>
                 )}

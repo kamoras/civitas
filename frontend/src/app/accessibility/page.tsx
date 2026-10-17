@@ -93,9 +93,18 @@ export default function AccessibilityPage() {
                   inside while open (Tab and Shift+Tab both wrap), close on Escape, and return focus
                   to what opened them. Map tiles are one keyboard stop per state, opened with Enter.
                 </Item>
+                <Item label="Long pages on a phone">
+                  A member&apos;s scorecard, a bill, a roll call, a state ballot, the Supreme Court
+                  page and the About chapters show a bar under the header once their first section
+                  scrolls up: it names the section you are reading, and SECTIONS opens every section
+                  in a sheet from the bottom of the screen, the current one marked. Choosing one
+                  moves focus to its heading. The sheet keeps focus inside, closes on Escape, its
+                  44-pixel Close button or a tap outside it, and returns focus to SECTIONS.
+                </Item>
                 <Item label="Focus">
                   The element with keyboard focus always shows a 2px cyan outline, and the page
-                  scrolls so it is never hidden under the fixed header.
+                  scrolls so it is never hidden under the fixed header, or under a phone&apos;s
+                  section bar.
                 </Item>
                 <Item label="Contrast">
                   Text colours come from a fixed palette with no dimmer shades to reach for. The

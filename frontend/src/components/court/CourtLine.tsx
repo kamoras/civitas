@@ -3,6 +3,7 @@ import type { Court } from "@/types/court";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { SHARE_SECTION_ATTR, shareMetaAttrs } from "@/lib/shareImage";
 import { axisAt, positionDomain, signedPosition, surname } from "@/lib/court";
+import { onThisPage } from "@/lib/onThisPage";
 
 const MQ_SOURCE = "Martin-Quinn scores (Martin and Quinn 2002), mqscores.wustl.edu";
 
@@ -23,6 +24,7 @@ export default function CourtLine({ court }: { court: Court }) {
   return (
     <section
       id="line"
+      {...onThisPage("Where the justices sit")}
       aria-labelledby="line-heading"
       {...{ [SHARE_SECTION_ATTR]: "line" }}
       {...shareMetaAttrs({ source: MQ_SOURCE, asOf: null })}

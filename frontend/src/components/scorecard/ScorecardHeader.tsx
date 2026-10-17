@@ -13,6 +13,7 @@ import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import Photo from "@/components/Photo";
 import { HeldScoreNote, ThinDataNote } from "@/components/scorecard/HeldScore";
+import { onThisPage } from "@/lib/onThisPage";
 
 /**
  * `min-h-6` for WCAG 2.2 SC 2.5.8 (24x24 targets): the links sit in a
@@ -82,6 +83,7 @@ export default function ScorecardHeader({
     <header
       id="overview"
       {...{ [SHARE_SECTION_ATTR]: "overview" }}
+      {...onThisPage("Score")}
       className={`grid grid-cols-[minmax(0,1fr)] gap-6 border border-white/25 border-t-[3px] bg-surface px-5 py-6 font-sans sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:grid-rows-[auto_1fr] ${PARTY_BORDER[member.party]}`}
     >
       {/* Three blocks in reading order for a phone — who, the score, then

@@ -25,6 +25,8 @@ import SeatOnMap from "@/components/elections/SeatOnMap";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { fetchMapSeats } from "@/lib/api";
 import PresidentialSupportSection from "@/components/presidentialSupport/PresidentialSupportSection";
+import OnThisPage from "@/components/shared/OnThisPage";
+import { onThisPage } from "@/lib/onThisPage";
 
 const DOC_TYPE_LABELS: Record<string, string> = {
   "Senate Floor Speech": "FLOOR SPEECH",
@@ -71,9 +73,18 @@ function DocRow({ doc }: { doc: GovernmentDoc }) {
   );
 }
 
-function SectionBlock({ title, children }: { title: string; children: React.ReactNode }) {
+function SectionBlock({
+  title,
+  id,
+  children,
+}: {
+  title: string;
+  /** An anchor, which also lists the block in a phone's "on this page" bar. */
+  id?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="mb-6">
+    <div className="mb-6" id={id} {...(id ? onThisPage(title) : {})}>
       <TerminalTitlebar title={title} />
       <div className="border border-t-0 border-white/[0.07] bg-surface-base p-4">{children}</div>
     </div>
@@ -108,6 +119,9 @@ export default function PoliticianProfileClient({
     <div className="min-h-screen bg-surface-base text-ink-hi">
       <Navbar />
       <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
+        {/* A phone's section bar: fixed under the header once the score
+            scrolls away (it lists the sections marked with onThisPage). */}
+        <OnThisPage />
         <div className="max-w-7xl mx-auto">
           {/* Breadcrumb */}
           <div className="mb-6 font-mono text-xs text-ink-min">
@@ -241,7 +255,7 @@ export default function PoliticianProfileClient({
 
           {/* Active Issues */}
           {activeIssues.length > 0 && (
-            <SectionBlock title="In the Action Center">
+            <SectionBlock title="In the Action Center" id="in-the-action-center">
               <p className="font-mono text-xs text-ink-min tracking-widest mb-3">
                 CURRENTLY ACTIVE IN {activeIssues.length} ISSUE
                 {activeIssues.length !== 1 ? "S" : ""}
@@ -279,7 +293,7 @@ export default function PoliticianProfileClient({
 
           {/* Government Record */}
           {governmentRecord.totalDocs > 0 && (
-            <SectionBlock title="Government record">
+            <SectionBlock title="Government record" id="government-record">
               <p className="font-mono text-xs text-ink-min tracking-widest mb-3">
                 {governmentRecord.totalDocs} DOCUMENT{governmentRecord.totalDocs !== 1 ? "S" : ""}{" "}
                 ON PUBLIC RECORD · VERBATIM SOURCE LINKS
