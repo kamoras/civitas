@@ -1092,7 +1092,7 @@ client per issue an hour (`ISSUE_VIEW_PERIOD_S`). The state picker on an issue (
 explicit, unremembered choice from a list: the state goes in the URL that loads
 its members (`GET /api/action/issues/{id}/members?state=`) and nowhere else, and
 the House town filter runs in the browser over district lists the page already
-has. Keep both that way: a tap row that named a state would be a coarse
+has. `/congress`'s "Your members this Congress" works the same way (`GET /api/congress/members?state=`). Keep both that way: a tap row that named a state would be a coarse
 location log per issue.
 
 The admin dashboard's headline traffic figures are the two that measure people:
@@ -2577,7 +2577,7 @@ the bills page's "Active now" falls back to bills that moved this week and
 says so (`shown`/`movedSince`), a bill page states its stage's base rate
 (`stageBaseRate` — worded as what happens to bills at the stage, never a
 forecast for the bill), the Ongoing tab lists recently closed monitors, and
-`/compare` offers pairs that need no picking. Never fill the gap with model
+`/compare` offers pairs that need no picking, and `/congress` leads with the Congress so far (the days each chamber sat, how far its bills got; `services/congress_glance.py`) and, in a recess, shows the last day of business on its week and month cards. Never fill the gap with model
 text or a visitor's input (§7, §8).
 
 #### Accessibility: WCAG 2.2 AA is a merge requirement (2026-10)

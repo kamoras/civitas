@@ -2992,7 +2992,7 @@ class RollCallPosition(Base):
         Integer, ForeignKey("roll_calls.id", ondelete="CASCADE"), nullable=False, index=True,
     )
     # House XML carries the bioguide id; Senate XML carries the LIS id.
-    member_id: Mapped[str] = mapped_column(String(12), nullable=False)
+    member_id: Mapped[str] = mapped_column(String(12), nullable=False, index=True)
     last_name: Mapped[str] = mapped_column(String(80), nullable=False)
     first_name: Mapped[str] = mapped_column(String(80), default="")
     party: Mapped[str] = mapped_column(String(2), default="")
