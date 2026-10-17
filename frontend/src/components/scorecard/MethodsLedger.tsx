@@ -41,7 +41,7 @@ const METHODS: {
     cites: ["kirkland2017", "nokken2004", "ansolabehere2022"],
     source: (chamber) =>
       chamber === "senate"
-        ? "Roll calls this Congress as Senate.gov records them; Voteview's Nokken-Poole positions; Cook PVI state lean; Cooperative Election Study approval."
+        ? "Roll calls this Congress as Senate.gov records them; Voteview's Nokken-Poole positions; the state's lean, computed by Civitas with Cook's formula from certified presidential returns; Cooperative Election Study approval."
         : "Roll calls this Congress as the House Clerk records them; Voteview's Nokken-Poole positions; Cook PVI district lean.",
   },
   {
@@ -196,16 +196,27 @@ function SinceScoredNote({ dim, shown }: { dim: ScoreBreakdownDimension; shown: 
   return null;
 }
 
-/** The seat lean the score read (Cook's PVI) and, for a House seat,
- * Civitas's own computed lean beside it — both the API's figures. */
-function SeatLean({ lean }: { lean?: AlignmentFacts["seatLean"] }) {
+/** The seat lean the score read and, for a House seat, Civitas's own
+ * computed lean beside it: both the API's figures. A House seat's is
+ * Cook's published PVI; a state's is computed by Civitas with Cook's
+ * formula (backend state_pvi.json), so it is not called Cook's. */
+export function SeatLean({
+  lean,
+  chamber,
+}: {
+  lean?: AlignmentFacts["seatLean"];
+  chamber: "senate" | "house";
+}) {
   if (!lean) return null;
   return (
     <>
       <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">Seat lean</dt>
       <dd className="text-ink-lo">
-        Cook PVI <span className="font-mono text-ink">{formatPvi(lean.cookPvi)}</span>, the figure
-        the score uses
+        {chamber === "senate" ? "State lean " : "Cook PVI "}
+        <span className="font-mono text-ink">{formatPvi(lean.cookPvi)}</span>
+        {chamber === "senate"
+          ? ", computed by Civitas with Cook's formula from certified presidential returns, the figure the score uses"
+          : ", the figure the score uses"}
         {lean.computedLean != null && (
           <>
             ; Civitas-computed{" "}
@@ -384,7 +395,10 @@ export default function MethodsLedger({
                 </dt>
                 <dd className="text-ink-lo">{m.source(chamber)}</dd>
                 {m.key === "constituentAlignment" && (
-                  <SeatLean lean={(dim?.facts as AlignmentFacts | undefined)?.seatLean} />
+                  <SeatLean
+                    lean={(dim?.facts as AlignmentFacts | undefined)?.seatLean}
+                    chamber={chamber}
+                  />
                 )}
               </dl>
             </article>

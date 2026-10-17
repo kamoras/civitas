@@ -9,6 +9,13 @@
       "url": "/congress"
     },
     {
+      "id": "site-search",
+      "date": "2026-10-17",
+      "title": "Search the whole site",
+      "summary": "One box in the header finds members, bills, agencies, districts, races, issues, documents and pages as you type, and an exact match such as a bill number goes straight to its page.",
+      "url": "/search"
+    },
+    {
       "id": "related-votes-in-congress",
       "date": "2026-10-17",
       "title": "Related votes in Congress",

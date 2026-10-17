@@ -1484,6 +1484,74 @@ A member's dimension falls back to a neutral 50 when its data is missing or too 
 
 ---
 
+## Site search
+
+One box in the header searches everything with a page: members (and their
+former ids and surnames), presidents, justices, bills (every spelling of a
+number: "HR 1", "H.R.1", "hr1"), roll calls, agencies (name and acronym),
+committees, states, districts ("TX-23", "Texas 23rd"), races, ballot
+measures, Action Center issues and ongoing stories, nominations, Explore
+documents (by FR document number, FR citation, executive order,
+proclamation or RIN, and by title through Explore's own keyword index), and
+the site's own pages (`backend/app/data/site_pages.json`, held equal to the
+frontend's `SECTIONS` and About chapters by `frontend/src/lib/sitePages.test.ts`).
+
+**Index, at write time.** The pipeline process rebuilds `/data/site_search.db`
+(`app/site_search_index.py`) when a cheap fingerprint of its source tables
+moves, checked every ten minutes: a separate SQLite file, written whole and
+renamed into place, with an FTS5 table (prefix indexes), an FTS5 trigram
+table for typos and an exact-key table for identifiers. Nothing in the main
+database is migrated or locked for it.
+
+**Query, on the read path.** `app/site_search.py`: an identifier parser,
+FTS5 prefix and trigram candidates, and a deterministic score (an exact
+identifier, then a name equal to the query, then the share of the query's
+words in a name, with near spellings credited by similarity), plus a small
+weight for importance (a sitting member over a former one, a recent issue
+over an old one). No model, no LLM.
+
+**Straight to the page.** Enter on a query that clearly names one page goes
+there (`GET /search?q=` answers with a redirect, so it works without
+JavaScript, and the autocomplete highlights that match first): an
+identifier's page, or a match that clears a floor and leads the next by a
+margin. Two pages the query names exactly (a state and an agency both
+called "NE", two members with one surname) are a list, never a jump.
+Section words read against the page's own headings
+(`app/data/site_search_sections.json`) land on the section: "HR 1 votes"
+on the bill's votes, "<member> donors" on Funding Independence, a district
+and a year on that race on the state ballot page.
+
+**Measured, not asserted.** `scripts/calibrate_site_search.py` builds known-item
+probes from the index itself (a name, a surname, an acronym, an identifier,
+a one-letter typo, a page name, section words, a prefix, a document title),
+fits the four scoring weights and the two jump thresholds on half the
+entities and reports on the other half
+(`app/data/site_search_calibration.json`). A wrong jump is worse than a
+list, so the thresholds allow no wrong jump in any probe type on the fit
+half. On a copy of the production database (32,418 entities), held out from the fit:
+
+| Probe type | Probes | Right page first | Straight there | Wrong jump |
+|---|---|---|---|---|
+| Name | 395 | 100% | 96.9% | 0 |
+| Surname | 292 | 100% | 98.3% | 0 |
+| Acronym | 214 | 100% | 93.6% | 0 |
+| Identifier | 415 | 100% | 100% | 0 |
+| Typo | 403 | 99.8% | 72.9% | 0 |
+| Page | 75 | 100% | 93.2% | 0 |
+| Section words | 409 | 100% | 99.8% | 0 |
+| Document title | 385 | 97.4% | 92.5% | 0 |
+| Prefix (in the first 8) | 397 | 100% | | |
+
+All 2,588: 93.2% straight to the right page with one Enter, no wrong jump;
+p50 6 ms, p95 25 ms per query on an x86 desktop (the whole read path,
+Explore's title search included). "Straight there" counts the unambiguous
+probes; an ambiguous one (two pages of one name) that lists is right.
+
+**Privacy.** Nothing a reader types is kept. Answers are cached only in the
+reader's browser (`Cache-Control: private`), never in nginx's cache on disk;
+nginx's access log drops every query string and referrer, uvicorn's drops
+query strings, and the `/search` page asks the backend with `no-store`.
+
 ## Hybrid Search (Explore)
 
 The Explore feature searches primary-source government documents. It is not a
@@ -1785,7 +1853,7 @@ Below the day's record and "This week", the homepage lists what stood out in Con
 
 The week is the latest Monday-to-Sunday week either chamber recorded a vote in, labelled with its dates, so a recess shows the last week in session. Past 28 days without a record vote the list is empty and the section is left out: an empty week shows nothing, never filler. A score's week-on-week "biggest mover" was considered and left out: a change is only comparable on one scoring method, and on 2026-10-13 none of 534 members had a comparable seven-day change, because methods change more often than that.
 
-The homepage is ordered by how often each part changes (2026-10): the masthead, then "Entered into the record" (the newest issues, active monitors and bills, rendered on the server; within a day the issues come first in the Action Center's rank order, so the first row is the day's top issue), then "This week", then "On the record", then the page's one index of every way into the site beside the source ledger. The homepage asks the reader for nothing: the masthead is the statement of what the record covers, one row of links ("Your members", "Your ballot", the election's pages for its phase, "Congress this week"; with a state chosen in the header they go straight to that state's pages) and one plain line on who pays for it. Search is in the header on every page: a SEARCH button opens a labelled field, a plain GET form to `/search?q=`, which for now sends a bill number to the bill's page and anything else to Explore (`app/search/route.ts`). The reader's state is asked once, in the header, and every page that needs one starts from it: held for the open tab only (sessionStorage), with an optional "Use my location" that works out the state on the device and keeps nothing else (AGENTS.md §8). The index lists every section's pages, About's chapters included, so the footer on `/` leaves its section columns out (the two were the same links a screen apart; the footer keeps its row of site pages, the API and the changelog among them). The masthead's "For researchers" line is gone for the same reason. On a day Congress is out (`recess` on `GET /api/sections`, the same test `/congress` leads with), the index's three report figures, which would each read "None", become one backend-worded line ("No record votes or floor business since Wednesday, September 30"), and "On the record" is headed "Last week of business: <week>" rather than reading as current. "This week" keeps every state's ballot link behind a disclosure, since the masthead's state list already leads to one, and on a phone the index shows each page's figure without its caption (kept for screen readers). Measured under `next build` against the previous layout: the day's top issue moved from 5.7 phone screens down to 1.2 (7.65 s to 3.65 s by KLM) and into the first desktop screen (5.65 s to 2.65 s); keyboard stops on the whole page went from 176 to 100 at 1280 px (163 to 87 on a phone).
+The homepage is ordered by how often each part changes (2026-10): the masthead, then "Entered into the record" (the newest issues, active monitors and bills, rendered on the server; within a day the issues come first in the Action Center's rank order, so the first row is the day's top issue), then "This week", then "On the record", then the page's one index of every way into the site beside the source ledger. The homepage asks the reader for nothing: the masthead is the statement of what the record covers, one row of links ("Your members", "Your ballot", the election's pages for its phase, "Congress this week"; with a state chosen in the header they go straight to that state's pages) and one plain line on who pays for it. Search is in the header on every page: SEARCH opens the site search (see Site search), a plain GET form to `/search?q=` underneath. The reader's state is asked once, in the header, and every page that needs one starts from it: held for the open tab only (sessionStorage), with an optional "Use my location" that works out the state on the device and keeps nothing else (AGENTS.md §8). The index lists every section's pages, About's chapters included, so the footer on `/` leaves its section columns out (the two were the same links a screen apart; the footer keeps its row of site pages, the API and the changelog among them). The masthead's "For researchers" line is gone for the same reason. On a day Congress is out (`recess` on `GET /api/sections`, the same test `/congress` leads with), the index's three report figures, which would each read "None", become one backend-worded line ("No record votes or floor business since Wednesday, September 30"), and "On the record" is headed "Last week of business: <week>" rather than reading as current. "This week" keeps every state's ballot link behind a disclosure, since the masthead's state list already leads to one, and on a phone the index shows each page's figure without its caption (kept for screen readers). Measured under `next build` against the previous layout: the day's top issue moved from 5.7 phone screens down to 1.2 (7.65 s to 3.65 s by KLM) and into the first desktop screen (5.65 s to 2.65 s); keyboard stops on the whole page went from 176 to 100 at 1280 px (163 to 87 on a phone).
 
 ## Score Data Transparency
 
