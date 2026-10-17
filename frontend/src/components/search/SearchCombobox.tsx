@@ -163,15 +163,25 @@ export default function SearchCombobox({
 
   const activeId = open && active >= 0 ? `${id}-opt-${active}` : undefined;
 
+  // aria-activedescendant moves no focus, so nothing scrolls the
+  // highlighted match into view by itself: at a large text size on a
+  // phone the list is taller than the screen.
+  useEffect(() => {
+    if (activeId) document.getElementById(activeId)?.scrollIntoView?.({ block: "nearest" });
+  }, [activeId]);
+
   return (
-    <form role="search" action="/search" method="get" className="relative w-full">
+    <form role="search" action="/search" method="get" className="@container relative w-full">
       <label
         htmlFor={inputId}
         className="mb-2 block font-mono text-xs uppercase tracking-[0.14em] text-ink-lo"
       >
         {label}
       </label>
-      <div className="flex items-stretch border-2 border-ink-lo bg-surface-base focus-within:border-ink-hi">
+      {/* GO under the field in a narrow box (a 320 px phone, or a doubled
+          text size), beside it from 20rem: side by side there, the field
+          was left a few characters wide (WCAG 1.4.10). */}
+      <div className="flex flex-wrap items-stretch border-2 border-ink-lo bg-surface-base focus-within:border-ink-hi @[20rem]:flex-nowrap">
         <span aria-hidden="true" className="flex items-center pl-3 font-mono text-sm text-ink-lo">
           &gt;
         </span>
@@ -201,11 +211,11 @@ export default function SearchCombobox({
           onBlur={() => setOpen(false)}
           onFocus={() => items.length > 0 && value.trim().length >= MIN_CHARS && setOpen(true)}
           placeholder="A member, bill, agency, district, page…"
-          className="min-h-11 w-full min-w-0 bg-transparent px-2 font-mono text-base text-ink-hi caret-phos placeholder:text-ink-min"
+          className="min-h-11 min-w-0 flex-1 basis-0 bg-transparent px-2 font-mono text-base text-ink-hi caret-phos placeholder:text-ink-min"
         />
         <button
           type="submit"
-          className="min-h-11 min-w-16 border-l-2 border-ink-lo px-3 font-mono text-xs uppercase tracking-[0.14em] text-ink-hi hover:bg-white/10"
+          className="min-h-11 w-full border-t-2 border-ink-lo px-3 font-mono text-xs uppercase tracking-[0.14em] text-ink-hi hover:bg-white/10 @[20rem]:w-auto @[20rem]:min-w-16 @[20rem]:border-t-0 @[20rem]:border-l-2"
         >
           Go
         </button>
@@ -248,7 +258,7 @@ export default function SearchCombobox({
             </span>
             {item.context && (
               <span
-                className={`truncate font-mono text-xs ${i === active ? "text-surface-base" : "text-ink-min"}`}
+                className={`font-mono text-xs ${i === active ? "text-surface-base" : "text-ink-min"}`}
               >
                 {item.context}
               </span>

@@ -262,6 +262,15 @@ def test_every_site_page_is_indexed(db_session):
     assert {(p["label"], p["href"]) for p in pages} <= indexed
 
 
+def test_long_context_lines_are_cut_at_a_word():
+    from app.site_search_index import CONTEXT_MAX, _clip
+
+    title = "To amend the Internal Revenue Code of 1986 " * 20
+    out = _clip(title)
+    assert len(out) <= CONTEXT_MAX + 1 and out.endswith("…") and not out[:-1].endswith(" ")
+    assert _clip("Short title") == "Short title"
+
+
 def test_normalize_folds_accents_and_punctuation():
     assert normalize("Núñez, Jr.") == "nunez jr"
     assert normalize("H.R. 1") == "h r 1"

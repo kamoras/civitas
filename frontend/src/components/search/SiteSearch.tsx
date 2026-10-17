@@ -76,14 +76,14 @@ export default function SiteSearch({ className = "" }: { className?: string }) {
         className="m-0 h-full max-h-none w-full max-w-none bg-surface-base p-0 text-ink-hi backdrop:bg-surface-base/80 sm:mx-auto sm:mt-[12vh] sm:h-auto sm:max-w-2xl sm:border-2 sm:border-ink-hi"
       >
         <div className="flex flex-col gap-4 p-4 sm:p-6">
-          <div className="flex items-center justify-between border-b-2 border-white/15 pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 border-b-2 border-white/15 pb-3">
             <h2 id={titleId} className="font-pixel text-xs tracking-widest text-ink-hi">
               SEARCH
             </h2>
             <button
               type="button"
               onClick={close}
-              className="inline-flex min-h-11 min-w-11 items-center justify-center px-2 font-mono text-xs uppercase tracking-widest text-ink-lo hover:text-ink-hi"
+              className="inline-flex min-h-11 min-w-11 max-w-full flex-wrap items-center justify-center px-2 font-mono text-xs uppercase tracking-widest text-ink-lo hover:text-ink-hi"
             >
               Close <span className="sr-only">search</span>
               <span aria-hidden="true" className="ml-1 text-ink-min">

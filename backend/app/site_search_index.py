@@ -129,6 +129,23 @@ class Entity:
     words: bool = True
 
 
+# The longest context line: a bill's official title runs to hundreds of
+# words, and one such line made a single result taller than a phone's
+# screen at a doubled text size (WCAG 1.4.10, 2.4.11). The whole title is
+# on the bill's page and still searchable (it is one of the bill's names).
+CONTEXT_MAX = 160
+
+
+def _clip(text: str, limit: int = CONTEXT_MAX) -> str:
+    """`text` cut at the last word boundary before `limit`, with an
+    ellipsis; unchanged when it fits."""
+    text = " ".join((text or "").split())
+    if len(text) <= limit:
+        return text
+    cut = text[:limit].rsplit(" ", 1)[0].rstrip(",;:")
+    return f"{cut}…"
+
+
 def _q(db: Session, sql: str, **params):
     return db.execute(text(sql), params).fetchall()
 
@@ -222,7 +239,7 @@ def _bills(db: Session) -> list[Entity]:
         # it); an earlier Congress's is labelled and keyed with its Congress.
         out.append(Entity(
             "bill", label if is_current else f"{label} ({ordinal(congress)} Congress)", url,
-            b["title"],
+            _clip(b["title"]),
             importance=(0.55 + 0.25 * _recency(b["day"], newest, 365) + (0.2 if b["law"] else 0.0))
             if is_current else 0.2,
             aliases=[b["title"]] if b["title"] else [],
@@ -240,7 +257,7 @@ def _roll_calls(db: Session) -> list[Entity]:
         out.append(Entity(
             "rollcall", f"{chamber.title()} roll call {number}",
             f"/congress/votes/{chamber}/{congress}/{session}/{number}",
-            f"{day} · {ordinal(congress)} Congress, session {session}" + (f" · {detail}" if detail else ""),
+            _clip(f"{day} · {ordinal(congress)} Congress, session {session}" + (f" · {detail}" if detail else "")),
             importance=0.3 + 0.4 * _recency(day, newest, 730),
             keys=[f"rc:{chamber}:{number}", f"rc:{number}"],
             words=False,
@@ -329,7 +346,7 @@ def _elections(db: Session) -> list[Entity]:
             label = f"{name} {noun} {number}".strip() if number else (title or "")[:80]
             out.append(Entity(
                 "measure", label, f"/elections/states/{state}#measure-{quote(mid)}",
-                f"{(title or '')[:140]}" + (" · removed from the ballot" if status == "removed" else ""),
+                _clip(title or "") + (" · removed from the ballot" if status == "removed" else ""),
                 importance=0.3 if status == "removed" else 0.6,
                 aliases=[a for a in (f"{state} {noun} {number}" if number else "", title) if a],
             ))
@@ -371,7 +388,7 @@ def _nominations(db: Session) -> list[Entity]:
         label = f"{citation}: {who}" if who else f"{citation}: {position or org}"[:120]
         out.append(Entity(
             "nomination", label, f"/congress/nominations/{congress}/{quote(citation)}",
-            " · ".join(p for p in (position, org, status) if p)[:160],
+            _clip(" · ".join(p for p in (position, org, status) if p)),
             importance=(0.55 if status == "pending" else 0.4) if congress == settings.CURRENT_CONGRESS else 0.2,
             aliases=[n for n in names if n] + ([position] if position else []),
             keys=[f"pn:{citation.lower()}", f"pn:{citation.lower().split('-')[0]}"],
