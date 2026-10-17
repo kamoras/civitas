@@ -2074,9 +2074,10 @@ cd civitas
 # 2. Create your env file from the template
 cp .env.example .env
 
-# 3. Edit .env — at minimum set your API key and admin token
+# 3. Edit .env — at minimum set your API key, admin token and contact address
 #    DATA_GOV_API_KEY=your-key-from-api-data-gov
 #    ADMIN_TOKEN=your-secret-admin-token
+#    CONTACT_EMAIL=an-address-you-read@example.org   (named in every request's User-Agent)
 nano .env
 
 # 4. Start all services
@@ -2427,6 +2428,7 @@ See `.env.example` for all options. Key variables:
 | `DATA_GOV_API_KEY` | Yes | API key from api.data.gov (covers Congress.gov, FEC, GovInfo) |
 | `BLS_API_KEY` | No | Free BLS v2 registration key (data.bls.gov/registrationEngine): 500 jobs-API requests a day instead of 25 |
 | `ADMIN_TOKEN` | Yes | Bearer token for admin panel and pipeline triggers |
+| `CONTACT_EMAIL` | Yes | Your instance's contact address, named in the User-Agent of every request the pipeline and scripts send (`backend/app/contact.py`). Unset or malformed, requests name Civitas with no address, the SEC (whose fair-access policy requires a contact) is not fetched and raises an ops alert, and the pipeline logs a warning at start |
 | `LLM_BACKEND` | No | `llama-server` (default) or `ollama` |
 | `LLAMA_SERVER_URL` | No | llama-server URL (default: `http://llama-server:8070`, the in-stack service) |
 | `LLAMA_MODELS_DIR` | No | Host directory bind-mounted into llama-server at `/models` (default: `./llama-models`) |

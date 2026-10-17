@@ -185,6 +185,10 @@ class Settings(BaseSettings):
     GITHUB_FEEDBACK_REPO: str = "kamoras/civitas"
     # Operator alerts (pipeline overruns, skipped runs, ground-truth failures).
     # Always logged + recorded for the admin dashboard; optionally pushed:
+    # Read by app.contact straight from the environment (standard library
+    # only, for the scripts that run on a bare python3); declared here so a
+    # .env that sets it isn't refused as an unknown key.
+    CONTACT_EMAIL: str = ""
     ALERT_NTFY_URL: str = ""    # e.g. https://ntfy.sh/<private-topic>
     PIPELINE_OVERRUN_ALERT_HOURS: float = 8.0
     # How long a nightly pipeline may go with no SUCCESSFUL completion
