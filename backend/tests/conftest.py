@@ -22,6 +22,9 @@ os.environ["THROTTLE_DB_PATH"] = os.path.join(os.environ["CIVITAS_RAM_DIR"], "ci
 # The data volume (/data) is the running site's, where one is mounted — a
 # test run must never write it (_data_volume_untouched below). The vector
 # store's path is read once, at import: set before anything imports it.
+# The contact address sources are given (app/contact.py), read once at
+# import: a fixed test value, never the host's.
+os.environ["CONTACT_EMAIL"] = "civitas-tests@example.org"
 os.environ["VECTOR_DB_PATH"] = os.path.join(tempfile.mkdtemp(prefix="civitas-tests-vectors-"), "vectors.db")
 
 import importlib

@@ -28,7 +28,8 @@ import time
 import httpx
 from sqlalchemy.orm import Session
 
-from app.contact import CONTACT_EMAIL
+from app.contact import UNSET_CONDITION, ContactUnset, require_contact
+from app.ops_alerts import send_ops_alert
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S, fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
@@ -37,10 +38,6 @@ logger = logging.getLogger(__name__)
 
 TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik:010d}.json"
-# SEC requests a descriptive User-Agent with contact info on all automated
-# requests (https://www.sec.gov/os/webmaster-faq#developers) — a generic UA
-# risks a block.
-_HEADERS = {"User-Agent": f"Civitas civic-transparency-platform {CONTACT_EMAIL}"}
 # The SEC's fair-access limit is 10 requests a second; half of it.
 _rate_limiter = RateLimiter(rps=5.0)
 
@@ -54,6 +51,24 @@ class SecUnavailable(Exception):
     """The SEC's records couldn't be read. Raised, not answered with an
     empty result: a caller relabelling stored trades from an empty answer
     would clear every label on a night the SEC was down."""
+
+
+def _headers() -> dict[str, str]:
+    """The headers for a request to the SEC. Its fair-access policy
+    requires a User-Agent naming a contact email
+    (https://www.sec.gov/os/webmaster-faq#developers), so with none
+    configured nothing is sent: an ops alert, and SecUnavailable, which
+    every caller already treats as "the SEC could not be read", never as
+    an issuer with no record."""
+    try:
+        return {"User-Agent": f"Civitas civic-transparency-platform {require_contact('SEC.gov')}"}
+    except ContactUnset as e:
+        send_ops_alert(
+            "SEC not fetched: CONTACT_EMAIL is not set",
+            f"{e}. Trade and PAC-sponsor industries from SEC SIC codes are not refreshed until it is.",
+            dedupe_key=UNSET_CONDITION, condition=UNSET_CONDITION,
+        )
+        raise SecUnavailable(str(e)) from e
 
 
 _issuers_cache: dict | None = None
@@ -233,7 +248,7 @@ async def _fetch_issuers(client: httpx.AsyncClient, db: Session) -> dict:
     cached = api_cache_get(db, "sec_tickers", "company_issuers-v2", max_age_hours=_TICKERS_TTL_HOURS)
     if cached is None:
         try:
-            resp = await client.get(TICKERS_URL, headers=_HEADERS, timeout=DEFAULT_FETCH_TIMEOUT_S)
+            resp = await client.get(TICKERS_URL, headers=_headers(), timeout=DEFAULT_FETCH_TIMEOUT_S)
             resp.raise_for_status()
             raw = resp.json()
         except Exception as e:
@@ -266,7 +281,7 @@ async def _sic_for(client: httpx.AsyncClient, db: Session, cik: int) -> int | No
         return cached.get("sic")
     resp = await fetch_with_retry(
         client, _rate_limiter, "GET", SUBMISSIONS_URL.format(cik=cik), log_label="SEC submissions",
-        headers=_HEADERS, expected_statuses=(404,),
+        headers=_headers(), expected_statuses=(404,),
     )
     if resp is None:
         raise SecUnavailable(f"submissions for CIK {cik}")

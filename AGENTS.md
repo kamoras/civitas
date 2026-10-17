@@ -2162,6 +2162,7 @@ See `.env.example` for all options. Key variables:
 |---|---|---|
 | `DATA_GOV_API_KEY` | Yes | API key from api.data.gov |
 | `ADMIN_TOKEN` | Yes | Bearer token for admin panel |
+| `CONTACT_EMAIL` | Yes | The instance's contact address, named in every outbound User-Agent (`app/contact.py`, read from the environment, stdlib only). Unset or malformed: User-Agents carry no address, SEC fetches refuse with an ops alert (`contact-email-unset`), and the pipeline warns at start |
 | `LLM_BACKEND` | No | `llama-server` (default) or `ollama` |
 | `LLAMA_SERVER_URL` | No | llama.cpp server URL |
 | `DATABASE_URL` | No | SQLite path (`docker-compose.yml` sets `sqlite:////data/civitas.db`, the volume; the code default is the relative `sqlite:///data/civitas.db`) |
