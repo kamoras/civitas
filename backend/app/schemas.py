@@ -1769,8 +1769,9 @@ class PublicRollCallPositionSchema(_PublicModel):
     last_name: str = Field(description="The member's surname as the chamber's record prints it (the House Clerk "
                                        "adds the state where two members share one: \"Joyce (PA)\")")
     first_name: str | None = Field(description="As the Senate's record prints it; null on a House roll call")
-    name: str | None = Field(description="The member's own full name where Civitas has a page for them; null for a "
-                                         "former member")
+    name: str | None = Field(description="A representative's own full name where Civitas has a page for them (the "
+                                         "Clerk prints only a surname); null for a senator, whose record prints "
+                                         "both names, and for a former representative")
     party: str
     state: str
     district: int | None = Field(description="A representative's district (0 at-large) where Civitas knows it; "
