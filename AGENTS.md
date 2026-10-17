@@ -1093,7 +1093,7 @@ client per issue an hour (`ISSUE_VIEW_PERIOD_S`). The state picker on an issue (
 explicit, unremembered choice from a list: the state goes in the URL that loads
 its members (`GET /api/action/issues/{id}/members?state=`) and nowhere else, and
 the House town filter runs in the browser over district lists the page already
-has. Keep both that way: a tap row that named a state would be a coarse
+has. `/congress`'s "Your members this Congress" works the same way (`GET /api/congress/members?state=`). Keep both that way: a tap row that named a state would be a coarse
 location log per issue.
 
 The admin dashboard's headline traffic figures are the two that measure people:
@@ -1373,9 +1373,10 @@ more outlets whose lede compose() verified (`trend_poster.tragedy_issue_refusal`
 the post quotes that lede, credited to its outlet, under the neutrality gate
 and the loaded-language vote). The political-violence vote was removed
 2026-10-16: agents' shootings, deaths in detention and attacks on the
-Capitol are in scope, and the news answers them before any vote or document. Every word is template text, a
-stored record field, or the trend's name quoted and attributed to Bluesky — no
-model. Selection is party-blind (rank weight × match strength); each trend gets
+Capitol are in scope, and the news answers them before any vote or document. Every word is template text or a
+stored record field: the record's own line, then its date and source in
+parentheses (`trend_poster.record_sentences`), with no "trending" and no echo
+of the trend's name, so the line must stand alone — no model. Selection is party-blind (rank weight × match strength); each trend gets
 one `TrendCandidate` audit row with the parties of the members it names and of
 the record's sponsors, and `check_party_balance` alerts when the posted share
 diverges from the eligible pool's (exact binomial). The post's picture is the
@@ -1483,6 +1484,16 @@ Each issue's actions are fixed templates around stored data:
   measured at 0.38 held-out precision — do not drop the labelled votes to
   "simplify". The chair and ranking member are read from the stored rosters
   when the issue is served (`api/action._committee_leaders`).
+- **"On the ballot"** for the states and races the issue's own words name
+  (`action_center.ballot_links`, stored as `ActionIssue.ballot_links` when
+  the issue is written): a confirmed nominee by full name, a state's only
+  nominee of a surname beside the state's name, a seat phrase (the
+  election-results gate's `race_named`). A state alone in an election
+  story's headline is not linked: measured at 16 of 22 on topic, under the
+  bar. Served with the voter calendar's next
+  deadline and the state's register and lookup links
+  (`app/ballot_links.py`), read when the issue is served so a countdown is
+  never stale. Measured in `docs/research/action-center-ballot-links.md`.
 - **"Comment by <date>"** for a proposed or final rule (the Register's own
   `type`) still open for comment whose title clears `EXPLORE_TITLE_MIN_SIM`
   (`_open_comment_docs`). The API drops it once the period closes (#903's
@@ -1542,7 +1553,9 @@ plus a day under five days, and neither raised a false alert. A feed with
 under a week of history has not shown a weekend yet, so the longest gap
 among feeds of its kind that have a week stands in.
 
-Then **multi-story digests are dropped at ingest** (`_digest_reason`) — an
+Then **multi-story digests are dropped at ingest** (`fetch/news_digest.digest_reason`,
+shared by every path that reads feed items: the Action Center and the election
+coverage ingest, which also re-checks its stored items and its posts) — an
 outlet's recurring briefing ("Up First", "Morning news brief", "The week in
 politics") is a single RSS item covering three to five unrelated stories, and
 every stage downstream treats it as one story. Four mechanical signals:
@@ -1566,7 +1579,11 @@ every stage downstream treats it as one story. Four mechanical signals:
   For the same reason an abbreviation's period ("U.S.", "Rep.") is not a
   sentence break, and photo credits and a broadcast sign-off ("… reports.")
   are not items: before 2026-10 those made 16 single stories in 627 feed
-  articles read as lists.
+  articles read as lists. A description the publisher cut ("…", "[…]") loses
+  its fragment the same way, and PBS's "joined <host> to discuss" sign-off is
+  not an item; "N takeaways" is not a digest title (every stored one was one
+  event's), "photos of the week" is (2026-10-17: 21 single stories in 1,457
+  stored race-coverage items and 20 in 875 feed articles were read as digests).
 - **A headline and body that tell the same unrelated stories**
   (`_parallel_stories`) — the two-story briefing the body check can't see
   ("<A>. And, <B>" over two teaser items): the headline's items name
@@ -1907,7 +1924,13 @@ it keeps, each enforced by a test (`tests/test_forecast_model.py`,
   never re-rounds them.
 - **Wording.** Ranges and frequencies, never "wins", "favored" or
   "projected". The implied chances exist only for the method section's
-  calibration table.
+  calibration table, which is party blind (`model.calibration_table`):
+  binned by the chance of the side a range leaned toward, whichever party,
+  and the same with the parties swapped. Nothing shown frames a figure
+  around one party ("went to the Democrat", a raw signed margin); the
+  internal R-positive sign convention stays inside the math. The method
+  section leads with a short plain summary; the full method sits behind a
+  disclosure.
 - **No year in the code.** Article titles, the fieldwork floor, the House
   lines and every label (CSV header and filename, page titles, the method's
   presidential window) come from `active_election().cycle` and the data
@@ -2118,7 +2141,10 @@ touches `backend/requirements.txt` or `backend/app/pipeline/`.
 
 `conftest.py` holds the fast tests to that: in a test not marked slow,
 constructing a sentence-transformer raises at once and resolving any host
-but loopback fails at once, on CI as offline (`_fast_tests_offline`). Until
+but loopback fails at once, on CI as offline (`_fast_tests_offline`), and a
+model a slow test already loaded in the same process is hidden from it
+(`_slow_test_running`; until 2026-10-17 a fast test run after a slow one
+used the real model). Until
 2026-10 a fast test that reached the model downloaded it on CI and waited
 out the Hub client's retries offline (69 s a test), and one whose mocks
 missed a fetch read the live source on CI. The fetch modules' rate limiters
@@ -2233,6 +2259,8 @@ the pending list).
 | Document citation graph + PageRank authority | `backend/app/pipeline/analyze/document_authority.py` |
 | Search-quality evaluation harness | `backend/scripts/evaluate_explore_search.py` |
 | News feed fetching (RSS) | `backend/app/pipeline/fetch/news_feeds.py` |
+| Multi-story digest detection (shared by the Action Center and race coverage) | `backend/app/pipeline/fetch/news_digest.py` |
+| Race coverage matching (full name plus the race) and the race-post checks (digest, race, certified ballot, labelled relevance threshold) | `backend/app/pipeline/analyze/election_coverage.py`, `analyze/election_bluesky.py` (`refusal`), `backend/scripts/calibrate_race_post_relevance.py`, `app/data/race_post_relevance*.json` |
 | Trending topic fetching | `backend/app/pipeline/fetch/trending.py` |
 | Donor-vote cross-referencing | `backend/app/pipeline/analyze/policy_alignment.py` |
 | Representative service + paginated votes | `backend/app/services/representative_service.py` |
@@ -2578,7 +2606,7 @@ the bills page's "Active now" falls back to bills that moved this week and
 says so (`shown`/`movedSince`), a bill page states its stage's base rate
 (`stageBaseRate` — worded as what happens to bills at the stage, never a
 forecast for the bill), the Ongoing tab lists recently closed monitors, and
-`/compare` offers pairs that need no picking. Never fill the gap with model
+`/compare` offers pairs that need no picking, and `/congress` leads with the Congress so far (the days each chamber sat, how far its bills got; `services/congress_glance.py`) and, in a recess, shows the last day of business on its week and month cards. Never fill the gap with model
 text or a visitor's input (§7, §8).
 
 #### Accessibility: WCAG 2.2 AA is a merge requirement (2026-10)

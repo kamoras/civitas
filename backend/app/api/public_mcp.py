@@ -41,8 +41,11 @@ _INSTRUCTIONS = (
     "Civitas scores U.S. senators and representatives on how well they represent their "
     "constituents (0-100, higher is better) from official voting, funding and legislative "
     "records, and searches floor speeches, presidential actions, Supreme Court opinions and "
-    "federal rules. Members are identified by the id in their Civitas URL (first-last, e.g. jane-doe); "
-    "find one with list_senators or list_representatives, filtered by state. Cite a record's "
+    "federal rules. It also gives each roll call with every member's position, every president's "
+    "Presidential Score, the sitting justices' votes case by case (not scored), presidential "
+    "nominations, federal agencies and the comment periods open today. Members are identified by the "
+    "id in their Civitas URL (first-last, e.g. jane-doe); find one with list_senators or "
+    "list_representatives, filtered by state. Cite a record's "
     f"siteUrl when you use it. How scores are computed: {SITE_URL}/about/scores."
 )
 

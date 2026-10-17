@@ -27,8 +27,9 @@ trend's k nearest (policy_relevance.relevance_votes, all-MiniLM-L6-v2):
     government or policy angle, was removed 2026-10-16: the official record
     is that angle, and the vote refused 44% of the political tragedies it
     was labelled on (leave-one-out recall 0.56).
-  - loaded: the trend's display name, the only words a post quotes from
-    Bluesky, judges or mocks rather than names
+  - loaded: the trend's display name judges or mocks rather than names.
+    The post no longer quotes it (since 2026-10-16), but a post still
+    answers it, so a loaded name is skipped
     (app/data/loaded_language_examples.json).
 
 A fifth, whether a trend is about a nomination itself (the nominee

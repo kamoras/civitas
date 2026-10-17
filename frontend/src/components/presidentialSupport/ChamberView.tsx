@@ -58,15 +58,15 @@ export default function ChamberView({ view }: { view: ChamberSupport }) {
       type="button"
       onClick={() => setSelected(m.id)}
       aria-pressed={selected === m.id}
-      className="flex min-h-11 w-full items-baseline justify-between gap-3 border-b border-white/[0.07] py-2 text-left hover:text-phos"
+      className="flex min-h-11 w-full flex-wrap items-baseline justify-between gap-x-3 border-b border-white/[0.07] py-2 text-left hover:text-phos"
     >
-      <span className="font-sans text-sm text-ink">
+      <span className="min-w-0 font-sans text-sm text-ink">
         {m.name}{" "}
         <span className={`font-mono text-xs ${PARTY_COLORS[m.party] ?? "text-ink-lo"}`}>
           {m.party}-{seatLabel(m)}
         </span>
       </span>
-      <span className="shrink-0 font-mono text-xs text-ink-lo">{detail}</span>
+      <span className="ml-auto shrink-0 font-mono text-xs text-ink-lo">{detail}</span>
     </button>
   );
 
@@ -74,7 +74,7 @@ export default function ChamberView({ view }: { view: ChamberSupport }) {
     <div className="space-y-8">
       <p className="max-w-3xl font-display text-lg leading-relaxed text-ink">{summary}</p>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <div className="min-w-0">
           <SeatChart
             view={view}
@@ -142,7 +142,7 @@ export default function ChamberView({ view }: { view: ChamberSupport }) {
         </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         {(["more", "less"] as const).map((side) => {
           const rows = furthest(view, side);
           return (

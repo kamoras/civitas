@@ -109,6 +109,26 @@ class TestWellFormedness:
         assert compose("Decision Desk HQ", "shifted the Florida governor's race to a toss-up", src)
 
 
+class TestAnAuxiliaryInTheGapMakesAClause:
+    """Recorded answers (2026-10) located "the administration" +
+    "seeking to stop ..." in "The administration is seeking to stop
+    ...": the gap's "is" makes it a progressive verb, and the sentence is
+    one contiguous span of the source."""
+
+    SRC = ("The Justice Department is seeking to stop the counting of some votes in the state "
+           "through a federal lawsuit filed Thursday.")
+
+    def test_the_progressive_composes(self):
+        assert compose("The Justice Department", "seeking to stop the counting of some votes in the state", self.SRC) == (
+            "The Justice Department is seeking to stop the counting of some votes in the state through a federal lawsuit "
+            "filed Thursday."
+        )
+
+    def test_a_bare_participle_is_still_refused(self):
+        src = "Senator Pat Lee unveiling legislation on Monday drew a crowd."
+        assert compose("Senator Pat Lee", "unveiling legislation on Monday", src) is None
+
+
 class TestBothSpansMustBeAssertedTogether:
     """Two true fragments can make one false sentence.
 
