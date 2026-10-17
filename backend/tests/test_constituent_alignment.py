@@ -719,7 +719,7 @@ class TestPositionCongruence:
         self.patch({"X1": -0.34})  # DS expects -0.44
         detail = self._congruence_for("D", "DS")["detail"]
         assert "a seat at D+15" in detail
-        assert "0.10 toward the seat's center" in detail
+        assert "0.100 toward the seat's center" in detail
         assert "0 at 0.20 toward the flank and 100 at 0.20 toward the seat's center" in detail
         assert "most out-of-step tenth" in detail and "the same for both parties" in detail
         assert "past it" not in detail
