@@ -556,8 +556,10 @@ def _coverage_line(chamber: str, doc: dict, due: int) -> list[str]:
     if due not in cov.get("results", []):
         missing.append(f"MEDSL's U.S. Senate file (doi:10.7910/DVN/PEJ5QU) has no {due} results yet"
                        if chamber == "senate" else
-                       f"the FEC has not published its Federal Elections {due} compilation (US House Results by "
-                       "State); MEDSL's U.S. House file is behind a sign-in form Civitas does not answer")
+                       f"no refit has read {due} House results: neither the FEC's Federal Elections {due} "
+                       f"compilation (US House Results by State) nor the Clerk of the House's {due} Statistics of the "
+                       "Presidential and Congressional Election was there to read (a refit that read one and failed "
+                       "its gates raises its own forecast_model.json refresh alert)")
     if chamber == "house" and due not in cov.get("lean", []):
         missing.append(f"app/data/forecast_house_lean.json has no {due} district lean "
                        "(backend/scripts/build_house_lean_history.py)")
@@ -569,7 +571,8 @@ def check_training_staleness() -> None:
     """Alert once a general election the map's fits never saw has certified
     results, naming each missing input per chamber: the training polls
     (Silver Bulletin's rated file, refreshed by app/data_refresh.py), the
-    certified results (MEDSL's Senate file; the FEC's House compilation),
+    certified results (MEDSL's Senate file; the FEC's House compilation, or
+    until it is out the Clerk of the House's Statistics),
     and for the House its lean history. The refit itself is automatic
     (data_refresh: forecast_model.json); a gate that refused a new poll file
     alerts on its own. Resolved once both fits include that election."""

@@ -551,15 +551,25 @@ def _training_polls_command(ctx: Context) -> list[str]:
 
 # The map's fits (scripts/fit_forecast_model.py): refit whenever the
 # training polls in use change, and monthly besides, which picks up a new
-# MEDSL version or a newly published FEC House compilation. Display only:
-# nothing in scoring reads them.
+# MEDSL version or a newly published FEC House compilation or Clerk's
+# Statistics; weekly while a fit lacks the last certified general, so a
+# newly published one is read within a week. Display only: nothing in
+# scoring reads them.
 FORECAST_OUTPUTS = ("forecast_training.json", "forecast_house_training.json", "forecast_house_model.json")
+FORECAST_TRAINING = ("forecast_training.json", "forecast_house_training.json")
+
+
+def _fits_behind(today: date) -> bool:
+    due = last_certified_general(today)
+    return due is not None and any(
+        max((r["year"] for r in read(name).get("races") or []), default=0) < due for name in FORECAST_TRAINING)
 
 
 def _forecast_due(ctx: Context) -> bool:
     polls = (read(training_polls.FILE_NAME).get("file") or {}).get("sha256")
     fitted = (ctx.doc.get("_polls") or {}).get("sha256")
-    return (polls is not None and polls != fitted and not ctx.tried_within(1)) or not ctx.tried_within(30)
+    return ((polls is not None and polls != fitted and not ctx.tried_within(1)) or not ctx.tried_within(30)
+            or (not ctx.tried_within(7) and _fits_behind(ctx.today)))
 
 
 def _forecast_command(ctx: Context) -> list[str]:
