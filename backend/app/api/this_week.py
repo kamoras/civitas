@@ -29,7 +29,7 @@ from app.retractions import retraction_for_issue
 from app.services.congress_service import CHAMBERS, bill_label, long_date, next_meeting, week_bounds
 from app.time_utils import comment_period_today
 from app.voter_calendar import CLOSING_SOON_DAYS, next_deadlines, registration_closing
-from app.services.explore_keys import public_key
+from app.services.explore_keys import issue_doc_ids, public_key
 
 router = APIRouter()
 
@@ -155,19 +155,14 @@ def _issues_by_document(db: Session, today: date) -> dict[int, str]:
     that cites it."""
     since = (today - timedelta(days=_NEWS_WINDOW_DAYS)).isoformat()
     out: dict[int, str] = {}
-    issues = (db.query(ActionIssue.id, ActionIssue.related_explore_ids)
+    issues = (db.query(ActionIssue.id, ActionIssue.related_explore_ids, ActionIssue.related_explore_keys)
               .filter(ActionIssue.date >= since, NOT_RETIRED_DRAFT).order_by(ActionIssue.date))
-    for issue_id, related in issues:
+    for issue_id, related, related_keys in issues:
         public_id = to_public_id(issue_id)
         if retraction_for_issue(public_id):
             continue
-        try:
-            ids = json.loads(related or "[]")
-        except ValueError:
-            continue
-        for doc_id in ids:
-            if isinstance(doc_id, int):
-                out[doc_id] = public_id
+        for doc_id in issue_doc_ids(db, related, related_keys):
+            out[doc_id] = public_id
     return out
 
 

@@ -300,19 +300,25 @@ def _action_issues(db: Session, slugs: list[str]) -> list[dict]:
     first: the issue's own record of which documents it drew on
     (related_explore_ids), never a match on its words. Left out: withdrawn
     issues, duplicates of another, and drafts taken down unconfirmed."""
-    doc_ids = {i for (i,) in db.query(ExploreDocument.id).filter(ExploreDocument.agency_slug.in_(slugs))}
+    agency_docs = db.query(ExploreDocument.id, ExploreDocument.external_id).filter(
+        ExploreDocument.agency_slug.in_(slugs)).all()
+    doc_ids = {i for i, _ in agency_docs}
     if not doc_ids:
         return []
+    # By permanent key where the issue stored one (services/explore_keys.py):
+    # a row id can name another document after the row is replaced.
+    doc_keys = {public_key(ext, i) for i, ext in agency_docs}
     out = []
     rows = (db.query(ActionIssue.id, ActionIssue.title, ActionIssue.date, ActionIssue.related_explore_ids,
-                     ActionIssue.status, ActionIssue.is_current)
+                     ActionIssue.related_explore_keys, ActionIssue.status, ActionIssue.is_current)
             .filter(ActionIssue.related_explore_ids != "[]", ActionIssue.duplicate_of_id.is_(None))
             .order_by(ActionIssue.date.desc(), ActionIssue.id.desc()))
-    for issue_id, title, day, related, status, is_current in rows:
+    for issue_id, title, day, related, related_keys, status, is_current in rows:
         if status == ActionIssueStatus.DEVELOPING and not is_current:
             continue
         try:
-            cited = set(json.loads(related or "[]")) & doc_ids
+            keys = json.loads(related_keys or "[]")
+            cited = set(keys) & doc_keys if keys else set(json.loads(related or "[]")) & doc_ids
         except (ValueError, TypeError):
             continue
         public_id = to_public_id(issue_id)

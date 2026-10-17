@@ -100,5 +100,62 @@ def test_a_roll_call_issue_leads_with_its_vote_page_here(db_session):
     actions = _build_issue_response(draft, db_session)["actions"]
     assert actions[0] == {"text": "How each member voted", "type": "roll_call",
                           "url": "/congress/votes/house/119/2/314",
-                          "docId": None, "closesOn": None, "committee": None}
+                          "docId": None, "docKey": None, "closesOn": None, "committee": None}
     assert _build_issue_response(news, db_session)["actions"] == []
+
+
+def _rule(db, external_id, **kw):
+    doc = ExploreDocument(doc_type="Proposed Rule", source="Federal Register", title=kw.pop("title", "A rule"),
+                          summary="", body="", date="2026-10-01", chamber="Regulatory",
+                          external_id=external_id, **kw)
+    db.add(doc)
+    db.commit()
+    return doc
+
+
+def test_an_issue_finds_its_documents_by_key_after_their_rows_are_replaced(db_session):
+    """An archived issue is permanent and the rows it named are not: its
+    documents are found by the keys it stored, and a row id that now names
+    another document (a data reset reuses them) is never trusted."""
+    old = _rule(db_session, "fr-reg-2026-11111", comments_close_on="2026-10-20",
+                comment_url="https://www.regulations.gov/commenton/X-2026-0001-0001")
+    issue = _issue(db_session, [{"text": "Comment by October 20", "type": "comment_period",
+                                 "url": f"/explore/{old.id}#comment", "docId": old.id,
+                                 "docKey": "fr-2026-11111", "closesOn": "2026-10-20"}], [old.id])
+    issue.related_explore_keys = json.dumps(["fr-2026-11111"])
+    db_session.commit()
+    # The row is replaced: the same document under a new row, and an
+    # unrelated one in the old row id.
+    old_id = old.id
+    db_session.delete(old)
+    db_session.commit()
+    stranger = _rule(db_session, "fr-reg-2026-99999", id=old_id, title="Unrelated")
+    new = _rule(db_session, "fr-reg-2026-11111", comments_close_on="2026-10-20",
+                comment_url="https://www.regulations.gov/commenton/X-2026-0001-0001")
+    with patch("app.api.action.comment_period_today", return_value="2026-10-11"):
+        resp = _build_issue_response(issue, db_session)
+    assert [(d["id"], d["key"]) for d in resp["relatedExploreDocs"]] == [(new.id, "fr-2026-11111")]
+    [action] = resp["actions"]
+    assert (action["docId"], action["docKey"], action["url"]) == (
+        new.id, "fr-2026-11111", "/explore/fr-2026-11111#comment")
+    assert stranger.id == old_id
+
+
+def test_an_issue_stored_before_keys_still_reads_its_ids(db_session):
+    doc = _rule(db_session, "fr-reg-2026-22222")
+    issue = _issue(db_session, [], [doc.id])
+    assert [d["id"] for d in _build_issue_response(issue, db_session)["relatedExploreDocs"]] == [doc.id]
+
+
+def test_the_backfill_derives_the_same_keys_the_site_uses():
+    import importlib.util
+    from pathlib import Path
+
+    from app.services.explore_keys import public_key
+    path = Path(__file__).parent.parent / "migrations" / "versions" / "0059_action_issue_explore_keys.py"
+    spec = importlib.util.spec_from_file_location("m0059", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    for ext in ("fr-reg-2026-1", "fr-2026-2", "crec-v1-CREC-2026-09-16-pt1-PgH5836-3-ab12cd34",
+                "scotus-2025-24-440", "senate-floor-DOE-2025-02-20-065f50ec", None):
+        assert module._key(ext, 7) == public_key(ext, 7), ext

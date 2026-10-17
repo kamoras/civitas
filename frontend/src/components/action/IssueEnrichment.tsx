@@ -566,7 +566,7 @@ function actionRows(issue: ActionIssue, today: string): ActionRow[] {
           .filter(Boolean)
           .join(" · ")
       ),
-      href: `/explore/${action.docId}#comment`,
+      href: `${exploreHref({ id: action.docId, key: action.docKey })}#comment`,
       internal: true,
       label: "Comment →",
       tap: "comment",

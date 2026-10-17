@@ -1759,7 +1759,7 @@ def _new_values_for(
     return {
         "title": title, "summary": "summary", "facts": json.dumps(facts),
         "actions": "[]", "source_urls": "[]", "source_names": "[]",
-        "policy_areas": "[]", "related_bill_ids": "[]", "related_explore_ids": "[]",
+        "policy_areas": "[]", "related_bill_ids": "[]", "related_explore_ids": "[]", "related_explore_keys": "[]",
         "related_senators": "[]", "related_officials": "[]",
         "primary_article_date": primary_article_date,
         "image_url": image_url,

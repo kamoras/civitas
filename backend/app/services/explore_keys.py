@@ -23,6 +23,7 @@ answers a permanent redirect to it (frontend explore/[id]/page.tsx).
 
 from __future__ import annotations
 
+import json
 import re
 
 from sqlalchemy.orm import Session
@@ -75,3 +76,55 @@ def find_by_key(db: Session, key: str) -> ExploreDocument | None:
         return None
     return db.query(ExploreDocument).filter(ExploreDocument.external_id == key).first()
 
+
+
+# ── Documents an Action Center issue stores ──────────────────────────
+#
+# An issue is permanent; the rows its documents were in are not. So an issue
+# stores its related documents' keys (ActionIssue.related_explore_keys) and
+# its comment actions' (each action's "docKey") beside the row ids, and is
+# read back through `resolve_keys`: the row now holding each key. The ids
+# are only a fast path, checked against the key, since a data reset hands
+# rebuilt documents old row ids.
+
+def keys_for_ids(db: Session, ids: list[int]) -> list[str]:
+    """The keys of these documents, in the same order; a missing row is
+    left out."""
+    if not ids:
+        return []
+    rows = dict(db.query(ExploreDocument.id, ExploreDocument.external_id).filter(ExploreDocument.id.in_(ids)))
+    return [public_key(rows[i], i) for i in ids if i in rows]
+
+
+def resolve_keys(db: Session, keys: list[str], hint_ids: list[int] = ()) -> dict[str, int]:
+    """key -> the row id holding that document now, for the keys any row
+    holds. `hint_ids` (the row ids stored beside the keys) are tried first,
+    in one query; anything they don't answer is looked up by key."""
+    found: dict[str, int] = {}
+    hints = [i for i in hint_ids if isinstance(i, int)]
+    if hints:
+        for row_id, ext in db.query(ExploreDocument.id, ExploreDocument.external_id).filter(
+                ExploreDocument.id.in_(hints)):
+            found[public_key(ext, row_id)] = row_id
+    out = {}
+    for key in dict.fromkeys(k for k in keys if isinstance(k, str)):
+        if key in found:
+            out[key] = found[key]
+        elif (doc := find_by_key(db, key)) is not None:
+            out[key] = doc.id
+    return out
+
+
+def issue_doc_ids(db: Session, ids_json: str | None, keys_json: str | None) -> list[int]:
+    """The row ids now holding an issue's related documents: by its stored
+    keys, or by its stored ids for an issue stored before keys (none after
+    migration 0059's backfill but a row whose documents were already gone)."""
+    try:
+        ids = [i for i in json.loads(ids_json or "[]") if isinstance(i, int)]
+        keys = [k for k in json.loads(keys_json or "[]") if isinstance(k, str)]
+    except (ValueError, TypeError):
+        return []
+    if not keys:
+        return ids
+    held = resolve_keys(db, keys, ids)
+    return [held[k] for k in keys if k in held]

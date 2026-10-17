@@ -29,11 +29,11 @@ class TestBuildActions:
         actions = ac._build_actions_from_data(
             "A story", [], [], [], [], policy_areas=["HEALTH"],
             committees=[FINANCE],
-            comment_docs=[{"id": 7, "title": "A rule", "comments_close_on": "2026-10-20"}],
+            comment_docs=[{"id": 7, "key": "fr-2026-17123", "title": "A rule", "comments_close_on": "2026-10-20"}],
         )
         assert actions == [
-            {"text": "Comment by October 20", "type": "comment_period", "url": "/explore/7#comment",
-             "docId": 7, "closesOn": "2026-10-20"},
+            {"text": "Comment by October 20", "type": "comment_period", "url": "/explore/fr-2026-17123#comment",
+             "docId": 7, "docKey": "fr-2026-17123", "closesOn": "2026-10-20"},
             {"text": "Contact the Senate Committee on Finance", "type": "contact_committee",
              "url": "https://www.finance.senate.gov/",
              "committee": {"code": "SSFI", "name": "Senate Committee on Finance", "chamber": "senate"}},
@@ -70,7 +70,7 @@ class TestOpenCommentDocs:
         # The related notice is kept (the issue's own link); a notice found
         # only by title is not; a closed rule never is.
         assert [d["id"] for d in got] == [1, 2]
-        assert got[1] == {"id": 2, "title": "Drug pricing rule", "comments_close_on": "2026-10-20"}
+        assert got[1] == {"id": 2, "key": "fr-2026-2", "title": "Drug pricing rule", "comments_close_on": "2026-10-20"}
 
     def test_a_rule_below_the_title_bar_is_not_offered(self, db_session):
         db_session.add(_doc(2, "Fisheries quota rule"))

@@ -1528,6 +1528,8 @@ class ActionItemSchema(CamelModel):
     # comment_period: the Explore document and when its comment period
     # closes (served only while open, the #903 rule).
     doc_id: int | None = None
+    # Its permanent key, /explore/{key} (services/explore_keys.py).
+    doc_key: str | None = None
     closes_on: str | None = None
     # contact_committee
     committee: CommitteeContactSchema | None = None
