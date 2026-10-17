@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from datetime import date, timedelta
 
+from app import comment_periods
 from app.config_definitions import BILL_STAGES, RECENT_FEED_MAX_LIMIT, RECENT_FEED_POOL_MULTIPLIER
 from app.retractions import retraction_for_issue
 from app.roll_call_links import parse_ref, stored_refs
@@ -24,7 +25,6 @@ from app.issue_ids import from_public_id, to_public_id
 from app.ordinals import ordinal
 from app.photos import issue_photo
 from app.pipeline.fetch.congress import congress_gov_url_for_bill_id, expected_current_congress
-from app.pipeline.fetch.fr_rulemaking import RULE_DOC_TYPES
 from app.pipeline.transform.normalize_votes import is_housekeeping
 from app.services.bill_record import MemberLinks, parse_bill_id
 from app.services.congress_service import bill_label
@@ -1048,29 +1048,11 @@ def _comment_doc_ids(db: Session, actions: list) -> dict[int, int | None]:
             for n, a in wanted.items()}
 
 
-def open_comments_salience(doc, linked: set[int]) -> tuple:
-    """Sort key, most salient first: documents an issue links; then rules
-    (the Register's own type — proposed and final rules) before notices; then
-    by readers, as the Register counts them (fr_page_views); then deadline.
-
-    Sorting by deadline alone led with whatever closed soonest — on
-    2026-10-11, a waiver petition and five Paperwork Reduction Act
-    collections in the first ten. Citations were measured and not used: the
-    most-cited open documents were airworthiness directives (306 citations
-    each, all of them the boilerplate cross-references every directive
-    carries)."""
-    return (
-        doc.id not in linked,
-        doc.doc_type not in RULE_DOC_TYPES,
-        -(doc.fr_page_views or 0),
-        doc.comments_close_on,
-    )
-
-
 @router.get("/open-comments")
 def get_open_comments(response: Response, db: Session = Depends(get_db)):
     """Federal Register documents with open public comment periods, most
-    salient first (open_comments_salience)."""
+    salient first (comment_periods.salience: rules, then notices, paperwork
+    notices last). Each with the abstract's first sentence and its window."""
     # Comment-period deadlines move in days, not minutes — an hour of
     # staleness has no real effect on this list.
     response.headers["Cache-Control"] = "public, max-age=3600"
@@ -1082,6 +1064,7 @@ def get_open_comments(response: Response, db: Session = Depends(get_db)):
             ExploreDocument.id, ExploreDocument.external_id, ExploreDocument.title, ExploreDocument.agency_name,
             ExploreDocument.agency_slug, ExploreDocument.comments_close_on, ExploreDocument.comment_url, ExploreDocument.doc_type,
             ExploreDocument.date, ExploreDocument.summary, ExploreDocument.fr_page_views,
+            ExploreDocument.fr_toc_subject,
         )
         .filter(
             ExploreDocument.comment_url.isnot(None),
@@ -1093,7 +1076,7 @@ def get_open_comments(response: Response, db: Session = Depends(get_db)):
     )
     since = (date.fromisoformat(str(today)) - timedelta(days=OPEN_COMMENTS_ISSUE_DAYS)).isoformat()
     linked = _issue_linked_doc_ids(db, since)
-    docs = sorted(open_docs, key=lambda d: open_comments_salience(d, linked))[:OPEN_COMMENTS_SHOWN]
+    docs = sorted(open_docs, key=lambda d: comment_periods.salience(d, linked))[:OPEN_COMMENTS_SHOWN]
     result = []
     # No policyAreas: nothing writes ExploreDocument.policy_areas (empty on
     # all 10,589 documents, 2026-10-09) and no page read it.
@@ -1109,6 +1092,9 @@ def get_open_comments(response: Response, db: Session = Depends(get_db)):
             "docType": d.doc_type,
             "date": d.date,
             "summary": (d.summary or "")[:200],
+            "firstSentence": comment_periods.first_sentence(d.summary),
+            "paperwork": comment_periods.is_paperwork(d.doc_type, d.fr_toc_subject),
+            "commentWindow": comment_periods.comment_window(d.date, d.comments_close_on, str(today)),
         })
     return result
 

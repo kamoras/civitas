@@ -38,6 +38,9 @@ FJC_JUDGES = "https://www.fjc.gov/sites/default/files/history/judges.csv"
 MQ_JUSTICES = "https://mqscores.wustl.edu/media/{year}/justices.csv"
 
 _CACHE_TIER = "justice_records"
+# v2 rows carry the credible interval; a v1 entry (position only) is read
+# again rather than served for a week without it.
+_MQ_CACHE_KEY = "martin-quinn-v2"
 _rate_limiter = RateLimiter(rps=1.0)
 
 _RELEASE_RE = re.compile(r"https://scdb\.la\.psu\.edu/data/(\d{4})-release-(\d{2})/")
@@ -249,10 +252,12 @@ async def fetch_fjc(client: httpx.AsyncClient, db: Session) -> list[dict] | None
 
 
 async def fetch_martin_quinn(client: httpx.AsyncClient, db: Session) -> dict[str, list[list]] | None:
-    """{justiceName: [[term, position], ...]} from the newest yearly file:
-    each year's is published after the term it adds, so the newest can be
-    a few years back."""
-    cached = api_cache_get(db, _CACHE_TIER, "martin-quinn", max_age_hours=24 * 7)
+    """{justiceName: [[term, position, low, high], ...]} from the newest
+    yearly file: the posterior mean and its 95% credible interval
+    (post_025, post_975), or [term, position] where the file gives no
+    interval. Each year's is published after the term it adds, so the
+    newest can be a few years back."""
+    cached = api_cache_get(db, _CACHE_TIER, _MQ_CACHE_KEY, max_age_hours=24 * 7)
     if cached is not None:
         return cached
     for year in range(utcnow().year, utcnow().year - 4, -1):
@@ -263,9 +268,14 @@ async def fetch_martin_quinn(client: httpx.AsyncClient, db: Session) -> dict[str
         out: dict[str, list[list]] = {}
         for r in csv.DictReader(io.StringIO(resp.text)):
             try:
-                out.setdefault(r["justiceName"], []).append([int(r["term"]), round(float(r["post_mn"]), 3)])
+                point = [int(r["term"]), round(float(r["post_mn"]), 3)]
             except (KeyError, ValueError):
                 continue
-        api_cache_set(db, _CACHE_TIER, "martin-quinn", out, normal_ttl_hours=24 * 7)
+            try:
+                point += [round(float(r["post_025"]), 3), round(float(r["post_975"]), 3)]
+            except (KeyError, TypeError, ValueError):
+                pass  # the position stands without its interval
+            out.setdefault(r["justiceName"], []).append(point)
+        api_cache_set(db, _CACHE_TIER, _MQ_CACHE_KEY, out, normal_ttl_hours=24 * 7)
         return out
     return None

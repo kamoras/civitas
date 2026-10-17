@@ -1,3 +1,5 @@
+import type { CommentWindow } from "@/types/commentWindow";
+
 /** Where a block of an agency page comes from (backend api/agencies.py). */
 export interface AgencySource {
   name: string;
@@ -86,6 +88,10 @@ export interface AgencyDocument {
   commentsCloseOn: string;
   /** Only while its comment period is open. */
   commentUrl: string;
+  /** While open: the abstract's opening sentence, verbatim (null when the
+   *  stored abstract has none whole), and the period's window. */
+  firstSentence?: string | null;
+  commentWindow?: CommentWindow | null;
 }
 
 export interface AgencyBudgetYear {
@@ -132,6 +138,9 @@ export interface AgencyDetail {
     total: number;
     byType: Record<string, number>;
     openComments: AgencyDocument[];
+    /** Paperwork Reduction Act notices, folded apart; closing soonest first. */
+    paperworkNotices?: AgencyDocument[];
+    paperworkCount?: number;
     openCommentsCount: number;
     proposedRules: AgencyDocument[];
     finalRules: AgencyDocument[];

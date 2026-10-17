@@ -91,14 +91,18 @@ class TestRefreshOpenCommentViews:
 
         async def fetch(client, numbers, fields):
             asked.append((sorted(numbers), fields))
-            return {"2026-001": {"document_number": "2026-001", "page_views": {"count": 321}}}, set()
+            return {"2026-001": {"document_number": "2026-001", "page_views": {"count": 321},
+                                 "toc_subject": None, "toc_doc": "Privacy Act; Systems of Records"}}, set()
 
         with patch.object(ac, "comment_period_today", return_value="2026-10-11"), \
                 patch.object(ac, "fetch_fr_metadata", fetch):
             assert ac._refresh_open_comment_views(db_session) == 1
             assert ac._refresh_open_comment_views(db_session) == 0  # within the day
-        assert asked == [(["2026-001"], ["document_number", "page_views"])]
-        assert db_session.get(ExploreDocument, 1).fr_page_views == 321
+        assert asked == [(["2026-001"], ["document_number", "page_views", "toc_subject", "toc_doc"])]
+        stored = db_session.get(ExploreDocument, 1)
+        # The table-of-contents subject, from toc_doc when the Register
+        # lists no toc_subject: what tells a paperwork notice apart.
+        assert (stored.fr_page_views, stored.fr_toc_subject) == (321, "Privacy Act; Systems of Records")
 
     def test_a_failed_request_changes_nothing_and_retries_next_hour(self, db_session):
         db_session.add(_doc(1, "Open rule", ext="fr-reg-2026-001"))

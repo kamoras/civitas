@@ -6,7 +6,9 @@ import {
   PaginatedVotes,
   Senator,
 } from "@/types/senator";
+import type { CommentWindow } from "@/types/commentWindow";
 import type { President, PresidentLeaderboardEntry } from "@/types/president";
+import type { Court, JusticeCasePage } from "@/types/court";
 import type { JusticeLeaderboardEntry } from "@/types/justice";
 import type { ActionIssuesResponse, IssueMembers, IssueVote } from "@/types/action";
 import type { RedistrictedSeat } from "@/types/redistricting";
@@ -782,6 +784,18 @@ export async function fetchMemberPresidentialSupport(
   }
 }
 
+/** One page of a justice's cases, newest first (court_service.justice_cases). */
+export async function fetchJusticeCases(id: string, page: number): Promise<JusticeCasePage> {
+  const url = `${API_BASE}/justices/${encodeURIComponent(id)}/cases?page=${page}&per_page=20`;
+  return cachedFetch(url, TTL.SHORT);
+}
+
+/** The Court page's record (court_service.court), for the leaderboard's
+ *  Supreme Court tab to lead with. */
+export async function fetchCourt(): Promise<Court> {
+  return cachedFetch(`${API_BASE}/court`, TTL.SHORT);
+}
+
 export async function fetchJusticeLeaderboard(): Promise<JusticeLeaderboardEntry[]> {
   const url = `${API_BASE}/justices/leaderboard`;
   return asList(
@@ -834,6 +848,8 @@ export interface ExploreResult {
   agencySlug?: string;
   commentUrl: string;
   commentsCloseOn: string;
+  /** On the open-comments list: the period from publication to deadline. */
+  commentWindow?: CommentWindow | null;
 }
 
 /** Sentinels the backend wraps matched query terms in. See splitHighlights. */
@@ -898,6 +914,9 @@ export interface ExploreResponse {
   // this flag so the UI can show an honest "still indexing" state instead of
   // "no results found" while the stats header still claims thousands of docs.
   indexEmpty?: boolean;
+  /** The open-comments list only: Paperwork Reduction Act notices, kept out
+   *  of `results` and listed under their own fold, closing soonest first. */
+  paperwork?: { count: number; results: ExploreResult[] };
   /** Identifiers the query names that no document here is known by, each
    * with why (before the corpus starts, or not read yet) and its official
    * source (backend services/explore_coverage.not_held). */
@@ -2077,6 +2096,9 @@ export async function fetchPresidentHistory(presidentId: string): Promise<ScoreH
 export interface OpenCommentItem {
   id: number;
   title: string;
+  /** The abstract's opening sentence, verbatim; null when none is whole. */
+  firstSentence?: string | null;
+  commentWindow?: CommentWindow | null;
   agencyName: string | null;
   /** The agency's page (/agencies/{slug}); null when not read yet. */
   agencySlug?: string | null;

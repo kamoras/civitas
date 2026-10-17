@@ -2911,9 +2911,12 @@ FR_VIEWS_REFRESH_HOURS = 24
 
 
 def _refresh_open_comment_views(db: Session) -> int:
-    """Store the Register's reader count on every open Federal Register
-    document, at most once per FR_VIEWS_REFRESH_HOURS. Returns how many rows
-    changed. A failed request changes nothing and is retried next hour."""
+    """Store the Register's reader count and table-of-contents subject on
+    every open Federal Register document, at most once per
+    FR_VIEWS_REFRESH_HOURS. Returns how many rows changed. A failed request
+    changes nothing and is retried next hour. The subject is what tells a
+    paperwork notice from other notices (app/comment_periods.py); read here
+    rather than at ingest, whose module is fingerprinted."""
     if api_cache_get(db, _FR_VIEWS_CACHE_TIER, _FR_VIEWS_CACHE_KEY, max_age_hours=FR_VIEWS_REFRESH_HOURS):
         return 0
     rows = db.query(ExploreDocument).filter(
@@ -2923,18 +2926,26 @@ def _refresh_open_comment_views(db: Session) -> int:
 
     async def _fetch():
         async with make_async_client(headers={"User-Agent": BOT_USER_AGENT}) as client:
-            return await fetch_fr_metadata(client, list(by_number), ["document_number", "page_views"])
+            return await fetch_fr_metadata(
+                client, list(by_number), ["document_number", "page_views", "toc_subject", "toc_doc"],
+            )
 
     got = asyncio.run(_fetch()) if by_number else ({}, set())
     if got is None:
         return 0
     changed = 0
     for number, doc in got[0].items():
-        views = (doc.get("page_views") or {}).get("count")
         row = by_number.get(number)
-        if row is not None and isinstance(views, int) and row.fr_page_views != views:
-            row.fr_page_views = views
-            changed += 1
+        if row is None:
+            continue
+        views = (doc.get("page_views") or {}).get("count")
+        # The Register gives toc_doc alone when the subject has no sub-entry.
+        subject = doc.get("toc_subject") or doc.get("toc_doc") or None
+        fresh = {"fr_page_views": views if isinstance(views, int) else row.fr_page_views, "fr_toc_subject": subject}
+        moved = {k: v for k, v in fresh.items() if getattr(row, k) != v}
+        for k, v in moved.items():
+            setattr(row, k, v)
+        changed += bool(moved)
     db.commit()
     api_cache_set(db, _FR_VIEWS_CACHE_TIER, _FR_VIEWS_CACHE_KEY, {"documents": len(by_number), "changed": changed},
                   normal_ttl_hours=FR_VIEWS_REFRESH_HOURS)

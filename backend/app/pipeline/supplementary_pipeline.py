@@ -169,6 +169,17 @@ async def run_supplementary_pipeline() -> dict:
                             )
                         else:
                             resolve_ops_alert("justice-loyalty-unmeasured")
+                        if justice_result.get("positions_unread"):
+                            detail += ", Martin-Quinn positions not read"
+                            send_ops_alert(
+                                "Martin-Quinn positions not read",
+                                "The justice step could not read any Martin-Quinn file (mqscores.wustl.edu); "
+                                "the stored positions stand until a later run can read it.",
+                                dedupe_key=f"justice-positions-unread-{utcnow():%Y-%m-%d}",
+                                condition="justice-positions-unread",
+                            )
+                        else:
+                            resolve_ops_alert("justice-positions-unread")
                         progress.complete("justice_scorecards", detail=detail)
             except Exception:
                 db.rollback()  # drop partial justice upserts before the next commit

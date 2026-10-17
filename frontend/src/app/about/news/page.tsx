@@ -288,11 +288,14 @@ export default function NewsChapter() {
             documents whose comment period is open, each linking to its page in Explore and the
             comment form there. Those come in order of how much they matter, not which closes first:
             any a recent issue links, then proposed and final rules by how many people have read
-            them (the Federal Register&apos;s own count), then notices, which are mostly paperwork
-            renewals and waiver requests. By deadline alone, six of the first ten were such notices
-            on 11 October 2026. &ldquo;Every open comment period&rdquo; lists them all in Explore,
-            closing soonest first. Every day still on the record can be paged through, one at a
-            time.
+            them (the Federal Register&apos;s own count), then other notices, then paperwork
+            notices: requests to renew a form an agency collects, which the Register files under its
+            own heading. By deadline alone, six of the first ten were such notices on 11 October
+            2026; on 17 October they were 303 of the 615 open periods. &ldquo;Every open comment
+            period&rdquo; lists them all in Explore in the same order, with the paperwork notices
+            folded under their own heading, as each agency&apos;s page does. Each shows the
+            abstract&apos;s first sentence as the Register printed it and how much of the period is
+            left. Every day still on the record can be paged through, one at a time.
           </Item>
           <Item label="Ongoing">
             When a story keeps coming back, on five separate days within two weeks and from at least

@@ -13,6 +13,8 @@ import {
 } from "@/lib/justices";
 import ScoreColumn from "./ScoreColumn";
 import Photo from "@/components/Photo";
+import JusticeCases from "./JusticeCases";
+import { COURT_HREF, termsPhrase } from "@/lib/court";
 
 const PARTY: Record<string, { label: string; text: string; border: string }> = {
   D: { label: "D", text: "text-dem-blue", border: "border-dem-blue/40" },
@@ -34,7 +36,7 @@ const TOOLTIPS = {
   ideology:
     "The Martin-Quinn score: a left-right position estimated each term from the justice's votes beside the other justices'. Negative is liberal, positive conservative. Shown for context, not scored.",
   record:
-    "Orally argued cases decided in the last four terms: how often the justice was in the majority, in dissent, and in the majority of close cases (decided by one vote), how many cases were unanimous, and the opinions they wrote. Shown for context, not scored.",
+    "Orally argued cases decided in the terms named: how often the justice was in the majority, in dissent, and in the majority of close cases (decided by one vote), how many cases were unanimous, and the opinions they wrote. Shown for context, not scored.",
 };
 
 function pts(share: number) {
@@ -158,7 +160,10 @@ function IdeologyColumn({ points }: { points: [number, number][] }) {
       )}
       <p className="text-sm leading-relaxed text-ink-lo">
         Shown for context. Where a justice sits says nothing about favoring the president who made
-        the appointment.
+        the appointment.{" "}
+        <Link href={`${COURT_HREF}#line`} className={LINK}>
+          Every justice on one line
+        </Link>
       </p>
     </ScoreColumn>
   );
@@ -183,7 +188,8 @@ function RecordColumn({ justice: j }: { justice: Justice }) {
       aside="Not scored"
     >
       <p className="text-base leading-relaxed text-ink">
-        {j.casesDecided} orally argued cases decided in the last four terms.
+        {j.casesDecided} orally argued cases decided
+        {j.recordTerms && j.recordTerms.length > 0 ? ` in ${termsPhrase(j.recordTerms)}` : ""}.
       </p>
       <dl className="flex flex-col gap-1.5 text-sm">
         {rows.map(([k, v]) => (
@@ -318,11 +324,12 @@ export default function JusticeScorecard({
                   Share of the cases both decided the same way · not scored
                 </p>
               </div>
-              <dl className="grid gap-x-8 gap-y-2 sm:grid-cols-2">
+              <dl className="grid grid-cols-[minmax(0,1fr)] gap-x-8 gap-y-2 sm:grid-cols-[repeat(2,minmax(0,1fr))]">
                 {agreement.map(({ id, name, share }) => (
-                  <div key={id} className="flex items-center gap-3">
-                    <dt className="w-40 truncate text-sm text-ink">{name}</dt>
-                    <dd className="flex flex-1 items-center gap-3">
+                  <div key={id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    {/* Wraps under large text rather than pushing the page sideways. */}
+                    <dt className="w-40 max-w-full truncate text-sm text-ink">{name}</dt>
+                    <dd className="flex min-w-32 flex-1 items-center gap-3">
                       <span className="h-1.5 flex-1 bg-white/10" aria-hidden="true">
                         <span className="block h-full bg-ink-lo" style={{ width: `${share}%` }} />
                       </span>
@@ -338,6 +345,8 @@ export default function JusticeScorecard({
               </div>
             </section>
           )}
+
+          <JusticeCases justiceId={j.id} />
         </div>
       </ShareSubjectProvider>
     </SectionHeadingLevelProvider>

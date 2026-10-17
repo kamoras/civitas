@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from app.database import get_db
 from app.main import app
+from app.comment_periods import PAPERWORK_TOC_SUBJECT
 from app.models import Agency, AgencyBudget, ExploreDocument
 from app.pipeline.fetch import agencies as ag
 from app.pipeline.fetch.fr_rulemaking import issuing_agency
@@ -202,6 +203,27 @@ class TestApi:
         assert [d["title"] for d in body["executiveOrders"]["items"]] == ["EO 1: Health"]
         assert body["children"] == [{"slug": "food-and-drug-administration", "name": "Food and Drug Administration",
                                      "documents": 1}]
+
+    def test_open_periods_lead_with_rules_and_fold_paperwork_notices(self, db_session):
+        _seed(db_session)
+        url = "https://www.regulations.gov/y"
+        db_session.add_all([
+            ExploreDocument(doc_type="Notice", source="Federal Register", title="Form renewal", date="2026-10-02",
+                            chamber="Regulatory", agency_slug="food-and-drug-administration", comment_url=url,
+                            comments_close_on="2098-01-01", external_id="fr-reg-4", fr_page_views=9_000,
+                            fr_toc_subject=PAPERWORK_TOC_SUBJECT),
+            ExploreDocument(doc_type="Notice", source="Federal Register", title="Hearing", date="2026-10-03",
+                            chamber="Regulatory", agency_slug="food-and-drug-administration", comment_url=url,
+                            comments_close_on="2097-01-01", external_id="fr-reg-5",
+                            summary="The FDA will hold a hearing. Bring papers."),
+        ])
+        db_session.commit()
+        docs = _get(db_session, "/api/agencies/food-and-drug-administration").json()["documents"]
+        assert [d["title"] for d in docs["openComments"]] == ["Food labels", "Hearing"]
+        assert [d["title"] for d in docs["paperworkNotices"]] == ["Form renewal"]
+        assert (docs["openCommentsCount"], docs["paperworkCount"]) == (3, 1)
+        assert docs["openComments"][1]["firstSentence"] == "The FDA will hold a hearing."
+        assert docs["openComments"][1]["commentWindow"]["closes"] == "2097-01-01"
 
     def test_a_sub_agency_points_at_its_departments_budget(self, db_session):
         _seed(db_session)
