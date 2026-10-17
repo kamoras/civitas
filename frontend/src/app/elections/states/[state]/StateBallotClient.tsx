@@ -1863,9 +1863,10 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
           <OnThisPage />
           <div className="mx-auto max-w-[1400px]">
             <SectionTabs section="elections" active="ballots" className="mb-4" />
+            {/* Under 640px the section row above leads back to every state. */}
             <Link
               href="/elections"
-              className="inline-block mb-4 font-mono text-xs text-ink-lo hover:text-phos transition-colors"
+              className="mb-4 hidden font-mono text-xs text-ink-lo transition-colors hover:text-phos sm:inline-block"
             >
               ← ALL STATES
             </Link>

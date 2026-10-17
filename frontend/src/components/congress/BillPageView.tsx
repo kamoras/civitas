@@ -230,7 +230,8 @@ export default function BillPageView({
           <OnThisPage />
           <div className="mx-auto max-w-6xl">
             <SectionTabs section="congress" active="bills" />
-            <nav aria-label="Breadcrumb" className="mb-4 text-sm text-ink-lo">
+            {/* Under 640px the section row above names where this page sits. */}
+            <nav aria-label="Breadcrumb" className="hidden sm:block mb-4 text-sm text-ink-lo">
               <Link href="/congress" className="hover:text-phos">
                 Congress
               </Link>
@@ -316,16 +317,6 @@ export default function BillPageView({
                     ))}
                   </p>
                 ) : null}
-                {(record?.congress ?? detail?.congress) && (
-                  // The bill's own feed (the <head> names it first): each
-                  // action and roll call. Left out of a shared picture.
-                  <div data-share-exclude>
-                    <FollowFeed
-                      subject={label}
-                      feed={billFeed(record?.congress ?? detail!.congress, billId, label)}
-                    />
-                  </div>
-                )}
                 {lead && summary && (
                   <div className="flex flex-col gap-1.5">
                     <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
@@ -390,6 +381,17 @@ export default function BillPageView({
                     Congress.gov just now; those parts are missing below, not empty. Reload in a few
                     minutes.
                   </p>
+                )}
+                {(record?.congress ?? detail?.congress) && (
+                  // The bill's own feed (the <head> names it first): each
+                  // action and roll call. Left out of a shared picture. At
+                  // the end of the header, not before what the bill does.
+                  <div data-share-exclude>
+                    <FollowFeed
+                      subject={label}
+                      feed={billFeed(record?.congress ?? detail!.congress, billId, label)}
+                    />
+                  </div>
                 )}
               </header>
 
