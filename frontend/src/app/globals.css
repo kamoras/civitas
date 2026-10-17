@@ -327,6 +327,21 @@ input:focus-visible {
   outline-offset: 2px;
 }
 
+/* ===== THE SEAT MAP'S TILE LABELS ON A PHONE =====
+   The Senate tile map's state labels are SVG text in the map's own units
+   (font-size 3 of a 10-unit tile), which a phone drew at 6-8px. Under 640px
+   they are 5.1 units, 11-14px from 320 to 412px wide, still inside the tile;
+   in the Difference view, which puts a glyph under the label, 4 (CSS px in
+   SVG are the map's units). */
+@media (max-width: 639.98px) {
+  .map-tile-label {
+    font-size: 5.1px;
+  }
+  .map-tile-label-diff {
+    font-size: 4px;
+  }
+}
+
 /* ===== EXTERNAL LINK A11Y =====
    Announce to screen readers that target="_blank" links open a new tab. */
 a[target="_blank"]::after {
