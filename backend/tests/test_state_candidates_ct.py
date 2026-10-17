@@ -437,9 +437,8 @@ class TestStatewideFetch:
 
 
 # The real 2026 2nd district certificates (fixtures_ct_endorsements_cd2_2026.pdf,
-# trimmed to its two certificate pages with `mutool clean`): Democratic Joe
-# Courtney and Republican George Patrick Austin, both endorsed, neither
-# primaried. Before these were read, the primary results named no one in
+# trimmed to its two certificate pages with `mutool clean`): one Democratic
+# and one Republican endorsement, neither primaried. Before these were read, the primary results named no one in
 # CD 2 or CD 3 and the sitting members could not be shown as nominees.
 CD2_ENDORSEMENTS = (FIXTURES / "fixtures_ct_endorsements_cd2_2026.pdf").read_bytes()
 HOUSE_ENDORSEMENTS = {
@@ -462,12 +461,12 @@ class TestCongressionalEndorsements:
     def test_a_primaried_district_is_the_primarys_and_a_doubled_endorsement_publishes_neither(self):
         endorsed = [
             {"office": "H", "district": 1, "party": "D", "last_name": "Bronin", "display_name": "Luke Bronin"},
-            {"office": "H", "district": 1, "party": "R", "last_name": "Chai", "display_name": "Amy Chai"},
+            {"office": "H", "district": 1, "party": "R", "last_name": "Poe", "display_name": "Kim Poe"},
             {"office": "H", "district": 3, "party": "R", "last_name": "Roe", "display_name": "Pat Roe"},
             {"office": "H", "district": 3, "party": "R", "last_name": "Doe", "display_name": "Sam Doe"},
         ]
         merged = ct._merge_house({"D": {ct._house_contest(1)}, "R": set()}, endorsed)
-        assert [(r["district"], r["party"], r["last_name"]) for r in merged] == [(1, "R", "Chai")]
+        assert [(r["district"], r["party"], r["last_name"]) for r in merged] == [(1, "R", "Poe")]
 
     @pytest.mark.asyncio
     async def test_the_run_adds_endorsed_house_nominees_no_primary_decided(self, monkeypatch):
