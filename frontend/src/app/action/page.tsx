@@ -305,6 +305,12 @@ function OpenComments() {
               >
                 {item.title}
               </Link>
+              {item.firstSentence && (
+                // The abstract's opening sentence, as the Register printed it.
+                <span className="mt-1 block font-display text-sm leading-snug text-ink-lo">
+                  {item.firstSentence}
+                </span>
+              )}
             </span>
             <span className="text-right">
               <span className="block whitespace-nowrap font-mono text-xs tracking-[0.06em] text-signal-amber">
