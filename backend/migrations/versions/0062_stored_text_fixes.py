@@ -11,15 +11,15 @@
 Data only, no schema change: the previous image reads the rewritten rows
 the same way.
 
-Revision ID: 0061
-Revises: 0060
+Revision ID: 0062
+Revises: 0061
 Create Date: 2026-10-17
 """
 from alembic import op
 
 
-revision = '0061'
-down_revision = '0060'
+revision = '0062'
+down_revision = '0061'
 branch_labels = None
 depends_on = None
 
