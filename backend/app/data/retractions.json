@@ -29,6 +29,85 @@
         114
       ],
       "reason": "A post on 17 October 2026 presented a story about two national figures campaigning in Michigan, and speculation about 2028, as an update on the New York 14th District House race. The source was a multi-story newsletter, and it was attached to that race only because it named one of the race's candidates in full; nothing else in it concerned that race. The election coverage ingest now drops multi-story digests and newsletters as the Action Center does, requires a story to name the race (its state or another of its candidates) as well as the candidate, and posts only stories that clear a relevance threshold fitted on labelled stories (PR #1093). The post is withdrawn from the Atom feeds and the story from the race page."
+    },
+    {
+      "date": "2026-10-17",
+      "migration": null,
+      "issueIds": [],
+      "publicIds": [],
+      "coverageItems": [
+        {
+          "id": 430,
+          "url": "https://thehill.com/homenews/house/6094700-thomas-massie-house-gop-pete-hegseth-impeachment/"
+        },
+        {
+          "id": 432,
+          "url": "https://thehill.com/policy/energy-environment/6094781-greene-blames-trump-gas-prices/"
+        },
+        {
+          "id": 434,
+          "url": "https://thehill.com/video-clips/6095054-watch-live-house-democrats-midterms-messaging-affordability/"
+        },
+        {
+          "id": 445,
+          "url": "https://www.pbs.org/newshour/politics/man-who-sprayed-rep-ilhan-omar-with-vinegar-sentenced-to-14-months-in-prison"
+        },
+        {
+          "id": 446,
+          "url": "https://thehill.com/homenews/senate/6097194-tillis-calls-for-hegseth-impeachment/"
+        },
+        {
+          "id": 453,
+          "url": "https://thehill.com/newsletters/whole-hog-politics/whole-hog-politics-live-briefing/6097431-republican-redistricting-gains-expectations-vs-reality-midterms-discussion/"
+        },
+        {
+          "id": 454,
+          "url": "https://thehill.com/homenews/senate/6098638-shaheen-meeks-hold-weapons-sale-israel/"
+        },
+        {
+          "id": 455,
+          "url": "https://thehill.com/policy/defense/6098183-pentagon-ufo-files-1952-project-blue-book-briefing-uaps/"
+        },
+        {
+          "id": 464,
+          "url": "https://thehill.com/homenews/administration/6099322-trump-signs-russia-sanctions-bill/"
+        },
+        {
+          "id": 465,
+          "url": "https://www.bbc.co.uk/news/articles/cqvgy34ndj4eo?at_medium=RSS&at_campaign=rss"
+        },
+        {
+          "id": 474,
+          "url": "https://thehill.com/homenews/house/6101601-salazar-trump-hispanic-voters-receptive/"
+        },
+        {
+          "id": 476,
+          "url": "https://www.pbs.org/newshour/politics/key-senators-reject-white-house-proposal-on-nih-grants"
+        },
+        {
+          "id": 9244,
+          "url": "https://thehill.com/homenews/senate/6122945-democrats-call-pulte-resign/"
+        },
+        {
+          "id": 9279,
+          "url": "https://thehill.com/homenews/campaign/6124450-khanna-ocasio-cortez-democratic-primaries/"
+        },
+        {
+          "id": 9643,
+          "url": "https://www.bbc.co.uk/news/articles/cvp8glg97393o?at_medium=RSS&at_campaign=rss"
+        },
+        {
+          "id": 9823,
+          "url": "https://thehill.com/policy/international/6151128-india-ambassador-slams-jayapal/"
+        }
+      ],
+      "broadcastPostIds": [
+        10,
+        20,
+        83,
+        101
+      ],
+      "reason": "Sixteen race updates posted between 17 September and 15 October 2026 linked a story to a race it was not about. Fifteen were attached by a candidate's name alone, with nothing in the story about the race (a member's official business, a court case, talk of a presidential run), and one came from a multi-story newsletter. The four posted since the Atom feeds began are withdrawn from them, and all sixteen stories from their race pages. The fixes are the same as for the entry above (PR #1093)."
     }
   ]
 }

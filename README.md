@@ -1199,6 +1199,13 @@ kept stories that were about their race 79% of the time on the same items. The
 labels (`app/data/race_post_relevance_labels.json`) carry no names; no source
 says which race a story is about, so they are hand labels.
 
+The NY-14 post and the 16 others the 2026-10-17 audit of the month's race
+updates found linked to a race by a name-only match or a newsletter (4 with a
+feed entry, 12 Bluesky-only from before the feeds) are withdrawn in the public
+retraction log (`app/data/retractions.json`): their stories are left off the race
+pages and their posts out of the Atom feeds. Civitas deletes nothing on Bluesky
+itself.
+
 **The state-name corroboration goes vacuous on a state's own newsroom.** Adding
 41 per-state outlets broke an assumption the rule had always relied on: the
 Kentucky Lantern says "Kentucky" in virtually every article it publishes, so the

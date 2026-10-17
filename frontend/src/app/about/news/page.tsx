@@ -442,7 +442,8 @@ export default function NewsChapter() {
           the race&apos;s page. The first entry, on 27 September 2026, withdrew two issues that a
           since-fixed grouping step had built from unrelated stories. The second, on 17 October
           2026, withdrew an update on a New York House race that was really a newsletter about other
-          things.
+          things, and a check of the month before it withdrew sixteen more race updates linked to a
+          race by a candidate&apos;s name alone or by a newsletter.
         </P>
       </Section>
     </AboutPage>
