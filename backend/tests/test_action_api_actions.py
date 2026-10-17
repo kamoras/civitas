@@ -1,14 +1,17 @@
 """The issues API's committee and comment actions, and the Today tab's
 comment periods ranked by salience (app/api/action.py)."""
 
+import importlib.util
 import json
 from datetime import datetime
+from pathlib import Path
 from unittest.mock import patch
 
 from fastapi import Response
 
 from app.api.action import _build_issue_response, get_open_comments
 from app.models import ActionIssue, ExploreDocument, Representative, RollCall, Senator
+from app.services.explore_keys import public_key
 
 
 def _issue(db, actions, explore_ids=()):
@@ -148,10 +151,6 @@ def test_an_issue_stored_before_keys_still_reads_its_ids(db_session):
 
 
 def test_the_backfill_derives_the_same_keys_the_site_uses():
-    import importlib.util
-    from pathlib import Path
-
-    from app.services.explore_keys import public_key
     path = Path(__file__).parent.parent / "migrations" / "versions" / "0059_action_issue_explore_keys.py"
     spec = importlib.util.spec_from_file_location("m0059", path)
     module = importlib.util.module_from_spec(spec)

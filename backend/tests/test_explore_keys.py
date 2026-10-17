@@ -8,8 +8,10 @@ import json
 import pytest
 from fastapi import HTTPException
 
+from app.api import sitemap
 from app.api.explore import get_explore_document
-from app.models import ExploreDocument
+from app.models import ExploreDocument, Representative
+from app.services.explore_coverage import coverage_windows
 from app.services.explore_keys import find_by_key, public_key
 
 SPEECH = "crec-v1-CREC-2026-09-16-pt1-PgH5836-3-213d7a94"
@@ -79,7 +81,6 @@ def test_the_detail_answers_by_key_and_by_row_id_and_names_the_key(db_session):
 
 
 def test_a_speech_names_its_record_citation_and_speaker(db_session):
-    from app.models import Representative
     db_session.add(Representative(id="jordan-hale", name="Jordan Hale", state="MI", district=5, party="D"))
     db_session.commit()
     speech = _speech(db_session, SPEECH, politician_id="jordan-hale")
@@ -89,7 +90,6 @@ def test_a_speech_names_its_record_citation_and_speaker(db_session):
 
 
 def test_the_sitemap_lists_keys(db_session):
-    from app.api import sitemap
     _doc(db_session, "fr-reg-2026-17123")
     _speech(db_session, SPEECH)
     docs = json.loads(sitemap.sitemap_explore(page=0, db=db_session).body)["documents"]
@@ -97,7 +97,6 @@ def test_the_sitemap_lists_keys(db_session):
 
 
 def test_coverage_states_each_types_window(db_session):
-    from app.services.explore_coverage import coverage_windows
     _doc(db_session, "fr-reg-2026-1", date="2026-04-09")
     _doc(db_session, "fr-reg-2026-2", doc_type="Notice", date="2026-10-16")
     _speech(db_session, SPEECH)
