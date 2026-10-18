@@ -8,6 +8,7 @@ uses to label special elections, so the structural invariants below
 
 from datetime import date
 
+import httpx
 import pytest
 
 from app.election_calendar import (
@@ -17,6 +18,7 @@ from app.election_calendar import (
     seats_up_for_year,
     senate_classes,
 )
+from app.pipeline.fetch import special_elections as se
 
 CLASS_I_STATES = senate_classes()[1]
 CLASS_II_STATES = senate_classes()[2]
@@ -137,8 +139,6 @@ class TestSenateClassesFromTheSenatesList:
         assert gate({1: {"MD"}, 2: {"MD"}, 3: {"MD"}})
 
     async def test_a_vacant_seat_does_not_drop_its_state(self, tmp_path, monkeypatch):
-        import httpx
-
         from app import election_calendar
         from app.pipeline.fetch import senate_classes as sc
 
@@ -159,10 +159,6 @@ class TestSenateClassesFromTheSenatesList:
     async def test_one_failed_request_is_retried(self, tmp_path):
         # 2026-10-18: one failed GET of the Senate's list left a day's
         # vacancies unread while the list itself read fine.
-        import httpx
-
-        from app.pipeline.fetch import special_elections as se
-
         answers = iter([httpx.ReadTimeout(""), httpx.Response(200, content=b"<contact_information/>")])
 
         def handler(request):
@@ -175,8 +171,6 @@ class TestSenateClassesFromTheSenatesList:
             assert await se._get(client, "https://www.senate.gov/x.xml") == b"<contact_information/>"
 
     async def test_an_unreadable_list_keeps_what_is_stored(self, tmp_path):
-        import httpx
-
         from app.pipeline.fetch import senate_classes as sc
 
         path = tmp_path / "senate_classes.json"
