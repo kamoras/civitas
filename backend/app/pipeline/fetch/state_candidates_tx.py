@@ -81,7 +81,7 @@ STATE_OFFICE_TYPES = frozenset({"SW", "SR"})
 # (verified live) — an honest, identifying UA (same convention
 # sec_tickers.py uses for the SEC's own documented UA request) works
 # fine; no need to spoof a real browser's string.
-_HEADERS = {"User-Agent": f"Civitas civic-transparency-platform {CONTACT_EMAIL}"}
+_HEADERS = {"User-Agent": f"Civitas civic-transparency-platform {CONTACT_EMAIL}".rstrip()}
 
 # Two real requests per sync run (elections list, then candidates) — a
 # light, polite pace is enough; this isn't FEC's thousands-of-calls scale.

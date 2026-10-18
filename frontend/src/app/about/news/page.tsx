@@ -217,6 +217,14 @@ export default function NewsChapter() {
           the exception: its issue is the count, so what you can do is follow that count on its
           state&apos;s page.
         </P>
+        <P>
+          When an issue names a race on this year&apos;s ballot, it leads with it: &quot;On the
+          ballot: Georgia · Senate race (Roe)&quot;, then the state&apos;s next voter deadline from
+          its election office and links to register and to check your registration. A race is linked
+          only when the story names one of its confirmed nominees (in full, or by surname beside the
+          state&apos;s name when no other nominee there shares it) or the seat itself (&quot;the
+          Michigan Senate race&quot;). A state named without one of its races is not linked.
+        </P>
         <More label="How a story is linked to votes in Congress">
           <P>
             News rarely prints a bill&apos;s number, so until October 2026 not one issue in 543 had
@@ -381,27 +389,29 @@ export default function NewsChapter() {
         <P>
           Whether a trend is about U.S. policy is a vote among the most similar labelled Bluesky
           trends (nearest neighbors), the same method the Action Center uses for articles; the
-          labels were made by an AI agent against a written rubric, published with them. The
-          trend&apos;s name is the only text a post takes from Bluesky, so it is checked before
+          labels were made by an AI agent against a written rubric, published with them. The post
+          doesn&apos;t quote the trend&apos;s name, but it answers it, so the name is checked before
           anything else: a name that reads as electioneering, editorializes, states advocacy as
           fact, or that a vote of labelled examples finds loaded is skipped, not reworded.
         </P>
         <More label="Tragedies and violence">
           <P>
             They aren&apos;t excluded outright, because an official response to one is part of the
-            public record. A trend about one is eligible only when a vote finds it about political
-            violence, and only with an official record responding to it, or the agency&apos;s own
-            record. The post then states only what that record says, and nothing about victims or
-            perpetrators. With no such record, there is no post.
+            public record. A trend about one is eligible only with an official record (a vote, a
+            bill, a rule or the day&apos;s Congressional Record), or an Action Center issue
+            confirmed by two or more outlets, whose checked opening line the post quotes and credits
+            to its outlet. The post then states only what that record says. With no such record,
+            there is no post.
           </P>
         </More>
         <P>
-          Every word of a post is fixed template text, the record&apos;s own fields, or
-          Bluesky&apos;s name for the trend, quoted and attributed to Bluesky. No model writes any
-          of it. The picture is the record itself (a vote&apos;s tally by party, a bill, a rule) on
-          a card with its source, its page on Civitas and the date the data was read, and alt text
-          made from the same fields. For the first four weeks, alternate days carry that picture or
-          a plain link card instead, to measure which people engage with more.
+          Every word of a post is fixed template text or the record&apos;s own fields: what the
+          record says, then its date and source in parentheses. The post doesn&apos;t name the trend
+          or call it trending, so the record has to say what happened on its own. No model writes
+          any of it. The picture is the record itself (a vote&apos;s tally by party, a bill, a rule)
+          on a card with its source, its page on Civitas and the date the data was read, and alt
+          text made from the same fields. For the first four weeks, alternate days carry that
+          picture or a plain link card instead, to measure which people engage with more.
         </P>
         <P>
           Selection doesn&apos;t look at party: among eligible trends, the one posted is the one
@@ -420,13 +430,34 @@ export default function NewsChapter() {
         </P>
       </Section>
 
+      <Section id="race-posts" title="Race updates">
+        <P>
+          A news story is listed beside a race when it names one of the race&apos;s candidates in
+          full and also names the race: its state, or another of its candidates. A candidate&apos;s
+          name alone is not enough, because a member of Congress is in the news for many things
+          besides their own race. Newsletters and other multi-story roundups are left out, the same
+          way the Action Center leaves them out.
+        </P>
+        <P>
+          Civitas posts far fewer stories than it lists. Before a story becomes an update on its
+          race, it must also be about a candidate still on the state&apos;s certified November
+          ballot, and score high enough on how closely it matches the race. That bar was set against
+          stories we read and marked as about the race or not: about nine in ten of the stories
+          above it were about their race.
+        </P>
+      </Section>
+
       <Section id="retractions" title="Corrections and retractions">
         <P>
           When something Civitas published is wrong and can&apos;t be corrected from its sources, it
           is withdrawn, not quietly deleted. Each withdrawal is listed with its date and reason in a
-          public retraction log in the source code, and the issue&apos;s page says it was withdrawn
-          and why. The first entry, on 27 September 2026, withdrew two issues that a since-fixed
-          grouping step had built from unrelated stories.
+          public retraction log in the source code. A withdrawn issue&apos;s page says it was
+          withdrawn and why; a withdrawn race update is left out of the feeds, and its story out of
+          the race&apos;s page. The first entry, on 27 September 2026, withdrew two issues that a
+          since-fixed grouping step had built from unrelated stories. The second, on 17 October
+          2026, withdrew an update on a New York House race that was really a newsletter about other
+          things, and a check of the month before it withdrew sixteen more race updates linked to a
+          race by a candidate&apos;s name alone or by a newsletter.
         </P>
       </Section>
     </AboutPage>

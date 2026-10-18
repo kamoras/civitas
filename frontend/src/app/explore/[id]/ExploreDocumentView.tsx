@@ -638,7 +638,7 @@ export default function ExploreDocumentView({
             <div id="comment" className="border border-phos/40 p-5 mb-6 bg-phos/5">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
-                  <div className="flex items-center gap-2 mb-1">
+                  <div className="flex flex-wrap items-center gap-x-2 mb-1">
                     <span className="text-xs font-mono px-2 py-0.5 bg-phos/20 text-phos border border-phos/30">
                       OPEN FOR PUBLIC COMMENT
                     </span>

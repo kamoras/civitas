@@ -72,23 +72,6 @@ class TestCalibrateAndStore:
         assert rr.threshold(db_session) == rr.BOOTSTRAP_THRESHOLD
 
 
-class TestIsRelevant:
-    def test_an_empty_item_is_never_relevant(self, db_session, monkeypatch):
-        """Fail closed: no text means no basis to judge, so no post."""
-        race = Race(id="2026-SEN-CT", cycle_year=2026, office="S", state="CT")
-        db_session.add(race)
-        db_session.commit()
-
-        class _Empty:
-            title = None
-            summary = None
-
-        called = []
-        monkeypatch.setattr(rr, "score_pairs", lambda *a: called.append(1) or [1.0])
-        assert rr.is_relevant(_Empty(), race, db_session) is False
-        assert not called  # short-circuits before loading any model
-
-
 def test_a_recalibration_by_another_process_is_picked_up(db_session, monkeypatch):
     # The pipeline process re-derives the threshold; its reset_cache()
     # never reaches the API processes gating the elections feed.

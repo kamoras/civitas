@@ -20,10 +20,10 @@ from app.time_utils import utcnow
 
 
 def _stub_relevance(monkeypatch, relevant=True):
-    """The relevance gate loads an embedding model; unit tests stub it and
-    race_relevance has its own tests."""
-    from app.pipeline.analyze import race_relevance
-    monkeypatch.setattr(race_relevance, "is_relevant", lambda *a, **k: relevant)
+    """Stub the pre-post refusal (digest, race evidence, relevance), which
+    TestRefusal exercises on its own, so these tests reach the volume and
+    publishing rules."""
+    monkeypatch.setattr(election_bluesky, "refusal", lambda *a: None if relevant else "not about the race")
 
 
 def _race(db, race_id="2026-SEN-GA", state="GA", office="S"):
@@ -563,3 +563,99 @@ class TestGeneratePostText:
         race = Race(id="2026-SEN-GA", cycle_year=2026, office="S", state="GA")
         assert len(f"Jon Brennan {clause}.") > eb._post_budget(race)
         assert self._generate(monkeypatch, clause) is None
+
+
+class TestRefusal:
+    """The pre-post check (election_bluesky.refusal), on the shape of the
+    2026-10-17 post: a newsletter whose lead item named a New York House
+    candidate campaigning in Michigan, at relevance 0.424."""
+
+    NEWSLETTER = dict(
+        title="Hale and Rivas-Cole face off in Michigan, previewing possible 2028 match-up",
+        url="https://thehill.com/newsletters/morning-report/6153128-vance-ocasio-cortez-michigan-2028/",
+        summary=(
+            "In today's issue: ▪ Zacharia confirms she didn't pass bar exam ▪ Livestreamed "
+            "execution called off ▪ Elections offices receive suspicious letters Rep. Alexandria "
+            "Rivas-Cole (D-N.Y.) and Vice President Hale are lending their star power to "
+            "frontline candidates in Michigan..."
+        ),
+    )
+
+    def _seed(self, db, **item):
+        race = _race(db, "2026-HOUSE-NY-14", "NY", office="H")
+        _candidate(db, "H8NY15148", "2026-HOUSE-NY-14", "RIVAS-COLE, ALEXANDRIA")
+        _candidate(db, "H6NY14002", "2026-HOUSE-NY-14", "RIVAL, PAT")
+        fields = dict(
+            title="Alexandria Rivas-Cole and Pat Rival clash in New York debate",
+            url="https://thehill.com/homenews/campaign/1-debate/",
+            summary="The two candidates met on Tuesday.", relevance=0.6,
+            matched_candidate_id="H8NY15148",
+        )
+        fields.update(item)
+        it = _item(db, race_id="2026-HOUSE-NY-14", source_name="The Hill", **fields)
+        db.commit()
+        matchers = {m.candidate_id: m for m in election_bluesky.build_matchers(db)}
+        return it, race, matchers
+
+    def test_race_coverage_that_names_the_race_passes(self, db_session):
+        assert election_bluesky.refusal(*self._seed(db_session)) is None
+
+    def test_the_ny14_newsletter_is_refused(self, db_session):
+        why = election_bluesky.refusal(*self._seed(db_session, relevance=0.424, **self.NEWSLETTER))
+        assert "digest" in why
+
+    def test_a_newsletter_url_alone_is_refused(self, db_session):
+        why = election_bluesky.refusal(*self._seed(
+            db_session, url="https://thehill.com/newsletters/campaign/1-debate/"))
+        assert "newsletter section" in why
+
+    def test_a_name_without_the_race_is_refused(self, db_session):
+        why = election_bluesky.refusal(*self._seed(
+            db_session, title="Alexandria Rivas-Cole rallies voters in Michigan",
+            summary="Rep. Alexandria Rivas-Cole (D-N.Y.) campaigned for candidates there."))
+        assert "not the race" in why
+
+    def test_relevance_below_the_calibrated_threshold_is_refused(self, db_session):
+        cut = election_bluesky.post_relevance_threshold()
+        item, race, matchers = self._seed(db_session, relevance=round(cut - 0.01, 4))
+        assert "below the posting threshold" in election_bluesky.refusal(item, race, matchers)
+        item.relevance = None  # never scored: fail closed
+        assert election_bluesky.refusal(item, race, matchers)
+
+    def test_a_candidate_off_the_certified_ballot_is_refused(self, db_session):
+        """A member running for governor, a primary loser: once the state
+        certifies its November candidates, a story about anyone else is not
+        about the race."""
+        item, race, matchers = self._seed(db_session)
+        rival = db_session.get(Candidate, "H6NY14002")
+        rival.confirmed_general = True
+        db_session.commit()
+        db_session.refresh(race)
+        assert "certified November ballot" in election_bluesky.refusal(item, race, matchers)
+        db_session.get(Candidate, "H8NY15148").confirmed_general = True
+        db_session.commit()
+        db_session.refresh(race)
+        assert election_bluesky.refusal(item, race, matchers) is None
+
+    def test_post_race_coverage_updates_does_not_post_it(self, db_session, bluesky_outbox):
+        self._seed(db_session, relevance=0.424, **self.NEWSLETTER)
+        with patch.object(election_bluesky, "_generate_post_text") as gen:
+            assert election_bluesky.post_race_coverage_updates(db_session) == 0
+        gen.assert_not_called()
+        assert db_session.query(BroadcastPost).count() == 0
+        assert bluesky_outbox == []
+
+
+def test_the_posting_threshold_matches_its_labels():
+    """Rerun scripts/calibrate_race_post_relevance.py when the labels change."""
+    import importlib.util
+    import json
+    import pathlib
+
+    path = pathlib.Path(__file__).resolve().parent.parent / "scripts" / "calibrate_race_post_relevance.py"
+    spec = importlib.util.spec_from_file_location("calibrate_race_post_relevance", path)
+    script = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(script)
+    stored = json.loads(script.CALIBRATION_PATH.read_text())
+    assert stored == script.calibrate(json.loads(script.LABELS_PATH.read_text()))
+    assert election_bluesky.post_relevance_threshold() == stored["threshold"]

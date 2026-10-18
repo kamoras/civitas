@@ -4,7 +4,10 @@ The log is the record of what Civitas published and withdrew, and why.
 The API answers 410 with its reason for an issue in it, and the issue page
 shows that reason (marked noindex), so a link someone saw in a post
 explains itself rather than breaking; its rows are removed by the data
-migration the entry names.
+migration the entry names. A withdrawn race-coverage item is left off its
+race's page (by URL, which a data reset's re-ingest keeps), and a withdrawn
+post (by id: broadcast_posts survives a reset) is left out of the feeds and
+never sent again.
 """
 
 import json
@@ -25,3 +28,13 @@ def retraction_for_issue(issue_id: str) -> dict | None:
         if issue_id in entry["publicIds"] or (issue_id.isdigit() and int(issue_id) in entry["issueIds"]):
             return {"date": entry["date"], "reason": entry["reason"]}
     return None
+
+
+def withdrawn_coverage_urls() -> frozenset[str]:
+    """URLs of race-coverage items the log withdraws from race pages."""
+    return frozenset(item["url"] for entry in entries() for item in entry.get("coverageItems", []))
+
+
+def withdrawn_post_ids() -> frozenset[int]:
+    """Ids of published posts (broadcast_posts) the log withdraws."""
+    return frozenset(post_id for entry in entries() for post_id in entry.get("broadcastPostIds", []))
