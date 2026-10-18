@@ -8,6 +8,7 @@ import importlib.util
 import pathlib
 from datetime import date
 
+import httpx
 import pytest
 
 from app import data_refresh as dr
@@ -189,8 +190,6 @@ def test_the_fits_refit_weekly_while_a_certified_general_is_missing(monkeypatch)
 
 def _client_with(answers: list):
     """A client whose requests answer in turn from `answers` (an exception is raised)."""
-    import httpx
-
     def handler(request):
         answer = answers.pop(0)
         if isinstance(answer, Exception):
@@ -201,8 +200,6 @@ def _client_with(answers: list):
 
 
 def test_a_dropped_connection_is_retried_not_a_failed_refit(monkeypatch, tmp_path):
-    import httpx
-
     answers = [httpx.RemoteProtocolError("Server disconnected without sending a response."),
                httpx.Response(200, content=b"PK cn24")]
     monkeypatch.setattr(fit, "make_async_client", _client_with(answers))
@@ -211,8 +208,6 @@ def test_a_dropped_connection_is_retried_not_a_failed_refit(monkeypatch, tmp_pat
 
 
 def test_a_source_down_through_every_retry_stops_the_run_with_nothing_cached(monkeypatch, tmp_path):
-    import httpx
-
     monkeypatch.setattr(fit, "make_async_client", _client_with([httpx.ConnectError("refused")] * 3))
     with pytest.raises(SystemExit, match="no answer after 3 attempts"):
         fit.fetch("https://www.fec.gov/files/bulk-downloads/2024/cn24.zip", tmp_path / "cn24.zip")
