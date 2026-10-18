@@ -101,7 +101,7 @@ def test_heavy_files_wait_for_the_pipeline_and_stale_ones_alert(alerts):
     heavy = dr.DataFile("t_heavy.json", command=lambda ctx: _writer({"v": 1}), due=lambda ctx: True, heavy=True)
     stale = dr.DataFile("t_stale.json", stale=lambda ctx: "a newer one is out")
     fresh = dr.DataFile("t_fresh.json")
-    with patch.object(dr, "_last_tried", return_value=None), \
+    with patch.object(dr, "_last_try", return_value=(None, False)), \
          patch.object(dr, "_record_try", side_effect=lambda n, o: tried.append(n)):
         out = dr.run_refreshes([heavy, stale, fresh], pipeline_busy=True)
         assert out == {"t_heavy.json": "waiting for the pipeline", "t_stale.json": "current", "t_fresh.json": "current"}
@@ -116,7 +116,7 @@ def test_one_files_error_never_stops_the_rest(alerts):
     def boom(ctx):
         raise RuntimeError("bad spec")
 
-    with patch.object(dr, "_last_tried", return_value=None):
+    with patch.object(dr, "_last_try", return_value=(None, False)):
         out = dr.run_refreshes([dr.DataFile("t_err.json", stale=boom), dr.DataFile("t_after.json")])
     assert out == {"t_err.json": "error", "t_after.json": "current"}
 
@@ -268,3 +268,19 @@ def test_the_population_source_says_which_census_it_reports():
     spec.loader.exec_module(module)
     assert module.latest_census("<th>2020 census rank</th><td>2010 census</td>") == 2020
     assert module.latest_census("<th>2030 census rank</th> 2020 census") == 2030
+
+
+def test_a_failed_try_is_retried_within_a_week_whatever_the_cadence():
+    with patch.object(dr, "utcnow", return_value=datetime(2026, 10, 26)):
+        failed = dr.Context("name_casing.json", {}, date(2026, 10, 26), datetime(2026, 10, 18), last_failed=True)
+        kept_fine = dr.Context("name_casing.json", {}, date(2026, 10, 26), datetime(2026, 10, 18))
+        assert not failed.tried_within(365)
+        assert kept_fine.tried_within(365)
+
+
+def test_the_last_try_remembers_a_kept_outcome(db_session):
+    with patch.object(dr, "SessionLocal", return_value=db_session), patch.object(db_session, "close"):
+        dr._record_try("x.json", "kept: 8832 forms")
+        assert dr._last_try("x.json")[1] is True
+        dr._record_try("x.json", "refreshed")
+        assert dr._last_try("x.json")[1] is False
