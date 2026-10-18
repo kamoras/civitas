@@ -86,6 +86,11 @@ export interface LeanContext {
   moreDemocratic: number;
   moreRepublican: number;
   same: number;
+  /** This seat's lean in `distribution` (positive = R). */
+  seatLean: number;
+  /** Every seat's lean against the nation, one entry per figure, most
+   * Democratic first, labelled as the map labels it. */
+  distribution?: { lean: number; label: string; count: number }[];
 }
 
 export interface RaceSummary {

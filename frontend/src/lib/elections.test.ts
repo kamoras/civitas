@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  filterDistricts,
   candidateName,
   districtAreaLabel,
   electionTitle,
@@ -575,6 +576,45 @@ describe("placeName", () => {
     expect(placeName("Lake Pine City city")).toBe("Lake Pine City");
     expect(placeName("Ore City")).toBe("Ore City");
     expect(placeName("Silver Glen")).toBe("Silver Glen");
+  });
+});
+
+describe("filterDistricts", () => {
+  // Backlog 7 #14: "Detroit" listed MI-5 (Detroit Beach) while the status
+  // line said districts 12 and 13.
+  const mi = [
+    { district: 5, counties: ["Monroe County"], places: ["Detroit Beach CDP", "Monroe city"] },
+    { district: 12, counties: ["Wayne County (part)"], places: ["Detroit city", "Dearborn city"] },
+    { district: 13, counties: ["Wayne County (part)"], places: ["Detroit city"] },
+    { district: 14, counties: ["Kent County"], places: ["Wayne city"] },
+  ];
+  const toRow = (d: (typeof mi)[number]) => ({
+    district: d.district,
+    areas: [...d.counties, ...d.places],
+    candidates: [],
+  });
+  const districts = (q: string) => filterDistricts(mi, q, toRow).map((d) => d.district);
+
+  it("a place named in full keeps only the districts holding it", () => {
+    expect(districts("Detroit")).toEqual([12, 13]);
+    expect(districts("detroit beach")).toEqual([5]);
+    // The list agrees with the status line.
+    expect(placeDistrictSummary(mi, "Detroit")[0]).toMatch(/districts 12 and 13/);
+  });
+
+  it("a county named in full, with or without County, matches the county and a place of that name", () => {
+    expect(districts("Wayne")).toEqual([12, 13, 14]);
+    expect(districts("Wayne County")).toEqual([12, 13]);
+  });
+
+  it("part of a name still narrows by substring", () => {
+    expect(districts("detr")).toEqual([5, 12, 13]);
+    expect(districts("")).toEqual([5, 12, 13, 14]);
+  });
+
+  it("a district number still matches in whole-name mode", () => {
+    const rows = [...mi, { district: 7, counties: ["Seven County"], places: [] }];
+    expect(filterDistricts(rows, "7", toRow).map((d) => d.district)).toEqual([7]);
   });
 });
 

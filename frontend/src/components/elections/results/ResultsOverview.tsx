@@ -267,7 +267,7 @@ export default function ResultsOverview({
 
   return (
     <div className="mt-6 space-y-8">
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <section
           aria-labelledby="results-map-heading"
           className="min-w-0 border border-phos/20 bg-surface"
@@ -279,7 +279,7 @@ export default function ResultsOverview({
             <div
               role="group"
               aria-label="Chamber"
-              className="flex font-mono text-xs tracking-[0.12em]"
+              className="flex flex-wrap font-mono text-xs tracking-[0.12em]"
             >
               {(["S", "H"] as const).map((c) => (
                 <button
@@ -386,7 +386,7 @@ export default function ResultsOverview({
         <LiveUpdates updates={results.updates} limit={12} />
       </div>
 
-      <section aria-label="Totals" className="grid gap-3 sm:grid-cols-3">
+      <section aria-label="Totals" className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="border border-white/[0.09] bg-surface p-4">
           <p className="font-mono text-xs tracking-[0.12em] text-ink-min">SENATE SEATS LED</p>
           <div className="mt-2">
@@ -455,7 +455,7 @@ export default function ResultsOverview({
           <span>By state</span>
           <span>Ballot research stays on every state page</span>
         </h2>
-        <ul className="mt-3 grid gap-px bg-white/[0.07] sm:grid-cols-2 lg:grid-cols-4">
+        <ul className="mt-3 grid grid-cols-1 gap-px bg-white/[0.07] sm:grid-cols-2 lg:grid-cols-4">
           {directory.map((state) => {
             const summary = summarizeState(byState.get(state) ?? []);
             const isLive = live.has(state);

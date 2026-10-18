@@ -48,15 +48,16 @@ describe("HeaderClearance", () => {
     const { unmount } = render(<HeaderClearance />);
     expect(document.documentElement.style.getPropertyValue("--header-clearance")).toBe("");
     // The header's own height, for the phone's section bar under it.
-    expect(document.documentElement.style.getPropertyValue("--header-h")).toBe("86px");
+    expect(document.documentElement.style.getPropertyValue("--header-height")).toBe("86px");
     // The bar wraps (a phone at 200% text): the clearance follows the header.
     document.querySelector("header")!.getBoundingClientRect = () => ({ height: 222 }) as DOMRect;
     observed?.();
     expect(document.documentElement.style.getPropertyValue("--header-clearance")).toBe("230px");
-    expect(document.documentElement.style.getPropertyValue("--header-h")).toBe("222px");
+    // What sticks under the header reads its measured height.
+    expect(document.documentElement.style.getPropertyValue("--header-height")).toBe("222px");
     unmount();
     expect(document.documentElement.style.getPropertyValue("--header-clearance")).toBe("");
-    expect(document.documentElement.style.getPropertyValue("--header-h")).toBe("");
+    expect(document.documentElement.style.getPropertyValue("--header-height")).toBe("");
     vi.restoreAllMocks();
   });
 });

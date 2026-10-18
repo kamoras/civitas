@@ -20,7 +20,7 @@ import {
 export const metadata = pageMetadata({
   title: "Public API and MCP server",
   description:
-    "Civitas's scores, member records and document search as an open JSON API and an MCP server for AI assistants. No key, no account.",
+    "Civitas's scores, records of Congress, presidents, the Supreme Court, nominations and agencies, and document search as an open JSON API and an MCP server for AI assistants. No key, no account.",
   path: "/developers",
 });
 
@@ -48,6 +48,10 @@ async function fetchSpec(): Promise<Spec | null> {
 
 const CODE = "font-mono text-xs text-ink-hi";
 
+/** A tag group's heading id: no spaces, since aria-labelledby reads a
+ *  space as a list of ids ("Votes with the president" named nothing). */
+const tagId = (tag: string) => `tag-${tag.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+
 /** Docstring prose, with its `code` spans set as code. */
 function Prose({ text }: { text: string }) {
   return (
@@ -69,7 +73,7 @@ function Params({ params }: { params: Parameter[] }) {
   return (
     <dl className="divide-y divide-white/[0.05] border-y border-white/[0.07]">
       {params.map((p) => (
-        <div key={p.name} className="grid gap-1 py-2 sm:grid-cols-[11rem_1fr] sm:gap-4">
+        <div key={p.name} className="grid grid-cols-1 gap-1 py-2 sm:grid-cols-[11rem_1fr] sm:gap-4">
           <dt>
             <code className={CODE}>{p.name}</code>
             <span className="ml-2 font-mono text-[11px] text-ink-min">
@@ -114,7 +118,7 @@ function Fields({
       {properties.map(([name, field]) => {
         const nested = depth < 2 ? nestedObject(field, spec) : null;
         return (
-          <div key={name} className="grid gap-1 py-2 sm:grid-cols-[11rem_1fr] sm:gap-4">
+          <div key={name} className="grid grid-cols-1 gap-1 py-2 sm:grid-cols-[11rem_1fr] sm:gap-4">
             <dt>
               <code className={`${CODE} break-all`}>{name}</code>
             </dt>
@@ -210,8 +214,9 @@ export default async function DevelopersPage() {
             title="Public API and MCP server"
           >
             <p>
-              The scores, member records and document search behind this site, as JSON for your own
-              program and as tools for an AI assistant.
+              The scores, the records of Congress, presidents, the Supreme Court, nominations and
+              agencies, and the document search behind this site, as JSON for your own program and
+              as tools for an AI assistant.
             </p>
           </PageMasthead>
 
@@ -250,7 +255,10 @@ export default async function DevelopersPage() {
                   <code className={CODE}>/politicians/jane-doe</code>. The lists give each one, and
                   every record carries <code className={CODE}>siteUrl</code>, its page here, to link
                   or cite. An id changes when the member&apos;s name does; the old one keeps
-                  working, and the record comes back under the new one.
+                  working, and the record comes back under the new one. A president&apos;s or
+                  justice&apos;s id is the one in their address too; a roll call is named by its
+                  chamber, Congress, session and number, a nomination by its Congress and citation,
+                  and an agency by the Federal Register&apos;s id.
                 </Item>
                 <Item label="Lists">
                   Pages of <code className={CODE}>entries</code> with{" "}
@@ -335,10 +343,10 @@ export default async function DevelopersPage() {
               {spec ? (
                 <div className="space-y-12">
                   {groups.map(({ tag, description, endpoints }) => (
-                    <section key={tag} aria-labelledby={`tag-${tag}`} className="space-y-8">
+                    <section key={tag} aria-labelledby={tagId(tag)} className="space-y-8">
                       <div className="space-y-1 border-b border-white/[0.07] pb-2">
                         <h3
-                          id={`tag-${tag}`}
+                          id={tagId(tag)}
                           className="font-mono text-xs uppercase tracking-wider text-ink-lo"
                         >
                           {tag}

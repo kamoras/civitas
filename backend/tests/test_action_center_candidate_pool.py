@@ -209,3 +209,22 @@ def test_a_livestream_announcement_never_titles_or_sources_an_issue(db_session, 
     issues = db_session.query(ActionIssue).order_by(ActionIssue.rank).all()
     assert [i.title for i in issues] == ["Story 3 headline 1", "Story 6 headline 0"]
     assert CLUSTERS[2][0].url not in json.loads(issues[0].source_urls)
+
+
+def test_a_live_blog_listing_several_stories_never_titles_an_issue(db_session, refresh, monkeypatch):
+    """Cluster 3 leads with a live blog whose headline lists two stories
+    (issue 806, 2026-10-16): the issue takes the next headline and keeps the
+    live blog as a source, and the live blog's headline claim is never
+    asked for. Cluster 5 is nothing but live blogs, so it publishes nothing
+    and cluster 6 takes the second slot."""
+    live = {CLUSTERS[2][0].title, *(a.title for a in CLUSTERS[4])}
+    monkeypatch.setattr(action_center, "_multi_story_headline", lambda title: title in live)
+    asked = []
+    extract = action_center.claim_layer.extract_claims
+    monkeypatch.setattr(action_center.claim_layer, "extract_claims",
+                        lambda cluster, locate: asked.extend(a.title for a in cluster) or extract(cluster, locate))
+    action_center._run_refresh(db_session)
+    issues = db_session.query(ActionIssue).order_by(ActionIssue.rank).all()
+    assert [i.title for i in issues] == ["Story 3 headline 1", "Story 6 headline 0"]
+    assert CLUSTERS[2][0].url in json.loads(issues[0].source_urls)
+    assert not live & set(asked)

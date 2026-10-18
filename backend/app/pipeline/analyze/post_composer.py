@@ -525,6 +525,17 @@ _OBJECT_PREPOSITIONS = frozenset({
 })
 
 
+# The forms of "be" that make a following -ing word a progressive verb
+# ("is seeking"), not a bare participle (compose). Grammar, not a
+# classification, like the word sets around it.
+_BE_FORMS = frozenset({"is", "are", "was", "were", "be", "been", "being", "am"})
+
+
+def _last_word(text: str | None) -> str:
+    words = re.findall(r"[\w']+", text or "")
+    return words[-1].lower() if words else ""
+
+
 # A predicate ending on one of these was cut mid-phrase: the model
 # located the right span but stopped before its object. Measured live
 # against real coverage, this produced "<a senator> takes a
@@ -727,7 +738,12 @@ def compose(actor: str, predicate: str, source: str) -> str | None:
     # unveiling legislation." An auxiliary ("is unveiling") is fine, so
     # only a LEADING -ing word is rejected.
     head = re.sub(r"[^\w]", "", predicate.split()[0]).lower()
-    if head.endswith("ing"):
+    # The auxiliary can be the source's own words between the spans: "The
+    # administration is seeking to stop the counting of some votes" located
+    # as "administration" + "seeking ...", composed with its
+    # gap " is ", reads "is seeking", a clause like any other. Rejected
+    # until 2026-10: 6 of 356 recorded answers, every one a true sentence.
+    if head.endswith("ing") and _last_word(gap) not in _BE_FORMS:
         return None
     if not _ends_at_clause_boundary(predicate, source):
         return None

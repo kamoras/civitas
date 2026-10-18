@@ -2,6 +2,7 @@ import type {
   BillRecord,
   CommitteeRecordPage,
   CongressCoverage,
+  CongressGlance,
   CommitteeSummary,
   DayReport,
   MonthReport,
@@ -179,3 +180,13 @@ async function visitorHeaders(): Promise<Record<string, string>> {
 
 export const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 export const ISO_MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/** The sitting Congress at a glance, or null when it can't be read just
+ * now: /congress still renders its report without the pictures. */
+export async function fetchGlance(): Promise<CongressGlance | null> {
+  try {
+    return await getJson<CongressGlance>("/api/congress/glance", "calendar");
+  } catch {
+    return null;
+  }
+}
