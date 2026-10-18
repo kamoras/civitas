@@ -156,6 +156,24 @@ class TestSenateClassesFromTheSenatesList:
         assert "DE" in sc._stored(path)[1]
         election_calendar.reset_senate_classes()
 
+    async def test_one_failed_request_is_retried(self, tmp_path):
+        # 2026-10-18: one failed GET of the Senate's list left a day's
+        # vacancies unread while the list itself read fine.
+        import httpx
+
+        from app.pipeline.fetch import special_elections as se
+
+        answers = iter([httpx.ReadTimeout(""), httpx.Response(200, content=b"<contact_information/>")])
+
+        def handler(request):
+            answer = next(answers)
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            assert await se._get(client, "https://www.senate.gov/x.xml") == b"<contact_information/>"
+
     async def test_an_unreadable_list_keeps_what_is_stored(self, tmp_path):
         import httpx
 

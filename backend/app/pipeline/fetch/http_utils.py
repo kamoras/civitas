@@ -237,9 +237,11 @@ async def fetch_with_retry(
                 # The exception's own message can embed the request URL,
                 # including request_url if one was given (e.g.
                 # httpx.ConnectError/ReadTimeout do) — redact it too.
+                # The type too: a timeout's message is often empty, which
+                # logged "unavailable: " with no cause (2026-10-18).
                 logger.error(
-                    "%s failed after %d attempts: %s — %s",
-                    label, retries, url, redact_url(str(e)),
+                    "%s failed after %d attempts: %s — %s: %s",
+                    label, retries, url, type(e).__name__, redact_url(str(e)),
                 )
                 return None
             await asyncio.sleep(backoff_s * attempt)
@@ -403,9 +405,11 @@ async def fetch_with_retry_requests(
             return resp
         except Exception as e:
             if attempt == retries:
+                # The type too: a timeout's message is often empty, which
+                # logged "unavailable: " with no cause (2026-10-18).
                 logger.error(
-                    "%s failed after %d attempts: %s — %s",
-                    label, retries, url, redact_url(str(e)),
+                    "%s failed after %d attempts: %s — %s: %s",
+                    label, retries, url, type(e).__name__, redact_url(str(e)),
                 )
                 return None
             await asyncio.sleep(backoff_s * attempt)
