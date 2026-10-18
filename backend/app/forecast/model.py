@@ -88,9 +88,12 @@ HORIZONS = (0, 7, 14)
 # normal spread.
 Z80 = 1.2815515655446004
 Z95 = 1.959963984540054
-# Calibration-table bins over the Democratic candidate's implied chance.
-# 0.35-0.65 is the band the page calls near even.
-CALIBRATION_EDGES = (0.0, 0.05, 0.15, 0.35, 0.65, 0.85, 0.95, 1.0)
+# Calibration-table bins over the implied chance of the side a range
+# leans toward, whichever party that is: the table is folded at even so it
+# reads the same with the parties swapped (a table of "went to the
+# Democrat" read as partisan though it was symmetric). 0.5-0.65 is the band
+# the page calls near even.
+CALIBRATION_EDGES = (0.5, 0.65, 0.85, 0.95, 1.0)
 
 
 @dataclass(frozen=True)
@@ -379,21 +382,37 @@ def log_loss(p: list[float], dem_won: list[float]) -> float:
 
 
 def calibration_table(p: list[float], dem_won: list[float], years: list[int]) -> list[dict]:
+    """Of the races whose range leaned one way by each band of implied
+    chance, how often the side it leaned toward carried the seat. Party
+    blind: swapping the parties (p -> 1 - p, dem_won -> 1 - dem_won) gives
+    the same table. A race at exactly even leans neither way and is left
+    out (a continuous chance is never exactly 0.5 in practice)."""
+    lean = [max(x, 1 - x) for x in p]
+    carried = [float((x > 0.5) == bool(w)) for x, w in zip(p, dem_won)]
     rows = []
     edges = CALIBRATION_EDGES
     for lo, hi in zip(edges, edges[1:]):
-        idx = [i for i, x in enumerate(p) if lo <= x < hi or (hi == 1.0 and x == 1.0)]
+        idx = [i for i, x in enumerate(lean) if p[i] != 0.5 and (lo <= x < hi or (hi == 1.0 and x == 1.0))]
+        label = f"{round(lo * 100)}–{round(hi * 100)}%" + (" (near even)" if lo == 0.5 else "")
         if not idx:
-            rows.append({"low": lo, "high": hi, "n": 0})
+            rows.append({"low": lo, "high": hi, "label": label, "n": 0})
             continue
         rows.append({
-            "low": lo, "high": hi, "n": len(idx),
-            "meanChance": round(float(np.mean([p[i] for i in idx])), 3),
-            "demShare": round(float(np.mean([dem_won[i] for i in idx])), 3),
-            "demCarried": int(sum(dem_won[i] for i in idx)),
+            "low": lo, "high": hi, "label": label, "n": len(idx),
+            "meanChance": round(float(np.mean([lean[i] for i in idx])), 3),
+            "leanShare": round(float(np.mean([carried[i] for i in idx])), 3),
+            "leanCarried": int(sum(carried[i] for i in idx)),
             "years": [min(years[i] for i in idx), max(years[i] for i in idx)],
         })
     return rows
+
+
+def calibration_current(table: list[dict] | None) -> bool:
+    """Whether a written calibration table has this code's bins: a fit
+    written before the bins changed (a refreshed copy on the data volume)
+    is refitted (data_refresh._forecast_due) and not shown until it is."""
+    edges = [r.get("low") for r in table or []] + [(table or [{}])[-1].get("high")]
+    return bool(table) and tuple(edges) == CALIBRATION_EDGES and all("label" in r for r in table)
 
 
 def predict_cycle(train: list[dict], test: list[dict], generic: dict, year: int, horizon: int,

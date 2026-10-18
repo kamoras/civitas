@@ -1092,48 +1092,13 @@
    "meanAbsError": 6.01,
    "calibration": [
     {
-     "low": 0.0,
-     "high": 0.05,
-     "n": 145,
-     "meanChance": 0.006,
-     "demShare": 0.0,
-     "demCarried": 0,
-     "years": [
-      1998,
-      2024
-     ]
-    },
-    {
-     "low": 0.05,
-     "high": 0.15,
-     "n": 29,
-     "meanChance": 0.103,
-     "demShare": 0.034,
-     "demCarried": 1,
-     "years": [
-      1998,
-      2024
-     ]
-    },
-    {
-     "low": 0.15,
-     "high": 0.35,
-     "n": 25,
-     "meanChance": 0.23,
-     "demShare": 0.08,
-     "demCarried": 2,
-     "years": [
-      1998,
-      2024
-     ]
-    },
-    {
-     "low": 0.35,
+     "low": 0.5,
      "high": 0.65,
+     "label": "50\u201365% (near even)",
      "n": 41,
-     "meanChance": 0.52,
-     "demShare": 0.537,
-     "demCarried": 22,
+     "meanChance": 0.574,
+     "leanShare": 0.585,
+     "leanCarried": 24,
      "years": [
       1998,
       2024
@@ -1142,10 +1107,11 @@
     {
      "low": 0.65,
      "high": 0.85,
-     "n": 35,
-     "meanChance": 0.748,
-     "demShare": 0.829,
-     "demCarried": 29,
+     "label": "65\u201385%",
+     "n": 60,
+     "meanChance": 0.757,
+     "leanShare": 0.867,
+     "leanCarried": 52,
      "years": [
       1998,
       2024
@@ -1154,10 +1120,11 @@
     {
      "low": 0.85,
      "high": 0.95,
-     "n": 29,
-     "meanChance": 0.914,
-     "demShare": 1.0,
-     "demCarried": 29,
+     "label": "85\u201395%",
+     "n": 58,
+     "meanChance": 0.906,
+     "leanShare": 0.983,
+     "leanCarried": 57,
      "years": [
       1998,
       2024
@@ -1166,10 +1133,11 @@
     {
      "low": 0.95,
      "high": 1.0,
-     "n": 143,
+     "label": "95\u2013100%",
+     "n": 288,
      "meanChance": 0.993,
-     "demShare": 1.0,
-     "demCarried": 143,
+     "leanShare": 1.0,
+     "leanCarried": 288,
      "years": [
       1998,
       2024
@@ -1312,48 +1280,13 @@
     "meanAbsError": 4.15,
     "calibration": [
      {
-      "low": 0.0,
-      "high": 0.05,
-      "n": 8,
-      "meanChance": 0.017,
-      "demShare": 0.0,
-      "demCarried": 0,
-      "years": [
-       2024,
-       2024
-      ]
-     },
-     {
-      "low": 0.05,
-      "high": 0.15,
-      "n": 2,
-      "meanChance": 0.121,
-      "demShare": 0.0,
-      "demCarried": 0,
-      "years": [
-       2024,
-       2024
-      ]
-     },
-     {
-      "low": 0.15,
-      "high": 0.35,
-      "n": 2,
-      "meanChance": 0.216,
-      "demShare": 0.0,
-      "demCarried": 0,
-      "years": [
-       2024,
-       2024
-      ]
-     },
-     {
-      "low": 0.35,
+      "low": 0.5,
       "high": 0.65,
+      "label": "50\u201365% (near even)",
       "n": 1,
       "meanChance": 0.501,
-      "demShare": 0.0,
-      "demCarried": 0,
+      "leanShare": 0.0,
+      "leanCarried": 0,
       "years": [
        2024,
        2024
@@ -1362,10 +1295,11 @@
      {
       "low": 0.65,
       "high": 0.85,
-      "n": 5,
-      "meanChance": 0.787,
-      "demShare": 0.8,
-      "demCarried": 4,
+      "label": "65\u201385%",
+      "n": 7,
+      "meanChance": 0.786,
+      "leanShare": 0.857,
+      "leanCarried": 6,
       "years": [
        2024,
        2024
@@ -1374,10 +1308,11 @@
      {
       "low": 0.85,
       "high": 0.95,
-      "n": 4,
-      "meanChance": 0.907,
-      "demShare": 1.0,
-      "demCarried": 4,
+      "label": "85\u201395%",
+      "n": 6,
+      "meanChance": 0.898,
+      "leanShare": 1.0,
+      "leanCarried": 6,
       "years": [
        2024,
        2024
@@ -1386,10 +1321,11 @@
      {
       "low": 0.95,
       "high": 1.0,
-      "n": 10,
-      "meanChance": 0.992,
-      "demShare": 1.0,
-      "demCarried": 10,
+      "label": "95\u2013100%",
+      "n": 18,
+      "meanChance": 0.988,
+      "leanShare": 1.0,
+      "leanCarried": 18,
       "years": [
        2024,
        2024
@@ -1471,48 +1407,13 @@
    "meanAbsError": 6.38,
    "calibration": [
     {
-     "low": 0.0,
-     "high": 0.05,
-     "n": 141,
-     "meanChance": 0.008,
-     "demShare": 0.0,
-     "demCarried": 0,
-     "years": [
-      1998,
-      2024
-     ]
-    },
-    {
-     "low": 0.05,
-     "high": 0.15,
-     "n": 26,
-     "meanChance": 0.096,
-     "demShare": 0.0,
-     "demCarried": 0,
-     "years": [
-      1998,
-      2024
-     ]
-    },
-    {
-     "low": 0.15,
-     "high": 0.35,
-     "n": 29,
-     "meanChance": 0.238,
-     "demShare": 0.069,
-     "demCarried": 2,
-     "years": [
-      1998,
-      2024
-     ]
-    },
-    {
-     "low": 0.35,
+     "low": 0.5,
      "high": 0.65,
+     "label": "50\u201365% (near even)",
      "n": 46,
-     "meanChance": 0.508,
-     "demShare": 0.587,
-     "demCarried": 27,
+     "meanChance": 0.567,
+     "leanShare": 0.587,
+     "leanCarried": 27,
      "years": [
       1998,
       2024
@@ -1521,10 +1422,11 @@
     {
      "low": 0.65,
      "high": 0.85,
-     "n": 33,
-     "meanChance": 0.741,
-     "demShare": 0.758,
-     "demCarried": 25,
+     "label": "65\u201385%",
+     "n": 62,
+     "meanChance": 0.751,
+     "leanShare": 0.839,
+     "leanCarried": 52,
      "years": [
       1998,
       2024
@@ -1533,10 +1435,11 @@
     {
      "low": 0.85,
      "high": 0.95,
-     "n": 32,
+     "label": "85\u201395%",
+     "n": 58,
      "meanChance": 0.903,
-     "demShare": 1.0,
-     "demCarried": 32,
+     "leanShare": 1.0,
+     "leanCarried": 58,
      "years": [
       1998,
       2024
@@ -1545,10 +1448,11 @@
     {
      "low": 0.95,
      "high": 1.0,
-     "n": 140,
-     "meanChance": 0.991,
-     "demShare": 1.0,
-     "demCarried": 140,
+     "label": "95\u2013100%",
+     "n": 281,
+     "meanChance": 0.992,
+     "leanShare": 1.0,
+     "leanCarried": 281,
      "years": [
       1998,
       2024
@@ -1691,48 +1595,13 @@
     "meanAbsError": 4.52,
     "calibration": [
      {
-      "low": 0.0,
-      "high": 0.05,
-      "n": 7,
-      "meanChance": 0.013,
-      "demShare": 0.0,
-      "demCarried": 0,
-      "years": [
-       2024,
-       2024
-      ]
-     },
-     {
-      "low": 0.05,
-      "high": 0.15,
-      "n": 2,
-      "meanChance": 0.09,
-      "demShare": 0.0,
-      "demCarried": 0,
-      "years": [
-       2024,
-       2024
-      ]
-     },
-     {
-      "low": 0.15,
-      "high": 0.35,
-      "n": 2,
-      "meanChance": 0.177,
-      "demShare": 0.0,
-      "demCarried": 0,
-      "years": [
-       2024,
-       2024
-      ]
-     },
-     {
-      "low": 0.35,
+      "low": 0.5,
       "high": 0.65,
+      "label": "50\u201365% (near even)",
       "n": 2,
-      "meanChance": 0.516,
-      "demShare": 0.0,
-      "demCarried": 0,
+      "meanChance": 0.554,
+      "leanShare": 0.5,
+      "leanCarried": 1,
       "years": [
        2024,
        2024
@@ -1741,10 +1610,11 @@
      {
       "low": 0.65,
       "high": 0.85,
-      "n": 4,
-      "meanChance": 0.748,
-      "demShare": 0.75,
-      "demCarried": 3,
+      "label": "65\u201385%",
+      "n": 6,
+      "meanChance": 0.773,
+      "leanShare": 0.833,
+      "leanCarried": 5,
       "years": [
        2024,
        2024
@@ -1753,10 +1623,11 @@
      {
       "low": 0.85,
       "high": 0.95,
-      "n": 6,
-      "meanChance": 0.913,
-      "demShare": 1.0,
-      "demCarried": 6,
+      "label": "85\u201395%",
+      "n": 8,
+      "meanChance": 0.912,
+      "leanShare": 1.0,
+      "leanCarried": 8,
       "years": [
        2024,
        2024
@@ -1765,10 +1636,11 @@
      {
       "low": 0.95,
       "high": 1.0,
-      "n": 9,
+      "label": "95\u2013100%",
+      "n": 16,
       "meanChance": 0.988,
-      "demShare": 1.0,
-      "demCarried": 9,
+      "leanShare": 1.0,
+      "leanCarried": 16,
       "years": [
        2024,
        2024
@@ -1850,48 +1722,13 @@
    "meanAbsError": 7.2,
    "calibration": [
     {
-     "low": 0.0,
-     "high": 0.05,
-     "n": 120,
-     "meanChance": 0.01,
-     "demShare": 0.0,
-     "demCarried": 0,
-     "years": [
-      1998,
-      2024
-     ]
-    },
-    {
-     "low": 0.05,
-     "high": 0.15,
-     "n": 36,
-     "meanChance": 0.084,
-     "demShare": 0.083,
-     "demCarried": 3,
-     "years": [
-      1998,
-      2024
-     ]
-    },
-    {
-     "low": 0.15,
-     "high": 0.35,
-     "n": 41,
-     "meanChance": 0.228,
-     "demShare": 0.146,
-     "demCarried": 6,
-     "years": [
-      1998,
-      2024
-     ]
-    },
-    {
-     "low": 0.35,
+     "low": 0.5,
      "high": 0.65,
+     "label": "50\u201365% (near even)",
      "n": 53,
-     "meanChance": 0.5,
-     "demShare": 0.491,
-     "demCarried": 26,
+     "meanChance": 0.576,
+     "leanShare": 0.604,
+     "leanCarried": 32,
      "years": [
       1998,
       2024
@@ -1900,10 +1737,11 @@
     {
      "low": 0.65,
      "high": 0.85,
-     "n": 35,
-     "meanChance": 0.753,
-     "demShare": 0.829,
-     "demCarried": 29,
+     "label": "65\u201385%",
+     "n": 76,
+     "meanChance": 0.763,
+     "leanShare": 0.842,
+     "leanCarried": 64,
      "years": [
       1998,
       2024
@@ -1912,10 +1750,11 @@
     {
      "low": 0.85,
      "high": 0.95,
-     "n": 36,
-     "meanChance": 0.903,
-     "demShare": 1.0,
-     "demCarried": 36,
+     "label": "85\u201395%",
+     "n": 72,
+     "meanChance": 0.91,
+     "leanShare": 0.958,
+     "leanCarried": 69,
      "years": [
       1998,
       2024
@@ -1924,10 +1763,11 @@
     {
      "low": 0.95,
      "high": 1.0,
-     "n": 126,
-     "meanChance": 0.987,
-     "demShare": 1.0,
-     "demCarried": 126,
+     "label": "95\u2013100%",
+     "n": 246,
+     "meanChance": 0.988,
+     "leanShare": 1.0,
+     "leanCarried": 246,
      "years": [
       1998,
       2024
@@ -2070,48 +1910,13 @@
     "meanAbsError": 5.33,
     "calibration": [
      {
-      "low": 0.0,
-      "high": 0.05,
-      "n": 8,
-      "meanChance": 0.015,
-      "demShare": 0.0,
-      "demCarried": 0,
-      "years": [
-       2024,
-       2024
-      ]
-     },
-     {
-      "low": 0.05,
-      "high": 0.15,
-      "n": 1,
-      "meanChance": 0.104,
-      "demShare": 0.0,
-      "demCarried": 0,
-      "years": [
-       2024,
-       2024
-      ]
-     },
-     {
-      "low": 0.15,
-      "high": 0.35,
-      "n": 2,
-      "meanChance": 0.202,
-      "demShare": 0.0,
-      "demCarried": 0,
-      "years": [
-       2024,
-       2024
-      ]
-     },
-     {
-      "low": 0.35,
+      "low": 0.5,
       "high": 0.65,
+      "label": "50\u201365% (near even)",
       "n": 2,
-      "meanChance": 0.567,
-      "demShare": 0.0,
-      "demCarried": 0,
+      "meanChance": 0.569,
+      "leanShare": 0.5,
+      "leanCarried": 1,
       "years": [
        2024,
        2024
@@ -2120,10 +1925,11 @@
      {
       "low": 0.65,
       "high": 0.85,
-      "n": 3,
-      "meanChance": 0.738,
-      "demShare": 0.667,
-      "demCarried": 2,
+      "label": "65\u201385%",
+      "n": 5,
+      "meanChance": 0.762,
+      "leanShare": 0.8,
+      "leanCarried": 4,
       "years": [
        2024,
        2024
@@ -2132,10 +1938,11 @@
      {
       "low": 0.85,
       "high": 0.95,
-      "n": 8,
-      "meanChance": 0.888,
-      "demShare": 1.0,
-      "demCarried": 8,
+      "label": "85\u201395%",
+      "n": 9,
+      "meanChance": 0.889,
+      "leanShare": 1.0,
+      "leanCarried": 9,
       "years": [
        2024,
        2024
@@ -2144,10 +1951,11 @@
      {
       "low": 0.95,
       "high": 1.0,
-      "n": 8,
-      "meanChance": 0.981,
-      "demShare": 1.0,
-      "demCarried": 8,
+      "label": "95\u2013100%",
+      "n": 16,
+      "meanChance": 0.983,
+      "leanShare": 1.0,
+      "leanCarried": 16,
       "years": [
        2024,
        2024

@@ -161,6 +161,38 @@ export function districtAreaLabel(
   return `${short.slice(0, shown).join(", ")} & ${short.length - shown} more`;
 }
 
+type DistrictRow = {
+  /** A U.S. House district is a number (0 = at-large); a state
+   * legislative one is a string, because "10A" and "10B" are real. */
+  district: number | string | null;
+  areas: string[] | null;
+  candidates: { name: string; ballotName?: string | null }[];
+};
+
+/** Is `area` (a county, city, town or community) the place the reader
+ * named in full? Its name as people say it ("Detroit" for "Detroit
+ * city"), or a county's without "County" and "(part)". Never part of a
+ * name: "Detroit" is not Detroit Beach. */
+function namesArea(area: string, q: string): boolean {
+  const bare = area.replace(/ \(part\)$/, "");
+  return [bare, placeName(bare), bare.replace(/ County$/, "")].some((n) => searchFold(n) === q);
+}
+
+/** The district rows a filter box keeps for what the reader typed.
+ *
+ * When the query is some row's place or county named in full, only the
+ * rows holding that place are kept (plus any matched by number or
+ * candidate), so the list agrees with placeDistrictSummary's status line:
+ * "Detroit" is in districts 12 and 13, and Detroit Beach (district 5)
+ * no longer joins them by substring. Otherwise every row
+ * matchesDistrictQuery accepts, so a part of a name still narrows. Every
+ * district filter goes through this, never matchesDistrictQuery alone. */
+export function filterDistricts<T>(rows: T[], query: string, toRow: (row: T) => DistrictRow): T[] {
+  const q = searchFold(query);
+  const whole = q !== "" && rows.some((r) => (toRow(r).areas ?? []).some((a) => namesArea(a, q)));
+  return rows.filter((r) => matchesDistrictQuery(toRow(r), query, whole));
+}
+
 /** Does this district row match what the reader typed in the district
  * filter?
  *
@@ -183,14 +215,10 @@ export function districtAreaLabel(
  * Substring, compared through searchFold on both sides.
  */
 export function matchesDistrictQuery(
-  race: {
-    /** A U.S. House district is a number (0 = at-large); a state
-     * legislative one is a string, because "10A" and "10B" are real. */
-    district: number | string | null;
-    areas: string[] | null;
-    candidates: { name: string; ballotName?: string | null }[];
-  },
-  query: string
+  race: DistrictRow,
+  query: string,
+  /** Match a place only by its whole name (filterDistricts decides). */
+  wholeName = false
 ): boolean {
   const raw = query.trim().toLowerCase();
   const q = searchFold(query);
@@ -206,7 +234,8 @@ export function matchesDistrictQuery(
   return (
     districtLabel === raw ||
     (districtNumber !== "" && districtNumber !== districtLabel && districtNumber === raw) ||
-    (q !== "" && (race.areas ?? []).some((a) => searchFold(a).includes(q))) ||
+    (q !== "" &&
+      (race.areas ?? []).some((a) => (wholeName ? namesArea(a, q) : searchFold(a).includes(q)))) ||
     race.candidates.some(
       (c) =>
         q !== "" && (searchFold(c.name).includes(q) || searchFold(c.ballotName ?? "").includes(q))

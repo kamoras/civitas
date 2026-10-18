@@ -51,7 +51,7 @@ import {
   isActiveCandidate,
   isRedrawnSeat,
   majorPartyOf,
-  matchesDistrictQuery,
+  filterDistricts,
   placeDistrictSummary,
   pviColor,
   redrawnMemberWords,
@@ -160,9 +160,11 @@ function StateLegSeatRow({ seat, filter }: { seat: StateLegDistrict; filter: str
  */
 function StateLegChamberSection({ chamber }: { chamber: StateLegChamber }) {
   const [filter, setFilter] = useState("");
-  const shown = chamber.districts.filter((d) =>
-    matchesDistrictQuery({ district: d.district, areas: d.towns, candidates: d.nominees }, filter)
-  );
+  const shown = filterDistricts(chamber.districts, filter, (d) => ({
+    district: d.district,
+    areas: d.towns,
+    candidates: d.nominees,
+  }));
 
   return (
     <div className="mb-5 last:mb-0">
@@ -326,12 +328,11 @@ function StatewideSeatGroup({ seats, lookupHref }: { seats: StatewideRace[]; loo
   const label = first.officeLabel || first.label;
   const byDistrict = first.electedBy === "district";
   const hasAreas = seats.some((s) => (s.areas ?? []).length > 0);
-  const shown = seats.filter((s) =>
-    matchesDistrictQuery(
-      { district: s.seat ?? null, areas: s.areas ?? [], candidates: s.nominees },
-      filter
-    )
-  );
+  const shown = filterDistricts(seats, filter, (s) => ({
+    district: s.seat ?? null,
+    areas: s.areas ?? [],
+    candidates: s.nominees,
+  }));
   const seatWord = /^\d/.test(first.seat ?? "") ? "District" : "";
   // Offered whenever there are towns to match: the hint below tells the
   // reader to filter, so the box has to be there whatever the seat count.
@@ -1111,9 +1112,10 @@ function HouseDetail({
     );
   }
 
-  const shown = houseRaces.filter((r) =>
-    matchesDistrictQuery({ ...r, areas: [...(r.counties ?? []), ...(r.places ?? [])] }, filter)
-  );
+  const shown = filterDistricts(houseRaces, filter, (r) => ({
+    ...r,
+    areas: [...(r.counties ?? []), ...(r.places ?? [])],
+  }));
   const placeSummary = placeDistrictSummary(houseRaces, filter);
   return (
     <div>

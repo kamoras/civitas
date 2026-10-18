@@ -364,20 +364,24 @@ def _text(path) -> str:
     return re.sub(r"""["']\s*["']""", "", text)
 
 
-def test_contact_address_is_real_and_held_once():
-    """Sources are told how to reach us; the address has to be one that is
-    read. contact@civitas-research.org never existed, and SEC's fair-access
-    policy asks for a working email."""
-    import re
+_EMAIL_TEXT = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
+
+
+def test_contact_address_is_configured_and_held_nowhere():
+    """Sources are told how to reach us, at the address the instance's
+    operator sets (CONTACT_EMAIL, conftest's test value here). No personal
+    address is written into the code: not the old one that never existed,
+    and not the maintainer's, which appears only in the contact lines for
+    people (SECURITY.md, CODE_OF_CONDUCT.md)."""
     from pathlib import Path
 
     from app.contact import CONTACT_EMAIL
     from app.pipeline.fetch import sec_tickers, state_candidates_tx
     from app.pipeline.fetch.http_utils import BROWSER_HEADERS
 
-    assert re.fullmatch(r"[^@\s()]+@[^@\s()]+\.[a-z]{2,}", CONTACT_EMAIL)
+    assert CONTACT_EMAIL == "civitas-tests@example.org"
     assert BROWSER_HEADERS["User-Agent"].endswith(f"(+{CONTACT_EMAIL})")
-    assert sec_tickers._HEADERS["User-Agent"].endswith(CONTACT_EMAIL)
+    assert sec_tickers._headers()["User-Agent"].endswith(CONTACT_EMAIL)
     assert state_candidates_tx._HEADERS["User-Agent"].endswith(CONTACT_EMAIL)
 
     this = Path(__file__).resolve()
@@ -385,16 +389,99 @@ def test_contact_address_is_real_and_held_once():
     files = _checked_in(backend)
     contact_py = (backend / "app" / "contact.py").resolve()
     assert contact_py in {p.resolve() for p in files}, "app/contact.py is not among the files swept (untracked?)"
+    assert not _EMAIL_TEXT.search(contact_py.read_text(encoding="utf-8")), "an address is hard-coded in contact.py"
 
-    # The old address nowhere; the real one only in contact.py (everything
-    # else names it through the constant) and the contact lines for people.
-    allowed = {contact_py, *((backend.parent / name).resolve() for name in _FOR_PEOPLE)}
+    people = {(backend.parent / name).resolve() for name in _FOR_PEOPLE}
+    personal = {
+        m.lower() for path in people if path.exists()
+        for m in _EMAIL_TEXT.findall(path.read_text(encoding="utf-8"))
+    }
     for path in files:
         if path.resolve() == this:  # names the old address, to look for it
             continue
         text = _text(path)
         assert _OLD_CONTACT not in text, path
-        assert path.resolve() in allowed or CONTACT_EMAIL.lower() not in text, path
+        if path.resolve() not in people:
+            assert not any(address in text for address in personal), path
+
+
+def _contact_in_fresh_process(value: str | None) -> dict:
+    """app.contact as a bare python3 imports it with CONTACT_EMAIL set to
+    `value` (None: unset): its exports, and what it logged."""
+    import json
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    env = {k: v for k, v in os.environ.items() if k != "CONTACT_EMAIL"}
+    if value is not None:
+        env["CONTACT_EMAIL"] = value
+    code = (
+        "import json, app.contact as c; print(json.dumps({k: getattr(c, k) for k in "
+        "('CONTACT_EMAIL', 'BOT_USER_AGENT', 'SELF_FETCH_USER_AGENT', 'CONTACT_COMMENT', 'CONTACT_NOTE')}))"
+    )
+    # -S: no site-packages, so contact.py must import on the standard
+    # library alone, as the scripts run it on a bare python3.
+    out = subprocess.run(
+        [sys.executable, "-S", "-c", code], cwd=Path(__file__).resolve().parents[1],
+        env=env, capture_output=True, text=True, check=True,
+    )
+    return {**json.loads(out.stdout), "stderr": out.stderr}
+
+
+def test_contact_set_names_it_in_every_user_agent():
+    c = _contact_in_fresh_process("ops@example.org")
+    assert c["CONTACT_EMAIL"] == "ops@example.org"
+    assert c["BOT_USER_AGENT"] == "Mozilla/5.0 (compatible; Civitas/1.0; +ops@example.org)"
+    assert c["SELF_FETCH_USER_AGENT"] == "Civitas-Bot/1.0 (+ops@example.org)"
+    assert c["CONTACT_NOTE"] == "; contact: ops@example.org"
+    assert c["stderr"] == ""
+
+
+@pytest.mark.parametrize("value", [None, "", "   "])
+def test_contact_unset_names_civitas_without_an_address(value):
+    c = _contact_in_fresh_process(value)
+    assert c["CONTACT_EMAIL"] == ""
+    assert c["BOT_USER_AGENT"] == "Mozilla/5.0 (compatible; Civitas/1.0)"
+    assert c["SELF_FETCH_USER_AGENT"] == "Civitas-Bot/1.0"
+    assert c["CONTACT_COMMENT"] == c["CONTACT_NOTE"] == ""
+
+
+@pytest.mark.parametrize("value", ["not-an-address", "a@@example.org", "a@b@example.org", "@example.org",
+                                   "ops@localhost", "ops@example.org (me)", "o ps@example.org"])
+def test_contact_invalid_is_unset_with_a_warning(value):
+    c = _contact_in_fresh_process(value)
+    assert c["CONTACT_EMAIL"] == "" and c["BOT_USER_AGENT"] == "Mozilla/5.0 (compatible; Civitas/1.0)"
+    assert "not an email address" in c["stderr"]
+
+
+def test_sec_refuses_without_a_contact_and_alerts(monkeypatch):
+    """SEC's fair-access policy requires a contact: with none, no request
+    goes out, an ops alert is raised, and the caller gets SecUnavailable
+    (the SEC could not be read), never an empty answer."""
+    from app import contact
+    from app.pipeline.fetch import sec_tickers
+
+    monkeypatch.setattr(contact, "CONTACT_EMAIL", "")
+    sent = []
+    monkeypatch.setattr(sec_tickers, "send_ops_alert", lambda *a, **k: sent.append((a, k)))
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json={})
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            await sec_tickers.issuer_industries(client, MagicMock(), ["AAPL"], [])
+
+    monkeypatch.setattr(sec_tickers, "_issuers_cache", None)
+    monkeypatch.setattr(sec_tickers, "api_cache_get", lambda *a, **k: None)
+    with pytest.raises(sec_tickers.SecUnavailable, match="CONTACT_EMAIL"):
+        asyncio.run(run())
+    assert requests == []
+    assert len(sent) == 1 and sent[0][1]["condition"] == contact.UNSET_CONDITION
 
 
 # User-Agents sent without the contact on purpose, each explained where it
@@ -408,7 +495,10 @@ _BROWSER_ONLY_USER_AGENTS = {
     ("backend/scripts/fetch_site_fonts.py", "Chrome/104"),
 }
 # Names that carry the contact: a value built from one names it.
-_CONTACT_NAMES = {"CONTACT_EMAIL", "BOT_USER_AGENT", "SELF_FETCH_USER_AGENT", "CIVIC_CONTACT", "BROWSER_HEADERS"}
+_CONTACT_NAMES = {
+    "CONTACT_EMAIL", "CONTACT_COMMENT", "CONTACT_NOTE", "BOT_USER_AGENT", "SELF_FETCH_USER_AGENT",
+    "CIVIC_CONTACT", "BROWSER_HEADERS", "require_contact",
+}
 # A string naming Civitas as a client: "Civitas/1.0", "Civitas-OG/1".
 _CIVITAS_TOKEN_TEXT = re.compile(r"\bcivitas[\w-]*/\d", re.IGNORECASE)
 

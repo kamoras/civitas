@@ -14,7 +14,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.engine import make_url
 
-from app import net_stats
+from app import contact, net_stats
 from app.api.cache_headers import ETagCacheMiddleware
 from app.api.public import PublicApiPreflight
 from app.api.public_mcp import PATH as MCP_PATH, McpEndpoint
@@ -25,7 +25,7 @@ from app.background import WritesElsewhere, WritesHeld, start_writer, writing
 from app.config import settings
 from app.database import SessionLocal, init_db
 from app.models import ExploreDocument
-from app.ops_alerts import check_pipeline_service_alive
+from app.ops_alerts import check_pipeline_service_alive, resolve_ops_alert
 from app.pipeline import lease, vector_store
 from app.pipeline.run_tracker import sweep_orphaned_runs
 from app.scheduler import resume_interrupted_chain, start_scheduler, stop_scheduler
@@ -381,6 +381,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.exception("District PVI table load failed (non-fatal)")
 
     if runs_pipelines:
+        # The contact sources are given (app/contact.py): said once, at
+        # start, by the process that fetches. Set, it closes the alert an
+        # SEC fetch refused without one raised (sec_tickers._headers).
+        if contact.CONTACT_EMAIL:
+            resolve_ops_alert(contact.UNSET_CONDITION)
+        else:
+            logger.warning(contact.UNSET_MESSAGE)
         # Only the process that runs pipelines may sweep their rows: the
         # API process sweeping on its own restart would mark a run live in
         # the pipeline process as dead.

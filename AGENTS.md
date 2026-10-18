@@ -943,8 +943,9 @@ shape for a project whose entire premise is that a voter can research their
 ballot without handing anything over. The box was also redundant — the
 district rows already showed each district's counties and its sitting
 representative, which is what a person can actually recall unprompted, so
-the replacement is a client-side filter over those (`matchesDistrictQuery`
-in `frontend/src/lib/elections.ts`).
+the replacement is a client-side filter over those (`filterDistricts`
+in `frontend/src/lib/elections.ts`: a place named in full keeps only the
+districts holding it, so the list agrees with the status line).
 
 What this rules in and out:
 
@@ -1381,9 +1382,10 @@ more outlets whose lede compose() verified (`trend_poster.tragedy_issue_refusal`
 the post quotes that lede, credited to its outlet, under the neutrality gate
 and the loaded-language vote). The political-violence vote was removed
 2026-10-16: agents' shootings, deaths in detention and attacks on the
-Capitol are in scope, and the news answers them before any vote or document. Every word is template text, a
-stored record field, or the trend's name quoted and attributed to Bluesky — no
-model. Selection is party-blind (rank weight × match strength); each trend gets
+Capitol are in scope, and the news answers them before any vote or document. Every word is template text or a
+stored record field: the record's own line, then its date and source in
+parentheses (`trend_poster.record_sentences`), with no "trending" and no echo
+of the trend's name, so the line must stand alone — no model. Selection is party-blind (rank weight × match strength); each trend gets
 one `TrendCandidate` audit row with the parties of the members it names and of
 the record's sponsors, and `check_party_balance` alerts when the posted share
 diverges from the eligible pool's (exact binomial). The post's picture is the
@@ -1931,7 +1933,13 @@ it keeps, each enforced by a test (`tests/test_forecast_model.py`,
   never re-rounds them.
 - **Wording.** Ranges and frequencies, never "wins", "favored" or
   "projected". The implied chances exist only for the method section's
-  calibration table.
+  calibration table, which is party blind (`model.calibration_table`):
+  binned by the chance of the side a range leaned toward, whichever party,
+  and the same with the parties swapped. Nothing shown frames a figure
+  around one party ("went to the Democrat", a raw signed margin); the
+  internal R-positive sign convention stays inside the math. The method
+  section leads with a short plain summary; the full method sits behind a
+  disclosure.
 - **No year in the code.** Article titles, the fieldwork floor, the House
   lines and every label (CSV header and filename, page titles, the method's
   presidential window) come from `active_election().cycle` and the data
@@ -2142,7 +2150,10 @@ touches `backend/requirements.txt` or `backend/app/pipeline/`.
 
 `conftest.py` holds the fast tests to that: in a test not marked slow,
 constructing a sentence-transformer raises at once and resolving any host
-but loopback fails at once, on CI as offline (`_fast_tests_offline`). Until
+but loopback fails at once, on CI as offline (`_fast_tests_offline`), and a
+model a slow test already loaded in the same process is hidden from it
+(`_slow_test_running`; until 2026-10-17 a fast test run after a slow one
+used the real model). Until
 2026-10 a fast test that reached the model downloaded it on CI and waited
 out the Hub client's retries offline (69 s a test), and one whose mocks
 missed a fetch read the live source on CI. The fetch modules' rate limiters
@@ -2160,6 +2171,7 @@ See `.env.example` for all options. Key variables:
 |---|---|---|
 | `DATA_GOV_API_KEY` | Yes | API key from api.data.gov |
 | `ADMIN_TOKEN` | Yes | Bearer token for admin panel |
+| `CONTACT_EMAIL` | Yes | The instance's contact address, named in every outbound User-Agent (`app/contact.py`, read from the environment, stdlib only). Unset or malformed: User-Agents carry no address, SEC fetches refuse with an ops alert (`contact-email-unset`), and the pipeline warns at start |
 | `LLM_BACKEND` | No | `llama-server` (default) or `ollama` |
 | `LLAMA_SERVER_URL` | No | llama.cpp server URL |
 | `DATABASE_URL` | No | SQLite path (`docker-compose.yml` sets `sqlite:////data/civitas.db`, the volume; the code default is the relative `sqlite:///data/civitas.db`) |
@@ -2291,7 +2303,7 @@ the pending list).
 | Detail pages' two layers: chamber strip, scorecard in short, methods ledger, bill stage ladder and sources, "cite this", held and thin-data marks | `frontend/src/components/scorecard/ChamberStrip.tsx`, `AtAGlance.tsx`, `MethodsLedger.tsx`, `HeldScore.tsx`, `frontend/src/components/congress/StageLadder.tsx`, `BillSources.tsx`, `frontend/src/components/shared/CiteThis.tsx` (a government document or record cites its issuer: `frontend/src/lib/citedSources.ts`); data from `api/politicians.py` (`_chamber_field`, `_scored_on`) and `bill_service.stage_milestones` |
 | Action Center issue parts (shared with `/issue/[id]`: meta, tags, "What you can do", coverage, sources) | `frontend/src/components/action/IssueEnrichment.tsx` |
 | Leaderboard spread strip, ties and thin-data marks | `backend/app/api/leaderboard.py`, `backend/app/score_display.py` (`score_spread`, `thin_dimensions`), `frontend/src/components/leaderboard/ScoreSpreadStrip.tsx` |
-| Site navigation: sections, main menu, footer, section tabs, hub cards and the homepage index | `frontend/src/lib/routes.ts` (`SECTIONS`), `frontend/src/components/layout/Navbar.tsx`, `Footer.tsx`, `SectionTabs.tsx`, `frontend/src/components/sections/SectionCards.tsx`, `frontend/src/components/home/SectionsBand.tsx`, `frontend/src/lib/sectionPreviews.ts`, `backend/app/api/sections.py` |
+| Site navigation: sections, main menu, footer (site pages only), section tabs, hub cards and the homepage index | `frontend/src/lib/routes.ts` (`SECTIONS`), `frontend/src/components/layout/Navbar.tsx`, `Footer.tsx`, `SectionTabs.tsx`, `frontend/src/components/sections/SectionCards.tsx`, `frontend/src/components/home/SectionsBand.tsx`, `frontend/src/lib/sectionPreviews.ts`, `backend/app/api/sections.py` |
 
 | Homepage (masthead, on-the-record entries, record index, sources panel) | `frontend/src/components/home/Masthead.tsx`, `OnTheRecord.tsx` (from `backend/app/api/notable.py`), `RecordIndex.tsx`, `Holdings.tsx` |
 
@@ -2485,10 +2497,12 @@ the pending list).
   picture travels without its page.
 - **A new page goes in `SECTIONS`** (`src/lib/routes.ts`): that one table is
   the main navigation (a disclosure button per section on desktop, two
-  levels on a phone), the footer, each section's tab bar, its hub's cards and
-  the homepage's index (which is why the footer on `/` drops its section
-  columns, `Footer omit`), so a page that isn't in it is reachable
-  only by an inline link. `routes.test.ts` fails on a page route in no
+  levels on a phone), each section's tab bar, its hub's cards and the
+  homepage's index, so a page that isn't in it is reachable only by an
+  inline link. The footer does not repeat it (2026-10): it was the whole
+  menu again at the foot of every page. The header's closed desktop panels
+  stay in the server HTML (`hidden`), which keeps every page's link
+  crawlable; `Navbar.test.tsx` holds that. `routes.test.ts` fails on a page route in no
   section (records with a `[segment]`, the footer's own pages and the admin
   aside). A page with a live figure gets it from `GET /api/sections`
   (`app/api/sections.py`), worded in `lib/sectionPreviews.ts`; a figure not
