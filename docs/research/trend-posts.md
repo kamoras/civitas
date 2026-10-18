@@ -3,9 +3,20 @@
 When a U.S. policy topic trends on Bluesky, Civitas posts the official
 record behind it: a recorded vote, a bill, the day's Congressional Record,
 an agency's document, or an Action Center issue. The post is
-`Trending on Bluesky: "<name>". On the record: <record>`. Every word is
-template text, a stored record field, or Bluesky's trend name quoted and
-attributed. No model writes any of it. Code: `analyze/trend_poster.py`,
+`<record> (<date> · <source>)`, for example
+`On Passage of the Bill: <title>. Bill Passed, 52–47. (Oct 13 · Senate roll call 301)`
+or `<issue headline>. (Oct 16 · Civitas Action Center)`. Every word is
+template text or a stored record field. No model writes any of it.
+
+Until 2026-10-16 the post opened `Trending on Bluesky: "<name>". On the
+record:` and spelled out each field ("Senate roll call 301, 119th Congress,
+October 13, 2026: ... Result: Bill Passed. Yea 52. Nay 47."). That was long
+and announced the trend outright; the post goes out while the topic trends,
+so the timing says it. Dropping the name puts the burden on the record line:
+each kind names what happened without it (a vote its question, measure,
+recorded result and yea–nay count; a bill its number, title and latest
+action; a rule its agency and type; a Digest entry its own sentence, or its
+kind and name), and the parenthesis says when and where the record is from. Code: `analyze/trend_poster.py`,
 `analyze/trend_evidence.py`, `analyze/trend_relevance.py`,
 `services/record_cards.py`.
 

@@ -1,5 +1,5 @@
 {
-  "_about": "Issues Civitas published and withdrew, with the reason. Each entry's issues are removed from the database by an Alembic data migration (named in `migration`), the API answers 410 with the reason (the issue page shows it, marked noindex), and their posts are left out of the Atom feeds. Entries are never removed from this file: it is the public record of what was withdrawn and why.",
+  "_about": "Content Civitas published and withdrew, with the reason. An issue entry's issues are removed from the database by an Alembic data migration (named in `migration`), the API answers 410 with the reason (the issue page shows it, marked noindex), and their posts are left out of the Atom feeds. A race-coverage entry names the coverage items (`coverageItems`, by URL, which a re-ingest keeps) and the posts (`broadcastPostIds`) it withdraws: the items are left off their race's page and the posts out of the Atom feeds and never sent again; it needs no migration (`migration` is null), since nothing is deleted. Entries are never removed from this file: it is the public record of what was withdrawn and why.",
   "retractions": [
     {
       "date": "2026-09-27",
@@ -13,6 +13,101 @@
         "i1679cbc7"
       ],
       "reason": "Both issues were assembled by a clustering step that joined unrelated news stories into one (fixed 2026-09-27, PR #659). Issue i1679cbc7 combined floods in Bangkok, a hurricane near Hawaii, a nor'easter in the Northeast and an HIV emergency in Fiji; issue i612cf1a1, about the Trump-Xi summit, took its headline from an unrelated article and cited unrelated sources. Their Bluesky posts were written by a language model (the poster has since been changed to quote sources word for word, PR #660) and included statements no source made. The articles behind them are not stored, so they could not be corrected and were withdrawn."
+    },
+    {
+      "date": "2026-10-17",
+      "migration": null,
+      "issueIds": [],
+      "publicIds": [],
+      "coverageItems": [
+        {
+          "id": 9858,
+          "url": "https://thehill.com/newsletters/morning-report/6153128-jd-vance-alexandria-ocasio-cortez-michigan-face-up-2028-preview-midterms-trump-defense-guilfoyle/"
+        }
+      ],
+      "broadcastPostIds": [
+        114
+      ],
+      "reason": "A post on 17 October 2026 presented a story about two national figures campaigning in Michigan, and speculation about 2028, as an update on the New York 14th District House race. The source was a multi-story newsletter, and it was attached to that race only because it named one of the race's candidates in full; nothing else in it concerned that race. The election coverage ingest now drops multi-story digests and newsletters as the Action Center does, requires a story to name the race (its state or another of its candidates) as well as the candidate, and posts only stories that clear a relevance threshold fitted on labelled stories (PR #1093). The post is withdrawn from the Atom feeds and the story from the race page."
+    },
+    {
+      "date": "2026-10-17",
+      "migration": null,
+      "issueIds": [],
+      "publicIds": [],
+      "coverageItems": [
+        {
+          "id": 430,
+          "url": "https://thehill.com/homenews/house/6094700-thomas-massie-house-gop-pete-hegseth-impeachment/"
+        },
+        {
+          "id": 432,
+          "url": "https://thehill.com/policy/energy-environment/6094781-greene-blames-trump-gas-prices/"
+        },
+        {
+          "id": 434,
+          "url": "https://thehill.com/video-clips/6095054-watch-live-house-democrats-midterms-messaging-affordability/"
+        },
+        {
+          "id": 445,
+          "url": "https://www.pbs.org/newshour/politics/man-who-sprayed-rep-ilhan-omar-with-vinegar-sentenced-to-14-months-in-prison"
+        },
+        {
+          "id": 446,
+          "url": "https://thehill.com/homenews/senate/6097194-tillis-calls-for-hegseth-impeachment/"
+        },
+        {
+          "id": 453,
+          "url": "https://thehill.com/newsletters/whole-hog-politics/whole-hog-politics-live-briefing/6097431-republican-redistricting-gains-expectations-vs-reality-midterms-discussion/"
+        },
+        {
+          "id": 454,
+          "url": "https://thehill.com/homenews/senate/6098638-shaheen-meeks-hold-weapons-sale-israel/"
+        },
+        {
+          "id": 455,
+          "url": "https://thehill.com/policy/defense/6098183-pentagon-ufo-files-1952-project-blue-book-briefing-uaps/"
+        },
+        {
+          "id": 464,
+          "url": "https://thehill.com/homenews/administration/6099322-trump-signs-russia-sanctions-bill/"
+        },
+        {
+          "id": 465,
+          "url": "https://www.bbc.co.uk/news/articles/cqvgy34ndj4eo?at_medium=RSS&at_campaign=rss"
+        },
+        {
+          "id": 474,
+          "url": "https://thehill.com/homenews/house/6101601-salazar-trump-hispanic-voters-receptive/"
+        },
+        {
+          "id": 476,
+          "url": "https://www.pbs.org/newshour/politics/key-senators-reject-white-house-proposal-on-nih-grants"
+        },
+        {
+          "id": 9244,
+          "url": "https://thehill.com/homenews/senate/6122945-democrats-call-pulte-resign/"
+        },
+        {
+          "id": 9279,
+          "url": "https://thehill.com/homenews/campaign/6124450-khanna-ocasio-cortez-democratic-primaries/"
+        },
+        {
+          "id": 9643,
+          "url": "https://www.bbc.co.uk/news/articles/cvp8glg97393o?at_medium=RSS&at_campaign=rss"
+        },
+        {
+          "id": 9823,
+          "url": "https://thehill.com/policy/international/6151128-india-ambassador-slams-jayapal/"
+        }
+      ],
+      "broadcastPostIds": [
+        10,
+        20,
+        83,
+        101
+      ],
+      "reason": "Sixteen race updates posted between 17 September and 15 October 2026 linked a story to a race it was not about. Fifteen were attached by a candidate's name alone, with nothing in the story about the race (a member's official business, a court case, talk of a presidential run), and one came from a multi-story newsletter. The four posted since the Atom feeds began are withdrawn from them, and all sixteen stories from their race pages. The fixes are the same as for the entry above (PR #1093)."
     }
   ]
 }

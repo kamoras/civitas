@@ -11,10 +11,12 @@ Measured on FEC bulk data for 2020-2024 incumbents
   was a third copy. Since v6.26 an industry mix too small to measure is
   left out of the score rather than counted as a neutral 50.
 """
+import re
 
 from app.pipeline.analyze.score_calculator import (
     _funding_diversity_core,
     _funding_independence_core,
+    _legislative_effectiveness_core,
 )
 from app.pipeline.transform.normalize_finance import normalize_finance
 
@@ -156,3 +158,40 @@ def test_a_campaign_that_itemizes_every_gift_has_no_measured_small_donor_share()
     small = next(c for c in core["components"] if c["label"] == "Small-donor share")
     assert small["score"] is None and "itemizes every gift" in small["detail"]
     assert core["facts"]["smallDonorShare"] is None
+
+
+class TestLedgerDetailsCanBeFollowedByHand:
+    """Backlog 7: the ledger's details printed figures a reader couldn't
+    combine into the score shown beside them."""
+
+    def test_source_breadth_prints_its_weights_and_result(self):
+        fd = {c["label"]: c for c in _funding_diversity_core(
+            funding(small=40, industries=[{"industry": "HEALTH", "total": 300_000}]))["components"]}
+        detail = fd["Source breadth"]["detail"]
+        shares = [float(x) / 100 for x in re.findall(r"([\d.]+)% [a-z-]+(?: \(neutral\))? ×", detail)]
+        weights = [float(x) for x in re.findall(r"× ([\d.]+)", detail)]
+        assert len(shares) == len(weights) == 4
+        total = sum(s * w for s, w in zip(shares, weights)) * 100
+        assert abs(total - fd["Source breadth"]["score"]) < 0.5
+        assert detail.endswith(f"= {fd['Source breadth']['score']:.1f}")
+
+    def test_industry_concentration_says_which_share_each_side_carries(self):
+        fd = {c["label"]: c for c in _funding_diversity_core(
+            funding(small=30, industries=[{"industry": "HEALTH", "total": 150_000},
+                                          {"industry": "ENERGY", "total": 50_000}]))["components"]}
+        detail = fd["Industry concentration"]["detail"]
+        assert "blended" not in detail
+        raw, rel, neutral, rest, result = map(float, re.search(
+            r"([\d.]+) × ([\d.]+) \+ ([\d.]+) × ([\d.]+) = ([\d.]+)$", detail).groups())
+        assert abs(rel + rest - 1) < 0.011
+        assert abs(raw * rel + neutral * rest - result) < 0.2
+        assert abs(result - fd["Industry concentration"]["score"]) < 0.06
+
+    def test_coalition_attraction_prints_its_ratio_to_the_party_median(self):
+        core = _legislative_effectiveness_core([], leadership_score=0.5, party="D", years_in_office=6,
+                                               attracted_bipartisanship=0.3)
+        (coalition,) = [c for c in core["components"] if c["label"] == "Bipartisan coalition attraction"]
+        assert coalition["score"] == 30.0 and "0.60 times the share of the median member" in coalition["detail"]
+        capped = _legislative_effectiveness_core([], leadership_score=0.5, attracted_bipartisanship=1.0)
+        (top,) = [c for c in capped["components"] if c["label"] == "Bipartisan coalition attraction"]
+        assert "at least twice" in top["detail"]
