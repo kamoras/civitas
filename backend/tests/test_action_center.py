@@ -1641,7 +1641,7 @@ class TestDedupeNearIdenticalIssues:
         db_session.commit()
         mock_embed.return_value = np.array([[1.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
 
-        assert mark_recent_duplicates(db_session) == 1
+        assert ac.mark_recent_duplicates(db_session) == 1
         fresh, older, other = rows
         assert (fresh.duplicate_of_id, older.duplicate_of_id, other.duplicate_of_id) == (None, fresh.id, None)
 
@@ -2637,18 +2637,18 @@ class TestDigestFiltering:
         "An evening briefing on troop levels",
     ])
     def test_recurring_digest_titles_are_dropped(self, title):
-        from app.pipeline.analyze.action_center import _digest_reason
+        from app.pipeline.fetch.news_digest import digest_reason
 
-        assert _digest_reason(_make_article(title)) == "recurring digest title"
+        assert digest_reason(_make_article(title)) == "recurring digest title"
 
     def test_an_outlets_newsletter_section_is_a_digest(self):
-        from app.pipeline.analyze.action_center import _digest_reason
+        from app.pipeline.fetch.news_digest import digest_reason
 
         url = "https://example.com/newsletters/healthcare/123-drugmakers-challenge-pilot/"
-        assert _digest_reason(_make_article("Drugmakers challenge pilot program", url=url)) == "newsletter section"
+        assert digest_reason(_make_article("Drugmakers challenge pilot program", url=url)) == "newsletter section"
         # A slug that only mentions a newsletter is not the section.
         url = "https://example.com/2026/10/08/123/up-first-newsletter-story"
-        assert _digest_reason(_make_article("Senate passes the budget", url=url)) is None
+        assert digest_reason(_make_article("Senate passes the budget", url=url)) is None
 
     @pytest.mark.parametrize("title", [
         "House approves Pentagon funding framework in narrow vote",
@@ -2676,9 +2676,9 @@ class TestDigestFiltering:
         "The latest: FEMA administrator resigns",
     ])
     def test_single_story_titles_are_kept(self, title):
-        from app.pipeline.analyze.action_center import _digest_reason
+        from app.pipeline.fetch.news_digest import digest_reason
 
-        assert _digest_reason(_make_article(title)) is None
+        assert digest_reason(_make_article(title)) is None
 
     @pytest.mark.parametrize("title,body", [
         # Sentence-delimited: the shape of an NPR "Up First" body.
@@ -2697,11 +2697,11 @@ class TestDigestFiltering:
          "sues over the new map"),
     ])
     def test_bodies_listing_unrelated_stories_are_dropped(self, title, body):
-        from app.pipeline.analyze.action_center import _digest_reason
+        from app.pipeline.fetch.news_digest import digest_reason
 
         article = _make_article(title)
         article.summary = body
-        assert _digest_reason(article) == "body lists unrelated stories"
+        assert digest_reason(article) == "body lists unrelated stories"
 
     @pytest.mark.parametrize("title,body", [
         # A single story keeps returning to its own subject.
@@ -2749,11 +2749,11 @@ class TestDigestFiltering:
          "discussed it with Lee Okafor."),
     ])
     def test_single_story_bodies_are_kept(self, title, body):
-        from app.pipeline.analyze.action_center import _digest_reason
+        from app.pipeline.fetch.news_digest import digest_reason
 
         article = _make_article(title)
         article.summary = body
-        assert _digest_reason(article) is None
+        assert digest_reason(article) is None
 
     @pytest.mark.parametrize("title,body", [
         # A two-story briefing names both stories in its headline, so the
@@ -2770,11 +2770,11 @@ class TestDigestFiltering:
          "Park. Agents searched the home of Rep. Dana Okafor (D-Minn.) on Monday."),
     ])
     def test_a_headline_and_body_telling_the_same_unrelated_stories_are_dropped(self, title, body):
-        from app.pipeline.analyze.action_center import _digest_reason
+        from app.pipeline.fetch.news_digest import digest_reason
 
         article = _make_article(title)
         article.summary = body
-        assert _digest_reason(article) == "headline and body list the same unrelated stories"
+        assert digest_reason(article) == "headline and body list the same unrelated stories"
 
     @pytest.mark.parametrize("title,body", [
         # One story in two headline sentences: its teaser names both
@@ -2796,11 +2796,11 @@ class TestDigestFiltering:
          "Varga set up a panel on Friday to investigate the Fed governor. Varga said more was to come."),
     ])
     def test_a_single_story_told_in_two_headline_sentences_is_kept(self, title, body):
-        from app.pipeline.analyze.action_center import _digest_reason
+        from app.pipeline.fetch.news_digest import digest_reason
 
         article = _make_article(title)
         article.summary = body
-        assert _digest_reason(article) is None
+        assert digest_reason(article) is None
 
     @pytest.mark.parametrize("title", [
         # A possessive-led headline is the most common shape there is, and
@@ -2812,7 +2812,7 @@ class TestDigestFiltering:
         "Varga\u2019s tariff order and the Lindqvist schedule fight",
     ])
     def test_possessive_headline_still_covers_its_own_body(self, title):
-        from app.pipeline.analyze.action_center import _multi_topic_body
+        from app.pipeline.fetch.news_digest import _multi_topic_body
 
         body = (
             "The order signed by Varga takes effect Monday; Marchetti set "
@@ -2828,7 +2828,7 @@ class TestDigestFiltering:
         """Disjointness is the first of the two conditions and has to reject
         on its own: three items that keep naming the same person are one
         story told in three beats, whatever the headline says."""
-        from app.pipeline.analyze.action_center import _multi_topic_body
+        from app.pipeline.fetch.news_digest import _multi_topic_body
 
         body = (
             "Reporters pressed Okonkwo on the deal; Brandt defended the "
@@ -2844,7 +2844,7 @@ class TestDigestFiltering:
         """A description that hit MAX_SUMMARY_CHARS was cut mid-item. The
         fragment names entities that by construction appear nowhere else,
         so counting it turns a two-item blurb into a three-item list."""
-        from app.pipeline.analyze.action_center import _multi_topic_body
+        from app.pipeline.fetch.news_digest import _multi_topic_body
         from app.pipeline.fetch.news_feeds import MAX_SUMMARY_CHARS
 
         head = (
@@ -2874,7 +2874,7 @@ class TestDigestFiltering:
         (e.g. a source publishing a multi-item briefing through
         content:encoded) is not caught by this check — only by the
         title-pattern check, which runs independently."""
-        from app.pipeline.analyze.action_center import _digest_reason
+        from app.pipeline.fetch.news_digest import digest_reason
         from app.pipeline.fetch.news_feeds import MAX_SUMMARY_CHARS
 
         body = (
@@ -2888,13 +2888,13 @@ class TestDigestFiltering:
         article = _make_article("A quiet Tuesday")
         article.summary = long_body
         article.truncated = False
-        assert _digest_reason(article) is None
+        assert digest_reason(article) is None
 
     def test_bulleted_body_without_terminal_punctuation_is_still_analyzed(self):
         """Trailing punctuation was the original truncation signal and it
         discarded the final item of every list that ends without a period —
         which is most bulleted lists."""
-        from app.pipeline.analyze.action_center import _split_body_items
+        from app.pipeline.fetch.news_digest import _split_body_items
 
         body = "Ukraine aid clears the Senate • Brandt signals a pause • Texas sues"
         assert len(_split_body_items(body)) == 3
@@ -2904,7 +2904,7 @@ class TestDigestFiltering:
         bug lived. A WordPress-style digest arrives as escaped <li> markup;
         the feed parser has to turn that into item boundaries the detector
         can split on, or the body check sees one undifferentiated blob."""
-        from app.pipeline.analyze.action_center import _digest_reason, _split_body_items
+        from app.pipeline.fetch.news_digest import digest_reason, _split_body_items
         from app.pipeline.fetch.news_feeds import _parse_rss_feed
 
         article = _parse_rss_feed(
@@ -2918,7 +2918,7 @@ class TestDigestFiltering:
 
         assert "<" not in article.summary
         assert len(_split_body_items(article.summary)) == 3
-        assert _digest_reason(article) == "body lists unrelated stories"
+        assert digest_reason(article) == "body lists unrelated stories"
 
     def test_empty_input_short_circuits(self):
         from app.pipeline.analyze.action_center import _filter_policy_relevant
@@ -4227,3 +4227,94 @@ class TestMonitorEntityGate:
             "Varga announces Kestrel deal", "Varga heads to a rally", "Senators fault Kestrel terms",
         ]
         assert json.loads(issue.related_monitor_slugs) == []
+
+
+class TestLiveBlogHeadlines:
+    """Issues 805/806 (2026-10-16): a live blog's headline listing two
+    stories titled a second issue over the PBS report that titled the
+    first, and its other story kept the two from matching."""
+
+    LIVE = "Live updates: Press secretary Morrow exits; Varga rallies for Brandt at Dunmore county fair"
+    REPORT = "Press secretary Dana Morrow leaving the job after Varga casts doubt"
+    PBS = "https://example.org/politics/varga-casts-doubt-on-press-secretary-morrow"
+
+    def test_a_kicker_over_disjoint_stories_is_a_live_blog(self):
+        assert ac._multi_story_headline(self.LIVE)
+        assert ac._story_titles(self.LIVE) == ["Press secretary Morrow exits", "Varga rallies for Brandt at Dunmore county fair"]
+        # One story under a kicker, a report, disjoint items with no kicker
+        # (a photo column, two sentences of one story), items sharing a name.
+        for title in (
+            "Live updates: Senate votes on the Varga nomination",
+            self.REPORT,
+            "Photo Desk | Quiet Hallway",
+            "Dale Hartwell claims he was an assembly line worker. The Machinists said that is a stretch.",
+            "Live updates: Ostrander says Varga will follow ballot ruling; Arts council rejects bid to add Varga's name",
+        ):
+            assert not ac._multi_story_headline(title), title
+            assert ac._story_titles(title) == [title]
+
+    @staticmethod
+    def _embed(vectors):
+        return lambda texts: np.array([vectors[t] for t in texts])
+
+    def _vectors(self):
+        agree = [0.7, (1 - 0.7 ** 2) ** 0.5, 0.0]
+        return {
+            self.REPORT: [1.0, 0.0, 0.0],
+            self.LIVE: [0.5, 0.0, (1 - 0.5 ** 2) ** 0.5],
+            "Press secretary Morrow exits": agree,
+            "Varga rallies for Brandt at Dunmore county fair": [0.0, 0.0, 1.0],
+        }
+
+    def test_a_live_blog_row_matches_on_its_shared_story(self, monkeypatch):
+        vectors = self._vectors()
+        monkeypatch.setattr(ac, "_embed_texts_sim", self._embed(vectors))
+        report = ActionIssue(id=805, date="2026-10-16", rank=4, title=self.REPORT, facts="[]",
+                             source_urls=json.dumps([self.PBS]))
+        recent_embs = np.array([vectors[self.LIVE]])
+        # The live-blog row as a candidate: its first story agrees with the
+        # new report's title past SHARED_SOURCE_TITLE_SIM.
+        live = ActionIssue(id=806, date="2026-10-16", rank=3, title=self.LIVE, facts="[]",
+                           source_urls=json.dumps([self.PBS]))
+        assert _find_matching_issue(self.REPORT, [], [live], recent_embs, np.array(vectors[self.REPORT]), set(),
+                                    source_urls=[self.PBS]) is live
+        # The article that titled a candidate is conclusive, whatever the
+        # new title.
+        orthogonal = np.array([0.0, 1.0])
+        assert _find_matching_issue("Another outlet's headline", [], [report], np.array([[1.0, 0.0]]), orthogonal,
+                                    set(), source_urls=[self.PBS]) is None
+        assert _find_matching_issue("Another outlet's headline", [], [report], np.array([[1.0, 0.0]]), orthogonal,
+                                    set(), source_urls=[self.PBS], source_titles={self.PBS: self.REPORT}) is report
+
+    def test_of_several_candidates_sharing_a_source_the_best_title_wins(self):
+        url = ["https://npr.org/story"]
+        weaker = ActionIssue(id=1, date="2026-10-16", rank=1, title="A", facts="[]", source_urls=json.dumps(url))
+        better = ActionIssue(id=2, date="2026-10-16", rank=2, title="B", facts="[]", source_urls=json.dumps(url))
+        recent_embs = np.array([[0.7, (1 - 0.7 ** 2) ** 0.5], [0.9, (1 - 0.9 ** 2) ** 0.5]])
+        assert _find_matching_issue("C", [], [weaker, better], recent_embs, np.array([1.0, 0.0]), set(),
+                                    source_urls=url) is better
+
+    def test_the_pass_retires_the_live_blog_row_behind_the_report(self, monkeypatch, db_session):
+        monkeypatch.setattr(ac, "_embed_texts_sim", self._embed(self._vectors()))
+        report = ActionIssue(date="2026-10-16", rank=4, title=self.REPORT, facts="[]",
+                             source_urls=json.dumps([self.PBS]), created_at=datetime(2026, 10, 16, 20, 17))
+        live = ActionIssue(date="2026-10-16", rank=3, title=self.LIVE, facts="[]",
+                           source_urls=json.dumps([self.PBS]), created_at=datetime(2026, 10, 16, 21, 20))
+        db_session.add_all([report, live])
+        db_session.commit()
+
+        assert ac.mark_recent_duplicates(db_session) == 1
+        # The later row gives way: its headline tells two stories.
+        assert (report.duplicate_of_id, live.duplicate_of_id) == (None, report.id)
+        assert (report.is_current, live.is_current) == (True, False)
+
+
+@pytest.mark.slow
+def test_a_live_blog_title_agrees_on_its_shared_story():
+    """On the similarity model, the live blog's whole headline falls under
+    SHARED_SOURCE_TITLE_SIM against the report (issues 805/806 scored
+    0.557) and its first story clears it (0.672); these invented-name
+    titles score 0.606 and 0.679."""
+    live, report = TestLiveBlogHeadlines.LIVE, TestLiveBlogHeadlines.REPORT
+    whole = float((ac._embed_texts_sim([live]) @ ac._embed_texts_sim([report]).T)[0, 0])
+    assert whole < ac.SHARED_SOURCE_TITLE_SIM <= ac._shared_source_title_sim(whole, live, report)

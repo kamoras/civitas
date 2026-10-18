@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import Navbar from "./Navbar";
-import Footer from "./Footer";
 import { SECTIONS, sectionSubpages, type SectionKey } from "@/lib/routes";
 
 vi.mock("next/navigation", () => ({
@@ -112,8 +111,14 @@ describe("Navbar", () => {
     render(<Navbar />);
     fireEvent.click(screen.getByRole("button", { name: "Open navigation menu" }));
     const menu = document.getElementById("mobile-menu")!;
-    // Focus starts on the panel's first control, the state picker.
-    expect(within(menu).getByLabelText("Your state")).toHaveFocus();
+    // Focus starts on the panel itself, never the state picker: a phone
+    // opens a native select's list when it takes focus.
+    expect(menu).toHaveFocus();
+    expect(menu).toHaveAccessibleName("Site menu");
+    expect(document.activeElement?.tagName).not.toBe("SELECT");
+    // Shift+Tab from the panel stays in it, on its last control.
+    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+    expect(within(menu).getAllByRole("link").at(-1)).toHaveFocus();
     for (const key of KEYS) {
       const subs = sectionSubpages(key);
       if (!subs.length) continue;
@@ -183,13 +188,13 @@ describe("Navbar row overflow guard", () => {
   });
 });
 
-describe("Footer", () => {
-  it("has a column for every section, with its pages", () => {
-    render(<Footer />);
-    const nav = screen.getByRole("navigation", { name: "Footer navigation" });
-    const hrefs = within(nav)
-      .getAllByRole("link")
-      .map((l) => l.getAttribute("href"));
+describe("Navbar markup with every menu closed", () => {
+  // The footer no longer repeats the sections' pages, so the header's closed
+  // desktop panels (`hidden`, display: none) are where a crawler finds them:
+  // they must be in the markup before anything opens.
+  it("holds a link to every section's pages", () => {
+    render(<Navbar />);
+    const hrefs = [...document.querySelectorAll("header a")].map((a) => a.getAttribute("href"));
     for (const key of KEYS) {
       expect(hrefs).toContain(SECTIONS[key].href);
       for (const t of sectionSubpages(key)) expect(hrefs).toContain(t.href);

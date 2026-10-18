@@ -85,7 +85,7 @@ function CoverageStrip({
   const interval = cell[`interval${level}`];
   const held = cell[`held${level}`];
   return (
-    <div className="grid gap-1 sm:grid-cols-[8.5rem_minmax(0,1fr)] sm:items-center sm:gap-3">
+    <div className="grid grid-cols-1 gap-1 sm:grid-cols-[8.5rem_minmax(0,1fr)] sm:items-center sm:gap-3">
       <span className="font-mono text-xs text-ink-lo">
         {level}% RANGE · {held}/{cell.graded}
       </span>
@@ -483,7 +483,7 @@ export default function MapAccountability({ data, pageUrl }: { data: Data; pageU
         >
           {statusSentence(data)}
         </p>
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {chambers.map((c) => (
             <ChamberCheck key={c} name={CHAMBER_NAME[c]} c={data.chambers[c]!} />
           ))}

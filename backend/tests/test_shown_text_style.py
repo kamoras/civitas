@@ -14,6 +14,7 @@ descriptions in app/api/public.py."""
 import ast
 import json
 import pathlib
+import re
 
 from app.api.public import openapi_spec_dict
 
@@ -61,3 +62,12 @@ def test_no_em_dash_in_the_public_api_spec():
     text = json.dumps(openapi_spec_dict(), ensure_ascii=False)
     offenders = [text[max(0, i - 60):i + 20] for i, ch in enumerate(text) if ch == "—"]
     assert offenders == [], "\n".join(offenders)
+
+
+def test_the_public_api_spec_is_evergreen():
+    """No Congress named by number and no internal dated note in what
+    /developers renders: "the 119th Congress's lines" goes stale at the next
+    Congress, and "went out without (2026-10-11)" is a note to ourselves."""
+    text = json.dumps(openapi_spec_dict(), ensure_ascii=False)
+    stale = re.findall(r".{0,40}(?:\b\d{2,3}(?:st|nd|rd|th) Congress|\(\d{4}-\d{2}-\d{2}\)).{0,20}", text)
+    assert stale == [], "\n".join(stale)
