@@ -9,7 +9,7 @@ Hourly, from the Action Center's scheduler job (scheduler._hourly_action_refresh
     outage, not an empty list: nothing is recorded, dropped or posted.
  2. Score each trend (trend_relevance): Bluesky's category, the tragedy
     vote, and the neutrality gate on its display name
-    (the only words a post quotes from Bluesky).
+    (not in the post, but the post answers it).
  3. Find its record on a pinned match only (trend_evidence: an issue,
     an Act's title, a nominee, or a named member's own bill).
  4. Write one audit row per trend (TrendCandidate): scores, match, record,
@@ -28,9 +28,11 @@ match strength, and the parties on the audit row are never read to choose
 party share with the eligible pool's, with an exact binomial test, and an
 ops alert fires on a divergence (check_party_balance).
 
-Every word of a post is template text, a stored record field, or Bluesky's
-trend name in quotation marks attributed to Bluesky. No model writes any
-of it. A tragedy is eligible only when the record is an official one (a
+Every word of a post is template text or a stored record field: the
+record's own line, then its date and source in parentheses
+(record_sentences). Bluesky's trend name is not in the post: it goes out
+while the topic trends, and the record line stands alone. No model writes
+any of it. A tragedy is eligible only when the record is an official one (a
 vote, a bill, the day's record, an agency's document) or a confirmed,
 multi-outlet Action Center issue (tragedy_issue_refusal), and the post
 states only what that record says: for an issue, its verified lede, credited
@@ -48,7 +50,7 @@ from __future__ import annotations
 import json
 import logging
 import math
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import numpy as np
 from sqlalchemy.orm import Session
@@ -73,7 +75,8 @@ from app.pipeline.analyze.trend_relevance import (
     trend_text,
 )
 from app.pipeline.fetch.trending import BSKY_TRENDS_LIMIT, BlueskyTrend, fetch_bluesky_trends
-from app.services.record_cards import RecordCard, card_for_key, long_date, og_query
+from app.services.bill_record import bill_label
+from app.services.record_cards import CHAMBER_NAMES, EVENT_SOURCE, RecordCard, card_for_key, og_query
 from app.time_utils import COMMENT_DEADLINE_TZ, utcnow
 
 logger = logging.getLogger(__name__)
@@ -96,28 +99,94 @@ _EASTERN = COMMENT_DEADLINE_TZ
 
 # -- the post's words -------------------------------------------------------
 
+# Who the post credits, after the date: what a reader would search for to
+# find the record themselves. An event's source is the card's own words
+# for it (record_cards.EVENT_SOURCE), shortened.
+_EVENT_CREDIT = {EVENT_SOURCE["digest"]: "Daily Digest", EVENT_SOURCE["floor_log"]: "floor log"}
+ACTION_CENTER = "Civitas Action Center"
+
+
+def short_date(iso: str | None) -> str:
+    """'2026-10-09' -> 'Oct 9', with the year when it isn't this one."""
+    try:
+        d = date.fromisoformat((iso or "")[:10])
+    except ValueError:
+        return ""
+    return f"{d:%b} {d.day}" + ("" if d.year == utcnow().year else f", {d.year}")
+
+
+def _credit(card: RecordCard) -> str:
+    kind, _, rest = card.key.partition(":")
+    if kind == "vote":
+        chamber, _, _, number = rest.split("/")
+        return f"{CHAMBER_NAMES[chamber]} roll call {number}"
+    if kind == "event":
+        chamber = card.eyebrow.partition(":")[0]
+        return f"{chamber} {_EVENT_CREDIT.get(card.source_name, 'Congressional Record')}"
+    return card.source_name
+
+
+def _sentence(text: str) -> str:
+    text = text.strip()
+    return text if text[-1:] in (".", "?", "!") else text + "."
+
+
+def _vote_line(card: RecordCard) -> str:
+    """The question and what it was on, then the result and count as the
+    chamber recorded them, yeas first: "Bill Passed, 52–47." An election of
+    the Speaker gives each candidate's votes instead."""
+    totals = {row["position"]: row["total"] for row in card.tally}
+    result = next((ln.removeprefix("Result: ").rstrip(".") for ln in card.lines if ln.startswith("Result: ")), "")
+    if "yea" in totals and "nay" in totals:
+        count = f"{totals['yea']}–{totals['nay']}"
+        outcome = f"{result}, {count}" if result else f"Yea {totals['yea']}, Nay {totals['nay']}"
+    else:
+        candidates = ", ".join(f"{row['label']} {row['total']}" for row in card.tally
+                               if row["position"].startswith("candidate:"))
+        outcome = ". ".join(x for x in (result, candidates) if x)
+    extra = [ln for ln in card.lines if not ln.startswith("Result: ")]  # a tie broken, by whom
+    return " ".join(_sentence(x) for x in (card.headline, outcome, *extra) if x)
+
+
 def record_sentences(card: RecordCard) -> list[str]:
-    """The record, in its card's fields, longest first: every version a
-    post may use (the caller takes the first that fits). Never a cut field:
-    a shorter version leaves whole fields out."""
-    head = f"{card.eyebrow}, {long_date(card.date)}: {card.headline.rstrip('.')}."
-    tally = " ".join(f"{row['label']} {row['total']}." for row in card.tally if row["position"] in ("yea", "nay"))
-    lines = " ".join(line.rstrip(".") + "." for line in card.lines)
-    versions = [" ".join(x for x in (head, lines, tally) if x), " ".join(x for x in (head, tally) if x)]
-    return list(dict.fromkeys(versions))
+    """The record, in its card's fields, then its date and source: every
+    version a post may use, longest first (the caller takes the first that
+    fits). Never a cut field: a shorter version leaves whole fields out.
+    Each line says what happened without the trend's name beside it."""
+    kind = card.kind
+    if kind == "vote":
+        bodies = [_vote_line(card)]
+    elif kind == "bill":
+        # "S. 100, Example Act: Placed on the calendar." The line is
+        # "Latest action, <date>: <action>"; the date is the credit's.
+        label = bill_label(card.key.partition("/")[2]) or card.headline
+        title = card.headline.strip().rstrip(".")  # "..., and for other purposes."
+        named = label if title in ("", label) else f"{label}, {title}"
+        actions = [ln.partition(": ")[2] for ln in card.lines if ln.startswith("Latest action")]
+        bodies = [f"{named}: {_sentence(a)}" for a in actions if a] + [_sentence(named)]
+    elif kind == "event":
+        # The Digest's own sentence; its name alone, with what kind of
+        # entry it is, when the sentence is too long to carry.
+        what = card.eyebrow.partition(": ")[2]
+        bodies = [_sentence(ln) for ln in card.lines] + ([_sentence(f"{what}: {card.headline}")] if card.headline else [])
+    else:
+        head = _sentence(f"{card.eyebrow}: {card.headline}" if card.eyebrow else card.headline)
+        bodies = [" ".join([head, *(_sentence(ln) for ln in card.lines)]), head]
+    tail = f"({' · '.join(x for x in (short_date(card.date), _credit(card)) if x)})"
+    return list(dict.fromkeys(f"{body} {tail}" for body in bodies))
 
 
 def issue_sentence(issue: ActionIssue) -> str:
-    return f"Civitas Research Action Center, {long_date(issue.date)}: {issue.title.rstrip('.')}."
+    return f"{_sentence(issue.title)} ({short_date(issue.date)} · {ACTION_CENTER})"
 
 
 def tragedy_issue_sentence(issue: ActionIssue) -> str:
     """A tragedy's issue record in the post: the issue's lede, the one claim
     compose() verified verbatim in its source and attributed to the party
-    the source says acted, credited to that outlet. Never the headline,
-    which no check verified."""
-    return (f"Civitas Research Action Center, {long_date(issue.date)}, quoting {issue.summary_source}: "
-            f"{(issue.summary or '').strip().rstrip('.')}.")
+    the source says acted, quoted and credited to that outlet. Never the
+    headline, which no check verified."""
+    lede = _sentence(issue.summary or "")
+    return f"“{lede}” ({short_date(issue.date)} · {issue.summary_source}, via {ACTION_CENTER})"
 
 
 # A tragedy needs an official record behind it, or a confirmed Action Center
@@ -153,15 +222,12 @@ def tragedy_issue_refusal(db: Session, issue_id: int | None) -> str | None:
     return None
 
 
-def compose_text(trend_name: str, sentences: list[str], url: str) -> str | None:
-    """`Trending on Bluesky: "<name>". On the record: <record>` — the first
-    version that fits a post with its link, or None."""
+def compose_text(sentences: list[str], url: str) -> str | None:
+    """`<record> (<date> · <source>)`: the first version that fits a post
+    with its link, or None. The trend's name is not in it: the post goes
+    out while the topic trends, and the record says what happened."""
     budget = BSKY_MAX_CHARS - len(url) - 1
-    for sentence in sentences:
-        text = f"Trending on Bluesky: “{trend_name}”. On the record: {sentence}"
-        if len(text) <= budget:
-            return text
-    return None
+    return next((s for s in sentences if len(s) <= budget), None)
 
 
 # -- selection --------------------------------------------------------------
@@ -265,14 +331,14 @@ def _draft(db: Session, trend: BlueskyTrend, ev: Evidence, tragedy: bool = False
         if neutrality_problems(card.alt):
             return None, "record card fails the neutrality check"
         sentences = record_sentences(card)
-    text = compose_text(trend.display_name, sentences, record.url)
+    text = compose_text(sentences, record.url)
     if text is None and show_title and record.kind == "vote":
         # A long measure title: the bill number stands in for it, in the
         # post and the image alike (never a cut title).
         short = card_for_key(db, record.key, show_title=False)
         if short is not None:
             card, show_title = short, False
-            text = compose_text(trend.display_name, record_sentences(card), record.url)
+            text = compose_text(record_sentences(card), record.url)
     if text is None:
         return None, "too long for a post"
     return Draft(ev, text, f"On the record: {trend.display_name}", card, show_title), ""

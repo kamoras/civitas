@@ -33,7 +33,7 @@ import logging
 import httpx
 import requests
 
-from app.contact import CONTACT_EMAIL
+from app.contact import CONTACT_COMMENT
 from app.error_utils import redact_sensitive_params
 from app.http_client import DEFAULT_FETCH_TIMEOUT_S, bounded, is_bot_challenge
 from app.pipeline.rate_limiter import RateLimiter
@@ -84,7 +84,7 @@ redact_url = redact_sensitive_params
 # request; the readers here fetch the documents a source publishes for
 # exactly this use, at addresses written into their config. This is standards-compliance, not disguise: a site that
 # wants to refuse Civitas can still refuse Civitas.
-CIVIC_CONTACT = f"Civitas/1.0 (+{CONTACT_EMAIL})"
+CIVIC_CONTACT = f"Civitas/1.0{CONTACT_COMMENT}"
 BROWSER_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "

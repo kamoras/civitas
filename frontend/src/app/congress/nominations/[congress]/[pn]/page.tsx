@@ -208,7 +208,7 @@ export default async function NominationPage({ params }: PageProps) {
                 )}
               </header>
 
-              <dl className="grid gap-px border border-white/15 bg-white/15 sm:grid-cols-2 lg:grid-cols-3">
+              <dl className="grid grid-cols-1 gap-px border border-white/15 bg-white/15 sm:grid-cols-2 lg:grid-cols-3">
                 {facts.map(([label, value]) => (
                   <div key={label} className="flex flex-col gap-1 bg-surface p-3">
                     <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
@@ -309,7 +309,7 @@ export default async function NominationPage({ params }: PageProps) {
                 {n.actions.map((a, i) => (
                   <li
                     key={`${a.date}-${i}`}
-                    className="grid gap-x-4 border-b border-white/[0.09] py-2 sm:grid-cols-[8rem_minmax(0,1fr)]"
+                    className="grid grid-cols-1 gap-x-4 border-b border-white/[0.09] py-2 sm:grid-cols-[8rem_minmax(0,1fr)]"
                   >
                     <span className="font-mono text-xs text-ink-min">{shortDate(a.date)}</span>
                     <span className="text-sm text-ink">{a.text}</span>
@@ -346,7 +346,7 @@ function NameList({
   names: { firstName: string; middleName: string; lastName: string; state: string }[];
 }) {
   return (
-    <ul className="grid gap-x-6 sm:grid-cols-2 lg:grid-cols-3">
+    <ul className="grid grid-cols-1 gap-x-6 sm:grid-cols-2 lg:grid-cols-3">
       {names.map((x, i) => (
         <li
           key={`${x.lastName}-${i}`}

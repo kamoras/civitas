@@ -23,6 +23,12 @@ export default function HeaderClearance() {
     if (!header || typeof ResizeObserver === "undefined") return;
     const root = document.documentElement;
     const update = () => {
+      // The header's own bottom, for what sticks under it (the Action
+      // Center's tabs), at any size.
+      root.style.setProperty(
+        "--header-height",
+        `${Math.ceil(header.getBoundingClientRect().height)}px`
+      );
       root.style.removeProperty("--header-clearance");
       const reserved =
         parseFloat(getComputedStyle(root).getPropertyValue("--header-clearance")) *
@@ -36,6 +42,7 @@ export default function HeaderClearance() {
     return () => {
       observer.disconnect();
       root.style.removeProperty("--header-clearance");
+      root.style.removeProperty("--header-height");
     };
   }, []);
   return null;
