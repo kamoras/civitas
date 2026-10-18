@@ -902,8 +902,9 @@ def check_pipeline_staleness() -> None:
       (``if run is None: continue``).
 
     Since 2026-09 a link's own skip, failure or crash no longer stops the
-    ones after it (app.pipeline_chain), but a killed process still ends
-    that night's chain, and a pipeline can fail every night. Every other
+    ones after it (app.pipeline_chain), and a chain a killed process cut
+    short is resumed once at the next start, but a second kill still ends
+    it, and a pipeline can fail every night. Every other
     alert watches a run that EXISTS; this one watches for the absence of
     a good one. It also covers Election, which check_pipeline_overrun
     omits entirely.

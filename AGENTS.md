@@ -1221,8 +1221,17 @@ flags, both reading the same progress writes), then is tried once
 more and that attempt is what gets reported: the other run may have been a
 single senator, or have failed, so it never stands in for the link. The one
 skip that ends a chain is a data reset holding the database, which every
-later link would hit too. A killed process still ends its chain; the
-staleness watch below is the backstop for that. Both member pipelines run
+later link would hit too. A killed process takes its running link and the
+rest of the chain with it, so a chain records the link it is on
+(`/data/pipeline_chain.json`, cleared when it ends) and the pipeline
+process, at start, resumes a chain cut short from that link — once, and
+only within a day of its start (`scheduler.resume_interrupted_chain`). On
+2026-10-17 a host `apt upgrade` restarted the Docker daemon mid-House-run;
+nothing resumed it, and Stock trades and Election lost the day. A resumed
+chain cut short again is alerted, not resumed (`chain-cut-again`): the link
+may be what kills the process. The staleness watch below is the backstop
+past that. Upgrading `docker-ce`/`containerd.io` on the Pi restarts every
+container: do it only while `pipelineChainIsRunning` is false. Both member pipelines run
 the analysis-code-hash invalidation (`invalidate_stale_analysis`), since
 House may run after a failed Senate. `POST /api/admin/pipeline/trigger`
 (and the token-authenticated `/api/pipeline/trigger`) runs the same
@@ -1604,9 +1613,25 @@ the publishers supply, never hand labels (`fit_broadcast_cut`): stored feed
 articles filed under a video section of their site (The Hill's
 `/video-clips/`, BBC's `/news/videos/`) against the same feeds' other
 articles, F1-maximising, because the labels are noisy (The Hill files some
-livestreams as news). A live blog ("Live updates:") is a report and is left
-alone. `articles_dropped_broadcast` and `clusters_only_broadcast` are the
-counters.
+livestreams as news). A live blog ("Live updates:") is a report and stays in
+its cluster, but one whose headline lists several stories — the kicker over
+two or more items naming disjoint entities (`_multi_story_headline`) — never
+titles an issue or lends it its headline claim: the issue takes the next
+single story's headline, and a cluster of nothing else waits for one (issue
+806, 2026-10-16, titled "Live updates: <a press secretary's exit>; <a
+campaign rally>", put a second story on the page and kept it from matching
+the PBS-titled issue on the first). On 2,642 headlines the shape
+with a kicker was 20 of 20 live blogs; without one, 12 of 28 were single
+stories. When matching, a row titled that way is compared story by story
+(`_shared_source_title_sim`), and a shared article whose headline titled the
+existing issue matches it outright (`source_titles`); the duplicate pass
+never keeps such a row as its story's representative, and a current row it
+marks a duplicate of another current row leaves the Action Center
+(`issues_retired_duplicate`). A shared source alone still does not decide:
+of 97 stored pairs within two days sharing one, 62 had titles below
+`SHARED_SOURCE_TITLE_SIM`, all but 805/806 different stories from before
+the claim layer. `articles_dropped_broadcast`, `clusters_only_broadcast` and
+`clusters_only_multi_story` are the counters.
 
 This has to happen here because once several stories share one article the
 boundary between them is not recoverable later — cluster coherence filtering

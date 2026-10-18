@@ -28,7 +28,7 @@ from app.models import ExploreDocument
 from app.ops_alerts import check_pipeline_service_alive, resolve_ops_alert
 from app.pipeline import lease, vector_store
 from app.pipeline.run_tracker import sweep_orphaned_runs
-from app.scheduler import start_scheduler, stop_scheduler
+from app.scheduler import resume_interrupted_chain, start_scheduler, stop_scheduler
 from app.services.bill_service import warm_bill_collection_cache
 
 # Imported where they run, not here: pipeline-side modules the read-only
@@ -304,6 +304,12 @@ def _start_pipeline_side_startup_jobs() -> None:
         lambda: _run_startup_rescore(SessionLocal, deadline=deadline, poll_s=REFRESH_POLL_S),
         name="startup-rescore",
     )
+
+    # A pipeline chain the last process died in (a crash, a health-check
+    # kill, the Docker daemon restarting under it) is resumed from the link
+    # it was on, once (scheduler.resume_interrupted_chain). After the sweep
+    # (lifespan), which marked that link's run row stale.
+    resume_interrupted_chain()
 
 
 # The pipeline side must be one process per container: the admin status

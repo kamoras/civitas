@@ -137,7 +137,11 @@ export default function NewsChapter() {
             livestream or video page (&ldquo;WATCH LIVE: &hellip;&rdquo;) is for watching, not a
             written report, so it never names an issue or supplies a fact; a story with nothing else
             waits for a report. Which pages those are is learned from how the outlets themselves
-            file their videos, not from a list.
+            file their videos, not from a list. A live blog whose headline lists several unrelated
+            stories under the outlet&apos;s label (&ldquo;Live updates: A; B&rdquo;) never names an
+            issue either: the issue takes a single story&apos;s headline, and a live blog sharing a
+            source with an issue is matched to it by the story they share. When two current issues
+            still turn out to be one story, the later card gives way to the earlier and links it.
           </P>
           <P>
             Reddit was a trending source until September 2026, when it began requiring a login this
