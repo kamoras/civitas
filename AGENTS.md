@@ -1221,8 +1221,17 @@ flags, both reading the same progress writes), then is tried once
 more and that attempt is what gets reported: the other run may have been a
 single senator, or have failed, so it never stands in for the link. The one
 skip that ends a chain is a data reset holding the database, which every
-later link would hit too. A killed process still ends its chain; the
-staleness watch below is the backstop for that. Both member pipelines run
+later link would hit too. A killed process takes its running link and the
+rest of the chain with it, so a chain records the link it is on
+(`/data/pipeline_chain.json`, cleared when it ends) and the pipeline
+process, at start, resumes a chain cut short from that link — once, and
+only within a day of its start (`scheduler.resume_interrupted_chain`). On
+2026-10-17 a host `apt upgrade` restarted the Docker daemon mid-House-run;
+nothing resumed it, and Stock trades and Election lost the day. A resumed
+chain cut short again is alerted, not resumed (`chain-cut-again`): the link
+may be what kills the process. The staleness watch below is the backstop
+past that. Upgrading `docker-ce`/`containerd.io` on the Pi restarts every
+container: do it only while `pipelineChainIsRunning` is false. Both member pipelines run
 the analysis-code-hash invalidation (`invalidate_stale_analysis`), since
 House may run after a failed Senate. `POST /api/admin/pipeline/trigger`
 (and the token-authenticated `/api/pipeline/trigger`) runs the same
