@@ -44,7 +44,7 @@ export default function BranchSelector({ selected, onChange }: BranchSelectorPro
 
   return (
     <div
-      className="flex justify-center gap-1 sm:gap-2"
+      className="flex flex-wrap justify-center gap-1 sm:gap-2"
       role="tablist"
       aria-label="Government branch"
       onKeyDown={onKeyDown}

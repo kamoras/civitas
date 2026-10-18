@@ -429,6 +429,9 @@ def vote_detail(db: Session, rc: RollCall, links: MemberLinks | None = None) -> 
         return {
             "lastName": p.last_name, "firstName": p.first_name, "party": p.party, "state": p.state,
             "position": p.position, "bucket": _bucket(p.position), "candidate": candidate_of(p.position),
+            # The id the chamber's record gives the member (House: bioguide;
+            # Senate: LIS), for the public API's positions.
+            "chamberMemberId": p.member_id,
             "page": (links.page(bioguide=p.member_id) if house
                      else links.page(last_name=p.last_name, state=p.state, lis_id=p.member_id)),
             # The member's own name and district where the site knows them;

@@ -468,7 +468,10 @@ def source_fingerprint(db: Session) -> str:
     return h.hexdigest()
 
 
-def stored_fingerprint(path: str = SITE_SEARCH_DB) -> str | None:
+def stored_fingerprint(path: str | None = None) -> str | None:
+    # Resolved here, not as a default argument: a default is bound at
+    # import, before the tests' data-volume redirect moves SITE_SEARCH_DB.
+    path = path or SITE_SEARCH_DB
     try:
         conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
     except sqlite3.Error:
@@ -537,9 +540,10 @@ def write_index(entities: list[Entity], path: str, fingerprint: str = "") -> int
     return len(entities)
 
 
-def refresh_index(db: Session, path: str = SITE_SEARCH_DB, force: bool = False) -> int | None:
+def refresh_index(db: Session, path: str | None = None, force: bool = False) -> int | None:
     """Rebuild the index when its sources moved (or it is missing, or at an
     old schema). Returns the entity count written, None when unchanged."""
+    path = path or SITE_SEARCH_DB
     fingerprint = source_fingerprint(db)
     if not force and stored_fingerprint(path) == fingerprint:
         return None

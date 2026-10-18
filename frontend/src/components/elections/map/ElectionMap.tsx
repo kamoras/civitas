@@ -1148,7 +1148,7 @@ export default function ElectionMap({
           <div
             role="group"
             aria-label="Chamber"
-            className="flex font-mono text-xs tracking-[0.12em]"
+            className="flex flex-wrap font-mono text-xs tracking-[0.12em]"
           >
             {MAP_CHAMBERS.map((c, i) => (
               <button
@@ -1177,7 +1177,7 @@ export default function ElectionMap({
           <div
             role="group"
             aria-label="Map view"
-            className="flex font-mono text-xs tracking-[0.12em]"
+            className="flex flex-wrap font-mono text-xs tracking-[0.12em]"
           >
             {MAP_VIEWS.map((v, i) => {
               const disabled = v !== "usual" && !hasPolls;
@@ -1230,7 +1230,7 @@ export default function ElectionMap({
           </p>
         </div>
 
-        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
           <section
             id="general-map"
             aria-labelledby="general-map-stamp"
