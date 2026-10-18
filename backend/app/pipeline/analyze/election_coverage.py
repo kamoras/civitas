@@ -12,7 +12,9 @@ candidate). A match therefore requires the surname PLUS corroboration in
 the same text:
 
   "full_name"       — the candidate's own first name also appears
-                      (word-boundary, case-insensitive), or
+                      (word-boundary, case-insensitive), AND the text
+                      names the race: its state, or another of its
+                      candidates (CandidateMatcher.names_the_race), or
   "surname_context" — the candidate's state name appears (full name, e.g.
                       "Georgia" — the 2-letter code is far too ambiguous
                       in prose). This corroborates nothing when the
@@ -20,6 +22,19 @@ the same text:
                       the state in nearly every article it runs; those
                       matches must additionally clear the relevance bar
                       (vacuous_corroboration_clause).
+
+A full name identifies a person, not a race. Until 2026-10-17 it was
+enough on its own, and 274 of the 830 stored full_name news items named
+neither the race's state nor anyone else running in it: a member's
+official business, a governor's race the member is running in, 2028
+speculation. Hand-labelled, 9 of the 274 were about the race. One of
+them (a newsletter whose lead item had the candidate campaigning in
+Michigan) was posted as an update on a New York House race.
+
+Multi-story digests and newsletters are dropped before matching
+(news_digest.digest_reason, the Action Center's rule): a newsletter's
+lead item can name a candidate while the rest of it is about other
+things entirely.
 
 If, after corroboration, an item still matches candidates in MORE THAN
 ONE race, it is dropped entirely rather than guessed or fanned out — the
@@ -45,8 +60,11 @@ from sqlalchemy.orm import Session
 
 from app.models import Candidate, Race, RaceCoverageItem
 from app.pipeline.analyze import race_relevance
+from app.pipeline.fetch.news_digest import digest_reason
 from app.pipeline.fetch.news_feeds import (
+    MAX_SUMMARY_CHARS,
     STATE_OUTLET_NAMES,
+    NewsArticle,
     fetch_news_articles,
     fetch_state_news_articles,
 )
@@ -215,6 +233,17 @@ class CandidateMatcher:
     full_name_re: "re.Pattern[str] | None"
     state_re: "re.Pattern[str]"
     surname_key: str  # surname.lower(), for the prefilter below
+    # The surnames of everyone else running in this race (other than
+    # namesakes of this candidate), as names_the_race reads them.
+    rival_res: tuple["re.Pattern[str]", ...] = ()
+
+    def names_the_race(self, text: str) -> bool:
+        """The text names the race, not only the person: its state (full
+        name), or another of its candidates as a name. A member's floor
+        speech, a governor's race and a presidential straw poll name the
+        candidate and neither of these."""
+        return bool(self.state_re.search(text)) or any(
+            _matches_as_a_name(r, text) for r in self.rival_res)
 
     def match_basis(self, text: str) -> str | None:
         """"full_name" / "surname_context" / None — see module docstring."""
@@ -230,15 +259,19 @@ class CandidateMatcher:
         if not _matches_as_a_name(self.surname_re, text):
             return None
         if self.full_name_re is not None and _matches_full_name(self.full_name_re, text):
-            return "full_name"
+            return "full_name" if self.names_the_race(text) else None
         if self.state_re.search(text):
             return "surname_context"
         return None
 
 
-def _build_matchers(db: Session) -> list[CandidateMatcher]:
+def build_matchers(db: Session) -> list[CandidateMatcher]:
     matchers = []
     rows = db.query(Candidate.id, Candidate.name, Candidate.race_id).all()
+    surnames_by_race: dict[str, set[str]] = {}
+    for _, name, race_id in rows:
+        if name and race_id and len(_surname(name)) >= MIN_SURNAME_LENGTH:
+            surnames_by_race.setdefault(race_id, set()).add(_surname(name))
     for cand_id, name, race_id in rows:
         if not name or not race_id:
             continue
@@ -259,6 +292,10 @@ def _build_matchers(db: Session) -> list[CandidateMatcher]:
             full_name_re=_full_name_pattern(first, surname) if first else None,
             state_re=_state_name_pattern(state_name),
             surname_key=surname.lower(),
+            rival_res=tuple(
+                _word_pattern(other) for other in sorted(surnames_by_race.get(race_id, ()))
+                if other.lower() != surname.lower()
+            ),
         ))
     return matchers
 
@@ -372,6 +409,19 @@ def _drop_syndicated_reprints(db: Session) -> set[tuple[str, str, str]]:
     return seen
 
 
+def stored_digest_reason(item: RaceCoverageItem) -> str | None:
+    """digest_reason for a stored news item (None for any other source:
+    a social post is not a feed item). A summary at the cap is read as
+    cut there, as news_feeds would have marked it."""
+    if item.source_type != "news":
+        return None
+    summary = item.summary or ""
+    return digest_reason(NewsArticle(
+        title=item.title or "", url=item.url, source_name=item.source_name, summary=summary,
+        published=None, truncated=len(summary) >= MAX_SUMMARY_CHARS,
+    ))
+
+
 def _drop_items_the_matcher_would_now_reject(
     db: Session, matchers: list[CandidateMatcher],
 ) -> int:
@@ -403,7 +453,8 @@ def _drop_items_the_matcher_would_now_reject(
         matcher = by_candidate.get(item.matched_candidate_id)
         if matcher is None:
             continue
-        if matcher.match_basis(f"{item.title or ''} {item.summary or ''}") is None:
+        if (matcher.match_basis(f"{item.title or ''} {item.summary or ''}") is None
+                or stored_digest_reason(item)):
             doomed.append(item.id)
 
     if not doomed:
@@ -520,7 +571,7 @@ async def ingest_race_coverage(db: Session) -> int:
     Returns the number of NEW coverage items stored (a url already
     ingested for that race is skipped, not duplicated).
     """
-    matchers = _build_matchers(db)
+    matchers = build_matchers(db)
     if not matchers:
         return 0
 
@@ -547,6 +598,8 @@ async def ingest_race_coverage(db: Session) -> int:
     # Center, so national issue ranking is untouched.
     articles = fetch_news_articles() + fetch_state_news_articles()
     for article in articles:
+        if digest_reason(article):
+            continue
         haystack = f"{article.title} {article.summary}"
         resolved = resolve_item_race(matchers, haystack)
         if resolved is None:

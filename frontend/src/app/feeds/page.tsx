@@ -215,12 +215,12 @@ export default async function FeedsPage() {
                 count as official; Civitas never calls a race. An &ldquo;On the record&rdquo; post
                 is made only when a U.S. policy topic trending on Bluesky has a pinned match to an
                 official record: a vote, a bill, a rule or the day&apos;s congressional record.
-                Every word is fixed template text, the record&apos;s own fields, or Bluesky&apos;s
-                name for the trend, quoted and attributed to Bluesky. Its picture is the record
-                itself (a vote&apos;s tally, a bill, a rule) with alt text. There are at most two a
-                day, at least four hours apart and inside the posting window; the same record is
-                posted at most once in 14 days, and never one an issue post already carried. Each
-                links to the page with the full record. More on how the news is handled is in{" "}
+                Every word is fixed template text or the record&apos;s own fields, then the
+                record&apos;s date and source. Its picture is the record itself (a vote&apos;s
+                tally, a bill, a rule) with alt text. There are at most two a day, at least four
+                hours apart and inside the posting window; the same record is posted at most once in
+                14 days, and never one an issue post already carried. Each links to the page with
+                the full record. More on how the news is handled is in{" "}
                 <A href="/about/news">News &amp; Congress reports</A>.
               </P>
             </Section>

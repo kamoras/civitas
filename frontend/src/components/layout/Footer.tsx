@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { BSKY_PROFILE_URL, GITHUB_REPO_URL, SITE_TAGLINE } from "@/lib/site";
-import { SECTIONS, sectionSubpages, type SectionKey } from "@/lib/routes";
 
 /**
  * Colophon footer.
@@ -10,14 +9,17 @@ import { SECTIONS, sectionSubpages, type SectionKey } from "@/lib/routes";
  * given a size someone can actually read it at (it was 12px, dimmed, and
  * centred at a 32rem measure).
  *
- * The layout is a printed form's footer: a 3px block rule, a register of
- * every section's pages in columns (the SECTIONS table, lib/routes.ts, the
- * same one the main navigation reads), the site's own pages, then the
- * standing statement. Centred stacks read brochure; left-aligned registers
- * read record.
+ * The layout is a printed form's footer: a 3px block rule, the site's own
+ * pages, then the standing statement. Centred stacks read brochure;
+ * left-aligned registers read record.
+ *
+ * No register of the sections' pages (2026-10): it repeated the header's
+ * menu at the foot of every page (on a phone 1,359 px of it at 390 px).
+ * The header carries every section's pages at every width, and its desktop
+ * panels are in the server HTML while closed (`hidden`), so the links stay
+ * crawlable without a second copy here. The pages below are the ones no
+ * section lists (routes.test.ts, NOT_IN_A_SECTION).
  */
-
-const FOOTER_SECTIONS = Object.keys(SECTIONS) as SectionKey[];
 
 const INTERNAL_LINKS: readonly { href: string; label: string }[] = [
   { href: "/feeds", label: "Feeds" },
@@ -50,52 +52,12 @@ const EXTERNAL_LINKS: readonly { href: string; label: string; aria: string }[] =
 const linkClass =
   "inline-flex min-h-6 items-center font-mono text-xs uppercase tracking-[0.11em] text-ink-lo hover:text-ink-hi transition-colors";
 
-/** `omit`: sections a page already lists in full above the footer (the
- * homepage's index), so the same links don't run twice a screen apart. */
-export default function Footer({ omit = [] }: { omit?: readonly SectionKey[] }) {
-  const sections = FOOTER_SECTIONS.filter((key) => !omit.includes(key));
+export default function Footer() {
   return (
     <footer className="border-t-3 border-white/15 bg-surface-base px-4 py-8 sm:px-6">
       <div className="mx-auto max-w-7xl">
         <nav aria-label="Footer navigation" className="border-b border-white/[0.07] pb-5">
-          {/* Columns at least 9.5rem wide, as many as fit: seven in a row
-              at 1280 px, two on a phone, and fewer as the text grows, so a
-              200% text size reflows instead of overflowing (WCAG 1.4.4). */}
-          {sections.length > 0 && (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,9.5rem),1fr))] gap-x-6 gap-y-6">
-              {sections.map((key) => {
-                const { label, href } = SECTIONS[key];
-                const subs = sectionSubpages(key);
-                return (
-                  <div key={key}>
-                    <Link
-                      href={href}
-                      className="inline-flex min-h-6 items-center font-mono text-xs uppercase tracking-[0.14em] text-ink-hi hover:text-phos"
-                    >
-                      {label}
-                    </Link>
-                    {subs.length > 0 && (
-                      <ul className="mt-1 border-l border-white/15 pl-3">
-                        {subs.map((t) => (
-                          <li key={t.key}>
-                            <Link
-                              href={t.href}
-                              className={`${linkClass} normal-case tracking-normal`}
-                            >
-                              {t.label}
-                            </Link>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          <div
-            className={`flex flex-wrap items-center gap-x-6 gap-y-1 ${sections.length > 0 ? "mt-6 border-t border-white/[0.07] pt-4" : ""}`}
-          >
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
             {INTERNAL_LINKS.map(({ href, label }) => (
               <Link key={href} href={href} className={linkClass}>
                 {label}

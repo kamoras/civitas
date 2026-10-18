@@ -265,7 +265,7 @@ export default function PoliticianProfileClient({
                   <div key={issue.id} className="border border-white/[0.07] bg-surface-base p-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
+                        <div className="flex flex-wrap items-center gap-x-2 mb-1">
                           <span className="font-mono text-xs text-ink-min">RANK #{issue.rank}</span>
                           <span className="font-mono text-xs text-ink-min">
                             {issueDateLabel(issue)}

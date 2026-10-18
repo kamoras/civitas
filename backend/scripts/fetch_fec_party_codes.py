@@ -22,7 +22,7 @@ import re
 import sys
 import urllib.request
 
-from app.contact import CONTACT_EMAIL
+from app.contact import CONTACT_COMMENT
 
 URL = "https://www.fec.gov/campaign-finance-data/party-code-descriptions/"
 OUT = pathlib.Path(__file__).resolve().parents[1] / "app" / "data" / "fec_party_codes.json"
@@ -40,7 +40,7 @@ def parse(page: str) -> dict[str, str]:
 
 def main() -> None:
     out = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else OUT
-    req = urllib.request.Request(URL, headers={"User-Agent": f"Civitas ({CONTACT_EMAIL})"})
+    req = urllib.request.Request(URL, headers={"User-Agent": f"Civitas/1.0{CONTACT_COMMENT}"})
     with urllib.request.urlopen(req, timeout=60) as resp:
         codes = parse(resp.read().decode("utf-8", errors="replace"))
     if len(codes) < 50:

@@ -23,21 +23,36 @@ once its run is stale (scheduler.pipelines_running, run_tracker.row_is_stale),
 and the retry's lock takes over a hung run's.
 
 The one skip that ends a chain is a data reset holding the database: every
-later link would be refused the same way. What this can't cover is the
-process itself dying — a kill takes the rest of the chain with it;
-ops_alerts.check_pipeline_staleness is the backstop for that.
+later link would be refused the same way.
+
+The process itself dying takes the running link and the rest of the chain
+with it: a pipeline is a thread of the process. So a named chain records
+the link it is on in a file on the data volume (CHAIN_FILE), removed when
+the chain ends; one still there when the pipeline process starts was cut
+short, and is resumed from that link once (scheduler.
+resume_interrupted_chain). On 2026-10-17 a host `apt upgrade` restarted
+the Docker daemon mid-House-run, killing every container: the House run
+was left with 175 of 433 members rescored on the new method and Stock
+trades and Election didn't run that day. Once, because a link that itself
+kills the process (memory, a health-check kill) would kill it again;
+ops_alerts.check_pipeline_staleness stays the backstop past that.
 """
 
 import asyncio
 import itertools
+import json
 import logging
+import os
 import threading
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import datetime
 
+from app.atomic_write import runtime_data_path, write_text_atomic
 from app.pipeline import run_tracker
 from app.pipeline.run_tracker import ALREADY_RUNNING, MEMBER_PIPELINE_RUNNING, QUIET_PIPELINE_TIMEOUT
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +66,9 @@ UNKNOWN = "unknown"
 FAILED = frozenset({CRASHED, UNKNOWN, "failed", "no_data"})
 # How often a link held off by another run looks whether it has finished.
 WAIT_POLL_S = 30
+# The link a named chain is on (run_chain's `name`), on the data volume so
+# it outlives the process; read at the pipeline process's start.
+CHAIN_FILE = "pipeline_chain.json"
 
 
 @dataclass(frozen=True)
@@ -60,6 +78,17 @@ class Link:
     # After the link, unless it was skipped (a cache the link may have
     # changed — a crash may have changed it partway).
     after: Callable[[], None] | None = None
+
+
+@dataclass(frozen=True)
+class Cut:
+    """A chain the process died in: its name ("Nightly", "Triggered"), when
+    it started, the link it was on, and whether it was already a resumption
+    of an earlier cut (resumed only once)."""
+    name: str
+    started_at: datetime
+    link: str
+    resumed: bool
 
 
 @dataclass(frozen=True)
@@ -119,6 +148,43 @@ def release(chain_id: int) -> None:
 def _progress(chain_id: int) -> None:
     with _chains_lock:
         _chains[chain_id] = time.monotonic()
+
+
+def _record(cut: Cut | None) -> None:
+    """Write the link a named chain is on, or (None) clear it. A failure is
+    logged, never raised: the chain still runs, unrecorded."""
+    path = runtime_data_path(CHAIN_FILE)
+    try:
+        if cut is None:
+            if os.path.exists(path):
+                os.remove(path)
+        else:
+            write_text_atomic(path, json.dumps({
+                "name": cut.name, "startedAt": cut.started_at.isoformat(), "link": cut.link,
+                "resumed": cut.resumed,
+            }))
+    except OSError:
+        logger.exception("Recording the pipeline chain's link failed")
+
+
+def take_cut() -> Cut | None:
+    """The chain a dead process left mid-link, cleared as it is read: what
+    the pipeline process reads at its start, before any chain can begin. A
+    file that can't be read is logged and cleared — no chain is resumed
+    from a guess."""
+    path = runtime_data_path(CHAIN_FILE)
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, encoding="utf-8") as fh:
+            doc = json.load(fh)
+        return Cut(str(doc["name"]), datetime.fromisoformat(doc["startedAt"]), str(doc["link"]),
+                   bool(doc["resumed"]))
+    except (OSError, ValueError, KeyError, TypeError):
+        logger.exception("The interrupted pipeline chain's record can't be read — not resumed")
+        return None
+    finally:
+        _record(None)
 
 
 def _skip_reason(outcome: Outcome) -> str | None:
@@ -185,20 +251,26 @@ async def _run_link(link: Link) -> Outcome:
 async def run_chain(
     links: list[Link], on_outcome: Callable[[Link, Outcome], None] | None = None,
     busy: Callable[[], bool] | None = None, chain_id: int | None = None,
+    name: str | None = None, started_at: datetime | None = None, resumed: bool = False,
 ) -> dict[str, Outcome] | None:
     """Each link in turn, whatever the one before it did, under `chain_id`
     (claimed already, or claimed here — None, and nothing runs, while
     another chain holds the slot). `busy`: whether any pipeline is running —
     what a link held off by another run waits on before its one retry
-    (without it, the chain moves straight on)."""
+    (without it, the chain moves straight on). `name`: record the link the
+    chain is on (CHAIN_FILE, with `started_at`, by default now, and
+    `resumed`), so a chain the process dies in is resumed at its start."""
     if chain_id is None:
         chain_id = claim()
         if chain_id is None:
             logger.info("Another pipeline chain is running — this one is not started")
             return None
     outcomes: dict[str, Outcome] = {}
+    started_at = started_at or utcnow()
     try:
         for link in links:
+            if name is not None:
+                _record(Cut(name, started_at, link.label, resumed))
             _progress(chain_id)
             outcome = await _run_link(link)
             if busy is not None and held_off(outcome):
@@ -220,5 +292,9 @@ async def run_chain(
                 logger.warning("A data reset holds the database — the rest of this chain is not run")
                 break
     finally:
+        # A chain that ends here, however, was not cut short. (A process
+        # that dies runs no finally in its daemon threads: the record stays.)
+        if name is not None:
+            _record(None)
         release(chain_id)
     return outcomes
