@@ -104,8 +104,8 @@ function ResultCard({ result, query }: { result: ExploreResult; query: string })
   return (
     <div className={`border transition-all ${chamberBg(result.chamber)}`}>
       <Link href={detailHref} className="block p-4 hover:brightness-125">
-        <div className="flex items-start justify-between gap-3 mb-2">
-          <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex flex-wrap items-start justify-between gap-x-3 mb-2">
+          <div className="flex min-w-0 items-center gap-2 flex-wrap">
             <span className={`text-xs font-mono tracking-wider ${chamberColor(result.chamber)}`}>
               {result.chamber === "Regulatory" && result.agencyName
                 ? result.agencyName
@@ -123,7 +123,7 @@ function ResultCard({ result, query }: { result: ExploreResult; query: string })
             )}
           </div>
           {result.date && (
-            <span className="text-ink-min text-xs shrink-0">{formatDate(result.date)}</span>
+            <span className="ml-auto text-ink-min text-xs shrink-0">{formatDate(result.date)}</span>
           )}
         </div>
 
@@ -558,7 +558,9 @@ function ExplorePageInner() {
                 <label htmlFor="explore-search" className="sr-only">
                   Search government records
                 </label>
-                <div className="flex items-center gap-2">
+                {/* Wraps, the box at least 6rem: at 200% text the SEARCH
+                    button's 7.5rem left the box 33 px and clipped it. */}
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="text-ink-lo font-mono text-sm shrink-0" aria-hidden="true">
                     {">"}
                   </span>
@@ -569,7 +571,7 @@ function ExplorePageInner() {
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder="What issue are you concerned about?"
-                    className="flex-1 bg-transparent text-ink-hi text-sm font-mono placeholder:text-ink-min outline-none focus-visible:ring-1 focus-visible:ring-signal-cyan caret-phos"
+                    className="min-w-0 basis-24 grow bg-transparent text-ink-hi text-sm font-mono placeholder:text-ink-min outline-none focus-visible:ring-1 focus-visible:ring-signal-cyan caret-phos"
                   />
                   <button
                     type="submit"

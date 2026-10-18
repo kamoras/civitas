@@ -416,7 +416,7 @@ export default function PresidentScorecard({
           <header
             id="overview"
             {...{ [SHARE_SECTION_ATTR]: "overview" }}
-            className={`grid gap-6 border border-white/25 border-t-[3px] bg-surface px-5 py-6 font-sans sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] ${party.border}`}
+            className={`grid grid-cols-[minmax(0,1fr)] gap-6 border border-white/25 border-t-[3px] bg-surface px-5 py-6 font-sans sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] ${party.border}`}
           >
             {/* Portrait above the name below sm: beside it, the name had
                 about 146px at 320px and long surnames split mid-word. */}
@@ -474,13 +474,13 @@ export default function PresidentScorecard({
                   Not yet calculated
                 </p>
               ) : (
-                <div className="flex items-baseline gap-4">
+                <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
                   <span
                     className={`font-display text-7xl font-extrabold leading-none ${getScoreColor(overall)}`}
                   >
                     {overall}
                   </span>
-                  <div className="flex flex-col gap-1">
+                  <div className="flex min-w-0 flex-col gap-1">
                     <span
                       className={`font-mono text-sm tracking-[0.1em] ${getScoreColor(overall)}`}
                     >
@@ -515,7 +515,7 @@ export default function PresidentScorecard({
             </div>
           </header>
 
-          <div className="grid items-stretch gap-5 md:grid-cols-3">
+          <div className="grid grid-cols-1 items-stretch gap-5 md:grid-cols-3">
             <MandateColumn
               dim={breakdown?.publicMandate}
               score={s.publicMandate}
@@ -547,7 +547,7 @@ export default function PresidentScorecard({
             >
               Also on record, not part of the score
             </h2>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {president.isCurrent && (
                 <button
                   type="button"

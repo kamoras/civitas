@@ -11,7 +11,7 @@ import {
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { CopyStatus, useCopyFeedback } from "@/hooks/useCopyFeedback";
 import { countyFinderStatus, countyNames, finderSuggestions } from "@/lib/countyFinder";
-import { districtName, matchesDistrictQuery, placeDistrictSummary } from "@/lib/elections";
+import { districtName, filterDistricts, placeDistrictSummary } from "@/lib/elections";
 import { formatUtcDate, safeHref } from "@/lib/formatting";
 import { PARTY_COLORS } from "@/lib/partyStyles";
 import { boxedControl } from "@/lib/controlStyles";
@@ -318,12 +318,11 @@ export default function ContactYourMembers({
   const matchedDistricts = useMemo(
     () =>
       finder && place.trim()
-        ? lines!.districts.filter((d) =>
-            matchesDistrictQuery(
-              { district: null, areas: [...d.counties, ...(d.places ?? [])], candidates: [] },
-              place
-            )
-          )
+        ? filterDistricts(lines!.districts, place, (d) => ({
+            district: null,
+            areas: [...d.counties, ...(d.places ?? [])],
+            candidates: [],
+          }))
         : [],
     [finder, lines, place]
   );

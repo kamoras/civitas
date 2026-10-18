@@ -17,8 +17,8 @@ const AIR_PX = 8;
  * the text size and the buttons beside the wordmark (the header search is
  * one), and a hard-coded value would drift from them.
  *
- * Also publishes the header's own height as `--header-h`, for anything that
- * sits directly under it (the phone's "on this page" bar): 86px today, more
+ * Also publishes the header's own height as `--header-height`, for anything that
+ * sits directly under it (the phone's "on this page" bar, the Action Center's tabs): 86px today, more
  * when the bar wraps.
  */
 export default function HeaderClearance() {
@@ -27,7 +27,12 @@ export default function HeaderClearance() {
     if (!header || typeof ResizeObserver === "undefined") return;
     const root = document.documentElement;
     const update = () => {
-      root.style.setProperty("--header-h", `${Math.ceil(header.getBoundingClientRect().height)}px`);
+      // The header's own bottom, for what sticks under it (the Action
+      // Center's tabs, the phone's section bar), at any size.
+      root.style.setProperty(
+        "--header-height",
+        `${Math.ceil(header.getBoundingClientRect().height)}px`
+      );
       root.style.removeProperty("--header-clearance");
       const reserved =
         parseFloat(getComputedStyle(root).getPropertyValue("--header-clearance")) *
@@ -41,7 +46,7 @@ export default function HeaderClearance() {
     return () => {
       observer.disconnect();
       root.style.removeProperty("--header-clearance");
-      root.style.removeProperty("--header-h");
+      root.style.removeProperty("--header-height");
     };
   }, []);
   return null;

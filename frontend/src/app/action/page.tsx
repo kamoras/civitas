@@ -676,7 +676,7 @@ function ActionPageInner() {
               parked beside the tab row, reading as a deliberate accent.
 
               It sticks directly under the header at the header's measured
-              height (`--header-h`), and at the top edge while a phone's
+              height (`--header-height`), and at the top edge while a phone's
               header is hidden: it was a literal 82px against an 86px header,
               so it tucked 4px under it, and 34px short of the phone's 52px
               one. Solid, like the header: paper, not glass. */}
@@ -684,7 +684,7 @@ function ActionPageInner() {
             role="tablist"
             aria-label="Action Center sections"
             data-sticky-subnav
-            className="sticky top-[var(--header-shown-h,var(--header-h))] z-30 -mx-4 mb-8 mt-6 flex gap-0 overflow-x-auto overflow-y-hidden border-b border-white/15 bg-surface-base px-4 sm:mx-0 sm:px-0"
+            className="sticky top-[var(--header-shown-h,var(--header-height))] z-30 -mx-4 mb-8 mt-6 flex gap-0 overflow-x-auto overflow-y-hidden border-b border-white/15 bg-surface-base px-4 sm:mx-0 sm:px-0"
             onKeyDown={(e) => {
               const tabs = TABS.map((t) => t.id);
               const idx = tabs.indexOf(activeTab);

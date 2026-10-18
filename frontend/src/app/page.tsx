@@ -4,7 +4,7 @@ import Masthead from "@/components/home/Masthead";
 import RecordIndex from "@/components/home/RecordIndex";
 import Holdings from "@/components/home/Holdings";
 import OnTheRecord from "@/components/home/OnTheRecord";
-import SectionsBand, { BAND } from "@/components/home/SectionsBand";
+import SectionsBand from "@/components/home/SectionsBand";
 import ElectionNight from "@/components/home/ElectionNight";
 import ThisWeekStrip from "@/components/shared/ThisWeekStrip";
 import JsonLd from "@/components/seo/JsonLd";
@@ -56,7 +56,7 @@ export default async function Home() {
         </div>
       </main>
       {/* The index lists these sections' pages in full, a screen above. */}
-      <Footer omit={BAND} />
+      <Footer />
     </>
   );
 }

@@ -23,14 +23,14 @@ import urllib.request
 
 import openpyxl
 
-from app.contact import CONTACT_EMAIL
+from app.contact import CONTACT_COMMENT
 from app.pipeline.fetch.peer_gdp import PEER_COUNTRIES, US
 
 MADDISON_FILE_URL = "https://dataverse.nl/api/access/datafile/421302"  # mpd2023_web.xlsx, version 1.0
 # dataverse.nl challenges browser-style User-Agents (an Anubis proof-of-work
 # page, served with a 200); a client that names itself without "Mozilla" is
 # let through, so this one does (BOT_USER_AGENT starts "Mozilla/5.0").
-USER_AGENT = f"Civitas/1.0 (+{CONTACT_EMAIL})"
+USER_AGENT = f"Civitas/1.0{CONTACT_COMMENT}"
 FIRST_YEAR = 1946  # a base for 1947, where Effectiveness's postwar comparison begins
 OUT = pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "peer_gdp_per_capita.json"
 

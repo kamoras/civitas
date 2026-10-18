@@ -246,7 +246,7 @@ export default function BillPageView({
             <div
               id="overview"
               {...shareSection("overview")}
-              className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_22rem]"
+              className="grid grid-cols-[minmax(0,1fr)] gap-10 lg:grid-cols-[minmax(0,1fr)_22rem]"
             >
               <header className="flex min-w-0 flex-col gap-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -418,7 +418,7 @@ export default function BillPageView({
 
               <aside
                 aria-label="Sponsor and facts"
-                className="flex flex-col gap-4 self-start border border-white/15 bg-surface p-4 text-sm lg:col-start-2 lg:row-span-2 lg:row-start-1"
+                className="@container flex flex-col gap-4 self-start border border-white/15 bg-surface p-4 text-sm lg:col-start-2 lg:row-span-2 lg:row-start-1"
               >
                 {record?.sponsors.length ? (
                   // On a phone the sponsor is named under the title instead.
@@ -469,7 +469,9 @@ export default function BillPageView({
                     )}
                   </div>
                 )}
-                <dl className="grid grid-cols-[7rem_minmax(0,1fr)] gap-x-3 gap-y-2">
+                {/* Label beside value where the box has 18rem, else above it: at 200%
+                    text the 7rem label column left "CBO, 2025-06-04" no room. */}
+                <dl className="grid grid-cols-1 gap-x-3 gap-y-1 @min-[18rem]:grid-cols-[7rem_minmax(0,1fr)] @min-[18rem]:gap-y-2">
                   {record?.introducedDate && (
                     <>
                       <dt className="text-ink-min">Introduced</dt>
@@ -507,7 +509,7 @@ export default function BillPageView({
               </aside>
             </div>
 
-            <div className="mt-8 grid gap-12 lg:grid-cols-[minmax(0,1fr)_22rem]">
+            <div className="mt-8 grid grid-cols-1 gap-12 lg:grid-cols-[minmax(0,1fr)_22rem]">
               <div className="flex min-w-0 flex-col gap-12">
                 <section className="flex flex-col gap-3" {...shareSection("summary")}>
                   <SectionHead id="summary" title="Summary" shareable />
