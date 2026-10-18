@@ -111,6 +111,14 @@ class Chamber:
         self.members = members
         self.majority = derive_chamber_majority([_party(m) for m in members], name, sitting_president_party(db))
         self.full = {key: self.reference(key, members) for key in _WEIGHT}
+        # Each member's score on the full reference, which error() compares
+        # every subset against: the same for every draw, so scored once
+        # (it was half of error()'s scoring, and the run overran the data
+        # refresh's 3 hours on the Pi).
+        self.full_scores = {
+            key: {m["bioguideId"]: self.score(key, m, self.full[key]) for m in members}
+            for key in _WEIGHT
+        }
 
     def reference(self, key: str, members: list[dict]) -> dict | None:
         if key == "les_reference":
@@ -155,9 +163,9 @@ class Chamber:
         ref = self.reference(key, subset)
         if ref is None:
             return None  # too few to measure at all: the pipeline keeps the last one anyway
-        full = self.full[key]
+        full = self.full_scores[key]
         deltas = {
-            m["bioguideId"]: (self.score(key, m, ref) - self.score(key, m, full)) * _WEIGHT[key]
+            m["bioguideId"]: (self.score(key, m, ref) - full[m["bioguideId"]]) * _WEIGHT[key]
             for m in self.members
         }
         ratios = sorted(abs(d) / self.sd[b] for b, d in deltas.items())
@@ -199,8 +207,17 @@ class Chamber:
 
 def calibrate(chamber: Chamber, seed: int, draws: int, noise_draws: int = NOISE_DRAWS) -> dict:
     """One chamber's floors. Each stream has its own seed (the run's seed,
-    the chamber, and what it draws for), so adding a share to GRID or a
-    reference to _WEIGHT leaves the others' draws as they were."""
+    the chamber, what it draws for and, for a subset, the share), so adding
+    a share to GRID or a reference to _WEIGHT leaves the others' draws as
+    they were.
+
+    The floor is read from the top of the grid down and the walk stops at
+    the first share that moves scores by the noise or more: the shares below
+    it cannot change the floor, and the curve is written only as far as it
+    was walked. Measuring every share took over three hours on the Pi
+    (each draw refits the Constituent Alignment reference on its subset),
+    past the data refresh's limit; the floors sit at 85% and up, so the walk
+    stops after a handful of shares."""
     chamber.noise(random.Random(f"{seed}-{chamber.name}-noise"), noise_draws)
     n = len(chamber.members)
     out = {
@@ -208,25 +225,24 @@ def calibrate(chamber: Chamber, seed: int, draws: int, noise_draws: int = NOISE_
         "floors": {}, "curves": {},
     }
     for key in _WEIGHT:
-        rng = random.Random(f"{seed}-{chamber.name}-{key}")
         curve = {}
-        for share in GRID:
+        floor = 1.0
+        for share in sorted(GRID, reverse=True):
             k = max(1, round(share * n))
             if k >= n:
                 curve[share] = 0.0
-                continue
-            errors = [chamber.error(key, rng.sample(chamber.members, k)) for _ in range(draws)]
-            errors = sorted(d for d in errors if d is not None)
-            prefix = chamber.error(key, chamber.members[:k])
-            random_err = errors[min(len(errors) - 1, math.ceil(0.9 * len(errors)) - 1)] if errors else math.inf
-            curve[share] = round(max(random_err, prefix if prefix is not None else math.inf), 3)
-        floor = 1.0
-        for share in sorted(GRID, reverse=True):
+            else:
+                rng = random.Random(f"{seed}-{chamber.name}-{key}-{share}")
+                errors = [chamber.error(key, rng.sample(chamber.members, k)) for _ in range(draws)]
+                errors = sorted(d for d in errors if d is not None)
+                prefix = chamber.error(key, chamber.members[:k])
+                random_err = errors[min(len(errors) - 1, math.ceil(0.9 * len(errors)) - 1)] if errors else math.inf
+                curve[share] = round(max(random_err, prefix if prefix is not None else math.inf), 3)
             if curve[share] >= 1.0:  # moved by more than the noise (Chamber.error)
                 break
             floor = share
         out["floors"][key] = floor
-        out["curves"][key] = {str(s): e for s, e in curve.items()}
+        out["curves"][key] = {str(s): e for s, e in sorted(curve.items())}
         print(f"{chamber.name} {key}: floor {floor:.0%}; {curve}", flush=True)
     return out
 
@@ -243,7 +259,7 @@ _CHAMBERS: dict[str, Chamber] = {}
 
 def _strictest(by_seed: dict[int, dict]) -> dict:
     """Per chamber and reference, the highest floor any seed gave, and the
-    error curve's highest value at each share."""
+    error curve's highest value at each share any seed measured."""
     out = {}
     for name in _CHAMBERS:
         runs = [by_seed[s][name] for s in sorted(by_seed)]
@@ -253,7 +269,10 @@ def _strictest(by_seed: dict[int, dict]) -> dict:
             "floors": {key: max(r["floors"][key] for r in runs) for key in _WEIGHT},
             "floors_by_seed": {key: {str(s): by_seed[s][name]["floors"][key] for s in sorted(by_seed)}
                                for key in _WEIGHT},
-            "curves": {key: {share: max(r["curves"][key][share] for r in runs) for share in runs[0]["curves"][key]}
+            # Each seed walks the grid down to its own floor, so a share
+            # appears where any seed reached it.
+            "curves": {key: {share: max(r["curves"][key][share] for r in runs if share in r["curves"][key])
+                             for share in sorted({s for r in runs for s in r["curves"][key]}, key=float)}
                        for key in _WEIGHT},
         }
     return out
@@ -294,7 +313,8 @@ def main() -> None:
             "a random subset (90th percentile of the draws) or the roster's first members in Congress.gov's "
             "order, moves neither the 95th-percentile member's overall score by more than that member's own "
             "noise (bills resampled, party-line breaks redrawn, display rounding) nor a party's mean score "
-            "by more than its standard error. Below it a run carries the last reference measured on full "
+            "by more than its standard error. Each curve runs from 100% down to the first share past that "
+            "bar, where the floor is decided. Below it a run carries the last reference measured on full "
             "coverage (live_references). Regenerate after a scoring change."
         ),
         **result,
