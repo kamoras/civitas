@@ -40,6 +40,8 @@ from app.pipeline.fetch import bill_display_titles
 from app.pipeline.fetch.agencies import run_agency_sync
 from app.pipeline.fetch.amendment_purpose import fill_amendment_purposes
 from app.http_client import make_async_client
+from app.ops_alerts import send_ops_alert
+from app.pipeline_chain import claim, release, run_chain, take_cut
 from app.services.bill_service import warm_bill_collection_cache
 from app import site_search_index
 
@@ -265,9 +267,6 @@ def resume_interrupted_chain() -> None:
     has. A deploy never lands here mid-chain (check-and-deploy.sh waits for
     pipelineChainIsRunning) unless the chain was wedged — and resuming the
     wedged link once on the release that fixes it is what's wanted."""
-    from app.ops_alerts import send_ops_alert
-    from app.pipeline_chain import claim, release, run_chain, take_cut
-
     cut = take_cut()
     if cut is None:
         return

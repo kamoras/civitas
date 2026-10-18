@@ -3,14 +3,18 @@ one before it did."""
 
 import asyncio
 import inspect
+import json
+import os
 import time
+from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app import pipeline_chain
+from app import atomic_write, pipeline_chain, scheduler
 from app.pipeline_chain import CRASHED, Link, run_chain
+from app.time_utils import utcnow
 
 
 async def _passthrough(run_house):
@@ -307,8 +311,6 @@ class TestResumingAChainTheProcessDiedIn:
 
     @pytest.fixture
     def links(self, monkeypatch):
-        from app import scheduler
-
         ran = []
 
         def link(label):
@@ -326,29 +328,19 @@ class TestResumingAChainTheProcessDiedIn:
 
     @staticmethod
     def _cut(link, *, resumed=False, hours_ago=1):
-        from datetime import timedelta
-
-        from app.time_utils import utcnow
-
         pipeline_chain._record(pipeline_chain.Cut("Nightly", utcnow() - timedelta(hours=hours_ago), link, resumed))
 
     def test_a_named_chain_records_each_link_and_clears_it_at_the_end(self, links):
-        from app import scheduler
-
         asyncio.run(run_chain(scheduler.nightly_links(), name="Nightly"))
         assert [(label, cut.link, cut.resumed) for label, cut in links] == [
             ("A", "A", False), ("B", "B", False), ("C", "C", False)]
         assert _peek() is None
 
     def test_an_unnamed_chain_records_nothing(self, links):
-        from app import scheduler
-
         asyncio.run(run_chain(scheduler.nightly_links()))
         assert [cut for _, cut in links] == [None, None, None]
 
     def test_resumed_from_the_link_it_was_on_and_marked_resumed(self, links):
-        from app import scheduler
-
         self._cut("B")
         scheduler.resume_interrupted_chain()
         assert [(label, cut.name, cut.resumed) for label, cut in links] == [
@@ -357,36 +349,25 @@ class TestResumingAChainTheProcessDiedIn:
         assert not pipeline_chain.chain_running()
 
     def test_cut_short_again_is_alerted_not_resumed(self, links):
-        from app import scheduler
-
         self._cut("B", resumed=True)
-        with patch("app.ops_alerts.send_ops_alert") as alert:
+        with patch("app.scheduler.send_ops_alert") as alert:
             scheduler.resume_interrupted_chain()
         assert links == [] and _peek() is None
         assert alert.call_args.kwargs["condition"] == "chain-cut-again"
 
     def test_a_chain_over_a_day_old_is_left_to_the_nightly_run(self, links):
-        from app import scheduler
-
         self._cut("B", hours_ago=25)
         scheduler.resume_interrupted_chain()
         assert links == [] and _peek() is None
 
     def test_nothing_recorded_nothing_resumed(self, links):
-        from app import scheduler
-
         scheduler.resume_interrupted_chain()
         assert links == []
 
 
 def _peek():
     """The recorded cut, left in place."""
-    import json
-    import os
-
-    from app.atomic_write import runtime_data_path
-
-    path = runtime_data_path(pipeline_chain.CHAIN_FILE)
+    path = atomic_write.runtime_data_path(pipeline_chain.CHAIN_FILE)
     if not os.path.exists(path):
         return None
     with open(path) as fh:
