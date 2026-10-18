@@ -45,7 +45,7 @@ export default function ScorecardDrawer({
         role="dialog"
         aria-modal="true"
         aria-labelledby="scorecard-drawer-title"
-        className="relative flex h-full w-full flex-col border-white/25 bg-surface-base font-sans lg:w-[720px] lg:border-l"
+        className="relative flex h-full w-full min-w-0 flex-col border-white/25 bg-surface-base font-sans lg:w-[720px] lg:border-l"
       >
         <div className="flex items-start justify-between gap-3 border-b border-white/25 bg-surface-raised px-5 py-4">
           <div className="min-w-0">

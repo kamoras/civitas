@@ -31,7 +31,9 @@ export default function Pagination({
   const step =
     "text-xs px-2 py-1 font-mono text-ink-lo hover:text-phos disabled:text-ink-min disabled:cursor-not-allowed";
   return (
-    <div className={`flex items-center justify-center mt-4 ${numbered ? "gap-1" : "gap-2"}`}>
+    <div
+      className={`flex flex-wrap items-center justify-center mt-4 ${numbered ? "gap-1" : "gap-2"}`}
+    >
       <button
         onClick={() => onPageChange(page - 1)}
         disabled={disabled || page === 1}

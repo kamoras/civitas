@@ -90,7 +90,7 @@ import zipfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-from app.contact import CONTACT_EMAIL  # noqa: E402
+from app.contact import CONTACT_NOTE  # noqa: E402
 
 # FEC, Federal Elections 2020 (public domain). Table 2 is the workbook's
 # third sheet; its columns are state, electoral votes (two), Biden, Trump,
@@ -135,7 +135,7 @@ CYCLE_WEIGHTS = {"2020": 0.25, "2024": 0.75}
 # column or sign flip moves most of the map by tens of points.
 CONTINUITY_TOLERANCE = 5
 
-UA = {"User-Agent": f"CivitasCivicPlatform/1.0 (state PVI ingestion; contact: {CONTACT_EMAIL})"}
+UA = {"User-Agent": f"CivitasCivicPlatform/1.0 (state PVI ingestion{CONTACT_NOTE})"}
 
 DEFAULT_OUTPUT = pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "state_pvi.json"
 

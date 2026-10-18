@@ -51,7 +51,7 @@ import {
   isActiveCandidate,
   isRedrawnSeat,
   majorPartyOf,
-  matchesDistrictQuery,
+  filterDistricts,
   placeDistrictSummary,
   pviColor,
   redrawnMemberWords,
@@ -95,7 +95,9 @@ import { INLINE_LINK } from "@/lib/controlStyles";
 function NomineeName({ nominee }: { nominee: StatewideNominee }) {
   const major = majorPartyOf(nominee);
   return (
-    <span className="inline-flex items-baseline gap-1">
+    // max-w-full and min-w-0: a long one-word surname ("Jariustokaeutulelei")
+    // breaks at the box edge instead of running past a phone at 200% text.
+    <span className="inline-flex max-w-full items-baseline gap-1">
       {/* A party with no code of ours or FEC's is shown as the state
           printed it: "OTH" alone would tell a reader nothing about which
           party this line is. */}
@@ -103,9 +105,9 @@ function NomineeName({ nominee }: { nominee: StatewideNominee }) {
         {nominee.partyLabel || nominee.party}
       </span>
       <span
-        className={
+        className={`min-w-0 ${
           major === "DEM" ? "text-dem-blue" : major === "REP" ? "text-rep-red" : "text-ink"
-        }
+        }`}
       >
         {nominee.name}
       </span>
@@ -127,7 +129,7 @@ function StateLegSeatRow({ seat, filter }: { seat: StateLegDistrict; filter: str
   // actual Forsyth city. The places the filter matched lead.
   const townsLabel = districtAreaLabel(seat.towns, 3, false, filter);
   return (
-    <div className="grid grid-cols-[42px_1fr] items-baseline gap-3 border border-white/[0.09] bg-surface px-3 py-2">
+    <div className="grid grid-cols-[42px_minmax(0,1fr)] items-baseline gap-3 border border-white/[0.09] bg-surface px-3 py-2">
       <span className="border border-white/15 py-0.5 text-center font-mono text-xs text-ink-hi">
         {seat.district}
       </span>
@@ -158,9 +160,11 @@ function StateLegSeatRow({ seat, filter }: { seat: StateLegDistrict; filter: str
  */
 function StateLegChamberSection({ chamber }: { chamber: StateLegChamber }) {
   const [filter, setFilter] = useState("");
-  const shown = chamber.districts.filter((d) =>
-    matchesDistrictQuery({ district: d.district, areas: d.towns, candidates: d.nominees }, filter)
-  );
+  const shown = filterDistricts(chamber.districts, filter, (d) => ({
+    district: d.district,
+    areas: d.towns,
+    candidates: d.nominees,
+  }));
 
   return (
     <div className="mb-5 last:mb-0">
@@ -324,12 +328,11 @@ function StatewideSeatGroup({ seats, lookupHref }: { seats: StatewideRace[]; loo
   const label = first.officeLabel || first.label;
   const byDistrict = first.electedBy === "district";
   const hasAreas = seats.some((s) => (s.areas ?? []).length > 0);
-  const shown = seats.filter((s) =>
-    matchesDistrictQuery(
-      { district: s.seat ?? null, areas: s.areas ?? [], candidates: s.nominees },
-      filter
-    )
-  );
+  const shown = filterDistricts(seats, filter, (s) => ({
+    district: s.seat ?? null,
+    areas: s.areas ?? [],
+    candidates: s.nominees,
+  }));
   const seatWord = /^\d/.test(first.seat ?? "") ? "District" : "";
   // Offered whenever there are towns to match: the hint below tells the
   // reader to filter, so the box has to be there whatever the seat count.
@@ -380,12 +383,16 @@ function StatewideSeatGroup({ seats, lookupHref }: { seats: StatewideRace[]; loo
         {shown.map((s) => (
           <div
             key={s.office}
-            className="grid grid-cols-[minmax(42px,auto)_1fr] items-baseline gap-3 border border-white/[0.06] px-3 py-2"
+            // Wraps: the seat label's column was as wide as the label, and at
+            // 200% text it left the names 57 px and pushed them off the
+            // drawer. Now the names go under the label when they can't have
+            // 10rem beside it.
+            className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border border-white/[0.06] px-3 py-2"
           >
-            <span className="font-mono text-xs text-ink-hi">
+            <span className="min-w-[42px] font-mono text-xs text-ink-hi">
               {seatWord ? `${seatWord} ${s.seat}` : s.seat}
             </span>
-            <span className="min-w-0">
+            <span className="min-w-[min(10rem,100%)] flex-1">
               {districtAreaLabel(s.areas ?? [], 3, false, filter) && (
                 <span className="block truncate text-[11px] text-ink-min">
                   {districtAreaLabel(s.areas ?? [], 3, false, filter)}
@@ -639,13 +646,13 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
             <p className="mb-2 font-mono text-xs tracking-[0.1em] text-ink-lo">JUMP TO A MEASURE</p>
             <ul className="flex flex-wrap gap-1.5">
               {measures.map((m) => (
-                <li key={m.id}>
+                <li key={m.id} className="max-w-full">
                   <button
                     type="button"
                     onClick={() => jumpToMeasure(m.id)}
                     aria-label={[m.number, m.title].filter(Boolean).join(": ")}
                     title={m.title}
-                    className="min-h-[44px] min-w-[44px] max-w-[16rem] truncate border border-white/25 px-2 font-mono text-sm text-ink-hi hover:border-phos hover:text-phos"
+                    className="min-h-[44px] min-w-[44px] max-w-[min(16rem,100%)] truncate border border-white/25 px-2 font-mono text-sm text-ink-hi hover:border-phos hover:text-phos"
                   >
                     {m.number || m.title}
                   </button>
@@ -1105,9 +1112,10 @@ function HouseDetail({
     );
   }
 
-  const shown = houseRaces.filter((r) =>
-    matchesDistrictQuery({ ...r, areas: [...(r.counties ?? []), ...(r.places ?? [])] }, filter)
-  );
+  const shown = filterDistricts(houseRaces, filter, (r) => ({
+    ...r,
+    areas: [...(r.counties ?? []), ...(r.places ?? [])],
+  }));
   const placeSummary = placeDistrictSummary(houseRaces, filter);
   return (
     <div>
@@ -1871,9 +1879,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
               <div className="min-w-0">
                 <p className="font-mono text-xs tracking-[0.14em] text-phos">
                   {resultsFraming ? "RESULTS" : "BALLOT RESEARCH"} · {stateName.toUpperCase()} ·{" "}
-                  <span className="whitespace-nowrap">
-                    {longDate(ballot.electionDate).toUpperCase()}
-                  </span>
+                  <span>{longDate(ballot.electionDate).toUpperCase()}</span>
                 </p>
                 <h1 className="mt-1 font-display text-2xl font-extrabold text-ink-hi sm:text-[28px]">
                   {resultsFraming ? (

@@ -40,10 +40,18 @@ export default function DecisionLineups({ court }: { court: Court }) {
                 return (
                   <span
                     key={s}
-                    className="flex items-center justify-center overflow-hidden font-mono text-xs"
+                    className="@container flex items-center justify-center overflow-hidden font-mono text-xs"
                     style={{ ...shade(i), width: `${share * 100}%` }}
                   >
-                    {share >= MIN_LABEL_SHARE ? `${splitLabel(s)} · ${count}` : ""}
+                    {/* Shown only where the segment is wide enough for it, a
+                        container query in rem, so it follows the text size:
+                        on a phone, and at 200% text, labels were cut off
+                        mid-figure ("7–2 · 1"). The table below has them. */}
+                    {share >= MIN_LABEL_SHARE && (
+                      <span className="hidden whitespace-nowrap @min-[5.5rem]:inline">
+                        {`${splitLabel(s)} · ${count}`}
+                      </span>
+                    )}
                   </span>
                 );
               })}
