@@ -460,6 +460,9 @@ function PresidentLeaderboard({
         </div>
 
         {/* Mobile cards */}
+        {/* Each card wraps: where the details can't have 11rem beside the
+            rank (a phone at 200% text) they go under it, not past the
+            panel's edge, which clipped them. */}
         <div className="md:hidden divide-y divide-white/[0.07]">
           {entries.map((entry, idx) => {
             const rank = ranks[idx];
@@ -468,13 +471,13 @@ function PresidentLeaderboard({
               <Link
                 key={entry.id}
                 href={`/politicians/${entry.id}`}
-                className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.03] transition-colors"
+                className="flex flex-wrap items-center gap-3 px-4 py-3 hover:bg-white/[0.03] transition-colors"
               >
                 <span className={`text-lg font-bold w-10 shrink-0 ${rankColor(rank)}`}>
                   #{rank}
                 </span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                <div className="min-w-[min(11rem,100%)] flex-1">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <span className="text-ink-hi text-sm truncate">{entry.name}</span>
                     <span
                       className={`text-xs px-1 border shrink-0 ${presParty(entry.party).bg} ${presParty(entry.party).color}`}
@@ -487,7 +490,7 @@ function PresidentLeaderboard({
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-3 mt-0.5">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-0.5">
                     <ScoreBar score={score} />
                     <span className="text-xs text-ink-lo">
                       {termYears(entry.termStart, entry.termEnd)}
@@ -669,10 +672,10 @@ function JusticeLeaderboard({
               <Link
                 key={entry.id}
                 href={`/politicians/${entry.id}`}
-                className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.03] transition-colors"
+                className="flex flex-wrap items-center gap-3 px-4 py-3 hover:bg-white/[0.03] transition-colors"
               >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                <div className="min-w-[min(11rem,100%)] flex-1">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <span className="text-ink-hi text-sm truncate">{entry.name}</span>
                     <span className={`text-xs px-1 border shrink-0 ${pp.bg} ${pp.color}`}>
                       {pp.label}
@@ -1340,7 +1343,7 @@ function LeaderboardContent({ initial }: { initial: LeaderboardInitial | null })
                         <Link
                           key={entry.id}
                           href={`/politicians/${entry.id}`}
-                          className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.03] transition-colors"
+                          className="flex flex-wrap items-center gap-3 px-4 py-3 hover:bg-white/[0.03] transition-colors"
                           {...hoverProps(score)}
                         >
                           <span
@@ -1349,8 +1352,8 @@ function LeaderboardContent({ initial }: { initial: LeaderboardInitial | null })
                             #{rank}
                             <TieNote members={tiedWith(score)} />
                           </span>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
+                          <div className="min-w-[min(11rem,100%)] flex-1">
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                               <span className="text-ink-hi text-sm truncate">{entry.name}</span>
                               <ThinDataTag dims={entry.thinData} />
                               <HeldScoreTag held={entry.representationScore.held} />
@@ -1362,7 +1365,7 @@ function LeaderboardContent({ initial }: { initial: LeaderboardInitial | null })
                                   : `${entry.state}-${entry.party}`}
                               </span>
                             </div>
-                            <div className="flex items-center gap-3 mt-0.5">
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-0.5">
                               <ScoreBar score={score} />
                               <TrendIndicator trend={entry.trend} />
                               <span className="text-xs text-ink-lo">

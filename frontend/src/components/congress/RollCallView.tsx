@@ -197,7 +197,7 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
               <h2 id="sources" className="font-display text-2xl font-extrabold text-ink-hi">
                 Source and citation
               </h2>
-              <div className="grid gap-8 lg:grid-cols-2">
+              <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
                 <ul className="flex flex-col text-sm">
                   {vote.sourceUrl && (
                     <li className="border-b border-white/[0.07] py-1.5 text-ink-lo">

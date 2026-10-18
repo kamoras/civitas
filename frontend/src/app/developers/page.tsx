@@ -75,7 +75,7 @@ function Params({ params }: { params: Parameter[] }) {
   return (
     <dl className="divide-y divide-white/[0.05] border-y border-white/[0.07]">
       {params.map((p) => (
-        <div key={p.name} className="grid gap-1 py-2 sm:grid-cols-[11rem_1fr] sm:gap-4">
+        <div key={p.name} className="grid grid-cols-1 gap-1 py-2 sm:grid-cols-[11rem_1fr] sm:gap-4">
           <dt>
             <code className={CODE}>{p.name}</code>
             <span className="ml-2 font-mono text-[11px] text-ink-min">
@@ -120,7 +120,7 @@ function Fields({
       {properties.map(([name, field]) => {
         const nested = depth < 2 ? nestedObject(field, spec) : null;
         return (
-          <div key={name} className="grid gap-1 py-2 sm:grid-cols-[11rem_1fr] sm:gap-4">
+          <div key={name} className="grid grid-cols-1 gap-1 py-2 sm:grid-cols-[11rem_1fr] sm:gap-4">
             <dt>
               <code className={`${CODE} break-all`}>{name}</code>
             </dt>

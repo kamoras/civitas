@@ -124,9 +124,7 @@ def test_an_act_title_match_posts_the_vote_in_its_own_words(world, bluesky_confi
     assert post.subject == "trend-record:vote:senate/119/2/301"
     assert post.url == "https://civitas-research.org/congress/votes/senate/119/2/301"
     assert post.text == (
-        "Trending on Bluesky: “Example Tariff Relief Act”. On the record: Senate roll call 301, "
-        "119th Congress, October 13, 2026: On Passage of the Bill: Example Tariff Relief Act. "
-        "Result: Bill Passed. Yea 2. Nay 1."
+        "On Passage of the Bill: Example Tariff Relief Act. Bill Passed, 2–1. (Oct 13 · Senate roll call 301)"
     )
     assert post.image_url == "https://civitas-research.org/api/og?vote=senate/119/2/301"
     row = world["db"].query(TrendCandidate).one()
@@ -134,14 +132,14 @@ def test_an_act_title_match_posts_the_vote_in_its_own_words(world, bluesky_confi
     assert row.broadcast_post_id == post.id
 
 
-def test_every_word_is_template_a_record_field_or_the_quoted_trend_name(world, bluesky_configured):
+def test_every_word_is_template_or_a_record_field(world, bluesky_configured):
     world["trends"] = [trend("Example Tariff Relief Act")]
     run(world)
     (post,) = posts(world["db"])
     card = record_cards.card_for_key(world["db"], "vote:senate/119/2/301")
-    template = {"Trending", "on", "Bluesky", "On", "the", "record", "Yea", "Nay", "Result"}
-    fields = " ".join([card.eyebrow, card.headline, *card.lines, record_cards.long_date(card.date),
-                       "Example Tariff Relief Act"])
+    template = {"Oct", "Yea", "Nay"}
+    fields = " ".join([card.eyebrow, card.headline, *card.lines, *(str(r["total"]) for r in card.tally),
+                       record_cards.long_date(card.date)])
     for word in re.findall(r"[A-Za-z0-9]+", post.text):
         assert word in template or word in fields, word
 
@@ -150,7 +148,8 @@ def test_an_issue_match_needs_cosine_of_at_least_half_and_links_the_issue(world,
     world["trends"] = [trend("Canal tolls", description="The canal toll plan advances in the state legislature.")]
     run(world)
     (post,) = posts(world["db"])
-    assert post.text.startswith("Trending on Bluesky: “Canal tolls”. On the record: Civitas Research Action Center")
+    assert post.text == "Canal toll plan advances. (Oct 14 · Civitas Action Center)"
+    assert "Trending" not in post.text and "Canal tolls" not in post.text
     assert post.url.startswith("https://civitas-research.org/issue/")
     assert post.image_url is None and post.embed_kind == "card"
 
@@ -223,13 +222,82 @@ def test_a_name_announcing_what_its_description_only_urges_is_skipped(world):
     assert row.decision == "skipped" and "advocacy stated as fact" in row.reason
 
 
+def _card(kind, key, eyebrow, headline, date, source_name, lines=(), tally=()):
+    return record_cards.RecordCard(kind=kind, key=key, eyebrow=eyebrow, headline=headline, date=date, path="/x",
+                                   source_name=source_name, as_of=date, lines=list(lines), tally=list(tally))
+
+
+def _row(position, label, total):
+    return {"position": position, "label": label, "total": total, "parties": []}
+
+
+def test_every_record_kind_leads_with_the_record_and_credits_date_and_source(world):
+    """The record line stands alone (no trend name), then (date · source)."""
+    db = world["db"]
+    event_id = db.query(CongressEvent.id).scalar()
+    cards = {
+        "vote": record_cards.card_for_key(db, "vote:senate/119/2/301"),
+        "vote, title left out": record_cards.card_for_key(db, "vote:senate/119/2/301", show_title=False),
+        "bill": record_cards.card_for_key(db, "bill:119/S.100"),
+        "bill, title left out": record_cards.card_for_key(db, "bill:119/S.100", show_title=False),
+        "bill, title with its own period": _card(
+            "bill", "bill:119/HR.12", "H.R. 12, 119th Congress", "To amend title 5, and for other purposes.",
+            "2026-09-30", "Congress.gov", lines=["Latest action, September 30, 2026: Referred to committee."]),
+        "digest": record_cards.card_for_key(db, f"event:{event_id}"),
+        "floor log, sentence too long": _card(
+            "event", "event:9", "House: Floor proceedings", "Morning-hour debate", "2026-10-02",
+            record_cards.EVENT_SOURCE["floor_log"]),
+        "document": _card(
+            "document", "document:4", "Environmental Protection Agency, Proposed Rule", "Example Water Standards",
+            "2026-10-10", "Federal Register", lines=["Comments close November 30, 2026"]),
+        "tie": _card(
+            "vote", "vote:senate/119/2/77", "Senate roll call 77, 119th Congress",
+            "On the Motion to Proceed: Example Act", "2026-06-04", "x",
+            lines=["Result: Motion Agreed to", "Tie broken: Vice President voted Yea"],
+            tally=[_row("yea", "Yea", 50), _row("nay", "Nay", 50)]),
+        "speaker, last year": _card(
+            "vote", "vote:house/119/1/2", "House roll call 2, 119th Congress", "Election of the Speaker",
+            "2025-01-03", "x", lines=["Result: Doe (TX) elected"],
+            tally=[_row("candidate:Doe (TX)", "Doe (TX)", 218), _row("candidate:Roe", "Roe", 215),
+                   _row("notVoting", "Not voting", 2)]),
+    }
+    want = {
+        "vote": "On Passage of the Bill: Example Tariff Relief Act. Bill Passed, 2–1. (Oct 13 · Senate roll call 301)",
+        "vote, title left out": "On Passage of the Bill: S. 100. Bill Passed, 2–1. (Oct 13 · Senate roll call 301)",
+        "bill": "S. 100, Example Tariff Relief Act: Placed on the calendar. (Oct 1 · Congress.gov)",
+        "bill, title left out": "S. 100: Placed on the calendar. (Oct 1 · Congress.gov)",
+        "bill, title with its own period": (
+            "H.R. 12, To amend title 5, and for other purposes: Referred to committee. (Sep 30 · Congress.gov)"),
+        "digest": "Committee on Orchards held a hearing on orchard pests. (Oct 12 · Senate Daily Digest)",
+        "floor log, sentence too long": "Floor proceedings: Morning-hour debate. (Oct 2 · House floor log)",
+        "document": ("Environmental Protection Agency, Proposed Rule: Example Water Standards. "
+                     "Comments close November 30, 2026. (Oct 10 · Federal Register)"),
+        "tie": ("On the Motion to Proceed: Example Act. Motion Agreed to, 50–50. "
+                "Tie broken: Vice President voted Yea. (Jun 4 · Senate roll call 77)"),
+        "speaker, last year": ("Election of the Speaker. Doe (TX) elected. Doe (TX) 218, Roe 215. "
+                               "(Jan 3, 2025 · House roll call 2)"),
+    }
+    url = "https://civitas-research.org/congress/votes/senate/119/2/301"
+    for name, card in cards.items():
+        text = trend_poster.compose_text(trend_poster.record_sentences(card), url)
+        assert text == want[name], name
+        assert len(f"{text} {url}") < 300 and "—" not in text and "Trending" not in text
+
+
+def test_a_record_line_too_long_with_its_extras_drops_whole_fields(world):
+    card = _card("document", "document:4", "Agency, Notice", "T" * 200, "2026-10-10", "Federal Register",
+                 lines=["Comments close November 30, 2026"])
+    text = trend_poster.compose_text(trend_poster.record_sentences(card), "https://civitas-research.org/x")
+    assert text == f"Agency, Notice: {'T' * 200}. (Oct 10 · Federal Register)"
+
+
 def test_a_loaded_bill_title_is_left_out_of_the_post_and_the_image(world, monkeypatch, bluesky_configured):
     monkeypatch.setattr(trend_poster, "loaded_votes", lambda texts: [0.99 for _ in texts])
     world["trends"] = [trend("Example Tariff Relief Act")]
     run(world)
     (post,) = posts(world["db"])
-    assert "On Passage of the Bill: S. 100." in post.text
-    assert post.text.count("Example Tariff Relief Act") == 1  # the quoted trend name only
+    assert post.text.startswith("On Passage of the Bill: S. 100. Bill Passed, 2–1.")
+    assert "Example Tariff Relief Act" not in post.text
     assert post.image_url.endswith("&title=0")
     assert "Example Tariff Relief Act" not in post.alt_text
 
@@ -292,8 +360,8 @@ def test_a_tragedy_posts_a_confirmed_issue_by_its_verified_lede(world, bluesky_c
     world["scores"]["Canal tolls"] = TRAGEDY
     run(world)
     (post,) = posts(world["db"])
-    assert post.text.split("On the record: ", 1)[1].startswith(
-        "Civitas Research Action Center, October 14, 2026, quoting Outlet One: State officials closed the canal")
+    assert post.text == ("“State officials closed the canal after a barge collision killed two workers.” "
+                         "(Oct 14 · Outlet One, via Civitas Action Center)")
     assert "Canal toll plan advances" not in post.text  # the unverified headline is never the post
 
 
@@ -322,7 +390,7 @@ def test_a_tragedy_with_an_official_record_posts_only_the_record(world, bluesky_
     world["scores"]["Example Tariff Relief Act"] = TRAGEDY
     run(world)
     (post,) = posts(world["db"])
-    assert post.text.split("On the record: ", 1)[1].startswith("Senate roll call 301")
+    assert post.text.endswith("(Oct 13 · Senate roll call 301)")
 
 
 # Political violence stays in scope: an agent's shooting, a death in
