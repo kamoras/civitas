@@ -8,7 +8,8 @@ What's new feed and, once each, a post (kind "feature", through
 app.broadcast.publish, so the feed first and then Bluesky).
 
 The post is a fixed template around the entry's own words:
-"New on Civitas Research: <title>. <summary>" and the page's link, whose card
+"New: <title>. <summary>" and the page's link (the account already says
+whose site it is; the feed entry's title keeps "New on Civitas Research:"), whose card
 (the page's Open Graph image) Bluesky and the feed entry show. No model
 writes any of it; tests/test_whats_new.py holds every entry to the
 shown-text rules (no em dash, no emoji, no pronoun) and to the post's length.
@@ -83,7 +84,7 @@ def entries() -> list[dict]:
 
 
 def post_text(entry: dict) -> str:
-    return f"New on Civitas Research: {entry['title']}. {entry['summary']}"
+    return f"New: {entry['title']}. {entry['summary']}"
 
 
 def page_url(entry: dict) -> str:

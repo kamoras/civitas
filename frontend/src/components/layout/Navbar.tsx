@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { SECTIONS, inSection, sectionSubpages, type SectionKey } from "@/lib/routes";
 import { BSKY_PROFILE_URL } from "@/lib/site";
+import HeaderClearance from "./HeaderClearance";
 import RecordsBand from "./RecordsBand";
 import SiteSearch from "@/components/search/SiteSearch";
 import YourStatePicker from "./YourStatePicker";
@@ -270,11 +271,13 @@ export default function Navbar() {
 
   useEffect(() => {
     if (!menuOpen || !menuRef.current) return;
-    // The panel's first control, in reading order: the state picker at its
-    // top, then the sections. Starting on the first link skipped the
-    // picker, which Tab then reached only after every link.
-    const first = menuRef.current.querySelector<HTMLElement>("select, a[href], button");
-    first?.focus();
+    // The panel itself, named "Site menu", so Tab's first stop is the
+    // state picker at its top, then the sections. Never the picker: a phone
+    // browser opens a native select's list when it takes focus, so MENU
+    // popped the state list open on every tap. (Starting on the first link
+    // instead skipped the picker, which Tab then reached only after every
+    // link.)
+    menuRef.current.focus();
   }, [menuOpen]);
 
   useEffect(() => {
@@ -291,7 +294,8 @@ export default function Navbar() {
       if (focusable.length === 0) return;
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
+      const onPanel = document.activeElement === menuRef.current;
+      if (e.shiftKey && (onPanel || document.activeElement === first)) {
         e.preventDefault();
         last.focus();
       } else if (!e.shiftKey && document.activeElement === last) {
@@ -316,13 +320,19 @@ export default function Navbar() {
         `--header-clearance` (6rem). Keep it to one line on mobile at ordinary sizes; at
         a large text size the bar wraps and HeaderClearance follows it.
       */}
+      {/* Here, mounted with the header it measures, not in the root layout:
+          there, under next build, its effect was cleaned up during
+          hydration of the client-rendered pages (/action, /explore,
+          /politicians) and never ran again, so at 200% text their wrapped
+          header covered the page's first lines. */}
+      <HeaderClearance />
       <RecordsBand aside={<YourStatePicker />} />
       {/* The skip link is the root layout's, ahead of everything: a second
           one here cost keyboard users an extra Tab on every page. */}
       <nav aria-label="Main navigation" className="relative border-b-3 border-white/15">
         <div
           ref={barRef}
-          className="@container max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-y-2 [&>:last-child]:ml-auto"
+          className="@container max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-y-4 [&>:last-child]:ml-auto"
         >
           {/* The lockup: the pixel mark, the site's one use of that face,
               and RESEARCH beside it in the mono, after a hairline. */}
@@ -334,7 +344,9 @@ export default function Navbar() {
               share a row (a phone at 200% text: 185 + 227 px in 256), the bar
               wraps, the buttons right-aligned on a second row, and
               HeaderClearance moves the pages' clearance down with it: one
-              row clipped every page there (WCAG 1.4.10). */}
+              row clipped every page there (WCAG 1.4.10). The row gap is
+              gap-y-4, over the buttons' -my-3: at gap-y-2 their 44 px
+              targets reached 8 px up over the wordmark's. */}
           <Link
             ref={logoRef}
             href="/"
@@ -435,7 +447,10 @@ export default function Navbar() {
           <div
             ref={menuRef}
             id="mobile-menu"
-            className={`${menuOnly} max-h-[calc(100dvh-5.5rem)] overflow-y-auto overscroll-contain bg-surface-base/[0.98] border-t border-white/[0.07] px-6 pt-2 pb-6`}
+            role="region"
+            aria-label="Site menu"
+            tabIndex={-1}
+            className={`${menuOnly} outline-none max-h-[calc(100dvh-5.5rem)] overflow-y-auto overscroll-contain bg-surface-base/[0.98] border-t border-white/[0.07] px-6 pt-2 pb-6`}
           >
             <div className="border-b border-white/[0.07] py-3">
               <YourStatePicker size="lg" />

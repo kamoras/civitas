@@ -70,6 +70,23 @@ describe("sectionPreview", () => {
     expect(sectionPreview(FIGURES, "elections", "map")?.caption).toBe(MAP_OFF);
   });
 
+  it("gives the last day of business, not None, in a recess", () => {
+    const recess = {
+      line: "No record votes or floor business since Wednesday, September 30",
+      lastBusinessDay: "2026-09-30",
+      week: "2026-09-28",
+    };
+    const f = {
+      ...FIGURES,
+      congress: { ...FIGURES.congress, week: { start: "2026-10-12", recordVotes: 0 }, recess },
+    };
+    expect(sectionPreview(f, "congress", "week")).toEqual({
+      figure: "Sep 30",
+      caption: "the last day either chamber voted, passed or confirmed anything",
+    });
+    expect(sectionPreview(f, "congress", "month")?.figure).toBe("30");
+  });
+
   it("words the archive's map check in every state, never a bare zero", () => {
     const at = (archive: SectionFigures["elections"]["archive"]) =>
       sectionPreview(

@@ -65,7 +65,7 @@ def descendants(children: dict[str, list[str]], slug: str) -> list[str]:
     return out
 
 
-def _document_counts(db: Session) -> Counter:
+def document_counts(db: Session) -> Counter:
     return Counter(dict(
         db.query(ExploreDocument.agency_slug, func.count(ExploreDocument.id))
         .filter(ExploreDocument.agency_slug.isnot(None), ExploreDocument.agency_slug != "")
@@ -78,7 +78,7 @@ def agency_options(db: Session) -> list[dict]:
     each department or independent agency by name, its sub-agencies with
     documents right under it, every count its sub-agencies' included."""
     agencies = db.query(Agency).all()
-    counts = _document_counts(db)
+    counts = document_counts(db)
     children = children_of(agencies)
     by_slug = {a.slug: a for a in agencies}
     out: list[dict] = []
@@ -159,7 +159,7 @@ def list_agencies(db: Session = Depends(get_db)):
     (its sub-agencies' included), and USAspending's toptier agencies by this
     fiscal year's budget authority, the unmatched ones named."""
     agencies = db.query(Agency).order_by(Agency.name).all()
-    counts = _document_counts(db)
+    counts = document_counts(db)
     # Listed by USAspending's last read, this fiscal year's figures first.
     budgets = [b for b in db.query(AgencyBudget) if b.retired_at is None]
     fy = max((b.fiscal_year for b in budgets if b.fiscal_year), default=None)
@@ -380,7 +380,7 @@ def get_agency(slug: str, db: Session = Depends(get_db)):
     if agency is None:
         raise HTTPException(status_code=404, detail="Agency not found")
     today = comment_period_today()
-    counts = _document_counts(db)
+    counts = document_counts(db)
     all_budgets = db.query(AgencyBudget).all()
     budgets = {b.agency_slug: b for b in all_budgets if b.agency_slug}
     tree_of = children_of(agencies)

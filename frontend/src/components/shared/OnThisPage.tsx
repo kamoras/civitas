@@ -121,7 +121,7 @@ export default function OnThisPage() {
       aria-label="Sections on this page"
       data-on-this-page=""
       className={`${pinned ? "flex" : "hidden"} fixed inset-x-0 z-40 border-b-3 border-ink-min/60 bg-surface-base sm:hidden`}
-      style={{ top: "var(--header-h, 5.375rem)" }}
+      style={{ top: "var(--header-height, 5.375rem)" }}
     >
       <div className="mx-auto flex h-11 w-full items-center justify-between gap-3 px-4">
         <p className="min-w-0 truncate font-mono text-[0.8125rem] uppercase tracking-[0.08em] text-ink-hi">

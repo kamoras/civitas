@@ -193,7 +193,7 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
                     </li>
                   ))}
                 </ul>
-                <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+                <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
                   {STATUSES.map((s) => (
                     <div key={s}>
                       <dt className="inline font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
