@@ -8,7 +8,9 @@ race (AGENTS.md, "Election night and after").
 
 import csv
 import io
+from collections import Counter
 
+from app.district_lean import lean_label
 from app.election_calendar import federal_states
 from app.models import Candidate
 
@@ -90,7 +92,10 @@ def lean_context(
     be ranked among districts).
 
     `moreDemocratic` / `moreRepublican` count the other seats leaning
-    further each way; `same` those with the identical figure."""
+    further each way; `same` those with the identical figure. `distribution`
+    is every seat's lean against the nation, one entry per figure, most
+    Democratic first (with its label, written as the map writes it), and
+    `seatLean` this seat's figure in it: the page draws them on one axis."""
     if pvi is None:
         return None
     if office == "S":
@@ -110,6 +115,10 @@ def lean_context(
         "moreRepublican": sum(v > pvi for v in values),
         # Less one: the seat itself is in the table.
         "same": max(sum(v == pvi for v in values) - 1, 0),
+        "seatLean": pvi,
+        "distribution": [
+            {"lean": v, "label": lean_label(v), "count": n} for v, n in sorted(Counter(values).items())
+        ],
     }
 
 

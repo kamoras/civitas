@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from app import site_search
+from app import site_search, site_search_index
 from app.api import search as search_api
 from app.main import DropQueryString
 from app.models import ActionIssue, Agency, Race, Representative, Senator, SponsoredBill
@@ -330,3 +330,11 @@ def test_calibration_file_is_in_range():
     p = site_search.params()
     assert p.direct_floor == data["params"]["direct_floor"]
     assert data["held_out"]["all"]["wrong_direct_rate"] <= 2 * data["wrong_direct_target"]
+
+
+def test_the_default_index_path_follows_the_data_volume_redirect(db_session):
+    """The scheduler calls refresh_index with no path. A default argument
+    bound SITE_SEARCH_DB at import, before the tests' redirect, so a test
+    that started the scheduler read the real /data volume."""
+    assert site_search_index.refresh_index(db_session, force=True) is not None
+    assert site_search_index.stored_fingerprint() is not None

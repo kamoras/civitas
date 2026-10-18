@@ -48,7 +48,7 @@ PARTY_NAMES = {"R": "Republican", "D": "Democratic", "I": "Independent", "ID": "
 POSITIONS = (("yea", "Yea"), ("nay", "Nay"), ("present", "Present"), ("notVoting", "Not voting"))
 CHAMBER_NAMES = {"senate": "Senate", "house": "House"}
 _VOTE_SOURCE = {"senate": "U.S. Senate roll-call vote record", "house": "Clerk of the House roll-call vote record"}
-_EVENT_SOURCE = {"digest": "Congressional Record, Daily Digest", "floor_log": "the chamber's floor log"}
+EVENT_SOURCE = {"digest": "Congressional Record, Daily Digest", "floor_log": "the chamber's floor log"}
 _EVENT_KIND = {
     "passed": "Measure passed", "failed": "Measure failed", "reported": "Measure reported",
     "confirmed": "Nomination confirmed", "committee": "Committee meeting", "floor": "Floor proceedings",
@@ -200,7 +200,7 @@ def event_card(db: Session, event_id: int) -> RecordCard | None:
         headline=(e.name or "").strip(),
         lines=[text] if text and len(text) <= MAX_LINE_CHARS else [],
         date=e.date, path=f"/congress/{e.date}",
-        source_name=_EVENT_SOURCE.get(e.source, "the Congressional Record"),
+        source_name=EVENT_SOURCE.get(e.source, "the Congressional Record"),
         as_of=_as_of(day.fetched_at if day else None),
     )
 

@@ -9,6 +9,27 @@
       "url": "/congress/bills"
     },
     {
+      "id": "public-api-records",
+      "date": "2026-10-17",
+      "title": "More of the record in the public API",
+      "summary": "The open API and its MCP server now give every member's position on each roll call, presidents, the Supreme Court's votes case by case, nominations, agencies and the comment periods open today.",
+      "url": "/developers"
+    },
+    {
+      "id": "issue-ballot-links",
+      "date": "2026-10-17",
+      "title": "Election stories link the ballot",
+      "summary": "An Action Center issue that names a race or one of its nominees now links the race, the state's next voter deadline and its official registration lookup.",
+      "url": "/action"
+    },
+    {
+      "id": "congress-at-a-glance",
+      "date": "2026-10-17",
+      "title": "Congress at a glance, and your members' record",
+      "summary": "The Congress page opens with a calendar of every day each chamber sat and how far bills got, and with a state picked, that state's members' latest votes and bills.",
+      "url": "/congress"
+    },
+    {
       "id": "site-search",
       "date": "2026-10-17",
       "title": "Search the whole site",

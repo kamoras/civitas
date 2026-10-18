@@ -80,10 +80,13 @@ export default function ContestDrawer({
         role="dialog"
         aria-modal="true"
         aria-labelledby="contest-drawer-title"
-        className="relative flex h-[85svh] w-full flex-col border-t-3 border-ink-min/60 bg-surface-base font-sans lg:h-full lg:w-[660px] lg:border-l lg:border-t-0 lg:border-white/25"
+        // min-w-0: as a flex item of the backdrop row it was otherwise as
+        // wide as its widest line, and at 200% text the whole drawer ran past
+        // the phone's edge, its Next button off screen.
+        className="relative flex h-[85svh] w-full min-w-0 flex-col border-t-3 border-ink-min/60 bg-surface-base font-sans lg:h-full lg:w-[660px] lg:border-l lg:border-t-0 lg:border-white/25"
       >
-        <div className="flex items-center justify-between gap-3 border-b border-white/[0.14] px-4 py-2.5">
-          <span className="font-mono text-xs tracking-[0.12em] text-ink-lo">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 border-b border-white/[0.14] px-4 py-2.5">
+          <span className="min-w-0 font-mono text-xs tracking-[0.12em] text-ink-lo">
             {/* "Section", not "contest": the drawer also pages through parts
                 that are not contests (news coverage), and the page header
                 counts contests the voter actually decides ("17 contests"
@@ -119,7 +122,7 @@ export default function ContestDrawer({
                 </h2>
                 <p className="mt-0.5 text-[13px] text-ink-lo">{contest.subtitle}</p>
               </div>
-              <span className="flex shrink-0 items-center gap-3">
+              <span className="flex flex-wrap items-center gap-3">
                 {contest.instruction && (
                   <span className="font-mono text-xs text-ink-lo">{contest.instruction}</span>
                 )}

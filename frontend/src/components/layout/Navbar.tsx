@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { SECTIONS, inSection, sectionSubpages, type SectionKey } from "@/lib/routes";
 import { BSKY_PROFILE_URL } from "@/lib/site";
+import HeaderClearance from "./HeaderClearance";
 import RecordsBand, { RunStatusSquare } from "./RecordsBand";
 import SiteSearch from "@/components/search/SiteSearch";
 import YourStatePicker from "./YourStatePicker";
@@ -386,13 +387,19 @@ export default function Navbar() {
         `--header-clearance` (6rem). Keep it to one line on mobile at ordinary sizes; at
         a large text size the bar wraps and HeaderClearance follows it.
       */}
+      {/* Here, mounted with the header it measures, not in the root layout:
+          there, under next build, its effect was cleaned up during
+          hydration of the client-rendered pages (/action, /explore,
+          /politicians) and never ran again, so at 200% text their wrapped
+          header covered the page's first lines. */}
+      <HeaderClearance />
       <RecordsBand aside={<YourStatePicker />} />
       {/* The skip link is the root layout's, ahead of everything: a second
           one here cost keyboard users an extra Tab on every page. */}
       <nav aria-label="Main navigation" className="relative border-b-3 border-white/15">
         <div
           ref={barRef}
-          className="@container max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-y-2 [&>:last-child]:ml-auto"
+          className="@container max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-y-4 [&>:last-child]:ml-auto"
         >
           {/* The lockup: the pixel mark, the site's one use of that face,
               and RESEARCH beside it in the mono, after a hairline. */}
@@ -404,7 +411,9 @@ export default function Navbar() {
               share a row (a phone at 200% text: 185 + 227 px in 256), the bar
               wraps, the buttons right-aligned on a second row, and
               HeaderClearance moves the pages' clearance down with it: one
-              row clipped every page there (WCAG 1.4.10). */}
+              row clipped every page there (WCAG 1.4.10). The row gap is
+              gap-y-4, over the buttons' -my-3: at gap-y-2 their 44 px
+              targets reached 8 px up over the wordmark's. */}
           {/* Under 56rem the records band is this square, left of the mark. */}
           <span className="flex items-center gap-1">
             <RunStatusSquare />

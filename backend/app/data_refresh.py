@@ -559,7 +559,12 @@ FORECAST_OUTPUTS = ("forecast_training.json", "forecast_house_training.json", "f
 def _forecast_due(ctx: Context) -> bool:
     polls = (read(training_polls.FILE_NAME).get("file") or {}).get("sha256")
     fitted = (ctx.doc.get("_polls") or {}).get("sha256")
-    return (polls is not None and polls != fitted and not ctx.tried_within(1)) or not ctx.tried_within(30)
+    # A fit whose calibration table predates the code's bins is refitted
+    # the next day, not at the month's end: the map hides that table.
+    outdated = any(not model.calibration_current(ev.get("calibration"))
+                   for ev in (ctx.doc.get("evaluation") or {}).values())
+    return (((polls is not None and polls != fitted) or outdated) and not ctx.tried_within(1)) \
+        or not ctx.tried_within(30)
 
 
 def _forecast_command(ctx: Context) -> list[str]:

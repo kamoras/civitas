@@ -44,7 +44,7 @@ export default function OffSeasonLead({
         Until then, seats that fall vacant are filled by special elections, listed here with each
         state&apos;s own count.
       </p>
-      <div className="grid gap-x-8 lg:grid-cols-[3fr_2fr]">
+      <div className="grid grid-cols-1 gap-x-8 lg:grid-cols-[3fr_2fr]">
         <SpecialsBoardView board={board} limit={SPECIALS_SHOWN} />
         <div>
           <h3 className="mt-6 font-mono text-xs uppercase tracking-[0.16em] text-ink-min">

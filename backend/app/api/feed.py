@@ -31,7 +31,7 @@ from sqlalchemy.orm import Session
 from app import entity_feeds
 from app.api.agencies import children_of, descendants
 from app.api.response_helpers import CACHE_TTL_LIST_S, cached_json
-from app.broadcast import FEEDS, KINDS, SITE_URL, withdrawn_subjects
+from app.broadcast import FEEDS, KINDS, SITE_URL, not_withdrawn
 from app.database import get_db
 from app.entity_feeds import EntityFeed
 from app.member_ids import resolve_member_id
@@ -237,12 +237,12 @@ def _atom_response(request: Request, body: bytes, newest: datetime | None) -> Re
 
 
 def _newest(db: Session, *filters) -> list[BroadcastPost]:
-    """The newest posts matching `filters`, leaving out any about a
-    withdrawn issue: its page now shows only the withdrawal, and the feed must not keep
-    serving what Civitas retracted."""
+    """The newest posts matching `filters`, leaving out any withdrawn (a
+    withdrawn issue's page now shows only the withdrawal): the feed must not
+    keep serving what Civitas retracted."""
     return (
         db.query(BroadcastPost)
-        .filter(*filters, BroadcastPost.subject.notin_(withdrawn_subjects()))
+        .filter(*filters, not_withdrawn())
         .order_by(BroadcastPost.published_at.desc(), BroadcastPost.id.desc())
         .limit(FEED_LENGTH)
         .all()
