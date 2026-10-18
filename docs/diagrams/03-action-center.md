@@ -34,7 +34,7 @@ flowchart TB
     RANK --> TOP["Try ranked clusters in order<br/>up to 6 (CANDIDATE_POOL)<br/>until 2 publish (MAX_ISSUES)"]
     TOP --> EXTRACT
 
-    EXTRACT["<b>5. EXTRACT</b><br/>livestream/video pages (headline kicker by embedding margin,<br/>cut fitted daily on publishers' video sections)<br/>give no title, fact or source<br/>model LOCATES spans; post_composer<br/>verifies verbatim + adjacency + clause end,<br/>then renders. no claim → no issue"]
+    EXTRACT["<b>5. EXTRACT</b><br/>livestream/video pages (headline kicker by embedding margin,<br/>cut fitted daily on publishers' video sections)<br/>give no title, fact or source<br/>live blog listing several stories<br/>(kicker over disjoint items) gives no title<br/>model LOCATES spans; post_composer<br/>verifies verbatim + adjacency + clause end,<br/>then renders. no claim → no issue"]
     EXTRACT --> DEDUP{"title cosine > 0.92<br/>vs another issue title?"}
     DEDUP -->|yes| MERGE["Drop as near-duplicate"]
     DEDUP -->|no| MATCH

@@ -380,7 +380,7 @@ Everything else uses geometric methods in sentence-embedding space:
 | Monitor deduplication | Title cosine on the similarity model ≥ 0.75 | No two different-topic update titles reached it (measured 2026-10-08); merging deletes a monitor |
 | Issue-to-monitor matching | Issue title against the monitor's title and description on the classification model ≥ 0.71, nothing else | The LLM verdict that used to decide 0.71–0.80 let 17 of 18 off-topic updates through when replayed (2026-10-09) |
 | Issue deduplication | Post-LLM title embedding similarity | Catches LLM-generated near-duplicates missed by pre-filtering |
-| Issue topic continuity | The same content, a near-identical title, or a shared source article with titles agreeing (`SHARED_SOURCE_TITLE_SIM`), across a 2-day lookback | Shared names and numbers were 25% precise on 65 judged pairs; a shared source alone merged 45 of 94 different-story pairs (both 2026-10-08) |
+| Issue topic continuity | The same content, a near-identical title, or a shared source article with titles agreeing (`SHARED_SOURCE_TITLE_SIM`; a live blog's several-story headline compared story by story) or whose headline titled the existing issue, across a 2-day lookback | Shared names and numbers were 25% precise on 65 judged pairs; a shared source alone merged 45 of 94 different-story pairs (both 2026-10-08) |
 
 LLM calls per full nightly run: 0 (Phase 3 is fully deterministic, see above). The LLM runs on its own schedule for Action Center claim location (hourly, a handful of calls per run). Embedding operations per full nightly run: ~50,000. The pipeline is a **semantic classification and retrieval system** that uses a language model only where natural-language synthesis is unavoidable.
 
