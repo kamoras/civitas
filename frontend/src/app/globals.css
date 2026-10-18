@@ -39,7 +39,7 @@
   --header-clearance: 6rem;
   /* The header's own height, for what sits directly under it; HeaderClearance
      sets the measured value. */
-  --header-h: 5.375rem;
+  --header-height: 5.375rem;
 }
 
 /* Under 56rem (the MENU layout) the records band folds into a status square
@@ -47,7 +47,7 @@
 @media (max-width: 55.99rem) {
   :root {
     --header-clearance: 3.75rem;
-    --header-h: 3.25rem;
+    --header-height: 3.25rem;
   }
 }
 
@@ -69,6 +69,10 @@ html[data-header-hidden] {
    data-sticky-subnav and gets that bar's height too. */
 html {
   scroll-padding-top: var(--header-clearance);
+  /* And clear of the fixed "TOP" button (BackToTop, bottom-20 right-4) at
+     the bottom: a control tabbed to there is scrolled above it, not under
+     it (WCAG 2.4.11). In rem, so it grows with the button at 200% text. */
+  scroll-padding-bottom: 8rem;
 }
 html:has([data-sticky-subnav]) {
   scroll-padding-top: calc(var(--header-clearance) + 3rem);
@@ -92,6 +96,17 @@ body {
      that fits is untouched. At a doubled text size a masthead's "THURSDAY,"
      or a figure label's "INTRODUCED" no longer fit a phone (WCAG 1.4.10). */
   overflow-wrap: break-word;
+}
+
+/* A form control is never wider than its box. A select is as wide as its
+   longest option ("Select a state" lists "District of Columbia") and an
+   input as its size attribute, so at 200% text on a phone the state pickers
+   on /compare, /politicians and the election calendar ran up to 72 px past
+   the screen. */
+select,
+input,
+textarea {
+  max-width: 100%;
 }
 
 /* ===== LAYOUT STABILITY: THE FOOTER STARTS BELOW THE FIRST SCREEN =====

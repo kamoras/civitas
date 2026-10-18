@@ -153,7 +153,7 @@ class TestBudget:
             _said(db_session, "2026-SEN-GA", er.ALL_REPORTING)
         _event(db_session, "2026-SEN-GA", er.FLIP_REVERSED, _detail(leader_party="DEM"))
         [(text, url)] = _run(db_session)
-        assert text.startswith("Update on Georgia's U.S. Senate: Ray Jones (D) is ahead again")
+        assert text.startswith("Georgia's U.S. Senate: Ray Jones (D) is ahead again")
         assert url.endswith("/elections/states/GA#race-2026-SEN-GA")
 
     def test_a_correction_says_not_final_in_its_post_and_its_feed_title(self, db_session):
@@ -234,7 +234,7 @@ class TestBudget:
         _said(db_session, "2026-SEN-GA", er.FLIP, at=utcnow() - timedelta(hours=4))
         _event(db_session, "2026-SEN-GA", er.FLIP_REVERSED, _detail(leader_party="DEM"), age=timedelta(hours=3))
         [(text, _)] = _run(db_session)
-        assert text.startswith("Update on Georgia's U.S. Senate")
+        assert text.startswith("Georgia's U.S. Senate")
 
 
 class TestComposeFits:
@@ -274,7 +274,7 @@ class TestComposeFits:
         d = json.loads(_detail())
         d["leader"] = None
         text = rb.compose(rb.CORRECTION, self._race(), d)
-        assert text.startswith("Update on North Carolina's 13th Congressional District: the count is now tied")
+        assert text.startswith("North Carolina's 13th Congressional District: the count is now tied")
 
     def test_no_correction_while_the_challenger_still_leads(self):
         """Only the holder back ahead, or a tie, undoes a flip."""

@@ -204,7 +204,10 @@ export default function VotePanel({
             <span className="text-[15px] leading-snug text-ink">{v.question}</span>
             <AmendmentPurpose vote={v} chamber={v.chamber} compact />
           </span>
-          <span className="col-start-2 flex flex-col items-start gap-1 pr-2 sm:col-start-auto sm:items-end">
+          {/* wrap-anywhere, as in ReportParts' VoteRow: a result of long
+              uppercase words is wider than this column on a phone at
+              200% text, and breaks only where it would overflow. */}
+          <span className="col-start-2 flex min-w-0 flex-col items-start gap-1 pr-2 wrap-anywhere sm:col-start-auto sm:items-end">
             <span
               className={`font-mono text-xs uppercase tracking-[0.1em] ${TONE[resultTone(v.rejected)]}`}
             >

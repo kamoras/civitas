@@ -83,7 +83,7 @@ export default function AlsoOnRecord({
       >
         {ALSO}
       </h2>
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Tile
           title="Stock trades"
           line={

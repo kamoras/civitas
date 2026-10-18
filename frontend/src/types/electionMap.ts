@@ -95,13 +95,18 @@ export interface UnrangedSeat extends MapSeatBase {
 
 export type MapSeat = RangedSeat | UnrangedSeat;
 
+/** One band of the held-out calibration table, party blind: races whose
+ * range leaned one way (either party) with an implied chance in the band,
+ * and how often the side it leaned toward carried the seat. */
 export interface CalibrationBin {
   low: number;
   high: number;
+  /** "50–65% (near even)": written by the backend. */
+  label: string;
   n: number;
   meanChance?: number;
-  demShare?: number;
-  demCarried?: number;
+  leanShare?: number;
+  leanCarried?: number;
   years?: [number, number];
 }
 
@@ -115,7 +120,8 @@ export interface ChamberCalibration {
   /** The structural line's own 80% ranges, held out (the map beyond the poll window). */
   coverage80Fundamentals?: number | null;
   meanAbsError: number;
-  table: CalibrationBin[];
+  /** Null from a fit written before the bins changed, until its refit. */
+  table: CalibrationBin[] | null;
   seatTotals: {
     year: number;
     expectedDem: number;

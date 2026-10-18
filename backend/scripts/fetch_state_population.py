@@ -31,7 +31,7 @@ import urllib.request
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-from app.contact import CONTACT_EMAIL  # noqa: E402
+from app.contact import CONTACT_NOTE  # noqa: E402
 
 STATE_NAMES = {
     "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas",
@@ -51,7 +51,7 @@ STATE_NAMES = {
     "WI": "Wisconsin", "WY": "Wyoming",
 }
 
-UA = {"User-Agent": f"CivitasCivicPlatform/1.0 (state population ingestion; contact: {CONTACT_EMAIL})"}
+UA = {"User-Agent": f"CivitasCivicPlatform/1.0 (state population ingestion{CONTACT_NOTE})"}
 SOURCE_URL = "https://en.wikipedia.org/wiki/List_of_states_and_territories_of_the_United_States_by_population"
 
 # The census whose comparison table _ROW_RE_TEMPLATE was verified against

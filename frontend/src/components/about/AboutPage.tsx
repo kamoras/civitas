@@ -64,7 +64,7 @@ export function AboutPage({
           {(prev || next || href !== ABOUT_OVERVIEW_HREF) && (
             <nav
               aria-label="Chapter"
-              className="mt-14 grid gap-3 border-t-3 border-ink-min/60 pt-6 sm:grid-cols-2"
+              className="mt-14 grid grid-cols-1 gap-3 border-t-3 border-ink-min/60 pt-6 sm:grid-cols-2"
             >
               {prev ? (
                 <PagerLink href={prev.href} dir="Previous" title={prev.title} />
@@ -115,7 +115,7 @@ function Contents({ sections }: { sections: { id: string; title: string }[] }) {
       >
         On this page
       </h2>
-      <ol className="mt-3 grid gap-x-6 gap-y-1 text-base sm:grid-cols-2">
+      <ol className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1 text-base sm:grid-cols-2">
         {sections.map((s) => (
           <li key={s.id}>
             <a
@@ -321,7 +321,10 @@ export function More({
           <span className="group-open:hidden">+</span>
           <span className="hidden group-open:inline">−</span>
         </span>
-        <span className="font-medium">
+        {/* min-w-0: a flex item is otherwise as wide as its longest word, so
+            a field name ("constituentAlignment") at 200% text ran past a
+            phone instead of breaking (body's overflow-wrap). */}
+        <span className="min-w-0 font-medium">
           {label}
           {context && <span className="sr-only"> {context}</span>}
         </span>
@@ -340,7 +343,7 @@ export function Facts({ children }: { children: ReactNode }) {
 
 export function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="grid gap-1 py-3 sm:grid-cols-[13rem_1fr] sm:gap-4">
+    <div className="grid grid-cols-1 gap-1 py-3 sm:grid-cols-[13rem_1fr] sm:gap-4">
       <dt className="font-mono text-xs uppercase tracking-[0.08em] text-signal-amber sm:pt-0.5">
         {label}
       </dt>
@@ -349,15 +352,16 @@ export function Fact({ label, children }: { label: string; children: ReactNode }
   );
 }
 
-/** Inline citation: prints who, links to the full entry. The leading space
- * sits outside the unbreakable span: inside it, two citations in a row
- * ("(Cover & Hart 1967) (Snell et al. 2017)") had no break between them and
- * pushed a 320px-wide page sideways. */
+/** Inline citation: prints who, links to the full entry. It wraps at its
+ * own spaces like the prose around it: it was one unbreakable span, which at
+ * 200% text ("(Ansolabehere & Kuriwaki 2022)") was wider than a phone and
+ * pushed the page sideways. The parentheses touch the name, so they never
+ * strand on a line of their own. */
 export function Cite({ id }: { id: RefId }) {
   return (
     <>
       {" "}
-      <span className="whitespace-nowrap text-sm text-ink-lo">
+      <span className="text-sm text-ink-lo">
         (
         <a
           href={`/about/references#${id}`}

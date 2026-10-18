@@ -110,12 +110,13 @@ const data: ElectionMapData = {
     meanAbsError: 6.59,
     table: [
       {
-        low: 0.35,
+        low: 0.5,
         high: 0.65,
+        label: "50–65% (near even)",
         n: 42,
-        meanChance: 0.501,
-        demShare: 0.571,
-        demCarried: 24,
+        meanChance: 0.571,
+        leanShare: 0.571,
+        leanCarried: 24,
         years: [1998, 2022],
       },
     ],
@@ -383,9 +384,48 @@ describe("election map", () => {
 
   it("shows the held-out calibration exactly as the API gives it", () => {
     render(<ElectionMapMethod data={data} />);
-    expect(screen.getByText("35%–65% (near even)")).toBeInTheDocument();
+    expect(screen.getByText("50–65% (near even)")).toBeInTheDocument();
     expect(screen.getByText("57% (24 of 42)")).toBeInTheDocument();
     expect(screen.getByText(/In 4 of the 13 held-out cycles/)).toBeInTheDocument();
+  });
+
+  it("frames the calibration for either party alike, never one side", () => {
+    const { container } = render(<ElectionMapMethod data={data} />);
+    const table = within(container).getByRole("table");
+    expect(table.textContent).toContain("Side it leaned toward carried");
+    expect(table.textContent).not.toMatch(/democrat|republican/i);
+    expect(container.textContent).not.toMatch(/seats Democrats carried|went to the Democrat/i);
+    // A fit written before the bins changed has no table until its refit.
+    const old: ElectionMapData = { ...data, calibration: { ...data.calibration, table: null } };
+    const { container: c2 } = render(<ElectionMapMethod data={old} />);
+    expect(within(c2).queryByRole("table")).toBeNull();
+    // Nor one frozen with the old one-party rows (an archived map).
+    const frozen = {
+      ...data,
+      calibration: {
+        ...data.calibration,
+        table: [{ low: 0.35, high: 0.65, n: 42, demShare: 0.571 }],
+      },
+    } as unknown as ElectionMapData;
+    const { container: c3 } = render(<ElectionMapMethod data={frozen} />);
+    expect(within(c3).queryByRole("table")).toBeNull();
+  });
+
+  it("leads with a short summary and keeps the full method behind a disclosure", () => {
+    const { container } = render(<ElectionMapMethod data={data} />);
+    const summary = screen.getByTestId("method-summary");
+    const sentences = (summary.textContent ?? "").split(/(?<=[.:])\s+(?=[A-Z])/).length;
+    expect(sentences).toBeLessThanOrEqual(10);
+    expect(summary.textContent).toContain("Ranges like these held the result 79% of the time");
+    expect(summary.textContent).toContain("These ranges are not a call.");
+    expect(summary.textContent).toContain("Representation Scores");
+    expect(summary.textContent).toContain("Wikipedia contributors, CC BY-SA 4.0");
+    expect(summary.textContent).toContain("Silver Bulletin");
+    const details = container.querySelector("details");
+    expect(details).not.toBeNull();
+    expect(details!.open).toBe(false);
+    expect(details!.textContent).toContain("Held-out checks");
+    expect(details!.textContent).toContain("Inputs, sources and licences");
   });
 
   it("keeps a range that crosses even neutral, and parses only known views", () => {

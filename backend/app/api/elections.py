@@ -64,6 +64,7 @@ from app.pipeline.fetch.ballot_lookup import lookup_for_state
 from app.pipeline.fetch.ballot_measure_pdf_sources import unread_reason
 from app.pipeline.fetch.district_pvi import congress_for_election, district_pvi_for_congress
 from app.redistricting import new_district_notes
+from app.retractions import withdrawn_coverage_urls
 from app.pipeline.analyze.election_coverage import vacuous_corroboration_clause
 from app.pipeline.fetch.ballot_pdf_sources import source_for_town as ballot_pdf_source_for_town
 from app.pipeline.fetch.ballot_pdf_sources import town_names_for_state as ballot_pdf_town_names_for_state
@@ -1051,6 +1052,8 @@ def _coverage_is_displayable(db: Session):
     return and_(
         RaceCoverageItem.source_type.in_(COVERAGE_SOURCE_TYPES),
         not_(vacuous_corroboration_clause(db)),
+        # Withdrawn in the public retraction log (app/retractions.py).
+        RaceCoverageItem.url.notin_(withdrawn_coverage_urls()),
     )
 
 
