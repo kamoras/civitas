@@ -86,7 +86,9 @@ export default function DataChapter() {
               bill of an earlier Congress says its votes aren&apos;t held and links each roll call
               to the chamber&apos;s record. A Senate tie the Vice President broke is shown with the
               Vice President&apos;s vote, an election of the Speaker by each candidate&apos;s votes,
-              and a quorum call as the members present, with no result.
+              and a quorum call as the members present, with no result. The election map&apos;s past
+              House results for a year the FEC has not yet compiled come from the Clerk&apos;s
+              official election statistics, checked against the Clerk&apos;s own district totals.
             </Fact>
             <Fact label="unitedstates/congress-legislators">
               Committee seats and party leadership titles, an open dataset refreshed weekly. It

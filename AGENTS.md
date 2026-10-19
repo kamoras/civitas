@@ -1918,16 +1918,24 @@ it keeps, each enforced by a test (`tests/test_forecast_model.py`,
   historical lean uses only the two presidential elections before it.
 - **The House fit's lean is rebuilt, not borrowed.** `scripts/
   build_house_lean_history.py` makes each district's pre-election lean for
-  2018, 2020 and 2022 on the lines each was held on, with
+  2018, 2020, 2022 and 2024 on the lines each was held on, with
   `build_district_lean.py`'s own block method (VEST 2016/2020 on Census 2020
-  blocks; 116th lines from TIGER polygons, 118th from the BEF), into
+  blocks; 116th lines from TIGER polygons, 118th and 119th from the BEFs), into
   `app/data/forecast_house_lean.json`; results and incumbency come from the
-  FEC's Federal Elections workbooks. Three cycles cannot identify the
+  FEC's Federal Elections workbooks, and for a year the FEC has not compiled,
+  from the Clerk of the House's Statistics of the Presidential and
+  Congressional Election (found by year on the Clerk's Election Information
+  page) with incumbency from the FEC's general-election candidate list.
+  The Clerk's PDF is gated (`clerk_house`, `clerk_results`): each
+  district's lines must sum to the Clerk's own recapitulation total, every
+  seat of the lines listed once, every FEC incumbent their party's nominee;
+  a failure stops the refit, which alerts. A few cycles cannot identify the
   generic-ballot coefficient, so the House takes the Senate fit's
   (`model.fit(national_coef=)`), refitted without each held-out cycle. Don't
   add a House cycle from a source behind a sign-in form (MEDSL's House file
   is one: its guestbook) or a lean made another way; the fit takes every
-  FEC compilation the FEC's results index links.
+  FEC compilation the FEC's results index links, and the Clerk's edition
+  only for a year the FEC hasn't compiled.
 - **Polls from Wikipedia, gated, attributed.** `forecast/polls.py` reads each
   race article's current revision (recorded per seat), parses the table whose
   columns are the confirmed nominees, and rejects the whole table on a failed
