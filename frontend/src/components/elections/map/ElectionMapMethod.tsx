@@ -120,12 +120,13 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
               the lines that election used. Civitas rebuilt it the same way as the usual vote, from
               VEST precinct returns placed on Census blocks: for 2018 and 2020 from the 2016
               presidential vote alone, on the 116th Congress&apos;s lines (2012 has no open precinct
-              returns), and for 2022 from 2016 and 2020 on the new lines drawn after the census.
+              returns), and from 2022 on from 2016 and 2020 on the lines drawn after the census.
               North Carolina&apos;s 2020 races are left out (it voted on new lines Census publishes
-              only on older blocks). A cycle is added once the FEC publishes its compilation of that
-              election&apos;s House results (MEDSL&apos;s House file sits behind a sign-in form,
-              which Civitas does not answer), so the House checks cover {c.cycles[0]} to{" "}
-              {c.cycles[1]}.
+              only on older blocks). A cycle&apos;s results come from the FEC&apos;s compilation of
+              that election, or, until the FEC publishes it, from the official statistics the Clerk
+              of the House publishes, checked district by district against the Clerk&apos;s own
+              totals (MEDSL&apos;s House file sits behind a sign-in form, which Civitas does not
+              answer), so the House checks cover {c.cycles[0]} to {c.cycles[1]}.
             </p>
           )}
           <p>

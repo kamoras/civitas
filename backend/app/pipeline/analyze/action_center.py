@@ -100,7 +100,13 @@ from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.congress import congress_gov_url_for_bill_id
 from app.pipeline.fetch.fr_rulemaking import RULE_DOC_TYPES, fetch_fr_metadata
 from app.http_client import make_async_client
-from app.pipeline.fetch.news_digest import _POSSESSIVE_SUFFIX_RE, _issue_signature, digest_reason
+from app.pipeline.fetch.news_digest import (
+    _POSSESSIVE_SUFFIX_RE,
+    _entity_items,
+    _issue_signature,
+    _split_body_items,
+    digest_reason,
+)
 from app.pipeline.fetch.news_feeds import (
     MAX_ARTICLE_AGE_HOURS,
     NewsArticle,
@@ -910,6 +916,26 @@ def _same_story(sim: float, title: str, facts: list, cand_title: str, cand_facts
 # second card.
 SHARED_SOURCE_TITLE_SIM = 0.62
 
+
+def _shared_source_title_sim(sim: float, title_a: str, title_b: str) -> float:
+    """The title agreement SHARED_SOURCE_TITLE_SIM is read against: the
+    titles' similarity `sim`, or, when either is a live blog's headline
+    listing several stories (_story_titles), the best agreement of any one
+    of its stories with the other title. Issues 805/806 (2026-10-16): a
+    live blog's headline over a press secretary's exit and an unrelated
+    campaign rally shared its source with the report of the exit at
+    0.557, the rally pulling the whole headline away; the exit alone
+    agreed at 0.672. The same shape with invented names ("Live updates:
+    Press secretary Morrow exits; Varga rallies for Brandt at Dunmore
+    county fair" against "Press secretary Dana Morrow leaving the job
+    after Varga casts doubt"): 0.606 whole, 0.679 for the first story
+    (test_a_live_blog_title_agrees_on_its_shared_story)."""
+    stories_a, stories_b = _story_titles(title_a), _story_titles(title_b)
+    if len(stories_a) == len(stories_b) == 1:
+        return sim
+    return float((_embed_texts_sim(stories_a) @ _embed_texts_sim(stories_b).T).max())
+
+
 # How far back (days, by issue date) a new story is matched against
 # existing rows, and the widest gap between two rows the feed's duplicate
 # pass (_near_identical_clusters) compares: one window, so the two passes
@@ -998,7 +1024,9 @@ def _near_identical_clusters(issues: list["ActionIssue"]) -> dict[int, int]:
                     a.title or "", facts_list[i], b.title or "", facts_list[j],
                 )
             else:
-                m = (bool(urls_list[i] & urls_list[j]) and float(sims[i, j]) >= SHARED_SOURCE_TITLE_SIM) or _same_story(
+                m = (bool(urls_list[i] & urls_list[j]) and _shared_source_title_sim(
+                    float(sims[i, j]), a.title or "", b.title or "",
+                ) >= SHARED_SOURCE_TITLE_SIM) or _same_story(
                     float(sims[i, j]), a.title or "", facts_list[i], b.title or "", facts_list[j],
                 )
             same_story[i][j] = same_story[j][i] = m
@@ -1026,13 +1054,19 @@ def _near_identical_clusters(issues: list["ActionIssue"]) -> dict[int, int]:
 
     representative: dict[int, int] = {}
     for members in clusters:
-        # (has a real timestamp, the timestamp itself, id) — a plain
+        # A row titled by a live blog's several-story headline never
+        # represents its story while a row with a single story's headline
+        # can (_multi_story_headline: 806 gives way to 805). Then (has a
+        # real timestamp, the timestamp itself, id) — a plain
         # `created_at or id` fallback would compare a datetime against an
         # int the moment one cluster member lacks a timestamp and another
         # doesn't, which TypeErrors.
         best = max(
             members,
-            key=lambda idx: (issues[idx].created_at is not None, issues[idx].created_at, issues[idx].id),
+            key=lambda idx: (
+                not _multi_story_headline(issues[idx].title or ""),
+                issues[idx].created_at is not None, issues[idx].created_at, issues[idx].id,
+            ),
         )
         for idx in members:
             representative[idx] = best
@@ -1094,6 +1128,14 @@ def mark_recent_duplicates(db: "Session") -> int:
     for idx, issue in enumerate(pool):
         rep = representative[idx]
         issue.duplicate_of_id = None if rep == idx else pool[rep].id
+        # A current story duplicating another current one leaves the Action
+        # Center too, as a draft a report covers does (early_signal): the
+        # Today tab reads is_current, not this mark, so both cards stayed
+        # up (805/806, 2026-10-16). Its page links the row it duplicates.
+        if rep != idx and issue.is_current and pool[rep].is_current and not issue.source_type:
+            issue.is_current = False
+            action_metrics.increment("issues_retired_duplicate")
+            logger.info("Retired issue %d: a duplicate of current issue %d", issue.id, pool[rep].id)
         # A vote draft whose bill a reported issue covers duplicates that
         # issue, though the titles differ too much to cluster ("Senate vote
         # on S. 4668" / "The Senate passes the Protect College Sports Act").
@@ -1353,6 +1395,39 @@ def _resolve_url(url: str, timeout: float = 6.0) -> str:
     except Exception:
         logger.debug("Google News URL resolution (GET) failed for %s", url[:100], exc_info=True)
     return url
+
+
+def _multi_story_headline(title: str) -> bool:
+    """A live blog's headline: the outlet's kicker (its label before the
+    first ": ", _headline_kicker) over two or more items naming disjoint
+    entities ("Live updates: Press secretary Morrow exits; Varga rallies
+    for Brandt at Dunmore county fair"). Such a page tells several stories, so its
+    headline neither titles an issue nor lends its headline claim to one,
+    and it is compared story by story (_story_titles).
+
+    The kicker is what makes the disjoint-items shape precise. Measured
+    2026-10-17 on 2,642 distinct headlines (national feed articles, race
+    coverage, stored issues and every composed issue title): 48 split into
+    disjoint items; the 20 with a kicker were all multi-story live blogs,
+    and of the 28 without one, 12 were single stories (a photo column
+    "<column name> | <caption>", two-sentence headlines about one event, a
+    debate between two candidates; _parallel_stories' docstring). Missed: 5
+    live blog headlines whose items share a name (the president's) or whose
+    second item names nobody ("candidates tangle in midterm debates"); they behave as
+    before. Structure only, no phrase list: any outlet's kicker counts."""
+    if not _headline_kicker(title):
+        return False
+    items = _entity_items(title.partition(": ")[2].translate(_APOSTROPHES))
+    return len(items) >= 2 and not any(a & b for i, a in enumerate(items) for b in items[i + 1:])
+
+
+def _story_titles(title: str) -> list[str]:
+    """The stories a headline tells: its items for a multi-story headline
+    (_multi_story_headline), else the headline itself."""
+    if not _multi_story_headline(title):
+        return [title]
+    rest = title.partition(": ")[2]
+    return [item.strip() for item, _ in _split_body_items(rest) if item.strip()]
 
 
 # Livestream announcements ("WATCH LIVE: The president speaks at a midterm rally
@@ -4676,6 +4751,7 @@ def _find_matching_issue(
     source_urls: list | None = None,
     summary: str = "",
     db=None,
+    source_titles: dict[str, str] | None = None,
 ):
     """Find the existing issue (if any) this new cluster's title/facts
     should update instead of becoming a new row — extracted from
@@ -4702,28 +4778,39 @@ def _find_matching_issue(
     floor, so a reworded title can still match through it, but only with
     the titles agreeing to SHARED_SOURCE_TITLE_SIM: one roundup article is
     cited by unrelated stories (2026-10-08, see that constant). It was
-    treated as conclusive on its own from 2026-08.
+    treated as conclusive on its own from 2026-08. One shared article is
+    conclusive still: the one whose headline is the candidate's title
+    (`source_titles`, the new cluster's articles by URL), when that
+    headline tells one story (_multi_story_headline). That article is the
+    candidate's story, and the new cluster holds it. Of several candidates
+    sharing a source, the one whose title agrees best is taken.
     """
     sims = recent_embs @ title_emb if recent_embs is not None else None
     if source_urls:
         new_urls = {u for u in source_urls if u}
-        if new_urls:
-            for idx, candidate in enumerate(recent_issues):
-                if candidate.id in matched_issue_ids or not _may_match(candidate, title, facts, summary, db):
-                    continue
-                try:
-                    cand_urls = set(json.loads(candidate.source_urls or "[]"))
-                except (ValueError, TypeError):
-                    continue
-                # A vote draft's source is its record: a story citing it is
-                # the draft's story (promotion). A news row needs its title
-                # to agree too (SHARED_SOURCE_TITLE_SIM).
-                if new_urls & cand_urls and (
-                    candidate.source_type
-                    or (sims is not None and float(sims[idx]) >= SHARED_SOURCE_TITLE_SIM)
-                ):
-                    action_metrics.increment("issues_matched_by_source")
-                    return candidate
+        best, best_sim = None, -2.0
+        for idx, candidate in enumerate(recent_issues if new_urls else []):
+            if candidate.id in matched_issue_ids or not _may_match(candidate, title, facts, summary, db):
+                continue
+            try:
+                shared = new_urls & set(json.loads(candidate.source_urls or "[]"))
+            except (ValueError, TypeError):
+                continue
+            if not shared:
+                continue
+            sim = _shared_source_title_sim(float(sims[idx]), title, candidate.title or "") if sims is not None else -1.0
+            # A vote draft's source is its record: a story citing it is
+            # the draft's story (promotion). A news row needs its title
+            # to agree too (SHARED_SOURCE_TITLE_SIM), or the shared article
+            # to be the one that titled it.
+            titled = any(
+                (source_titles or {}).get(u) == candidate.title for u in shared
+            ) and not _multi_story_headline(candidate.title or "")
+            if (candidate.source_type or titled or sim >= SHARED_SOURCE_TITLE_SIM) and sim > best_sim:
+                best, best_sim = candidate, sim
+        if best is not None:
+            action_metrics.increment("issues_matched_by_source")
+            return best
 
     if sims is None:
         return None
@@ -5270,6 +5357,19 @@ def _run_refresh(db: Session) -> int:
                 continue
 
         filtered_cluster = [a for a, _ in on_topic]
+        # The headline of the top-ranked real article (below) that is not
+        # a live blog's headline listing several stories
+        # (_multi_story_headline): issue 806 (2026-10-16) was titled by a
+        # live blog's "Live updates: <a press secretary's exit>; <a campaign
+        # rally>" over a PBS report of the exit alone, brought the rally
+        # onto the page, and agreed too little with the PBS-titled issue
+        # 805 to be matched to it. A cluster of
+        # nothing else waits for a single story's report to join it.
+        title = next((a.title for a in filtered_cluster if not _multi_story_headline(a.title)), None)
+        if title is None:
+            logger.info("Rank %d: only live blogs listing several stories, no issue until a report joins", rank)
+            action_metrics.increment("clusters_only_multi_story")
+            continue
         logger.info(
             "Rank %d coherence filter: %d/%d articles on-topic (sims: %s)",
             rank, len(filtered_cluster), len(cluster),
@@ -5349,7 +5449,12 @@ def _run_refresh(db: Session) -> int:
         # Claims come from the on-topic articles only: one from an article
         # the coherence filter dropped was published with a source the
         # issue doesn't list (2026-10-08).
-        headline_claims = claim_layer.extract_claims(filtered_cluster, _locate)
+        # A live blog's headline lists several stories, so its headline
+        # claim may be another story's; its body still contributes, and
+        # on_topic judges that.
+        headline_claims = claim_layer.extract_claims(
+            [a for a in filtered_cluster if not _multi_story_headline(a.title)], _locate,
+        )
         kept = claim_layer.dedupe_claims(headline_claims + claim_layer.extract_body_claims(filtered_cluster, _locate))
         ordered = [c for c in headline_claims if c in kept] + [c for c in kept if c not in headline_claims]
         cluster_claims = claim_layer.on_topic(ordered, filtered_cluster)
@@ -5371,7 +5476,6 @@ def _run_refresh(db: Session) -> int:
         # own headline cannot hallucinate, and this was already the
         # proven-safe fallback whenever a generated title failed — it is
         # now the only path.
-        title = filtered_cluster[0].title
         summary = claim_layer.build_lede(cluster_claims)
         # The lede is a quoted claim like the facts, so it carries its
         # outlet too: without it, the outlet whose line became the summary
@@ -5586,6 +5690,7 @@ def _run_refresh(db: Session) -> int:
         match = _find_matching_issue(
             title, facts, _recent_issues, _recent_embs, title_emb, _matched_issue_ids,
             source_urls=source_urls, summary=summary, db=db,
+            source_titles={_url_of(a.url): a.title for a in filtered_cluster},
         )
 
         _new_values: dict = {
