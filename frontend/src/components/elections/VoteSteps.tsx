@@ -42,7 +42,7 @@ function Step({ step, n }: { step: VoteStep; n: number }) {
       <span aria-hidden="true" className="w-6 shrink-0 font-mono text-lg text-ink-lo">
         {n}
       </span>
-      <span className="min-w-0 flex-1">
+      <span className="min-w-0 flex-1 wrap-anywhere">
         <span className="block text-[17px] font-semibold leading-snug text-ink-hi">{label}</span>
         {where && <span className="block text-sm text-ink-lo">{where}</span>}
         {deadline && (
@@ -61,7 +61,7 @@ function Step({ step, n }: { step: VoteStep; n: number }) {
     </>
   );
   return (
-    <li className="border border-white/15 bg-surface">
+    <li className="min-w-0 border border-white/15 bg-surface">
       {href ? (
         <a
           href={href}
@@ -77,7 +77,7 @@ function Step({ step, n }: { step: VoteStep; n: number }) {
         <div className="flex min-h-[52px] items-start gap-3 px-4 py-3">{body}</div>
       )}
       {step.unconfirmed && fallbackHref && step.fallback && (
-        <p className="border-t border-white/[0.09] px-4 py-2 pl-[52px] text-xs text-ink-lo">
+        <p className="border-t border-white/[0.09] px-4 py-2 pl-[52px] text-xs text-ink-lo wrap-anywhere">
           This site blocks automated checks, so we can&apos;t confirm it&apos;s up. If it
           doesn&apos;t open, use{" "}
           <a
@@ -105,7 +105,7 @@ function Step({ step, n }: { step: VoteStep; n: number }) {
 export default function VoteSteps({ steps, stateName }: { steps: VoteStep[]; stateName: string }) {
   if (steps.length === 0) return null;
   return (
-    <section id="vote-steps" aria-labelledby="vote-steps-heading" className="mb-6">
+    <section id="vote-steps" aria-labelledby="vote-steps-heading" className="mb-6 min-w-0">
       <h2
         id="vote-steps-heading"
         className="border-t-[3px] border-ink-hi pt-2 font-display text-xl font-semibold text-ink-hi"
@@ -115,7 +115,7 @@ export default function VoteSteps({ steps, stateName }: { steps: VoteStep[]; sta
       <p className="mb-3 mt-1 text-sm text-ink-lo">
         Each button opens an official site for {stateName}, named under it.
       </p>
-      <ol className="grid gap-3 lg:grid-cols-2">
+      <ol className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         {steps.map((s, i) => (
           <Step key={s.task} step={s} n={i + 1} />
         ))}
