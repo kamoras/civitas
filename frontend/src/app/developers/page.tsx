@@ -4,9 +4,11 @@ import PageMasthead from "@/components/layout/PageMasthead";
 import Footer from "@/components/layout/Footer";
 import CopyText from "@/components/CopyText";
 import { Summary, Point, Section, P, List, Item, More, A } from "@/components/about/AboutPage";
+import DataLicense from "@/components/about/DataLicense";
 import {
   codeSpans,
   endpointsByTag,
+  isCsv,
   nestedObject,
   paramTypeLabel,
   responseSchema,
@@ -166,7 +168,9 @@ function EndpointBlock({ endpoint, spec }: { endpoint: Endpoint; spec: Spec }) {
             <span className="text-ink-hi">{path}</span>
           )}
         </p>
-        <p className="text-xs text-ink-min">MCP tool: {op.operationId}</p>
+        <p className="text-xs text-ink-min">
+          {isCsv(op) ? "CSV download (not an MCP tool)" : `MCP tool: ${op.operationId}`}
+        </p>
       </div>
       {op.description && (
         <div className="space-y-2 text-sm text-ink-mid">
@@ -298,6 +302,39 @@ export default async function DevelopersPage() {
                 <p>The OpenAPI 3 description, to generate a client from:</p>
                 <CopyText text={SPEC_URL} label="OpenAPI spec address" />
               </More>
+            </Section>
+
+            <Section id="downloads" title="Spreadsheets (CSV)">
+              <P>
+                The leaderboards, a member&apos;s votes and every member&apos;s position on a roll
+                call are also CSV files, from the same data as the JSON: add{" "}
+                <code className={CODE}>.csv</code> as the endpoints below list. Each file names its
+                columns in its first row, and the reference describes every column.
+              </P>
+              <List>
+                {[
+                  ["senators.csv", "Every serving senator's scores, with the method version"],
+                  [
+                    "representatives.csv",
+                    "Every serving representative's scores, with the method version",
+                  ],
+                  ["presidents.csv", "Every president's Presidential Score"],
+                ].map(([file, what]) => (
+                  <Item key={file} label={what}>
+                    <a
+                      href={`${API}/${file}`}
+                      download
+                      className="font-mono text-xs text-signal-cyan underline underline-offset-2 hover:text-phos"
+                    >
+                      {`${API}/${file}`}
+                    </a>
+                  </Item>
+                ))}
+              </List>
+            </Section>
+
+            <Section id="license" title="Data license and how to cite Civitas">
+              <DataLicense />
             </Section>
 
             <Section id="mcp" title="Use it from an AI assistant (MCP)">

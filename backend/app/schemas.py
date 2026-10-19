@@ -739,6 +739,11 @@ _RANK = Field(description="Place in the whole chamber by overall score, whatever
                           "same score share a rank (1, 2, 2, 4)")
 
 
+class PublicLicenseSchema(_PublicModel):
+    name: str = Field(description="The license, in words")
+    url: str = Field(description="Where it is stated, with each source whose terms carry over")
+
+
 class PublicApiIndexSchema(_PublicModel):
     name: str
     version: str
@@ -748,7 +753,8 @@ class PublicApiIndexSchema(_PublicModel):
     docs: str = Field(description="The documentation page")
     openapi: str = Field(description="This API's OpenAPI 3 description")
     mcp: str = Field(description="MCP server (streamable HTTP) exposing these endpoints as tools")
-    source: str = Field(description="Civitas's source code")
+    source: str = Field(description="Civitas's source code (AGPL-3.0)")
+    license: PublicLicenseSchema = Field(description="The license of the data this API serves")
 
 
 class PublicStateSchema(_PublicModel):
