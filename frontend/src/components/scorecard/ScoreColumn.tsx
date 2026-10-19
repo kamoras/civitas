@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import { displayScore } from "@/lib/formatting";
-import { getScoreColor } from "@/lib/representation";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import MetricTooltip from "@/components/checker/MetricTooltip";
@@ -16,8 +15,6 @@ export default function ScoreColumn({
   shareId,
   tooltip,
   score,
-  weight,
-  scoreInHeader = false,
   finding,
   method,
   more,
@@ -30,16 +27,10 @@ export default function ScoreColumn({
   /** The column's anchor id; also what its shared image and link are named by. */
   shareId: string;
   score: number | null | undefined;
-  /** Share of a composite, 0-1: presidents only, whose composite is still
-   *  shown; members' columns pass none (no composite on the page). */
-  weight?: number;
-  /** The 0-100 figure in the column's header (presidents, until their
-   *  page is redesigned); members' columns keep it behind the disclosure. */
-  scoreInHeader?: boolean;
   /** What the score found, in one plain sentence (the breakdown API's). */
   finding?: string | null;
   /** How the score is computed (its components and their statistics),
-   *  kept behind a disclosure under the evidence, with the weight. */
+   *  kept behind a disclosure under the evidence. */
   method?: ReactNode;
   more?: { label: string; onClick: () => void };
   /** In place of the score, for a column on record but not scored. */
@@ -63,25 +54,14 @@ export default function ScoreColumn({
           <span className="shrink-0 font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
             {aside}
           </span>
-        ) : (
-          scoreInHeader && (
-            <span
-              className={`shrink-0 font-display text-[44px] font-semibold leading-none ${
-                shown == null ? "text-ink-min" : getScoreColor(shown)
-              }`}
-              aria-label={shown == null ? "Not scored" : `${shown} out of 100`}
-            >
-              {shown ?? "—"}
-            </span>
-          )
-        )}
+        ) : null}
       </header>
       <div className="flex flex-1 flex-col gap-5 px-5 py-4">
         {finding && (
           <p className="font-display text-lg font-semibold leading-snug text-ink-hi">{finding}</p>
         )}
         {children}
-        {(method || shown != null || weight != null) && (
+        {(method || shown != null) && (
           <details
             {...{ [SHARE_EXCLUDE_ATTR]: "" }}
             className="group border-t border-white/[0.08] pt-4"
@@ -93,14 +73,9 @@ export default function ScoreColumn({
               How this is computed
             </summary>
             <div className="flex flex-col gap-4 pt-2">
-              {shown != null && !scoreInHeader && (
+              {shown != null && (
                 <p className="text-sm text-ink-lo">
                   The scorer&apos;s arithmetic puts this at {shown} out of 100.
-                </p>
-              )}
-              {weight != null && (
-                <p className="text-sm text-ink-lo">
-                  {Math.round(weight * 100)}% of the overall score.
                 </p>
               )}
               {method}

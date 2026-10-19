@@ -66,12 +66,17 @@ function scored(n: number | null) {
   return n == null ? "Not scored" : String(displayScore(n));
 }
 
+// No composite row (redesign 2026-10): the historians' rank, attributed,
+// then each measured part on its own.
 const SCORE_ROWS: Row[] = [
   {
-    label: "Presidential Score",
-    value: ({ president: p }) =>
-      p.score.dimensionsAvailable === 0 ? "Not scored" : String(displayScore(p.score.overall)),
-    score: ({ president: p }) => (p.score.dimensionsAvailable === 0 ? null : p.score.overall),
+    label: "Historians' rank (C-SPAN survey, their ranking)",
+    value: ({ breakdown: b }) => {
+      const f = b?.historicalLegacy.facts as HistoricalLegacyFacts | undefined;
+      return f?.historiansRank != null
+        ? `#${f.historiansRank} of ${f.historiansRated}`
+        : "Not rated";
+    },
   },
   ...(
     [

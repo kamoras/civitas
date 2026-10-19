@@ -415,9 +415,8 @@ function actionRows(issue: ActionIssue, today: string): ActionRow[] {
           <Link
             href={`/politicians/${m.id}`}
             className="font-mono text-xs text-phos-mid hover:underline"
-            aria-label={`${m.name}'s scorecard, overall score ${Math.round(m.overallScore)}`}
           >
-            · {Math.round(m.overallScore)}
+            · record
           </Link>
         </>
       ),

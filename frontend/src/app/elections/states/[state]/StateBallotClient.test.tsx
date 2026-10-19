@@ -368,13 +368,12 @@ describe("the contest drawer", () => {
     render(<StateBallotClient ballot={ballot({ senateRaces: [senate] })} />);
     const drawer = await openContest(/U\.S\. Senator/);
     expect(
-      drawer.getByRole("link", { name: /house member, OH-2 · representation score 61/ })
+      drawer.getByRole("link", { name: /house member, OH-2 · where this member stands/ })
     ).toHaveAttribute("href", "/politicians/eric-conway");
     await userEvent.click(drawer.getByRole("tab", { name: "Record" }));
-    expect(drawer.getByRole("link", { name: /House member, OH-2 · score 61/ })).toHaveAttribute(
-      "href",
-      "/politicians/eric-conway"
-    );
+    expect(
+      drawer.getByRole("link", { name: /House member, OH-2 · record and peers/ })
+    ).toHaveAttribute("href", "/politicians/eric-conway");
     // Never worded as this seat's incumbent.
     expect(drawer.queryByText(/INCUMBENT/)).toBeNull();
     expect(drawer.getAllByText("not linked")).toHaveLength(1);

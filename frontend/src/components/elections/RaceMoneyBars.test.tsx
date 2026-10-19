@@ -137,9 +137,10 @@ describe("RaceMoneyBars", () => {
         candidates={[cand({ incumbentRecord: { id: "member-a", score: 42.5 } })]}
       />
     );
-    const link = screen.getByRole("link", { name: /representation score/ });
+    const link = screen.getByRole("link", { name: /where this member stands among peers/ });
     expect(link).toHaveAttribute("href", "/politicians/member-a");
-    expect(screen.getByText("43")).toBeInTheDocument();
+    // No composite score on the ballot (redesign 2026-10).
+    expect(screen.queryByText("43")).not.toBeInTheDocument();
   });
 
   it("badges unconfirmed entries only when the race asks for it", () => {

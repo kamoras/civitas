@@ -146,11 +146,12 @@ describe("PresidentScorecard", () => {
   it("states each score's figures beside the averages they are scored against", async () => {
     render(
       <main>
-        <PresidentScorecard president={president} breakdown={breakdown} rank={null} />
+        <PresidentScorecard president={president} breakdown={breakdown} />
       </main>
     );
     expect(screen.getByRole("heading", { level: 1, name: "Donald J. Trump" })).toBeInTheDocument();
-    expect(screen.getByText("Ranked once the term ends")).toBeInTheDocument();
+    // No composite or rank of Civitas's own; the historians' rank waits for the term's end.
+    expect(screen.getAllByText(/Not rated\. C-SPAN/)[0]).toBeInTheDocument();
     expect(
       screen.getByText(
         /Approval has averaged 37\.3% so far, below the 50\.9% past presidents averaged over their first 20 months\. Averaged over the first quarter of its polls and then the last, it fell 5\.6 points from 41\.0%\. Presidents who started there typically rose 4\.8 points, so this is worse than usual\./
@@ -158,7 +159,7 @@ describe("PresidentScorecard", () => {
     ).toBeInTheDocument();
     // Each score shows its actual share of this president's overall, not
     // the nominal weight (Historical Legacy is unscored for a sitting one).
-    expect(screen.getAllByText("50% of the overall score.")).toHaveLength(2);
+    expect(screen.queryByText(/of the overall score/)).not.toBeInTheDocument();
     expect(
       screen.getByText(
         /Growth is counted from the term's second full year, so there's no figure yet\./
@@ -194,7 +195,7 @@ describe("PresidentScorecard", () => {
         },
       },
     };
-    render(<PresidentScorecard president={president} breakdown={peers} rank={null} />);
+    render(<PresidentScorecard president={president} breakdown={peers} />);
     expect(
       screen.getByText(
         /Growth: 1\.4% a year per person, against 1\.1% in 13 other wealthy countries over the same years, which shared the same oil shocks, recessions and pandemic\. Those countries were poorer and still catching up with US incomes, which alone would have had them growing 1\.6 points a year faster\. Allowing for that, the US came out 1\.9 points a year ahead; under the typical president since 1947 it came out 2\.2 points a year ahead\./
@@ -217,7 +218,7 @@ describe("PresidentScorecard", () => {
         },
       },
     };
-    render(<PresidentScorecard president={president} breakdown={era} rank={null} />);
+    render(<PresidentScorecard president={president} breakdown={era} />);
     expect(
       screen.getByText(
         /Approval has averaged 37\.3% so far: 87% in the president's party, 4% in the other party and 30% among independents\. Under the same polarization, presidents typically got 87%, 6% and 36% over their first 20 months\. That puts this term 2\.7 points below the era; the typical president comes out 0\.1 points above\./
@@ -243,7 +244,7 @@ describe("PresidentScorecard", () => {
         },
       },
     };
-    render(<PresidentScorecard president={president} breakdown={economy} rank={null} />);
+    render(<PresidentScorecard president={president} breakdown={economy} />);
     expect(
       screen.getByText(
         /Unemployment: fell 4\.9 points from 9\.3% over the credited years; for presidents starting at that rate it typically fell 4\.5 points, so this is better than usual\./
@@ -271,17 +272,17 @@ describe("PresidentScorecard", () => {
     } as President;
     render(
       <main>
-        <PresidentScorecard president={former} breakdown={null} rank={null} />
+        <PresidentScorecard president={former} breakdown={null} />
       </main>
     );
     expect(screen.queryByText(/not rated|not scored|No GDP figure/i)).not.toBeInTheDocument();
-    expect(screen.getByText("12")).toBeInTheDocument();
+    expect(screen.getByText(/at 12 out of 100/)).toBeInTheDocument();
   });
 
   it("has no structural accessibility violations", async () => {
     render(
       <main>
-        <PresidentScorecard president={president} breakdown={breakdown} rank={null} />
+        <PresidentScorecard president={president} breakdown={breakdown} />
       </main>
     );
     await screen.findByText("21,285 disclosed this term");

@@ -1,8 +1,7 @@
 import Link from "next/link";
 import type { BallotCandidate, FundingSourceKey, FundingSources } from "@/types/election";
 import { SERIES } from "@/components/admin/charts/palette";
-import { cashOnHandDisplay, displayScore, formatCurrency } from "@/lib/formatting";
-import { getScoreColor } from "@/lib/representation";
+import { cashOnHandDisplay, formatCurrency } from "@/lib/formatting";
 import { getPartyMeta } from "@/components/elections/CandidateCard";
 import {
   candidateName,
@@ -201,11 +200,7 @@ export default function RaceMoneyBars({
                   href={`/politicians/${c.incumbentRecord.id}`}
                   className="mt-1.5 inline-block font-mono text-[11px] text-ink-lo hover:text-phos"
                 >
-                  representation score{" "}
-                  <span className={getScoreColor(displayScore(c.incumbentRecord.score))}>
-                    {displayScore(c.incumbentRecord.score)}
-                  </span>{" "}
-                  →
+                  where this member stands among peers →
                 </Link>
               )}
               {!c.incumbentRecord && c.memberRecord && (
@@ -215,11 +210,7 @@ export default function RaceMoneyBars({
                   className="mt-1.5 inline-block font-mono text-[11px] text-ink-lo hover:text-phos"
                 >
                   {memberRecordLabel(c.memberRecord).replace(/^./, (ch) => ch.toLowerCase())} ·
-                  representation score{" "}
-                  <span className={getScoreColor(displayScore(c.memberRecord.score))}>
-                    {displayScore(c.memberRecord.score)}
-                  </span>{" "}
-                  →
+                  where this member stands →
                 </Link>
               )}
             </li>

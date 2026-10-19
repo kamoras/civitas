@@ -1356,10 +1356,11 @@ longer on Oyez's sitting list inactive (`retire_departed_justices`, never a
 delete, refused below the Court's quorum of six) and the Supplementary run
 checks that list nightly so a confirmation or departure doesn't wait for the
 weekly refresh (`court_roster_changed`). Relatedly,
-the Senate/House leaderboards rank only currently-serving members, while the
-presidential leaderboard ranks the *historical* field and excludes the
-sitting president (see `president_service.get_president_leaderboard`) — for
-that office, comparison against predecessors is the only meaningful ranking.
+the leaderboard API (no longer a page since 2026-10, §3; kept for public API
+v1's deprecated rank) ranks only currently-serving members, and for
+presidents the *historical* field without the sitting president
+(`president_service.get_president_leaderboard`). A president's page shows
+the historians' own rank, attributed, instead of a blend.
 
 **Trend posts ("On the record", `analyze/trend_poster.py`)** run after each
 hourly Action Center refresh (`scheduler._post_trends`, under the same lease).
