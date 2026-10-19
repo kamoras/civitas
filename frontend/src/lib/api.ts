@@ -1,7 +1,6 @@
 import {
   Holdings,
   LeaderboardEntry,
-  ScoreSpread,
   PaginatedStockTrades,
   PaginatedVotes,
   Senator,
@@ -21,7 +20,7 @@ import type { MemberSupport } from "@/types/presidentialSupport";
 import type { TrendPostsAudit } from "@/types/trendPosts";
 import type { MapSeatLines } from "@/types/electionMap";
 import type { SearchSuggestions } from "@/types/search";
-import type { PeerComparison, PeerGroupKey } from "@/types/peers";
+import type { ChamberMeasures, PeerComparison, PeerGroupKey } from "@/types/peers";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 
@@ -267,6 +266,11 @@ export async function fetchCompareAgreement(
   return cachedFetch(`${API_BASE}/compare/agreement?${params}`, TTL.SHORT);
 }
 
+/** The whole chamber, measure by measure (the measures page and compare). */
+export async function fetchChamberMeasures(chamber: "senate" | "house"): Promise<ChamberMeasures> {
+  return cachedFetch(`${API_BASE}/congress/measures?chamber=${chamber}`, TTL.SHORT);
+}
+
 /** Where a member stands among peers on each measure (the member page's
  *  "Where they stand"). */
 export async function fetchPeerComparison(
@@ -279,10 +283,6 @@ export async function fetchPeerComparison(
     `${API_BASE}/${path}/${encodeURIComponent(id)}/peers?group=${group}`,
     TTL.SHORT
   );
-}
-
-export async function fetchLeaderboardSpread(chamber: "senate" | "house"): Promise<ScoreSpread> {
-  return cachedFetch(`${API_BASE}/leaderboard/spread?chamber=${chamber}`, TTL.SHORT);
 }
 
 // --- House Representatives ---

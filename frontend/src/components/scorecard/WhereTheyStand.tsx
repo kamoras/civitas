@@ -9,7 +9,7 @@ import type { PeerComparison, PeerGroupKey, PeerMeasure } from "@/types/peers";
 
 /** How each row's figure is printed on its axis and in its table: the
  *  backend's values, formatted only. */
-function fmt(m: PeerMeasure, v: number): string {
+export function fmt(m: Pick<PeerMeasure, "unit">, v: number): string {
   if (m.unit === "count") return String(Math.round(v));
   const pct = v * 100;
   return `${m.unit === "rate" && pct > 0 && pct < 10 ? pct.toFixed(1) : Math.round(pct)}%`;
@@ -17,7 +17,9 @@ function fmt(m: PeerMeasure, v: number): string {
 
 /** The axis's top: the largest figure on the row, up to a round step, so
  *  the strip reads on the measure's own scale, never 0-100 score units. */
-function axisMax(m: PeerMeasure): number {
+export function axisMax(
+  m: Pick<PeerMeasure, "unit" | "distribution" | "value" | "expected">
+): number {
   const top = Math.max(...m.distribution, m.value ?? 0, m.expected ?? 0);
   if (m.unit === "count") return Math.max(5, Math.ceil(top / 5) * 5);
   const step = top <= 0.1 ? 0.02 : 0.1;
@@ -26,7 +28,7 @@ function axisMax(m: PeerMeasure): number {
 
 /** A round mark. Drawn as SVG, not a rounded box: the site's boxes keep
  *  hard corners, and a dot is a data mark, not a box. */
-function Dot({
+export function Dot({
   size,
   fill,
   ring,

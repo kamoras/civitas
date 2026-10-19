@@ -81,3 +81,20 @@ def test_house_median_comparison_has_no_seat_tick(monkeypatch):
 def test_not_serving_is_none(monkeypatch):
     _rows(monkeypatch, [_member("a")])
     assert pc.peer_comparison(None, "senate", "nobody") is None
+
+
+def test_chamber_measures_lists_everyone_with_no_rank(monkeypatch):
+    rows = [_member(f"d{i}", small=i / 40, stages=(3, 1, i % 4, 1, 0)) for i in range(25)]
+    rows += [_member(f"r{i}", caucus="R", small=0.5 + i / 100) for i in range(5)]
+    _rows(monkeypatch, rows)
+    monkeypatch.setattr(pc, "seat_lean", lambda state, district: 7)
+    out = pc.chamber_measures(None, "house")
+    small = out["measures"][0]
+    assert small["n"] == 30 and [p["value"] for p in small["points"]] == sorted(p["value"] for p in small["points"])
+    # Furthest from each member's own expected figure (0.25 here), each way.
+    assert [e["id"] for e in small["mostAbove"]] == ["d24", "d23", "d22"]
+    assert [e["id"] for e in small["mostBelow"]] == ["d0", "d1", "d2"]
+    assert [m["id"] for m in out["members"]] == sorted(m["id"] for m in out["members"])
+    first = out["members"][0]
+    assert first["lean"] == 7 and first["bills"] == 5 and first["passed"] == 1 and first["law"] == 0
+    assert "rank" not in first

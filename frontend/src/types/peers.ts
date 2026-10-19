@@ -33,3 +33,55 @@ export interface PeerComparison {
   measures: PeerMeasure[];
   standsOut: string;
 }
+
+/** One member's figure on a whole-chamber strip (GET /api/congress/measures). */
+export interface ChamberPoint {
+  id: string;
+  name: string;
+  party: string;
+  state: string;
+  district: number | null;
+  value: number;
+  shown: string;
+  expected: number | null;
+  gap: number | null;
+}
+
+export interface ChamberMeasure {
+  key: PeerMeasure["key"];
+  label: string;
+  direction: string;
+  unit: PeerMeasure["unit"];
+  median: number | null;
+  n: number;
+  source: { name: string; url: string };
+  points: ChamberPoint[];
+  /** The three members furthest above, and below, the figure expected for them. */
+  mostAbove: ChamberPoint[];
+  mostBelow: ChamberPoint[];
+}
+
+export interface ChamberMember {
+  id: string;
+  name: string;
+  party: string;
+  caucus: string;
+  state: string;
+  district: number | null;
+  /** House: the seat's Cook PVI on the sitting lines, positive leaning R. */
+  lean: number | null;
+  smallGifts: number | null;
+  pacMoney: number | null;
+  breaks: number | null;
+  partyVotes: number | null;
+  billsPastCommittee: number | null;
+  bills: number | null;
+  passed: number | null;
+  law: number | null;
+}
+
+export interface ChamberMeasures {
+  chamber: "senate" | "house";
+  measures: ChamberMeasure[];
+  members: ChamberMember[];
+}

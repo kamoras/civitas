@@ -31,7 +31,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models import Representative, Senator
-from app.pipeline.analyze.score_calculator import ALGORITHM_VERSION
+from app.pipeline.analyze.score_calculator import ALGORITHM_VERSION, _seat_pvi
 from app.score_keeping import load_breakdown
 from app.score_display import thin_dimensions
 from app.services.representative_service import get_representative_score_breakdown
@@ -174,6 +174,15 @@ def _confidence(member) -> dict:
         return {}
 
 
+def seat_lean(state: str, district: int | None) -> int | None:
+    """A House seat's Cook PVI on the sitting lines (positive leans
+    Republican), or None where the table has none."""
+    try:
+        return _seat_pvi(state, district)
+    except Exception:
+        return None
+
+
 def percentile(value: float, values: list[float]) -> float:
     """Mid-rank percentile of `value` in `values` (which include it): the
     share below, plus half the ties, 0-100."""
@@ -296,6 +305,60 @@ def peer_comparison(db: Session, chamber: str, member_id: str, group: str = "cau
     peers = rows if group == "chamber" else [r for r in rows if r["caucus"] == me["caucus"]]
     measures = [_row(m, me, peers, chamber, group) for m in MEASURES]
     return {"group": group, "rule": RULE, "measures": measures, "standsOut": stands_out(measures)}
+
+
+def chamber_measures(db: Session, chamber: str) -> dict:
+    """The whole chamber, measure by measure, for the measures page (no
+    rank: a sort is a fact, a rank a verdict). Per measure: every member's
+    figure, the median, and the three members furthest above and below the
+    figure expected for them (their seat's where the scorer has one, else
+    the chamber median), as names with figures. Per member: the plain
+    facts for the table, and, in the House, the seat's Cook PVI (positive
+    leans Republican) for the seat-lean filter."""
+    rows = chamber_rows(db, chamber)
+    out = []
+    for m in MEASURES:
+        points = [(r, m.value(r["facts"])) for r in rows]
+        points = [(r, v) for r, v in points if v is not None]
+        values = sorted(v for _, v in points)
+        median = statistics.median(values) if values else None
+
+        def entry(r: dict, v: float) -> dict:
+            seat = m.seat_expected(r["facts"])
+            expected = seat if seat is not None else median
+            return {"id": r["id"], "name": r["name"], "party": r["party"], "state": r["state"],
+                    "district": r["district"], "value": v, "shown": _shown(m, v, r["facts"]),
+                    "expected": expected, "gap": None if expected is None else v - expected}
+
+        entries = [entry(r, v) for r, v in points]
+        ranked = sorted((e for e in entries if e["gap"] is not None), key=lambda e: e["gap"])
+        out.append({
+            "key": m.key, "label": m.label, "direction": m.direction, "unit": m.unit,
+            "median": median, "n": len(entries), "source": m.source,
+            "points": sorted(entries, key=lambda e: e["value"]),
+            "mostAbove": [e for e in reversed(ranked[-3:]) if e["gap"] > 0],
+            "mostBelow": [e for e in ranked[:3] if e["gap"] < 0],
+        })
+    members = []
+    for r in rows:
+        f = r["facts"]
+        stages = _bills(f).get("billsByStage")
+        five = isinstance(stages, list) and len(stages) == 5
+        members.append({
+            "id": r["id"], "name": r["name"], "party": r["party"], "caucus": r["caucus"],
+            "state": r["state"], "district": r["district"],
+            "lean": seat_lean(r["state"], r["district"]) if chamber == "house" else None,
+            "smallGifts": MEASURES[0].value(f),
+            "pacMoney": MEASURES[1].value(f),
+            "breaks": _alignment(f).get("breaks"),
+            "partyVotes": _alignment(f).get("partyVotes"),
+            "billsPastCommittee": _past_committee(f),
+            "bills": _bills(f).get("bills"),
+            "passed": sum(stages[3:]) if five else None,
+            "law": stages[4] if five else None,
+        })
+    members.sort(key=lambda x: x["name"])
+    return {"chamber": chamber, "measures": out, "members": members}
 
 
 def stands_out(measures: list[dict]) -> str:

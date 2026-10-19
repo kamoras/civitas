@@ -35,6 +35,7 @@ function member(id: string, name: string, state: string, party: "D" | "R"): Sena
 const NORTH = [member("n-1", "Member One", "NA", "D"), member("n-2", "Member Two", "NA", "R")];
 
 vi.mock("@/lib/api", () => ({
+  fetchChamberMeasures: vi.fn(() => new Promise(() => {})),
   fetchStates: vi.fn(async () => [
     { code: "NA", name: "North", senatorCount: 2 },
     { code: "SO", name: "South", senatorCount: 1 },

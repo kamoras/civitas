@@ -100,7 +100,7 @@ external API calls to cloud AI services.
                            ▼
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │  Next.js 16 frontend  (port 3000)                                            │
-│  /politicians  /congress  /leaderboard  /action  /explore  /compare          │
+│  /politicians  /congress  /congress/members  /action  /explore  /compare     │
 │  /elections  /elections/states/<ST>  /issue  /about  /changelog  /admin       │
 │  /accessibility  /feedback  /compare/presidents                              │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -1886,15 +1886,9 @@ The homepage's "Built from the public record" panel lists each source with what 
 
 `/compare` sets two members of Congress side by side: the Representation Score and its three parts, and the money. Two members of the same chamber also get how often they voted alike this Congress, from `GET /api/compare/agreement?chamber=&left=&right=` (`api/compare.py`): of the chamber's roll calls in the sitting Congress on which both cast a Yea or a Nay, how many they voted the same way on, as a sentence ("Voted the same way on 603 of the 723 roll calls this Congress where both cast a Yea or a Nay (83%).") and the backend's whole percent, then the five latest votes they split on, each with both votes and a link to its roll call. Housekeeping questions (quorum calls, motions to table, the previous question; `normalize_votes.is_housekeeping`) are left out, as Constituent Alignment leaves them out: they split on party lines by habit. A senator is matched to the roll calls the way a bill page links a Senate vote to a member (`bill_record.MemberLinks`): the roll call's surname as whole words of the senator's name (so a name ending "Jr." still matches), the state, and, where two senators of one surname share a state while both are on file, the LIS id the vote carries; a representative by bioguide id. Members of different chambers share no vote, so the section is left out for them.
 
-## Reading the leaderboard
+## The chamber, measure by measure
 
-The Senate and House leaderboards rank on the whole-number score the page shows, so members who show the same score share a rank. Most of a chamber sits in a narrow band (on 2026-10-13 the 433 House members held 47 distinct scores, half of them between 53 and 65), so a rank alone overstates how far apart two members are. Three things say so on the page, each from the backend:
-
-- **The field, by score.** A strip above the table with one mark per serving member, stacked on their score, and the middle half and median (`GET /api/leaderboard/spread?chamber=senate|house`, `score_display.score_spread`). The column of the row under the pointer or keyboard focus lights up with how many members show that score. The same answer carries each party's serving count for the party filter (the House list is paginated, so the page can't count it; it read DEM (0) and REP (0) before).
-- **Ties.** Beside a shared rank, "TIED ×4" with how many share it, read from the spread's counts; shown on the default ranking of the whole chamber only, since a party filter re-ranks within the party.
-- **Thin data.** `thinData` on each leaderboard row (and in the public API's rows): the weighted dimensions whose data-sufficiency grade (`score_calculator.calculate_confidence`) is "low", where the score is mostly the pull toward a reference rather than a measurement (`score_display.thin_dimensions`). Shown as a "THIN DATA" tag naming them.
-
-No rank interval is shown: a score has no standard error to draw one from, and a band of ±1 point would be a choice, not a measurement.
+`/congress/members?chamber=senate|house` replaced the leaderboard (redesign 2026-10; `/leaderboard` answers with a permanent redirect there, `?branch=president` to the presidents' directory and `?branch=scotus` to `/court`). It ranks no one and shows no composite score. Four strips, one per measure (small gifts, PAC money, breaks with party, bills past committee), draw every serving member as a mark shaped by party (D circle, R square, independent diamond, so party never rests on colour), with the chamber median, and name the three members furthest above and below the figure expected for them (their seat's where the scorer has one, else the chamber median). Below, one table of plain facts (member, seat, small gifts, PAC share, breaks over party-line votes, bills past committee, passed, law), alphabetical by default and sortable by any column (`aria-sort`), filtered by state, party and, in the House, seat lean from the sitting lines' Cook PVI (bands stated on the page as conventions). Data: `GET /api/congress/measures?chamber=` (`peer_comparison.chamber_measures`). `/compare` draws the same four strips with the two members as a filled and an outlined marker, beside the fact table, with no winner marks.
 
 ## On the record
 
@@ -2458,7 +2452,7 @@ civitas/
 │   │   ├── explore/          # Hybrid search over government documents
 │   │   ├── elections/        # State index, per-state ballot pages (federal contests
 │   │   │                     #   + statewide measures), race/candidate detail
-│   │   ├── leaderboard/      # Rankings across all branches (House paginated)
+│   │   ├── congress/members/ # The chamber measure by measure (replaced the leaderboard)
 │   │   ├── environmental/    # Environmental policy tracking
 │   │   ├── accessibility/    # Accessibility statement
 │   │   ├── feedback/         # On-site feedback form -> files a GitHub issue
