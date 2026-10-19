@@ -29,7 +29,9 @@ from collections.abc import Awaitable, Callable
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Path, Query, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import Response
+
+from app.api.response_helpers import JSONResponse
 from fastapi.routing import APIRoute
 from sqlalchemy import func
 from sqlalchemy.orm import Session

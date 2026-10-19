@@ -4,7 +4,7 @@ renderer; id-based, so any post or page can show the same record the same
 way."""
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
-from fastapi.responses import JSONResponse
+from app.api.response_helpers import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.api.response_helpers import cached_json

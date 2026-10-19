@@ -5,7 +5,7 @@ Supplementary pipeline; informational, not part of any score."""
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Path
-from fastapi.responses import JSONResponse
+from app.api.response_helpers import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, cached_json
