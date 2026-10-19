@@ -95,8 +95,11 @@ class Context:
     doc: dict  # the copy in use
     today: date
     last_tried: datetime | None
+    last_failed: bool = False  # the last try kept the copy in use
 
     def tried_within(self, days: int) -> bool:
+        if self.last_failed:
+            days = min(days, RETRY_FAILED_AFTER_DAYS)
         return self.last_tried is not None and utcnow() - self.last_tried < timedelta(days=days)
 
 
@@ -134,13 +137,23 @@ def content_sha256(doc: dict) -> str:
     return hashlib.sha256(json.dumps(body, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
-def _last_tried(name: str) -> datetime | None:
+# A try that kept the copy in use (refresh_one's "kept: ..." outcome) is
+# tried again within a week, whatever the file's cadence: a yearly file
+# (name_casing.json) otherwise kept its alert open, and its fix untried, for
+# a year, and a monthly one for a month. Weekly rather than daily, since the
+# heavy generators take hours.
+RETRY_FAILED_AFTER_DAYS = 7
+
+
+def _last_try(name: str) -> tuple[datetime | None, bool]:
+    """When `name` was last tried, and whether that try kept the copy in use."""
     db = SessionLocal()
     try:
         state = api_cache_get(db, _STATE_TIER, name, max_age_hours=24 * 365 * 5) or {}
     finally:
         db.close()
-    return datetime.fromisoformat(state["triedAt"]) if state.get("triedAt") else None
+    tried = datetime.fromisoformat(state["triedAt"]) if state.get("triedAt") else None
+    return tried, str(state.get("outcome") or "").startswith("kept")
 
 
 def _record_try(name: str, outcome: str) -> None:
@@ -263,7 +276,7 @@ def run_refreshes(files: list[DataFile] | None = None, *, pipeline_busy: bool = 
     outcomes: dict[str, str] = {}
     for spec in files if files is not None else DATA_FILES:
         try:
-            ctx = Context(spec.name, read(spec.name), utcnow().date(), _last_tried(spec.name))
+            ctx = Context(spec.name, read(spec.name), utcnow().date(), *_last_try(spec.name))
             if spec.command and spec.due(ctx):
                 if spec.heavy and pipeline_busy:
                     outcomes[spec.name] = "waiting for the pipeline"
