@@ -57,7 +57,7 @@ import type {
 } from "@/types/electionMap";
 
 const SHARE_SOURCE =
-  "Civitas, from official returns (MEDSL, FEC, VEST, Census); polls: Wikipedia contributors, CC BY-SA 4.0; past polls: Silver Bulletin";
+  "Civitas, from official returns (MEDSL, FEC, House Clerk, VEST, Census); polls: Wikipedia contributors, CC BY-SA 4.0; past polls: Silver Bulletin";
 
 const TILE = 10;
 const GAP = 1;

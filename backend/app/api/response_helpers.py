@@ -6,10 +6,23 @@ deliberate per-router choice, just accretion as each entity type's routes
 were added over time.
 """
 
-from fastapi.responses import JSONResponse
+from fastapi import responses
 from sqlalchemy.orm import Session
 
+from app.bill_ids import canonical_ids
 from app.services.score_trends import change_on_current_method
+
+
+class JSONResponse(responses.JSONResponse):
+    """Every API route's JSON response (and the app's default response
+    class): bill ids in the one spelling, at any depth (app/bill_ids.py).
+    Stored records name a bill however their source printed it (a Senate roll
+    call's "H.R. 997"), so the spelling is settled here, where every response
+    passes, rather than in each route. tests/test_bill_ids.py fails on an API
+    module that builds a JSON response another way."""
+
+    def render(self, content) -> bytes:
+        return super().render(canonical_ids(content))
 
 # Cache-Control max-age tiers shared across the read-only API routers —
 # previously each router repeated its own bare-number max_age= literal
