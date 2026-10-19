@@ -278,11 +278,17 @@ export function HouseResultRow({ result }: { result: LiveRaceResult }) {
         </span>
         <span className="mt-1 flex h-1.5 bg-surface-raised" aria-hidden="true">
           <span
-            style={{ width: `${(100 * (dem?.votes ?? 0)) / total}%`, backgroundColor: "#82acff" }}
+            style={{
+              width: `${(100 * (dem?.votes ?? 0)) / total}%`,
+              backgroundColor: "var(--dem-blue)",
+            }}
           />
           <span
             className="ml-auto"
-            style={{ width: `${(100 * (rep?.votes ?? 0)) / total}%`, backgroundColor: "#ff8989" }}
+            style={{
+              width: `${(100 * (rep?.votes ?? 0)) / total}%`,
+              backgroundColor: "var(--rep-red)",
+            }}
           />
         </span>
         {/* On a phone the reporting column is folded in here: a lead with

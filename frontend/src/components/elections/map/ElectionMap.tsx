@@ -165,7 +165,7 @@ function SenateTileMap({
   return (
     <svg
       viewBox={`0 0 ${W} ${H}`}
-      className="block h-auto w-full"
+      className="night block h-auto w-full"
       role={mini ? undefined : "group"}
       aria-hidden={mini ? true : undefined}
       aria-label={mini ? undefined : "Senate seats by state"}
@@ -325,7 +325,7 @@ function HouseTileMap({
   return (
     <svg
       viewBox={`-2 -2 ${layout.width + 4} ${layout.height + 4}`}
-      className="block h-auto w-full"
+      className="night block h-auto w-full"
       role={mini ? undefined : "group"}
       aria-hidden={mini ? true : undefined}
       aria-label={mini ? undefined : "House seats, grouped by state"}

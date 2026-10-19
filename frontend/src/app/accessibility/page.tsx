@@ -94,16 +94,19 @@ export default function AccessibilityPage() {
                   to what opened them. Map tiles are one keyboard stop per state, opened with Enter.
                 </Item>
                 <Item label="Focus">
-                  The element with keyboard focus always shows a 2px cyan outline, and the page
+                  The element with keyboard focus always shows a 2px green outline, and the page
                   scrolls so it is never hidden under the fixed header.
                 </Item>
                 <Item label="Contrast">
-                  Text colours come from a fixed palette with no dimmer shades to reach for. The
-                  faintest text clears 4.5:1 against the lightest background any text sits on, and
-                  stays at or above APCA Lc 58 on every background, a stricter measure of how light
-                  text on a dark page actually reads. Links inside a sentence are underlined, not
-                  only coloured. Letters drawn on map tiles sit on a dark outline, so they read on
-                  any tile colour.
+                  The site is dark text on a warm paper by default, and a warm dark theme follows
+                  your device&apos;s dark setting, or the &ldquo;Dark theme&rdquo; button in the
+                  footer (kept for this tab only). Text colours come from a fixed palette in each
+                  theme with no dimmer shades to reach for. The faintest text clears 4.5:1 against
+                  every background any text sits on, in both themes, and stays at or above APCA Lc
+                  58. Links inside a sentence are underlined, not only coloured. Maps and the
+                  Court&apos;s agreement grid are drawn on a dark plate in both themes, the ground
+                  their tile colours were measured on; letters on map tiles sit on a dark outline,
+                  so they read on any tile colour.
                 </Item>
                 <Item label="Screen readers">
                   Pages use landmarks (header, navigation, main) and headings in order. Tabs,
@@ -173,8 +176,8 @@ export default function AccessibilityPage() {
                 <Item label="Palette tests">
                   Tests fail if code uses a stock Tailwind colour or a semi-transparent colour
                   outside the palette. They hold each text colour to its APCA floor on every
-                  background, and compute the WCAG ratio of every text and background pair written
-                  in the code, failing below 4.5:1 (3:1 for large text).
+                  background in both themes, and compute the WCAG ratio of every text and background
+                  pair written in the code, failing below 4.5:1 (3:1 for large text).
                 </Item>
               </List>
               <More label="What the automated checks don't cover">

@@ -261,7 +261,7 @@ function SenateSwing({ seats }: { seats: AccountabilitySeat[] }) {
   return (
     <svg
       viewBox={`0 0 ${TILE_COLS * (TILE + GAP)} ${TILE_ROWS * (TILE + GAP)}`}
-      className="block h-auto w-full"
+      className="night block h-auto w-full"
       aria-hidden="true"
     >
       {Object.entries(STATE_TILES).map(([state, [col, row]]) => {
@@ -310,7 +310,7 @@ function HouseSwing({ seats }: { seats: AccountabilitySeat[] }) {
   return (
     <svg
       viewBox={`-2 -2 ${layout.width + 4} ${layout.height + 4}`}
-      className="block h-auto w-full"
+      className="night block h-auto w-full"
       aria-hidden="true"
     >
       {layout.blocks.map((b) => (

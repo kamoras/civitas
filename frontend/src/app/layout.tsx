@@ -14,6 +14,7 @@ import {
 import { fontVariables } from "./fonts";
 import "./fonts/fallback.css";
 import "./globals.css";
+import { THEME_BOOT } from "@/components/layout/ThemeToggle";
 
 // Site-wide defaults only. No `alternates.canonical` and no `openGraph.url`
 // here — both are inherited by every route that doesn't set its own, which
@@ -49,7 +50,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    // data-theme is set by THEME_BOOT before hydration when this tab chose a
+    // theme, so React is told the attribute may differ from the server's.
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
+      </head>
       {/*
         `font-mono` is Share Tech Mono. It governs every element that does not
         name a font itself, which is most of the site's prose.

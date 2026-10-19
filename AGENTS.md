@@ -2448,6 +2448,16 @@ the pending list).
 - Tailwind CSS for styling
 - API calls go through `src/lib/api.ts`
 - Dynamic configuration fetched from `GET /api/config` — never hardcode industry codes, score weights, or category labels
+- **Two themes, one set of classes** (2026-10). The palette is CSS custom
+  properties in `src/app/globals.css`, one `THEME` block per theme: "register
+  paper" (light, the default) and "night register" (warm dark, by
+  `prefers-color-scheme` or the footer's per-tab `ThemeToggle`, sessionStorage
+  only per §8). Tailwind's colours point at them, and `white` is the overlay
+  (ink on paper, white on carbon), so `border-white/15` is a hairline in both.
+  Never write a hex in a component: use a token or a `var(--…)`.
+  `wcagContrast.test.ts` and `inkContrast.test.ts` compute both themes from
+  globals.css. Maps and the Court's agreement grid draw on a `.night` plate in
+  both themes, the ground their tile palettes were measured on.
 - **Site prose uses no em dashes** (2026-10). Use a comma, colon, parentheses or a
   full stop; for a separator inside a label, the middle dot " · ". A string that is
   only "—" is the table placeholder for no data and stays.

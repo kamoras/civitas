@@ -22,13 +22,13 @@ const DONOR_KIND: Record<string, string> = {
 // one bar, its two largest sources for nearly every member (#00ff41 and
 // #39ff14) sit side by side and read as one. These are set apart here.
 const SEGMENT_COLOR: Record<string, string> = {
-  SMALL_DONORS: "#00FF41",
-  LARGE_INDIVIDUAL: "#CDC7BC",
-  OTHER: "#8A8378",
-  UNCLASSIFIED: "#5A554D",
-  CANDIDATE_FUNDS: "#B08D57",
+  SMALL_DONORS: "var(--phos)",
+  LARGE_INDIVIDUAL: "var(--ink-lo)",
+  OTHER: "var(--chart-muted)",
+  UNCLASSIFIED: "var(--chart-faint)",
+  CANDIDATE_FUNDS: "var(--chart-gold)",
 };
-const FALLBACK_COLOR = "#8A8378";
+const FALLBACK_COLOR = "var(--chart-muted)";
 
 // Industries shown by name under the bar; the rest are in the drawer.
 const INDUSTRIES_NAMED = 6;

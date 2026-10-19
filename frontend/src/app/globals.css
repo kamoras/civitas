@@ -2,21 +2,53 @@
 @config "../../tailwind.config.ts";
 
 :root {
-  /* Mirrors the palette in tailwind.config.ts for the handful of places that
-     cannot reach a utility class — pseudo-elements, ::selection, the
-     scrollbar. Keep the two in step; the config is the source of truth and
-     carries the measured contrast ratios. */
-  --surface-base: #0e0c0a;
-  --surface: #14110e;
-  --ink-hi: #f2eee7;
-  --ink: #e3dcd1;
-  --ink-lo: #cdc7bc;
-  --ink-min: #bbb5ac;
-  --phos: #00ff41;
-  --signal-cyan: #4de3e8;
-  --signal-red: #ff8989;
-  --signal-magenta: #ff6bd6;
-  --hairline: rgba(255, 255, 255, 0.09);
+  /* The palette. Tailwind's colours (tailwind.config.ts) point at these, so a
+     theme is these values and nothing else: same type, same layout.
+
+     Light, "register paper", is the default: dark text on a warm paper reads
+     better than light on dark for most readers, and the gap grows as text
+     gets smaller (Piepenbrock, Mayr & Buchner 2013). Dark, "night register",
+     follows prefers-color-scheme, or the footer's per-tab choice
+     (data-theme on <html>, sessionStorage only: AGENTS.md section 8).
+
+     Every text token clears WCAG 2.2 AA on every ground in its theme;
+     src/lib/wcagContrast.test.ts computes that from the values below, for
+     both themes, and fails the build otherwise. Party is never told by
+     colour alone (the letter is always printed): dem and rep are 1.2:1
+     apart in light. */
+  color-scheme: light;
+  /* THEME light */
+  --surface-base: #f5efe2; /* parchment: the page */
+  --surface: #fbf8f1; /* paper: a box on the page */
+  --surface-raised: #ece4d3; /* sunk: a wash, a selected row */
+  --ink-hi: #1e1a15; /* 15.1:1 on parchment: headings, figures */
+  --ink: #362f27; /* body prose */
+  --ink-lo: #4a4238; /* 8.6:1: secondary text */
+  --ink-min: #5a5143; /* 6.9:1: captions, the floor for any text */
+  --phos: #1b5e34; /* ledger green: links, live data, focus */
+  --phos-mid: #18552f;
+  --signal-cyan: #1b5e34; /* links take the ledger green */
+  --signal-amber: #7a4f00; /* unconfirmed, thin data, countdowns */
+  --signal-orange: #9a3412; /* stamp: deadlines, well outside peers */
+  --signal-red: #a12a24;
+  --signal-magenta: #8e2f73;
+  --dem-blue: #2552a3;
+  --rep-red: #a12a24;
+  --ind-purple: #6b4699;
+  /* What `white/NN` washes and hairlines are drawn in: ink on paper, white
+     on carbon, so a translucent rule reads as a rule in both themes. */
+  --overlay: #1e1a15;
+  /* Chart and map fills that carry no text: a muted series, a faint one, a
+     gold one, and the election maps' "close", "no votes yet" and "no data"
+     tiles. */
+  --chart-muted: #8a7f6c;
+  --chart-faint: #c9bfa9;
+  --chart-gold: #8c6a2e;
+  --map-close: #d8cfbd;
+  --map-awaiting: #e3dac8;
+  --map-unknown: #cfc5b1;
+  /* THEME end */
+  --hairline: color-mix(in srgb, var(--overlay) 9%, transparent);
 
   --background: var(--surface-base);
 
@@ -37,6 +69,78 @@
 
      Change the header's height, change this, and every page follows. */
   --header-clearance: 6rem;
+}
+
+/* Night register: a warm carbon page, the same type and layout. The two
+   blocks are the same values (wcagContrast.test.ts holds them equal): the
+   system preference, unless the reader chose light, and the reader's choice. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    /* THEME dark */
+    --surface-base: #14120f; /* carbon */
+    --surface: #1d1a16;
+    --surface-raised: #24201b;
+    --ink-hi: #f4efe6;
+    --ink: #e2dacd;
+    --ink-lo: #cfc6b6;
+    --ink-min: #c2b8a5;
+    --phos: #7fd49a;
+    --phos-mid: #5db97b;
+    --signal-cyan: #7fd49a;
+    --signal-amber: #e8c46a;
+    --signal-orange: #f0a47a;
+    --signal-red: #f29a90;
+    --signal-magenta: #e6a0d2;
+    --dem-blue: #8fb1f0;
+    --rep-red: #f29a90;
+    --ind-purple: #c3a6ec;
+    --overlay: #ffffff;
+    --chart-muted: #8a806f;
+    --chart-faint: #5a5248;
+    --chart-gold: #b08d57;
+    --map-close: #4c4842;
+    --map-awaiting: #2a2520;
+    --map-unknown: #3a352f;
+    /* THEME end */
+  }
+}
+/* `.night` is a map plate: the election maps' tile palettes and their
+   textures were measured against the carbon ground (results.test.ts,
+   electionMap.ts), so each map draws on a night plate in either theme, its
+   legend and labels with it. */
+:root[data-theme="dark"],
+.night {
+  color-scheme: dark;
+  --surface-base: #14120f; /* carbon */
+  --surface: #1d1a16;
+  --surface-raised: #24201b;
+  --ink-hi: #f4efe6;
+  --ink: #e2dacd;
+  --ink-lo: #cfc6b6;
+  --ink-min: #c2b8a5;
+  --phos: #7fd49a;
+  --phos-mid: #5db97b;
+  --signal-cyan: #7fd49a;
+  --signal-amber: #e8c46a;
+  --signal-orange: #f0a47a;
+  --signal-red: #f29a90;
+  --signal-magenta: #e6a0d2;
+  --dem-blue: #8fb1f0;
+  --rep-red: #f29a90;
+  --ind-purple: #c3a6ec;
+  --overlay: #ffffff;
+  --chart-muted: #8a806f;
+  --chart-faint: #5a5248;
+  --chart-gold: #b08d57;
+  --map-close: #4c4842;
+  --map-awaiting: #2a2520;
+  --map-unknown: #3a352f;
+}
+
+.night {
+  background: var(--surface);
+  color: var(--ink);
 }
 
 /* ===== BASE STYLES ===== */
