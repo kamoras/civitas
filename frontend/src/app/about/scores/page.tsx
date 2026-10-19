@@ -43,6 +43,11 @@ export default function ScoresChapter() {
             Flesch-Kincaid grade of 6.7 or below, score name included
             (measured 2026-10-13). The detail is in each linked section. */}
         <Point>
+          <A href="#peers">Where they stand</A>: each member page sets four figures next to the same
+          figures for colleagues in the same party. A word says if the member is above, near or
+          below them.
+        </Point>
+        <Point>
           <A href="#overall">Representation Score</A>: the overall grade. It is the average of the
           three parts below, about a third each.
         </Point>
@@ -79,6 +84,36 @@ export default function ScoresChapter() {
           Where a setting is a judgment call rather than a measurement, this page says so.
         </Point>
       </Summary>
+
+      <Section id="peers" title="How a member is compared with peers">
+        <P>
+          A member page leads with four figures: the share of the money given in gifts of $200 or
+          less, the share given by PACs, how often the member broke with the party on party-line
+          votes, and how many of the member&apos;s bills got past committee. Each is drawn as one
+          dot among every peer&apos;s dot, with a tick at the figure the seat predicts (for small
+          gifts, the share typical for a state that size; for breaks, the rate for the same party in
+          seats that lean the same way) or, where no seat figure exists, the peers&apos; middle
+          value.
+        </P>
+        <P>
+          Peers are the other members of the same chamber who caucus with the same party (an
+          independent counts with the party they caucus with). A switch on the page compares with
+          the whole chamber instead.
+        </P>
+        <P>
+          The word is set by a fixed rule, not a judgment: &ldquo;well above&rdquo; or &ldquo;well
+          below peers&rdquo; outside the middle 80% of peers and more than one standard deviation
+          from the expected figure; &ldquo;above&rdquo; or &ldquo;below peers&rdquo; outside the
+          middle half; otherwise &ldquo;near peers&rdquo;. These cut points are conventions. The
+          words say above or below, never better or worse; each figure says which way is higher. A
+          figure with fewer than 20 peers or party-line votes behind it gets no word.
+        </P>
+        <P>
+          The figures come from the same filings and votes the scores below use, stored with each
+          night&apos;s run. The three-part score is still computed, for the record and the public
+          API, but no page shows it as a grade.
+        </P>
+      </Section>
 
       <Section id="overall" title="How the three parts combine">
         <ScoreWeightBar />

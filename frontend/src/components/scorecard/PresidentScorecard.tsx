@@ -121,6 +121,7 @@ function MandateColumn({
       title="Public Mandate"
       shareId="public-mandate"
       weight={weight}
+      scoreInHeader
       score={score}
       method={dim && <ComponentBars components={dim.components} />}
     >
@@ -222,6 +223,7 @@ function EffectivenessColumn({
       title="Effectiveness"
       shareId="effectiveness"
       weight={weight}
+      scoreInHeader
       score={score}
       method={dim && <ComponentBars components={dim.components} />}
     >
@@ -308,6 +310,7 @@ function LegacyColumn({
       title="Historical Legacy"
       shareId="historical-legacy"
       weight={weight}
+      scoreInHeader
       score={score}
       method={dim && <ComponentBars components={dim.components} />}
     >

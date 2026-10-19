@@ -78,7 +78,6 @@ export default function FundingColumn({
   funding,
   dimension,
   score,
-  weight,
   onMore,
   donorVoteLinks = 0,
   onDonorVotes,
@@ -86,7 +85,6 @@ export default function FundingColumn({
   funding: Senator["funding"];
   dimension: ScoreBreakdownDimension | undefined;
   score: number;
-  weight?: number;
   onMore: () => void;
   /** Stored donor-vote overlaps; with `onDonorVotes`, a link to them here,
    *  beside the money, rather than only in the tiles at the foot of the
@@ -111,10 +109,9 @@ export default function FundingColumn({
 
   return (
     <ScoreColumn
-      title="Funding Independence"
+      title="Money"
       shareId="funding-independence"
       tooltip={TOOLTIP}
-      weight={weight}
       score={score}
       finding={dimension?.finding}
       method={dimension && <ComponentBars components={dimension.components} />}

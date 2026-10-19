@@ -15,8 +15,9 @@ export default function ScoreColumn({
   title,
   shareId,
   tooltip,
-  weight,
   score,
+  weight,
+  scoreInHeader = false,
   finding,
   method,
   more,
@@ -28,9 +29,13 @@ export default function ScoreColumn({
   tooltip?: string;
   /** The column's anchor id; also what its shared image and link are named by. */
   shareId: string;
-  /** Share of the overall score, 0–1; omitted when the config hasn't loaded. */
-  weight?: number;
   score: number | null | undefined;
+  /** Share of a composite, 0-1: presidents only, whose composite is still
+   *  shown; members' columns pass none (no composite on the page). */
+  weight?: number;
+  /** The 0-100 figure in the column's header (presidents, until their
+   *  page is redesigned); members' columns keep it behind the disclosure. */
+  scoreInHeader?: boolean;
   /** What the score found, in one plain sentence (the breakdown API's). */
   finding?: string | null;
   /** How the score is computed (its components and their statistics),
@@ -59,14 +64,16 @@ export default function ScoreColumn({
             {aside}
           </span>
         ) : (
-          <span
-            className={`shrink-0 font-display text-[44px] font-semibold leading-none ${
-              shown == null ? "text-ink-min" : getScoreColor(shown)
-            }`}
-            aria-label={shown == null ? "Not scored" : `${shown} out of 100`}
-          >
-            {shown ?? "—"}
-          </span>
+          scoreInHeader && (
+            <span
+              className={`shrink-0 font-display text-[44px] font-semibold leading-none ${
+                shown == null ? "text-ink-min" : getScoreColor(shown)
+              }`}
+              aria-label={shown == null ? "Not scored" : `${shown} out of 100`}
+            >
+              {shown ?? "—"}
+            </span>
+          )
         )}
       </header>
       <div className="flex flex-1 flex-col gap-5 px-5 py-4">
@@ -74,7 +81,7 @@ export default function ScoreColumn({
           <p className="font-display text-lg font-semibold leading-snug text-ink-hi">{finding}</p>
         )}
         {children}
-        {(method || weight != null) && (
+        {(method || shown != null || weight != null) && (
           <details
             {...{ [SHARE_EXCLUDE_ATTR]: "" }}
             className="group border-t border-white/[0.08] pt-4"
@@ -86,6 +93,11 @@ export default function ScoreColumn({
               How this is computed
             </summary>
             <div className="flex flex-col gap-4 pt-2">
+              {shown != null && !scoreInHeader && (
+                <p className="text-sm text-ink-lo">
+                  The scorer&apos;s arithmetic puts this at {shown} out of 100.
+                </p>
+              )}
               {weight != null && (
                 <p className="text-sm text-ink-lo">
                   {Math.round(weight * 100)}% of the overall score.
