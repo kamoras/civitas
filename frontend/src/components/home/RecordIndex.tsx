@@ -178,11 +178,16 @@ export default async function RecordIndex() {
 
 export function RecordIndexList({ entries }: { entries: RecordEntry[] }) {
   return (
-    <section aria-labelledby="record-index" className="mx-auto mt-8 max-w-7xl px-4 sm:px-6">
+    <section aria-labelledby="record-index" className="mx-auto mt-10 max-w-7xl px-4 sm:px-6">
       {/* The link sits beside the heading, not in it, so the heading's name
           is the heading (as in OnTheRecord). */}
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 border-b border-white/15 pb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
-        <h2 id="record-index">Entered into the record</h2>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 border-t-[3px] border-ink-hi pt-3 pb-2 text-sm text-ink-lo">
+        <h2
+          id="record-index"
+          className="font-display text-[22px] font-semibold text-ink-hi sm:text-[26px]"
+        >
+          Entered into the record
+        </h2>
         <Link
           href={ACTION_CENTER_HREF}
           className="normal-case tracking-[0.06em] underline decoration-white/30 underline-offset-4 hover:text-phos"
@@ -190,10 +195,10 @@ export function RecordIndexList({ entries }: { entries: RecordEntry[] }) {
           The Action Center today &rarr;
         </Link>
       </div>
-      <ul className="grid grid-cols-1 gap-x-8 sm:grid-cols-2 lg:grid-cols-3">
+      <ul className="grid grid-cols-1 border border-white/30 bg-surface">
         {entries.map((entry) => (
-          <li key={entry.ref} className="border-b border-white/[0.07]">
-            <Link href={entry.href} className="group block py-3">
+          <li key={entry.ref} className="border-t border-white/30 first:border-t-0">
+            <Link href={entry.href} className="group block px-4 py-3 sm:px-5">
               <span className={`font-mono text-xs tracking-[0.08em] ${entry.tone}`}>
                 {formatEntryDate(entry.date)} · <span className="font-id">{entry.ref}</span>
               </span>

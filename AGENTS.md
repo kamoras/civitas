@@ -2342,7 +2342,7 @@ the pending list).
 | The chamber measure by measure (replaced the leaderboard page; `/leaderboard` redirects), compare's pair strips; the leaderboard API stays for the deprecated composite | `frontend/src/app/congress/members/`, `frontend/src/components/compare/PairStrips.tsx`, `GET /api/congress/measures` (`peer_comparison.chamber_measures`); `backend/app/api/leaderboard.py`, `backend/app/score_display.py` (`score_spread`, `thin_dimensions`) |
 | Site navigation: sections, main menu, footer (site pages only), section tabs, hub cards and the homepage index | `frontend/src/lib/routes.ts` (`SECTIONS`), `frontend/src/components/layout/Navbar.tsx`, `Footer.tsx`, `SectionTabs.tsx`, `frontend/src/components/sections/SectionCards.tsx`, `frontend/src/components/home/SectionsBand.tsx`, `frontend/src/lib/sectionPreviews.ts`, `backend/app/api/sections.py` |
 
-| Homepage (masthead, on-the-record entries, record index, sources panel) | `frontend/src/components/home/Masthead.tsx`, `OnTheRecord.tsx` (from `backend/app/api/notable.py`), `RecordIndex.tsx`, `Holdings.tsx` |
+| Homepage (masthead, task boxes and registration closing, on-the-record entries, record index, sources panel) | `frontend/src/components/home/Masthead.tsx`, `HomeTasks.tsx`, `StateJump.tsx`, `OnTheRecord.tsx` (from `backend/app/api/notable.py`), `RecordIndex.tsx`, `Holdings.tsx` |
 
 ## Conventions
 
