@@ -22,7 +22,8 @@ Conventions every route keeps, so a caller learns them once:
 import json
 import re
 import typing
-from datetime import date
+from datetime import date, datetime, timezone
+from email.utils import format_datetime
 from typing import Literal
 from urllib.parse import parse_qsl, urlencode
 
@@ -69,6 +70,7 @@ from app.pipeline.fetch.district_pvi import lines_congress, lines_of
 from app.pipeline.lexical_index import HIGHLIGHT_END, HIGHLIGHT_START
 from app.score_display import displayed_rank
 from app.schemas import (
+    API_V1_SUNSET,
     PublicAgencyDetailSchema,
     PublicAgencyListSchema,
     PublicApiIndexSchema,
@@ -267,7 +269,17 @@ def _rl_headers(request: Request) -> dict:
     return headers
 
 
-def _pub_json(data, request: Request, max_age: int = CACHE_TTL_LIST_S) -> JSONResponse:
+# A response carrying the deprecated composite fields (schemas.API_V1_SUNSET)
+# says so in headers: Deprecation (RFC 9745, the date it was deprecated, as
+# a Unix time), Sunset (RFC 8594) and a link to the notice.
+_DEPRECATION_HEADERS = {
+    "Deprecation": f"@{int(datetime(2026, 10, 19, tzinfo=timezone.utc).timestamp())}",
+    "Sunset": format_datetime(datetime.fromisoformat(API_V1_SUNSET).replace(tzinfo=timezone.utc), usegmt=True),
+    "Link": f'<{SITE_URL}/developers#deprecations>; rel="deprecation"',
+}
+
+
+def _pub_json(data, request: Request, max_age: int = CACHE_TTL_LIST_S, deprecated: bool = False) -> JSONResponse:
     # private: the caller's browser may reuse it, a shared cache (nginx, a
     # CDN) may not — the X-RateLimit headers are this caller's own counts,
     # and a cached copy would hand them to everyone else.
@@ -277,6 +289,7 @@ def _pub_json(data, request: Request, max_age: int = CACHE_TTL_LIST_S) -> JSONRe
             "Cache-Control": f"private, max-age={max_age}",
             **_CORS_HEADERS,
             **_rl_headers(request),
+            **(_DEPRECATION_HEADERS if deprecated else {}),
         },
     )
 
@@ -371,6 +384,7 @@ def _history(db: Session, entity_type: str, model, member_id: str, request: Requ
         },
         request,
         max_age=CACHE_TTL_CONFIG_S,
+        deprecated=True,
     )
 
 
@@ -458,6 +472,7 @@ def _breakdown(db: Session, model, entity_type: str, member_id: str, request: Re
         },
         request,
         max_age=CACHE_TTL_DETAIL_S,
+        deprecated=True,
     )
 
 
@@ -483,7 +498,8 @@ _PREFLIGHT_HEADERS = {**_CORS_HEADERS, "Access-Control-Max-Age": "3600"}
 # rate-limit headers the spec says report the caller's quota.
 _RESPONSE_CORS = [
     (b"access-control-allow-origin", b"*"),
-    (b"access-control-expose-headers", b"X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, Retry-After"),
+    (b"access-control-expose-headers",
+     b"X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, Retry-After, Deprecation, Sunset, Link"),
 ]
 
 
@@ -712,7 +728,7 @@ def list_senators(
     `representationScore.overall` is the weighted score (weights in the
     index's `scoreWeights`); `rank` is the senator's place among all 100,
     whatever the filters."""
-    return _pub_json(_page(_senate_rows(db), party, state, page, per_page), request)
+    return _pub_json(_page(_senate_rows(db), party, state, page, per_page), request, deprecated=True)
 
 
 @router.get("/senators/{senator_id}", response_model=PublicSenatorProfileSchema, responses=_NOT_FOUND,
@@ -734,7 +750,7 @@ def get_senator(
             "siteUrl": _member_url(senator.id),
             **_method(_latest_snapshot(db, "senator", senator.id)),
         },
-        request, max_age=CACHE_TTL_DETAIL_S,
+        request, max_age=CACHE_TTL_DETAIL_S, deprecated=True,
     )
 
 
@@ -857,7 +873,7 @@ def list_representatives(
     Filter by `state` for a delegation; `district` is 0 for an at-large
     seat."""
     rows = _ranked(get_rep_leaderboard(db, page=1, per_page=_WHOLE_CHAMBER)["entries"])
-    return _pub_json(_page(rows, party, state, page, per_page), request)
+    return _pub_json(_page(rows, party, state, page, per_page), request, deprecated=True)
 
 
 @router.get("/representatives/{rep_id}", response_model=PublicRepresentativeProfileSchema,
@@ -879,7 +895,7 @@ def get_representative(
             "siteUrl": _member_url(rep.id),
             **_method(_latest_snapshot(db, "representative", rep.id)),
         },
-        request, max_age=CACHE_TTL_DETAIL_S,
+        request, max_age=CACHE_TTL_DETAIL_S, deprecated=True,
     )
 
 
@@ -1094,7 +1110,7 @@ def list_presidents(_rl: PublicReadLimit, request: Request, db: Session = Depend
     effectiveWeights shows). How it is computed: the site's /about/scores.
     A sitting president is listed unranked: the term isn't complete."""
     rows = _presidents(db)
-    return _pub_json({"total": len(rows), "entries": rows}, request, max_age=CACHE_TTL_DETAIL_S)
+    return _pub_json({"total": len(rows), "entries": rows}, request, max_age=CACHE_TTL_DETAIL_S, deprecated=True)
 
 
 @router.get("/presidents/{president_id}", response_model=PublicPresidentSchema,
@@ -1111,7 +1127,7 @@ def get_president_record(
     row = next((r for r in _presidents(db) if r["id"] == president_id), None)
     if row is None or get_president(db, president_id) is None:
         raise HTTPException(status_code=404, detail=_NO_PRESIDENT)
-    return _pub_json(row, request, max_age=CACHE_TTL_DETAIL_S)
+    return _pub_json(row, request, max_age=CACHE_TTL_DETAIL_S, deprecated=True)
 
 
 # ---------------------------------------------------------------------------

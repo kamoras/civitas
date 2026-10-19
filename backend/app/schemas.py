@@ -12,6 +12,16 @@ def to_camel(string: str) -> str:
     return components[0] + "".join(x.title() for x in components[1:])
 
 
+
+# Public API v1's composite fields (a member's `overall` and `rank`, a
+# president's `rank`): the site stopped showing the composite in 2026-10
+# (AGENTS.md section 3). Kept for one deprecation cycle, marked deprecated in
+# the OpenAPI schema (and so on /developers), with Deprecation and Sunset
+# headers on the responses that carry them (api/public.py); removed in v2.
+API_V1_SUNSET = "2027-01-04"
+_DEPRECATED = f"Deprecated: the composite is no longer shown on the site (2026-10); removed in API v2, sunset {API_V1_SUNSET}. "
+_DEPRECATED_FIELD = {"deprecated": True}
+
 class CamelModel(BaseModel):
     model_config = ConfigDict(
         alias_generator=to_camel,
@@ -71,7 +81,8 @@ class RepresentationScoreSchema(CamelModel):
     # Backend-computed overall (score_calculator.compute_overall_score) — the
     # frontend must never recompute this from the sub-scores itself (see
     # lib/representation.ts's removed weightedScore).
-    overall: float = Field(0.0, description="The weighted overall score, 0-100 (weights: the API index's scoreWeights)")
+    overall: float = Field(0.0, description=_DEPRECATED + "The weighted overall score, 0-100 (weights: the API "
+                                                         "index's scoreWeights)", json_schema_extra=_DEPRECATED_FIELD)
     confidence: dict[str, str] | None = Field(
         None, description='How much data backs each sub-score, by its name: "high", "medium" or "low". Also '
                           'constituentAlignmentVotePart, how that score\'s vote part was scored: "full"; '
@@ -729,7 +740,7 @@ class _PublicModel(CamelModel):
 
 
 _SITE_URL = Field(description="This record's page on Civitas")
-_RANK = Field(description="Place in the whole chamber by overall score, whatever the filters, as the site shows it: "
+_RANK = Field(json_schema_extra=_DEPRECATED_FIELD, description=_DEPRECATED + "Place in the whole chamber by overall score, whatever the filters, as the site shows it: "
                           "scores are compared as displayed, rounded to a whole number, and members who show the "
                           "same score share a rank (1, 2, 2, 4)")
 
@@ -996,7 +1007,8 @@ class PublicSnapshotFactsSchema(_PublicModel):
 
 class PublicScoreSnapshotSchema(_PublicModel):
     date: str = Field(description="When the scores were computed, YYYY-MM-DD")
-    overall: float = Field(description="0-100, like the sub-scores here; see representationScore for each")
+    overall: float = Field(description=_DEPRECATED + "0-100, like the sub-scores here; read `facts` instead",
+                           json_schema_extra=_DEPRECATED_FIELD)
     funding_independence: float
     promise_persistence: float | None = Field(None, description="Always null: see representationScore")
     constituent_alignment: float
@@ -1239,7 +1251,7 @@ class PublicScoreBreakdownSchema(_PublicModel):
     scored_on: str | None = _SCORED_ON
     recomputed_with: str = Field(description="The scoring version today's recompute used (sinceScored, and a "
                                              "dimension whose basis is recomputed)")
-    overall: float = Field(description="representationScore.overall: sum(weights[k] x dimensions[k].storedScore), "
+    overall: float = Field(json_schema_extra=_DEPRECATED_FIELD, description=_DEPRECATED + "representationScore.overall: sum(weights[k] x dimensions[k].storedScore), "
                                        "rounded to 2 decimals")
     weights: dict[str, float] = Field(description="Each weighted dimension's weight in overall (they sum to 1)")
     dimensions: PublicScoreDimensionsSchema
@@ -1906,7 +1918,7 @@ class PublicRollCallPageSchema(_PublicModel):
     entries: list[PublicBillRollCallSchema] = Field(description="Newest first")
 
 
-_PRESIDENT_RANK = Field(description="Place among the former presidents by Presidential Score as the site shows it "
+_PRESIDENT_RANK = Field(json_schema_extra=_DEPRECATED_FIELD, description=_DEPRECATED + "Place among the former presidents by Presidential Score as the site shows it "
                                     "(compared as displayed, a whole number; equal scores share a rank). Null for a "
                                     "sitting president, whose term is not complete and is not ranked")
 

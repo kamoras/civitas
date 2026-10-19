@@ -1933,6 +1933,8 @@ An issue's link preview (`/api/og?issue=`, the card a social post or chat app sh
 
 An open, read-only API at `/api/public/v1` — no key, no account, CORS open to
 every origin — documented at [`/developers`](https://civitas-research.org/developers).
+
+**Deprecated in v1 (2026-10), removed in v2 after 2027-01-04** (`schemas.API_V1_SUNSET`): the composite fields, a member's `representationScore.overall` and `rank`, `overall` on a breakdown and on each history snapshot, and a president's `rank`. The OpenAPI schema marks them `deprecated` and their descriptions say so; every response that carries them sends `Deprecation` (RFC 9745), `Sunset` (RFC 8594) and `Link: <…/developers#deprecations>; rel="deprecation"`, exposed to browsers by CORS. Their replacements are a breakdown's `peerComparison` and each snapshot's `facts`.
 That page renders the OpenAPI spec at `/api/public/v1/openapi.json`, which
 FastAPI generates from the routes and their response schemas
 (`backend/app/api/public.py`, `app/schemas.py` "Public API v1"), so the
