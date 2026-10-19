@@ -3,7 +3,9 @@
 import logging
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
+
+from app.api.response_helpers import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
