@@ -1187,6 +1187,7 @@ class PublicPeerMeasureSchema(_PublicModel):
     peer_group: PublicPeerGroupSchema
     distribution: list[float] = Field(description="Every peer's figure, the member's included, ascending")
     distribution_ids: list[str] = Field(description="The member id behind each distribution value, same order")
+    distribution_names: list[str] = Field(description="The member's name behind each distribution value, same order")
     record: int | None = Field(description="How much record backs the figure (party-line votes for breaks, bills "
                                            "sponsored for bills moved, 1 when there are contributions)")
     source: PublicPeerSourceSchema

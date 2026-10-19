@@ -53,7 +53,7 @@ def test_rows_against_the_caucus_with_template_sentences(monkeypatch):
     assert by["billsMoved"]["shown"] == "9 of 83"
     assert by["breaks"]["shown"] == "0 of 100"
     assert small["distribution"] == sorted(small["distribution"])
-    assert len(small["distributionIds"]) == small["peerGroup"]["n"]
+    assert len(small["distributionIds"]) == len(small["distributionNames"]) == small["peerGroup"]["n"]
     assert out["standsOut"].startswith("Small gifts: ") or out["standsOut"].startswith("PAC money: ")
     assert pc.peer_comparison(None, "senate", "me", "chamber")["measures"][0]["peerGroup"]["n"] == 62
 
