@@ -292,6 +292,17 @@ alias table. This prevents label fragmentation from diluting kNN vote weights.
 
 ### 3. Deterministic, auditable scoring
 
+**No composite is displayed** (2026-10). The weighted Representation Score
+and its rank are not shown on any page; each is still computed for public
+API v1's deprecated `overall` and `rank` (removed in v2). What the site
+shows is each measure against peers (`app/peer_comparison.py`): the member's
+figure, the seat-adjusted expected figure, the peers' distribution, and an
+evaluative word per measure ("well above / above / near / below / well below
+peers") from a fixed percentile rule whose cut points are conventions, served
+with every comparison as `rule`. The words are neutral about direction (above
+and below, never better and worse). Never add a page that ranks members by a
+blend of unlike measures, or a word not from that rule.
+
 The representation sub-scores — Funding Independence, Constituent Alignment
 and Legislative Effectiveness (weighted, `SCORE_WEIGHTS`), plus the
 informational Funding Diversity (Promise Persistence, which has had no input

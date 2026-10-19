@@ -175,7 +175,7 @@ export default function ChangelogPage() {
               </Point>
               <Point>
                 How each score is calculated today is on the{" "}
-                <A href="/about/scores">How Congress is scored</A> and{" "}
+                <A href="/about/scores">How Congress is compared</A> and{" "}
                 <A href="/about/presidents-and-justices">Presidents &amp; justices</A> pages.
               </Point>
             </Summary>

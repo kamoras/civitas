@@ -1480,6 +1480,8 @@ Each issue links back to its permanent Civitas permalink (`/issue/<id>`). The pe
 
 ## Scoring
 
+**What the site shows (2026-10).** No composite grade and no rank: each member page compares four measures (small gifts, PAC money, breaks with party, bills moved) with the member's own caucus in the chamber, each with the figure the seat predicts, and an evaluative word from a fixed percentile rule (see "Where a member stands among peers" below and `/about/scores#peers`). The three-part score below is still computed each night, for the record and for public API v1's deprecated `overall` and `rank` (removed in v2); its weights' closing record is in `docs/methodology/weights.md`.
+
 ### Non-Partisan by Construction
 
 The scoring formulas deliberately avoid any ground truth that encodes partisan assumptions. Every dimension measures *structural behavior* against a neutral baseline, not agreement or disagreement with any policy position.
