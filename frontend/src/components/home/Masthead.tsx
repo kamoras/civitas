@@ -65,7 +65,7 @@ export default function Masthead({
         <div className="max-w-2xl">
           <p
             aria-hidden="true"
-            className="font-display text-xl font-bold uppercase leading-none tracking-[0.22em] text-ink-hi sm:text-2xl"
+            className="font-display text-xl font-semibold uppercase leading-none tracking-[0.22em] text-ink-hi sm:text-2xl"
           >
             Civitas Research
           </p>
@@ -79,7 +79,7 @@ export default function Masthead({
           and what they pass.
         </h1>
 
-        <p className="mt-4 max-w-xl font-display text-base leading-relaxed text-ink-lo sm:text-[17px]">
+        <p className="mt-4 max-w-xl font-sans text-base leading-relaxed text-ink-lo sm:text-[17px]">
           Rebuilt every night from federal and state filings. Every number links to the document it
           came from. Where a figure is an estimate, like the ranges on the{" "}
           <Link

@@ -154,7 +154,7 @@ function ChamberCheck({ name, c }: { name: string; c: ChamberAccountability }) {
   return (
     <div className="space-y-4 border border-white/[0.09] bg-surface p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="font-display text-lg font-bold uppercase text-ink-hi">{name}</h3>
+        <h3 className="font-display text-lg font-semibold uppercase text-ink-hi">{name}</h3>
         <span className="font-mono text-xs text-ink-min">
           {c.certified} OF {c.ranged} OFFICIAL · {c.counts.counting} COUNTING · {c.counts.no_count}{" "}
           NO COUNT

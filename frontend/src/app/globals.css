@@ -165,6 +165,9 @@ html:has([data-sticky-subnav]) {
 }
 
 body {
+  /* Tabular figures everywhere, so a column of numbers lines up (Fira Sans's
+     tnum). */
+  font-variant-numeric: tabular-nums;
   color: var(--foreground);
   background: var(--background);
   overflow-x: hidden;

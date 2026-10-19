@@ -194,7 +194,7 @@ function PresidentSelect({
 
 function PresidentHeading({ side: { president: p } }: { side: Side }) {
   return (
-    <th scope="col" className="w-[38%] px-3 py-3 font-display text-base">
+    <th scope="col" className="w-[38%] px-3 py-3 font-sans text-base">
       <Link
         href={`/politicians/${p.id}`}
         className="underline-offset-4 hover:text-phos hover:underline"

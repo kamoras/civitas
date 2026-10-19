@@ -30,15 +30,12 @@ export default function PresidentSummary({ president }: { president: President }
             className={`flex h-16 w-14 shrink-0 flex-col items-center justify-center border-2 ${party.border} ${party.text}`}
             aria-hidden="true"
           >
-            <span className="font-display text-2xl font-extrabold leading-none">
+            <span className="font-display text-2xl font-semibold leading-none">
               {president.number}
             </span>
           </div>
           <div className="min-w-0">
-            <h2
-              id="sitting-president"
-              className="text-2xl font-extrabold leading-tight text-ink-hi"
-            >
+            <h2 id="sitting-president" className="text-2xl font-semibold leading-tight text-ink-hi">
               {president.name}
             </h2>
             <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-lo">
@@ -59,7 +56,7 @@ export default function PresidentSummary({ president }: { president: President }
                   {label}
                 </dt>
                 <dd
-                  className={`font-display text-2xl font-extrabold leading-none ${
+                  className={`font-display text-2xl font-semibold leading-none ${
                     value == null ? "text-ink-min" : getScoreColor(displayScore(value))
                   }`}
                 >
@@ -79,11 +76,11 @@ export default function PresidentSummary({ president }: { president: President }
           Presidential Score
         </p>
         {s.dimensionsAvailable === 0 ? (
-          <p className="font-display text-2xl font-extrabold text-ink-min">Not yet calculated</p>
+          <p className="font-display text-2xl font-semibold text-ink-min">Not yet calculated</p>
         ) : (
           <div className="flex items-baseline gap-3">
             <span
-              className={`font-display text-6xl font-extrabold leading-none ${getScoreColor(overall)}`}
+              className={`font-display text-6xl font-semibold leading-none ${getScoreColor(overall)}`}
             >
               {overall}
             </span>

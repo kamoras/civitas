@@ -139,7 +139,7 @@ export default function RaceMoneyBars({
           return (
             <li key={c.id} className="py-3">
               <div className="flex items-baseline justify-between gap-3">
-                <p className="min-w-0 font-display text-sm text-ink-hi">
+                <p className="min-w-0 font-sans text-sm text-ink-hi">
                   <span className={`font-mono text-xs ${pm.color}`}>{pm.label}</span>
                   <span className="mx-1.5 text-ink-min">·</span>
                   <span className="break-words">{candidateName(c)}</span>

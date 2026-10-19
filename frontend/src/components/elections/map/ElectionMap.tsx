@@ -716,7 +716,7 @@ function SeatDetail({
             {seat.district != null ? "House" : "Senate"}
             {seat.special ? " · special election" : ""}
           </p>
-          <h3 className="font-display text-xl font-bold text-ink-hi">{seatName(seat)}</h3>
+          <h3 className="font-display text-xl font-semibold text-ink-hi">{seatName(seat)}</h3>
         </div>
         <button
           type="button"

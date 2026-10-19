@@ -139,7 +139,7 @@ export default function ScoreSpreadStrip({
               ))}
             </div>
           </div>
-          <p className="mt-1 font-display text-sm leading-snug text-ink-lo">
+          <p className="mt-1 font-sans text-sm leading-snug text-ink-lo">
             Each mark is one {chamberNoun(spread.chamber, 1)}, stacked on the score the table shows.{" "}
             {spread.total} {noun} show {spread.counts.length} different scores, so members with the
             same score share a rank, and a gap of several places can be a single point.

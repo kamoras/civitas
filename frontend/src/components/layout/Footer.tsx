@@ -109,7 +109,7 @@ export default function Footer() {
           </div>
 
           <div>
-            <p className="font-display text-base leading-relaxed text-ink-lo">
+            <p className="font-sans text-base leading-relaxed text-ink-lo">
               All data sourced from public records, principally: FEC campaign finance filings
               (fec.gov); bills and roll-call votes from Congress.gov, Senate.gov and the House
               Clerk; ideal points from Voteview; Lobbying Disclosure Act filings (lda.gov); the

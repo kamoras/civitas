@@ -192,7 +192,7 @@ function CountyFinder({
   );
   return (
     <div className="mb-4 border border-white/[0.07] p-4">
-      <label htmlFor={id} className="block text-sm font-bold text-ink-hi">
+      <label htmlFor={id} className="block text-sm font-semibold text-ink-hi">
         Find your House member by city, town or county
       </label>
       <p className="mt-1 text-xs text-ink-lo">

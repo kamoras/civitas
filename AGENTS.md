@@ -2458,6 +2458,15 @@ the pending list).
   `wcagContrast.test.ts` and `inkContrast.test.ts` compute both themes from
   globals.css. Maps and the Court's agreement grid draw on a `.night` plate in
   both themes, the ground their tile palettes were measured on.
+- **Type** (2026-10, `src/app/fonts.ts`): Source Serif 4 600 for titles
+  (`font-display`), Fira Sans 400/600 for everything else (`font-sans`; the
+  long-standing `font-mono` class maps to Fira Sans too, so a label keeps its
+  class and loses the monospace), DM Mono for record identifiers only
+  (`font-id`, never prose), Archivo 800 for the wordmark (`font-wordmark`).
+  Tabular figures are on for the whole body. Only the loaded weights exist:
+  no `font-bold`/`font-extrabold` (they would be synthesised), except the
+  wordmark. Fonts come from `backend/scripts/fetch_site_fonts.py`, which
+  writes the files, `fonts/manifest.json` and `fonts/fallback.css`.
 - **Site prose uses no em dashes** (2026-10). Use a comma, colon, parentheses or a
   full stop; for a separator inside a label, the middle dot " · ". A string that is
   only "—" is the table placeholder for no data and stays.

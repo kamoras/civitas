@@ -32,8 +32,8 @@ export default function AccessibilityPage() {
     <>
       <Navbar />
       <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
-        {/* `font-sans`: this is reading, not data. The body element is
-            `font-mono`, and prose that names no face inherits it. */}
+        {/* `font-sans`: this is reading. The body element is `font-sans`
+            too; named here so the page reads the same whatever it sits in. */}
         <div className="max-w-3xl mx-auto font-sans">
           <PageMasthead
             className="mb-6"
@@ -142,9 +142,12 @@ export default function AccessibilityPage() {
               </List>
               <More label="Typefaces, and why">
                 <P>
-                  Prose is set in Archivo, a plain grotesque. Share Tech Mono is kept for data, IDs
-                  and labels, where telling 0 from O and 1 from l matters. The pixel face is used
-                  for the Civitas wordmark and nothing else.
+                  Prose, labels and figures are set in Fira Sans, a humanist sans with open letter
+                  shapes that stay readable at small sizes, with figures of equal width so columns
+                  of numbers line up. Page and section titles are in Source Serif 4. DM Mono is kept
+                  for record identifiers (issue, roll-call and bill numbers), where telling 0 from O
+                  and 1 from l matters. The Civitas wordmark is Archivo. All four are open-licence
+                  fonts served from this site.
                 </P>
               </More>
             </Section>

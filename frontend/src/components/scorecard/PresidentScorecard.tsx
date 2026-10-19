@@ -425,13 +425,13 @@ export default function PresidentScorecard({
                 className={`flex h-24 w-20 shrink-0 flex-col items-center justify-center border-2 sm:h-28 sm:w-24 ${party.border} ${party.text}`}
                 aria-hidden="true"
               >
-                <span className="font-display text-4xl font-extrabold leading-none">
+                <span className="font-display text-4xl font-semibold leading-none">
                   {president.number}
                 </span>
                 <span className="mt-1 font-mono text-[10px] tracking-[0.12em]">PRESIDENT</span>
               </div>
               <div className="flex min-w-0 flex-col gap-2">
-                <Title className="break-words text-3xl font-extrabold leading-tight text-ink-hi sm:text-4xl">
+                <Title className="break-words text-3xl font-semibold leading-tight text-ink-hi sm:text-4xl">
                   {president.name}
                 </Title>
                 <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-lo">
@@ -470,13 +470,13 @@ export default function PresidentScorecard({
                 Presidential Score
               </p>
               {s.dimensionsAvailable === 0 ? (
-                <p className="font-display text-2xl font-extrabold text-ink-min">
+                <p className="font-display text-2xl font-semibold text-ink-min">
                   Not yet calculated
                 </p>
               ) : (
                 <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
                   <span
-                    className={`font-display text-7xl font-extrabold leading-none ${getScoreColor(overall)}`}
+                    className={`font-display text-7xl font-semibold leading-none ${getScoreColor(overall)}`}
                   >
                     {overall}
                   </span>
@@ -555,7 +555,7 @@ export default function PresidentScorecard({
                   disabled={!trades?.total}
                   className="flex min-h-24 flex-col gap-1.5 border border-white/[0.18] bg-surface px-5 py-4 text-left disabled:cursor-default"
                 >
-                  <span className="text-base font-bold text-ink-hi">Stock trades</span>
+                  <span className="text-base font-semibold text-ink-hi">Stock trades</span>
                   <span className="text-sm text-ink-lo">
                     {trades === undefined
                       ? "Loading…"
@@ -572,7 +572,7 @@ export default function PresidentScorecard({
               )}
               {president.eoCount != null && (
                 <div className="flex min-h-24 flex-col gap-1.5 border border-white/[0.18] bg-surface px-5 py-4">
-                  <span className="text-base font-bold text-ink-hi">Executive orders</span>
+                  <span className="text-base font-semibold text-ink-hi">Executive orders</span>
                   <span className="text-sm text-ink-lo">
                     {president.eoCount.toLocaleString()} signed
                   </span>

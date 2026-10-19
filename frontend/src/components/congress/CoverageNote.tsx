@@ -13,7 +13,7 @@ export default async function CoverageNote({ of }: { of: "days" | "rollCalls" })
   const coverage = await fetchCoverage();
   if (!coverage) return null;
   return (
-    <p className="mt-3 font-display text-sm leading-relaxed text-ink-lo">
+    <p className="mt-3 font-sans text-sm leading-relaxed text-ink-lo">
       {of === "days" ? coverage.sentence : coverage.rollCallSentence}{" "}
       {of === "days" ? (
         <>

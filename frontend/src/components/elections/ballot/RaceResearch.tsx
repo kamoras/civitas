@@ -43,7 +43,7 @@ function RecordPanel({ race }: { race: RaceWithCandidates }) {
             className="flex items-baseline justify-between gap-3 border-b border-white/[0.09] py-2.5"
           >
             <span className="flex min-w-0 flex-col">
-              <span className="text-[15px] font-bold text-ink-hi">{candidateName(c)}</span>
+              <span className="text-[15px] font-semibold text-ink-hi">{candidateName(c)}</span>
               <span className={`font-mono text-[11px] tracking-[0.08em] ${getPartyMeta(c).color}`}>
                 {getPartyMeta(c).label}
               </span>
@@ -158,7 +158,7 @@ export default function RaceResearch({
               onClick={() => setTab(t.id)}
               className={`min-h-[44px] flex-1 border px-4 text-sm ${
                 selected
-                  ? "border-phos bg-phos font-bold text-surface-base"
+                  ? "border-phos bg-phos font-semibold text-surface-base"
                   : "border-white/25 text-ink-hi hover:border-white/50"
               }`}
             >

@@ -195,13 +195,13 @@ export function RecordIndexList({ entries }: { entries: RecordEntry[] }) {
           <li key={entry.ref} className="border-b border-white/[0.07]">
             <Link href={entry.href} className="group block py-3">
               <span className={`font-mono text-xs tracking-[0.08em] ${entry.tone}`}>
-                {formatEntryDate(entry.date)} · {entry.ref}
+                {formatEntryDate(entry.date)} · <span className="font-id">{entry.ref}</span>
               </span>
               <span className="mt-1 block font-display text-base font-semibold leading-snug text-ink-hi group-hover:underline">
                 {entry.title}
               </span>
               {entry.detail && (
-                <span className="mt-0.5 block font-display text-sm leading-snug text-ink-lo">
+                <span className="mt-0.5 block font-sans text-sm leading-snug text-ink-lo">
                   {entry.detail}
                 </span>
               )}

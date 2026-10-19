@@ -50,7 +50,7 @@ export default function ScoreColumn({
     >
       <header className="flex items-end justify-between gap-3 border-b border-white/25 bg-surface-raised px-5 py-4">
         <div className="min-w-0">
-          <h2 className="text-[19px] font-bold leading-tight text-ink-hi">
+          <h2 className="text-[19px] font-semibold leading-tight text-ink-hi">
             {tooltip ? <MetricTooltip text={tooltip}>{title}</MetricTooltip> : title}
           </h2>
         </div>
@@ -60,7 +60,7 @@ export default function ScoreColumn({
           </span>
         ) : (
           <span
-            className={`shrink-0 font-display text-[44px] font-extrabold leading-none ${
+            className={`shrink-0 font-display text-[44px] font-semibold leading-none ${
               shown == null ? "text-ink-min" : getScoreColor(shown)
             }`}
             aria-label={shown == null ? "Not scored" : `${shown} out of 100`}

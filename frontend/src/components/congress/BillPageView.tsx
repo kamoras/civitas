@@ -68,7 +68,7 @@ function SectionHead({
 }) {
   return (
     <div className="flex flex-wrap items-baseline justify-between gap-3">
-      <h2 id={id} className="font-display text-2xl font-extrabold text-ink-hi">
+      <h2 id={id} className="font-display text-2xl font-semibold text-ink-hi">
         {title}
         {count !== undefined && (
           // The comma is for a screen reader, which ran the two together
@@ -196,7 +196,7 @@ export default function BillPageView({
                     <ShareSectionButton label="Bill overview" withStrip={false} />
                   </span>
                 </div>
-                <h1 className="font-display text-2xl font-extrabold leading-tight text-ink-hi sm:text-4xl">
+                <h1 className="font-display text-2xl font-semibold leading-tight text-ink-hi sm:text-4xl">
                   {title}
                 </h1>
                 {shortTitle && under && (
@@ -433,7 +433,7 @@ export default function BillPageView({
                       {record.summary.paragraphs.map((p, i) => (
                         <p
                           key={i}
-                          className={`max-w-3xl leading-relaxed ${i === 0 ? "font-bold text-ink-hi" : "text-ink"}`}
+                          className={`max-w-3xl leading-relaxed ${i === 0 ? "font-semibold text-ink-hi" : "text-ink"}`}
                         >
                           {p}
                         </p>
@@ -568,7 +568,8 @@ export default function BillPageView({
                                 (bill_journey), the first time it appears. */}
                             {a.term && a.meaning && explained.get(a.term) === i && (
                               <span className="text-xs leading-relaxed text-ink-lo">
-                                <span className="font-bold text-ink">{a.term}:</span> {a.meaning}
+                                <span className="font-semibold text-ink">{a.term}:</span>{" "}
+                                {a.meaning}
                               </span>
                             )}
                           </span>

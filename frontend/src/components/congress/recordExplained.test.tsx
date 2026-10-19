@@ -147,7 +147,7 @@ describe("BillJourney", () => {
   it("lists every stop in order, dated, with where the bill is now", async () => {
     render(<BillJourney journey={journey} passage={passage} />);
     const items = screen.getAllByRole("listitem").slice(0, 4);
-    expect(items.map((li) => li.querySelector(".font-bold")?.textContent)).toEqual([
+    expect(items.map((li) => li.querySelector(".font-semibold")?.textContent)).toEqual([
       "Introduced in the Senate",
       "Committee",
       "Senate floor (where it is now)",

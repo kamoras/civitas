@@ -166,7 +166,10 @@ function ScoreBar({ score: raw }: { score: number }) {
       >
         <div className={`h-full ${color} transition-all`} style={{ width: `${score}%` }} />
       </div>
-      <span className={`text-sm font-bold tabular-nums ${getScoreColor(score)}`} aria-hidden="true">
+      <span
+        className={`text-sm font-semibold tabular-nums ${getScoreColor(score)}`}
+        aria-hidden="true"
+      >
         {score}
       </span>
     </div>
@@ -415,7 +418,7 @@ function PresidentLeaderboard({
                     {...rowNavProps(router, `/politicians/${entry.id}`)}
                   >
                     <td className="px-4 py-3">
-                      <span className={`font-bold text-lg ${rankColor(rank)}`}>#{rank}</span>
+                      <span className={`font-semibold text-lg ${rankColor(rank)}`}>#{rank}</span>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
@@ -473,7 +476,7 @@ function PresidentLeaderboard({
                 href={`/politicians/${entry.id}`}
                 className="flex flex-wrap items-center gap-3 px-4 py-3 hover:bg-white/[0.03] transition-colors"
               >
-                <span className={`text-lg font-bold w-10 shrink-0 ${rankColor(rank)}`}>
+                <span className={`text-lg font-semibold w-10 shrink-0 ${rankColor(rank)}`}>
                   #{rank}
                 </span>
                 <div className="min-w-[min(11rem,100%)] flex-1">
@@ -570,7 +573,7 @@ function JusticeLeaderboard({
       <div className="mb-4 flex flex-col gap-2 border border-white/25 border-t-[3px] border-t-ink-hi bg-surface px-5 py-4 font-sans leading-relaxed text-ink">
         {lead ? (
           <p className="text-lg text-ink-hi">
-            <span className="font-display text-3xl font-extrabold tabular-nums">{lead.figure}</span>{" "}
+            <span className="font-display text-3xl font-semibold tabular-nums">{lead.figure}</span>{" "}
             {lead.headline} <span className="text-base text-ink">{lead.detail}</span>
           </p>
         ) : null}
@@ -701,7 +704,7 @@ function JusticeLeaderboard({
         aria-labelledby="scotus-methods"
         className="mt-6 border border-white/25 bg-surface px-5 py-4 font-sans text-sm leading-relaxed text-ink"
       >
-        <h2 id="scotus-methods" className="text-base font-bold text-ink-hi">
+        <h2 id="scotus-methods" className="text-base font-semibold text-ink-hi">
           Methods: votes under the appointing president
         </h2>
         <p className="mt-2">
@@ -1248,7 +1251,7 @@ function LeaderboardContent({ initial }: { initial: LeaderboardInitial | null })
                               {...hoverProps(score)}
                             >
                               <td className="px-4 py-3">
-                                <span className={`font-bold text-lg ${rankColor(rank)}`}>
+                                <span className={`font-semibold text-lg ${rankColor(rank)}`}>
                                   #{rank}
                                 </span>
                                 <TieNote members={tiedWith(score)} />
@@ -1326,7 +1329,7 @@ function LeaderboardContent({ initial }: { initial: LeaderboardInitial | null })
                           {...hoverProps(score)}
                         >
                           <span
-                            className={`flex w-12 shrink-0 flex-col text-lg font-bold ${rankColor(rank)}`}
+                            className={`flex w-12 shrink-0 flex-col text-lg font-semibold ${rankColor(rank)}`}
                           >
                             #{rank}
                             <TieNote members={tiedWith(score)} />

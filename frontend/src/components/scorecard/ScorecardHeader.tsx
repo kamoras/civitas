@@ -71,7 +71,7 @@ export default function ScorecardHeader({
 
   const initials = (
     <div
-      className={`flex h-14 w-12 shrink-0 items-center justify-center border-2 text-lg font-bold sm:h-28 sm:w-24 sm:text-2xl ${PARTY_BORDER[member.party]} ${PARTY_COLORS[member.party]}`}
+      className={`flex h-14 w-12 shrink-0 items-center justify-center border-2 text-lg font-semibold sm:h-28 sm:w-24 sm:text-2xl ${PARTY_BORDER[member.party]} ${PARTY_COLORS[member.party]}`}
       aria-hidden="true"
     >
       {member.initials}
@@ -109,7 +109,7 @@ export default function ScorecardHeader({
         <div className="flex min-w-0 flex-1 basis-48 flex-col gap-2">
           <Title
             lang="en"
-            className="break-words text-2xl font-extrabold leading-tight text-ink-hi [hyphens:auto] sm:text-4xl"
+            className="break-words text-2xl font-semibold leading-tight text-ink-hi [hyphens:auto] sm:text-4xl"
           >
             {member.name}
           </Title>
@@ -141,7 +141,7 @@ export default function ScorecardHeader({
         </p>
         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2">
           <span
-            className={`font-display text-6xl font-extrabold leading-none sm:text-7xl ${getScoreColor(overall)}`}
+            className={`font-display text-6xl font-semibold leading-none sm:text-7xl ${getScoreColor(overall)}`}
           >
             {overall}
           </span>

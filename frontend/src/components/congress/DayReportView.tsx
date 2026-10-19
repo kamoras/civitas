@@ -51,7 +51,7 @@ function ChamberHead({ day }: { day: ChamberDay }) {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h2 className="font-display text-3xl font-extrabold text-ink-hi">
+        <h2 className="font-display text-3xl font-semibold text-ink-hi">
           {CHAMBER_NAME[day.chamber]}
         </h2>
         <span
@@ -161,7 +161,7 @@ function ChamberColumn({ day }: { day: ChamberDay }) {
             <ul className="flex flex-col">
               {day.committees.map((e, i) => (
                 <li key={i} className="flex flex-col gap-1 border-b border-white/[0.09] py-2.5">
-                  <span className="text-[15px] font-bold text-ink">{e.name}</span>
+                  <span className="text-[15px] font-semibold text-ink">{e.name}</span>
                   <span className="text-sm leading-relaxed text-ink-lo">{e.text}</span>
                 </li>
               ))}
@@ -186,7 +186,7 @@ function ChamberColumn({ day }: { day: ChamberDay }) {
                 >
                   <span className="font-mono text-xs tabular-nums text-ink-lo">{e.time ?? ""}</span>
                   <span className="text-sm leading-relaxed text-ink">
-                    {e.name && <span className="font-bold">{e.name} </span>}
+                    {e.name && <span className="font-semibold">{e.name} </span>}
                     {e.text}
                   </span>
                 </li>

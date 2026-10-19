@@ -37,14 +37,14 @@ export default function PageMasthead({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">{eyebrow}</p>
-          <h1 className="mt-3 font-display text-3xl font-extrabold uppercase leading-none tracking-[-0.02em] text-ink-hi sm:text-4xl">
+          <h1 className="mt-3 font-display text-3xl font-semibold uppercase leading-none tracking-[-0.02em] text-ink-hi sm:text-4xl">
             {title}
           </h1>
         </div>
         {aside && <div className="min-w-0 max-w-full shrink-0">{aside}</div>}
       </div>
       {children && (
-        <div className="mt-3 max-w-2xl font-display text-base leading-relaxed text-ink-lo">
+        <div className="mt-3 max-w-2xl font-sans text-base leading-relaxed text-ink-lo">
           {children}
         </div>
       )}

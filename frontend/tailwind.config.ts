@@ -51,27 +51,21 @@ const config: Config = {
         "ind-purple": "var(--ind-purple)",
       },
       fontFamily: {
-        /* Three faces, one job each. `display` and `sans` are both Archivo:
-           a grotesque reads broadsheet where a bookish serif reads endowment,
-           and prose does not need a fourth family to be legible.
-
-           `mono` (Share Tech Mono) is data, IDs, timestamps, labels and
-           status — the terminal voice, now meaning something because it is
-           no longer also the body face.
-
-           `pixel` (Press Start 2P) is the wordmark and nothing else. It is a
-           bitmap face on a 125/1000em grid, so it only rasterises cleanly at
-           multiples of 8px; at label sizes it was off-grid at ~86% of its
-           call sites, which is why globals.css substitutes it out below 12px.
-
-           There is no fourth family. `terminal` (VT323) was removed along with
-           its font import: it had no call sites left, and a 0.400em x-height
-           that rendered ~5.6px lowercase at text-sm is not a face to leave
-           within reach. */
-        display: ["var(--font-archivo)", "ui-sans-serif", "system-ui", "sans-serif"],
-        sans: ["var(--font-archivo)", "ui-sans-serif", "system-ui", "sans-serif"],
-        pixel: ["var(--font-press-start)", "monospace"],
-        mono: ["var(--font-share-tech)", "monospace"],
+        /* One job each (src/app/fonts.ts has the faces and why):
+             display   Source Serif 4: page and section titles
+             sans      Fira Sans: body, UI, figures (tabular, set on body)
+             mono      Fira Sans as well. `font-mono` was Share Tech Mono
+                       and still marks labels, data and status across the
+                       site; those keep their class and lose the monospace,
+                       which was the main source of the "technical" feel.
+             id        DM Mono: record identifiers only (issue ids, roll-call
+                       and bill numbers, filing ids). Never prose.
+             wordmark  Archivo 800: the CIVITAS mark and nothing else. */
+        display: ["var(--font-serif)", "Georgia", "serif"],
+        sans: ["var(--font-fira)", "ui-sans-serif", "system-ui", "sans-serif"],
+        mono: ["var(--font-fira)", "ui-sans-serif", "system-ui", "sans-serif"],
+        id: ["var(--font-dm-mono)", "ui-monospace", "monospace"],
+        wordmark: ["var(--font-archivo)", "ui-sans-serif", "system-ui", "sans-serif"],
       },
       borderWidth: {
         // Three rule weights carry the entire hierarchy, the way a printed
