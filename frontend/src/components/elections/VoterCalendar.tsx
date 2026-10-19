@@ -70,7 +70,7 @@ function Row({ d, register }: { d: VoterDeadline; register?: Calendar["register"
  *  countdown and the register link; what follows the deadline (same-day
  *  registration, in the state's words); or that the state has no
  *  registration. Falls back to the older API's summary sentence. */
-function Registration({ calendar }: { calendar: Calendar }) {
+function Registration({ calendar, showRegister }: { calendar: Calendar; showRegister: boolean }) {
   const line = calendar.registration;
   if (!line) {
     return calendar.registrationSummary ? (
@@ -81,7 +81,7 @@ function Registration({ calendar }: { calendar: Calendar }) {
   }
   const left =
     line.status === "open" ? countdownText({ status: "open", countdown: line.countdown }) : null;
-  const link = calendar.register;
+  const link = showRegister ? calendar.register : null;
   const canRegister = line.status === "open" || line.status === "same_day";
   return (
     <div className="mt-1">
@@ -119,8 +119,13 @@ export default function VoterCalendar({
   stateName,
   lookupHref,
   lookupIsStateSpecific,
+  showRegister = true,
 }: {
   calendar: Calendar;
+  /** Off on the state ballot page, whose "Your vote, step by step" carries
+   *  the one register button (a second "Register" beside the deadlines is
+   *  how a reader looking for the ballot clicked register instead). */
+  showRegister?: boolean;
   stateName: string;
   /** Where to send a reader when no deadline could be read: the state's
    *  own voter lookup, or the national directory of election offices. */
@@ -175,7 +180,7 @@ export default function VoterCalendar({
           {calendar.republished}
         </p>
       )}
-      <Registration calendar={calendar} />
+      <Registration calendar={calendar} showRegister={showRegister} />
       {calendar.electionDay && calendar.items.length > 0 && (
         <DeadlineRibbon
           items={calendar.items}
@@ -208,7 +213,7 @@ export default function VoterCalendar({
             <Row
               key={`${d.kind}-${d.method}-${d.basis}-${d.date}`}
               d={d}
-              register={calendar.register}
+              register={showRegister ? calendar.register : undefined}
             />
           ))}
         </ul>
