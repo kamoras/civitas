@@ -1641,7 +1641,7 @@ class TestDedupeNearIdenticalIssues:
         db_session.commit()
         mock_embed.return_value = np.array([[1.0, 0.0], [1.0, 0.0], [0.0, 1.0]])
 
-        assert mark_recent_duplicates(db_session) == 1
+        assert ac.mark_recent_duplicates(db_session) == 1
         fresh, older, other = rows
         assert (fresh.duplicate_of_id, older.duplicate_of_id, other.duplicate_of_id) == (None, fresh.id, None)
 
@@ -4227,3 +4227,94 @@ class TestMonitorEntityGate:
             "Varga announces Kestrel deal", "Varga heads to a rally", "Senators fault Kestrel terms",
         ]
         assert json.loads(issue.related_monitor_slugs) == []
+
+
+class TestLiveBlogHeadlines:
+    """Issues 805/806 (2026-10-16): a live blog's headline listing two
+    stories titled a second issue over the PBS report that titled the
+    first, and its other story kept the two from matching."""
+
+    LIVE = "Live updates: Press secretary Morrow exits; Varga rallies for Brandt at Dunmore county fair"
+    REPORT = "Press secretary Dana Morrow leaving the job after Varga casts doubt"
+    PBS = "https://example.org/politics/varga-casts-doubt-on-press-secretary-morrow"
+
+    def test_a_kicker_over_disjoint_stories_is_a_live_blog(self):
+        assert ac._multi_story_headline(self.LIVE)
+        assert ac._story_titles(self.LIVE) == ["Press secretary Morrow exits", "Varga rallies for Brandt at Dunmore county fair"]
+        # One story under a kicker, a report, disjoint items with no kicker
+        # (a photo column, two sentences of one story), items sharing a name.
+        for title in (
+            "Live updates: Senate votes on the Varga nomination",
+            self.REPORT,
+            "Photo Desk | Quiet Hallway",
+            "Dale Hartwell claims he was an assembly line worker. The Machinists said that is a stretch.",
+            "Live updates: Ostrander says Varga will follow ballot ruling; Arts council rejects bid to add Varga's name",
+        ):
+            assert not ac._multi_story_headline(title), title
+            assert ac._story_titles(title) == [title]
+
+    @staticmethod
+    def _embed(vectors):
+        return lambda texts: np.array([vectors[t] for t in texts])
+
+    def _vectors(self):
+        agree = [0.7, (1 - 0.7 ** 2) ** 0.5, 0.0]
+        return {
+            self.REPORT: [1.0, 0.0, 0.0],
+            self.LIVE: [0.5, 0.0, (1 - 0.5 ** 2) ** 0.5],
+            "Press secretary Morrow exits": agree,
+            "Varga rallies for Brandt at Dunmore county fair": [0.0, 0.0, 1.0],
+        }
+
+    def test_a_live_blog_row_matches_on_its_shared_story(self, monkeypatch):
+        vectors = self._vectors()
+        monkeypatch.setattr(ac, "_embed_texts_sim", self._embed(vectors))
+        report = ActionIssue(id=805, date="2026-10-16", rank=4, title=self.REPORT, facts="[]",
+                             source_urls=json.dumps([self.PBS]))
+        recent_embs = np.array([vectors[self.LIVE]])
+        # The live-blog row as a candidate: its first story agrees with the
+        # new report's title past SHARED_SOURCE_TITLE_SIM.
+        live = ActionIssue(id=806, date="2026-10-16", rank=3, title=self.LIVE, facts="[]",
+                           source_urls=json.dumps([self.PBS]))
+        assert _find_matching_issue(self.REPORT, [], [live], recent_embs, np.array(vectors[self.REPORT]), set(),
+                                    source_urls=[self.PBS]) is live
+        # The article that titled a candidate is conclusive, whatever the
+        # new title.
+        orthogonal = np.array([0.0, 1.0])
+        assert _find_matching_issue("Another outlet's headline", [], [report], np.array([[1.0, 0.0]]), orthogonal,
+                                    set(), source_urls=[self.PBS]) is None
+        assert _find_matching_issue("Another outlet's headline", [], [report], np.array([[1.0, 0.0]]), orthogonal,
+                                    set(), source_urls=[self.PBS], source_titles={self.PBS: self.REPORT}) is report
+
+    def test_of_several_candidates_sharing_a_source_the_best_title_wins(self):
+        url = ["https://npr.org/story"]
+        weaker = ActionIssue(id=1, date="2026-10-16", rank=1, title="A", facts="[]", source_urls=json.dumps(url))
+        better = ActionIssue(id=2, date="2026-10-16", rank=2, title="B", facts="[]", source_urls=json.dumps(url))
+        recent_embs = np.array([[0.7, (1 - 0.7 ** 2) ** 0.5], [0.9, (1 - 0.9 ** 2) ** 0.5]])
+        assert _find_matching_issue("C", [], [weaker, better], recent_embs, np.array([1.0, 0.0]), set(),
+                                    source_urls=url) is better
+
+    def test_the_pass_retires_the_live_blog_row_behind_the_report(self, monkeypatch, db_session):
+        monkeypatch.setattr(ac, "_embed_texts_sim", self._embed(self._vectors()))
+        report = ActionIssue(date="2026-10-16", rank=4, title=self.REPORT, facts="[]",
+                             source_urls=json.dumps([self.PBS]), created_at=datetime(2026, 10, 16, 20, 17))
+        live = ActionIssue(date="2026-10-16", rank=3, title=self.LIVE, facts="[]",
+                           source_urls=json.dumps([self.PBS]), created_at=datetime(2026, 10, 16, 21, 20))
+        db_session.add_all([report, live])
+        db_session.commit()
+
+        assert ac.mark_recent_duplicates(db_session) == 1
+        # The later row gives way: its headline tells two stories.
+        assert (report.duplicate_of_id, live.duplicate_of_id) == (None, report.id)
+        assert (report.is_current, live.is_current) == (True, False)
+
+
+@pytest.mark.slow
+def test_a_live_blog_title_agrees_on_its_shared_story():
+    """On the similarity model, the live blog's whole headline falls under
+    SHARED_SOURCE_TITLE_SIM against the report (issues 805/806 scored
+    0.557) and its first story clears it (0.672); these invented-name
+    titles score 0.606 and 0.679."""
+    live, report = TestLiveBlogHeadlines.LIVE, TestLiveBlogHeadlines.REPORT
+    whole = float((ac._embed_texts_sim([live]) @ ac._embed_texts_sim([report]).T)[0, 0])
+    assert whole < ac.SHARED_SOURCE_TITLE_SIM <= ac._shared_source_title_sim(whole, live, report)

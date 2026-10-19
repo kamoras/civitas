@@ -2,6 +2,20 @@
   "_contract": "One entry per user-facing feature, newest first; writing it is part of shipping the feature (AGENTS.md, 'What gets posted'). The same entry is the /changelog 'New on the site' list, the What's new feed and a Bluesky post (app/whats_new.py). id: a stable slug, never reused (it is the post's subject, so changing it posts again). date: the UTC day the feature reached main (git log --date=format-local:%Y-%m-%d with TZ=UTC). title: a name, no trailing period. summary: one plain sentence that stays true: no named politicians, no pronouns, no em dashes, no emoji, no year or Congress number. url: the page's path on the site. tests/test_whats_new.py checks each entry and that the post fits.",
   "entries": [
     {
+      "id": "compare-citable",
+      "date": "2026-10-17",
+      "title": "Comparisons you can cite",
+      "summary": "A side-by-side comparison names the run and scoring version behind each score, shows funding diversity apart from the score, and gives a reference to cite.",
+      "url": "/compare"
+    },
+    {
+      "id": "bill-page-sections",
+      "date": "2026-10-17",
+      "title": "Bill pages that get to the votes",
+      "summary": "A bill page lists its sections under the title and keeps a long summary to its first paragraph, with the full text a tap away.",
+      "url": "/congress/bills"
+    },
+    {
       "id": "public-api-records",
       "date": "2026-10-17",
       "title": "More of the record in the public API",

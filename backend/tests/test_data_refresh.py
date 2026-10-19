@@ -6,6 +6,7 @@ Offline: the generators here are tiny inline scripts or mocked."""
 import importlib.util
 import json
 import pathlib
+import re
 import sys
 from datetime import date, datetime
 from types import SimpleNamespace
@@ -284,3 +285,14 @@ def test_the_last_try_remembers_a_kept_outcome(db_session):
         assert dr._last_try("x.json")[1] is True
         dr._record_try("x.json", "refreshed")
         assert dr._last_try("x.json")[1] is False
+
+
+def test_name_casing_refresh_reads_as_many_issues_as_the_bundled_table():
+    # 2026-10-18: the refresh ran the script's default of 120 issues against a
+    # table built from the whole year (247), and its gate refused the result.
+    spec = next(f for f in dr.DATA_FILES if f.name == "name_casing.json")
+    argv = spec.command(dr.Context(spec.name, {}, date(2027, 3, 1), None))
+    issues = int(argv[argv.index("--days") + 1])
+    bundled = json.loads((dr.BUNDLED / "name_casing.json").read_text())["_source"]
+    assert issues >= int(re.search(r"the first (\d+) issues", bundled)[1])
+    assert argv[argv.index("--year") + 1] == "2026"

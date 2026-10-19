@@ -463,6 +463,10 @@ def _coverage_gate(new: dict, old: dict) -> list[str]:
     return failures
 
 
+# More than a year's weekdays: build_name_casing.py stops at the year's end.
+NAME_CASING_ISSUES = 366
+
+
 def _casing_gate(new: dict, old: dict) -> list[str]:
     forms = new.get("forms") or {}
     failures = [] if len(forms) >= 0.7 * len(old.get("forms") or {}) else [f"{len(forms)} forms"]
@@ -564,9 +568,18 @@ def _training_polls_command(ctx: Context) -> list[str]:
 
 # The map's fits (scripts/fit_forecast_model.py): refit whenever the
 # training polls in use change, and monthly besides, which picks up a new
-# MEDSL version or a newly published FEC House compilation. Display only:
-# nothing in scoring reads them.
+# MEDSL version or a newly published FEC House compilation or Clerk's
+# Statistics; weekly while a fit lacks the last certified general, so a
+# newly published one is read within a week. Display only: nothing in
+# scoring reads them.
 FORECAST_OUTPUTS = ("forecast_training.json", "forecast_house_training.json", "forecast_house_model.json")
+FORECAST_TRAINING = ("forecast_training.json", "forecast_house_training.json")
+
+
+def _fits_behind(today: date) -> bool:
+    due = last_certified_general(today)
+    return due is not None and any(
+        max((r["year"] for r in read(name).get("races") or []), default=0) < due for name in FORECAST_TRAINING)
 
 
 def _forecast_due(ctx: Context) -> bool:
@@ -576,8 +589,9 @@ def _forecast_due(ctx: Context) -> bool:
     # the next day, not at the month's end: the map hides that table.
     outdated = any(not model.calibration_current(ev.get("calibration"))
                    for ev in (ctx.doc.get("evaluation") or {}).values())
-    return (((polls is not None and polls != fitted) or outdated) and not ctx.tried_within(1)) \
-        or not ctx.tried_within(30)
+    return ((((polls is not None and polls != fitted) or outdated) and not ctx.tried_within(1))
+            or not ctx.tried_within(30)
+            or (not ctx.tried_within(7) and _fits_behind(ctx.today)))
 
 
 def _forecast_command(ctx: Context) -> list[str]:
@@ -678,9 +692,13 @@ DATA_FILES: list[DataFile] = [
     DataFile("reference_coverage.json",
              command=lambda ctx: [PY, _script("calibrate_reference_coverage.py"), "--out", "{out}"],
              due=_every(30), gate=_coverage_gate, heavy=True, moves_scores=True, timeout_s=3 * 3600),
+    # The whole of last year's issues, as the bundled table was built (its
+    # _source: "the first 247 issues of 2025"); the script's own default of
+    # 120 issues read half the prose and lost a third of the forms, which the
+    # gate refused (2026-10-18: 8,832 forms against 13,395).
     DataFile("name_casing.json",
              command=lambda ctx: [PY, _script("build_name_casing.py"), "--year", str(ctx.today.year - 1),
-                                  "--output", "{out}", "--cache", "{tmp}"],
+                                  "--days", str(NAME_CASING_ISSUES), "--output", "{out}", "--cache", "{tmp}"],
              due=lambda ctx: not ctx.tried_within(365) and ctx.today >= date(ctx.today.year, 2, 1),
              gate=_casing_gate, heavy=True, timeout_s=4 * 3600),
     DataFile(training_polls.FILE_NAME, command=_training_polls_command, due=_training_polls_due,
