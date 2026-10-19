@@ -14,7 +14,7 @@ from collections import Counter
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
-from fastapi.responses import JSONResponse
+from app.api.response_helpers import JSONResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
