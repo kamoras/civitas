@@ -1,370 +1,1270 @@
 {
-  "_source": "Each state's (and D.C.'s) own election authority: the voter lookup it publishes on its own domain, or a vendor portal it links as its official tool. Never a third-party aggregator. National fallback: USAGov's state election office directory (https://www.usa.gov/election-office).",
-  "_method": "Per state, the page where a voter sees their sample ballot or polling place: the state's personal lookup when an automated check can reach it, else the authority's own polling-place page that links it. Each was opened through the pipeline's HTTP client with BROWSER_HEADERS (what refresh_link_verification sends) from the development workstation and from production, and `_checked` records what was found. A state whose lookup sits behind a bot wall keeps its official URL, marked UNVERIFIABLE, and is never worked around (AGENTS.md section 7): the link check cannot confirm it, so (since 2026-10-13) its page shows that URL as the state's own lookup, says the site blocks automated checks so Civitas can't confirm it is up, and gives the national directory as the backup. A URL that answers 404, or redirects to its site's homepage, still falls back to the national directory alone.",
-  "_as_of": "2026-10-13",
-  "_note": "A dead link on 'here is how to see your real ballot', during election week, from a link Civitas vouched for, is the worst failure this feature has. So per-state URLs are gated: an entry is rendered only once the liveness check (app/pipeline/fetch/ballot_lookup.py) sets `verified_at` (the page answered) or `blocked_at` (a bot wall refused the check; shown as unconfirmed, with the national directory beside it). This file never sets either. The check reads its candidate URLs from this file every run, so an edit here reaches the site on the next election run. Unverified or missing entries fall back to the national directory, which is stable and maintained by USAGov.",
+  "_source": "Each state's (and D.C.'s) own election authority: the page on its own domain, or a vendor portal it links as its official tool, for each voting task. Registration-status, polling-place and absentee pages as NASS's Can I Vote (nass.org/can-i-vote, the Secretaries of State's own directory) lists them, each opened and stored where it lands; a dead one replaced from the authority's own site. Never a third-party aggregator as a destination. The register task is not here: it is election_calendar.json's `register` (one copy of each URL), checked by the same nightly check.",
+  "_method": "Per state and task, opened through the pipeline's HTTP client with BROWSER_HEADERS (what refresh_link_verification sends), and `_checked` records what was found. A sample ballot task is listed only where the state's voter lookup says, on its own page or in its address, that it shows a sample ballot; elsewhere the step points to the voter's county election office through USAGov's directory. A page behind a bot wall keeps its official URL, marked UNVERIFIABLE, and is never worked around (AGENTS.md section 7): its step is shown as unconfirmed, with the task's fallback beside it.",
+  "_as_of": "2026-10-18",
+  "_note": "A dead link on a voting step, during election week, from a link Civitas vouched for, is the worst failure this feature has. So every per-state URL is gated: a task is shown only once the liveness check (app/pipeline/fetch/ballot_lookup.py) sets `verified_at` (the page answered) or `blocked_at` (a bot wall refused the check; shown as unconfirmed, with the fallback beside it). This file never sets either. The check reads its candidate URLs from this file every run, so an edit here reaches the site on the next election run. A task unverified or missing falls back to `task_fallbacks`: NASS's Can I Vote, or USAGov's office directory for a sample ballot (vote.gov for registering, election_calendar.json's registerFallback).",
   "national_fallback": {
     "url": "https://www.usa.gov/election-office",
     "label": "Find your state or local election office",
     "source_name": "USAGov"
   },
+  "task_fallbacks": {
+    "check_registration": {
+      "url": "https://www.nass.org/can-i-vote/voter-registration-status",
+      "source_name": "Can I Vote (National Association of Secretaries of State)"
+    },
+    "sample_ballot": {
+      "url": "https://www.usa.gov/election-office",
+      "source_name": "USAGov's directory of election offices"
+    },
+    "polling_place": {
+      "url": "https://www.nass.org/can-i-vote/find-your-polling-place",
+      "source_name": "Can I Vote (National Association of Secretaries of State)"
+    },
+    "mail_ballot": {
+      "url": "https://www.nass.org/can-i-vote/absentee-early-voting",
+      "source_name": "Can I Vote (National Association of Secretaries of State)"
+    }
+  },
   "states": {
-    "AL": {
-      "url": "https://myinfo.alabamavotes.gov/voterview",
-      "label": "Alabama VoterView",
-      "source_name": "Alabama Secretary of State",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
-    },
     "AK": {
-      "url": "https://www.elections.alaska.gov/election-polls/",
-      "label": "Alaska polling place locations",
       "source_name": "Alaska Division of Elections",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08. The personal portal (myvoterportal.alaska.gov) is behind a DataDome bot wall that refuses automated checks, so the Division's own polling-place page, which links it, is used instead. Its server omits the intermediate certificate, which browsers fetch from the certificate's AIA address; the check completes the chain the same way (2026-10-12)"
+      "tasks": {
+        "check_registration": {
+          "url": "https://myvoterportal.alaska.gov/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). UNVERIFIABLE: the site's bot wall refused the pipeline's client, 2026-10-18. Official URL kept; shown as unconfirmed with the fallback beside it"
+        },
+        "sample_ballot": {
+          "url": "https://www.elections.alaska.gov/election-polls/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "The state's voter lookup, whose own page offers a sample ballot. Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://www.elections.alaska.gov/election-polls/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "From the state election authority's own site (its link to this page). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://www.elections.alaska.gov/voter-information/absentee-and-early-voting/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "From the state election authority's own site (its link to this page). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
     },
-    "AZ": {
-      "url": "https://my.arizona.vote/PortalList.aspx",
-      "label": "Arizona Voter Information Portal",
-      "source_name": "Arizona Secretary of State",
-      "verified_at": null,
-      "_checked": "UNVERIFIABLE: Cloudflare challenge (403) to the pipeline's client from the workstation and from production, 2026-10-08. Official URL kept; the link check cannot confirm it, so the page shows it as unconfirmed, with the national directory as the backup"
+    "AL": {
+      "source_name": "Alabama Secretary of State",
+      "tasks": {
+        "check_registration": {
+          "url": "https://myinfo.alabamavotes.gov/voterview",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://myinfo.alabamavotes.gov/voterview",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://www.sos.alabama.gov/alabama-votes/voter/absentee-voting",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
     },
     "AR": {
-      "url": "https://www.voterview.ar-nova.org/voterview",
-      "label": "Arkansas VoterView",
       "source_name": "Arkansas Secretary of State",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+      "tasks": {
+        "check_registration": {
+          "url": "https://www.voterview.ar-nova.org/voterview",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://www.voterview.ar-nova.org/VoterView",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://www.sos.arkansas.gov/elections/voter-information/absentee-voting",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
+    },
+    "AZ": {
+      "source_name": "Arizona Secretary of State",
+      "tasks": {
+        "check_registration": {
+          "url": "https://my.arizona.vote/WhereToVote.aspx?s=individual",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). UNVERIFIABLE: the site's bot wall refused the pipeline's client, 2026-10-18. Official URL kept; shown as unconfirmed with the fallback beside it"
+        },
+        "polling_place": {
+          "url": "https://my.arizona.vote/WhereToVote.aspx?s=address",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). UNVERIFIABLE: the site's bot wall refused the pipeline's client, 2026-10-18. Official URL kept; shown as unconfirmed with the fallback beside it"
+        },
+        "mail_ballot": {
+          "url": "https://my.arizona.vote/Early/ApplicationLogin.aspx",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). UNVERIFIABLE: the site's bot wall refused the pipeline's client, 2026-10-18. Official URL kept; shown as unconfirmed with the fallback beside it"
+        }
+      }
     },
     "CA": {
-      "url": "https://www.sos.ca.gov/elections/polling-place",
-      "label": "Find your polling place (California)",
       "source_name": "California Secretary of State",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08. My Voter Status (voterstatus.sos.ca.gov) is behind Imperva, so the Secretary of State's polling-place page, which links it and each county's lookup, is used instead"
+      "tasks": {
+        "check_registration": {
+          "url": "https://voterstatus.sos.ca.gov/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "sample_ballot": {
+          "url": "https://www.sos.ca.gov/elections/polling-place",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "The state's voter lookup, whose own page offers a sample ballot. Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://www.sos.ca.gov/elections/polling-place/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://www.sos.ca.gov/elections/voter-registration/vote-mail#vote-by-mail",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
     },
     "CO": {
-      "url": "https://www.coloradosos.gov/voter/pages/pub/olvr/findVoterReg.xhtml",
-      "label": "Colorado: find my voter registration",
       "source_name": "Colorado Secretary of State",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+      "tasks": {
+        "check_registration": {
+          "url": "https://www.sos.state.co.us/voter/pages/pub/olvr/findVoterReg.xhtml",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://www.sos.state.co.us/voter/pages/pub/olvr/findVoterReg.xhtml",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://www.sos.state.co.us/pubs/elections/FAQs/ElectionDay.html",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
     },
     "CT": {
-      "url": "https://portaldir.ct.gov/sots/LookUp.aspx",
-      "label": "Connecticut voter registration lookup",
       "source_name": "Connecticut Secretary of the State",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08 (a request without a browser's ordinary headers gets the firewall's 'Request Rejected' page)"
-    },
-    "DE": {
-      "url": "https://ivote.de.gov/VoterView",
-      "label": "Delaware voter lookup",
-      "source_name": "Delaware Department of Elections",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+      "tasks": {
+        "check_registration": {
+          "url": "https://portaldir.ct.gov/sots/LookUp.aspx",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://portaldir.ct.gov/sots/LookUp.aspx",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://portal.ct.gov/SOTS/Election-Services/Voter-Information/Absentee-Voting",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
     },
     "DC": {
-      "url": "https://www.dcboe.org/voters/find-out-where-to-vote/vote-center-locator-tool",
-      "label": "D.C. vote center locator",
       "source_name": "District of Columbia Board of Elections",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+      "tasks": {
+        "check_registration": {
+          "url": "https://apps.dcboe.org/VRS",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://dcboe.org/voters/find-out-where-to-vote/vote-center-locator-tool",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://www.dcboe.org/voters/casting-your-vote/voting-by-special-ballot",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
+    },
+    "DE": {
+      "source_name": "Delaware Department of Elections",
+      "tasks": {
+        "check_registration": {
+          "url": "https://ivote.de.gov/voterview",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://ivote.de.gov/voterview",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://elections.delaware.gov/voter/absentee/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
     },
     "FL": {
-      "url": "https://registration.dos.fl.gov/CheckVoterStatus",
-      "label": "Florida voter lookup",
       "source_name": "Florida Division of Elections",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+      "tasks": {
+        "check_registration": {
+          "url": "https://registration.dos.fl.gov/CheckVoterStatus",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "sample_ballot": {
+          "url": "https://registration.dos.fl.gov/CheckVoterStatus",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "The state's voter lookup, whose own page offers a sample ballot. Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://registration.dos.fl.gov/en/CheckVoterStatus/Index",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://dos.fl.gov/elections/for-voters/voting/vote-by-mail/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
     },
     "GA": {
-      "url": "https://mvp.sos.ga.gov/s/",
-      "label": "Georgia My Voter Page",
       "source_name": "Georgia Secretary of State",
-      "verified_at": null,
-      "_checked": "UNVERIFIABLE: Cloudflare challenge (403) to the pipeline's client from the workstation, 2026-10-13; production's link check has not verified it either (the live page showed the national directory on 2026-10-13). Earlier checks (2026-10-08) had resolved it. Official URL kept"
+      "tasks": {
+        "check_registration": {
+          "url": "https://www.mvp.sos.ga.gov/MVP/mvp.do",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). UNVERIFIABLE: the site's bot wall refused the pipeline's client, 2026-10-18. Official URL kept; shown as unconfirmed with the fallback beside it"
+        },
+        "polling_place": {
+          "url": "https://mvp.sos.ga.gov/s/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). UNVERIFIABLE: the site's bot wall refused the pipeline's client, 2026-10-18. Official URL kept; shown as unconfirmed with the fallback beside it"
+        },
+        "mail_ballot": {
+          "url": "https://www.mvp.sos.ga.gov/MVP/mvp.do",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). UNVERIFIABLE: the site's bot wall refused the pipeline's client, 2026-10-18. Official URL kept; shown as unconfirmed with the fallback beside it"
+        }
+      }
     },
     "HI": {
-      "url": "https://elections.hawaii.gov/voter-service-centers-and-places-of-deposit/",
-      "label": "Hawaii voter service centers and ballot drop boxes",
       "source_name": "Hawaii Office of Elections",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08. Hawaii votes by mail; in-person voting is at these service centers"
-    },
-    "ID": {
-      "url": "https://votertools.voteidaho.gov/TEDElectionLink/VoterServices/voter-search/ovr-voter-search",
-      "label": "Idaho voter search",
-      "source_name": "Idaho Secretary of State",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
-    },
-    "IL": {
-      "url": "https://ova.elections.il.gov/RegistrationLookup.aspx",
-      "label": "Illinois registration lookup",
-      "source_name": "Illinois State Board of Elections",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
-    },
-    "IN": {
-      "url": "https://indianavoters.in.gov/",
-      "label": "Indiana Voters",
-      "source_name": "Indiana Election Division",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+      "tasks": {
+        "check_registration": {
+          "url": "https://olvr.hawaii.gov/debug.aspx?aspxerrorpath=/(S(vb2rcnebimyjdjcs5q22kazp))/Default.aspx",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://elections.hawaii.gov/voting/voting-in-hawaii/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://elections.hawaii.gov/voting/voting-in-hawaii/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
     },
     "IA": {
-      "url": "https://apps.sos.iowa.gov/elections/voterreg/pollingplace/search.aspx",
-      "label": "Iowa: find my polling place",
       "source_name": "Iowa Secretary of State",
-      "verified_at": null,
-      "_checked": "UNVERIFIABLE: Cloudflare challenge (403) to the pipeline's client from the workstation and from production, 2026-10-08 (one of several requests to the same host was answered). Official URL, linked from the Secretary of State's voter page; the page shows it as unconfirmed, with the national directory as the backup"
+      "tasks": {
+        "check_registration": {
+          "url": "https://apps.sos.iowa.gov/elections/voterreg/regtovote/search.aspx",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://apps.sos.iowa.gov/elections/voterreg/pollingplace/search.aspx",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://sos.iowa.gov/voters/absentee-voting",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "From the state election authority's own site (its link to this page). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
+    },
+    "ID": {
+      "source_name": "Idaho Secretary of State",
+      "tasks": {
+        "check_registration": {
+          "url": "https://votertools.voteidaho.gov/TEDElectionLink/VoterServices/voter-search/ovr-voter-search?returnUrl=VoterServices%2Fvoter%2Fvoter-profile",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://votertools.voteidaho.gov/TEDElectionLink/VoterServices/voter/where-do-I-vote",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://voteidaho.gov/casting-your-ballot/#vote-early",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
+    },
+    "IL": {
+      "source_name": "Illinois State Board of Elections",
+      "tasks": {
+        "check_registration": {
+          "url": "https://ova.elections.il.gov/RegistrationLookup.aspx",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://ova.elections.il.gov/PollingPlaceLookup.aspx",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://www.elections.il.gov/electionoperations/votingbymail.aspx",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
+    },
+    "IN": {
+      "source_name": "Indiana Election Division",
+      "tasks": {
+        "check_registration": {
+          "url": "https://indianavoters.in.gov/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://indianavoters.in.gov/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "From the state election authority's own site (its link to this page). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://www.in.gov/sos/elections/voter-information/ways-to-vote/absentee-voting",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "From the state election authority's own site (its link to this page). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
     },
     "KS": {
-      "url": "https://myvoteinfo.voteks.org/voterview",
-      "label": "Kansas VoterView",
       "source_name": "Kansas Secretary of State",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+      "tasks": {
+        "check_registration": {
+          "url": "https://myvoteinfo.voteks.org/VoterView/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://myvoteinfo.voteks.org/VoterView",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://sos.ks.gov/elections/voter-information.html",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
     },
     "KY": {
-      "url": "https://elect.ky.gov/Voters/Pages/Polling-Locations.aspx",
-      "label": "Kentucky polling locations",
       "source_name": "Kentucky State Board of Elections",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08. The Voter Information Center (vrsws.sos.ky.gov/vic, linked as 'Where to Vote' from that page) answers the Board's bot-activity refusal (403) to the pipeline's client from both machines, so the Board's polling-locations page is used instead"
+      "tasks": {
+        "check_registration": {
+          "url": "https://vrsws.sos.ky.gov/VIC/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "sample_ballot": {
+          "url": "https://vrsws.sos.ky.gov/ovrweb/govoteky/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "The state's voter lookup, whose own page offers a sample ballot. Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://vrsws.sos.ky.gov/ovrweb/govoteky/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://elect.ky.gov/Voters/Pages/Absentee-Voting.aspx",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
     },
     "LA": {
-      "url": "https://voterportal.sos.la.gov/",
-      "label": "Louisiana Voter Portal",
       "source_name": "Louisiana Secretary of State",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
-    },
-    "ME": {
-      "url": "https://www.maine.gov/portal/government/edemocracy/voter_lookup.php",
-      "label": "Maine voter information lookup",
-      "source_name": "Maine Secretary of State",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
-    },
-    "MD": {
-      "url": "https://voterservices.elections.maryland.gov/VoterSearch",
-      "label": "Maryland voter search",
-      "source_name": "Maryland State Board of Elections",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+      "tasks": {
+        "check_registration": {
+          "url": "https://voterportal.sos.la.gov/Home/VoterLogin",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://voterportal.sos.la.gov/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://www.sos.la.gov/elections-voting/absentee-voting-faqs",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
     },
     "MA": {
-      "url": "https://www.sec.state.ma.us/WhereDoIVoteMA/bal/MyElectionInfo.aspx",
-      "label": "Where do I vote? (Massachusetts)",
       "source_name": "Secretary of the Commonwealth of Massachusetts",
-      "verified_at": null,
-      "_checked": "UNVERIFIABLE: Imperva challenge page (200 with challenge script) to the pipeline's client from the workstation and from production, 2026-10-08. Official URL kept; the page shows it as unconfirmed, with the national directory as the backup"
+      "tasks": {
+        "check_registration": {
+          "url": "https://www.sec.state.ma.us/voterregistrationsearch/myvoterregstatus.aspx",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). UNVERIFIABLE: the site's bot wall refused the pipeline's client, 2026-10-18. Official URL kept; shown as unconfirmed with the fallback beside it"
+        },
+        "polling_place": {
+          "url": "https://www.sec.state.ma.us/WhereDoIVoteMA/WhereDoIVote",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). UNVERIFIABLE: the site's bot wall refused the pipeline's client, 2026-10-18. Official URL kept; shown as unconfirmed with the fallback beside it"
+        },
+        "mail_ballot": {
+          "url": "https://www.sec.state.ma.us/divisions/elections/voting-information/vote-by-mail.htm",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). UNVERIFIABLE: the site's bot wall refused the pipeline's client, 2026-10-18. Official URL kept; shown as unconfirmed with the fallback beside it"
+        }
+      }
+    },
+    "MD": {
+      "source_name": "Maryland State Board of Elections",
+      "tasks": {
+        "check_registration": {
+          "url": "https://voterservices.elections.maryland.gov/VoterSearch",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "sample_ballot": {
+          "url": "https://voterservices.elections.maryland.gov/VoterSearch",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "The state's voter lookup, whose own page offers a sample ballot. Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://elections.maryland.gov",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://elections.maryland.gov/voting/absentee.html",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
+    },
+    "ME": {
+      "source_name": "Maine Secretary of State",
+      "tasks": {
+        "check_registration": {
+          "url": "https://www1.maine.gov/portal/government/edemocracy/voter_lookup.php",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://www.maine.gov/portal/government/edemocracy/voter_lookup.php",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://www.maine.gov/sos/elections-voting/absentee-voting",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
     },
     "MI": {
-      "url": "https://mvic.sos.state.mi.us/",
-      "label": "Michigan Voter Information Center",
       "source_name": "Michigan Secretary of State",
-      "verified_at": null,
-      "_checked": "UNVERIFIABLE: Cloudflare challenge (403) to the pipeline's client from the workstation and from production, 2026-10-08. Official URL kept; the page shows it as unconfirmed, with the national directory as the backup"
+      "tasks": {
+        "check_registration": {
+          "url": "https://mvic.sos.state.mi.us/Voter/Index",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). UNVERIFIABLE: the site's bot wall refused the pipeline's client, 2026-10-18. Official URL kept; shown as unconfirmed with the fallback beside it"
+        },
+        "polling_place": {
+          "url": "https://mvic.sos.state.mi.us/Voter/index",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). UNVERIFIABLE: the site's bot wall refused the pipeline's client, 2026-10-18. Official URL kept; shown as unconfirmed with the fallback beside it"
+        },
+        "mail_ballot": {
+          "url": "https://www.michigan.gov/sos/elections/voting/absentee-voting",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
     },
     "MN": {
-      "url": "https://myballotmn.sos.mn.gov/",
-      "label": "Minnesota voting information portal",
       "source_name": "Minnesota Secretary of State",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
-    },
-    "MS": {
-      "url": "https://www.sos.ms.gov/elections-voting/polling-place-locator",
-      "label": "Mississippi polling place locator",
-      "source_name": "Mississippi Secretary of State",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08 (redirects to the Secretary of State's myelectionday.sos.state.ms.us)"
+      "tasks": {
+        "check_registration": {
+          "url": "https://mnvotes.sos.mn.gov/voterstatuscheck/index",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://pollfinder.sos.mn.gov/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://www.sos.mn.gov/elections-voting/other-ways-to-vote/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
     },
     "MO": {
-      "url": "https://voteroutreach.sos.mo.gov/portal/",
-      "label": "Missouri voter registration lookup",
       "source_name": "Missouri Secretary of State",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+      "tasks": {
+        "check_registration": {
+          "url": "https://voteroutreach.sos.mo.gov/portal/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://voteroutreach.sos.mo.gov/portal",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://www.sos.mo.gov/elections/govotemissouri/howtovote#Absentee",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
+    },
+    "MS": {
+      "source_name": "Mississippi Secretary of State",
+      "tasks": {
+        "check_registration": {
+          "url": "https://www.msegov.com/sos/voter_registration/AmIRegistered",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "sample_ballot": {
+          "url": "https://myelectionday.sos.state.ms.us/VoterOutreach/Pages/VOSearch.aspx",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "The state's voter lookup, whose own page offers a sample ballot. Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://myelectionday.sos.state.ms.us/VoterOutreach/Pages/VOSearch.aspx",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://www.sos.ms.gov/yall-vote/absentee-voting-information",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
     },
     "MT": {
-      "url": "https://voterportal.mt.gov/WhereToVote.aspx",
-      "label": "Montana My Voter Page",
       "source_name": "Montana Secretary of State",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
-    },
-    "NE": {
-      "url": "https://www.votercheck.necvr.ne.gov/voterview",
-      "label": "Nebraska voter information lookup",
-      "source_name": "Nebraska Secretary of State",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
-    },
-    "NV": {
-      "url": "https://www.nvsos.gov/votersearch/",
-      "label": "Nevada voter search",
-      "source_name": "Nevada Secretary of State",
-      "verified_at": null,
-      "_checked": "UNVERIFIABLE: Imperva challenge page (200 with challenge script) to the pipeline's client from the workstation and from production, 2026-10-08. Official URL kept; the page shows it as unconfirmed, with the national directory as the backup"
-    },
-    "NH": {
-      "url": "https://app.sos.nh.gov/viphome",
-      "label": "New Hampshire voter information lookup",
-      "source_name": "New Hampshire Secretary of State",
-      "verified_at": null,
-      "_checked": "UNVERIFIABLE: Akamai Access Denied (403) to the pipeline's client from the workstation and from production, 2026-10-08, on sos.nh.gov too (a plain curl from production was answered 'Voter Information Lookup'). Official URL kept; the page shows it as unconfirmed, with the national directory as the backup"
-    },
-    "NJ": {
-      "url": "https://www.nj.gov/state/elections/vote-polling-location.shtml",
-      "label": "New Jersey polling locations",
-      "source_name": "New Jersey Division of Elections",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08. The voter portal's own search (voter.svrs.nj.gov) is behind Imperva, so the Division's polling-location page, which links it, is used instead"
-    },
-    "NM": {
-      "url": "https://voterportal.servis.sos.state.nm.us/WhereToVote.aspx",
-      "label": "New Mexico voter portal",
-      "source_name": "New Mexico Secretary of State",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
-    },
-    "NY": {
-      "url": "https://voterlookup.elections.ny.gov/",
-      "label": "New York voter lookup",
-      "source_name": "New York State Board of Elections",
-      "verified_at": null,
-      "_checked": "UNVERIFIABLE: Cloudflare challenge (403) to the pipeline's client from the workstation and from production, 2026-10-08, on elections.ny.gov too. Official URL kept; the page shows it as unconfirmed, with the national directory as the backup"
+      "tasks": {
+        "check_registration": {
+          "url": "https://voterportal.mt.gov/WhereToVote.aspx",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://voterportal.mt.gov/WhereToVote.aspx",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://sosmt.gov/elections/absentee",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). UNVERIFIABLE: the site's bot wall refused the pipeline's client, 2026-10-18. Official URL kept; shown as unconfirmed with the fallback beside it"
+        }
+      }
     },
     "NC": {
-      "url": "https://vt.ncsbe.gov/RegLkup/",
-      "label": "North Carolina voter search",
       "source_name": "North Carolina State Board of Elections",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+      "tasks": {
+        "check_registration": {
+          "url": "https://vt.ncsbe.gov/RegLkup/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "sample_ballot": {
+          "url": "https://vt.ncsbe.gov/RegLkup/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "The state's voter lookup, whose own page offers a sample ballot. Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://vt.ncsbe.gov/PPLkup/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://www.ncsbe.gov/voting/vote-mail",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
     },
     "ND": {
-      "url": "https://vip.sos.nd.gov/PortalList.aspx",
-      "label": "North Dakota My Voter Site",
       "source_name": "North Dakota Secretary of State",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+      "tasks": {
+        "check_registration": {
+          "url": "https://www.sos.nd.gov/elections",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "sample_ballot": {
+          "url": "https://vip.sos.nd.gov/PortalList.aspx",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "The state's voter lookup, whose own page offers a sample ballot. Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://vip.sos.nd.gov/WhereToVote.aspx?tab=AddressandVotingTimes",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://vip.sos.nd.gov/absentee/Default.aspx",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
+    },
+    "NE": {
+      "source_name": "Nebraska Secretary of State",
+      "tasks": {
+        "check_registration": {
+          "url": "https://www.votercheck.necvr.ne.gov/VoterView/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://www.votercheck.necvr.ne.gov/VoterView",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://sos.nebraska.gov/elections/early-voting",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
+    },
+    "NH": {
+      "source_name": "New Hampshire Secretary of State",
+      "tasks": {
+        "check_registration": {
+          "url": "https://app.sos.nh.gov/captcha/challenge",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://app.sos.nh.gov/captcha/challenge",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://www.sos.nh.gov/elections/absentee-ballots",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
+    },
+    "NJ": {
+      "source_name": "New Jersey Division of Elections",
+      "tasks": {
+        "check_registration": {
+          "url": "https://voter.svrs.nj.gov/registration-check",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). UNVERIFIABLE: the site's bot wall refused the pipeline's client, 2026-10-18. Official URL kept; shown as unconfirmed with the fallback beside it"
+        },
+        "sample_ballot": {
+          "url": "https://www.nj.gov/state/elections/vote-polling-location.shtml",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "The state's voter lookup, whose own page offers a sample ballot. Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://www.nj.gov/state/elections/vote-polling-location.shtml",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://www.nj.gov/state/elections/vote-by-mail.shtml",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
+    },
+    "NM": {
+      "source_name": "New Mexico Secretary of State",
+      "tasks": {
+        "check_registration": {
+          "url": "https://voterportal.servis.sos.state.nm.us/WhereToVote.aspx?AspxAutoDetectCookieSupport=1",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "sample_ballot": {
+          "url": "https://voterportal.servis.sos.state.nm.us/WhereToVote.aspx?AspxAutoDetectCookieSupport=1",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "The state's voter lookup, whose own page offers a sample ballot. Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://voterportal.servis.sos.state.nm.us/WhereToVote.aspx?AspxAutoDetectCookieSupport=1",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://www.sos.nm.gov/voting-and-elections/absentee-and-early-voting/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
+    },
+    "NV": {
+      "source_name": "Nevada Secretary of State",
+      "tasks": {
+        "check_registration": {
+          "url": "https://www.nvsos.gov/votersearch/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). UNVERIFIABLE: the site's bot wall refused the pipeline's client, 2026-10-18. Official URL kept; shown as unconfirmed with the fallback beside it"
+        },
+        "polling_place": {
+          "url": "https://nvsos.gov/votersearch/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). UNVERIFIABLE: the site's bot wall refused the pipeline's client, 2026-10-18. Official URL kept; shown as unconfirmed with the fallback beside it"
+        },
+        "mail_ballot": {
+          "url": "https://www.nvsos.gov/sos/elections/voters/voters-with-disabilities/absentee-voting",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). UNVERIFIABLE: the site's bot wall refused the pipeline's client, 2026-10-18. Official URL kept; shown as unconfirmed with the fallback beside it"
+        }
+      }
+    },
+    "NY": {
+      "source_name": "New York State Board of Elections",
+      "tasks": {
+        "check_registration": {
+          "url": "https://voterlookup.elections.ny.gov/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). UNVERIFIABLE: the site's bot wall refused the pipeline's client, 2026-10-18. Official URL kept; shown as unconfirmed with the fallback beside it"
+        },
+        "polling_place": {
+          "url": "https://voterlookup.elections.ny.gov/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://elections.ny.gov/request-ballot",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
     },
     "OH": {
-      "url": "https://voterlookup.ohiosos.gov/voterlookup.aspx",
-      "label": "Ohio voter lookup",
       "source_name": "Ohio Secretary of State",
-      "verified_at": null,
-      "_checked": "UNVERIFIABLE: challenge page (403) to the pipeline's client from the workstation and from production, 2026-10-08, on ohiosos.gov and voteohio.gov too. Official URL kept; the page shows it as unconfirmed, with the national directory as the backup"
+      "tasks": {
+        "check_registration": {
+          "url": "https://voterlookup.ohiosos.gov/voterlookup.aspx",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). UNVERIFIABLE: the site's bot wall refused the pipeline's client, 2026-10-18. Official URL kept; shown as unconfirmed with the fallback beside it"
+        },
+        "polling_place": {
+          "url": "https://www.ohiosos.gov/directories/find-my-polling-location",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). UNVERIFIABLE: the site's bot wall refused the pipeline's client, 2026-10-18. Official URL kept; shown as unconfirmed with the fallback beside it"
+        },
+        "mail_ballot": {
+          "url": "https://www.ohiosos.gov/elections/frequently-asked-questions#absentee-voting",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
     },
     "OK": {
-      "url": "https://okvoterportal.okelections.gov/",
-      "label": "OK Voter Portal",
       "source_name": "Oklahoma State Election Board",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+      "tasks": {
+        "check_registration": {
+          "url": "https://okvoterportal.okelections.gov/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://okvoterportal.okelections.gov/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://oklahoma.gov/elections/voters/absentee-voting.html",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
     },
     "OR": {
-      "url": "https://sos.oregon.gov/elections/pages/myvote.aspx",
-      "label": "Oregon My Vote",
       "source_name": "Oregon Secretary of State",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08. The My Vote search itself sits behind a captcha, so its page on sos.oregon.gov, which links it, is used"
+      "tasks": {
+        "check_registration": {
+          "url": "https://secure.sos.state.or.us/orestar/vr/showVoterSearch.do?lang=eng",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://sos.oregon.gov/elections/pages/drop-box-locator.aspx",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "From the state election authority's own site (its link to this page). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://sos.oregon.gov/elections/pages/voteinor.aspx",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
     },
     "PA": {
-      "url": "https://www.pa.gov/services/vote/find-your-local-polling-place",
-      "label": "Find your local polling place (Pennsylvania)",
       "source_name": "Pennsylvania Department of State",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08. The voter-services search (pavoterservices.pa.gov) is behind Imperva, so the Department's own polling-place page, which links it, is used instead"
+      "tasks": {
+        "check_registration": {
+          "url": "https://www.pa.gov/agencies/vote/voter-registration/check-my-registration-status",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://www.pavoterservices.pa.gov/Pages/PollingPlaceInfo.aspx",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://www.pa.gov/agencies/vote/voter-support/mail-in-and-absentee-ballot",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
     },
     "RI": {
-      "url": "https://vote.sos.ri.gov/",
-      "label": "Rhode Island Voter Information Center",
       "source_name": "Rhode Island Secretary of State",
-      "verified_at": null,
-      "_checked": "UNVERIFIABLE: Cloudflare challenge (403) to the pipeline's client from the workstation and from production, 2026-10-08. Official URL kept; the page shows it as unconfirmed, with the national directory as the backup"
+      "tasks": {
+        "check_registration": {
+          "url": "https://vote.sos.ri.gov/Home/UpdateVoterRecord?ActiveFlag=0",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). UNVERIFIABLE: the site's bot wall refused the pipeline's client, 2026-10-18. Official URL kept; shown as unconfirmed with the fallback beside it"
+        },
+        "polling_place": {
+          "url": "https://vote.sos.ri.gov/Home/PollingPlaces?ActiveFlag=2",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). UNVERIFIABLE: the site's bot wall refused the pipeline's client, 2026-10-18. Official URL kept; shown as unconfirmed with the fallback beside it"
+        },
+        "mail_ballot": {
+          "url": "https://vote.sos.ri.gov/Voter/VotebyMail?ActiveFlag=4",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). UNVERIFIABLE: the site's bot wall refused the pipeline's client, 2026-10-18. Official URL kept; shown as unconfirmed with the fallback beside it"
+        }
+      }
     },
     "SC": {
-      "url": "https://vrems.scvotes.sc.gov/Voter/Login?PageMode=Sampleballot",
-      "label": "South Carolina: get my sample ballot",
       "source_name": "South Carolina Election Commission",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08 (linked as 'Get My Sample Ballot' from scvotes.gov)"
+      "tasks": {
+        "check_registration": {
+          "url": "https://vrems.scvotes.sc.gov/Voter/Login?PageMode=VoterInformation",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "sample_ballot": {
+          "url": "https://vrems.scvotes.sc.gov/Voter/Login?PageMode=Sampleballot",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "The state's voter lookup, whose own page offers a sample ballot (its address names it). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://vrems.scvotes.sc.gov/Voter/Login?PageMode=PollingPlace",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://scvotes.gov/voters/absentee-voting/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
     },
     "SD": {
-      "url": "https://vip.sdsos.gov/VIPLogin.aspx",
-      "label": "South Dakota voter information portal",
       "source_name": "South Dakota Secretary of State",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+      "tasks": {
+        "check_registration": {
+          "url": "https://vip.sdsos.gov/viplogin.aspx",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://vip.sdsos.gov/VIPLogin.aspx",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://sdsos.gov/elections-voting/voting/absentee-voting.aspx",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
     },
     "TN": {
-      "url": "https://tnmap.tn.gov/voterlookup/",
-      "label": "Tennessee voter lookup",
       "source_name": "Tennessee Secretary of State",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+      "tasks": {
+        "check_registration": {
+          "url": "https://tnmap.tn.gov/voterlookup/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://tnmap.tn.gov/voterlookup/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://sos.tn.gov/elections/services/absentee-voting",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
     },
     "TX": {
-      "url": "https://teamrv-mvp.sos.texas.gov/MVP/mvp.do",
-      "label": "Texas My Voter Portal",
       "source_name": "Texas Secretary of State",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08 (redirects to the state's Civix-hosted portal, which votetexas.gov links as 'Am I Registered?')"
+      "tasks": {
+        "check_registration": {
+          "url": "https://goelect.txelections.civixapps.com/ivis-mvp-ui/#/login",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://goelect.txelections.civixapps.com/ivis-mvp-ui/#/login",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://www.votetexas.gov/voting/early-voting.html",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
     },
     "UT": {
-      "url": "https://votesearch.utah.gov/voter-search/search/search-by-address/how-and-where-can-i-vote",
-      "label": "Utah: how and where can I vote",
       "source_name": "Utah Lieutenant Governor's Office of Elections",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08 (linked as 'How can I vote?' from vote.utah.gov)"
-    },
-    "VT": {
-      "url": "https://mvp.vermont.gov/",
-      "label": "Vermont My Voter Page",
-      "source_name": "Vermont Secretary of State",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08 (redirects to vote.vermont.gov)"
+      "tasks": {
+        "check_registration": {
+          "url": "https://votesearch.utah.gov/voter-search/search/search-by-voter/voter-info",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://votesearch.utah.gov/voter-search/search/search-by-address/how-and-where-can-i-vote",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://vote.utah.gov/securing-your-mail-ballot/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
     },
     "VA": {
-      "url": "https://vote.elections.virginia.gov/VoterInformation",
-      "label": "Virginia citizen portal",
       "source_name": "Virginia Department of Elections",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+      "tasks": {
+        "check_registration": {
+          "url": "https://vote.elections.virginia.gov/VoterInformation/Lookup/status",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://vote.elections.virginia.gov/VoterInformation/Lookup/polling",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://www.elections.virginia.gov/casting-a-ballot/absentee-voting/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
+    },
+    "VT": {
+      "source_name": "Vermont Secretary of State",
+      "tasks": {
+        "check_registration": {
+          "url": "https://vote.vermont.gov/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://vote.vermont.gov/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://sos.vermont.gov/elections/voters/early-absentee-voting",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
     },
     "WA": {
-      "url": "https://voter.votewa.gov/WhereToVote.aspx",
-      "label": "VoteWA voter portal",
       "source_name": "Washington Secretary of State",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
-    },
-    "WV": {
-      "url": "https://apps.sos.wv.gov/Elections/Voter/FindMyPollingPlace",
-      "label": "West Virginia: find my polling place",
-      "source_name": "West Virginia Secretary of State",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08 (linked as 'Find Your Polling Place' from sos.wv.gov)"
+      "tasks": {
+        "check_registration": {
+          "url": "https://voter.votewa.gov/portal2023/login.aspx",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://voter.votewa.gov/portal2023/login.aspx",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://www.sos.wa.gov/elections/voters/helpful-information/frequently-asked-questions-voting-mail",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
     },
     "WI": {
-      "url": "https://myvote.wi.gov/en-us/",
-      "label": "MyVote Wisconsin",
       "source_name": "Wisconsin Elections Commission",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+      "tasks": {
+        "check_registration": {
+          "url": "https://myvote.wi.gov/en-us/My-Voter-Info",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://myvote.wi.gov/en-us/Find-My-Polling-Place",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://elections.wi.gov/node/1103",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). UNVERIFIABLE: the site's bot wall refused the pipeline's client, 2026-10-18. Official URL kept; shown as unconfirmed with the fallback beside it"
+        }
+      }
+    },
+    "WV": {
+      "source_name": "West Virginia Secretary of State",
+      "tasks": {
+        "check_registration": {
+          "url": "https://apps.sos.wv.gov/Elections/Voter/AmIRegisteredToVote",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://apps.sos.wv.gov/elections/Voter/AmIRegisteredToVote",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://sos.wv.gov/absentee-voting-information",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
     },
     "WY": {
-      "url": "https://myelectionday.sos.wyo.gov/WYVOTES/Pages/VOSearch.aspx",
-      "label": "Wyoming voter information tool",
       "source_name": "Wyoming Secretary of State",
-      "verified_at": null,
-      "_checked": "Resolved to the lookup page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, from the development workstation and from production, 2026-10-08"
+      "tasks": {
+        "check_registration": {
+          "url": "https://sos.wyo.gov/Elections/State/RegisteringToVote.aspx",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "polling_place": {
+          "url": "https://myelectionday.sos.wyo.gov/WYVOTES/Pages/VOSearch.aspx",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "mail_ballot": {
+          "url": "https://sos.wyo.gov/Elections/State/AbsenteeVoting.aspx",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        }
+      }
     }
   }
 }

@@ -213,10 +213,12 @@ export default function DataChapter() {
               town selector, a fixed public building per district to fill in candidate lists), never
               a visitor&apos;s.
             </Fact>
-            <Fact label="State election offices · USAGov">
-              Each state&apos;s own voter lookup, linked after a nightly check that it still opens,
-              or, where the state&apos;s site turns the check away, linked as unconfirmed beside
-              USAGov&apos;s directory of election offices; otherwise USAGov&apos;s directory alone.
+            <Fact label="State election offices · NASS · USAGov · vote.gov">
+              Each state&apos;s own pages for checking registration, registering, a sample ballot,
+              the polling place and voting by mail, as NASS&apos;s Can I Vote lists them, linked
+              after a nightly check that each still opens, or, where the state&apos;s site turns the
+              check away, linked as unconfirmed with a backup beside it; otherwise the backup alone
+              (Can I Vote, USAGov&apos;s office directory, or vote.gov).
             </Fact>
             <Fact label="Silver Bulletin · Wikipedia">
               The election map&apos;s past polls, which its ranges are fitted and checked on, come

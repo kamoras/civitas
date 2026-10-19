@@ -336,6 +336,10 @@ def test_state_ballot_lookup_falls_back_when_no_verified_link(db_session):
     data = _body(elections.state_ballot("GA", db=db_session))
     assert data["officialLookup"]["isStateSpecific"] is False
     assert data["officialLookup"]["url"].startswith("https://")
+    steps = data["voteSteps"]
+    assert [s["task"] for s in steps] == ["check_registration", "register", "sample_ballot", "polling_place",
+                                          "mail_ballot"]
+    assert all(s["url"].startswith("https://") for s in steps if s["task"] != "register")
 
 
 def test_removed_measures_are_still_returned(db_session, freeze_utcnow):
@@ -355,7 +359,7 @@ def test_lookup_hides_unverified_state_entry(monkeypatch):
 
     monkeypatch.setattr(ballot_lookup, "_cache", {
         "national_fallback": {"url": "https://nat.example", "label": "N", "source_name": "S"},
-        "states": {"GA": {"url": "https://ga.example", "verified_at": None}},
+        "states": _tasked({"GA": {"url": "https://ga.example", "verified_at": None}}),
     })
     result = ballot_lookup.lookup_for_state("GA")
     assert result["url"] == "https://nat.example"
@@ -367,26 +371,37 @@ def test_lookup_uses_verified_state_entry(monkeypatch):
 
     monkeypatch.setattr(ballot_lookup, "_cache", {
         "national_fallback": {"url": "https://nat.example", "label": "N", "source_name": "S"},
-        "states": {"GA": {
-            "url": "https://ga.example", "label": "GA lookup",
-            "source_name": "GA SoS", "verified_at": "2026-08-01T00:00:00",
-        }},
+        "states": _tasked({"GA": {
+            "url": "https://ga.example", "source_name": "GA SoS", "verified_at": "2026-08-01T00:00:00",
+        }}),
     })
     result = ballot_lookup.lookup_for_state("GA")
     assert result["url"] == "https://ga.example"
     assert result["isStateSpecific"] is True
 
 
-def _link_files(monkeypatch, tmp_path, states, volume_states=None):
+def _tasked(states, task="check_registration"):
+    """Old-style one-link entries as the per-task file holds them."""
+    return {code: {"source_name": entry.get("source_name", "SoS"),
+                   "tasks": {task: {k: v for k, v in entry.items() if k not in ("source_name", "label")}}}
+            for code, entry in states.items()}
+
+
+def _stored(volume, code, task="check_registration"):
+    return json.loads(volume.read_text())["states"][code]["tasks"][task]
+
+
+def _link_files(monkeypatch, tmp_path, states, volume_states=None, register=None):
     """Point the link check at a bundled file holding `states` (and, when
     given, a volume copy from an earlier run holding `volume_states`)."""
     from app.pipeline.fetch import ballot_lookup
 
     bundled, volume = tmp_path / "bundled.json", tmp_path / "volume.json"
     fallback = {"url": "https://nat.example", "label": "N", "source_name": "S"}
-    bundled.write_text(json.dumps({"national_fallback": fallback, "states": states}))
+    bundled.write_text(json.dumps({"national_fallback": fallback, "states": _tasked(states)}))
     if volume_states is not None:
-        volume.write_text(json.dumps({"national_fallback": fallback, "states": volume_states}))
+        volume.write_text(json.dumps({"national_fallback": fallback, "states": _tasked(volume_states)}))
+    monkeypatch.setattr(ballot_lookup, "register_pages", lambda: (register or {}, None))
     monkeypatch.setattr(ballot_lookup, "_BUNDLED_PATH", str(bundled))
     monkeypatch.setattr(ballot_lookup, "_VOLUME_PATH", str(volume))
     monkeypatch.setattr(ballot_lookup, "_cache", None)
@@ -425,7 +440,7 @@ async def test_link_verification_clears_a_link_that_stops_resolving(monkeypatch,
     client = _answering(**{"https://ga.example/lookup": (404, None, {}, b"")})
     result = await ballot_lookup.refresh_link_verification(client)
     assert result["failed"] == 1
-    assert json.loads(volume.read_text())["states"]["GA"]["verified_at"] is None
+    assert _stored(volume, "GA")["verified_at"] is None
     shown = ballot_lookup.lookup_for_state("GA")
     assert shown["isStateSpecific"] is False
     assert shown["url"] == "https://nat.example"
@@ -671,7 +686,7 @@ async def test_link_verification_shows_a_walled_lookup_as_unconfirmed(monkeypatc
     })
     result = await ballot_lookup.refresh_link_verification(client)
     assert (result["verified"], result["blocked"], result["failed"]) == (0, 2, 0)
-    stored = json.loads(volume.read_text())["states"]["MA"]
+    stored = _stored(volume, "MA")
     assert stored["verified_at"] is None and stored["blocked_at"]
     shown = ballot_lookup.lookup_for_state("MA")
     assert shown["isStateSpecific"] is True and shown["unconfirmed"] is True
@@ -693,7 +708,7 @@ async def test_a_walled_lookup_that_turns_dead_falls_back(monkeypatch, tmp_path)
     assert ballot_lookup.lookup_for_state("AZ")["unconfirmed"] is True
     client = _answering(**{"https://az.example/portal": (404, None, {}, b"")})
     assert (await ballot_lookup.refresh_link_verification(client))["failed"] == 1
-    assert json.loads(volume.read_text())["states"]["AZ"]["blocked_at"] is None
+    assert _stored(volume, "AZ")["blocked_at"] is None
     shown = ballot_lookup.lookup_for_state("AZ")
     assert shown["isStateSpecific"] is False and shown["unconfirmed"] is False
     assert shown["url"] == "https://nat.example"
@@ -732,13 +747,15 @@ async def test_link_verification_checks_the_bundled_urls_not_last_runs(monkeypat
     )
     client = _answering(**{"https://ga.example/new": (200, None, {}, b"")})
     await ballot_lookup.refresh_link_verification(client)
-    assert json.loads(volume.read_text())["states"]["GA"]["url"] == "https://ga.example/new"
+    assert _stored(volume, "GA")["url"] == "https://ga.example/new"
     assert ballot_lookup.lookup_for_state("GA")["url"] == "https://ga.example/new"
 
 
 def test_bundled_ballot_lookups_cover_every_state_from_its_own_authority():
-    """Every state and D.C. has an official lookup, none of them shown
-    before the link check has passed it, none from an aggregator."""
+    """Every state and D.C. has its own pages for checking registration,
+    the polling place and voting by mail, none shown before the link check
+    has passed it, none from an aggregator; a sample ballot only where the
+    file says how it knows the lookup shows one."""
     from urllib.parse import urlsplit
 
     from app.pipeline.fetch import ballot_lookup
@@ -747,14 +764,90 @@ def test_bundled_ballot_lookups_cover_every_state_from_its_own_authority():
     data = json.loads(open(ballot_lookup._BUNDLED_PATH, encoding="utf-8").read())
     states = data["states"]
     assert set(states) == set(STATE_NAMES)
+    assert set(data["task_fallbacks"]) == set(ballot_lookup._LISTED_TASKS)
     for code, entry in states.items():
-        assert entry["verified_at"] is None, code  # only the link check sets it
-        assert urlsplit(entry["url"]).scheme == "https", code
-        host = urlsplit(entry["url"]).hostname
-        assert not any(host == d or host.endswith("." + d) for d in (
-            "vote.org", "ballotpedia.org", "usa.gov", "vote.gov",
-        )), code
-        assert entry["label"] and entry["source_name"] and entry["_checked"], code
+        assert entry["source_name"], code
+        tasks = entry["tasks"]
+        assert {"check_registration", "polling_place", "mail_ballot"} <= set(tasks) <= set(ballot_lookup._LISTED_TASKS), code
+        for task, link in tasks.items():
+            assert link["verified_at"] is None and link["blocked_at"] is None, (code, task)
+            assert urlsplit(link["url"]).scheme == "https", (code, task)
+            host = urlsplit(link["url"]).hostname
+            assert not any(host == d or host.endswith("." + d) for d in (
+                "vote.org", "ballotpedia.org", "usa.gov", "vote.gov", "nass.org",
+            )), (code, task)
+            assert link["_checked"], (code, task)
+        if "sample_ballot" in tasks:
+            assert "sample ballot" in tasks["sample_ballot"]["_checked"], code
+
+
+def _calendar(registration=None, items=()):
+    return {"registration": registration, "items": list(items)}
+
+
+def test_vote_steps_one_per_task_in_task_order_with_deadlines(monkeypatch, tmp_path):
+    """Five steps, registration before ballot before polling place, each
+    naming where it goes; the register and mail steps carry their deadline,
+    and a passed mail deadline is shown as passed, not dropped."""
+    ballot_lookup, _ = _link_files(
+        monkeypatch, tmp_path, {},
+        register={"PA": {"url": "https://www.pa.gov/register", "publisher": "Commonwealth", "status": "verified"}},
+    )
+    bundled = json.loads(open(ballot_lookup._BUNDLED_PATH).read())
+    bundled["task_fallbacks"] = {t: {"url": f"https://www.nass.org/{t}", "source_name": "NASS"}
+                                 for t in ballot_lookup._LISTED_TASKS}
+    bundled["states"] = {"PA": {"source_name": "Pennsylvania DOS", "tasks": {
+        "polling_place": {"url": "https://www.pavoterservices.pa.gov/poll", "verified_at": "2026-10-18T00:00:00"},
+        "check_registration": {"url": "https://www.pa.gov/check", "blocked_at": "2026-10-18T00:00:00"},
+    }}}
+    open(ballot_lookup._BUNDLED_PATH, "w").write(json.dumps(bundled))
+    ballot_lookup.invalidate_cache()
+    reg = {"sentence": "Register online by Mon, Oct 19", "status": "open", "countdown": "1 day", "closesOn": "2026-10-19"}
+    mail = {"kind": "absentee_request", "sentence": "Mail ballot requests closed Oct 27", "status": "closed",
+            "countdown": None, "closesOn": "2026-10-27"}
+    steps = ballot_lookup.vote_steps("PA", _calendar(reg, [mail]))
+    assert [s["task"] for s in steps] == list(ballot_lookup.TASKS)
+    by = {s["task"]: s for s in steps}
+    assert by["register"]["url"] == "https://www.pa.gov/register" and by["register"]["host"] == "pa.gov"
+    assert by["register"]["deadline"]["countdown"] == "1 day"
+    assert by["check_registration"]["unconfirmed"] is True
+    assert by["check_registration"]["fallback"]["url"] == "https://www.nass.org/check_registration"
+    assert by["polling_place"]["isStateSpecific"] is True and by["polling_place"]["host"] == "pavoterservices.pa.gov"
+    assert by["sample_ballot"]["isStateSpecific"] is False
+    assert by["sample_ballot"]["url"] == "https://www.nass.org/sample_ballot"
+    assert by["mail_ballot"]["deadline"]["status"] == "closed"
+
+
+def test_vote_steps_register_follows_tonights_check(monkeypatch, tmp_path):
+    """The register page is the calendar's; once the nightly check has
+    found that same URL dead, the step falls back to vote.gov. A state with
+    no registration gets a step with no link."""
+    ballot_lookup, _ = _link_files(monkeypatch, tmp_path, {}, register={
+        "GA": {"url": "https://ga.example/register", "publisher": "GA SoS", "status": "verified"},
+        "ND": {"none": True, "url": "https://nd.example/info.pdf"},
+    })
+    volume = {"states": {"GA": {"tasks": {"register": {"url": "https://ga.example/register", "verified_at": None,
+                                                       "blocked_at": None}}}}}
+    open(ballot_lookup._VOLUME_PATH, "w").write(json.dumps(volume))
+    ballot_lookup.invalidate_cache()
+    ga = {s["task"]: s for s in ballot_lookup.vote_steps("GA", None)}
+    assert ga["register"]["url"] == "https://vote.gov/" and ga["register"]["isStateSpecific"] is False
+    nd = {s["task"]: s for s in ballot_lookup.vote_steps("ND", None)}
+    assert nd["register"]["url"] is None
+
+
+@pytest.mark.asyncio
+async def test_link_verification_checks_the_calendars_register_page(monkeypatch, tmp_path):
+    ballot_lookup, volume = _link_files(
+        monkeypatch, tmp_path, {"GA": {"url": "https://ga.example/lookup"}},
+        register={"GA": {"url": "https://ga.example/register"}, "ND": {"none": True, "url": "https://nd.example/x"}},
+    )
+    client = _answering(**{"https://ga.example/lookup": (200, None, {}, b""),
+                           "https://ga.example/register": (403, None, {}, b"")})
+    result = await ballot_lookup.refresh_link_verification(client)
+    assert (result["verified"], result["blocked"]) == (1, 1)
+    assert _stored(volume, "GA", "register")["blocked_at"]
+    assert {s["task"]: s for s in ballot_lookup.vote_steps("GA", None)}["register"]["unconfirmed"] is True
 
 
 # ── direct path: each registered state read from its own office ────
