@@ -231,6 +231,7 @@ _LESS = {"smallGifts": "had a smaller share", "pacMoney": "took a smaller share"
 def _row(measure: Measure, me: dict, peers: list[dict], chamber: str, group: str) -> dict:
     facts = me["facts"]
     value = measure.value(facts)
+    names = {p["id"]: p["name"] for p in peers}
     pairs = [(p["id"], measure.value(p["facts"])) for p in peers]
     pairs = sorted([(i, v) for i, v in pairs if v is not None], key=lambda x: x[1])
     label = _group_label(chamber, group, me["caucus"], peers)
@@ -252,6 +253,7 @@ def _row(measure: Measure, me: dict, peers: list[dict], chamber: str, group: str
         "peerGroup": {"key": group, "label": label, "n": len(values)},
         "distribution": values,
         "distributionIds": [i for i, _ in pairs],
+        "distributionNames": [names[i] for i, _ in pairs],
         "record": record,
         "source": measure.source,
         "percentile": None,
