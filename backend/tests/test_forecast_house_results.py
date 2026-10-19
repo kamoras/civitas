@@ -153,9 +153,9 @@ def test_every_seat_of_the_lines_must_be_listed(monkeypatch):
 
 
 def test_a_misspelt_surname_still_matches_but_a_different_one_does_not():
-    assert fit._same_name("PETTERSON", "Brittany Pettersen")
-    assert fit._same_name("DESPOSITO", "Anthony D’Esposito")
-    assert not fit._same_name("SMITH", "Laurie Buckhout")
+    assert fit._same_name("HALVERSON", "Dana Halversen")
+    assert fit._same_name("DANGELO", "Kim D’Angelo")
+    assert not fit._same_name("SMITH", "Laurie Brackett")
 
 
 def test_fec_party_cells_joining_codes_count_for_the_major_party(monkeypatch):

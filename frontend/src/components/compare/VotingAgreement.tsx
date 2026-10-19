@@ -99,7 +99,7 @@ function Split({ vote: v, left, right }: { vote: AgreementSplit; left: string; r
     <li className="border-b border-white/[0.07] py-2 last:border-b-0">
       <Link
         href={rollCallHref(v)}
-        className="line-clamp-2 font-sans text-sm leading-snug text-ink-hi hover:underline"
+        className="line-clamp-2 min-h-6 font-sans text-sm leading-snug text-ink-hi hover:underline"
       >
         {what}
       </Link>

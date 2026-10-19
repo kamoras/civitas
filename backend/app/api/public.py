@@ -102,6 +102,7 @@ from app.services.presidential_support_service import chamber_view
 from app.state_names import STATE_NAMES
 from app.time_utils import comment_period_today
 from app.services.pagination import paginate_bounds
+from app.services._scorecard_common import latest_snapshot, score_method
 from app.api.agencies import children_of, descendants, document_counts
 from app.ordinals import ordinal
 from app.services import court_service, nomination_service
@@ -323,24 +324,11 @@ _RENAMED_ID = (" An id the member had before a rename still works: the record co
                " current id (`id`, `siteUrl`).")
 
 
-def _latest_snapshot(db: Session, entity_type: str, member_id: str) -> ScoreSnapshot | None:
-    """The member's newest score snapshot: the run that stored the scores
-    a profile and a breakdown publish."""
-    return (
-        db.query(ScoreSnapshot)
-        .filter(ScoreSnapshot.entity_type == entity_type, ScoreSnapshot.entity_id == member_id)
-        .order_by(ScoreSnapshot.date.desc())
-        .first()
-    )
-
-
 def _method(snapshot: ScoreSnapshot | None) -> dict:
-    """Which scoring version stored the scores, and when: what a citation
-    of a score needs (the same two fields as the breakdown's)."""
-    return {
-        "algorithmVersion": snapshot.algorithm_version if snapshot else None,
-        "scoredOn": snapshot.date if snapshot else None,
-    }
+    """The scoring version and date, in the API's camelCase (the same two
+    fields as the breakdown's)."""
+    m = score_method(snapshot)
+    return {"algorithmVersion": m["algorithm_version"], "scoredOn": m["scored_on"]}
 
 
 def _snapshot_facts(stored: str | None) -> dict | None:
@@ -421,7 +409,7 @@ def _breakdown(db: Session, model, entity_type: str, member_id: str, request: Re
     house = entity_type == "representative"
     chamber = "house" if house else "senate"
     explained = (get_representative_score_breakdown if house else get_senator_score_breakdown)(db, member_id)
-    snapshot = _latest_snapshot(db, entity_type, member_id)
+    snapshot = latest_snapshot(db, entity_type, member_id)
     district = member.district if house else None
     with lines_of(member.district_lines_congress if house else None):
         cook_pvi = _seat_pvi(member.state, district)
@@ -748,7 +736,7 @@ def get_senator(
         {
             **senator.model_dump(by_alias=True),
             "siteUrl": _member_url(senator.id),
-            **_method(_latest_snapshot(db, "senator", senator.id)),
+            **_method(latest_snapshot(db, "senator", senator.id)),
         },
         request, max_age=CACHE_TTL_DETAIL_S, deprecated=True,
     )
@@ -893,7 +881,7 @@ def get_representative(
         {
             **rep.model_dump(by_alias=True),
             "siteUrl": _member_url(rep.id),
-            **_method(_latest_snapshot(db, "representative", rep.id)),
+            **_method(latest_snapshot(db, "representative", rep.id)),
         },
         request, max_age=CACHE_TTL_DETAIL_S, deprecated=True,
     )

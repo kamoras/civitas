@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import StateBallotClient from "./StateBallotClient";
-import type { RaceWithCandidates, StateBallot } from "@/types/election";
+import type { RaceWithCandidates, StateBallot, VoteStep } from "@/types/election";
 
 vi.mock("@/lib/api", () => ({
   // The seat map is not shown (out of the campaign, or not built): no lines.
@@ -277,39 +277,49 @@ describe("the ballot page", () => {
     expect(screen.getAllByText("County and municipal offices").length).toBeGreaterThan(0);
   });
 
-  it("links a walled state's own lookup, says it can't be checked, and gives the backup", () => {
+  it("leads with one button per voting task; a walled step says so and gives the backup", () => {
+    const step = (task: VoteStep["task"], over: Partial<VoteStep> = {}): VoteStep => ({
+      task,
+      url: `https://my.arizona.vote/${task}`,
+      host: "my.arizona.vote",
+      sourceName: "Arizona Secretary of State",
+      isStateSpecific: true,
+      unconfirmed: false,
+      fallback: null,
+      deadline: null,
+      ...over,
+    });
     render(
       <StateBallotClient
         ballot={ballot({
           state: "AZ",
           stateName: "Arizona",
-          officialLookup: {
-            url: "https://my.arizona.vote/PortalList.aspx",
-            label: "Arizona Voter Information Portal",
-            sourceName: "Arizona Secretary of State",
-            isStateSpecific: true,
-            verifiedAt: null,
-            unconfirmed: true,
-            fallback: {
-              url: "https://www.usa.gov/election-office",
-              label: "Find your state or local election office",
-              sourceName: "USAGov",
-            },
-          },
+          voteSteps: [
+            step("check_registration", {
+              unconfirmed: true,
+              fallback: {
+                url: "https://www.nass.org/can-i-vote/voter-registration-status",
+                sourceName: "Can I Vote (National Association of Secretaries of State)",
+                host: "nass.org",
+              },
+            }),
+            step("register"),
+            step("sample_ballot"),
+            step("polling_place"),
+            step("mail_ballot"),
+          ],
         })}
       />
     );
-    const own = screen.getByRole("link", {
-      name: "Arizona Voter Information Portal (opens in new tab)",
-    });
-    expect(own).toHaveAttribute("href", "https://my.arizona.vote/PortalList.aspx");
-    expect(own).toHaveTextContent("ARIZONA'S OFFICIAL VOTER LOOKUP");
+    const own = screen.getByRole("link", { name: /^Check your registration: my\.arizona\.vote/ });
+    expect(own).toHaveAttribute("href", "https://my.arizona.vote/check_registration");
     expect(screen.getByText(/This site blocks automated checks/)).toBeInTheDocument();
     expect(
-      screen.getByRole("link", {
-        name: "Find your state or local election office (opens in new tab)",
-      })
-    ).toHaveAttribute("href", "https://www.usa.gov/election-office");
+      screen.getByRole("link", { name: /Check your registration through Can I Vote/ })
+    ).toHaveAttribute("href", "https://www.nass.org/can-i-vote/voter-registration-status");
+    // The page's one register link is the step's.
+    expect(screen.getAllByRole("link", { name: /^Register/ })).toHaveLength(1);
+    expect(screen.queryByText(/OFFICIAL VOTER LOOKUP/)).not.toBeInTheDocument();
   });
 
   it("gives a verified lookup no caveat", () => {

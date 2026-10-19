@@ -911,11 +911,14 @@ Corollaries that follow from the same rule, all enforced in code:
   back to one, since that would publish past the refusal; and the card
   names both ("as republished by Eureka County Clerk-Recorder"). Getting
   past the wall itself is not an option: it is the state saying no.
-  A wall is not a dead link, though. A state's voter lookup the nightly
-  link check is refused on (`ballot_lookup._check` → `blocked_at`) is still
-  linked, worded as unconfirmed ("This site blocks automated checks, so we
-  can't confirm it's up") with USAGov's directory beside it; only a link
-  that answers 404, or lands on its site's homepage, falls back alone. That
+  A wall is not a dead link, though. A voting step's link (the state
+  page's "Your vote, step by step", one official link per task,
+  `ballot_lookup.vote_steps`) the nightly link check is refused on
+  (`ballot_lookup._check` → `blocked_at`) is still linked, worded as
+  unconfirmed ("This site blocks automated checks, so we can't confirm
+  it's up") with the task's fallback beside it (vote.gov, NASS's Can I
+  Vote, USAGov's directory); only a link that answers 404, or lands on its
+  site's homepage, falls back alone. That
   is enforced in the HTTP layer for every source: the client forgets the
   cookies a challenge response sets (`http_client.is_bot_challenge`), and
   `fetch_with_retry` never retries a challenge. Until 2026-10 a retry sent

@@ -12,6 +12,7 @@ import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
 import BallotMeasureCard, { measureAnchor } from "@/components/elections/BallotMeasureCard";
 import BallotBasisNotice from "@/components/elections/BallotBasisNotice";
 import VoterCalendar from "@/components/elections/VoterCalendar";
+import VoteSteps from "@/components/elections/VoteSteps";
 import GeneralRunoffNotice, {
   otherPrimaryLabel,
   RankedChoiceNotice,
@@ -1627,12 +1628,6 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   // A rejected URL falls back to the national directory, so it isn't the
   // state's own site whatever the flag says.
   const lookupIsStateSpecific = officialLookup.isStateSpecific && !!safeHref(officialLookup.url);
-  // The state's own lookup behind a bot wall the link check can't get
-  // past: shown, but said to be unconfirmed, with the national directory
-  // as the backup (ballot_lookup.lookup_for_state).
-  const lookupUnconfirmed = lookupIsStateSpecific && !!officialLookup.unconfirmed;
-  const fallbackHref =
-    safeHref(officialLookup.fallback?.url ?? "") || "https://www.usa.gov/election-office";
   const stateName = ballot.stateName ?? ballot.state;
 
   const [towns, setTowns] = useState<TownEntry[]>([]);
@@ -1927,37 +1922,21 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                 <span className="text-xs text-ink-lo">
                   A research tool, not an official ballot.
                 </span>
-                <a
-                  href={lookupHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label={`${officialLookup.label} (opens in new tab)`}
-                  className="font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
-                >
-                  {/* lookupIsStateSpecific, not the raw flag: a URL safeHref
-                    rejected sends this link to USAGov. "Voter lookup", not
-                    "your full ballot": some states' link is their polling-
-                    place page, which shows where to vote, not the ballot. */}
-                  {lookupUnconfirmed
-                    ? `${stateName.toUpperCase()}'S OFFICIAL VOTER LOOKUP ↗`
-                    : lookupIsStateSpecific
+                {/* The voter lookup is a step in "Your vote, step by step"
+                  below, named for its task; an older API without steps
+                  keeps this one link. */}
+                {!ballot.voteSteps?.length && (
+                  <a
+                    href={lookupHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`${officialLookup.label} (opens in new tab)`}
+                    className="font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
+                  >
+                    {lookupIsStateSpecific
                       ? `${ballot.state} OFFICIAL VOTER LOOKUP ↗`
                       : "FIND YOUR ELECTION OFFICE ↗"}
-                </a>
-                {lookupUnconfirmed && (
-                  <p className="max-w-xs text-xs text-ink-lo">
-                    This site blocks automated checks, so we can&apos;t confirm it&apos;s up. If it
-                    doesn&apos;t open, use the{" "}
-                    <a
-                      href={fallbackHref}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label={`${officialLookup.fallback?.label ?? "National directory of election offices"} (opens in new tab)`}
-                      className={INLINE_LINK}
-                    >
-                      national directory ↗
-                    </a>
-                  </p>
+                  </a>
                 )}
                 <FollowFeed subject={stateName} feed={stateFeed(ballot.state, stateName)} />
                 {/* Before election day nothing on the page says what it
@@ -1976,8 +1955,13 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
             {/* Before the ballot: a reader who isn't registered by the
               deadline can't vote on any of it. Gone in the results window,
               when every deadline has passed. */}
+            {!resultsMode && ballot.voteSteps && (
+              <VoteSteps steps={ballot.voteSteps} stateName={stateName} />
+            )}
+
             {!resultsMode && ballot.voterCalendar && (
               <VoterCalendar
+                showRegister={!ballot.voteSteps?.length}
                 calendar={ballot.voterCalendar}
                 stateName={stateName}
                 lookupHref={lookupHref}
