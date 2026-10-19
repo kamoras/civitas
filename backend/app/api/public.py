@@ -110,6 +110,7 @@ from app.services.president_service import get_all_presidents, get_president
 from app.services.roll_call_shape import shapes
 from app.services.congress_service import roll_call_congresses
 from app.services.member_positions import member_positions
+from app.peer_comparison import peer_comparison
 from app.services.representative_service import (
     get_rep_leaderboard,
     get_rep_states_with_counts,
@@ -385,7 +386,8 @@ def _positions(chamber: str, bioguide_id: str | None) -> dict | None:
     }
 
 
-def _breakdown(db: Session, model, entity_type: str, member_id: str, request: Request) -> JSONResponse:
+def _breakdown(db: Session, model, entity_type: str, member_id: str, request: Request,
+               peers: str = "caucus") -> JSONResponse:
     member_id = resolve_member_id(db, member_id)
     member = db.get(model, member_id)
     if member is None:
@@ -426,6 +428,7 @@ def _breakdown(db: Session, model, entity_type: str, member_id: str, request: Re
             "overall": compute_overall_score(member),
             "weights": SCORE_WEIGHTS,
             "dimensions": dimensions,
+            "peerComparison": peer_comparison(db, chamber, member_id, peers),
             "references": {
                 "funding": FUNDING_REFERENCE.load().get(chamber),
                 "constituent": CONSTITUENT_REFERENCE.load().get(chamber),
@@ -741,9 +744,11 @@ def get_senator_breakdown(
     _rl: PublicReadLimit,
     request: Request,
     senator_id: str = Path(description="The senator's id." + _RENAMED_ID),
+    peers: Literal["caucus", "chamber"] = Query("caucus", description="Peer group for peerComparison: caucus (the "
+                                                "member's party's caucus in the chamber) or chamber (every member)"),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
-    return _breakdown(db, Senator, "senator", senator_id, request)
+    return _breakdown(db, Senator, "senator", senator_id, request, peers)
 
 
 
@@ -885,9 +890,11 @@ def get_representative_breakdown(
     _rl: PublicReadLimit,
     request: Request,
     rep_id: str = Path(description="The representative's id." + _RENAMED_ID),
+    peers: Literal["caucus", "chamber"] = Query("caucus", description="Peer group for peerComparison: caucus (the "
+                                                "member's party's caucus in the chamber) or chamber (every member)"),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
-    return _breakdown(db, Representative, "representative", rep_id, request)
+    return _breakdown(db, Representative, "representative", rep_id, request, peers)
 
 
 

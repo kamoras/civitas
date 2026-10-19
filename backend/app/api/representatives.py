@@ -12,6 +12,7 @@ from app.api.response_helpers import (
 from app.database import get_db
 from app.member_ids import resolve_member_id
 from app.services._scorecard_common import VOTE_PERIOD_PATTERN
+from app.peer_comparison import peer_comparison
 from app.services.holdings_service import HOLDING_CATEGORY_PATTERN, get_rep_holdings
 from app.services.representative_service import (
     get_rep_leaderboard,
@@ -59,6 +60,20 @@ def get_rep_score_breakdown_route(rep_id: str, db: Session = Depends(get_db)) ->
     if breakdown is None:
         raise HTTPException(status_code=404, detail="Representative not found")
     return _cached_json(breakdown, max_age=CACHE_TTL_DETAIL_S)
+
+
+@router.get("/representatives/{rep_id}/peers")
+def get_representative_peers(
+    rep_id: str,
+    group: str = Query("caucus", pattern="^(caucus|chamber)$"),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """Where the representative stands among peers on each measure (app/peer_comparison.py):
+    the "Where they stand" stack's data."""
+    result = peer_comparison(db, "house", resolve_member_id(db, rep_id), group)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Representative not found")
+    return _cached_json(result, max_age=CACHE_TTL_DETAIL_S)
 
 
 @router.get("/representatives/{rep_id}/votes")
