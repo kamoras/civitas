@@ -638,6 +638,11 @@ class _PersonDetailBase(CamelModel):
         None, description="How the member's constituents rated them in the Cooperative Election Study, by party")
     website_url: str = ""
     contact_form_url: str = ""
+    algorithm_version: str | None = Field(
+        None, description="The scoring version that stored the member's scores (the newest history snapshot's); "
+                          "null when none is recorded")
+    scored_on: str | None = Field(
+        None, description="When the member's stored scores were computed, YYYY-MM-DD; null when none is recorded")
     office_phone: str = ""
     office_address: str = ""
 

@@ -34,6 +34,12 @@ SOURCES (every one public domain or open, nothing behind a sign-in):
   * Incumbency: the Federal Election Commission's candidate master files
     (fec.gov bulk downloads cnYY.zip, public domain): a nominee is the
     incumbent when the FEC codes their candidacy "I" for that election.
+  * House results: the FEC's Federal Elections workbooks (US House Results
+    by State, public domain), found through the FEC's results index; for a
+    year the FEC has not compiled, the Clerk of the House's Statistics of
+    the Presidential and Congressional Election (public domain), found on
+    the Clerk's Election Information page, with incumbency from the FEC's
+    list of general-election candidates (clerk_house, clerk_results).
   * Polls: Silver Bulletin's raw polls (app/forecast/training_polls.py),
     the copy in use of app/data/forecast_polls.json: each race's final
     weeks of polls with the certified result, and the generic
@@ -60,15 +66,20 @@ Run from the repo (network on the first run, cached):
 from __future__ import annotations
 
 import argparse
+import asyncio
 import csv
 import io
 import json
 import re
 import sys
-import urllib.request
+import unicodedata
 import zipfile
 from collections import defaultdict
+from difflib import SequenceMatcher
 from pathlib import Path
+
+import pdfplumber
+from pdfplumber.utils.text import chars_to_textmap
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -76,7 +87,12 @@ from app.atomic_write import runtime_data_path  # noqa: E402
 from app.contact import BOT_USER_AGENT  # noqa: E402
 from app.forecast import model  # noqa: E402
 from app.forecast import training_polls as tp  # noqa: E402
+from app.http_client import make_async_client  # noqa: E402
+from app.pipeline.fetch.election_results import ranked_choice_states  # noqa: E402
+from app.pipeline.fetch.http_utils import DEFAULT_MAX_RETRIES, fetch_with_retry  # noqa: E402
 from app.pipeline.fetch.state_candidates_tabular import _xlsx_rows, xlsx_sheet_as_first  # noqa: E402
+from app.pipeline.rate_limiter import RateLimiter  # noqa: E402
+from app.state_names import STATE_NAMES  # noqa: E402
 
 DATA = Path(__file__).resolve().parents[1] / "app" / "data"
 TRAINING = DATA / "forecast_training.json"
@@ -94,13 +110,41 @@ FEC_CN_URL = "https://www.fec.gov/files/bulk-downloads/{year}/cn{yy}.zip"
 # index; a year with no link has not been published.
 FEC_RESULTS_INDEX = "https://www.fec.gov/introduction-campaign-finance/election-results-and-voting-information/"
 FEC_HOUSE_SHEET = "US House Results by State"
+# The FEC's list of each general election's congressional candidates
+# ("<year>congressgecands.xlsx", with its incumbent mark), linked from this
+# page soon after the election: the Clerk's results carry no incumbency.
+FEC_ELECTION_INFO = "https://www.fec.gov/introduction-campaign-finance/election-and-voting-information/"
+# The Clerk of the House's Election Information page, which links the newest
+# "Statistics of the Presidential and Congressional Election" (official
+# results, public domain): the House's results for a year the FEC has not
+# compiled yet.
+CLERK = "https://clerk.house.gov"
+CLERK_ELECTION_INFO = CLERK + "/Members/ViewElectionInformation"
+
+
+# Every download goes through the backend's retrying fetch: a dropped
+# connection (the FEC's bulk files did it twice in one refit, 2026-10-17)
+# is retried with backoff instead of failing the whole refit.
+_LIMITER = RateLimiter(2.0, name="fit_forecast_model")
+DOWNLOAD_TIMEOUT_S = 120.0
+
+
+def download(url: str) -> bytes:
+    """The body at `url`, retried with backoff (http_utils.fetch_with_retry);
+    stops the run once the retries are spent, never returning an empty body."""
+    async def get() -> bytes | None:
+        async with make_async_client(headers={"User-Agent": BOT_USER_AGENT}) as client:
+            resp = await fetch_with_retry(client, _LIMITER, "GET", url, timeout=DOWNLOAD_TIMEOUT_S)
+            return None if resp is None else resp.content
+    body = asyncio.run(get())
+    if body is None:
+        raise SystemExit(f"{url}: no answer after {DEFAULT_MAX_RETRIES} attempts")
+    return body
 
 
 def fetch(url: str, dest: Path) -> bytes:
     if not dest.exists():
-        req = urllib.request.Request(url, headers={"User-Agent": BOT_USER_AGENT})
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            dest.write_bytes(resp.read())
+        dest.write_bytes(download(url))
     return dest.read_bytes()
 
 
@@ -108,10 +152,7 @@ def medsl_file(doi: str) -> tuple[str, str]:
     """(download URL, file name) of the data file in the newest version of a
     MEDSL Dataverse dataset: the one named for its year span
     ("1976-2024-senate-state"), in its original format."""
-    req = urllib.request.Request(f"{DATAVERSE}/api/datasets/:persistentId/?persistentId={doi}",
-                                 headers={"User-Agent": BOT_USER_AGENT})
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        version = json.loads(resp.read())["data"]["latestVersion"]
+    version = json.loads(download(f"{DATAVERSE}/api/datasets/:persistentId/?persistentId={doi}"))["data"]["latestVersion"]
     for f in version["files"]:
         df = f["dataFile"]
         name = df.get("originalFileName") or df["filename"]
@@ -281,7 +322,9 @@ def poll_source(doc: dict) -> str:
 # The House (forecast_house_training.json, forecast_house_model.json)
 # ---------------------------------------------------------------------------
 
-_D_PARTIES = {"D", "DEM", "DFL"}
+# FEC party codes. A cell can join several ("D/IP": a fusion nominee;
+# "W(R)/R": nominated by primary write-ins) and carry a mark ("R*").
+_D_PARTIES = {"D", "DEM", "DFL", "DNL"}
 _R_PARTIES = {"R", "REP"}
 
 
@@ -330,15 +373,20 @@ def fec_house(raw: bytes, sheet: str) -> list[dict]:
     """Contested House generals from one FEC workbook: the top two by
     general-election votes are a Democrat and a Republican. A candidate on
     several lines (New York's and Connecticut's fusion parties) counts once,
-    every line summed."""
+    every line summed: keyed by FEC ID and surname together, since the
+    workbook sometimes repeats one candidate's ID on an opponent's row
+    (2020 TN-7, 2022 IL-3). A district holding a special election the same
+    day lists its general as "NN-Full Term"."""
     rows = _xlsx_rows(xlsx_sheet_as_first(raw, _sheet_file(raw, sheet)))
     vcol = next(k for k in rows[0] if k.strip() == "GENERAL VOTES")
     icol = next(k for k in rows[0] if k.startswith("(I)"))
     races: dict = defaultdict(dict)
     for r in rows:
-        st, dist = r.get("STATE ABBREVIATION", "").strip(), r.get("DISTRICT", "").strip()
-        if not re.fullmatch(r"\d\d", dist) or not st:
+        st = r.get("STATE ABBREVIATION", "").strip()
+        full = re.fullmatch(r"(\d\d)(?:\s*-\s*full term)?", r.get("DISTRICT", "").strip(), re.I)
+        if not full or not st:
             continue  # totals, headers, unexpired-term specials ("05 - UNEXPIRED TERM")
+        dist = full.group(1)
         if not (r.get("CANDIDATE NAME") or "").strip() or (r.get("TOTAL VOTES") or "").strip():
             continue  # "Party Votes:" / "District Votes:" total rows
         # A ranked-choice count (Maine, Alaska from 2022) is its last round
@@ -348,10 +396,11 @@ def fec_house(raw: bytes, sheet: str) -> list[dict]:
         if not re.fullmatch(r"\d+", votes):
             continue  # "Unopposed", blank, write-in notes
         fec = r.get("FEC ID#") or r.get("FEC ID") or ""
-        name = (fec if fec not in ("", "n/a") else r.get("CANDIDATE NAME", "")).strip()
+        surname = (r.get("CANDIDATE NAME (Last)") or "").strip().upper()
+        name = (fec, surname) if fec not in ("", "n/a") else r.get("CANDIDATE NAME", "").strip()
         cand = races[(st, int(dist))].setdefault(name, {"votes": 0, "parties": set(), "inc": False})
         cand["votes"] += int(votes)
-        cand["parties"].add((r.get("PARTY") or "").strip().upper())
+        cand["parties"] |= {p.strip("*") for p in (r.get("PARTY") or "").strip().upper().split("/")}
         cand["inc"] |= (r.get(icol) or "").strip() == "(I)"
     out = []
     for (st, dist), cands in races.items():
@@ -368,17 +417,233 @@ def fec_house(raw: bytes, sheet: str) -> list[dict]:
     return out
 
 
+def clerk_statistics(years, cache: Path) -> dict[int, bytes]:
+    """{year: PDF} of each of `years` whose "Statistics of the Presidential
+    and Congressional Election" the Clerk's Election Information page links
+    (statistics<year>.pdf). The page links the newest edition only; a year
+    it doesn't link is not read from the Clerk."""
+    page = fetch(CLERK_ELECTION_INFO, cache / "clerk-election-information.html").decode("utf-8", "replace")
+    out = {}
+    for year in years:
+        link = re.search(r'href="([^"]*statistics%d\.pdf)"' % year, page)
+        if not link:
+            continue
+        href = link.group(1) if link.group(1).startswith("http") else CLERK + link.group(1)
+        raw = fetch(href, cache / f"clerk-statistics{year}.pdf")
+        if not raw.startswith(b"%PDF"):
+            raise SystemExit(f"Clerk's Statistics {year}: {href} is not a PDF")
+        out[year] = raw
+    return out
+
+
+def _letters(name: str) -> str:
+    """A name's letters alone, accents folded, for matching across sources
+    ("D’Esposito", "D'Esposito")."""
+    folded = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()
+    return re.sub(r"[^A-Z]", "", folded.upper())
+
+
+def fec_general_candidates(year: int, cache: Path) -> dict[tuple[str, int], list[tuple[str, str, bool]]]:
+    """{(state, district): [(party D/R/other, surname letters, incumbent)]}
+    from the FEC's list of the year's congressional general-election
+    candidates. Stops when the FEC's page doesn't link it: without it the
+    Clerk's results have no incumbency."""
+    page = fetch(FEC_ELECTION_INFO, cache / "fec-election-information.html").decode("utf-8", "replace")
+    link = re.search(r'href="([^"]*/%dcongressgecands\.xlsx)"' % year, page)
+    if not link:
+        raise SystemExit(f"FEC: {FEC_ELECTION_INFO} links no {year}congressgecands.xlsx (candidates and incumbents)")
+    href = link.group(1) if link.group(1).startswith("http") else "https://www.fec.gov" + link.group(1)
+    raw = fetch(href, cache / f"{year}congressgecands.xlsx")
+    sheets = sorted(re.findall(r"xl/worksheets/(sheet\d+)\.xml", " ".join(zipfile.ZipFile(io.BytesIO(raw)).namelist())))
+    out: dict = defaultdict(list)
+    # One sheet per state.
+    for r in (row for sheet in sheets for row in _xlsx_rows(xlsx_sheet_as_first(raw, sheet))):
+        st, dist = (r.get("STATE ABBREVIATION") or "").strip(), (r.get("DISTRICT") or "").strip()
+        if not st or not re.fullmatch(r"\d\d", dist):
+            continue  # blank separators; Senate rows ("S")
+        codes = {p.strip("*") for p in (r.get("PARTY") or "").strip().upper().split("/")}
+        side = "D" if codes & _D_PARTIES else "R" if codes & _R_PARTIES else "X"
+        out[(st, int(dist))].append((side, _letters(r.get("CANDIDATE NAME (Last)") or ""),
+                                     (r.get("(I)") or "").strip() == "(I)"))
+    if not out:
+        raise SystemExit(f"FEC {year}congressgecands.xlsx: no House candidates read")
+    return out
+
+
+def _upright(char: dict, page) -> dict:
+    """A character of a page set sideways (the wide recapitulation tables),
+    placed as it reads with the page turned upright."""
+    if char["matrix"][1] > 0:  # reads bottom to top
+        return dict(char, x0=page.height - char["bottom"], x1=page.height - char["top"],
+                    top=char["x0"], bottom=char["x1"], upright=True)
+    return dict(char, x0=char["top"], x1=char["bottom"], top=page.width - char["x1"],
+                bottom=page.width - char["x0"], upright=True)
+
+
+def clerk_lines(raw: bytes) -> list[tuple[float, str, bool]]:
+    """(left edge, text, noted) of every line of a Statistics PDF, in
+    reading order. Footnote marks (set at half the text's size) are taken
+    out of the text, since one printed against a count reads as its leading
+    digit ("1146,142"), and `noted` says the line had one."""
+    out = []
+    with pdfplumber.open(io.BytesIO(raw)) as pdf:
+        for page in pdf.pages:
+            upright = [c for c in page.chars if c["upright"]]
+            turned = [_upright(c, page) for c in page.chars if not c["upright"]]
+            for chars in (upright, turned):
+                if not chars:
+                    continue
+                heights = [round(c["bottom"] - c["top"], 1) for c in chars]
+                body = max(set(heights), key=heights.count)
+                marks = [c for c in chars if c["bottom"] - c["top"] <= 0.75 * body]
+                text = [c for c in chars if c["bottom"] - c["top"] > 0.75 * body]
+                for ln in chars_to_textmap(text).extract_text_lines(return_chars=False):
+                    noted = any(ln["top"] - 3 <= m["top"] and m["bottom"] <= ln["bottom"] + 3 for m in marks)
+                    out.append((ln["x0"], ln["text"], noted))
+    return out
+
+
+# "1. Barry Moore, Republican ........ 258,619"; a nominee unopposed and not
+# on the ballot has no count (a footnote mark in its place).
+_CLERK_ENTRY = re.compile(r"^(?:(\d+)\.\s+)?(\S.*?)\s*\.{2,}\s*(\d{1,3}(?:,\d{3})*)?$")
+# A recapitulation row: "1st district .... 258,619 70,929 .... 306 329,854",
+# its last figure the district's total.
+_CLERK_RECAP = re.compile(r"^(?:(\d+)(?:st|nd|d|rd|th) district|At large)\s*\.+(?:\s.*?)?\s([\d,]+)$")
+_CLERK_D = {"Democrat", "Democratic", "Democratic-Farmer-Labor", "Democratic-Nonpartisan League"}
+_CLERK_R = {"Republican"}
+_STATE_BY_NAME = {name.upper(): st for st, name in STATE_NAMES.items()}
+
+
+def clerk_house(lines: list[tuple[float, str, bool]], ranked_choice=frozenset()) -> tuple[list[dict], set, list[str]]:
+    """(contested D-vs-R races, every district listed, races left out) from
+    a Statistics PDF's lines (clerk_lines): the same race shape as
+    fec_house, with the nominees' names for the incumbency match (the
+    Clerk doesn't mark incumbents).
+
+    A candidate's indented lines beneath their name are the other parties
+    that nominated them (New York's and Connecticut's fusion lines) and
+    count toward them; a line at the name's indent with no party ("Blank",
+    "Write-in", "Exhausted Ballots") is a tally of no candidate. Every
+    district's lines must add up to the total the Clerk's own
+    recapitulation table gives it, or the run stops: a misread line would
+    otherwise move a margin silently. A special election for an unexpired
+    term is not the general. A ranked-choice state's race in which nobody
+    has a majority is left out unless the Clerk prints its last round (the
+    "Exhausted Ballots" tally): its first choices are not the result."""
+    state = section = block = None
+    special = False
+    table = 0
+    blocks: dict = defaultdict(list)
+    recap: dict = {}
+    for x, text, noted in lines:
+        head = re.sub(r"\s*—\s*Continued$", "", text.strip())
+        if head in _STATE_BY_NAME:
+            state, section, special = _STATE_BY_NAME[head], None, False
+            continue
+        if head.startswith("Recapitulation of Votes Cast in "):
+            state = _STATE_BY_NAME.get(head.removeprefix("Recapitulation of Votes Cast in ").upper())
+            section, special = "recap", False
+            continue
+        if head.startswith("FOR "):
+            section, special = ("house" if "UNITED STATES REPRESENTATIVE" in head else "other"), False
+            continue
+        if head.startswith("(For unexpired term"):
+            special = True
+            continue
+        if head.startswith("(For full term"):
+            special = False
+            continue
+        if section == "recap" and state:
+            # A wide table continues in a second one below it (its own
+            # "Title of candidate" header); the total is the last one's.
+            table += head.startswith("Title of")
+            m = _CLERK_RECAP.match(head)
+            if m and not special:
+                key = (state, int(m.group(1) or 0))
+                if recap.get(key, (None,))[0] == table:
+                    raise SystemExit(f"Clerk's Statistics: two recapitulation rows for {key}")
+                recap[key] = (table, int(m.group(2).replace(",", "")))
+            continue
+        if section != "house" or state is None:
+            continue
+        if head == "AT LARGE":
+            block = {"key": (state, 0), "special": special, "entries": []}
+            blocks[block["key"]].append(block)
+            continue
+        m = _CLERK_ENTRY.match(head)
+        if not m:
+            continue
+        number, label, figure = m.groups()
+        if number:
+            block = {"key": (state, int(number)), "special": special, "entries": []}
+            blocks[block["key"]].append(block)
+        if block is None or block["key"][0] != state:
+            raise SystemExit(f"Clerk's Statistics: {text!r} belongs to no district")
+        block["entries"].append((round(x), bool(number), label, int(figure.replace(",", "")) if figure else 0, noted))
+    # A name's indent: the commonest left edge among unnumbered entries. A
+    # line well right of it continues the name above.
+    entry_x = [e[0] for bs in blocks.values() for b in bs for e in b["entries"] if not e[1]]
+    name_x = max(set(entry_x), key=entry_x.count) if entry_x else 0
+    out, left_out = [], []
+    for key, listed in blocks.items():
+        general = [b for b in listed if not b["special"]]
+        if len(general) != 1:
+            raise SystemExit(f"Clerk's Statistics: {len(general)} general-election listings for {key}")
+        b = {"cands": [], "tally": 0, "rounds": False, "noted": False}
+        for x, numbered, label, votes, noted in general[0]["entries"]:
+            name, *parties = [p.strip() for p in label.split(",")]
+            if not numbered and x > name_x + 5 and b["cands"]:
+                b["cands"][-1]["votes"] += votes
+                b["cands"][-1]["parties"] |= {name, *parties}
+                b["noted"] |= noted
+            elif parties:
+                b["cands"].append({"name": name, "votes": votes, "parties": set(parties)})
+                b["noted"] |= noted
+            else:
+                b["tally"] += votes
+                b["rounds"] |= name.startswith("Exhausted Ballot")
+        counted = sum(c["votes"] for c in b["cands"]) + b["tally"]
+        total = recap.get(key, (None, 0))[1]
+        if counted != total:
+            raise SystemExit(f"Clerk's Statistics: {key[0]}-{key[1]}'s lines add up to {counted:,}; its "
+                             f"recapitulation row says {total:,}")
+        top = sorted(b["cands"], key=lambda c: -c["votes"])[:2]
+        if len(top) < 2 or not top[1]["votes"]:
+            continue
+        side = {("D" if c["parties"] & _CLERK_D else "R" if c["parties"] & _CLERK_R else "X"): c for c in top}
+        if set(side) != {"D", "R"}:
+            continue
+        if b["noted"] and not b["rounds"]:
+            left_out.append(f"{key[0]}-{key[1]}: a count carries a footnote (a runoff's count, a recount)")
+            continue
+        if (key[0] in ranked_choice and not b["rounds"]
+                and 2 * top[0]["votes"] <= sum(c["votes"] for c in b["cands"])):
+            left_out.append(f"{key[0]}-{key[1]}: ranked-choice with no majority, and only first choices printed")
+            continue
+        d, rep = side["D"], side["R"]
+        out.append({"state": key[0], "district": key[1],
+                    "margin": round(100 * (rep["votes"] - d["votes"]) / (rep["votes"] + d["votes"]), 3),
+                    "names": {"D": d["name"], "R": rep["name"]}})
+    return out, set(blocks), left_out
+
+
 def fit_house(cache: Path, house_polls: dict, generic: dict, senate: tuple, poll_doc: dict,
               training_out: Path, model_out: Path) -> None:
     leans = json.loads(HOUSE_LEAN.read_text())
-    workbooks = fec_house_workbooks(sorted(int(y) for y in leans["leans"]), cache)
+    years = sorted(int(y) for y in leans["leans"])
+    workbooks = fec_house_workbooks(years, cache)
+    results = {year: fec_house(raw, _house_sheet(raw)) for year, raw in workbooks.items()}
+    left_out = {}
+    for year, raw in clerk_statistics([y for y in years if y not in workbooks], cache).items():
+        results[year], left_out[str(year)] = clerk_results(year, raw, _lines(leans, year), cache)
+        print(f"House {year}: the Clerk's Statistics, {len(results[year])} contested races; left out {left_out[str(year)]}")
     rows, missing = [], []
-    for year, raw in sorted(workbooks.items()):
+    for year, races in sorted(results.items()):
         lean = leans["leans"][str(year)]
-        lines = leans["lines"][leans["_method"][str(year)].split("th", 1)[0]]
+        lines = _lines(leans, year)
         at_large = {k.split("-")[0] for k in lines if k.endswith("-0")}
         states = {k.split("-")[0] for k in lines}
-        for race in fec_house(raw, _house_sheet(raw)):
+        for race in races:
             if race["state"] not in states:
                 continue  # the delegates (DC, the territories) are not states' seats
             seat = f"{race['state']}-{0 if race['state'] in at_large else race['district']}"
@@ -399,8 +664,14 @@ def fit_house(cache: Path, house_polls: dict, generic: dict, senate: tuple, poll
         raise SystemExit("House: a results row has no lean, or a cycle parsed too few contested races")
     gen = {y: v for y, v in generic.items() if int(y) in per_year}
     years = sorted(per_year)
-    source = (f"Results and incumbency: Federal Election Commission, Federal Elections {_years(years)}, "
-              "US House Results by State (certified results, public domain). Lean: app/data/forecast_house_lean.json "
+    fec_years = [y for y in years if y in workbooks]
+    clerk_years = [y for y in years if y not in workbooks]
+    source = (f"Results and incumbency: Federal Election Commission, Federal Elections {_years(fec_years)}, "
+              "US House Results by State (certified results, public domain)"
+              + (f"; for {_years(clerk_years)}, which the FEC has not compiled yet, the Clerk of the House's "
+                 f"Statistics of the Presidential and Congressional Election (official results, public domain), "
+                 f"with incumbency from the FEC's list of general-election candidates" if clerk_years else "")
+              + ". Lean: app/data/forecast_house_lean.json "
               "(Civitas, from VEST 2016 and 2020 precinct results, CC BY 4.0, and Census blocks and districts), "
               f"each district's lean before the election on the lines it was held on. {poll_source(poll_doc)}")
     training_out.write_text(json.dumps({
@@ -409,11 +680,63 @@ def fit_house(cache: Path, house_polls: dict, generic: dict, senate: tuple, poll
                     f"attributed to {tp.ATTRIBUTION}); leans derived from VEST, CC BY 4.0; results public domain.",
         "_columns": {"polls": "[pollster, days before election day, sample size, R-D margin, partisan sponsor]"},
         # The cycles each input reaches (build.check_training_staleness).
-        "_coverage": {"results": sorted(workbooks), "lean": sorted(int(y) for y in leans["leans"]),
+        "_coverage": {"results": sorted(results), "lean": sorted(int(y) for y in leans["leans"]),
                       "polls": sorted(int(y) for y in generic)},
+        # Contested races the Clerk's Statistics print but the fit leaves out (clerk_house).
+        "_excluded": left_out,
         "races": rows, "generic": dict(sorted(gen.items())),
     }, separators=(",", ":")) + "\n")
     write_model(model_out, source, rows, gen, borrow=senate, poll_doc=poll_doc)
+
+
+def _lines(leans: dict, year: int) -> dict:
+    """The seats of the lines `year`'s House election was fought on."""
+    return leans["lines"][leans["_method"][str(year)].split("th", 1)[0]]
+
+
+def _same_name(surname: str, name: str) -> bool:
+    """The FEC's surname for a candidate the Clerk names in full: contained
+    in it, or within a letter or two of its last word (the FEC's
+    "Petterson" for Pettersen, ratio 0.89; Ratcliff & Obershelp 1988)."""
+    letters = _letters(name)
+    last = _letters(name.split()[-1]) if name.split() else ""
+    return bool(surname) and (surname in letters or SequenceMatcher(None, surname, last).ratio() >= 0.8)
+
+
+def clerk_results(year: int, raw: bytes, lines: dict, cache: Path) -> tuple[list[dict], list[str]]:
+    """(contested races with incumbency, races left out) from one edition of
+    the Clerk's Statistics, gated: the edition lists every seat of the
+    lines the election was fought on exactly once (clerk_house stops on a
+    second listing), and every incumbent the FEC lists on a contested
+    district's general ballot is its party's nominee. A misread
+    district or a shifted line breaks the second at once; a nominee the
+    FEC misspells or omits does not (2024: 2 of 794)."""
+    races, listed, left_out = clerk_house(clerk_lines(raw), ranked_choice_states())
+    states = {k.split("-")[0] for k in lines}
+    seats = {(k.split("-")[0], int(k.split("-")[1])) for k in lines}
+    listed = {k for k in listed if k[0] in states}  # not the delegates
+    if listed != seats:
+        raise SystemExit(f"Clerk's Statistics {year}: seats not listed {sorted(seats - listed)}, listed but not "
+                         f"seats {sorted(listed - seats)}")
+    candidates = fec_general_candidates(year, cache)
+    unmatched, wrong = [], []
+    for race in races:
+        on_ballot = candidates.get((race["state"], race["district"]), [])
+        names = race.pop("names")
+        unmatched += [f"{race['state']}-{race['district']} {names[side]}" for side in "DR"
+                      if not any(c[0] == side and _same_name(c[1], names[side]) for c in on_ballot)]
+        race["inc"] = 0
+        for side, surname, incumbent in on_ballot:
+            if not incumbent:
+                continue
+            if side in names and _same_name(surname, names[side]):
+                race["inc"] = 1 if side == "R" else -1
+            else:
+                wrong.append(f"{race['state']}-{race['district']} incumbent {surname} ({side}) vs {names}")
+    print(f"House {year}: nominees not on the FEC's candidate list for their party: {unmatched}")
+    if wrong:
+        raise SystemExit(f"Clerk's Statistics {year}: the FEC's incumbent is neither nominee in {wrong}")
+    return races, left_out
 
 
 def _years(years: list[int]) -> str:

@@ -9,6 +9,20 @@
       "url": "/developers#downloads"
     },
     {
+      "id": "compare-citable",
+      "date": "2026-10-17",
+      "title": "Comparisons you can cite",
+      "summary": "A side-by-side comparison names the run and scoring version behind each score, shows funding diversity apart from the score, and gives a reference to cite.",
+      "url": "/compare"
+    },
+    {
+      "id": "bill-page-sections",
+      "date": "2026-10-17",
+      "title": "Bill pages that get to the votes",
+      "summary": "A bill page lists its sections under the title and keeps a long summary to its first paragraph, with the full text a tap away.",
+      "url": "/congress/bills"
+    },
+    {
       "id": "public-api-records",
       "date": "2026-10-17",
       "title": "More of the record in the public API",
