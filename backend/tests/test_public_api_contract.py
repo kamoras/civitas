@@ -39,6 +39,7 @@ from app.models import (
 )
 from app.pipeline.lexical_index import ensure_lexical_index
 from app.schemas import (
+    PublicSenatorRowSchema,
     PublicAgencyDetailSchema,
     PublicAgencyListSchema,
     PublicApiIndexSchema,
@@ -633,7 +634,5 @@ def test_unrelated_responses_carry_no_deprecation(client):
 
 
 def test_composite_fields_are_marked_deprecated_in_the_schema():
-    from app.schemas import PublicScoreBreakdownSchema, PublicSenatorRowSchema
-
     assert PublicScoreBreakdownSchema.model_json_schema()["properties"]["overall"]["deprecated"] is True
     assert PublicSenatorRowSchema.model_json_schema()["properties"]["rank"]["deprecated"] is True
