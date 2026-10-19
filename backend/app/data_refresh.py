@@ -450,6 +450,10 @@ def _coverage_gate(new: dict, old: dict) -> list[str]:
     return failures
 
 
+# More than a year's weekdays: build_name_casing.py stops at the year's end.
+NAME_CASING_ISSUES = 366
+
+
 def _casing_gate(new: dict, old: dict) -> list[str]:
     forms = new.get("forms") or {}
     failures = [] if len(forms) >= 0.7 * len(old.get("forms") or {}) else [f"{len(forms)} forms"]
@@ -675,9 +679,13 @@ DATA_FILES: list[DataFile] = [
     DataFile("reference_coverage.json",
              command=lambda ctx: [PY, _script("calibrate_reference_coverage.py"), "--out", "{out}"],
              due=_every(30), gate=_coverage_gate, heavy=True, moves_scores=True, timeout_s=3 * 3600),
+    # The whole of last year's issues, as the bundled table was built (its
+    # _source: "the first 247 issues of 2025"); the script's own default of
+    # 120 issues read half the prose and lost a third of the forms, which the
+    # gate refused (2026-10-18: 8,832 forms against 13,395).
     DataFile("name_casing.json",
              command=lambda ctx: [PY, _script("build_name_casing.py"), "--year", str(ctx.today.year - 1),
-                                  "--output", "{out}", "--cache", "{tmp}"],
+                                  "--days", str(NAME_CASING_ISSUES), "--output", "{out}", "--cache", "{tmp}"],
              due=lambda ctx: not ctx.tried_within(365) and ctx.today >= date(ctx.today.year, 2, 1),
              gate=_casing_gate, heavy=True, timeout_s=4 * 3600),
     DataFile(training_polls.FILE_NAME, command=_training_polls_command, due=_training_polls_due,
