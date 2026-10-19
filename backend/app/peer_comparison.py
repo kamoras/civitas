@@ -24,12 +24,11 @@ import json
 import logging
 import statistics
 import time
-from dataclasses import dataclass
-from typing import Callable
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.measures import MEASURES, Measure, alignment_facts, bill_facts, past_committee
 from app.models import Representative, Senator
 from app.pipeline.analyze.score_calculator import ALGORITHM_VERSION, _seat_pvi
 from app.score_keeping import load_breakdown
@@ -54,67 +53,6 @@ _PARTY_PLURAL = {"D": "Democrats", "R": "Republicans"}
 # doesn't see (a reference file the API recomputes against).
 _CACHE_TTL_S = 3600
 _cache: dict[str, tuple[tuple, float, list[dict]]] = {}
-
-
-@dataclass(frozen=True)
-class Measure:
-    key: str
-    label: str
-    dimension: str
-    direction: str
-    unit: str
-    source: dict
-    value: Callable[[dict], float | None]
-    seat_expected: Callable[[dict], float | None]
-    record: Callable[[dict], int | None]
-
-
-def _funding(facts: dict) -> dict:
-    return facts.get("fundingIndependence") or {}
-
-
-def _alignment(facts: dict) -> dict:
-    return facts.get("constituentAlignment") or {}
-
-
-def _bills(facts: dict) -> dict:
-    return facts.get("legislativeEffectiveness") or {}
-
-
-def _past_committee(facts: dict) -> int | None:
-    stages = _bills(facts).get("billsByStage")
-    # [introduced only, committee action, past committee, passed the chamber, law]
-    return sum(stages[2:]) if isinstance(stages, list) and len(stages) == 5 else None
-
-
-_FEC = {"name": "FEC filings", "url": "https://www.fec.gov/data/"}
-MEASURES = (
-    Measure("smallGifts", "Small gifts", "fundingIndependence",
-            "higher means more of the money came in gifts of $200 or less", "share", _FEC,
-            lambda f: _funding(f).get("smallDonorShare"),
-            # The House compares with the chamber median, not a seat fit: no
-            # seat expectation then, so the row's tick is the peer median.
-            lambda f: (_funding(f).get("smallDonorExpectedShare")
-                       if _funding(f).get("smallDonorComparison") != "house-median" else None),
-            lambda f: 1 if _funding(f).get("contributions") else 0),
-    Measure("pacMoney", "PAC money", "fundingIndependence",
-            "higher means more of the money came from PACs", "share", _FEC,
-            lambda f: _funding(f).get("pacShare") if _funding(f).get("contributions") else None,
-            lambda f: None,
-            lambda f: 1 if _funding(f).get("contributions") else 0),
-    Measure("breaks", "Breaks with party", "constituentAlignment",
-            "higher means more breaks with the party on party-line votes", "rate",
-            {"name": "Roll-call votes", "url": "https://voteview.com/"},
-            lambda f: _alignment(f).get("breakRate"),
-            lambda f: _alignment(f).get("expectedBreakRate"),
-            lambda f: _alignment(f).get("partyVotes")),
-    Measure("billsMoved", "Bills moved", "legislativeEffectiveness",
-            "higher means more of the member's bills got past committee", "count",
-            {"name": "Congress.gov", "url": "https://www.congress.gov/"},
-            _past_committee,
-            lambda f: None,
-            lambda f: _bills(f).get("bills")),
-)
 
 
 def _model(chamber: str):
@@ -209,9 +147,9 @@ def _shown(measure: Measure, value: float, facts: dict) -> str:
     if measure.unit == "share":
         return "under 1%" if 0 < value < 0.005 else f"{round(value * 100)}%"
     if measure.key == "breaks":
-        a = _alignment(facts)
+        a = alignment_facts(facts)
         return f"{a.get('breaks', 0):,} of {a.get('partyVotes', 0):,}"
-    return f"{int(value):,} of {_bills(facts).get('bills', 0):,}"
+    return f"{int(value):,} of {bill_facts(facts).get('bills', 0):,}"
 
 
 def _group_label(chamber: str, group: str, caucus: str, members: list[dict]) -> str:
@@ -342,7 +280,7 @@ def chamber_measures(db: Session, chamber: str) -> dict:
     members = []
     for r in rows:
         f = r["facts"]
-        stages = _bills(f).get("billsByStage")
+        stages = bill_facts(f).get("billsByStage")
         five = isinstance(stages, list) and len(stages) == 5
         members.append({
             "id": r["id"], "name": r["name"], "party": r["party"], "caucus": r["caucus"],
@@ -350,10 +288,10 @@ def chamber_measures(db: Session, chamber: str) -> dict:
             "lean": seat_lean(r["state"], r["district"]) if chamber == "house" else None,
             "smallGifts": MEASURES[0].value(f),
             "pacMoney": MEASURES[1].value(f),
-            "breaks": _alignment(f).get("breaks"),
-            "partyVotes": _alignment(f).get("partyVotes"),
-            "billsPastCommittee": _past_committee(f),
-            "bills": _bills(f).get("bills"),
+            "breaks": alignment_facts(f).get("breaks"),
+            "partyVotes": alignment_facts(f).get("partyVotes"),
+            "billsPastCommittee": past_committee(f),
+            "bills": bill_facts(f).get("bills"),
             "passed": sum(stages[3:]) if five else None,
             "law": stages[4] if five else None,
         })

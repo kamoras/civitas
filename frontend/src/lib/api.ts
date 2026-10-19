@@ -2084,6 +2084,9 @@ export interface ScoreSnapshot {
    * effectiveness/historicalLegacy) — untyped here since
    * ScoreTrend (the only consumer) only ever reads date/overallScore. */
   scores: Record<string, number>;
+  /** The peer-comparison measures that day (backend app/measures.py), keyed
+   *  like PeerMeasure.key; null before they were kept (2026-10-19). */
+  facts?: Record<string, number | null> | null;
 }
 
 export interface ScoreHistory {

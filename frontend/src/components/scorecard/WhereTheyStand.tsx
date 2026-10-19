@@ -4,7 +4,9 @@ import { useId, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useAsyncData } from "@/hooks/useAsyncData";
-import { fetchPeerComparison } from "@/lib/api";
+import { fetchPeerComparison, fetchRepresentativeHistory, fetchSenatorHistory } from "@/lib/api";
+import type { ScoreSnapshot } from "@/lib/api";
+import { shortDate } from "@/lib/congress";
 import type { PeerComparison, PeerGroupKey, PeerMeasure } from "@/types/peers";
 
 /** How each row's figure is printed on its axis and in its table: the
@@ -119,7 +121,58 @@ function Strip({ m, name }: { m: PeerMeasure; name: string }) {
   );
 }
 
-function Row({ m, name, showTable }: { m: PeerMeasure; name: string; showTable: boolean }) {
+/** This measure over time, from the score snapshots' facts: a line of the
+ *  member's own figure, night by night, and its first and latest values.
+ *  Kept since 2026-10-19, so early on it says how long it has been kept. */
+function OverTime({ m, snapshots }: { m: PeerMeasure; snapshots: ScoreSnapshot[] | null }) {
+  if (!snapshots) return null;
+  const points = snapshots
+    .map((s) => ({ date: s.date, v: s.facts?.[m.key] }))
+    .filter((p): p is { date: string; v: number } => typeof p.v === "number");
+  if (points.length < 2) {
+    return (
+      <p className="text-xs text-ink-min">
+        Over time: kept nightly
+        {points[0] ? ` since ${shortDate(points[0].date)}` : " from the next run"}.
+      </p>
+    );
+  }
+  const vs = points.map((p) => p.v);
+  const lo = Math.min(...vs);
+  const span = Math.max(...vs) - lo || 1;
+  const path = points
+    .map((p, i) => `${(i / (points.length - 1)) * 100},${18 - ((p.v - lo) / span) * 16}`)
+    .join(" ");
+  const first = points[0];
+  const last = points[points.length - 1];
+  return (
+    <p className="flex flex-wrap items-center gap-2 text-xs text-ink-lo">
+      <svg viewBox="0 0 100 20" preserveAspectRatio="none" className="h-5 w-24" aria-hidden="true">
+        <polyline
+          points={path}
+          fill="none"
+          stroke="var(--ink-hi)"
+          strokeWidth="1.5"
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
+      Over time: {fmt(m, first.v)} on {shortDate(first.date)}, {fmt(m, last.v)} on{" "}
+      {shortDate(last.date)}.
+    </p>
+  );
+}
+
+function Row({
+  m,
+  name,
+  showTable,
+  snapshots,
+}: {
+  m: PeerMeasure;
+  name: string;
+  showTable: boolean;
+  snapshots: ScoreSnapshot[] | null;
+}) {
   const strong = (m.word ?? "").startsWith("well");
   const captionId = useId();
   return (
@@ -166,6 +219,9 @@ function Row({ m, name, showTable }: { m: PeerMeasure; name: string; showTable: 
           {m.source.name} ↗
         </a>
       </figcaption>
+      <div className="md:col-span-3">
+        <OverTime m={m} snapshots={snapshots} />
+      </div>
       <div className={showTable ? "md:col-span-3" : "sr-only"}>
         <table className="w-full max-w-md text-sm">
           <caption className="text-left text-xs text-ink-min">
@@ -237,6 +293,9 @@ export default function WhereTheyStand({
     () => fetchPeerComparison(chamber, memberId, group),
     initial ? { key: `${chamber}/${memberId}/caucus`, data: initial } : undefined
   );
+  const { data: history } = useAsyncData(`${chamber}/${memberId}/history`, () =>
+    chamber === "senate" ? fetchSenatorHistory(memberId) : fetchRepresentativeHistory(memberId)
+  );
   const choose = (next: PeerGroupKey) => {
     setGroup(next);
     const url = new URL(window.location.href);
@@ -305,7 +364,13 @@ export default function WhereTheyStand({
           </div>
           <div className="mt-3 border border-white/25 bg-surface">
             {data.measures.map((m) => (
-              <Row key={m.key} m={m} name={name} showTable={showTable} />
+              <Row
+                key={m.key}
+                m={m}
+                name={name}
+                showTable={showTable}
+                snapshots={history?.snapshots ?? null}
+              />
             ))}
           </div>
           <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-lo" aria-hidden="true">

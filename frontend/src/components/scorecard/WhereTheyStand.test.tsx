@@ -8,6 +8,26 @@ import type { PeerComparison, PeerMeasure } from "@/types/peers";
 const fetchPeerComparison = vi.fn();
 vi.mock("@/lib/api", () => ({
   fetchPeerComparison: (...a: unknown[]) => fetchPeerComparison(...a),
+  fetchSenatorHistory: vi.fn(async () => ({
+    snapshots: [
+      { date: "2026-10-18", overallScore: 60, algorithmVersion: "v7", scores: {}, facts: null },
+      {
+        date: "2026-10-19",
+        overallScore: 60,
+        algorithmVersion: "v7",
+        scores: {},
+        facts: { smallGifts: 0.13 },
+      },
+      {
+        date: "2026-10-26",
+        overallScore: 60,
+        algorithmVersion: "v7",
+        scores: {},
+        facts: { smallGifts: 0.2 },
+      },
+    ],
+  })),
+  fetchRepresentativeHistory: vi.fn(),
 }));
 
 function measure(over: Partial<PeerMeasure>): PeerMeasure {
@@ -69,6 +89,11 @@ describe("WhereTheyStand", () => {
       caption.closest("figcaption")?.id
     );
     expect(screen.getAllByText("well below peers")[0]).toBeInTheDocument();
+    // The measure over time, from the snapshots that kept it.
+    expect(
+      await screen.findByText(/Over time: 13% on Mon, Oct 19, 20% on Mon, Oct 26\./)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Over time: kept nightly from the next run\./)).toBeInTheDocument();
     // A thin row keeps its figure and draws no word.
     expect(
       screen.getByText(/Not enough record yet to compare \(6 party-line votes\)/)

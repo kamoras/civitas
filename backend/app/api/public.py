@@ -19,6 +19,7 @@ Conventions every route keeps, so a caller learns them once:
 - `siteUrl` links each record to its page on Civitas.
 """
 
+import json
 import re
 import typing
 from datetime import date
@@ -329,6 +330,16 @@ def _method(snapshot: ScoreSnapshot | None) -> dict:
     }
 
 
+def _snapshot_facts(stored: str | None) -> dict | None:
+    """A snapshot's measures (models.ScoreSnapshot.facts), or None for one
+    recorded before they were kept."""
+    try:
+        facts = json.loads(stored or "null")
+    except (TypeError, ValueError):
+        return None
+    return facts if isinstance(facts, dict) else None
+
+
 def _history(db: Session, entity_type: str, model, member_id: str, request: Request) -> JSONResponse:
     member_id = resolve_member_id(db, member_id)
     if db.get(model, member_id) is None:
@@ -353,6 +364,7 @@ def _history(db: Session, entity_type: str, model, member_id: str, request: Requ
                     "fundingDiversity": round(s.score_4, 1),
                     "legislativeEffectiveness": round(s.score_5, 1),
                     "algorithmVersion": s.algorithm_version,
+                    "facts": _snapshot_facts(s.facts),
                 }
                 for s in snapshots
             ],

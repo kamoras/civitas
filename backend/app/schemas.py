@@ -984,6 +984,16 @@ class PublicBillVotesSchema(_PublicModel):
                                                                 "bill has had no recorded vote")
 
 
+class PublicSnapshotFactsSchema(_PublicModel):
+    small_gifts: float | None = Field(description="Share of contributions in gifts of $200 or less, 0-1")
+    pac_money: float | None = Field(description="Share of contributions from PACs, 0-1")
+    breaks: float | None = Field(description="Breaks with the party over party-line votes, 0-1")
+    bills_moved: float | None = Field(description="Bills sponsored this Congress that got past committee")
+    party_votes: int | None = Field(description="Party-line votes behind breaks")
+    break_count: int | None = Field(description="Breaks with the party")
+    bills: int | None = Field(description="Bills sponsored this Congress")
+
+
 class PublicScoreSnapshotSchema(_PublicModel):
     date: str = Field(description="When the scores were computed, YYYY-MM-DD")
     overall: float = Field(description="0-100, like the sub-scores here; see representationScore for each")
@@ -996,6 +1006,9 @@ class PublicScoreSnapshotSchema(_PublicModel):
                                                       "change between two snapshots is a method change, not "
                                                       "only a change in the record. Null for snapshots taken "
                                                       "before versions were recorded")
+    facts: PublicSnapshotFactsSchema | None = Field(
+        description="The measures the site compares members on, as they stood that day (the history to read "
+                    "in place of overall); null for snapshots recorded before 2026-10-19")
 
 
 class PublicHistorySchema(_PublicModel):
