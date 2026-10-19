@@ -1,0 +1,6647 @@
+{
+ "_about": "Hand labels for the race-post relevance threshold (scripts/calibrate_race_post_relevance.py writes app/data/race_post_relevance.json from them). One row per stored production race_coverage_items row on 2026-10-17 that was posting-eligible before that day's fixes: a news item matched on the full_name basis and not a multi-story digest by news_digest.digest_reason. id is the production row id, relevance the stored race_relevance cosine, names_the_race whether the text names the race's state or another of its candidates (CandidateMatcher.names_the_race), not_on_november_ballot whether the race's state has certified November candidates and the matched candidate is not among them (on 2026-10-17), posted whether Civitas published a post from it. about_race is 1 when the story is about the contest for that seat (the campaign, its candidates' campaigning, polls, debates, ads, endorsements, fundraising, nominations and results) and 0 otherwise: a member's official business, a race for another office (a member running for governor), national politics naming the member, or someone else of the same name. No headline or name is stored here.",
+ "_why_hand_labels": "No source states which race a story is about. The nearest publisher label, a section path such as The Hill's /homenews/campaign/, says a story is about an election, not which one: the candidate's 2028 presidential speculation is filed there too, and most outlets in the feeds file by date only.",
+ "_labelled": "2026-10-17, every eligible row (830), by Claude Code (the agent that prepared the fix) reading each headline and feed description against its matched race; not yet reviewed by a person.",
+ "rows": [
+  {
+   "id": 1,
+   "relevance": 0.3741,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 2,
+   "relevance": 0.4345,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 3,
+   "relevance": 0.3047,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 5,
+   "relevance": 0.298,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 6,
+   "relevance": 0.3134,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 7,
+   "relevance": 0.3129,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 8,
+   "relevance": 0.131,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9,
+   "relevance": 0.3837,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 11,
+   "relevance": 0.3937,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 13,
+   "relevance": 0.3191,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 16,
+   "relevance": 0.3879,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 17,
+   "relevance": 0.2521,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 19,
+   "relevance": 0.411,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 20,
+   "relevance": 0.2803,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 21,
+   "relevance": 0.1656,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 22,
+   "relevance": 0.0569,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 24,
+   "relevance": 0.1101,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 26,
+   "relevance": 0.1119,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 27,
+   "relevance": 0.4695,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 28,
+   "relevance": 0.1493,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 29,
+   "relevance": 0.0794,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 30,
+   "relevance": 0.5068,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 31,
+   "relevance": 0.4037,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 32,
+   "relevance": 0.2349,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 33,
+   "relevance": 0.4918,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 34,
+   "relevance": 0.4542,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 35,
+   "relevance": 0.3088,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 36,
+   "relevance": 0.2642,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 37,
+   "relevance": 0.4792,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 40,
+   "relevance": 0.1955,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 41,
+   "relevance": 0.1801,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 42,
+   "relevance": 0.3135,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 44,
+   "relevance": 0.3618,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 46,
+   "relevance": 0.2929,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 48,
+   "relevance": 0.3547,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 50,
+   "relevance": 0.1666,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 52,
+   "relevance": 0.0995,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 53,
+   "relevance": 0.1814,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 54,
+   "relevance": 0.2904,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 55,
+   "relevance": 0.406,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 58,
+   "relevance": 0.209,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 59,
+   "relevance": 0.5692,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 60,
+   "relevance": 0.6303,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 61,
+   "relevance": 0.5191,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 62,
+   "relevance": 0.474,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 63,
+   "relevance": 0.462,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 65,
+   "relevance": 0.548,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 67,
+   "relevance": 0.2988,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 68,
+   "relevance": 0.1363,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 69,
+   "relevance": 0.1989,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 71,
+   "relevance": 0.4448,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 72,
+   "relevance": 0.5748,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 75,
+   "relevance": 0.1157,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 76,
+   "relevance": 0.3225,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 77,
+   "relevance": -0.0298,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 78,
+   "relevance": 0.2871,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 79,
+   "relevance": 0.4676,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 80,
+   "relevance": 0.2535,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 84,
+   "relevance": 0.4601,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 85,
+   "relevance": 0.5128,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 86,
+   "relevance": 0.5097,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 87,
+   "relevance": 0.5217,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 88,
+   "relevance": 0.6364,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 89,
+   "relevance": 0.4888,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 91,
+   "relevance": 0.2349,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 92,
+   "relevance": 0.0819,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 93,
+   "relevance": 0.2995,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 94,
+   "relevance": 0.1982,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 95,
+   "relevance": 0.5264,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 96,
+   "relevance": 0.1805,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 98,
+   "relevance": 0.1939,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 100,
+   "relevance": 0.4143,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 101,
+   "relevance": 0.1292,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 102,
+   "relevance": 0.1301,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 105,
+   "relevance": 0.1211,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 107,
+   "relevance": -0.0026,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 108,
+   "relevance": 0.1704,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 109,
+   "relevance": 0.2716,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 111,
+   "relevance": 0.4249,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 112,
+   "relevance": 0.6858,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 114,
+   "relevance": 0.3384,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 116,
+   "relevance": 0.4387,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 117,
+   "relevance": 0.6598,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 120,
+   "relevance": 0.1879,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 125,
+   "relevance": 0.4726,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 126,
+   "relevance": 0.4003,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 128,
+   "relevance": 0.504,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 129,
+   "relevance": 0.069,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 131,
+   "relevance": 0.2092,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 132,
+   "relevance": 0.2936,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 133,
+   "relevance": 0.1977,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 134,
+   "relevance": 0.3083,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 135,
+   "relevance": 0.6626,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 136,
+   "relevance": 0.2975,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 140,
+   "relevance": 0.1336,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 142,
+   "relevance": 0.2378,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 144,
+   "relevance": 0.285,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 146,
+   "relevance": 0.5883,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 147,
+   "relevance": 0.5636,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 148,
+   "relevance": 0.4022,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 151,
+   "relevance": 0.5076,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 153,
+   "relevance": 0.2488,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 154,
+   "relevance": 0.2106,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 155,
+   "relevance": 0.5827,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 156,
+   "relevance": 0.1506,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 157,
+   "relevance": 0.2454,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 158,
+   "relevance": 0.3318,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 162,
+   "relevance": 0.5331,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 163,
+   "relevance": 0.2361,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 165,
+   "relevance": 0.3097,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 169,
+   "relevance": 0.1422,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 170,
+   "relevance": 0.0681,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 171,
+   "relevance": 0.2946,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 172,
+   "relevance": 0.4551,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 177,
+   "relevance": 0.0571,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 179,
+   "relevance": 0.5053,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 180,
+   "relevance": 0.1546,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 181,
+   "relevance": 0.455,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 185,
+   "relevance": 0.5368,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 186,
+   "relevance": 0.1895,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 187,
+   "relevance": 0.0383,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 189,
+   "relevance": 0.0924,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 192,
+   "relevance": 0.1842,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 193,
+   "relevance": 0.2165,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 194,
+   "relevance": 0.2644,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 195,
+   "relevance": 0.4633,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 196,
+   "relevance": 0.3871,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 197,
+   "relevance": 0.2505,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 199,
+   "relevance": 0.564,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 201,
+   "relevance": 0.2421,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 202,
+   "relevance": 0.1783,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 206,
+   "relevance": 0.3391,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 208,
+   "relevance": 0.3354,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 209,
+   "relevance": 0.6141,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 210,
+   "relevance": 0.1527,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 211,
+   "relevance": 0.183,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 212,
+   "relevance": 0.2961,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 214,
+   "relevance": 0.3171,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 215,
+   "relevance": 0.4569,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 218,
+   "relevance": 0.2637,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 219,
+   "relevance": 0.2732,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 221,
+   "relevance": 0.3242,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 222,
+   "relevance": 0.4234,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 223,
+   "relevance": 0.2239,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 224,
+   "relevance": 0.0313,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 225,
+   "relevance": 0.1733,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 226,
+   "relevance": 0.3204,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 228,
+   "relevance": 0.0542,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 229,
+   "relevance": 0.2888,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 230,
+   "relevance": 0.3363,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 231,
+   "relevance": 0.2464,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 233,
+   "relevance": 0.258,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 234,
+   "relevance": 0.2613,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 235,
+   "relevance": 0.4106,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 237,
+   "relevance": 0.1761,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 240,
+   "relevance": 0.2433,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 243,
+   "relevance": 0.1336,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 247,
+   "relevance": 0.2572,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 253,
+   "relevance": 0.2956,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 256,
+   "relevance": 0.5179,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 258,
+   "relevance": 0.2317,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 262,
+   "relevance": 0.2481,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 265,
+   "relevance": -0.0284,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 266,
+   "relevance": 0.2924,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 267,
+   "relevance": 0.2282,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 269,
+   "relevance": 0.501,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 270,
+   "relevance": 0.0742,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 271,
+   "relevance": 0.3269,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 276,
+   "relevance": 0.3426,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 278,
+   "relevance": 0.6072,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 279,
+   "relevance": 0.3025,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 284,
+   "relevance": 0.4394,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 286,
+   "relevance": 0.4551,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 288,
+   "relevance": 0.156,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 290,
+   "relevance": 0.5074,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 291,
+   "relevance": 0.226,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 292,
+   "relevance": 0.3089,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 293,
+   "relevance": 0.3192,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 295,
+   "relevance": 0.4643,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 298,
+   "relevance": 0.278,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 300,
+   "relevance": 0.2766,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 301,
+   "relevance": 0.1374,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 304,
+   "relevance": 0.2426,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 305,
+   "relevance": 0.3125,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 306,
+   "relevance": 0.3185,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 309,
+   "relevance": 0.3735,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 310,
+   "relevance": 0.313,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 313,
+   "relevance": 0.1493,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 317,
+   "relevance": 0.1841,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 318,
+   "relevance": 0.162,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 321,
+   "relevance": 0.2158,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 322,
+   "relevance": 0.1309,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 325,
+   "relevance": 0.1842,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 327,
+   "relevance": 0.2656,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 328,
+   "relevance": 0.3038,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 329,
+   "relevance": 0.3642,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 330,
+   "relevance": 0.4737,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 332,
+   "relevance": 0.3321,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 334,
+   "relevance": 0.1925,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 335,
+   "relevance": 0.2867,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 336,
+   "relevance": 0.194,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 337,
+   "relevance": 0.1238,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 338,
+   "relevance": 0.3227,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 339,
+   "relevance": 0.2942,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 340,
+   "relevance": 0.1795,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 341,
+   "relevance": 0.2591,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 342,
+   "relevance": 0.227,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 344,
+   "relevance": 0.3157,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 345,
+   "relevance": 0.1559,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 346,
+   "relevance": 0.2689,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 347,
+   "relevance": 0.3112,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 348,
+   "relevance": 0.2417,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 349,
+   "relevance": 0.2478,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 351,
+   "relevance": 0.3805,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 352,
+   "relevance": 0.3248,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 353,
+   "relevance": 0.3821,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 354,
+   "relevance": 0.3403,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 356,
+   "relevance": 0.2721,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 357,
+   "relevance": 0.4293,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 358,
+   "relevance": 0.3981,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 360,
+   "relevance": 0.2084,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 362,
+   "relevance": 0.3235,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 363,
+   "relevance": 0.1965,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 365,
+   "relevance": 0.0754,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 366,
+   "relevance": 0.1293,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 368,
+   "relevance": 0.481,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 369,
+   "relevance": 0.5459,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 370,
+   "relevance": 0.3202,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 371,
+   "relevance": 0.4382,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 372,
+   "relevance": 0.4087,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 376,
+   "relevance": 0.2329,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 377,
+   "relevance": 0.34,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 379,
+   "relevance": 0.1254,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 380,
+   "relevance": 0.1701,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 381,
+   "relevance": 0.2263,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 382,
+   "relevance": 0.1797,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 383,
+   "relevance": 0.184,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 384,
+   "relevance": 0.3912,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 385,
+   "relevance": 0.1875,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 386,
+   "relevance": 0.3044,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 387,
+   "relevance": 0.174,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 388,
+   "relevance": 0.1801,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 391,
+   "relevance": 0.2939,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 395,
+   "relevance": 0.4724,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 396,
+   "relevance": 0.0007,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 397,
+   "relevance": 0.1345,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 399,
+   "relevance": 0.3449,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 400,
+   "relevance": 0.465,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 401,
+   "relevance": 0.1714,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 402,
+   "relevance": 0.4858,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 403,
+   "relevance": 0.2376,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 404,
+   "relevance": 0.2873,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 405,
+   "relevance": 0.2416,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 406,
+   "relevance": 0.5041,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 407,
+   "relevance": 0.253,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 409,
+   "relevance": 0.3266,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 410,
+   "relevance": 0.2224,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 411,
+   "relevance": 0.4499,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 412,
+   "relevance": 0.1818,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 414,
+   "relevance": 0.0986,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 416,
+   "relevance": 0.5138,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 417,
+   "relevance": 0.156,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 418,
+   "relevance": 0.2469,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 419,
+   "relevance": 0.4877,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 420,
+   "relevance": 0.3061,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 421,
+   "relevance": 0.3599,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 422,
+   "relevance": 0.4825,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 423,
+   "relevance": 0.2192,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 426,
+   "relevance": 0.1911,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 427,
+   "relevance": 0.4974,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 428,
+   "relevance": 0.4915,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 429,
+   "relevance": 0.4064,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 430,
+   "relevance": 0.325,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 432,
+   "relevance": 0.1107,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 434,
+   "relevance": 0.3419,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 435,
+   "relevance": 0.325,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 436,
+   "relevance": 0.5458,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 438,
+   "relevance": 0.3117,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 439,
+   "relevance": 0.1219,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 441,
+   "relevance": 0.4409,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 445,
+   "relevance": 0.1447,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 446,
+   "relevance": 0.1868,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 447,
+   "relevance": 0.5897,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 448,
+   "relevance": 0.2942,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 449,
+   "relevance": 0.5944,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 450,
+   "relevance": 0.4331,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 454,
+   "relevance": 0.1426,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 455,
+   "relevance": 0.0992,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 456,
+   "relevance": 0.2881,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 457,
+   "relevance": 0.2614,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 458,
+   "relevance": 0.2811,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 464,
+   "relevance": 0.0265,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 465,
+   "relevance": 0.1266,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 469,
+   "relevance": 0.425,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 470,
+   "relevance": 0.261,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 472,
+   "relevance": 0.2956,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 474,
+   "relevance": 0.286,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 475,
+   "relevance": 0.4642,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 476,
+   "relevance": 0.226,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 480,
+   "relevance": 0.2483,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 482,
+   "relevance": 0.1478,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 663,
+   "relevance": 0.1808,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 665,
+   "relevance": 0.2949,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 918,
+   "relevance": 0.1785,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 4202,
+   "relevance": 0.2143,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 4270,
+   "relevance": 0.4167,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 4341,
+   "relevance": 0.459,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 4413,
+   "relevance": 0.2094,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 4465,
+   "relevance": 0.4206,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 4559,
+   "relevance": 0.3746,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 4591,
+   "relevance": 0.2775,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 4715,
+   "relevance": 0.3604,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 4787,
+   "relevance": 0.1835,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 4849,
+   "relevance": 0.3425,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 4954,
+   "relevance": 0.378,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 5968,
+   "relevance": 0.1947,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 6448,
+   "relevance": 0.5635,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 6546,
+   "relevance": 0.3368,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 6703,
+   "relevance": 0.1823,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 6747,
+   "relevance": 0.3612,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 6887,
+   "relevance": 0.1366,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 7026,
+   "relevance": 0.3894,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 7170,
+   "relevance": 0.1748,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 7247,
+   "relevance": 0.3173,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 7365,
+   "relevance": 0.2533,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 7387,
+   "relevance": 0.1049,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 7491,
+   "relevance": 0.1835,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 7542,
+   "relevance": 0.2175,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 7543,
+   "relevance": 0.2693,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 7544,
+   "relevance": 0.4138,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 7615,
+   "relevance": 0.4849,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 7616,
+   "relevance": 0.1041,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 7678,
+   "relevance": 0.1765,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 8782,
+   "relevance": 0.2372,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 8785,
+   "relevance": 0.2717,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 8787,
+   "relevance": 0.2869,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 8790,
+   "relevance": 0.4231,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 8822,
+   "relevance": 0.4506,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 8825,
+   "relevance": 0.1256,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 8829,
+   "relevance": 0.1537,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 8830,
+   "relevance": 0.3522,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 8831,
+   "relevance": 0.3202,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 8832,
+   "relevance": 0.3175,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 8834,
+   "relevance": 0.411,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 8836,
+   "relevance": 0.2098,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 8846,
+   "relevance": 0.3066,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 8847,
+   "relevance": 0.0894,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 8853,
+   "relevance": 0.2214,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 8858,
+   "relevance": 0.5039,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 8859,
+   "relevance": 0.2583,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 8867,
+   "relevance": 0.4697,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 8872,
+   "relevance": 0.1707,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 8889,
+   "relevance": 0.1652,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 8902,
+   "relevance": 0.2353,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 8904,
+   "relevance": 0.4262,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 8914,
+   "relevance": 0.5268,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 8917,
+   "relevance": 0.2908,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 8918,
+   "relevance": 0.2563,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 8919,
+   "relevance": 0.3717,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 8930,
+   "relevance": 0.1513,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 8933,
+   "relevance": 0.4936,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 8934,
+   "relevance": 0.2085,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 8936,
+   "relevance": 0.3525,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 8940,
+   "relevance": 0.3692,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 8941,
+   "relevance": 0.3668,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 8944,
+   "relevance": 0.2753,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 8986,
+   "relevance": 0.1955,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 8987,
+   "relevance": 0.2853,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 8989,
+   "relevance": 0.4038,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 8990,
+   "relevance": 0.2951,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 8991,
+   "relevance": -0.0207,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 8994,
+   "relevance": 0.1651,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 8998,
+   "relevance": 0.398,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9000,
+   "relevance": 0.5567,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9001,
+   "relevance": 0.459,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9003,
+   "relevance": 0.6207,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9005,
+   "relevance": 0.3455,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9007,
+   "relevance": 0.1897,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9009,
+   "relevance": 0.3474,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9010,
+   "relevance": 0.3687,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9012,
+   "relevance": 0.063,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9013,
+   "relevance": 0.3937,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9014,
+   "relevance": 0.3502,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9017,
+   "relevance": 0.3444,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9023,
+   "relevance": 0.2688,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9024,
+   "relevance": 0.494,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9025,
+   "relevance": 0.3177,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9026,
+   "relevance": 0.1499,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9028,
+   "relevance": 0.283,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9029,
+   "relevance": 0.1583,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9032,
+   "relevance": 0.397,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9033,
+   "relevance": 0.0847,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9036,
+   "relevance": 0.1873,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9037,
+   "relevance": 0.1657,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9038,
+   "relevance": 0.2545,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9039,
+   "relevance": 0.2245,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9042,
+   "relevance": 0.4776,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9043,
+   "relevance": 0.3303,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9045,
+   "relevance": 0.0733,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9046,
+   "relevance": 0.1839,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9050,
+   "relevance": 0.2911,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9052,
+   "relevance": 0.3234,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9055,
+   "relevance": 0.3344,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9057,
+   "relevance": 0.211,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9059,
+   "relevance": 0.0052,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9060,
+   "relevance": 0.2039,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9063,
+   "relevance": 0.0587,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9064,
+   "relevance": 0.4601,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9065,
+   "relevance": 0.2727,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9066,
+   "relevance": 0.2048,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9067,
+   "relevance": 0.2117,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9068,
+   "relevance": 0.1001,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9069,
+   "relevance": 0.2869,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9070,
+   "relevance": 0.2815,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9073,
+   "relevance": 0.6132,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9076,
+   "relevance": 0.4166,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9077,
+   "relevance": 0.3531,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9081,
+   "relevance": 0.3332,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9082,
+   "relevance": 0.3068,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9083,
+   "relevance": 0.1968,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9092,
+   "relevance": 0.4178,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9094,
+   "relevance": 0.507,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9100,
+   "relevance": 0.1126,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9102,
+   "relevance": 0.5203,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9103,
+   "relevance": 0.0905,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9104,
+   "relevance": 0.5213,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9105,
+   "relevance": -0.0016,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9106,
+   "relevance": 0.4496,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9107,
+   "relevance": 0.3599,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9108,
+   "relevance": 0.4107,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9109,
+   "relevance": 0.2683,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9110,
+   "relevance": 0.2507,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9111,
+   "relevance": 0.4597,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9113,
+   "relevance": 0.4941,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9116,
+   "relevance": 0.0915,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9117,
+   "relevance": 0.2745,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9118,
+   "relevance": 0.0362,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9120,
+   "relevance": 0.2573,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9123,
+   "relevance": 0.1774,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9124,
+   "relevance": 0.332,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9127,
+   "relevance": 0.3337,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9128,
+   "relevance": 0.5582,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9132,
+   "relevance": 0.1953,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9134,
+   "relevance": 0.3363,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9135,
+   "relevance": -0.0072,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9138,
+   "relevance": 0.3335,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9142,
+   "relevance": 0.1641,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9144,
+   "relevance": 0.3351,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9147,
+   "relevance": 0.4287,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9148,
+   "relevance": 0.4073,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9154,
+   "relevance": 0.166,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9156,
+   "relevance": 0.2467,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9158,
+   "relevance": 0.2442,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9159,
+   "relevance": 0.3518,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9160,
+   "relevance": 0.0346,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9161,
+   "relevance": 0.6522,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9162,
+   "relevance": 0.0556,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9165,
+   "relevance": 0.4295,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9170,
+   "relevance": 0.2938,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9175,
+   "relevance": 0.0739,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9176,
+   "relevance": 0.3977,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9181,
+   "relevance": 0.2834,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9182,
+   "relevance": 0.4806,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9183,
+   "relevance": 0.1868,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9187,
+   "relevance": 0.3701,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9190,
+   "relevance": 0.3302,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9191,
+   "relevance": 0.3409,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9193,
+   "relevance": 0.2404,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9196,
+   "relevance": 0.254,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9199,
+   "relevance": 0.2336,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9200,
+   "relevance": 0.1901,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9201,
+   "relevance": 0.2573,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9202,
+   "relevance": 0.4894,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9203,
+   "relevance": 0.1848,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9205,
+   "relevance": 0.2764,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9209,
+   "relevance": 0.6245,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9210,
+   "relevance": 0.1185,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9211,
+   "relevance": 0.0312,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9212,
+   "relevance": 0.3651,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9214,
+   "relevance": 0.4195,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9215,
+   "relevance": 0.1875,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9218,
+   "relevance": 0.178,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9221,
+   "relevance": 0.3349,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9224,
+   "relevance": 0.0816,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9225,
+   "relevance": -0.0127,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9226,
+   "relevance": 0.157,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9228,
+   "relevance": 0.2684,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9230,
+   "relevance": 0.1069,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9232,
+   "relevance": 0.3553,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9235,
+   "relevance": 0.1737,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9237,
+   "relevance": 0.2282,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9238,
+   "relevance": 0.57,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9239,
+   "relevance": 0.2389,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9244,
+   "relevance": 0.3075,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9246,
+   "relevance": 0.3471,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9248,
+   "relevance": 0.3493,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9250,
+   "relevance": 0.2366,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9251,
+   "relevance": 0.3527,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9252,
+   "relevance": 0.4612,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9254,
+   "relevance": 0.1869,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9255,
+   "relevance": 0.2256,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9256,
+   "relevance": 0.319,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9259,
+   "relevance": 0.4013,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9261,
+   "relevance": 0.7183,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9262,
+   "relevance": 0.5616,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9264,
+   "relevance": 0.5617,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9265,
+   "relevance": 0.1811,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9268,
+   "relevance": 0.325,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9269,
+   "relevance": 0.1769,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9271,
+   "relevance": 0.5009,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9273,
+   "relevance": 0.3033,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9278,
+   "relevance": 0.5628,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9279,
+   "relevance": 0.4402,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9280,
+   "relevance": 0.046,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9288,
+   "relevance": 0.3723,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9289,
+   "relevance": 0.0881,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9290,
+   "relevance": 0.319,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9292,
+   "relevance": 0.3539,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9293,
+   "relevance": 0.5663,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9294,
+   "relevance": 0.1289,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9296,
+   "relevance": 0.2673,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9297,
+   "relevance": 0.3661,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9298,
+   "relevance": 0.2105,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9299,
+   "relevance": 0.248,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9300,
+   "relevance": 0.4038,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9301,
+   "relevance": 0.4776,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9302,
+   "relevance": 0.073,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9304,
+   "relevance": 0.2481,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9305,
+   "relevance": 0.3802,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9306,
+   "relevance": 0.2501,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9307,
+   "relevance": 0.0976,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9311,
+   "relevance": 0.3489,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9312,
+   "relevance": 0.5261,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9315,
+   "relevance": 0.4211,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9316,
+   "relevance": 0.1424,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9320,
+   "relevance": 0.1719,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9321,
+   "relevance": 0.5876,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9323,
+   "relevance": 0.1029,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9325,
+   "relevance": 0.2221,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9328,
+   "relevance": 0.1742,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9331,
+   "relevance": 0.2929,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9332,
+   "relevance": 0.1619,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9333,
+   "relevance": 0.494,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9334,
+   "relevance": 0.4371,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9335,
+   "relevance": 0.3739,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9338,
+   "relevance": 0.4843,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9346,
+   "relevance": 0.2278,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9348,
+   "relevance": 0.294,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9352,
+   "relevance": 0.5657,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9353,
+   "relevance": 0.1713,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9354,
+   "relevance": 0.2337,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9357,
+   "relevance": 0.2523,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9358,
+   "relevance": 0.2399,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9359,
+   "relevance": 0.2184,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9360,
+   "relevance": 0.4124,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9364,
+   "relevance": 0.4464,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9366,
+   "relevance": 0.2827,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9373,
+   "relevance": 0.0264,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9374,
+   "relevance": 0.1812,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9376,
+   "relevance": 0.4692,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9378,
+   "relevance": 0.4866,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9380,
+   "relevance": 0.4593,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9384,
+   "relevance": 0.006,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9390,
+   "relevance": 0.2284,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9391,
+   "relevance": 0.0901,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9392,
+   "relevance": 0.2684,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9394,
+   "relevance": 0.3057,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9395,
+   "relevance": 0.222,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9396,
+   "relevance": 0.2183,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9397,
+   "relevance": 0.3149,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9398,
+   "relevance": 0.1293,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9399,
+   "relevance": 0.038,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9401,
+   "relevance": 0.4231,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9402,
+   "relevance": 0.2617,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9403,
+   "relevance": 0.3253,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9409,
+   "relevance": 0.2754,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9410,
+   "relevance": 0.1593,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9411,
+   "relevance": 0.2323,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9412,
+   "relevance": 0.3148,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9414,
+   "relevance": 0.2255,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9415,
+   "relevance": 0.5987,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9416,
+   "relevance": 0.2937,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9418,
+   "relevance": 0.6051,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9421,
+   "relevance": 0.2658,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9423,
+   "relevance": 0.2966,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9427,
+   "relevance": 0.1527,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9430,
+   "relevance": 0.2501,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9432,
+   "relevance": 0.243,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9433,
+   "relevance": 0.6127,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9434,
+   "relevance": 0.4398,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9440,
+   "relevance": 0.314,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9441,
+   "relevance": 0.2792,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9442,
+   "relevance": 0.2721,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9443,
+   "relevance": 0.4504,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9444,
+   "relevance": 0.4047,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9445,
+   "relevance": 0.521,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9448,
+   "relevance": 0.2081,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9450,
+   "relevance": 0.2527,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9454,
+   "relevance": 0.0472,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9456,
+   "relevance": 0.4335,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9457,
+   "relevance": 0.2188,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9459,
+   "relevance": 0.2739,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9461,
+   "relevance": 0.3087,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9465,
+   "relevance": 0.2217,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9469,
+   "relevance": 0.5211,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9470,
+   "relevance": 0.3367,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9472,
+   "relevance": 0.2445,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9478,
+   "relevance": 0.2285,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9481,
+   "relevance": 0.3749,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9486,
+   "relevance": 0.2628,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9489,
+   "relevance": 0.2343,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9490,
+   "relevance": 0.4768,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9492,
+   "relevance": 0.2553,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9494,
+   "relevance": 0.5448,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9498,
+   "relevance": 0.5253,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9499,
+   "relevance": 0.4276,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9500,
+   "relevance": 0.4392,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9501,
+   "relevance": 0.3766,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9502,
+   "relevance": 0.347,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9503,
+   "relevance": 0.5246,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9504,
+   "relevance": 0.4171,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9506,
+   "relevance": 0.2573,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9507,
+   "relevance": 0.3312,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9512,
+   "relevance": 0.3678,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9513,
+   "relevance": 0.3759,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9514,
+   "relevance": 0.3316,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9515,
+   "relevance": 0.6132,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9516,
+   "relevance": 0.4709,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9518,
+   "relevance": 0.2837,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9519,
+   "relevance": 0.357,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9521,
+   "relevance": 0.2328,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9522,
+   "relevance": 0.2085,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9524,
+   "relevance": 0.3574,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9525,
+   "relevance": 0.3453,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9527,
+   "relevance": 0.433,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9528,
+   "relevance": 0.418,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9529,
+   "relevance": 0.3648,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9531,
+   "relevance": 0.1762,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9532,
+   "relevance": 0.3313,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9533,
+   "relevance": 0.3502,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9535,
+   "relevance": 0.4092,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9536,
+   "relevance": 0.2069,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9537,
+   "relevance": 0.5961,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9538,
+   "relevance": 0.4929,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9542,
+   "relevance": 0.3042,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9543,
+   "relevance": 0.2865,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9544,
+   "relevance": 0.1805,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9546,
+   "relevance": 0.1138,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9549,
+   "relevance": 0.4242,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9550,
+   "relevance": 0.2087,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9554,
+   "relevance": 0.4967,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9555,
+   "relevance": 0.4302,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9557,
+   "relevance": 0.3078,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9559,
+   "relevance": 0.2751,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9560,
+   "relevance": 0.4118,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9562,
+   "relevance": 0.503,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9567,
+   "relevance": 0.3867,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9568,
+   "relevance": 0.5492,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9569,
+   "relevance": 0.104,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9570,
+   "relevance": 0.1905,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9572,
+   "relevance": 0.3017,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9573,
+   "relevance": 0.4127,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9575,
+   "relevance": 0.0177,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9576,
+   "relevance": 0.3218,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9578,
+   "relevance": 0.3878,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9582,
+   "relevance": 0.0428,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9583,
+   "relevance": 0.1203,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9584,
+   "relevance": 0.394,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9585,
+   "relevance": 0.4767,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9589,
+   "relevance": 0.1054,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9593,
+   "relevance": 0.4489,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9596,
+   "relevance": 0.2453,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9599,
+   "relevance": 0.4008,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9601,
+   "relevance": 0.3347,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9605,
+   "relevance": 0.3388,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9609,
+   "relevance": 0.3913,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9613,
+   "relevance": 0.1649,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9614,
+   "relevance": 0.5435,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9618,
+   "relevance": 0.2807,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9619,
+   "relevance": 0.2053,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9620,
+   "relevance": 0.2761,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9621,
+   "relevance": 0.0982,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9622,
+   "relevance": 0.3099,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9624,
+   "relevance": 0.1711,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9625,
+   "relevance": 0.204,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9627,
+   "relevance": 0.5438,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9628,
+   "relevance": 0.1775,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9637,
+   "relevance": 0.0791,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9638,
+   "relevance": 0.6286,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9640,
+   "relevance": 0.2279,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9641,
+   "relevance": 0.2525,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9642,
+   "relevance": 0.3119,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9643,
+   "relevance": 0.3527,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9644,
+   "relevance": 0.4895,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9646,
+   "relevance": 0.135,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9647,
+   "relevance": 0.2764,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9648,
+   "relevance": 0.3586,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9649,
+   "relevance": 0.3199,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9650,
+   "relevance": 0.5362,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9652,
+   "relevance": 0.1333,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9653,
+   "relevance": 0.2307,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9655,
+   "relevance": 0.4275,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9656,
+   "relevance": 0.3021,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9657,
+   "relevance": 0.1749,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9658,
+   "relevance": 0.3506,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9659,
+   "relevance": 0.4974,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9660,
+   "relevance": 0.2912,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9661,
+   "relevance": 0.3426,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9662,
+   "relevance": 0.5277,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9663,
+   "relevance": 0.3473,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9664,
+   "relevance": 0.5166,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9665,
+   "relevance": 0.6095,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9667,
+   "relevance": 0.3826,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9668,
+   "relevance": 0.2548,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9671,
+   "relevance": 0.3155,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9672,
+   "relevance": 0.2412,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9675,
+   "relevance": 0.2786,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9677,
+   "relevance": 0.6906,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9683,
+   "relevance": 0.3355,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9684,
+   "relevance": 0.4142,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9686,
+   "relevance": 0.3563,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9687,
+   "relevance": 0.4412,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9688,
+   "relevance": 0.5019,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9689,
+   "relevance": 0.1536,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9690,
+   "relevance": 0.2589,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9692,
+   "relevance": 0.4647,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9693,
+   "relevance": 0.214,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9694,
+   "relevance": 0.2569,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9695,
+   "relevance": 0.3803,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9696,
+   "relevance": 0.5143,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9697,
+   "relevance": 0.2128,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9698,
+   "relevance": 0.4522,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9699,
+   "relevance": 0.4418,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9700,
+   "relevance": 0.5162,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9702,
+   "relevance": 0.2001,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9703,
+   "relevance": 0.408,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9706,
+   "relevance": 0.3549,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9708,
+   "relevance": 0.3251,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9709,
+   "relevance": 0.4764,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9710,
+   "relevance": 0.6335,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9712,
+   "relevance": 0.4752,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9713,
+   "relevance": 0.2791,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9714,
+   "relevance": 0.3963,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9716,
+   "relevance": 0.2122,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9717,
+   "relevance": 0.1624,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9725,
+   "relevance": 0.3231,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9727,
+   "relevance": 0.4604,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9729,
+   "relevance": 0.2426,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9730,
+   "relevance": 0.3234,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9732,
+   "relevance": 0.2599,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9733,
+   "relevance": 0.2803,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9736,
+   "relevance": 0.4374,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9739,
+   "relevance": 0.1741,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9741,
+   "relevance": 0.4506,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9742,
+   "relevance": 0.5621,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9744,
+   "relevance": 0.276,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9755,
+   "relevance": 0.4667,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9760,
+   "relevance": 0.2402,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9762,
+   "relevance": 0.3577,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9766,
+   "relevance": 0.1921,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9769,
+   "relevance": 0.096,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9771,
+   "relevance": 0.1681,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9773,
+   "relevance": 0.1198,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9774,
+   "relevance": 0.3944,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9775,
+   "relevance": 0.5698,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9776,
+   "relevance": 0.3768,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9778,
+   "relevance": 0.6417,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9782,
+   "relevance": 0.2366,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9783,
+   "relevance": 0.511,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9784,
+   "relevance": 0.2317,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9785,
+   "relevance": 0.3502,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9786,
+   "relevance": 0.5921,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9788,
+   "relevance": 0.5246,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9789,
+   "relevance": 0.3362,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9794,
+   "relevance": 0.34,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9797,
+   "relevance": 0.5919,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9798,
+   "relevance": 0.3198,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9799,
+   "relevance": 0.4812,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9800,
+   "relevance": 0.1624,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9801,
+   "relevance": 0.3559,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9802,
+   "relevance": 0.3818,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9803,
+   "relevance": 0.5264,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9805,
+   "relevance": 0.343,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9806,
+   "relevance": 0.1913,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9807,
+   "relevance": 0.6896,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9810,
+   "relevance": 0.1722,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9813,
+   "relevance": 0.2496,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9814,
+   "relevance": 0.0761,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9815,
+   "relevance": 0.2476,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9819,
+   "relevance": 0.3548,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9820,
+   "relevance": 0.4633,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9823,
+   "relevance": 0.3448,
+   "names_the_race": false,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9825,
+   "relevance": 0.3921,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9827,
+   "relevance": 0.1155,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9829,
+   "relevance": 0.1526,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9831,
+   "relevance": 0.2595,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9833,
+   "relevance": 0.4461,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9834,
+   "relevance": 0.27,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9837,
+   "relevance": 0.2179,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9839,
+   "relevance": 0.3226,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9840,
+   "relevance": 0.4391,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9844,
+   "relevance": 0.0816,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9845,
+   "relevance": 0.4718,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9846,
+   "relevance": 0.5679,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9848,
+   "relevance": 0.3177,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9849,
+   "relevance": 0.2866,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9850,
+   "relevance": 0.3264,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9851,
+   "relevance": 0.5035,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9852,
+   "relevance": 0.4072,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9853,
+   "relevance": 0.2721,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9856,
+   "relevance": 0.5764,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9862,
+   "relevance": 0.1608,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9864,
+   "relevance": 0.3157,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9865,
+   "relevance": 0.2934,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9867,
+   "relevance": 0.2839,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9870,
+   "relevance": 0.1787,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9872,
+   "relevance": 0.3671,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9874,
+   "relevance": 0.6559,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9875,
+   "relevance": 0.3668,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9876,
+   "relevance": 0.2889,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9879,
+   "relevance": 0.0863,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9882,
+   "relevance": 0.2042,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9883,
+   "relevance": 0.4521,
+   "names_the_race": true,
+   "posted": true,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9885,
+   "relevance": 0.3646,
+   "names_the_race": false,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9886,
+   "relevance": 0.4397,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9889,
+   "relevance": 0.2557,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": true
+  },
+  {
+   "id": 9890,
+   "relevance": 0.5034,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9893,
+   "relevance": 0.2549,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9895,
+   "relevance": 0.2746,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 0,
+   "not_on_november_ballot": false
+  },
+  {
+   "id": 9897,
+   "relevance": 0.6323,
+   "names_the_race": true,
+   "posted": false,
+   "about_race": 1,
+   "not_on_november_ballot": false
+  }
+ ]
+}

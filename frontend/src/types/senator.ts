@@ -33,6 +33,11 @@ export interface HeldScore {
 export interface Senator {
   id: string;
   name: string;
+  /** The scoring version that stored the scores, and when (the newest
+   *  history snapshot's); null when none is recorded, absent from an
+   *  older API. What a citation of the score names. */
+  algorithmVersion?: string | null;
+  scoredOn?: string | null;
   /** Biographical Directory id, which Congress.gov's member pages are keyed by. */
   bioguideId?: string | null;
   state: string;

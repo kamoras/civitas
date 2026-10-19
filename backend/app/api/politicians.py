@@ -27,7 +27,7 @@ import statistics
 from difflib import SequenceMatcher
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import JSONResponse
+from app.api.response_helpers import JSONResponse
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 

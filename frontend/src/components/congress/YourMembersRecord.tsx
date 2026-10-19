@@ -149,7 +149,7 @@ export default function YourMembersRecord() {
           Loading {name}&apos;s members…
         </p>
       ) : (
-        <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {members.map((m) => (
             <MemberCard key={m.id} m={m} />
           ))}

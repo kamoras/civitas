@@ -358,7 +358,7 @@ two-claim gate, a false one drops a real fact and often the issue with it.
 
 ## The digest filter
 
-`_digest_reason`'s body check drops an article whose description splits
+`digest_reason`'s body check (`fetch/news_digest.py` since 2026-10-17) drops an article whose description splits
 into three or more items naming disjoint entities that the headline doesn't
 account for. On this sample it dropped 19 articles that way: one was a
 curated preview of several stories; 18 were single stories (14 relevant).
@@ -392,6 +392,47 @@ and a body (race coverage plus the Action Center's claim sources,
 Disjoint headline items alone would have dropped all 12 single stories with
 the 16 briefings, so the body half is what makes it precise. Its known miss
 is the live blog, left to the coherence and on-topic checks downstream.
+
+That miss mattered once a live blog titled an issue: on 2026-10-16 a
+"Live updates: <a press secretary's exit>; <a campaign rally>" headline
+titled issue 806 over a PBS report of the exit already titling issue 805,
+and the rally held the two titles to 0.557, under the 0.62 a shared
+source needs. The live blog's own kicker is what makes its headline
+readable: `_multi_story_headline` is the kicker over two or more items
+naming disjoint entities. On 2,642 distinct headlines (feed articles, race
+coverage, stored issues, every composed issue title; 2026-10-17), 48 have
+disjoint items; the 20 with a kicker are all live blogs, and of the 28
+without one, 12 are single stories. It misses 5 live blogs whose items share
+a name or whose second item names nobody. Such a headline no longer titles
+an issue or gives it a headline claim, and matching compares it story by
+story (805's title and 806's first story: 0.672; the invented-name pair in
+`test_a_live_blog_title_agrees_on_its_shared_story` scores 0.606 whole and
+0.679 for its first story). Replayed over every stored
+issue (2026-06-20 to 10-16), the duplicate pass marks one more row, 806 as a
+duplicate of 805, and nothing else changes; the write-time matcher matches
+806 to 805, and picks a different one of two identical-title copies in two
+other cases.
+
+### Shared with race coverage (2026-10-17)
+
+The election coverage ingest had no digest check, and posted a Hill
+newsletter whose lead item named a candidate as an update on her race. It now
+calls the same `digest_reason`. Replayed over the 875 stored feed articles and
+the 1,457 stored news coverage items, four of the rule's misses on single
+stories were fixed in the shared module, so both consumers change together:
+
+| change | feed articles | coverage items |
+|---|---|---|
+| a description the publisher cut ("…", "[…]") drops its fragment, as a cap-cut one does | 8 single stories no longer dropped | 8 |
+| PBS's "<guest> joined <host> to discuss" is a sign-off, not an item | 2 | 2 |
+| "N takeaways" is not a digest title | 10, every one a single event (mostly debates) | 11 |
+| "photos of the week" is a digest title (Roll Call's weekly photo roundup, which the publisher-cut fix let through) | 2 kept as digests | 2 |
+| dropped as digests, before / after | 48 / 28 | 58 / 37 |
+
+Of the 37 coverage items still dropped, 33 are digests on reading them (17
+newsletters, roundups, two-story briefings); 4 are single stories (an AP story
+whose photo caption and timestamp read as items, two titles ending in "and
+more", one Hill item listing three speakers).
 
 ## Limits
 

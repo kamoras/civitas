@@ -15,7 +15,7 @@ import {
   formatComputedLean,
   formatPvi,
   leanWindowWords,
-  matchesDistrictQuery,
+  filterDistricts,
   placeDistrictSummary,
   pviColor,
   stateBallotHref,
@@ -491,12 +491,11 @@ export default function RedistrictingStateView({ data }: { data: StateRedistrict
   const rows = view === "new" ? data.newDistricts : data.oldDistricts;
   const shown = useMemo(
     () =>
-      rows.filter((r) =>
-        matchesDistrictQuery(
-          { district: r.number, areas: [...r.counties, ...r.places], candidates: [] },
-          filter
-        )
-      ),
+      filterDistricts<NewDistrict | OldDistrict>(rows, filter, (r) => ({
+        district: r.number,
+        areas: [...r.counties, ...r.places],
+        candidates: [],
+      })),
     [rows, filter]
   );
   const placeSummary = placeDistrictSummary(

@@ -100,9 +100,15 @@ from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.congress import congress_gov_url_for_bill_id
 from app.pipeline.fetch.fr_rulemaking import RULE_DOC_TYPES, fetch_fr_metadata
 from app.http_client import make_async_client
+from app.pipeline.fetch.news_digest import (
+    _POSSESSIVE_SUFFIX_RE,
+    _entity_items,
+    _issue_signature,
+    _split_body_items,
+    digest_reason,
+)
 from app.pipeline.fetch.news_feeds import (
     MAX_ARTICLE_AGE_HOURS,
-    MAX_SUMMARY_CHARS,
     NewsArticle,
     fetch_news_articles,
 )
@@ -532,62 +538,6 @@ def _full_story_should_invalidate(
     """
     return old_title != new_title or old_facts != new_facts
 
-# Tokens that appear in most political stories and therefore carry no
-# STORY identity — a signature made of these matches everything. Identity
-# comes from specific entities and numbers, never from shared civic
-# vocabulary. Calibrated against real production pairs (see
-# _issue_signature): with these stripped, two same-story rows measured
-# overlap 0.78-1.00 while a different-story pair whose TITLES scored 0.88
-# cosine measured 0.0.
-_SIGNATURE_GENERIC_TOKENS = {
-    "the", "a", "an", "this", "these", "those", "several", "multiple",
-    "recent", "new", "over", "under", "after", "before", "while", "with",
-    "house", "senate", "congress", "congressional", "president",
-    "republicans", "republican", "democrats", "democrat", "democratic",
-    "gop", "lawmakers", "federal", "government", "state", "states",
-    "white", "washington", "american", "americans", "bill", "act",
-    "committee", "administration", "officials", "legislation",
-}
-
-
-# A date names when, not what: on 2026-10-08, 8 of the 23 rows the feed had
-# marked duplicates shared little but a date ("2026", "September", "28"),
-# one news story hidden as a duplicate of an unrelated Senate vote's draft.
-# Removed before the signature is read: a month with its day and year, an
-# ISO date, a weekday, and a year standing alone.
-_MONTHS = (
-    "January|February|March|April|May|June|July|August|September|October|"
-    "November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sept|Sep|Oct|Nov|Dec"
-)
-_DATE_RE = re.compile(
-    rf"\b(?:{_MONTHS})\.?(?:\s+\d{{1,2}}(?:st|nd|rd|th)?)?(?:,?\s+\d{{4}})?\b"
-    rf"|\b\d{{1,2}}\s+(?:{_MONTHS})\b(?:\s+\d{{4}})?"
-    r"|\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}/\d{1,2}/\d{2,4}\b"
-    r"|\b(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b"
-    r"|\b(?:19|20)\d{2}\b"
-)
-
-
-def _issue_signature(title: str, facts: list[str]) -> set[str]:
-    """Identity fingerprint of an issue: specific capitalized entities plus
-    digit groups from its title and facts, minus generic civic vocabulary
-    (see _SIGNATURE_GENERIC_TOKENS) and dates (_DATE_RE). Two rows about
-    the same real-world story share the numbers and named entities that
-    define it; two rows that merely sound alike share only the generic
-    tokens this strips."""
-    text = _DATE_RE.sub(" ", f"{title} {' '.join(facts)}").translate(_APOSTROPHES)
-    # A possessive is the same entity: "Trump" and "Trump's" counted as two
-    # shared tokens matched unrelated stories about one person (2026-10-08).
-    tokens = {
-        _POSSESSIVE_SUFFIX_RE.sub("", m.group(0).lower())
-        for m in re.finditer(r"\b[A-Z][a-zA-Z'\-]{2,}\b", text)
-    } - _SIGNATURE_GENERIC_TOKENS
-    numbers = {
-        m.group(0).replace(",", "")
-        for m in re.finditer(r"\d[\d,]*(?:\.\d+)?", text)
-    }
-    return tokens | numbers
-
 
 # Words that mark a change in a story's STATE rather than the arrival of a new
 # participant. The signature check below sees only capitalized entities and
@@ -966,6 +916,26 @@ def _same_story(sim: float, title: str, facts: list, cand_title: str, cand_facts
 # second card.
 SHARED_SOURCE_TITLE_SIM = 0.62
 
+
+def _shared_source_title_sim(sim: float, title_a: str, title_b: str) -> float:
+    """The title agreement SHARED_SOURCE_TITLE_SIM is read against: the
+    titles' similarity `sim`, or, when either is a live blog's headline
+    listing several stories (_story_titles), the best agreement of any one
+    of its stories with the other title. Issues 805/806 (2026-10-16): a
+    live blog's headline over a press secretary's exit and an unrelated
+    campaign rally shared its source with the report of the exit at
+    0.557, the rally pulling the whole headline away; the exit alone
+    agreed at 0.672. The same shape with invented names ("Live updates:
+    Press secretary Morrow exits; Varga rallies for Brandt at Dunmore
+    county fair" against "Press secretary Dana Morrow leaving the job
+    after Varga casts doubt"): 0.606 whole, 0.679 for the first story
+    (test_a_live_blog_title_agrees_on_its_shared_story)."""
+    stories_a, stories_b = _story_titles(title_a), _story_titles(title_b)
+    if len(stories_a) == len(stories_b) == 1:
+        return sim
+    return float((_embed_texts_sim(stories_a) @ _embed_texts_sim(stories_b).T).max())
+
+
 # How far back (days, by issue date) a new story is matched against
 # existing rows, and the widest gap between two rows the feed's duplicate
 # pass (_near_identical_clusters) compares: one window, so the two passes
@@ -1054,7 +1024,9 @@ def _near_identical_clusters(issues: list["ActionIssue"]) -> dict[int, int]:
                     a.title or "", facts_list[i], b.title or "", facts_list[j],
                 )
             else:
-                m = (bool(urls_list[i] & urls_list[j]) and float(sims[i, j]) >= SHARED_SOURCE_TITLE_SIM) or _same_story(
+                m = (bool(urls_list[i] & urls_list[j]) and _shared_source_title_sim(
+                    float(sims[i, j]), a.title or "", b.title or "",
+                ) >= SHARED_SOURCE_TITLE_SIM) or _same_story(
                     float(sims[i, j]), a.title or "", facts_list[i], b.title or "", facts_list[j],
                 )
             same_story[i][j] = same_story[j][i] = m
@@ -1082,13 +1054,19 @@ def _near_identical_clusters(issues: list["ActionIssue"]) -> dict[int, int]:
 
     representative: dict[int, int] = {}
     for members in clusters:
-        # (has a real timestamp, the timestamp itself, id) — a plain
+        # A row titled by a live blog's several-story headline never
+        # represents its story while a row with a single story's headline
+        # can (_multi_story_headline: 806 gives way to 805). Then (has a
+        # real timestamp, the timestamp itself, id) — a plain
         # `created_at or id` fallback would compare a datetime against an
         # int the moment one cluster member lacks a timestamp and another
         # doesn't, which TypeErrors.
         best = max(
             members,
-            key=lambda idx: (issues[idx].created_at is not None, issues[idx].created_at, issues[idx].id),
+            key=lambda idx: (
+                not _multi_story_headline(issues[idx].title or ""),
+                issues[idx].created_at is not None, issues[idx].created_at, issues[idx].id,
+            ),
         )
         for idx in members:
             representative[idx] = best
@@ -1150,6 +1128,14 @@ def mark_recent_duplicates(db: "Session") -> int:
     for idx, issue in enumerate(pool):
         rep = representative[idx]
         issue.duplicate_of_id = None if rep == idx else pool[rep].id
+        # A current story duplicating another current one leaves the Action
+        # Center too, as a draft a report covers does (early_signal): the
+        # Today tab reads is_current, not this mark, so both cards stayed
+        # up (805/806, 2026-10-16). Its page links the row it duplicates.
+        if rep != idx and issue.is_current and pool[rep].is_current and not issue.source_type:
+            issue.is_current = False
+            action_metrics.increment("issues_retired_duplicate")
+            logger.info("Retired issue %d: a duplicate of current issue %d", issue.id, pool[rep].id)
         # A vote draft whose bill a reported issue covers duplicates that
         # issue, though the titles differ too much to cluster ("Senate vote
         # on S. 4668" / "The Senate passes the Protect College Sports Act").
@@ -1411,314 +1397,37 @@ def _resolve_url(url: str, timeout: float = 6.0) -> str:
     return url
 
 
-# Recurring multi-story products an outlet publishes as ONE feed item. The
-# body of such an item is a list of that day's (or week's) unrelated stories,
-# so everything downstream — clustering, the LLM prompt, the generated
-# summary — treats several separate events as one issue and the summary
-# stitches them into a single narrative, often inventing a causal link
-# between them (live 2026-07 case, issue 483: "A new agreement involving
-# Hamas and Israel has been announced... The U.S. economy saw a slight
-# slowdown following the announcement" — two unrelated NPR items from one
-# briefing, joined by a "following the announcement" no source stated).
-#
-# This started as a weekly-roundup title filter. Daily briefings are the
-# same shape and far more common — NPR runs "Up First" and "Morning news
-# brief" every weekday, and each is a single RSS item covering three to five
-# separate stories. Phrases that also appear on ordinary single-topic
-# explainers ("what to know", "the latest:", "live updates" — a live blog
-# covers one event in many parts, not many events) are deliberately NOT
-# here: this filter drops articles outright, so it is tuned for precision on
-# the recurring-product class rather than for catching every possible digest.
-#
-# Matching is split by WHERE the marker has to appear, because several of
-# these phrases are also ordinary English somewhere else in a headline:
-#   - anywhere: phrases that are digest-specific wherever they land
-#   - title-initial: product names that collide with real reporting when
-#     they appear mid-headline ("Pentagon holds evening briefing on troop
-#     levels", "Varga skipped the President's Daily Brief", "the building
-#     blew up first") — a product name leads its own headline, optionally
-#     after a source tag like "NPR:"
-#   - trailing tag: "in brief" / "and more", which are digest markers only
-#     at the end ("spoke in brief remarks", "and more-restrictive rules")
-#
-# Titles are apostrophe-normalized before matching (_digest_reason): feeds
-# emit the typographic ’ far more often than ', and "Today’s headlines"
-# silently missed the ' spelling.
-_DIGEST_TITLE_PATTERNS = re.compile(
-    r"\b(week(?:ly)? in (?:politics|review|news)|week(?:'?s)? (?:top |best )?(?:news|stories|headlines)"
-    r"|this week in|news of the week|political news this week|what we('re| are) watching"
-    r"|week(?:ly)? (?:wrap-?up|round-?up)"
-    # "brief" only, never "briefing" — "White House news briefing on the
-    # Gaza strikes" is one story about a press conference.
-    r"|news brief\b|newscast|politics chat|news round-?up"
-    r"|\d+ things to know|\d+ takeaways)",
-    re.IGNORECASE,
-)
+def _multi_story_headline(title: str) -> bool:
+    """A live blog's headline: the outlet's kicker (its label before the
+    first ": ", _headline_kicker) over two or more items naming disjoint
+    entities ("Live updates: Press secretary Morrow exits; Varga rallies
+    for Brandt at Dunmore county fair"). Such a page tells several stories, so its
+    headline neither titles an issue nor lends its headline claim to one,
+    and it is compared story by story (_story_titles).
 
-_DIGEST_TITLE_PREFIX_PATTERNS = re.compile(
-    # Optional source tag: "NPR:", "AP —", "Morning Edition - ". A dash only
-    # separates a tag when it is spaced; unspaced it is a compound word, and
-    # "Wrap-up first look at the budget" is not a product name. Then an
-    # optional leading article ("The Up First newsletter: ...", NPR's real
-    # title format for that product) — live-missed case (issue 492, 2026-08):
-    # "The" is too long to be swallowed as part of the source-tag group (it
-    # has no colon/dash of its own within 20 chars of "The"), so without this
-    # the whole prefix pattern silently failed to match and the article fell
-    # through to _multi_topic_body, which has its own gap for titles that
-    # name every bundled story (see that function's docstring). An article
-    # is not a source tag, so this is a separate, unconditional skip, not
-    # folded into the source-tag group above.
-    r"^(?:[A-Za-z][\w.&' ]{0,20}?(?::\s*|\s+[—–|-]\s+))?"
-    r"(?:(?:the|a|an)\s+)?"
-    r"(up first|first up|top stories|today's headlines|headlines\s*:"
-    r"|(?:daily|morning|evening|nightly)\s+"
-    r"(?:brief|briefing|digest|rundown|wire|wrap|newsletter))\b",
-    re.IGNORECASE,
-)
-
-_DIGEST_TITLE_SUFFIX_PATTERNS = re.compile(
-    # A dash only counts as the tag boundary when spaced — "and
-    # more-restrictive tariffs" is a compound adjective, not a tag.
-    r"\b(in brief|and more)(?=\s*[:.…]|\s*$|\s+[-–—])",
-    re.IGNORECASE,
-)
-
-# Feeds emit the typographic apostrophe far more often than the ASCII one.
-
-# Feed descriptions enumerate their items with sentence breaks, semicolons,
-# bullets, or pipes — all four appear in real NPR/AP briefing bodies. The
-# delimiter is captured, not consumed, because it decides whether the item's
-# first word can be trusted as a name (see _split_body_items).
-_DIGEST_ITEM_SPLIT_RE = re.compile(r"((?<=[.!?])\s+|\s*[;•·|]\s*)")
-
-# A digest body must break into at least this many entity-bearing items
-# before disjointness means anything: two sentences that happen not to
-# share a name is ordinary prose ("Israel and Hamas reached a deal.
-# Negotiators met in Cairo."), three or more sharing NOTHING is a list.
-_DIGEST_MIN_ITEMS = 3
-
-# Two things in a single story's teaser that the split above turned into
-# extra, guaranteed-disjoint "items" — measured 2026-10-10: of 19 articles
-# this body check dropped from 627 feed articles, 18 were single stories (14
-# of them U.S. policy stories), 16 pushed to three items by one of these
-# (now 2 drops, both single stories; docs/research/action-center-relevance.md):
-#  - A period that ends an abbreviation is not a sentence break: dotted
-#    initials ("U.S.", "D.C.", "Joshua A.") and the abbreviated titles and
-#    months written before names and dates ("Rep.", "Sen.", "Sept."). "An
-#    investigation is underway after U.S. | Immigration and Customs ..."
-#    became two items.
-_ABBREVIATION_END_RE = re.compile(
-    r"(?:\b[A-Z]\.)+$"
-    r"|\b(?:Sens?|Reps?|Gov|Gen|Lt|Col|Sgt|Capt|Adm|Dr|Mrs?|Ms|St|Jr|Sr"
-    r"|Jan|Feb|Aug|Sept?|Oct|Nov|Dec|No|Ft|Mt)\.$"
-)
-#  - Attribution is not an item: a photo credit in parentheses ("(Image
-#    credit: ...)", "(AP Photo/...)") anywhere, and a broadcast segment's
-#    closing sign-off ("<reporter> reports.", "<host> discussed it with
-#    <guest>."), which names people who are not in the story. Dropping an
-#    item can only make a body less list-like, so a sign-off pattern that
-#    catches a real sentence errs toward keeping the article.
-_CREDIT_ITEM_RE = re.compile(r"^\(.*\)?$")
-_SIGN_OFF_ITEM_RE = re.compile(
-    r"\breports(?: from [^.]*)?\.?$|\b(?:discussed|spoke|talked)\b.*\bwith\b[^.]*\.?$"
-)
-
-
-def _split_body_items(summary: str, truncated: bool = False) -> list[tuple[str, bool]]:
-    """Split a feed description into (item, first_word_is_forced_capital).
-
-    Grammar capitalizes the word that opens a sentence whether or not it
-    names anything, so "Negotiators met in Cairo." looks like it introduces
-    a person. After a semicolon or a bullet nothing is forced, so a
-    capitalized word there really is a name ("Brandt defended the cut").
-    Which delimiter preceded an item is the only thing that distinguishes
-    the two, hence the captured-group split.
-
-    A body news_feeds cut at its length cap (NewsArticle.truncated — a
-    plain length check against a hardcoded constant stopped being reliable
-    once summaries could come from either a short teaser or full article
-    text, each with its own cap) was cut mid-item, and the fragment left
-    behind ("...Negotiators from Qatar") names entities that by
-    construction appear nowhere else in the text — one more
-    guaranteed-disjoint item, enough to push a two-item blurb over the list
-    threshold. The cap is the signal, not trailing punctuation: plenty of
-    bodies legitimately end without a period (bulleted lists especially),
-    and treating those as cut discarded the whole final item.
-    """
-    parts = _DIGEST_ITEM_SPLIT_RE.split(summary or "")
-    delimiters = parts[1::2]
-    # Nothing precedes the first item, so its capital is read from the rest
-    # of the body: in a bulleted or semicolon-separated list the opening item
-    # is a list entry like every other one, and stripping its first word
-    # would throw away the only name it has.
-    first_forced = all(d.strip() == "" for d in delimiters)
-    items: list[tuple[str, bool]] = [(parts[0], first_forced)]
-    for delimiter, item in zip(delimiters, parts[2::2]):
-        sentence_break = delimiter.strip() == ""
-        if sentence_break and _ABBREVIATION_END_RE.search(items[-1][0].rstrip()):
-            items[-1] = (f"{items[-1][0]} {item}", items[-1][1])
-        else:
-            items.append((item, sentence_break))
-    if truncated and len(items) > 1:
-        items.pop()
-    if len(items) > 1 and _SIGN_OFF_ITEM_RE.search(items[-1][0].strip()):
-        items.pop()
-    return [(item, forced) for item, forced in items if not _CREDIT_ITEM_RE.match(item.strip())]
-
-
-# Singular and plural possessives both: "Varga's", "Democrats'".
-_POSSESSIVE_SUFFIX_RE = re.compile(r"'s?$")
-
-
-def _topic_tokens(text: str) -> set[str]:
-    """Entity signature of one text, for comparing a headline against its
-    own body. _issue_signature unifies apostrophes and drops possessives, so
-    a possessive-led headline ("Varga's tariff order faces court test", the
-    most common headline shape there is) shares {varga} with a body that
-    says "Varga", whichever apostrophe the feed emitted."""
-    return _issue_signature(text, [])
-
-
-def _item_entities(item: str, forced_capital: bool) -> set[str]:
-    """Named entities in one item of a feed description.
-
-    Reuses the issue-signature extractor (capitalized tokens and digit
-    groups, minus generic civic vocabulary). Where the first word's capital
-    is forced by grammar it is dropped before extraction — _issue_signature
-    was written for whole titles and fact lists, in which sentence-initial
-    capitalization is a rounding error, and per-item it would otherwise
-    manufacture a distinct "entity" for every sentence, which is exactly the
-    noise the disjointness test below cannot tolerate.
-    """
-    if forced_capital:
-        parts = item.split(None, 1)
-        item = parts[1] if len(parts) > 1 else ""
-    return _topic_tokens(item)
-
-
-# How many of a body's items the headline may account for before the body
-# stops looking like a list. A headline names its story's subject and the
-# blurb keeps referring back to it, so a single story's title covers most
-# of its own items; a briefing's title can cover at most the one item it
-# leads with. Without this, any single story whose blurb hands off between
-# actors reads as a list ("Sen. Chuck Grassley released the transcript
-# Thursday. The FBI declined to comment. House Judiciary Democrats called
-# for hearings." — three sentences, three disjoint entity sets, one story).
-_DIGEST_MAX_TITLE_COVERED_ITEMS = 1
-
-
-def _multi_topic_body(summary: str, title: str, truncated: bool = False) -> bool:
-    """True if ``summary`` reads as a list of separate stories.
-
-    Two conditions, both required. The items must be pairwise disjoint in
-    the entities they name — a single story's blurb keeps returning to its
-    own subject, a briefing's items are about different people in different
-    places. And the headline must fail to account for the body: a digest
-    headline cannot describe stories it does not know about, which is the
-    property that distinguishes a list from a story told through several
-    actors (see _DIGEST_MAX_TITLE_COVERED_ITEMS).
-    """
-    items = [
-        entities
-        for entities in (
-            _item_entities(item, forced)
-            for item, forced in _split_body_items(summary, truncated)
-        )
-        # A bare number is not a topic — an item must name something.
-        if any(not token[0].isdigit() for token in entities)
-    ]
-    if len(items) < _DIGEST_MIN_ITEMS:
+    The kicker is what makes the disjoint-items shape precise. Measured
+    2026-10-17 on 2,642 distinct headlines (national feed articles, race
+    coverage, stored issues and every composed issue title): 48 split into
+    disjoint items; the 20 with a kicker were all multi-story live blogs,
+    and of the 28 without one, 12 were single stories (a photo column
+    "<column name> | <caption>", two-sentence headlines about one event, a
+    debate between two candidates; _parallel_stories' docstring). Missed: 5
+    live blog headlines whose items share a name (the president's) or whose
+    second item names nobody ("candidates tangle in midterm debates"); they behave as
+    before. Structure only, no phrase list: any outlet's kicker counts."""
+    if not _headline_kicker(title):
         return False
-    disjoint = all(
-        not (a & b)
-        for i, a in enumerate(items)
-        for b in items[i + 1:]
-    )
-    if not disjoint:
-        return False
-    title_entities = _topic_tokens(title)
-    covered = sum(1 for entities in items if entities & title_entities)
-    return covered <= _DIGEST_MAX_TITLE_COVERED_ITEMS
+    items = _entity_items(title.partition(": ")[2].translate(_APOSTROPHES))
+    return len(items) >= 2 and not any(a & b for i, a in enumerate(items) for b in items[i + 1:])
 
 
-def _entity_items(text: str, truncated: bool = False) -> list[set[str]]:
-    """The entity set of each entity-bearing item of ``text``
-    (_split_body_items, _item_entities)."""
-    return [
-        entities
-        for entities in (_item_entities(item, forced) for item, forced in _split_body_items(text, truncated))
-        if any(not token[0].isdigit() for token in entities)
-    ]
-
-
-def _parallel_stories(title: str, summary: str, truncated: bool = False) -> bool:
-    """True if the headline strings unrelated stories together and the body
-    tells the same ones, one item each.
-
-    _multi_topic_body needs three items, since two disjoint sentences are
-    ordinary prose, and a briefing that names its stories in its headline
-    passes its second condition by construction. A two-story briefing has
-    both shapes at once ("<story A>. And, <story B>" over "<A at more
-    length>. And, <B at more length>"): the headline splits into items
-    naming disjoint entities, the body's items are disjoint too, and each
-    body item names exactly one headline item's entities, every headline
-    item being named. A single story told in two headline sentences fails
-    the last half: its teaser names both halves in one item, or adds an item
-    naming neither ("Lawmakers added $1 to car insurance. The money paid for
-    cameras." over a photo caption and the story). Measured 2026-10-15 on
-    1,473 stored articles with a headline and body (election coverage and
-    the Action Center's claim sources): 28 headlines have two or more
-    disjoint items, 5 have this shape, and all 5 are two-story briefings; of
-    the 23 left, 11 are multi-story live blogs it doesn't catch and 12 are
-    single stories (docs/research/action-center-relevance.md).
-    """
-    heads = _entity_items(title)
-    if len(heads) < 2 or any(a & b for i, a in enumerate(heads) for b in heads[i + 1:]):
-        return False
-    body = _entity_items(summary, truncated)
-    if any(a & b for i, a in enumerate(body) for b in body[i + 1:]):
-        return False
-    named = [[i for i, head in enumerate(heads) if item & head] for item in body]
-    return all(len(n) == 1 for n in named) and {n[0] for n in named} == set(range(len(heads)))
-
-
-# The outlet's own section for its newsletters. A newsletter is a
-# multi-section product ("The Big Story", then other news, with "Welcome to
-# ... newsletter" and photo-credit boilerplate in its feed description), so
-# it is a digest by the outlet's own filing, whatever its headline says.
-# One outlet syndicates them into its news feed (3 of 4,067 items across
-# all 49 feeds, 2026-10-08); one was published as an issue whose "fact" was
-# four of its section headings run together.
-_NEWSLETTER_SECTIONS = frozenset({"newsletter", "newsletters"})
-
-
-def _digest_reason(article: NewsArticle) -> str | None:
-    """Why ``article`` is a multi-story digest, or None if it is one story."""
-    if _NEWSLETTER_SECTIONS & {s.lower() for s in urlparse(article.url or "").path.split("/")}:
-        return "newsletter section"
-    title = article.title.translate(_APOSTROPHES)
-    if (
-        _DIGEST_TITLE_PATTERNS.search(title)
-        or _DIGEST_TITLE_PREFIX_PATTERNS.match(title)
-        or _DIGEST_TITLE_SUFFIX_PATTERNS.search(title)
-    ):
-        return "recurring digest title"
-    # The body-shape check targets a specific, short-field phenomenon —
-    # several unrelated headlines crammed into one RSS <description> — not
-    # genuine long-form prose. A full article (see news_feeds'
-    # content:encoded handling) legitimately drifts across several named
-    # entities in the course of telling ONE story; that's normal narrative
-    # structure, not a compilation, and shouldn't be judged by a heuristic
-    # built around a one-paragraph teaser.
-    if len(article.summary) <= MAX_SUMMARY_CHARS and _multi_topic_body(
-        article.summary, article.title, article.truncated,
-    ):
-        return "body lists unrelated stories"
-    if len(article.summary) <= MAX_SUMMARY_CHARS and _parallel_stories(
-        article.title.translate(_APOSTROPHES), article.summary, article.truncated,
-    ):
-        return "headline and body list the same unrelated stories"
-    return None
+def _story_titles(title: str) -> list[str]:
+    """The stories a headline tells: its items for a multi-story headline
+    (_multi_story_headline), else the headline itself."""
+    if not _multi_story_headline(title):
+        return [title]
+    rest = title.partition(": ")[2]
+    return [item.strip() for item, _ in _split_body_items(rest) if item.strip()]
 
 
 # Livestream announcements ("WATCH LIVE: The president speaks at a midterm rally
@@ -1836,7 +1545,7 @@ def _filter_policy_relevant(db: Session, articles: list[NewsArticle]) -> list[tu
     # issues whose summary presents separate events as one story.
     specific = []
     for a in articles:
-        reason = _digest_reason(a)
+        reason = digest_reason(a)
         if reason:
             logger.debug("Filtered digest article (%s): %s", reason, a.title[:80])
         else:
@@ -5042,6 +4751,7 @@ def _find_matching_issue(
     source_urls: list | None = None,
     summary: str = "",
     db=None,
+    source_titles: dict[str, str] | None = None,
 ):
     """Find the existing issue (if any) this new cluster's title/facts
     should update instead of becoming a new row — extracted from
@@ -5068,28 +4778,39 @@ def _find_matching_issue(
     floor, so a reworded title can still match through it, but only with
     the titles agreeing to SHARED_SOURCE_TITLE_SIM: one roundup article is
     cited by unrelated stories (2026-10-08, see that constant). It was
-    treated as conclusive on its own from 2026-08.
+    treated as conclusive on its own from 2026-08. One shared article is
+    conclusive still: the one whose headline is the candidate's title
+    (`source_titles`, the new cluster's articles by URL), when that
+    headline tells one story (_multi_story_headline). That article is the
+    candidate's story, and the new cluster holds it. Of several candidates
+    sharing a source, the one whose title agrees best is taken.
     """
     sims = recent_embs @ title_emb if recent_embs is not None else None
     if source_urls:
         new_urls = {u for u in source_urls if u}
-        if new_urls:
-            for idx, candidate in enumerate(recent_issues):
-                if candidate.id in matched_issue_ids or not _may_match(candidate, title, facts, summary, db):
-                    continue
-                try:
-                    cand_urls = set(json.loads(candidate.source_urls or "[]"))
-                except (ValueError, TypeError):
-                    continue
-                # A vote draft's source is its record: a story citing it is
-                # the draft's story (promotion). A news row needs its title
-                # to agree too (SHARED_SOURCE_TITLE_SIM).
-                if new_urls & cand_urls and (
-                    candidate.source_type
-                    or (sims is not None and float(sims[idx]) >= SHARED_SOURCE_TITLE_SIM)
-                ):
-                    action_metrics.increment("issues_matched_by_source")
-                    return candidate
+        best, best_sim = None, -2.0
+        for idx, candidate in enumerate(recent_issues if new_urls else []):
+            if candidate.id in matched_issue_ids or not _may_match(candidate, title, facts, summary, db):
+                continue
+            try:
+                shared = new_urls & set(json.loads(candidate.source_urls or "[]"))
+            except (ValueError, TypeError):
+                continue
+            if not shared:
+                continue
+            sim = _shared_source_title_sim(float(sims[idx]), title, candidate.title or "") if sims is not None else -1.0
+            # A vote draft's source is its record: a story citing it is
+            # the draft's story (promotion). A news row needs its title
+            # to agree too (SHARED_SOURCE_TITLE_SIM), or the shared article
+            # to be the one that titled it.
+            titled = any(
+                (source_titles or {}).get(u) == candidate.title for u in shared
+            ) and not _multi_story_headline(candidate.title or "")
+            if (candidate.source_type or titled or sim >= SHARED_SOURCE_TITLE_SIM) and sim > best_sim:
+                best, best_sim = candidate, sim
+        if best is not None:
+            action_metrics.increment("issues_matched_by_source")
+            return best
 
     if sims is None:
         return None
@@ -5636,6 +5357,19 @@ def _run_refresh(db: Session) -> int:
                 continue
 
         filtered_cluster = [a for a, _ in on_topic]
+        # The headline of the top-ranked real article (below) that is not
+        # a live blog's headline listing several stories
+        # (_multi_story_headline): issue 806 (2026-10-16) was titled by a
+        # live blog's "Live updates: <a press secretary's exit>; <a campaign
+        # rally>" over a PBS report of the exit alone, brought the rally
+        # onto the page, and agreed too little with the PBS-titled issue
+        # 805 to be matched to it. A cluster of
+        # nothing else waits for a single story's report to join it.
+        title = next((a.title for a in filtered_cluster if not _multi_story_headline(a.title)), None)
+        if title is None:
+            logger.info("Rank %d: only live blogs listing several stories, no issue until a report joins", rank)
+            action_metrics.increment("clusters_only_multi_story")
+            continue
         logger.info(
             "Rank %d coherence filter: %d/%d articles on-topic (sims: %s)",
             rank, len(filtered_cluster), len(cluster),
@@ -5715,7 +5449,12 @@ def _run_refresh(db: Session) -> int:
         # Claims come from the on-topic articles only: one from an article
         # the coherence filter dropped was published with a source the
         # issue doesn't list (2026-10-08).
-        headline_claims = claim_layer.extract_claims(filtered_cluster, _locate)
+        # A live blog's headline lists several stories, so its headline
+        # claim may be another story's; its body still contributes, and
+        # on_topic judges that.
+        headline_claims = claim_layer.extract_claims(
+            [a for a in filtered_cluster if not _multi_story_headline(a.title)], _locate,
+        )
         kept = claim_layer.dedupe_claims(headline_claims + claim_layer.extract_body_claims(filtered_cluster, _locate))
         ordered = [c for c in headline_claims if c in kept] + [c for c in kept if c not in headline_claims]
         cluster_claims = claim_layer.on_topic(ordered, filtered_cluster)
@@ -5737,7 +5476,6 @@ def _run_refresh(db: Session) -> int:
         # own headline cannot hallucinate, and this was already the
         # proven-safe fallback whenever a generated title failed — it is
         # now the only path.
-        title = filtered_cluster[0].title
         summary = claim_layer.build_lede(cluster_claims)
         # The lede is a quoted claim like the facts, so it carries its
         # outlet too: without it, the outlet whose line became the summary
@@ -5952,6 +5690,7 @@ def _run_refresh(db: Session) -> int:
         match = _find_matching_issue(
             title, facts, _recent_issues, _recent_embs, title_emb, _matched_issue_ids,
             source_urls=source_urls, summary=summary, db=db,
+            source_titles={_url_of(a.url): a.title for a in filtered_cluster},
         )
 
         _new_values: dict = {

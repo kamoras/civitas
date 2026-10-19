@@ -3,14 +3,18 @@ one before it did."""
 
 import asyncio
 import inspect
+import json
+import os
 import time
+from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app import pipeline_chain
+from app import atomic_write, pipeline_chain, scheduler
 from app.pipeline_chain import CRASHED, Link, run_chain
+from app.time_utils import utcnow
 
 
 async def _passthrough(run_house):
@@ -298,3 +302,74 @@ def test_pipelines_running_stops_counting_a_hung_run(monkeypatch):
         assert scheduler.pipelines_running() is False
         monkeypatch.setattr(scheduler, "house_pipeline_hung", lambda: False)
         assert scheduler.pipelines_running() is True
+
+
+class TestResumingAChainTheProcessDiedIn:
+    """A named chain records the link it is on, so a chain the process died
+    in (2026-10-17: the Docker daemon restarted mid-House-run) is resumed
+    from that link when the pipeline process starts, once."""
+
+    @pytest.fixture
+    def links(self, monkeypatch):
+        ran = []
+
+        def link(label):
+            async def run():
+                ran.append((label, _peek()))
+                return {"status": "completed"}
+            return Link(label, run)
+
+        monkeypatch.setattr(scheduler, "nightly_links", lambda: [link("A"), link("B"), link("C")])
+        monkeypatch.setattr(scheduler, "reporter", lambda name: None)
+        monkeypatch.setattr(scheduler, "pipelines_running", lambda: False)
+        # The resumed chain's thread, run where it is started.
+        monkeypatch.setattr(scheduler, "start_writer", lambda target, name: target())
+        return ran
+
+    @staticmethod
+    def _cut(link, *, resumed=False, hours_ago=1):
+        pipeline_chain._record(pipeline_chain.Cut("Nightly", utcnow() - timedelta(hours=hours_ago), link, resumed))
+
+    def test_a_named_chain_records_each_link_and_clears_it_at_the_end(self, links):
+        asyncio.run(run_chain(scheduler.nightly_links(), name="Nightly"))
+        assert [(label, cut.link, cut.resumed) for label, cut in links] == [
+            ("A", "A", False), ("B", "B", False), ("C", "C", False)]
+        assert _peek() is None
+
+    def test_an_unnamed_chain_records_nothing(self, links):
+        asyncio.run(run_chain(scheduler.nightly_links()))
+        assert [cut for _, cut in links] == [None, None, None]
+
+    def test_resumed_from_the_link_it_was_on_and_marked_resumed(self, links):
+        self._cut("B")
+        scheduler.resume_interrupted_chain()
+        assert [(label, cut.name, cut.resumed) for label, cut in links] == [
+            ("B", "Nightly", True), ("C", "Nightly", True)]
+        assert _peek() is None
+        assert not pipeline_chain.chain_running()
+
+    def test_cut_short_again_is_alerted_not_resumed(self, links):
+        self._cut("B", resumed=True)
+        with patch("app.scheduler.send_ops_alert") as alert:
+            scheduler.resume_interrupted_chain()
+        assert links == [] and _peek() is None
+        assert alert.call_args.kwargs["condition"] == "chain-cut-again"
+
+    def test_a_chain_over_a_day_old_is_left_to_the_nightly_run(self, links):
+        self._cut("B", hours_ago=25)
+        scheduler.resume_interrupted_chain()
+        assert links == [] and _peek() is None
+
+    def test_nothing_recorded_nothing_resumed(self, links):
+        scheduler.resume_interrupted_chain()
+        assert links == []
+
+
+def _peek():
+    """The recorded cut, left in place."""
+    path = atomic_write.runtime_data_path(pipeline_chain.CHAIN_FILE)
+    if not os.path.exists(path):
+        return None
+    with open(path) as fh:
+        doc = json.load(fh)
+    return SimpleNamespace(name=doc["name"], link=doc["link"], resumed=doc["resumed"])

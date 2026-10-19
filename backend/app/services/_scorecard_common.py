@@ -17,7 +17,7 @@ from sqlalchemy.orm import Query, Session
 
 from app.config import settings
 from app.district_lean import lean_for as computed_lean_for
-from app.models import RollCall
+from app.models import RollCall, ScoreSnapshot
 from app.pipeline.analyze.party_line_record import load_record
 from app.pipeline.analyze.score_calculator import (
     bills_inputs_from_status,
@@ -365,3 +365,23 @@ def score_breakdown(db: Session, entity: Any, *, lobbying_donation_attr: str) ->
     if facts is not None:
         facts["seatLean"] = seat_lean
     return add_findings(breakdown, "senate" if district is None else "house")
+
+
+def latest_snapshot(db: Session, entity_type: str, member_id: str) -> ScoreSnapshot | None:
+    """The member's newest score snapshot: the run that stored the scores a
+    profile, a breakdown and the public API publish."""
+    return (
+        db.query(ScoreSnapshot)
+        .filter(ScoreSnapshot.entity_type == entity_type, ScoreSnapshot.entity_id == member_id)
+        .order_by(ScoreSnapshot.date.desc())
+        .first()
+    )
+
+
+def score_method(snapshot: ScoreSnapshot | None) -> dict:
+    """Which scoring version stored the scores, and when: what a citation of
+    a score needs."""
+    return {
+        "algorithm_version": snapshot.algorithm_version if snapshot else None,
+        "scored_on": snapshot.date if snapshot else None,
+    }

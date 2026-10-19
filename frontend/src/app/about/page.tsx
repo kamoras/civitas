@@ -141,7 +141,7 @@ export default function AboutOverview() {
       <LegacyAboutAnchor />
 
       <Section id="principles" title="What we hold ourselves to">
-        <ul className="grid gap-px border border-white/[0.07] bg-white/[0.07] sm:grid-cols-2">
+        <ul className="grid grid-cols-1 gap-px border border-white/[0.07] bg-white/[0.07] sm:grid-cols-2">
           {PRINCIPLES.map((p) => (
             <li key={p.title} className="bg-surface p-5">
               <h3 className="font-display text-base font-semibold text-ink-hi">{p.title}</h3>
@@ -159,7 +159,7 @@ export default function AboutOverview() {
           to 100.
         </P>
         <ScoreWeightBar />
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {SCORE_PARTS.map((s) => (
             <Link
               key={s.href}
@@ -201,7 +201,7 @@ export default function AboutOverview() {
             <li key={c.what}>
               <Link
                 href={c.href}
-                className="group grid gap-1 py-3 sm:grid-cols-[12rem_1fr_auto] sm:items-baseline sm:gap-4"
+                className="group grid grid-cols-1 gap-1 py-3 sm:grid-cols-[12rem_1fr_auto] sm:items-baseline sm:gap-4"
               >
                 <span className="font-display font-semibold text-ink-hi group-hover:text-phos">
                   {c.what}
@@ -252,7 +252,7 @@ export default function AboutOverview() {
           Every formula, data source and design choice is published, along with the evidence behind
           it and what we changed when the evidence disagreed.
         </P>
-        <ul className="grid gap-3 sm:grid-cols-2">
+        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {ABOUT_CHAPTERS.map((c) => (
             <li key={c.href}>
               <Link

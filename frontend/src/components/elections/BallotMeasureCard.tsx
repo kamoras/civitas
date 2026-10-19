@@ -95,7 +95,7 @@ export default function BallotMeasureCard({ measure }: { measure: BallotMeasure 
       )}
 
       {(measure.yesMeans || measure.noMeans) && (
-        <section className="mb-3 grid gap-2 sm:grid-cols-2">
+        <section className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
           {measure.yesMeans && (
             <div className="border border-white/[0.09] p-2.5">
               <h4 className="font-mono text-[10px] text-signal-cyan tracking-widest mb-1">
