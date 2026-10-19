@@ -12,6 +12,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
+
+from app.api.response_helpers import JSONResponse as APIJSONResponse
 from sqlalchemy.engine import make_url
 
 from app import contact, net_stats
@@ -446,6 +448,7 @@ app = FastAPI(
     description="Backend API for the Civitas senator representation tracker",
     version="0.1.0",
     lifespan=lifespan,
+    default_response_class=APIJSONResponse,
 )
 
 
