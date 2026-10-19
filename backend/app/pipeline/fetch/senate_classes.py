@@ -25,12 +25,14 @@ import httpx
 from lxml import etree
 
 from app.atomic_write import write_text_atomic
-from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
+from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S, fetch_bytes_with_retry
+from app.pipeline.rate_limiter import RateLimiter
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
 SENATORS_URL = "https://www.senate.gov/general/contact_information/senators_cfm.xml"
+_rate_limiter = RateLimiter(rps=1.0)
 _PERSISTENT_PATH = "/data/senate_classes.json"
 
 _ROMAN = {"I": 1, "II": 2, "III": 3}
@@ -95,9 +97,12 @@ async def refresh_senate_classes(client: httpx.AsyncClient, path: str | None = N
     fails its gates. Never raises."""
     target = pathlib.Path(path or _PERSISTENT_PATH)
     try:
-        resp = await client.get(SENATORS_URL, timeout=DEFAULT_FETCH_TIMEOUT_S)
-        resp.raise_for_status()
-        live = parse_senate_classes(resp.content)
+        body = await fetch_bytes_with_retry(client, _rate_limiter, SENATORS_URL, "Senate member list",
+                                            headers=None, timeout=DEFAULT_FETCH_TIMEOUT_S)
+        if body is None:
+            logger.warning("Senate classes not refreshed: the member list could not be read")
+            return False
+        live = parse_senate_classes(body)
         failures = gate(live)
         if failures:
             for f in failures:

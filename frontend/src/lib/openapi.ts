@@ -45,6 +45,8 @@ export interface Spec {
     description?: string;
     /** Requests per minute per address (api/public.py adds it; rate_limit.PUBLIC_READ_LIMIT). */
     "x-rate-limit-per-minute"?: number;
+    /** The data's license and where it is stated. */
+    license?: { name: string; url?: string };
   };
   paths: Record<string, Record<string, Operation>>;
   components?: { schemas?: Record<string, Schema> };
@@ -150,6 +152,11 @@ export function nestedObject(schema: Schema, spec: Spec): Schema | null {
   const candidate = inner.anyOf?.find((s) => s.type !== "null") ?? inner;
   const target = resolve(candidate, spec);
   return target.properties ? target : null;
+}
+
+/** A CSV download (a spreadsheet's file, not an MCP tool): its 200 is text/csv. */
+export function isCsv(op: Operation): boolean {
+  return !!op.responses["200"]?.content?.["text/csv"];
 }
 
 /** The 200 response's body schema, resolved. */

@@ -19,6 +19,8 @@ Conventions every route keeps, so a caller learns them once:
 - `siteUrl` links each record to its page on Civitas.
 """
 
+import csv
+import io
 import re
 import typing
 from datetime import date
@@ -29,7 +31,9 @@ from collections.abc import Awaitable, Callable
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Path, Query, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import Response
+
+from app.api.response_helpers import JSONResponse
 from fastapi.routing import APIRoute
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -97,6 +101,7 @@ from app.services.presidential_support_service import chamber_view
 from app.state_names import STATE_NAMES
 from app.time_utils import comment_period_today
 from app.services.pagination import paginate_bounds
+from app.services._scorecard_common import latest_snapshot, score_method
 from app.api.agencies import children_of, descendants, document_counts
 from app.ordinals import ordinal
 from app.services import court_service, nomination_service
@@ -277,6 +282,58 @@ def _pub_json(data, request: Request, max_age: int = CACHE_TTL_LIST_S) -> JSONRe
     )
 
 
+# The license of Civitas's own data. Some outputs inherit a source's
+# restrictions (the Supreme Court record's non-commercial terms, Wikipedia's
+# share-alike); the page at LICENSE_URL names each.
+DATA_LICENSE = "CC BY 4.0, except where a source's terms carry over"
+
+# Where Civitas states the license of its data and what inherits a
+# source's restrictions (the /about/data page's license section).
+LICENSE_URL = f"{SITE_URL}/about/data#license"
+
+
+class CsvResponse(Response):
+    media_type = "text/csv"
+
+
+# How a CSV route documents its answer in the spec: no JSON schema, the
+# columns are in its description (_csv_doc).
+_CSV_RESPONSES = {200: {"description": "CSV with one header row; columns as described",
+                        "content": {"text/csv": {"schema": {"type": "string"}}}}}
+
+Columns = list[tuple[str, str]]
+
+
+def _csv_doc(intro: str, columns: Columns) -> str:
+    """A CSV route's description: what it is, its license, then every column
+    from the same list the file is written from, so the two can't drift."""
+    listed = "; ".join(f"`{name}`: {what}" for name, what in columns)
+    return (f"{intro}\n\nUTF-8, one header row. Licensed as {LICENSE_URL} states (the response's Link "
+            f"header, rel=license). Columns: {listed}.")
+
+
+def _csv(rows: list[dict], columns: Columns, filename: str, request: Request,
+         max_age: int = CACHE_TTL_LIST_S) -> Response:
+    """rows as CSV, one column per `columns` entry, read from the row's key
+    of the same name. A None is an empty cell; a bool is true or false; a
+    list is joined with semicolons."""
+    out = io.StringIO()
+    writer = csv.writer(out, lineterminator="\n")
+    writer.writerow([name for name, _ in columns])
+    for row in rows:
+        writer.writerow([
+            "" if (v := row.get(name)) is None else ("true" if v is True else "false" if v is False
+                                                     else ";".join(map(str, v)) if isinstance(v, list) else v)
+            for name, _ in columns
+        ])
+    return CsvResponse(content=out.getvalue(), headers={
+        "Cache-Control": f"private, max-age={max_age}",
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "Link": f'<{LICENSE_URL}>; rel="license"',
+        **_CORS_HEADERS, **_rl_headers(request),
+    })
+
+
 def _member_url(member_id: str) -> str:
     return f"{SITE_URL}/politicians/{member_id}"
 
@@ -306,24 +363,11 @@ _RENAMED_ID = (" An id the member had before a rename still works: the record co
                " current id (`id`, `siteUrl`).")
 
 
-def _latest_snapshot(db: Session, entity_type: str, member_id: str) -> ScoreSnapshot | None:
-    """The member's newest score snapshot: the run that stored the scores
-    a profile and a breakdown publish."""
-    return (
-        db.query(ScoreSnapshot)
-        .filter(ScoreSnapshot.entity_type == entity_type, ScoreSnapshot.entity_id == member_id)
-        .order_by(ScoreSnapshot.date.desc())
-        .first()
-    )
-
-
 def _method(snapshot: ScoreSnapshot | None) -> dict:
-    """Which scoring version stored the scores, and when: what a citation
-    of a score needs (the same two fields as the breakdown's)."""
-    return {
-        "algorithmVersion": snapshot.algorithm_version if snapshot else None,
-        "scoredOn": snapshot.date if snapshot else None,
-    }
+    """The scoring version and date, in the API's camelCase (the same two
+    fields as the breakdown's)."""
+    m = score_method(snapshot)
+    return {"algorithmVersion": m["algorithm_version"], "scoredOn": m["scored_on"]}
 
 
 def _history(db: Session, entity_type: str, model, member_id: str, request: Request) -> JSONResponse:
@@ -391,7 +435,7 @@ def _breakdown(db: Session, model, entity_type: str, member_id: str, request: Re
     house = entity_type == "representative"
     chamber = "house" if house else "senate"
     explained = (get_representative_score_breakdown if house else get_senator_score_breakdown)(db, member_id)
-    snapshot = _latest_snapshot(db, entity_type, member_id)
+    snapshot = latest_snapshot(db, entity_type, member_id)
     district = member.district if house else None
     with lines_of(member.district_lines_congress if house else None):
         cook_pvi = _seat_pvi(member.state, district)
@@ -572,6 +616,7 @@ def openapi_spec_dict() -> dict:
         )
         spec_app.include_router(router, prefix=PREFIX)
         _spec = spec_app.openapi()
+        _spec["info"]["license"] = {"name": DATA_LICENSE, "url": LICENSE_URL}
         # Machine-readable, for /developers to state rather than repeat.
         _spec["info"]["x-rate-limit-per-minute"] = PUBLIC_READ_LIMIT
     return _spec
@@ -608,6 +653,7 @@ def api_index(_rl: PublicReadLimit, request: Request) -> JSONResponse:
             "openapi": f"{SITE_URL}{PREFIX}/openapi.json",
             "mcp": f"{SITE_URL}{PREFIX}/mcp",
             "source": "https://github.com/kamoras/civitas",
+            "license": {"name": DATA_LICENSE, "url": LICENSE_URL},
         },
         request, max_age=CACHE_TTL_CONFIG_S,
     )
@@ -715,7 +761,7 @@ def get_senator(
         {
             **senator.model_dump(by_alias=True),
             "siteUrl": _member_url(senator.id),
-            **_method(_latest_snapshot(db, "senator", senator.id)),
+            **_method(latest_snapshot(db, "senator", senator.id)),
         },
         request, max_age=CACHE_TTL_DETAIL_S,
     )
@@ -746,11 +792,94 @@ def get_senator_breakdown(
 
 
 # ---------------------------------------------------------------------------
+# Scores as CSV (the leaderboards)
+# ---------------------------------------------------------------------------
+
+_DIMENSIONS = (("fundingIndependence", "funding_independence"), ("constituentAlignment", "constituent_alignment"),
+               ("legislativeEffectiveness", "legislative_effectiveness"), ("fundingDiversity", "funding_diversity"))
+
+
+def _score_columns(house: bool) -> Columns:
+    return [
+        ("rank", "place in the whole chamber by overall score, as the site shows it (equal displayed scores "
+                 "share a rank)"),
+        ("id", "the member's Civitas id"), ("name", "the member's name"), ("party", "D, R or I"),
+        ("state", "two-letter state code"),
+        *([("district", "congressional district; 0 for an at-large seat")] if house else []),
+        ("overall", "the representation score, 0-100 (the weighted sum of the three weighted parts)"),
+        *[(col, f"the {col.replace('_', ' ')} score, 0-100") for _, col in _DIMENSIONS],
+        *[(f"{col}_data", f"how much data backs {col.replace('_', ' ')}: high, medium or low")
+          for _, col in _DIMENSIONS],
+        ("thin_data", "weighted parts with low data, semicolon-separated"),
+        ("held_scored_on", "when the member's scores were last computed, if a later run could not score the "
+                           "member (YYYY-MM-DD); empty otherwise"),
+        ("held_source", "what that later run could not read; empty otherwise"),
+        ("algorithm_version", "the scoring version that stored the scores"),
+        ("scored_on", "the date of the run that stored them, YYYY-MM-DD"),
+        ("site_url", "the member's page on Civitas"),
+    ]
+
+
+def _latest_versions(db: Session, entity_type: str) -> dict[str, tuple[str | None, str]]:
+    """Each member's newest snapshot: (scoring version, date)."""
+    newest = (db.query(ScoreSnapshot.entity_id, func.max(ScoreSnapshot.date).label("d"))
+              .filter(ScoreSnapshot.entity_type == entity_type).group_by(ScoreSnapshot.entity_id).subquery())
+    rows = db.query(ScoreSnapshot.entity_id, ScoreSnapshot.algorithm_version, ScoreSnapshot.date).join(
+        newest, (ScoreSnapshot.entity_id == newest.c.entity_id) & (ScoreSnapshot.date == newest.c.d),
+    ).filter(ScoreSnapshot.entity_type == entity_type)
+    return {i: (v, d) for i, v, d in rows}
+
+
+def _score_rows(db: Session, rows: list[dict], entity_type: str) -> list[dict]:
+    versions = _latest_versions(db, entity_type)
+    out = []
+    for r in rows:
+        score = r["representationScore"]
+        confidence = score.get("confidence") or {}
+        held = score.get("held") or {}
+        version, scored_on = versions.get(r["id"], (None, None))
+        out.append({
+            **{k: r.get(k) for k in ("rank", "id", "name", "party", "state", "district")},
+            "overall": score["overall"],
+            **{col: score[key] for key, col in _DIMENSIONS},
+            **{f"{col}_data": confidence.get(key) for key, col in _DIMENSIONS},
+            "thin_data": [dict(_DIMENSIONS).get(k, k) for k in score.get("thinData") or []],
+            "held_scored_on": held.get("scoredOn"), "held_source": held.get("source"),
+            "algorithm_version": version, "scored_on": scored_on, "site_url": _member_url(r["id"]),
+        })
+    return out
+
+
+@router.get("/senators.csv", response_class=CsvResponse, responses=_CSV_RESPONSES, tags=["Senators"],
+            summary="Every serving senator's scores, as CSV",
+            description=_csv_doc("The Senate leaderboard: every serving senator, best overall score first.",
+                                 _score_columns(False)))
+def senators_csv(_rl: PublicReadLimit, request: Request, db: Session = Depends(get_db)) -> Response:
+    return _csv(_score_rows(db, _senate_rows(db), "senator"), _score_columns(False), "civitas-senators.csv",
+                request)
+
+
+@router.get("/representatives.csv", response_class=CsvResponse, responses=_CSV_RESPONSES,
+            tags=["Representatives"], summary="Every serving representative's scores, as CSV",
+            description=_csv_doc("The House leaderboard: every serving representative, best overall score "
+                                 "first.", _score_columns(True)))
+def representatives_csv(_rl: PublicReadLimit, request: Request, db: Session = Depends(get_db)) -> Response:
+    rows = _ranked(get_rep_leaderboard(db, page=1, per_page=_WHOLE_CHAMBER)["entries"])
+    return _csv(_score_rows(db, rows, "representative"), _score_columns(True), "civitas-representatives.csv",
+                request)
+
+
+# ---------------------------------------------------------------------------
 # Votes
 # ---------------------------------------------------------------------------
 
 def _roll_call_url(chamber: str, congress: int, session: int, number: int) -> str:
     return f"{SITE_URL}/congress/votes/{chamber}/{congress}/{session}/{number}"
+
+
+def _snake(key: str) -> str:
+    """camelCase as snake_case, for CSV column names."""
+    return re.sub(r"(?<!^)(?=[A-Z])", "_", key).lower()
 
 
 def _absolute(path: str | None) -> str | None:
@@ -817,6 +946,71 @@ def get_senator_votes(
 
 
 
+_VOTE_COLUMNS: Columns = [
+    ("date", "YYYY-MM-DD"), ("chamber", "senate or house"), ("congress", "the Congress"),
+    ("session", "its session"), ("number", "the roll call's number in its chamber and session"),
+    ("bill_id", "the measure voted on (e.g. HR.1234); empty for a roll call on no bill"),
+    ("bill_name", "the measure's short title, else the chamber's title of the vote, else its question"),
+    ("question", "the question, as the chamber recorded it"), ("result", "the result, as the chamber recorded it"),
+    ("vote", "the member's vote: Yea, Nay, Present, Not Voting, or another word as recorded"),
+    ("voted_with_party", "true or false on a roll call the parties split on; empty when it carries no party signal"),
+    ("party_leaning", "R, D or bipartisan, from the roll call's own positions; empty for a housekeeping question"),
+    ("counted_as_break", "true where Constituent Alignment counted the vote as a break with the party"),
+    ("policy_area", "Civitas's policy area for the vote, where the scoring run stored one"),
+    ("roll_call_url", "the roll call's page on Civitas, with every member's position"),
+    ("source_url", "the roll call at its official source (Senate.gov or the House Clerk)"),
+]
+
+
+def _member_votes_csv(db: Session, chamber: str, member_id: str, request: Request) -> Response:
+    found = member_positions(db, chamber, member_id, 1, _WHOLE_CHAMBER)
+    if found is None:
+        raise HTTPException(status_code=404, detail=_NOT_FOUND[404]["description"])
+    rows = []
+    for v in found["votes"]:
+        rc = _roll_call(v["rollCall"]) or {}
+        rows.append({
+            "date": v["date"], "chamber": rc.get("chamber"), "congress": rc.get("congress"),
+            "session": rc.get("session"), "number": rc.get("number"),
+            # The one spelling the JSON gives (a Senate roll call stores "H.R. 1").
+            "bill_id": canonical_bill_id(v["billId"]) or v["billId"],
+            "bill_name": v["billName"], "question": rc.get("question"), "result": rc.get("result"),
+            "vote": v["vote"], "voted_with_party": v["votedWithParty"], "party_leaning": v["partyLeaning"],
+            "counted_as_break": v["countedAsBreak"], "policy_area": v["policyArea"],
+            "roll_call_url": rc.get("siteUrl"), "source_url": rc.get("sourceUrl"),
+        })
+    return _csv(rows, _VOTE_COLUMNS, f"civitas-{member_id}-votes-{found['congress']}.csv", request,
+                max_age=CACHE_TTL_DETAIL_S)
+
+
+_VOTES_CSV_DOC = _csv_doc("Every position the member recorded on the chamber's roll calls this Congress, newest "
+                          "first: the same record as the JSON votes endpoint, every page at once.", _VOTE_COLUMNS)
+
+
+@router.get("/senators/{senator_id}/votes.csv", response_class=CsvResponse,
+            responses={**_CSV_RESPONSES, **_NOT_FOUND}, tags=["Senators"],
+            summary="A senator's votes, as CSV", description=_VOTES_CSV_DOC)
+def senator_votes_csv(
+    _rl: PublicReadLimit,
+    request: Request,
+    senator_id: str = Path(description="The senator's id." + _RENAMED_ID),
+    db: Session = Depends(get_db),
+) -> Response:
+    return _member_votes_csv(db, "senate", resolve_member_id(db, senator_id), request)
+
+
+@router.get("/representatives/{rep_id}/votes.csv", response_class=CsvResponse,
+            responses={**_CSV_RESPONSES, **_NOT_FOUND}, tags=["Representatives"],
+            summary="A representative's votes, as CSV", description=_VOTES_CSV_DOC)
+def representative_votes_csv(
+    _rl: PublicReadLimit,
+    request: Request,
+    rep_id: str = Path(description="The representative's id." + _RENAMED_ID),
+    db: Session = Depends(get_db),
+) -> Response:
+    return _member_votes_csv(db, "house", resolve_member_id(db, rep_id), request)
+
+
 # ---------------------------------------------------------------------------
 # Representatives
 # ---------------------------------------------------------------------------
@@ -858,7 +1052,7 @@ def get_representative(
         {
             **rep.model_dump(by_alias=True),
             "siteUrl": _member_url(rep.id),
-            **_method(_latest_snapshot(db, "representative", rep.id)),
+            **_method(latest_snapshot(db, "representative", rep.id)),
         },
         request, max_age=CACHE_TTL_DETAIL_S,
     )
@@ -980,6 +1174,53 @@ def _tallied(rc: dict, congress: int | None = None) -> dict:
             "present": rc["present"], "notVoting": rc["notVoting"]}
 
 
+_POSITION_COLUMNS: Columns = [
+    ("last_name", "the surname as the chamber's record prints it"),
+    ("first_name", "as the Senate's record prints it; empty on a House roll call"),
+    ("name", "a representative's full name where Civitas has a page for them; empty for a senator (first_name "
+             "and last_name give it) and a former representative"),
+    ("party", "the party the record gives"), ("state", "two-letter state code"),
+    ("district", "a representative's district (0 at-large) where known"),
+    ("position", "as the chamber recorded it"),
+    ("bucket", "how the tally counts it: yea, nay, present, notVoting or candidate"),
+    ("chamber_member_id", "the id the chamber's record gives the member (House: bioguide; Senate: LIS)"),
+    ("member_id", "the member's Civitas id, where there is a page"),
+    ("site_url", "the member's page on Civitas"),
+]
+
+
+def _positions_of(db: Session, chamber: str, congress: int, session: int, number: int) -> dict:
+    d = vote_detail(db, _roll_call_or_404(db, chamber, congress, session, number))
+    d["publicPositions"] = [{
+        "lastName": m["lastName"], "firstName": m["firstName"], "name": m["name"], "party": m["party"],
+        "state": m["state"], "district": m["district"], "position": m["position"], "bucket": m["bucket"],
+        "chamberMemberId": m["chamberMemberId"],
+        "memberId": m["page"].rsplit("/", 1)[-1] if m["page"] else None, "siteUrl": _absolute(m["page"]),
+    } for m in d["members"]]
+    return d
+
+
+# Before the JSON route, whose {number} would otherwise take "5.csv".
+@router.get("/roll-calls/{chamber}/{congress}/{session}/{number}.csv", response_class=CsvResponse,
+            responses={**_CSV_RESPONSES, **_ROLL_CALL_404}, tags=["Roll calls"],
+            summary="Every member's position on one roll call, as CSV",
+            description=_csv_doc("One row per member, by surname: the positions of the JSON roll-call endpoint.",
+                                 _POSITION_COLUMNS))
+def roll_call_csv(
+    _rl: PublicReadLimit,
+    request: Request,
+    chamber: _RollCallChamber = Path(description="senate or house"),
+    congress: int = Path(ge=93, le=200, description="The Congress"),
+    session: int = Path(ge=1, le=3, description="The session of that Congress"),
+    number: int = Path(ge=1, le=5000, description="The roll call's number in its chamber and session"),
+    db: Session = Depends(get_db),
+) -> Response:
+    d = _positions_of(db, chamber, congress, session, number)
+    rows = [{_snake(k): v for k, v in p.items()} for p in d["publicPositions"]]
+    return _csv(rows, _POSITION_COLUMNS, f"civitas-{chamber}-{congress}-{session}-{number}.csv", request,
+                max_age=CACHE_TTL_DETAIL_S)
+
+
 @router.get("/roll-calls/{chamber}/{congress}/{session}/{number}", response_model=PublicRollCallDetailSchema,
             responses=_ROLL_CALL_404, tags=["Roll calls"],
             summary="One roll call, with every member's position")
@@ -997,14 +1238,9 @@ def get_roll_call(
     gives them and their Civitas id where Civitas has a page for them. A
     member's votes across roll calls: /senators/{id}/votes and
     /representatives/{id}/votes."""
-    d = vote_detail(db, _roll_call_or_404(db, chamber, congress, session, number))
-    positions = [{
-        "lastName": m["lastName"], "firstName": m["firstName"], "name": m["name"], "party": m["party"],
-        "state": m["state"], "district": m["district"], "position": m["position"], "bucket": m["bucket"],
-        "chamberMemberId": m["chamberMemberId"],
-        "memberId": m["page"].rsplit("/", 1)[-1] if m["page"] else None, "siteUrl": _absolute(m["page"]),
-    } for m in d["members"]]
-    return _pub_json({**_tallied(d), "billId": d["billId"], "title": d["title"] or "", "positions": positions},
+    d = _positions_of(db, chamber, congress, session, number)
+    return _pub_json({**_tallied(d), "billId": d["billId"], "title": d["title"] or "",
+                      "positions": d["publicPositions"]},
                      request, max_age=CACHE_TTL_DETAIL_S)
 
 
@@ -1074,6 +1310,35 @@ def list_presidents(_rl: PublicReadLimit, request: Request, db: Session = Depend
     A sitting president is listed unranked: the term isn't complete."""
     rows = _presidents(db)
     return _pub_json({"total": len(rows), "entries": rows}, request, max_age=CACHE_TTL_DETAIL_S)
+
+
+_PRESIDENT_COLUMNS: Columns = [
+    ("rank", "place among former presidents by Presidential Score as the site shows it; empty for a sitting "
+             "president"),
+    ("id", "the president's Civitas id"), ("name", "the president's name"), ("party", "the party"),
+    ("number", "which president (1 for the first)"), ("term_start", "YYYY-MM-DD"),
+    ("term_end", "YYYY-MM-DD; empty while serving"), ("is_current", "true for a sitting president"),
+    ("overall", "the Presidential Score, 0-100"),
+    ("public_mandate", "Public Mandate, 0-100; empty where it doesn't apply"),
+    ("effectiveness", "Effectiveness, 0-100; empty where it doesn't apply"),
+    ("historical_legacy", "Historical Legacy, 0-100; empty where it doesn't apply"),
+    ("dimensions_available", "how many of the three parts are scored"),
+    ("site_url", "the president's page on Civitas"),
+]
+
+
+@router.get("/presidents.csv", response_class=CsvResponse, responses=_CSV_RESPONSES, tags=["Presidents"],
+            summary="Every president's Presidential Score, as CSV",
+            description=_csv_doc("The presidents' leaderboard, in /presidents order.", _PRESIDENT_COLUMNS))
+def presidents_csv(_rl: PublicReadLimit, request: Request, db: Session = Depends(get_db)) -> Response:
+    rows = [{
+        "rank": r["rank"], "id": r["id"], "name": r["name"], "party": r["party"], "number": r["number"],
+        "term_start": r["termStart"], "term_end": r["termEnd"], "is_current": r["isCurrent"],
+        "overall": r["score"]["overall"], "public_mandate": r["score"]["publicMandate"],
+        "effectiveness": r["score"]["effectiveness"], "historical_legacy": r["score"]["historicalLegacy"],
+        "dimensions_available": r["score"]["dimensionsAvailable"], "site_url": r["siteUrl"],
+    } for r in _presidents(db)]
+    return _csv(rows, _PRESIDENT_COLUMNS, "civitas-presidents.csv", request, max_age=CACHE_TTL_DETAIL_S)
 
 
 @router.get("/presidents/{president_id}", response_model=PublicPresidentSchema,

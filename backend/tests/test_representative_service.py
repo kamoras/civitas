@@ -13,7 +13,7 @@ field build_rep_response feeds.
 
 import json
 
-from app.models import RepDonor, RepKeyVote, RepLobbyingMatch, Representative, RollCall
+from app.models import RepDonor, RepKeyVote, RepLobbyingMatch, Representative, RollCall, ScoreSnapshot
 from app.services.representative_service import build_rep_response
 
 
@@ -108,3 +108,17 @@ class TestDonorVoteBillsAreReadable:
         ]
         assert votes[0].roll_call is None
         assert (votes[1].roll_call["chamber"], votes[1].roll_call["number"]) == ("house", 314)
+
+
+def test_a_profile_names_the_run_and_version_that_stored_its_scores(db_session):
+    """Compare and the profile cite a score by its version and date, from
+    the newest snapshot (the public API's algorithmVersion/scoredOn)."""
+    rep = _make_rep(db_session, "test-rep-snap", [])
+    assert (build_rep_response(rep, db_session).scored_on, build_rep_response(rep).algorithm_version) == (None, None)
+    for day, version in (("2026-10-01", "v6.34"), ("2026-10-02", "v6.35")):
+        db_session.add(ScoreSnapshot(entity_type="representative", entity_id=rep.id, date=day, overall_score=50,
+                                     score_1=50, score_2=50, score_3=50, score_4=50, score_5=50,
+                                     algorithm_version=version))
+    db_session.commit()
+    built = build_rep_response(rep, db_session)
+    assert (built.scored_on, built.algorithm_version) == ("2026-10-02", "v6.35")

@@ -900,11 +900,14 @@ Corollaries that follow from the same rule, all enforced in code:
   back to one, since that would publish past the refusal; and the card
   names both ("as republished by Eureka County Clerk-Recorder"). Getting
   past the wall itself is not an option: it is the state saying no.
-  A wall is not a dead link, though. A state's voter lookup the nightly
-  link check is refused on (`ballot_lookup._check` → `blocked_at`) is still
-  linked, worded as unconfirmed ("This site blocks automated checks, so we
-  can't confirm it's up") with USAGov's directory beside it; only a link
-  that answers 404, or lands on its site's homepage, falls back alone. That
+  A wall is not a dead link, though. A voting step's link (the state
+  page's "Your vote, step by step", one official link per task,
+  `ballot_lookup.vote_steps`) the nightly link check is refused on
+  (`ballot_lookup._check` → `blocked_at`) is still linked, worded as
+  unconfirmed ("This site blocks automated checks, so we can't confirm
+  it's up") with the task's fallback beside it (vote.gov, NASS's Can I
+  Vote, USAGov's directory); only a link that answers 404, or lands on its
+  site's homepage, falls back alone. That
   is enforced in the HTTP layer for every source: the client forgets the
   cookies a challenge response sets (`http_client.is_bot_challenge`), and
   `fetch_with_retry` never retries a challenge. Until 2026-10 a retry sent
@@ -1918,16 +1921,24 @@ it keeps, each enforced by a test (`tests/test_forecast_model.py`,
   historical lean uses only the two presidential elections before it.
 - **The House fit's lean is rebuilt, not borrowed.** `scripts/
   build_house_lean_history.py` makes each district's pre-election lean for
-  2018, 2020 and 2022 on the lines each was held on, with
+  2018, 2020, 2022 and 2024 on the lines each was held on, with
   `build_district_lean.py`'s own block method (VEST 2016/2020 on Census 2020
-  blocks; 116th lines from TIGER polygons, 118th from the BEF), into
+  blocks; 116th lines from TIGER polygons, 118th and 119th from the BEFs), into
   `app/data/forecast_house_lean.json`; results and incumbency come from the
-  FEC's Federal Elections workbooks. Three cycles cannot identify the
+  FEC's Federal Elections workbooks, and for a year the FEC has not compiled,
+  from the Clerk of the House's Statistics of the Presidential and
+  Congressional Election (found by year on the Clerk's Election Information
+  page) with incumbency from the FEC's general-election candidate list.
+  The Clerk's PDF is gated (`clerk_house`, `clerk_results`): each
+  district's lines must sum to the Clerk's own recapitulation total, every
+  seat of the lines listed once, every FEC incumbent their party's nominee;
+  a failure stops the refit, which alerts. A few cycles cannot identify the
   generic-ballot coefficient, so the House takes the Senate fit's
   (`model.fit(national_coef=)`), refitted without each held-out cycle. Don't
   add a House cycle from a source behind a sign-in form (MEDSL's House file
   is one: its guestbook) or a lean made another way; the fit takes every
-  FEC compilation the FEC's results index links.
+  FEC compilation the FEC's results index links, and the Clerk's edition
+  only for a year the FEC hasn't compiled.
 - **Polls from Wikipedia, gated, attributed.** `forecast/polls.py` reads each
   race article's current revision (recorded per seat), parses the table whose
   columns are the confirmed nominees, and rejects the whole table on a failed
@@ -2362,7 +2373,18 @@ the pending list).
   descriptions; `/developers` and the MCP tools are generated from exactly
   that, so nothing else needs editing. `tests/test_public_api_contract.py`
   must cover the new endpoint, since those routes return `JSONResponse` and
-  FastAPI would otherwise never check the body against the documented shape.
+  FastAPI would otherwise never check the body against the documented shape. A CSV download (`…/x.csv`) declares
+  `response_class=CsvResponse` and `_CSV_RESPONSES`, and is written and
+  documented from one column list (`_csv`, `_csv_doc`): the contract test
+  checks its header against that list, and it is not an MCP tool.
+- **A bill's id has one spelling in every response** (`HR.997`, `SJRES.138`;
+  `app/bill_ids.py`). Stored records keep their source's spelling (a Senate
+  roll call names "H.R. 997"), so the API's `JSONResponse`
+  (`api/response_helpers.py`, also the app's and the API router's default
+  response class) rewrites every `billId` and `billIds` at render. API
+  modules import `JSONResponse` from there, never from FastAPI
+  (`tests/test_bill_ids.py`). The display label (`billLabel`, "H.R. 997") is
+  a separate field. Input takes any spelling through `canonical_bill_id`.
 - **Read path must stay lightweight**: never load the embedding model or LLM on
   API read requests (GET endpoints). All ML inference happens at pipeline write
   time. Anything a response needs that takes a model — the Action Center's

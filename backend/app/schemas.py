@@ -638,6 +638,11 @@ class _PersonDetailBase(CamelModel):
         None, description="How the member's constituents rated them in the Cooperative Election Study, by party")
     website_url: str = ""
     contact_form_url: str = ""
+    algorithm_version: str | None = Field(
+        None, description="The scoring version that stored the member's scores (the newest history snapshot's); "
+                          "null when none is recorded")
+    scored_on: str | None = Field(
+        None, description="When the member's stored scores were computed, YYYY-MM-DD; null when none is recorded")
     office_phone: str = ""
     office_address: str = ""
 
@@ -734,6 +739,11 @@ _RANK = Field(description="Place in the whole chamber by overall score, whatever
                           "same score share a rank (1, 2, 2, 4)")
 
 
+class PublicLicenseSchema(_PublicModel):
+    name: str = Field(description="The license, in words")
+    url: str = Field(description="Where it is stated, with each source whose terms carry over")
+
+
 class PublicApiIndexSchema(_PublicModel):
     name: str
     version: str
@@ -743,7 +753,8 @@ class PublicApiIndexSchema(_PublicModel):
     docs: str = Field(description="The documentation page")
     openapi: str = Field(description="This API's OpenAPI 3 description")
     mcp: str = Field(description="MCP server (streamable HTTP) exposing these endpoints as tools")
-    source: str = Field(description="Civitas's source code")
+    source: str = Field(description="Civitas's source code (AGPL-3.0)")
+    license: PublicLicenseSchema = Field(description="The license of the data this API serves")
 
 
 class PublicStateSchema(_PublicModel):

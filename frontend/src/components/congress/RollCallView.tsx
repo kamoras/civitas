@@ -40,6 +40,8 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
   // A quorum call or a Speaker election puts no question: no yeas, nays or
   // threshold to show (roll_call_shape).
   const isQuestion = !vote.kind || vote.kind === "question";
+  // The public API's record of this roll call (api/public.py get_roll_call).
+  const positionsApi = `/api/public/v1/roll-calls/${vote.chamber}/${vote.congress}/${vote.session}/${vote.number}`;
   const counts: [string, number][] = [
     ...(isQuestion
       ? ([
@@ -217,6 +219,16 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
                       </Link>
                     </li>
                   )}
+                  <li className="border-b border-white/[0.07] py-1.5 text-ink-lo">
+                    Every member&apos;s position as data:{" "}
+                    <a href={`${positionsApi}.csv`} download className={LINK}>
+                      spreadsheet (CSV)
+                    </a>{" "}
+                    ·{" "}
+                    <a href={positionsApi} className={LINK}>
+                      JSON
+                    </a>
+                  </li>
                   <li className="py-1.5 text-ink-lo">
                     <Link href="/about/data" className={LINK}>
                       Every data source
