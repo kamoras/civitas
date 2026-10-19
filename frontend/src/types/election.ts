@@ -86,6 +86,11 @@ export interface LeanContext {
   moreDemocratic: number;
   moreRepublican: number;
   same: number;
+  /** This seat's lean in `distribution` (positive = R). */
+  seatLean: number;
+  /** Every seat's lean against the nation, one entry per figure, most
+   * Democratic first, labelled as the map labels it. */
+  distribution?: { lean: number; label: string; count: number }[];
 }
 
 export interface RaceSummary {
@@ -522,6 +527,30 @@ export interface VoterCalendar {
 }
 
 /** Where to go for the parts of the ballot this page cannot show. */
+export type VoteTask =
+  "check_registration" | "register" | "sample_ballot" | "polling_place" | "mail_ballot";
+
+/** One voting task's link, gated by the nightly link check: the state's own
+ * page (`isStateSpecific`), one whose bot wall refused the check
+ * (`unconfirmed`, `fallback` beside it), or the task's fallback (NASS's Can
+ * I Vote, USAGov, vote.gov). `url` is null only for registering in a state
+ * with no registration. */
+export interface VoteStep {
+  task: VoteTask;
+  url: string | null;
+  host: string | null;
+  sourceName: string | null;
+  isStateSpecific: boolean;
+  unconfirmed: boolean;
+  fallback: { url: string; sourceName: string; host: string } | null;
+  deadline: {
+    sentence: string;
+    status: string;
+    countdown: string | null;
+    closesOn: string | null;
+  } | null;
+}
+
 export interface OfficialLookup {
   url: string;
   label: string;
@@ -636,6 +665,9 @@ export interface StateBallot {
    * November judicial contests. */
   judicialCoverage: JudicialCoverage;
   officialLookup: OfficialLookup;
+  /** "Your vote, step by step": one official link per task, in task order
+   * (backend ballot_lookup.vote_steps). Absent from an older API. */
+  voteSteps?: VoteStep[];
   /** Registration, early voting and mail-ballot deadlines, each with where
    * it stands on the state's own clock (backend app/voter_calendar.py).
    * Null when there is no calendar for this election; absent from an

@@ -325,7 +325,9 @@ none of which sends anything anywhere:
   `app/redistricting.py`, filterable by city, town or county like the list.
 - **County picker** (`DistrictFinder.tsx`) — built from the counties each
   race already lists; a county split between districts offers them.
-- **Text filter** (`matchesDistrictQuery`) — county names, any
+- **Text filter** (`filterDistricts`) — a city, town or county typed in
+  full keeps only the districts holding that place (so "Detroit" is not
+  Detroit Beach's district); otherwise part of a name narrows. County names, any
   candidate's name (the representative's only when they are running
   again), or a district number. In a state whose lines were
   redrawn after its members were elected — those going into the election

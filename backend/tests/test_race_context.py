@@ -82,12 +82,28 @@ class TestLeanContext:
 
     def test_house_district_among_districts(self):
         out = lean_context("H", 2, "district", self.STATES, self.DISTRICTS)
-        assert out == {"unit": "districts", "of": 4, "moreDemocratic": 1, "moreRepublican": 1, "same": 1}
+        assert out == {
+            "unit": "districts", "of": 4, "moreDemocratic": 1, "moreRepublican": 1, "same": 1,
+            "seatLean": 2,
+            "distribution": [
+                {"lean": -3, "label": "D+3", "count": 1},
+                {"lean": 2, "label": "R+2", "count": 2},
+                {"lean": 9, "label": "R+9", "count": 1},
+            ],
+        }
 
     def test_senate_among_the_states_only(self, monkeypatch):
         monkeypatch.setattr("app.race_context.federal_states", lambda: frozenset({"AA", "BB", "CC"}))
         out = lean_context("S", 0, "state", self.STATES, self.DISTRICTS)
-        assert out == {"unit": "states", "of": 3, "moreDemocratic": 1, "moreRepublican": 1, "same": 0}
+        assert out == {
+            "unit": "states", "of": 3, "moreDemocratic": 1, "moreRepublican": 1, "same": 0,
+            "seatLean": 0,
+            "distribution": [
+                {"lean": -10, "label": "D+10", "count": 1},
+                {"lean": 0, "label": "EVEN", "count": 1},
+                {"lean": 5, "label": "R+5", "count": 1},
+            ],
+        }
 
     def test_a_statewide_stand_in_is_not_ranked_among_districts(self):
         assert lean_context("H", 5, "state", self.STATES, self.DISTRICTS) is None

@@ -10,7 +10,11 @@ from pathlib import Path
 
 from app.pipeline.fetch import ballot_measures_mn as mn
 
-PAGE = json.loads((Path(__file__).parent / "fixtures_mn_constitutional_amendments.json").read_text())["page_2026"]
+_FIXTURES = json.loads((Path(__file__).parent / "fixtures_mn_constitutional_amendments.json").read_text())
+PAGE = _FIXTURES["page_2026"]
+# The same page re-laid out on 2026-10-18: one paragraph each for title,
+# question, Yes and No, in English and Spanish accordions.
+PAGE_RELAID = _FIXTURES["page_2026_10"]
 
 
 class TestParsePage:
@@ -21,6 +25,13 @@ class TestParsePage:
         assert m["official_summary"].endswith("effective July 1, 2027?")
         assert m["yes_means"] is None and m["no_means"] is None
         assert m["title_authority"] == "Minnesota Legislature"
+
+    def test_relaid_page_reads_the_same_amendment(self):
+        assert mn.parse_page(PAGE_RELAID, 2026) == mn.parse_page(PAGE, 2026)
+
+    def test_relaid_page_count_must_match(self):
+        doubled = PAGE_RELAID.replace("there will be one proposed", "there will be two proposed")
+        assert mn.parse_page(doubled, 2026) is None
 
     def test_stated_count_must_match(self):
         doubled = PAGE.replace("there will be one proposed", "there will be two proposed")

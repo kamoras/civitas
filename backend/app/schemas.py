@@ -638,6 +638,11 @@ class _PersonDetailBase(CamelModel):
         None, description="How the member's constituents rated them in the Cooperative Election Study, by party")
     website_url: str = ""
     contact_form_url: str = ""
+    algorithm_version: str | None = Field(
+        None, description="The scoring version that stored the member's scores (the newest history snapshot's); "
+                          "null when none is recorded")
+    scored_on: str | None = Field(
+        None, description="When the member's stored scores were computed, YYYY-MM-DD; null when none is recorded")
     office_phone: str = ""
     office_address: str = ""
 
@@ -913,6 +918,8 @@ class PublicRollCallSchema(_PublicModel):
         description="An election of the Speaker: each candidate's votes, most first; empty for any other vote")
     source_url: str = Field(description="The roll call at its official source (Senate.gov or the House Clerk); "
                                         "empty when not recorded")
+    site_url: str = Field(description="The roll call's page on Civitas, with every member's position (the same "
+                                      "as /roll-calls/{chamber}/{congress}/{session}/{number})")
     parties: list[PublicPartySplitSchema] = Field(description="How each party voted (an election's votes for "
                                                               "candidates are in candidates, not here)")
 
@@ -1613,6 +1620,26 @@ class RelatedMonitorSchema(CamelModel):
     title: str
 
 
+class IssueBallotRaceSchema(CamelModel):
+    """A race the issue names: by id ("2026-SEN-GA"), its label ("Senate",
+    "GA-2") and the nominee the story named, as the story wrote it."""
+    id: str
+    label: str
+    candidate: str | None = None
+
+
+class IssueBallotSchema(CamelModel):
+    """A state the issue names (app/ballot_links.py): its races, the voter
+    calendar's next deadline (registration while it is open), where to register and
+    the state's official voter lookup, read when the issue is served."""
+    state: str
+    state_name: str
+    races: list[IssueBallotRaceSchema] = []
+    deadline: dict | None = None
+    register_link: dict | None = None
+    lookup: dict | None = None
+
+
 class ActionIssueSchema(CamelModel):
     id: int
     public_id: str
@@ -1663,6 +1690,8 @@ class ActionIssueSchema(CamelModel):
     # stays on the issues it tracked, and linked nowhere.
     related_monitors: list[RelatedMonitorSchema] = []
     deciders: list[DeciderSchema] = []
+    # The states and races the issue names, with their voter information.
+    ballot: list[IssueBallotSchema] = []
     # Roll calls linked to the issue (IssueVoteSchema), so a page knows to
     # offer each member's record on them.
     vote_count: int = 0
@@ -1756,3 +1785,246 @@ class TimelineEntrySchema(CamelModel):
     source_url: str | None = None
     source_name: str | None = None
     monitor_slug: str | None = None
+
+
+# --- Public API v1, continued: roll calls, presidents, justices, nominations
+# and agencies (api/public.py). After the internal schemas they extend; the
+# same contract as the section above (extra="forbid", contract-tested).
+
+
+class PublicRollCallPositionSchema(_PublicModel):
+    last_name: str = Field(description="The member's surname as the chamber's record prints it (the House Clerk "
+                                       "adds the state where two members share one: \"Doe (TX)\")")
+    first_name: str | None = Field(description="As the Senate's record prints it; null on a House roll call")
+    name: str | None = Field(description="A representative's own full name where Civitas has a page for them (the "
+                                         "Clerk prints only a surname); null for a senator, whose record prints "
+                                         "both names, and for a former representative")
+    party: str
+    state: str
+    district: int | None = Field(description="A representative's district (0 at-large) where Civitas knows it; "
+                                             "null for a senator or a former member")
+    position: str = Field(description="As the chamber recorded it: Yea, Nay, Aye, No, Present, Not Voting, Guilty, "
+                                      "a candidate's name in an election of the Speaker")
+    bucket: Literal["yea", "nay", "present", "notVoting", "candidate"] = Field(
+        description="How the position is counted in the tally (Aye and Guilty count as yea; a candidate's name is "
+                    "counted as not voting in the stored tally and listed in candidates)")
+    chamber_member_id: str | None = Field(description="The id the chamber's record gives the member: a bioguide id "
+                                                      "in the House, the Senate's LIS id in the Senate")
+    member_id: str | None = Field(description="The member's Civitas id (as in /senators/{id} or "
+                                              "/representatives/{id}); null for a member Civitas has no page for")
+    site_url: str | None = Field(description="The member's page on Civitas; null when there is none")
+
+
+class PublicRollCallDetailSchema(PublicRollCallSchema):
+    bill_id: str | None = Field(description="The measure voted on (e.g. HR.1234), as Civitas names it; null for a "
+                                            "roll call on no bill")
+    title: str = Field(description="The chamber's own title of the vote; empty when it records none")
+    yeas: int
+    nays: int
+    present: int
+    not_voting: int
+    positions: list[PublicRollCallPositionSchema] = Field(description="Every member's recorded position, by surname")
+
+
+class PublicRollCallPageSchema(_PublicModel):
+    chamber: Literal["senate", "house"]
+    congress: int
+    covered: bool = Field(description="Whether Civitas holds this Congress's roll calls; false means the list is "
+                                      "empty because they aren't held here, not because none were taken")
+    held_congresses: list[int] = Field(description="The Congresses whose roll calls Civitas holds, oldest first")
+    total: int
+    page: int = Field(description="This page; a page past the last is answered as the last")
+    per_page: int
+    total_pages: int = Field(description="At least 1, even when there are none")
+    entries: list[PublicBillRollCallSchema] = Field(description="Newest first")
+
+
+_PRESIDENT_RANK = Field(description="Place among the former presidents by Presidential Score as the site shows it "
+                                    "(compared as displayed, a whole number; equal scores share a rank). Null for a "
+                                    "sitting president, whose term is not complete and is not ranked")
+
+
+class PublicPresidentSchema(PresidentSchema):
+    model_config = _PublicModel.model_config
+    rank: int | None = _PRESIDENT_RANK
+    site_url: str = _SITE_URL
+
+
+class PublicPresidentListSchema(_PublicModel):
+    total: int
+    entries: list[PublicPresidentSchema] = Field(description="Ranked presidents best score first, then any sitting "
+                                                             "president")
+
+
+class PublicJusticeRowSchema(JusticeLeaderboardEntry):
+    model_config = _PublicModel.model_config
+    site_url: str = _SITE_URL
+
+
+class PublicJusticeListSchema(_PublicModel):
+    total: int
+    entries: list[PublicJusticeRowSchema] = Field(description="The sitting justices by seniority. Not ranked or "
+                                                              "scored: score is always null")
+
+
+class PublicJusticeSchema(JusticeSchema):
+    model_config = _PublicModel.model_config
+    site_url: str = _SITE_URL
+
+
+class PublicCaseLinksSchema(_PublicModel):
+    oyez: str | None = Field(description="The case on Oyez")
+    opinion: str | None = Field(description="The Court's slip opinion, once posted")
+    explore: str | None = Field(description="The case's document on Civitas")
+
+
+class PublicJusticeCaseSchema(_PublicModel):
+    case_id: str = Field(description="The case's id in the record (the Supreme Court Database's, or Oyez's for a "
+                                     "term the Database doesn't cover yet)")
+    name: str
+    term: str = Field(description="The Court's term (October Term), YYYY")
+    decided: str | None = Field(description="YYYY-MM-DD")
+    vote: str = Field(description="The justice's side: majority or minority")
+    opinion: str | None = Field(description="The opinion the justice wrote or joined, as the record codes it")
+    split: str = Field(description="The Court's vote, majority-minority (e.g. 6-3)")
+    links: PublicCaseLinksSchema
+
+
+class PublicJusticeCasesSchema(_PublicModel):
+    id: str = Field(description="The justice's id")
+    total: int
+    page: int
+    per_page: int
+    total_pages: int = Field(description="At least 1, even when there are none")
+    terms: list[int] = Field(description="The terms the record covers")
+    entries: list[PublicJusticeCaseSchema] = Field(description="Newest first")
+
+
+class PublicLatestActionSchema(_PublicModel):
+    date: str | None
+    text: str | None
+
+
+class PublicNominationSchema(_PublicModel):
+    congress: int
+    citation: str = Field(description="The Senate's citation, e.g. PN12 or PN12-3 for one part of a split "
+                                      "nomination")
+    description: str = Field(description="As the Senate's record words it (the nominee, their state and the office)")
+    organization: str | None = Field(description="The organization, as Congress.gov names it")
+    agency_slug: str | None = Field(description="The organization's agency in /agencies, where a name matches "
+                                                "exactly; null otherwise")
+    position_title: str | None
+    kind: Literal["civilian", "judicial", "military"]
+    nominees: list[str] = Field(description="The nominees' names as published (\"Jane Q. Doe (TX)\"): in a list, "
+                                            "the first few; one nomination gives every one")
+    nominee_count: int
+    received_date: str | None = Field(description="When the Senate received it, YYYY-MM-DD")
+    status: str = Field(description="pending, confirmed, returned or withdrawn")
+    status_date: str | None
+    latest_action: PublicLatestActionSchema
+    days_to_confirm: int | None = Field(description="Days from receipt to confirmation; null unless confirmed")
+    congress_gov_url: str
+    site_url: str = _SITE_URL
+
+
+class PublicNominationBackfillSchema(_PublicModel):
+    complete: bool = Field(description="Whether the daily read has reached every nomination of the Congress. "
+                                       "False: total and every count are of the nominations read so far (the "
+                                       "oldest updates first), not the Congress's whole number")
+    read: int = Field(description="Nominations read so far")
+    expected: int | None = Field(description="About how many the Congress has, as Congress.gov counts them; null "
+                                             "before the first read")
+    nights_left: int | None = Field(description="Daily reads expected before the rest are in; null when complete "
+                                                "or unknown")
+
+
+class PublicNominationPageSchema(_PublicModel):
+    congress: int
+    backfill: PublicNominationBackfillSchema = Field(description="Whether the list is the Congress's whole record "
+                                                                 "yet")
+    total: int
+    page: int
+    per_page: int
+    total_pages: int = Field(description="At least 1, even when there are none")
+    entries: list[PublicNominationSchema] = Field(description="Newest action first")
+
+
+class PublicNominationRollCallSchema(PublicRollCallSchema):
+    yeas: int
+    nays: int
+    present: int
+    not_voting: int
+
+
+class PublicNominationActionSchema(_PublicModel):
+    date: str = Field(description="YYYY-MM-DD")
+    code: str = Field(description="Congress.gov's action code")
+    type: str
+    text: str = Field(description="As the Senate's record words it")
+
+
+class PublicCommitteeRefSchema(_PublicModel):
+    code: str = Field(description="The committee's code (e.g. SSJU00)")
+    name: str
+
+
+class PublicNominationDetailSchema(PublicNominationSchema):
+    actions: list[PublicNominationActionSchema] = Field(description="The Senate's actions on it, newest first")
+    hearing_held: bool = Field(description="Whether an action records a hearing")
+    committee: PublicCommitteeRefSchema | None = Field(description="The committee it was referred to")
+    roll_calls: list[PublicNominationRollCallSchema] = Field(description="The Senate roll calls whose question names "
+                                                                         "this citation, oldest first")
+
+
+class PublicAgencySchema(_PublicModel):
+    slug: str = Field(description="The agency's id, the Federal Register's")
+    name: str
+    short_name: str | None
+    parent_slug: str | None = Field(description="The department or agency it sits under")
+    documents: int = Field(description="Federal Register documents Civitas holds from it, its sub-agencies' included")
+    site_url: str = _SITE_URL
+
+
+class PublicAgencyListSchema(_PublicModel):
+    total: int
+    entries: list[PublicAgencySchema] = Field(description="Every agency the Federal Register lists, by name")
+    as_of: str | None = Field(description="When the list was last read, YYYY-MM-DD")
+
+
+class PublicAgencyRefSchema(_PublicModel):
+    slug: str
+    name: str
+
+
+class PublicAgencyDetailSchema(PublicAgencySchema):
+    description: str | None = Field(description="The Federal Register's description of the agency")
+    website: str | None
+    fr_url: str | None = Field(description="The agency's page on the Federal Register")
+    parent: PublicAgencyRefSchema | None
+    children: list[PublicAgencyRefSchema] = Field(description="Its sub-agencies, by name")
+    documents_by_type: dict[str, int] = Field(description="Documents held, by Federal Register type")
+    open_comment_periods: int = Field(description="Its documents open for comment today (see /comment-periods)")
+
+
+class PublicCommentPeriodSchema(_PublicModel):
+    key: str = Field(description="The document's permanent key on Civitas (its Federal Register document number)")
+    title: str
+    doc_type: str = Field(description="The Federal Register's type: Proposed Rule, Rule, Notice ...")
+    published: str = Field(description="YYYY-MM-DD")
+    agency_name: str
+    agency_slug: str
+    comments_close_on: str = Field(description="The last day to comment, YYYY-MM-DD, on the deadline's own clock "
+                                               "(Eastern)")
+    days_left: int = Field(description="Days from today (Eastern) to the deadline; 0 on its last day")
+    comment_url: str = Field(description="Where to comment (Regulations.gov)")
+    url: str = Field(description="The document on the Federal Register")
+    site_url: str = _SITE_URL
+
+
+class PublicCommentPeriodPageSchema(_PublicModel):
+    today: str = Field(description="Today on the deadline's clock (Eastern), YYYY-MM-DD")
+    total: int
+    page: int
+    per_page: int
+    total_pages: int = Field(description="At least 1, even when there are none")
+    entries: list[PublicCommentPeriodSchema] = Field(description="Soonest deadline first")

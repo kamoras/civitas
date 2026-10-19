@@ -82,7 +82,7 @@ function AgencyRow({
         )}
         {parentName && <span className="block text-xs text-ink-min">Part of {parentName}</span>}
       </span>
-      <span className="shrink-0 font-mono text-xs tabular-nums text-ink-lo">
+      <span className="font-mono text-xs tabular-nums text-ink-lo">
         {a.documents > 0
           ? `${a.documents.toLocaleString("en-US")} document${a.documents === 1 ? "" : "s"}`
           : linking

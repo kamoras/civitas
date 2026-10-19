@@ -51,6 +51,8 @@ describe("HeaderClearance", () => {
     document.querySelector("header")!.getBoundingClientRect = () => ({ height: 222 }) as DOMRect;
     observed?.();
     expect(document.documentElement.style.getPropertyValue("--header-clearance")).toBe("230px");
+    // What sticks under the header reads its measured height.
+    expect(document.documentElement.style.getPropertyValue("--header-height")).toBe("222px");
     unmount();
     expect(document.documentElement.style.getPropertyValue("--header-clearance")).toBe("");
     vi.restoreAllMocks();

@@ -60,10 +60,11 @@ from app.election_phase import ActiveElection, active_election, election_today
 from app.live_results.summary import state_summaries
 from app.live_results.sync import elected_congress_sits, redrawn_states
 from app.pipeline.fetch import ballot_pdf
-from app.pipeline.fetch.ballot_lookup import lookup_for_state
+from app.pipeline.fetch.ballot_lookup import lookup_for_state, vote_steps
 from app.pipeline.fetch.ballot_measure_pdf_sources import unread_reason
 from app.pipeline.fetch.district_pvi import congress_for_election, district_pvi_for_congress
 from app.redistricting import new_district_notes
+from app.retractions import withdrawn_coverage_urls
 from app.pipeline.analyze.election_coverage import vacuous_corroboration_clause
 from app.pipeline.fetch.ballot_pdf_sources import source_for_town as ballot_pdf_source_for_town
 from app.pipeline.fetch.ballot_pdf_sources import town_names_for_state as ballot_pdf_town_names_for_state
@@ -1051,6 +1052,8 @@ def _coverage_is_displayable(db: Session):
     return and_(
         RaceCoverageItem.source_type.in_(COVERAGE_SOURCE_TYPES),
         not_(vacuous_corroboration_clause(db)),
+        # Withdrawn in the public retraction log (app/retractions.py).
+        RaceCoverageItem.url.notin_(withdrawn_coverage_urls()),
     )
 
 
@@ -1550,6 +1553,7 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
     judicial_races, judicial_coverage = _judicial_section(
         db, state, cycle, _judicial_marker(db, state, cycle))
 
+    voter_calendar = calendar_for_state(state, election.election_day)
     return cached_json({
         "state": state,
         # The full name is what people search for ("California ballot
@@ -1643,7 +1647,11 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
         # where it stands on the state's own clock (app/voter_calendar.py,
         # data/election_calendar.json); null when the file has no calendar
         # for this election.
-        "voterCalendar": calendar_for_state(state, election.election_day),
+        "voterCalendar": voter_calendar,
+        # "Your vote, step by step": one official link per task, each
+        # gated by the nightly link check, with its deadline merged in
+        # (ballot_lookup.vote_steps).
+        "voteSteps": vote_steps(state, voter_calendar),
         "statewideRaces": statewide_races,
         "statewideCoverage": statewide_coverage,
         "stateLegRaces": state_leg_races,

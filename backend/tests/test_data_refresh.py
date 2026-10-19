@@ -6,6 +6,7 @@ Offline: the generators here are tiny inline scripts or mocked."""
 import importlib.util
 import json
 import pathlib
+import re
 import sys
 from datetime import date, datetime
 from types import SimpleNamespace
@@ -268,3 +269,14 @@ def test_the_population_source_says_which_census_it_reports():
     spec.loader.exec_module(module)
     assert module.latest_census("<th>2020 census rank</th><td>2010 census</td>") == 2020
     assert module.latest_census("<th>2030 census rank</th> 2020 census") == 2030
+
+
+def test_name_casing_refresh_reads_as_many_issues_as_the_bundled_table():
+    # 2026-10-18: the refresh ran the script's default of 120 issues against a
+    # table built from the whole year (247), and its gate refused the result.
+    spec = next(f for f in dr.DATA_FILES if f.name == "name_casing.json")
+    argv = spec.command(dr.Context(spec.name, {}, date(2027, 3, 1), None))
+    issues = int(argv[argv.index("--days") + 1])
+    bundled = json.loads((dr.BUNDLED / "name_casing.json").read_text())["_source"]
+    assert issues >= int(re.search(r"the first (\d+) issues", bundled)[1])
+    assert argv[argv.index("--year") + 1] == "2026"

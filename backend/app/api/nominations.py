@@ -2,7 +2,7 @@
 Congress's counts and time to confirm, and one nomination."""
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
-from fastapi.responses import JSONResponse
+from app.api.response_helpers import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.api.response_helpers import cached_json

@@ -156,7 +156,7 @@ function BudgetBlock({ a }: { a: AgencyDetail }) {
             {b.byYear.map((y) => (
               <li
                 key={y.fiscalYear}
-                className="grid grid-cols-[7.5rem_1fr_auto] items-center gap-2 text-xs sm:grid-cols-[11rem_1fr_auto]"
+                className="grid grid-cols-[minmax(0,7.5rem)_minmax(2rem,1fr)_auto] items-center gap-2 text-xs sm:grid-cols-[minmax(0,11rem)_minmax(2rem,1fr)_auto]"
               >
                 <span className="font-mono text-ink-lo">
                   {fiscalYearLabel(y.fiscalYear, y.throughPeriod)}
@@ -201,7 +201,7 @@ function Overview({ a }: { a: AgencyDetail }) {
     >
       <TerminalTitlebar title={a.shortName ?? "Agency"} />
       <div className="p-4">
-        <div className="flex items-baseline justify-between gap-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3">
           <h2 id="overview-heading" className={H2}>
             At a glance
           </h2>
@@ -297,7 +297,7 @@ export default async function AgencyPage({ params }: PageProps) {
 
             <Overview a={a} />
 
-            <div className="grid gap-10 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-10 lg:grid-cols-2">
               <section aria-labelledby="comment-heading">
                 <h2 id="comment-heading" className={H2}>
                   Open for comment
@@ -437,7 +437,7 @@ export default async function AgencyPage({ params }: PageProps) {
                   </p>
                 )}
                 {a.children.length > 0 && (
-                  <ul className="mt-2 grid gap-x-6 sm:grid-cols-2">
+                  <ul className="mt-2 grid grid-cols-1 gap-x-6 sm:grid-cols-2">
                     {a.children.map((c) => (
                       <li
                         key={c.slug}

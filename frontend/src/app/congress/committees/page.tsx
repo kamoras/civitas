@@ -103,7 +103,7 @@ export default async function CommitteesPage({
           <form
             method="get"
             action={`/congress/committees${RESULTS}`}
-            className="mb-8 grid gap-4 sm:grid-cols-2"
+            className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2"
           >
             <label className="flex flex-col gap-1 sm:col-span-2">
               <span className={LABEL}>Words or bill number</span>
