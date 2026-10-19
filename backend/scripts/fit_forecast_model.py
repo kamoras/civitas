@@ -503,7 +503,7 @@ def clerk_lines(raw: bytes) -> list[tuple[float, str, bool]]:
     return out
 
 
-# "1. Barry Moore, Republican ........ 258,619"; a nominee unopposed and not
+# "1. Jane Roe, Republican ........ 258,619"; a nominee unopposed and not
 # on the ballot has no count (a footnote mark in its place).
 _CLERK_ENTRY = re.compile(r"^(?:(\d+)\.\s+)?(\S.*?)\s*\.{2,}\s*(\d{1,3}(?:,\d{3})*)?$")
 # A recapitulation row: "1st district .... 258,619 70,929 .... 306 329,854",
@@ -697,7 +697,7 @@ def _lines(leans: dict, year: int) -> dict:
 def _same_name(surname: str, name: str) -> bool:
     """The FEC's surname for a candidate the Clerk names in full: contained
     in it, or within a letter or two of its last word (the FEC's
-    "Petterson" for Pettersen, ratio 0.89; Ratcliff & Obershelp 1988)."""
+    "Halverson" for Halversen, ratio 0.89; Ratcliff & Obershelp 1988)."""
     letters = _letters(name)
     last = _letters(name.split()[-1]) if name.split() else ""
     return bool(surname) and (surname in letters or SequenceMatcher(None, surname, last).ratio() >= 0.8)
