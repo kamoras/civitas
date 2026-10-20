@@ -85,6 +85,12 @@ export default function PresidentsAndJusticesChapter() {
             which mostly reflects the outgoing administration <Cite id="blinder2016" />. Before 1947
             only growth and, from 1939, jobs can be measured.
           </Item>
+          <Item label="Through the term">
+            Charts of approval month by month, jobs added since the inauguration and growth in each
+            calendar year, each beside the middle half of other presidencies over the same stretch
+            (drawn where at least five of them reach that point). They show what happened during a
+            term, not why.
+          </Item>
           <Item label="Executive orders">
             The count signed, from the Federal Register. A count, not a comparison: orders became a
             routine tool only in the 20th century.
