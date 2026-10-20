@@ -291,7 +291,8 @@ def test_outputs_are_installed_together_only_when_the_gate_passes(alerts_fixture
     spec = dr.DataFile("t_main.json", command=lambda ctx: writer, outputs=("t_side.json",),
                        gate=lambda new, old: ["held"] if old.get("hold") else [])
     pathlib.Path(dr.runtime_data_path("t_main.json")).write_text(json.dumps({"hold": True}))
-    assert dr.refresh_one(spec, dr.Context("t_main.json", {"hold": True}, None, None)).startswith("kept: held")
+    kept = dr.refresh_one(spec, dr.Context("t_main.json", {"hold": True}, None, None))
+    assert kept == "kept: its gate refused the new candidate: held"
     assert dr.read("t_side.json") == {}
     assert dr.refresh_one(spec, dr.Context("t_main.json", {}, None, None)) == "refreshed"
     assert dr.read("t_side.json")["races"] == [1] and dr.read("t_main.json")["fits"] == {"0": 1}

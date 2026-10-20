@@ -2354,9 +2354,9 @@ the pending list).
 | Action Center issue parts (shared with `/issue/[id]`: meta, tags, "What you can do", coverage, sources) | `frontend/src/components/action/IssueEnrichment.tsx` |
 | Where a member stands among peers (per-measure figure, expected, percentile, word by a fixed rule, template sentence) | `backend/app/peer_comparison.py`, `GET /api/{senators,representatives}/{id}/peers`, public breakdown `peerComparison` |
 | The chamber measure by measure (replaced the leaderboard page; `/leaderboard` redirects), compare's pair strips; the leaderboard API stays for the deprecated composite | `frontend/src/app/congress/members/`, `frontend/src/components/compare/PairStrips.tsx`, `GET /api/congress/measures` (`peer_comparison.chamber_measures`); `backend/app/api/leaderboard.py`, `backend/app/score_display.py` (`score_spread`, `thin_dimensions`) |
-| Site navigation: sections, main menu, footer (site pages only), section tabs, hub cards and the homepage index | `frontend/src/lib/routes.ts` (`SECTIONS`), `frontend/src/components/layout/Navbar.tsx`, `Footer.tsx`, `SectionTabs.tsx`, `frontend/src/components/sections/SectionCards.tsx`, `frontend/src/components/home/SectionsBand.tsx`, `frontend/src/lib/sectionPreviews.ts`, `backend/app/api/sections.py` |
+| Site navigation: sections, main menu, footer (site pages only), section tabs and hub cards | `frontend/src/lib/routes.ts` (`SECTIONS`), `frontend/src/components/layout/Navbar.tsx`, `Footer.tsx`, `SectionTabs.tsx`, `frontend/src/components/sections/SectionCards.tsx`, `frontend/src/lib/sectionPreviews.ts`, `backend/app/api/sections.py` |
 
-| Homepage (masthead, task boxes and registration closing, on-the-record entries, record index, sources panel) | `frontend/src/components/home/Masthead.tsx`, `HomeTasks.tsx`, `StateJump.tsx`, `OnTheRecord.tsx` (from `backend/app/api/notable.py`), `RecordIndex.tsx`, `Holdings.tsx` |
+| Homepage (masthead, task boxes and registration closing, on-the-record entries, record index) | `frontend/src/components/home/Masthead.tsx`, `HomeTasks.tsx`, `StateJump.tsx`, `OnTheRecord.tsx` (from `backend/app/api/notable.py`), `RecordIndex.tsx`; the source ledger is on `/about/data#sources` (`frontend/src/components/about/SourceLedger.tsx`, `backend/app/api/sources.py`) |
 
 ## Conventions
 
@@ -2596,14 +2596,15 @@ the pending list).
   picture travels without its page.
 - **A new page goes in `SECTIONS`** (`src/lib/routes.ts`): that one table is
   the main navigation (a disclosure button per section on desktop, two
-  levels on a phone), each section's tab bar, its hub's cards and the
-  homepage's index, so a page that isn't in it is reachable only by an
-  inline link. The footer does not repeat it (2026-10): it was the whole
-  menu again at the foot of every page. The header's closed desktop panels
+  levels on a phone), each section's tab bar and its hub's cards, so a
+  page that isn't in it is reachable only by an inline link. Neither the
+  footer nor the homepage repeats it (2026-10): the footer was the whole
+  menu again at the foot of every page, and the homepage's index the same
+  list a few screens down. The header's closed desktop panels
   stay in the server HTML (`hidden`), which keeps every page's link
   crawlable; `Navbar.test.tsx` holds that. `routes.test.ts` fails on a page route in no
   section (records with a `[segment]`, the footer's own pages and the admin
-  aside). A page with a live figure gets it from `GET /api/sections`
+  aside). A hub card with a live figure gets it from `GET /api/sections`
   (`app/api/sections.py`), worded in `lib/sectionPreviews.ts`; a figure not
   read yet says so, never a bare zero.
 - Tabbed UIs follow the WAI-ARIA tabs pattern with a roving `tabindex`.

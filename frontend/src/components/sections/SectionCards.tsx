@@ -13,7 +13,7 @@ const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 const REVALIDATE_S = 300;
 
 /** GET /api/sections, or null when the backend can't answer: the cards
- * and the band then show their links without figures. */
+ * then show their links without figures. */
 export async function fetchSectionFigures(): Promise<SectionFigures | null> {
   try {
     const res = await fetch(`${BACKEND}/api/sections`, { next: { revalidate: REVALIDATE_S } });
@@ -29,7 +29,6 @@ const SOURCES: Partial<Record<SectionKey, string>> = {
   elections:
     "State election offices (official counts for the archive's map check); Civitas election map; enacted House maps",
   agencies: "Federal Register; USAspending.gov",
-  court: "Supreme Court Database; Oyez; Martin-Quinn scores",
 };
 
 /**
