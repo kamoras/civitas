@@ -540,6 +540,9 @@ class PaginatedBillsSchema(CamelModel):
     # when no issue names one, "moved" (an action since moved_since).
     shown: Literal["mentioned", "moved"] | None = None
     moved_since: str | None = None
+    # reached= only: the heading of that milestone's list
+    # (bill_service.MILESTONE_HEADINGS).
+    reached_label: str | None = None
 
 
 class RelatedIssueSchema(CamelModel):
@@ -568,6 +571,9 @@ class StageBaseRateSchema(CamelModel):
 
 class StageMilestoneSchema(CamelModel):
     label: str
+    # The milestone's stage code: GET /api/bills?reached=<stage> lists
+    # exactly the `bills` it counts.
+    stage: str
     bills: int
     share: float
     share_text: str

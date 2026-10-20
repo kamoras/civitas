@@ -73,6 +73,13 @@ export function billHref(billId: string, congress?: number | null): string {
   return congress ? `${path}?congress=${congress}` : path;
 }
 
+/** The bills list holding this Congress's bills that got at least as far
+ * as a milestone (its stage code): exactly the bills /congress's pipeline
+ * row for it counts. Not `?stage=`, which is a bill's current stage. */
+export function reachedHref(stage: string): string {
+  return `/congress/bills?reached=${encodeURIComponent(stage)}`;
+}
+
 /** The site's page for one roll call: the question, the result, each
  * party's split and every member's position. Every roll call has one,
  * whether or not it was on a bill (a nomination, a procedural motion). */

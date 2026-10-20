@@ -488,10 +488,16 @@ def get_bills_in_flight(
     sort: str = "recent",
     page: int = 1,
     per_page: int = 25,
+    reached: str | None = None,
 ) -> PaginatedBillsSchema:
+    """`reached` is a milestone's stage code (MILESTONE_HEADINGS): this
+    Congress's bills that got at least that far, the very bills a
+    milestone of stage_milestones counts (/congress's pipeline rows)."""
     all_rows = _collect_bills(db)
 
     filtered = all_rows
+    if reached:
+        filtered = _reached(_this_congress(filtered, settings.CURRENT_CONGRESS), reached)
     if chamber:
         filtered = [r for r in filtered if r.bill.chamber == chamber]
     if party:
@@ -565,6 +571,7 @@ def get_bills_in_flight(
         in_motion=sum(n for s, n in stage_counts.items() if s not in _NOT_YET_MOVING),
         shown=shown,
         moved_since=moved_since,
+        reached_label=MILESTONE_HEADINGS.get(reached) if reached else None,
     )
 
 
@@ -639,14 +646,29 @@ def stage_base_rate(db: Session, stage: str, congress: int) -> dict | None:
 # The milestones a bill page's ladder draws: the furthest stage reached,
 # grouped where the steps between are automatic or brief (every bill is
 # referred on introduction; "on the floor" and "in the other chamber" are
-# waits between votes). Each is the BILL_STAGES order a bill must have reached.
+# waits between votes). Each is the BILL_STAGES order a bill must have
+# reached, and the heading of the bills list that milestone opens
+# (GET /api/bills?reached=).
 _MILESTONES = (
-    ("Introduced", BillStage.INTRODUCED),
-    ("Reported by a committee", BillStage.REPORTED),
-    ("Passed one chamber", BillStage.PASSED_CHAMBER),
-    ("Passed both chambers", BillStage.PASSED_BOTH),
-    ("Became law", BillStage.ENACTED),
+    ("Introduced", BillStage.INTRODUCED, "Bills introduced this Congress"),
+    ("Reported by a committee", BillStage.REPORTED, "Bills reported by a committee this Congress"),
+    ("Passed one chamber", BillStage.PASSED_CHAMBER, "Bills that passed one chamber this Congress"),
+    ("Passed both chambers", BillStage.PASSED_BOTH, "Bills that passed both chambers this Congress"),
+    ("Became law", BillStage.ENACTED, "Bills that became law this Congress"),
 )
+MILESTONE_HEADINGS = {str(at): heading for _, at, heading in _MILESTONES}
+
+
+# The population and rule a milestone counts, shared by stage_milestones
+# and the bills list's `reached` filter so the list a milestone opens
+# always holds exactly the number it shows.
+def _this_congress(rows: list[_Row], congress: int) -> list[_Row]:
+    return [r for r in rows if r.bill.congress == congress]
+
+
+def _reached(rows: list[_Row], at: str) -> list[_Row]:
+    need = BILL_STAGES[at]["order"]
+    return [r for r in rows if _reach(r.bill.stage) >= need]
 
 
 def stage_milestones(db: Session, stage: str, congress: int) -> dict | None:
@@ -660,17 +682,17 @@ def stage_milestones(db: Session, stage: str, congress: int) -> dict | None:
     don't describe."""
     if congress != settings.CURRENT_CONGRESS:
         return None
-    counts = Counter(_reach(r.bill.stage) for r in _collect_bills(db) if r.bill.congress == congress)
-    total = sum(counts.values())
+    rows = _this_congress(_collect_bills(db), congress)
+    total = len(rows)
     if not total:
         return None
     here = _reach(stage)
     milestones = []
-    for label, at in _MILESTONES:
-        need = BILL_STAGES[at]["order"]
-        n = sum(k for order, k in counts.items() if order >= need)
-        milestones.append({"label": label, "bills": n, "share": round(n / total, 4), "shareText": _pct(n, total)})
-    reached = max(i for i, (_, at) in enumerate(_MILESTONES) if here >= BILL_STAGES[at]["order"])
+    for label, at, _ in _MILESTONES:
+        n = len(_reached(rows, at))
+        milestones.append({"label": label, "stage": str(at), "bills": n, "share": round(n / total, 4),
+                           "shareText": _pct(n, total)})
+    reached = max(i for i, (_, at, _) in enumerate(_MILESTONES) if here >= BILL_STAGES[at]["order"])
     return {"total": total, "milestones": milestones, "reached": reached}
 
 

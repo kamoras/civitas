@@ -479,9 +479,13 @@ export async function fetchBillsInFlight(options?: {
   sort?: "recent" | "hot" | "stale";
   page?: number;
   perPage?: number;
+  /** A milestone's stage code: this Congress's bills that got at least
+   * that far, exactly the bills /congress's pipeline row counts. */
+  reached?: string;
 }): Promise<PaginatedBills> {
   const params = new URLSearchParams();
   if (options?.stage) params.set("stage", options.stage);
+  if (options?.reached) params.set("reached", options.reached);
   if (options?.chamber) params.set("chamber", options.chamber);
   if (options?.party) params.set("party", options.party);
   if (options?.q) params.set("q", options.q);
