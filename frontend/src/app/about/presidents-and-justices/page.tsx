@@ -15,9 +15,9 @@ import {
 } from "@/components/about/AboutPage";
 
 export const metadata = pageMetadata({
-  title: "How Presidents Are Scored, and Why Justices Are Not",
+  title: "How Presidents Are Shown, and Why Justices Are Not Scored",
   description:
-    "How Civitas scores every U.S. president (public mandate, economic effectiveness and historical legacy), and why it does not score Supreme Court justices: no method yet separates loyalty to the appointing president from career timing.",
+    "What a president's page shows (approval, the economy and the historians' own rank, each beside past presidencies) and why Supreme Court justices are not scored: no method yet separates loyalty to the appointing president from career timing.",
   path: "/about/presidents-and-justices",
 });
 
@@ -29,214 +29,130 @@ export default function PresidentsAndJusticesChapter() {
       title="Presidents & justices"
       lede={
         <p>
-          Presidents are scored on how well they served the country, from records, not opinions
-          typed in by us. Justices are not scored: the one measure we tested could not be separated
-          from when in a career the appointing president served.
+          A president&apos;s page shows the record: approval polls and the economy, each beside past
+          presidencies, and the historians&apos; own rank. Civitas gives no president a score.
+          Justices are not scored either: the one measure we tested could not be separated from when
+          in a career the appointing president served.
         </p>
       }
     >
       <Summary>
         <Point>
-          A president&apos;s page leads with the historians&apos; own rank, named as theirs, then
-          two records Civitas measures: public approval and the economy. No page shows a blended
-          grade.
+          A president&apos;s page leads with the historians&apos; rank, named as theirs and dated,
+          then approval and the economy, each figure beside the average of past presidencies and how
+          many there were.
         </Point>
         <Point>
-          Where a president has no real data for a score (no historians&apos; rating yet for recent
-          presidents, no approval polling or election win for four of them), it reads N/A and is
-          left out of their overall score, rather than filled with a guess. Each score on their page
-          shows its actual share of their overall.
+          Where there is no record (no historians&apos; rating yet for recent presidents, no
+          approval polling or election win for four of them), the page says so rather than filling
+          the gap.
         </Point>
         <Point>
           Justices are not scored or ranked. How often each sided with the federal government under
           the appointing president is shown as information, with its confidence interval.
         </Point>
-        <Point>
-          Four presidential scores were removed: three because no real data could support them, one
-          because administrations didn&apos;t differ on it. We say which, and why.
-        </Point>
       </Summary>
 
-      <Section id="presidents" title="How presidents are scored">
+      <Section id="presidents" title="What a president's page shows">
         <P>
           Every figure, and each president&apos;s name, party and term dates, comes from live,
-          historical or expert-survey data. Since 2026-10 no page blends the three into one grade or
-          ranks presidents by it: half of that blend was the historians&apos; survey, so a page
-          leads with the historians&apos; own rank (C-SPAN&apos;s, by total points, attributed to
-          them) beside the two records Civitas measures. The blend below is still worked out for the
-          public API. Any two presidents, the sitting one included, can be set side by side on the{" "}
+          historical or expert-survey records. Since October 2026 no page shows a 0 to 100 score for
+          a president or ranks presidents by one: a weighted blend of unlike records carries a
+          judgment its weights decide. Any two presidents, the sitting one included, can be set side
+          by side on the{" "}
           <Link href="/compare/presidents" className="underline underline-offset-2 hover:text-phos">
             president comparison
           </Link>
-          , which shows both scores and the same figures without ranking either.
+          .
         </P>
-        <P>
-          A president&apos;s page shows each score beside the figures it is scored on and the
-          average of every president with a figure: approval against all presidents&apos; approval,
-          jobs a year against every presidency since 1939, and so on. The sitting president&apos;s
-          page is not ranked until the term ends.
-        </P>
-        <Sub title="Public Mandate (25%)">
+        <List>
+          <Item label="Historians' rank">
+            C-SPAN&apos;s Presidential Historians Survey, newest edition published (as of October
+            2026, the 2021 survey of about 142 historians; C-SPAN postponed its 2025 survey). The
+            rank is the survey&apos;s own order by total points, and the page names it as theirs. It
+            rates only completed terms, so a later president reads &ldquo;not rated&rdquo; until an
+            edition rates them. Historians as a field tend to favor presidents who expanded federal
+            power.
+          </Item>
+          <Item label="Approval">
+            The average over the term and how it moved from start to finish, from the American
+            Presidency Project at UC Santa Barbara (AP-NORC, CNN-SSRS, Marist, Pew, Verasight;
+            Gallup stopped tracking presidential approval in February 2026). Presidents before
+            polling show their average margin of victory instead.
+          </Item>
+          <Item label="The economy">
+            Growth, jobs, unemployment and inflation over the term, leaving out the first year,
+            which mostly reflects the outgoing administration <Cite id="blinder2016" />. Before 1947
+            only growth and, from 1939, jobs can be measured.
+          </Item>
+          <Item label="Executive orders">
+            The count signed, from the Federal Register. A count, not a comparison: orders became a
+            routine tool only in the 20th century.
+          </Item>
+        </List>
+        <Sub title="What each figure sits beside">
           <P>
-            Approval over the term: 70% the average, 30% the trend from start to finish, each scored
-            against every completed presidency&apos;s actual polling history.
+            Each figure is drawn as a strip with every other presidency that has it, within the era
+            its series covers, and the page says how many there are. A word follows the same fixed
+            rule as members&apos; peer strips: outside the middle half of the other presidencies
+            reads &ldquo;above&rdquo; or &ldquo;below&rdquo;, outside the top or bottom tenth and
+            far from the expected figure reads &ldquo;well above&rdquo; or &ldquo;well below&rdquo;,
+            and no word is drawn with fewer than ten other presidencies or for a term still under
+            way. A dashed tick marks the expected figure: the median, or for these three, what
+            presidents starting from the same level saw, because raw figures would partly rank
+            presidents by their luck.
           </P>
+          <List>
+            <Item label="Approval by party, against the era">
+              As the parties drifted apart in Congress, approval from the other party collapsed and
+              approval from the president&apos;s own party rose <Cite id="jacobson2019" />
+              <Cite id="donovan2020" />. So approval in each group (the president&apos;s party, the
+              other party, independents) sits beside what presidents got from that group when
+              Congress was as polarized, measured by the distance between the parties&apos; voting
+              records <Cite id="mccarty2006" />, fitted by a method no single presidency can swing{" "}
+              <Cite id="sen1968" />.
+            </Item>
+            <Item label="Approval trend and the economy, against the start">
+              Approval is bounded: the higher a term starts, the further it tends to fall. A term
+              that begins near the top of a recession usually sees unemployment fall a long way, and
+              inherited inflation usually lingers. So each sits beside what presidents who started
+              at the same level went on to see. A presidency shorter than a full term (the sitting
+              one, or one cut short) is compared with predecessors over the same number of days.
+            </Item>
+            <Item label="Growth, against 13 peer economies">
+              Oil shocks, financial crises and the pandemic hit every advanced economy in the same
+              years, so from 1947 on growth per person sits beside the median of 13 peer economies
+              over the same years <Cite id="bolt2024" />, with the part of the gap that the
+              peers&apos; catching up with US incomes predicts set aside <Cite id="baumol1986" />
+              <Cite id="barro1992" />. Before 1947 no peer series covers the terms, so growth is
+              total real growth beside other presidents before 1947 <Cite id="romer1989" />.
+            </Item>
+          </List>
           <P>
-            The average is compared within its era. As the parties drifted apart in Congress,
-            approval from the other party collapsed, from about 49% for Eisenhower to 5% for Biden,
-            while approval from the president&apos;s own party rose <Cite id="jacobson2019" />
-            <Cite id="donovan2020" />. Compared raw, that ranked presidents partly by when they
-            served. So approval in each group (the president&apos;s party, the other party,
-            independents) is compared with what presidents got from that group when Congress was as
-            polarized, measured by the distance between the parties&apos; voting records{" "}
-            <Cite id="mccarty2006" />, and the three differences are averaged. The relationship is
-            fitted every update with a method that no single presidency can swing{" "}
-            <Cite id="sen1968" />: leaving out any one moves a president&apos;s figure by at most
-            2.5 points, against a spread of about 8 between presidents.
-          </P>
-          <P>
-            The trend is compared with what presidents who started at the same level went on to do,
-            because approval is bounded: across the 14 completed presidencies with polling, the
-            higher the start, the further it fell. A presidency shorter than a full four-year term
-            (the sitting one, or one cut short, like Kennedy&apos;s and Ford&apos;s) is compared
-            with predecessors over the same number of days from the start of their terms, since
-            approval falls as a term goes on: compared with whole terms, Kennedy&apos;s fall of 14
-            points from a start of 76% looked twice as good as typical, when presidents starting
-            there fell about as much in their first 1,001 days. Data comes from the American
-            Presidency Project at UC Santa Barbara, which aggregates AP-NORC, CNN-SSRS, Marist, Pew
-            and Verasight. Gallup, the original source, stopped tracking presidential approval in
-            February 2026. Presidents before Truman, from before polling, are scored on their
-            average margin of victory instead. The four who have neither (Tyler, Fillmore, Arthur
-            and Andrew Johnson, who never won a presidential election and served before polling)
-            read N/A.
-          </P>
-        </Sub>
-        <Sub title="Effectiveness (25%)">
-          <P>
-            The economy over the term, leaving out the first year, which mostly reflects the
-            outgoing administration <Cite id="blinder2016" />. From 1947 on it has four equal parts:
-            growth, jobs created, the change in unemployment, and inflation. Before 1947 only growth
-            (60%) and, from 1939, jobs (40%) can be measured. Every part is compared with other
-            presidents&apos; actual figures rather than fixed cut-offs.
-          </P>
-          <P>
-            Unemployment and inflation are judged against where a term started. A president who
-            takes office near the top of a recession usually sees unemployment fall a long way, and
-            one who inherits high inflation usually keeps some of it: across the 13 postwar
-            presidencies the change in unemployment correlates -0.84 with its starting rate, and
-            average inflation +0.74 with the rate inherited. So each is compared with what
-            presidents who started at the same rate went on to see. The four parts are weighed
-            equally because they barely overlap (correlations of 0.05 to 0.17), and there is no
-            outside yardstick to set other weights by without counting the historians twice{" "}
-            <Cite id="dawes1979" />. Weighed this way, the economy score agrees with the
-            historians&apos; own rating of economic management (+0.48); growth alone did not
-            (+0.02).
-          </P>
-          <P>
-            Measures tested and left out: how often Congress voted the president&apos;s way (mostly
-            a matter of which party held Congress, and a president&apos;s House and Senate records
-            barely agree once that is set aside), counts of major laws enacted (they follow Congress
-            and the era, not the president), and the change in the federal deficit (it mostly
-            follows the business cycle, and would mark down borrowing in a recession that most
-            economists recommend). The study is in docs/research/president-scores.md.
-          </P>
-          <P>
-            Most of a president&apos;s growth is shared with the rest of the rich world: oil shocks,
-            financial crises and the pandemic hit every advanced economy in the same years. So from
-            1947 on, growth per person is compared with the median of 13 peer economies (Britain,
-            France, Germany, the Netherlands, Belgium, Italy, Sweden, Denmark, Norway, Switzerland,
-            Canada, Australia and Japan) over the same years
-            <Cite id="bolt2024" />. Measured against them, the gap between the parties&apos; growth
-            records shrinks from about 0.9 to 0.6 points a year.
-          </P>
-          <P>
-            One adjustment keeps that comparison fair across eras. A poorer economy grows faster by
-            catching up with a richer one <Cite id="baumol1986" />
-            <Cite id="barro1992" />, and in the 1950s and 1960s Europe and Japan were far poorer
-            than the US. Their fast growth then was not something the US missed out on, but raw it
-            made every president of that era look worse. Each year, the part of the gap that the
-            peers&apos; distance below US incomes predicts is set aside, using a rate measured from
-            every year since 1947 <Cite id="sen1968" />. What remains still favors the most recent
-            terms somewhat, because the US genuinely outgrew Europe and Japan after 2017.
-          </P>
-          <P>
-            Before 1947 no peer series covers the terms, so growth there is total real growth,
-            compared with other presidents before 1947, because older estimates exaggerate booms and
-            busts <Cite id="romer1989" />. The study is in the project repository at
-            docs/research/president-scores.md.
+            Tested and left out: how often Congress voted the president&apos;s way (mostly which
+            party held Congress), counts of major laws enacted (they follow Congress and the era),
+            and the change in the deficit (it mostly follows the business cycle). The study is in
+            the project repository at docs/research/president-scores.md.
           </P>
         </Sub>
-        <Sub title="Historical Legacy (50%)">
+        <More label="The retired score, for the record">
           <P>
-            What none of the others can capture (crisis leadership, moral authority, vision) from
-            C-SPAN&apos;s Presidential Historians Survey, newest edition published: as of October
-            2026 that was the 2021 survey of about 142 historians (C-SPAN postponed its 2025
-            survey). It rates only presidents whose terms were complete when it was taken, so a
-            later president reads N/A until an edition rates them.
+            Until October 2026 each president had a 0 to 100 Presidential Score: the
+            historians&apos; survey at 50%, approval and the economy at 25% each. With half the
+            weight on the survey, the blend mostly restated the historians&apos; order, so the page
+            now shows their rank directly beside the two records. The open API still serves the
+            score, marked deprecated, until its version 2 (see the{" "}
+            <Link href="/developers#deprecations" className="underline underline-offset-2">
+              developer notes
+            </Link>
+            ).
           </P>
           <P>
-            It is a real, documented external survey, not neutral ground truth. Studies of these
-            surveys find historians tend to favor presidents who expanded federal power, and hold
-            off rating recent presidents. At 50%, this ranking inherits those tendencies at about
-            that strength.
-          </P>
-        </Sub>
-        <Sub title="How the parts combine">
-          <P>
-            Historical Legacy is held at exactly 50% whenever both of the other two have data, and
-            those share the rest. With only one of them available, Historical Legacy and that one
-            score share the weight in proportion to their usual weights (two thirds and one third):
-            one number isn&apos;t reliable enough to carry half a score (Fillmore&apos;s economy
-            scores 100 on a Gold Rush boom he had little to do with). A sitting president, unrated
-            by historians, is scored on the other two equally. Each score on a president&apos;s page
-            shows the share it actually carries in their overall.
-          </P>
-        </Sub>
-        <More label="Why 50%, and why four scores were removed">
-          <P>
-            Independence and Follow-Through were removed in 2026-07. Both were one-time hand-set
-            numbers with no live formula and no realistic path to one: Independence&apos;s obvious
-            source (OpenSecrets&apos; revolving-door tracking) was discontinued in 2025, and
-            Follow-Through needed the same platform-versus-action matching that failed four times
-            for members of Congress. Rather than present a hand-set number as a computed score, they
-            were dropped.
-          </P>
-          <P>
-            Historical Legacy was added because nothing else could credit &ldquo;preserved the
-            Union, ended slavery&rdquo;: Lincoln was landing in the bottom half. Its weight was
-            checked against the real 47-presidency dataset. At 20%, the other dimensions, which
-            barely correlate with historians&apos; judgment on their own (Spearman 0.17), put
-            Coolidge, McKinley and Harding in the top ten while Lincoln and Eisenhower fell out. At
-            50%, the overall ranking correlated 0.96 with C-SPAN&apos;s alone, so the other
-            dimensions added almost nothing. At 35% the top was recognizable and the rest still
-            moved (0.89). Re-measured in October 2026 on the current scores (approval judged against
-            where a term starts and over the time it lasted, Agency Alignment removed), the other
-            two dimensions now move the ranking more: at 35% the overall correlated 0.78 with
-            C-SPAN&apos;s alone and 0.83 with the other two, so historians carried no more weight
-            than the economy and approval together. At 50% it correlates 0.90 with C-SPAN&apos;s and
-            0.69 with the other two: the historians lead, and the record still moves the ranking.
-            The weight is now 50%.
-          </P>
-          <P>
-            Competence (executive-order rate) was removed next: Coolidge and Harding issued orders
-            at nearly the same rate, yet historians rate their administrative skill 596 and 334 of
-            1,000, and across 44 presidents the correlation was 0.097 (p = 0.53): indistinguishable
-            from noise. Using C-SPAN&apos;s own administrative-skill rating instead would have
-            pushed the historians&apos; effective weight to about 51%. Its weight went evenly to the
-            remaining three.
-          </P>
-          <P>
-            Historical Legacy&apos;s weight used to drift upward for presidents missing other scores
-            (from 35% to about 45% for everyone before Clinton and 62% for four unelected
-            successors). It is now held fixed as described above.
-          </P>
-          <P>
-            Agency Alignment (the share of the rulemakings agencies began that reached a final rule)
-            was removed in October 2026. Its counts had been capped by the Federal Register&apos;s
-            search, which reports at most 10,000 results, so Clinton, George W. Bush and Obama all
-            read exactly 50%. Counted in full, every administration since 1994 finalized between
-            59.6% and 61.8%: too little difference to score, and compared only with each other, a
-            two-point gap read as nearly two standard deviations.
+            Earlier parts were dropped for lack of a real record: Independence and Follow-Through
+            were hand-set numbers with no live source; Competence (the executive-order rate) showed
+            no relationship with historians&apos; rating of administrative skill; and Agency
+            Alignment (rules finalized) differed by about two points across every administration
+            since 1994.
           </P>
         </More>
       </Section>

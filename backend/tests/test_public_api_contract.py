@@ -640,6 +640,13 @@ def test_composite_fields_are_marked_deprecated_in_the_schema():
     assert PublicSenatorRowSchema.model_json_schema()["properties"]["rank"]["deprecated"] is True
 
 
+def test_president_scores_are_marked_deprecated_in_the_schema():
+    """Presidents' 0-100 scores, parts and rank went off the site too."""
+    props = PublicPresidentSchema.model_json_schema()["properties"]
+    assert props["score"]["deprecated"] is True and props["rank"]["deprecated"] is True
+    assert "removed in API v2" in props["score"]["description"]
+
+
 def _csv_rows(client, path, **params):
     resp = client.get(f"/api/public/v1{path}", params=params)
     assert resp.status_code == 200, resp.text

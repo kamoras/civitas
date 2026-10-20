@@ -22,7 +22,9 @@ def test_every_link_is_a_page_the_site_has():
     events = _upcoming_civic_events(2029, date(2029, 1, 1))  # inauguration, Congress, Court, no election
     links = {e["link"].split("?")[0] for e in events}
     assert "/scorecard" not in links
-    assert links <= {"/politicians", "/leaderboard", "/elections"}
+    # /leaderboard is a redirect since the composite left the site: link where it lands.
+    assert "/leaderboard" not in links
+    assert links <= {"/politicians", "/congress/members", "/elections"}
 
 
 def test_election_day_links_to_the_elections_page():

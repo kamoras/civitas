@@ -38,7 +38,7 @@
     {"label": "About", "href": "/about", "section": "About", "aliases": []},
     {"label": "Overview", "href": "/about", "section": "About", "aliases": ["about civitas"]},
     {"label": "How Congress is compared", "href": "/about/scores", "section": "About", "aliases": ["methods", "methodology", "scoring", "peers"]},
-    {"label": "Presidents & justices", "href": "/about/presidents-and-justices", "section": "About", "aliases": ["how presidents are scored"]},
+    {"label": "Presidents & justices", "href": "/about/presidents-and-justices", "section": "About", "aliases": ["how presidents are shown", "how presidents are scored"]},
     {"label": "Elections & ballots", "href": "/about/elections", "section": "About", "aliases": []},
     {"label": "News & Congress reports", "href": "/about/news", "section": "About", "aliases": ["corrections"]},
     {"label": "Data, AI & how it runs", "href": "/about/data", "section": "About", "aliases": ["sources", "data sources", "privacy", "ai"]},

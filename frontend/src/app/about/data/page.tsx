@@ -173,7 +173,9 @@ export default function DataChapter() {
             <Fact label="Maddison Project · World Bank">
               GDP per person for the US and 13 peer economies from 1946, to compare postwar growth.
             </Fact>
-            <Fact label="C-SPAN Historians Survey">The 2021 survey, for Historical Legacy.</Fact>
+            <Fact label="C-SPAN Historians Survey">
+              The newest edition (2021), for the historians&apos; rank on a president&apos;s page.
+            </Fact>
           </Facts>
         </Sub>
         <Sub title="Courts, elections and documents">

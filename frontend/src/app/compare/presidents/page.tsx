@@ -1,8 +1,6 @@
 import Link from "next/link";
 import { pageMetadata } from "@/lib/site";
 import { usableRecord } from "@/lib/ssrPayload";
-import { displayScore } from "@/lib/formatting";
-import { getScoreColor } from "@/lib/representation";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
@@ -18,7 +16,7 @@ import type {
 export const metadata = pageMetadata({
   title: "Compare Presidents Side by Side",
   description:
-    "Compare any two presidents side by side: the Presidential Score, its four dimensions, and the approval, jobs, growth, rulemaking and historians' figures each is scored on.",
+    "Compare any two presidents side by side: approval, jobs, growth, unemployment and inflation, each beside the average of past presidencies, and the historians' own rank.",
   path: "/compare/presidents",
 });
 
@@ -34,7 +32,7 @@ async function fetchPresidents(): Promise<President[]> {
   return body as President[];
 }
 
-/** Null when it fails: the scores still compare without the figures. */
+/** Null when it fails: the table then shows a dash for its figures. */
 async function fetchBreakdown(id: string): Promise<PresidentScoreBreakdown | null> {
   try {
     const res = await fetch(`${BACKEND}/api/presidents/${encodeURIComponent(id)}/score-breakdown`, {
@@ -48,7 +46,7 @@ async function fetchBreakdown(id: string): Promise<PresidentScoreBreakdown | nul
 }
 
 type Side = { president: President; breakdown: PresidentScoreBreakdown | null };
-type Row = { label: string; value: (s: Side) => string; score?: (s: Side) => number | null };
+type Row = { label: string; value: (s: Side) => string };
 
 const NONE = "—";
 const one = (n: number) => n.toFixed(1);
@@ -62,37 +60,26 @@ function versus(
   return value == null || mean == null ? NONE : `${fmt(value)} vs ${fmt(mean)}`;
 }
 
-function scored(n: number | null) {
-  return n == null ? "Not scored" : String(displayScore(n));
-}
+const legacyFacts = (s: Side) =>
+  s.breakdown?.historicalLegacy.facts as HistoricalLegacyFacts | undefined;
 
-// No composite row (redesign 2026-10): the historians' rank, attributed,
-// then each measured part on its own.
-const SCORE_ROWS: Row[] = [
-  {
-    label: "Historians' rank (C-SPAN survey, their ranking)",
-    value: ({ breakdown: b }) => {
-      const f = b?.historicalLegacy.facts as HistoricalLegacyFacts | undefined;
+/** The historians' own rank (no score of Civitas's is shown), labelled
+ *  with the survey edition either side's breakdown names. */
+function rankRow(left: Side, right: Side): Row {
+  const year = legacyFacts(left)?.surveyYear ?? legacyFacts(right)?.surveyYear;
+  return {
+    label: `Historians' rank (C-SPAN survey${year ? `, ${year}` : ""}; their ranking)`,
+    value: (s) => {
+      const f = legacyFacts(s);
       return f?.historiansRank != null
         ? `#${f.historiansRank} of ${f.historiansRated}`
         : "Not rated";
     },
-  },
-  ...(
-    [
-      ["Public Mandate", "publicMandate"],
-      ["Effectiveness", "effectiveness"],
-      ["Historical Legacy", "historicalLegacy"],
-    ] as const
-  ).map(([label, key]) => ({
-    label,
-    value: ({ president: p }: Side) => scored(p.score[key]),
-    score: ({ president: p }: Side) => p.score[key],
-  })),
-];
+  };
+}
 
-// Each figure beside the all-president mean it is scored against, as the
-// breakdown states them.
+// Each figure beside the average of past presidencies, as the breakdown
+// states them.
 const FACT_ROWS: Row[] = [
   {
     label: "Average approval (vs all presidents)",
@@ -173,10 +160,7 @@ function PresidentSelect({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label
-        htmlFor={`president-${name}`}
-        className="font-mono text-xs uppercase tracking-widest text-ink-lo"
-      >
+      <label htmlFor={`president-${name}`} className="text-sm font-semibold text-ink-lo">
         {label}
       </label>
       <select
@@ -214,16 +198,9 @@ function PresidentHeading({ side: { president: p } }: { side: Side }) {
 }
 
 function ComparisonTable({ left, right }: { left: Side; right: Side }) {
-  const cell = (row: Row, side: Side) => {
-    const s = row.score?.(side);
-    return (
-      <td
-        className={`px-3 py-2 text-center font-mono ${s != null ? getScoreColor(displayScore(s)) : "text-ink"}`}
-      >
-        {row.value(side)}
-      </td>
-    );
-  };
+  const cell = (row: Row, side: Side) => (
+    <td className="px-3 py-2 text-center font-mono text-ink">{row.value(side)}</td>
+  );
   const body = (rows: Row[]) =>
     rows.map((row) => (
       <tr key={row.label}>
@@ -247,7 +224,7 @@ function ComparisonTable({ left, right }: { left: Side; right: Side }) {
             <PresidentHeading side={right} />
           </tr>
         </thead>
-        <tbody className="divide-y divide-white/[0.07]">{body(SCORE_ROWS)}</tbody>
+        <tbody className="divide-y divide-white/[0.07]">{body([rankRow(left, right)])}</tbody>
         <tbody className="divide-y divide-white/[0.07] border-t border-white/[0.12]">
           {body(FACT_ROWS)}
         </tbody>
@@ -282,8 +259,9 @@ export default async function ComparePresidentsPage({
             title="Compare presidents"
           >
             <p>
-              Pick two presidents to set their Presidential Scores, the four dimensions and the
-              figures each is scored on side by side. Members of Congress compare on the{" "}
+              Pick two presidents to set their records side by side: approval and the economy, each
+              beside the average of past presidencies, and the historians&apos; own rank. Members of
+              Congress compare on the{" "}
               <Link
                 href="/compare"
                 className="underline decoration-white/30 underline-offset-4 hover:text-phos"
@@ -312,7 +290,7 @@ export default async function ComparePresidentsPage({
             />
             <button
               type="submit"
-              className="border border-signal-cyan/40 px-4 py-2 font-mono text-xs uppercase tracking-widest text-signal-cyan transition-colors hover:bg-signal-cyan/10"
+              className="min-h-11 border border-ink-hi bg-surface px-4 text-sm font-semibold text-ink-hi hover:bg-white/5"
             >
               Compare
             </button>

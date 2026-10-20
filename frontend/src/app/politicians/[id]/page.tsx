@@ -3,6 +3,7 @@ import { notFound, permanentRedirect } from "next/navigation";
 import type { PoliticianProfile } from "@/types/politicians";
 import type { RepresentationScoreBreakdown } from "@/types/scoreBreakdown";
 import type { PeerComparison } from "@/types/peers";
+import type { PresidentPeers } from "@/types/presidentPeers";
 import { fetchRecord } from "@/lib/ssrPayload";
 import { absoluteUrl, memberFeed, notFoundMetadata, pageMetadata } from "@/lib/site";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
@@ -26,19 +27,13 @@ function fetchProfile(id: string): Promise<PoliticianProfile | null> {
 /** A member's score, component by component, with the numbers each
  * sentence on the scorecard states. Fetched here, beside the profile, so the
  * scorecard renders whole on first paint instead of opening panels one click
- * at a time. Null when it fails: the scorecard then shows the scores alone. */
+ * at a time. Null when it fails: the scorecard then shows the scores alone.
+ * Not for a president, whose page shows no score (fetchPeers instead). */
 async function fetchBreakdown(
   branch: string,
   id: string
 ): Promise<RepresentationScoreBreakdown | null> {
-  const segment =
-    branch === "senate"
-      ? "senators"
-      : branch === "house"
-        ? "representatives"
-        : branch === "president"
-          ? "presidents"
-          : null;
+  const segment = branch === "senate" ? "senators" : branch === "house" ? "representatives" : null;
   if (!segment) return null;
   try {
     const res = await fetch(`${BACKEND}/api/${segment}/${encodeURIComponent(id)}/score-breakdown`, {
@@ -52,19 +47,23 @@ async function fetchBreakdown(
   }
 }
 
-/** Where a member stands among the caucus, for the first view; null on
- *  any failure (the section then fetches it in the browser). */
-async function fetchPeers(branch: string, id: string): Promise<PeerComparison | null> {
-  if (branch !== "senate" && branch !== "house") return null;
-  const segment = branch === "senate" ? "senators" : "representatives";
+/** Where a member stands among the caucus, for the first view, or a
+ *  president among the other presidencies; null on any failure (a member's
+ *  section then fetches it in the browser). */
+async function fetchPeers(
+  branch: string,
+  id: string
+): Promise<PeerComparison | PresidentPeers | null> {
+  if (branch !== "senate" && branch !== "house" && branch !== "president") return null;
+  const path =
+    branch === "president"
+      ? `presidents/${encodeURIComponent(id)}/peers`
+      : `${branch === "senate" ? "senators" : "representatives"}/${encodeURIComponent(id)}/peers?group=caucus`;
   try {
-    const res = await fetch(
-      `${BACKEND}/api/${segment}/${encodeURIComponent(id)}/peers?group=caucus`,
-      {
-        next: { revalidate: 120 },
-      }
-    );
-    return res.ok ? ((await res.json()) as PeerComparison) : null;
+    const res = await fetch(`${BACKEND}/api/${path}`, {
+      next: { revalidate: 120 },
+    });
+    return res.ok ? ((await res.json()) as PeerComparison | PresidentPeers) : null;
   } catch {
     return null;
   }

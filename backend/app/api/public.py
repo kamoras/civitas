@@ -623,7 +623,7 @@ def openapi_spec_dict() -> dict:
                 {"name": "Representatives", "description": "The serving House members: rankings, full records, score history and votes."},
                 {"name": "Bills", "description": "The roll calls on a bill, with each party's split."},
                 {"name": "Roll calls", "description": "Each chamber's roll calls, and every member's position on one."},
-                {"name": "Presidents", "description": "Every president, with the Presidential Score and its parts."},
+                {"name": "Presidents", "description": "Every president: approval, the economy, executive orders and the historians' points."},
                 {"name": "Justices", "description": "The sitting Supreme Court justices' voting records, case by case. Not scored."},
                 {"name": "Nominations", "description": "Presidential nominations sent to the Senate, their actions and the votes on them."},
                 {"name": "Agencies", "description": "Federal agencies, the documents Civitas holds from them, and every comment period open today."},
@@ -1336,42 +1336,51 @@ def _presidents(db: Session) -> list[dict]:
 
 
 @router.get("/presidents", response_model=PublicPresidentListSchema, tags=["Presidents"],
-            summary="Every president, ranked by Presidential Score")
+            summary="Every president's record")
 def list_presidents(_rl: PublicReadLimit, request: Request, db: Session = Depends(get_db)) -> JSONResponse:
-    """Every president Civitas scores, with the Presidential Score and its
-    three parts (Public Mandate, Effectiveness, Historical Legacy; a part
-    that doesn't apply is null and the others are reweighted, as
-    effectiveWeights shows). How it is computed: the site's /about/scores.
-    A sitting president is listed unranked: the term isn't complete."""
+    """Every president's record: approval, the economy, executive orders and
+    the C-SPAN historians' points. The 0-100 score and rank are deprecated
+    (the site stopped showing them) and are removed in API v2. A sitting
+    president is listed last, unranked: the term isn't complete."""
     rows = _presidents(db)
     return _pub_json({"total": len(rows), "entries": rows}, request, max_age=CACHE_TTL_DETAIL_S, deprecated=True)
 
 
 _PRESIDENT_COLUMNS: Columns = [
-    ("rank", "place among former presidents by Presidential Score as the site shows it; empty for a sitting "
-             "president"),
+    ("rank", "deprecated, removed in API v2: place among former presidents by Presidential Score; empty for a "
+             "sitting president"),
     ("id", "the president's Civitas id"), ("name", "the president's name"), ("party", "the party"),
     ("number", "which president (1 for the first)"), ("term_start", "YYYY-MM-DD"),
     ("term_end", "YYYY-MM-DD; empty while serving"), ("is_current", "true for a sitting president"),
-    ("overall", "the Presidential Score, 0-100"),
-    ("public_mandate", "Public Mandate, 0-100; empty where it doesn't apply"),
-    ("effectiveness", "Effectiveness, 0-100; empty where it doesn't apply"),
-    ("historical_legacy", "Historical Legacy, 0-100; empty where it doesn't apply"),
-    ("dimensions_available", "how many of the three parts are scored"),
+    ("overall", "deprecated, removed in API v2: the Presidential Score, 0-100"),
+    ("public_mandate", "deprecated, removed in API v2: Public Mandate, 0-100; empty where it doesn't apply"),
+    ("effectiveness", "deprecated, removed in API v2: Effectiveness, 0-100; empty where it doesn't apply"),
+    ("historical_legacy", "deprecated, removed in API v2: Historical Legacy, 0-100; empty where it doesn't apply"),
+    ("dimensions_available", "deprecated, removed in API v2: how many of the three parts are scored"),
+    ("avg_approval", "average approval over the term, percent; empty before polling"),
+    ("election_margin", "average margin of victory in the president's own election wins, points; set "
+                        "only before polling"),
+    ("jobs_created_millions", "payroll jobs added over the term, millions (BLS, from 1939)"),
+    ("gdp_growth_avg", "average annual real GDP growth over the term, percent"),
+    ("eo_count", "executive orders signed (Federal Register)"),
+    ("historians_points", "points in C-SPAN's Presidential Historians Survey; empty when unrated"),
     ("site_url", "the president's page on Civitas"),
 ]
 
 
 @router.get("/presidents.csv", response_class=CsvResponse, responses=_CSV_RESPONSES, tags=["Presidents"],
-            summary="Every president's Presidential Score, as CSV",
-            description=_csv_doc("The presidents' leaderboard, in /presidents order.", _PRESIDENT_COLUMNS))
+            summary="Every president's record, as CSV",
+            description=_csv_doc("Every president, in /presidents order.", _PRESIDENT_COLUMNS))
 def presidents_csv(_rl: PublicReadLimit, request: Request, db: Session = Depends(get_db)) -> Response:
     rows = [{
         "rank": r["rank"], "id": r["id"], "name": r["name"], "party": r["party"], "number": r["number"],
         "term_start": r["termStart"], "term_end": r["termEnd"], "is_current": r["isCurrent"],
         "overall": r["score"]["overall"], "public_mandate": r["score"]["publicMandate"],
         "effectiveness": r["score"]["effectiveness"], "historical_legacy": r["score"]["historicalLegacy"],
-        "dimensions_available": r["score"]["dimensionsAvailable"], "site_url": r["siteUrl"],
+        "dimensions_available": r["score"]["dimensionsAvailable"], "avg_approval": r["avgApproval"],
+        "election_margin": r["electionMargin"], "jobs_created_millions": r["jobsCreatedMillions"],
+        "gdp_growth_avg": r["gdpGrowthAvg"], "eo_count": r["eoCount"],
+        "historians_points": r["historicalLegacyScore"], "site_url": r["siteUrl"],
     } for r in _presidents(db)]
     return _csv(rows, _PRESIDENT_COLUMNS, "civitas-presidents.csv", request, max_age=CACHE_TTL_DETAIL_S)
 
@@ -1385,8 +1394,8 @@ def get_president_record(
                                          "/presidents lists it, e.g. doe-52)"),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
-    """The president's scores, term, approval, economic figures and executive
-    order count, with the rank /presidents gives."""
+    """The president's term, approval, economic figures, executive order
+    count and historians' points (the 0-100 scores and rank are deprecated)."""
     row = next((r for r in _presidents(db) if r["id"] == president_id), None)
     if row is None or get_president(db, president_id) is None:
         raise HTTPException(status_code=404, detail=_NO_PRESIDENT)

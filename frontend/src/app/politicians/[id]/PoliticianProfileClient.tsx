@@ -15,11 +15,12 @@ import { issueDateLabel } from "@/lib/formatting";
 import { houseSeatLabel, stateBallotHref } from "@/lib/elections";
 import { STATE_NAMES } from "@/lib/stateCodes";
 import type { PoliticianProfile, GovernmentDoc, SeatRace } from "@/types/politicians";
-import type { PresidentScoreBreakdown, RepresentationScoreBreakdown } from "@/types/scoreBreakdown";
+import type { RepresentationScoreBreakdown } from "@/types/scoreBreakdown";
 import type { Senator } from "@/types/senator";
 import type { President } from "@/types/president";
 import type { Justice } from "@/types/justice";
 import type { PeerComparison } from "@/types/peers";
+import type { PresidentPeers } from "@/types/presidentPeers";
 import Photo from "@/components/Photo";
 import RedrawnSeatNote from "@/components/redistricting/RedrawnSeatNote";
 import SeatOnMap from "@/components/elections/SeatOnMap";
@@ -106,11 +107,13 @@ export default function PoliticianProfileClient({
   /** Votes with the president's stated positions in one line, rendered by
    *  the server page (members only). */
   supportLine?: React.ReactNode;
-  /** The score breakdown, fetched with the profile (senators,
-   *  representatives and presidents). */
+  /** The score breakdown, fetched with the profile (senators and
+   *  representatives). */
   breakdown?: RepresentationScoreBreakdown | null;
   /** Where the member stands among the caucus (members only). */
-  peers?: PeerComparison | null;
+  /** Where the member stands among the caucus, or a president among the
+   *  other presidencies. */
+  peers?: PeerComparison | PresidentPeers | null;
 }) {
   const { identity, branch, activeIssues, governmentRecord, scorecard } = profile;
   const isMember = branch === "senate" || branch === "house";
@@ -118,7 +121,10 @@ export default function PoliticianProfileClient({
   // Justices carry `isActive`; every other branch carries `isCurrent`.
   const hasLeftOffice =
     branch === "scotus" ? identity.isActive === false : identity.isCurrent === false;
-  const formerOffice = hasLeftOffice ? formerOfficeNotice({ branch, ...identity }) : null;
+  // A former president's years served, on the page's first line, already
+  // say the term is over: no banner (screen readers hear the years).
+  const formerOffice =
+    hasLeftOffice && branch !== "president" ? formerOfficeNotice({ branch, ...identity }) : null;
 
   return (
     <div className="min-h-screen bg-surface-base text-ink-hi">
@@ -203,7 +209,7 @@ export default function PoliticianProfileClient({
                   leadershipTitle={identity.leadershipTitle}
                   committees={identity.committees}
                   scoredOn={profile.scoredOn}
-                  peers={peers}
+                  peers={peers as PeerComparison | null}
                   titleAs="h1"
                   former={hasLeftOffice}
                 />
@@ -212,7 +218,7 @@ export default function PoliticianProfileClient({
                 <PresidentScorecard
                   key={(scorecard as unknown as President).id}
                   president={scorecard as unknown as President}
-                  breakdown={breakdown as unknown as PresidentScoreBreakdown | null}
+                  peers={peers as PresidentPeers | null}
                   scoredOn={profile.scoredOn}
                   titleAs="h1"
                 />

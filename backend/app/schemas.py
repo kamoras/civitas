@@ -21,6 +21,10 @@ def to_camel(string: str) -> str:
 API_V1_SUNSET = "2027-01-04"
 _DEPRECATED = f"Deprecated: the composite is no longer shown on the site (2026-10); removed in API v2, sunset {API_V1_SUNSET}. "
 _DEPRECATED_FIELD = {"deprecated": True}
+# Presidents' 0-100 scores, parts included, stopped being shown in 2026-10,
+# after the members' composite: the same cycle, worded for them.
+_DEPRECATED_PRESIDENT = (f"Deprecated: presidents' 0-100 scores are no longer shown on the site (2026-10); removed "
+                         f"in API v2, sunset {API_V1_SUNSET}. ")
 
 class CamelModel(BaseModel):
     model_config = ConfigDict(
@@ -1935,21 +1939,26 @@ class PublicRollCallPageSchema(_PublicModel):
     entries: list[PublicBillRollCallSchema] = Field(description="Newest first")
 
 
-_PRESIDENT_RANK = Field(json_schema_extra=_DEPRECATED_FIELD, description=_DEPRECATED + "Place among the former presidents by Presidential Score as the site shows it "
-                                    "(compared as displayed, a whole number; equal scores share a rank). Null for a "
-                                    "sitting president, whose term is not complete and is not ranked")
+_PRESIDENT_RANK = Field(json_schema_extra=_DEPRECATED_FIELD, description=_DEPRECATED_PRESIDENT + "Place among the former presidents by "
+                                    "Presidential Score (compared as a whole number; equal scores share a rank). "
+                                    "Null for a sitting president, whose term is not complete and is not ranked")
 
 
 class PublicPresidentSchema(PresidentSchema):
     model_config = _PublicModel.model_config
+    score: PresidentialScoreSchema = Field(
+        json_schema_extra=_DEPRECATED_FIELD,
+        description=_DEPRECATED_PRESIDENT + "The Presidential Score (overall) and its parts, each 0-100. Read the "
+                    "record instead: avgApproval, recentAvgApproval, electionMargin, jobsCreatedMillions, "
+                    "gdpGrowthAvg, eoCount and historicalLegacyScore (the C-SPAN historians' points)")
     rank: int | None = _PRESIDENT_RANK
     site_url: str = _SITE_URL
 
 
 class PublicPresidentListSchema(_PublicModel):
     total: int
-    entries: list[PublicPresidentSchema] = Field(description="Ranked presidents best score first, then any sitting "
-                                                             "president")
+    entries: list[PublicPresidentSchema] = Field(description="Former presidents by the deprecated rank, then any "
+                                                             "sitting president")
 
 
 class PublicJusticeRowSchema(JusticeLeaderboardEntry):

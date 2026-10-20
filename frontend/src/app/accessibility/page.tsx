@@ -189,9 +189,9 @@ export default function AccessibilityPage() {
                   pixels tall at that width.
                 </Item>
                 <Item label="axe-core, in the test suite">
-                  The member, president and justice scorecards, the Congress report pages and the
-                  state ballot page are rendered in tests and checked with axe-core. These tests run
-                  on every change.
+                  The member scorecards, the president and justice profiles, the Congress report
+                  pages and the state ballot page are rendered in tests and checked with axe-core.
+                  These tests run on every change.
                 </Item>
                 <Item label="Lint">
                   ESLint&apos;s jsx-a11y rules check ARIA attributes, labels and roles as code is

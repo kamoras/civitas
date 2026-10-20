@@ -218,5 +218,9 @@ export interface HistoricalLegacyFacts {
    *  every rated one (ties shared), and how many are rated. */
   historiansRank?: number | null;
   historiansRated?: number;
-  otherTerms: { id: string; number: number; points: number; score: number | null }[];
+  /** The survey edition the points are from, and its page; null when no
+   *  read is on record. */
+  surveyYear?: number | null;
+  surveyUrl?: string | null;
+  otherTerms: { id: string; number: number; points: number }[];
 }

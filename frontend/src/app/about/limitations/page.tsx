@@ -175,21 +175,22 @@ export default async function LimitationsChapter() {
       <Section id="presidents" title="Presidents">
         <Limitation title="Historians’ judgment carries its biases in">
           <P>
-            Historical Legacy (50%) comes from C-SPAN&apos;s historians survey. Historians as a
-            field tend to favor presidents who expanded federal power, and hold off rating recent
-            presidents, so this ranking inherits those tendencies at roughly that weight.
+            The historians&apos; rank on a president&apos;s page is C-SPAN&apos;s survey, shown as
+            theirs. Historians as a field tend to favor presidents who expanded federal power, and
+            hold off rating recent presidents, so the rank carries those tendencies.
           </P>
         </Limitation>
         <Limitation title="The economy isn’t only the president’s doing">
           <P>
-            Effectiveness compares postwar growth with 13 peer economies, which takes out shocks the
-            whole rich world shared, and sets aside the peers&apos; catching up with US incomes. It
-            can&apos;t take out what hit the US alone without a president causing it. Jobs,
-            unemployment and inflation aren&apos;t compared with peers: jobs are counted in
+            A president&apos;s page sets postwar growth beside 13 peer economies, which takes out
+            shocks the whole rich world shared, and sets aside the peers&apos; catching up with US
+            incomes. It can&apos;t take out what hit the US alone without a president causing it.
+            Jobs, unemployment and inflation aren&apos;t compared with peers: jobs are counted in
             millions, which has no counterpart abroad, and compared with peers, unemployment
             can&apos;t be measured consistently before the 1980s and inflation took on a strong
-            trend with era. Unemployment and inflation are instead judged against where the term
-            started. Presidents before 1947 are compared on growth and, from 1939, jobs.
+            trend with era. Unemployment and inflation instead sit beside what presidents who
+            started from the same rates saw. Presidents before 1947 are compared on growth and, from
+            1939, jobs.
           </P>
         </Limitation>
       </Section>

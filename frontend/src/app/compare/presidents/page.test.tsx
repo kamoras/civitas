@@ -6,37 +6,31 @@ import ComparePresidentsPage from "./page";
 vi.mock("@/components/layout/Navbar", () => ({ default: () => <header /> }));
 vi.mock("@/components/layout/Footer", () => ({ default: () => <footer /> }));
 
-const score = (overall: number, legacy: number | null, dims: number) => ({
-  publicMandate: 50,
-  effectiveness: 44,
-  agencyAlignment: 26,
-  historicalLegacy: legacy,
-  overall,
-  dimensionsAvailable: dims,
-});
+// The API still sends a deprecated 0-100 `score`; the page must not show it.
+const score = { publicMandate: 50, effectiveness: 44, historicalLegacy: 72, overall: 61 };
 
 const presidents = [
   {
-    id: "trump-47",
-    name: "Donald J. Trump",
+    id: "doe-47",
+    name: "Jane Doe",
     party: "R",
     number: 47,
     termStart: "2025-01-20",
     termEnd: null,
-    score: score(50.67, null, 3),
+    score: { ...score, historicalLegacy: null },
   },
   {
-    id: "obama-44",
-    name: "Barack Obama",
+    id: "roe-44",
+    name: "John Roe",
     party: "D",
     number: 44,
     termStart: "2009-01-20",
     termEnd: "2017-01-20",
-    score: score(48.2, 72, 4),
+    score,
   },
 ];
 
-const obamaBreakdown = {
+const formerBreakdown = {
   publicMandate: {
     score: 50,
     components: [],
@@ -55,7 +49,17 @@ const obamaBreakdown = {
       gdpRelativeMean: 2.2333,
     },
   },
-  historicalLegacy: { score: 72, components: [], facts: { points: 664, pointsMean: 549.4 } },
+  historicalLegacy: {
+    score: 72,
+    components: [],
+    facts: {
+      points: 664,
+      pointsMean: 549.4,
+      historiansRank: 12,
+      historiansRated: 45,
+      surveyYear: 2021,
+    },
+  },
 };
 
 function serve(breakdowns: Record<string, unknown>) {
@@ -76,25 +80,32 @@ async function renderPage(params: { left?: string; right?: string }) {
 }
 
 describe("ComparePresidentsPage", () => {
-  beforeEach(() => serve({ "obama-44": obamaBreakdown }));
+  beforeEach(() => serve({ "roe-44": formerBreakdown }));
 
-  it("preselects the president the scorecard linked from, and asks for a second", async () => {
-    await renderPage({ left: "trump-47" });
-    expect(screen.getByLabelText("First president")).toHaveValue("trump-47");
+  it("preselects the president the profile linked from, and asks for a second", async () => {
+    await renderPage({ left: "doe-47" });
+    expect(screen.getByLabelText("First president")).toHaveValue("doe-47");
     expect(screen.getByLabelText("Second president")).toHaveValue("");
     expect(screen.getByText("Choose a second president to compare.")).toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });
 
-  it("sets the scores and the API's figures side by side, without computing any", async () => {
-    await renderPage({ left: "trump-47", right: "obama-44" });
+  it("sets the API's figures side by side, with no score and computing none", async () => {
+    await renderPage({ left: "doe-47", right: "roe-44" });
     const row = (name: string) =>
       within(screen.getByRole("rowheader", { name }).closest("tr")!)
         .getAllByRole("cell")
         .map((c) => c.textContent);
 
-    expect(row("Historians' rank (C-SPAN survey, their ranking)")).toHaveLength(2);
-    expect(row("Historical Legacy")).toEqual(["Not scored", "72"]);
+    expect(row("Historians' rank (C-SPAN survey, 2021; their ranking)")).toEqual([
+      "Not rated",
+      "#12 of 45",
+    ]);
+    // None of Civitas's own 0-100 scores.
+    for (const name of ["Public Mandate", "Effectiveness", "Historical Legacy"]) {
+      expect(screen.queryByRole("rowheader", { name })).not.toBeInTheDocument();
+    }
+    expect(screen.queryByText("61")).not.toBeInTheDocument();
     expect(row("Average approval (vs all presidents)")).toEqual(["—", "48.0% vs 50.9%"]);
     expect(row("Approval against its era, points (vs the typical president)")).toEqual([
       "—",
@@ -110,15 +121,15 @@ describe("ComparePresidentsPage", () => {
       "—",
     ]);
     expect(row("Historians' points (vs all presidents)")).toEqual(["—", "664 vs 549"]);
-    expect(screen.getByRole("link", { name: "Barack Obama" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "John Roe" })).toHaveAttribute(
       "href",
-      "/politicians/obama-44"
+      "/politicians/roe-44"
     );
     expect(screen.getByText(/44th president/)).toBeInTheDocument();
   });
 
   it("has no axe violations", async () => {
-    await renderPage({ left: "trump-47", right: "obama-44" });
+    await renderPage({ left: "doe-47", right: "roe-44" });
     const result = await axe.run(document.body, {
       rules: { "color-contrast": { enabled: false } },
     });

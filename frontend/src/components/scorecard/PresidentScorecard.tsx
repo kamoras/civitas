@@ -3,22 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import type { President } from "@/types/president";
-import type {
-  HistoricalLegacyFacts,
-  PresidentEffectivenessFacts,
-  PresidentScoreBreakdown,
-  PublicMandateFacts,
-  ScoreBreakdownDimension,
-} from "@/types/scoreBreakdown";
+import type { PresidentPeers } from "@/types/presidentPeers";
 import { fetchPresidentStockTrades } from "@/lib/api";
-import { displayScore } from "@/lib/formatting";
-import { getScoreBgColor, getScoreColor } from "@/lib/representation";
 import { SectionHeadingLevelProvider } from "@/components/shared/CollapsibleSection";
 import Holdings from "@/components/checker/Holdings";
 import StockTrades from "@/components/checker/StockTrades";
-import ComparisonScale from "./ComparisonScale";
-import ComponentBars from "./ComponentBars";
-import ScoreColumn from "./ScoreColumn";
+import PresidentStanding from "./PresidentStanding";
 import ScorecardDrawer from "./ScorecardDrawer";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
@@ -34,339 +24,59 @@ const PARTY: Record<string, { label: string; text: string; border: string }> = {
   W: { label: "Whig", text: "text-signal-amber", border: "border-signal-amber/40" },
 };
 const NO_PARTY = { label: "No party", text: "text-ink", border: "border-white/30" };
-// "U": a president who belonged to no party (George Washington).
+// "U": a president who belonged to no party (the first).
 PARTY.U = NO_PARTY;
 
-/** A president's party label and colours (also the leaderboard's summary). */
+/** A president's party label and colours. */
 export function presidentParty(code: string) {
   return PARTY[code] ?? NO_PARTY;
 }
 
 const LINK = "font-mono text-[13px] text-ink-lo underline underline-offset-2 hover:text-phos";
 
-function tone(score: number | null | undefined) {
-  const shown = score == null ? 50 : displayScore(score);
-  return { text: getScoreColor(shown), bg: getScoreBgColor(shown) };
-}
-
-function one(n: number) {
-  return n.toFixed(1);
-}
-
-function signed(n: number) {
-  return `${n > 0 ? "+" : ""}${one(n)}`;
-}
-
-function Facts({ rows }: { rows: [string, string][] }) {
-  if (rows.length === 0) return null;
-  return (
-    <dl className="flex flex-col gap-1.5 border-t border-white/[0.08] pt-4 text-sm">
-      {rows.map(([k, v]) => (
-        <div key={k} className="flex justify-between gap-3">
-          <dt className="text-ink-lo">{k}</dt>
-          <dd className="text-right font-mono text-ink-hi">{v}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-function Lede({ children }: { children: React.ReactNode }) {
-  return <p className="text-base leading-relaxed text-ink">{children}</p>;
-}
-
-/** What a section measures, in a sentence, above this president's figures. */
-function Measures({ children }: { children: React.ReactNode }) {
-  return <p className="text-sm leading-relaxed text-ink-lo">{children}</p>;
-}
-
-/** "above" / "below": where a figure sits against the average it's scored on. */
-function side(value: number, mean: number) {
-  return value >= mean ? "above" : "below";
-}
-
-/** "rose 4.8 points" / "fell 12.0 points". */
-function moved(points: number) {
-  return `${points >= 0 ? "rose" : "fell"} ${one(Math.abs(points))} points`;
-}
-
-/** "1.0 points above" / "2.5 points below". */
-function aboveBelow(points: number) {
-  return `${one(Math.abs(points))} points ${points >= 0 ? "above" : "below"}`;
-}
-
-/** "1.9 points a year ahead" / "0.4 points a year behind". */
-function ahead(points: number) {
-  return `${one(Math.abs(points))} points a year ${points >= 0 ? "ahead" : "behind"}`;
-}
-
-function MandateColumn({ dim, score }: { dim?: ScoreBreakdownDimension; score: number | null }) {
-  const f = dim?.facts as PublicMandateFacts | undefined;
-  // The sitting president is compared with predecessors over the same
-  // stretch of their terms; everyone else with completed terms.
-  const months = f?.comparedOverDays != null ? Math.round(f.comparedOverDays / 30.44) : null;
-  const over = months != null ? `over their first ${months} months` : "over their terms";
-  return (
-    <ScoreColumn
-      title="Public Mandate"
-      shareId="public-mandate"
-      score={score}
-      method={dim && <ComponentBars components={dim.components} />}
-    >
-      <Measures>
-        How the public rated the president in approval polls: the average over the term, and how it
-        moved from where it started. Approval from the other party has collapsed as the parties
-        drifted apart in Congress, so each party&apos;s approval is compared with what presidents
-        got from it when Congress was as polarized.
-      </Measures>
-      {f?.approval != null &&
-      f.approvalGroups != null &&
-      f.approvalExpected != null &&
-      f.approvalVsEra != null &&
-      f.approvalVsEraMean != null ? (
-        <>
-          <Lede>
-            {`Approval ${months != null ? "has averaged" : "averaged"} ${one(f.approval)}%${months != null ? " so far" : ""}: ${Math.round(f.approvalGroups.own)}% in the president's party, ${Math.round(f.approvalGroups.opp)}% in the other party and ${Math.round(f.approvalGroups.ind)}% among independents. Under the same polarization, presidents typically got ${Math.round(f.approvalExpected.own)}%, ${Math.round(f.approvalExpected.opp)}% and ${Math.round(f.approvalExpected.ind)}%${months != null ? ` over their first ${months} months` : ""}. That puts this term ${aboveBelow(f.approvalVsEra)} the era; the typical president comes out ${aboveBelow(f.approvalVsEraMean)}.`}
-            {f.approvalTrend != null && f.trendExpected != null && f.approvalStart != null
-              ? ` Averaged over the first quarter of its polls and then the last, it ${moved(f.approvalTrend)} from ${one(f.approvalStart)}%. Presidents who started there typically ${moved(f.trendExpected)}, so this is ${f.approvalTrend >= f.trendExpected ? "better" : "worse"} than usual.`
-              : ""}
-          </Lede>
-          <ComparisonScale
-            value={f.approvalVsEra}
-            norm={f.approvalVsEraMean}
-            min={-Math.max(20, Math.ceil(Math.abs(f.approvalVsEra)))}
-            max={Math.max(20, Math.ceil(Math.abs(f.approvalVsEra)))}
-            axis={["below the era", "above the era"]}
-            valueLabel={`This term ${signed(f.approvalVsEra)}`}
-            normLabel={`typical president ${signed(f.approvalVsEraMean)}`}
-            tone={tone(score)}
-          />
-        </>
-      ) : f?.approval != null && f.approvalMean != null ? (
-        <>
-          <Lede>
-            {months != null
-              ? `Approval has averaged ${one(f.approval)}% so far, ${side(f.approval, f.approvalMean)} the ${one(f.approvalMean)}% past presidents averaged ${over}.`
-              : `Approval averaged ${one(f.approval)}% over the term, ${side(f.approval, f.approvalMean)} the ${one(f.approvalMean)}% average for past presidents.`}
-            {f.approvalTrend != null && f.trendExpected != null && f.approvalStart != null
-              ? ` Averaged over the first quarter of its polls and then the last, it ${moved(f.approvalTrend)} from ${one(f.approvalStart)}%. Presidents who started there typically ${moved(f.trendExpected)}, so this is ${f.approvalTrend >= f.trendExpected ? "better" : "worse"} than usual.`
-              : f.approvalTrend != null &&
-                f.trendMean != null &&
-                ` It ${moved(f.approvalTrend)} over the term; presidents typically ${moved(f.trendMean)}.`}
-          </Lede>
-          <ComparisonScale
-            value={f.approval}
-            norm={f.approvalMean}
-            min={0}
-            max={100}
-            axis={["0%", "100%"]}
-            valueLabel={`This term ${one(f.approval)}%`}
-            normLabel={
-              months != null
-                ? `predecessors' first ${months} months ${one(f.approvalMean)}%`
-                : `all presidents ${one(f.approvalMean)}%`
-            }
-            tone={tone(score)}
-          />
-        </>
-      ) : f?.electionMargin != null && f.marginMean != null ? (
-        <Lede>
-          Served before approval polling, so election results stand in: won by an average of{" "}
-          {one(f.electionMargin)} points, {side(f.electionMargin, f.marginMean)} the{" "}
-          {one(f.marginMean)} average for presidents.
-        </Lede>
-      ) : (
-        score == null && (
-          <Lede>
-            {dim?.note ?? "Never won a presidential election in their own right, so not scored."}
-          </Lede>
-        )
-      )}
-      <Facts
-        rows={[
-          ...(f?.recentApproval != null
-            ? [["Last 90 days", `${one(f.recentApproval)}%`] as [string, string]]
-            : []),
-        ]}
-      />
-    </ScoreColumn>
-  );
-}
-
-function EffectivenessColumn({
-  dim,
-  score,
-  isCurrent,
-}: {
-  dim?: ScoreBreakdownDimension;
-  score: number | null;
-  isCurrent: boolean;
-}) {
-  const f = dim?.facts as PresidentEffectivenessFacts | undefined;
-  const jobs = f?.jobsPerYear != null && f.jobsMean != null && f.jobsMillions != null;
-  return (
-    <ScoreColumn
-      title="Effectiveness"
-      shareId="effectiveness"
-      score={score}
-      method={dim && <ComponentBars components={dim.components} />}
-    >
-      <Measures>
-        The economy during the term: growth, jobs, unemployment and inflation (since 1947; growth
-        and jobs before that), each against other presidents. The first year is left out, since it
-        mostly reflects the previous president&apos;s policies, and unemployment and inflation are
-        judged against what presidents starting from the same rates went on to see.
-      </Measures>
-      {(f || score == null) && (
-        <>
-          {jobs && (
-            <Lede>
-              Jobs: {signed(f!.jobsMillions!)} million, or {f!.jobsPerYear!.toFixed(2)} million a
-              year, {side(f!.jobsPerYear!, f!.jobsMean!)} the {f!.jobsMean!.toFixed(2)} million a
-              year presidents since 1939 average.
-            </Lede>
-          )}
-          <Lede>
-            {f?.gdpRelative != null &&
-            f.gdpPerPerson != null &&
-            f.gdpPeers != null &&
-            f.gdpCatchUp != null &&
-            f.gdpRelativeMean != null
-              ? `Growth: ${one(f.gdpPerPerson)}% a year per person, against ${one(f.gdpPeers)}% in 13 other wealthy countries over the same years, which shared the same oil shocks, recessions and pandemic. ${f.gdpCatchUp < 0 ? `Those countries were poorer and still catching up with US incomes, which alone would have had them growing ${one(-f.gdpCatchUp)} points a year faster.` : `Those countries were richer than the US, which alone would have had the US growing ${one(f.gdpCatchUp)} points a year faster.`} Allowing for that, the US came out ${ahead(f.gdpRelative)}; under the typical president since 1947 it came out ${ahead(f.gdpRelativeMean)}.`
-              : f?.gdpGrowth != null && f.gdpMean != null
-                ? `Growth: the economy grew ${one(f.gdpGrowth)}% a year, ${side(f.gdpGrowth, f.gdpMean)} the ${one(f.gdpMean)}% average for presidents ${f.gdpSince ? "since" : "before"} 1947.${f.gdpSince ? "" : " No comparable figures for other countries cover these years."}`
-                : isCurrent
-                  ? "Growth is counted from the term's second full year, so there's no figure yet."
-                  : "No growth figure for this term."}
-            {!jobs &&
-              f?.gdpGrowth == null &&
-              f?.gdpRelative == null &&
-              !isCurrent &&
-              " Payroll jobs are counted from 1939."}
-          </Lede>
-          {f?.unemploymentChange != null &&
-            f.unemploymentStart != null &&
-            f.unemploymentExpected != null && (
-              <Lede>
-                {`Unemployment: ${moved(f.unemploymentChange)} from ${one(f.unemploymentStart)}% over the credited years; for presidents starting at that rate it typically ${moved(f.unemploymentExpected)}, so this is ${f.unemploymentChange <= f.unemploymentExpected ? "better" : "worse"} than usual.`}
-              </Lede>
-            )}
-          {f?.inflationAverage != null &&
-            f.inflationStart != null &&
-            f.inflationExpected != null && (
-              <Lede>
-                {`Inflation: prices rose ${one(f.inflationAverage)}% a year, from ${one(f.inflationStart)}% the year the term began; presidents starting there averaged ${one(f.inflationExpected)}%, so this is ${f.inflationAverage <= f.inflationExpected ? "better" : "worse"} than usual.`}
-              </Lede>
-            )}
-        </>
-      )}
-      {jobs && (
-        <ComparisonScale
-          value={f!.jobsPerYear!}
-          norm={f!.jobsMean!}
-          min={Math.min(0, f!.jobsPerYear!)}
-          max={Math.max(f!.jobsPerYear!, f!.jobsMean!) * 1.25}
-          axis={[
-            `${Math.min(0, f!.jobsPerYear!).toFixed(1)}M`,
-            `${(Math.max(f!.jobsPerYear!, f!.jobsMean!) * 1.25).toFixed(1)}M a year`,
-          ]}
-          valueLabel={`This term ${f!.jobsPerYear!.toFixed(2)}M a year`}
-          normLabel={`presidencies since 1939: ${f!.jobsMean!.toFixed(2)}M`}
-          tone={tone(score)}
-        />
-      )}
-    </ScoreColumn>
-  );
-}
-
-function LegacyColumn({ dim, score }: { dim?: ScoreBreakdownDimension; score: number | null }) {
-  const f = dim?.facts as HistoricalLegacyFacts | undefined;
-  return (
-    <ScoreColumn
-      title="Historical Legacy"
-      shareId="historical-legacy"
-      score={score}
-      method={dim && <ComponentBars components={dim.components} />}
-    >
-      <Measures>
-        How historians rank the presidency: C-SPAN&apos;s Presidential Historians Survey, in which
-        historians rate ten areas of leadership such as crisis leadership, economic management and
-        moral authority.
-      </Measures>
-      {f?.points != null && f.pointsMean != null ? (
-        <Lede>
-          {f.points} points, {side(f.points, f.pointsMean)} the {Math.round(f.pointsMean)} average
-          for presidents.
-        </Lede>
-      ) : (
-        score == null && (
-          <Lede>
-            Not rated. C-SPAN&apos;s Presidential Historians Survey rates only completed terms, and
-            the newest edition published does not rate this presidency.
-          </Lede>
-        )
-      )}
-      {f?.otherTerms?.map((t) => (
-        <p key={t.id} className="text-sm text-ink-lo">
-          The {ordinal(t.number)}-president term:{" "}
-          <Link
-            href={`/politicians/${t.id}`}
-            className="underline underline-offset-2 hover:text-phos"
-          >
-            {t.points} points{t.score != null ? `, scored ${displayScore(t.score)}` : ""}
-          </Link>
-          .
-        </p>
-      ))}
-    </ScoreColumn>
-  );
-}
-
 /**
- * A president's scorecard, at a glance, laid out like a member's: who and
- * the Presidential Score, then the four scored dimensions side by side, each
- * with the figures it is scored on beside the all-president averages, then
- * what is on record but not scored. Every number is the API's: the stored
- * scores, and the score breakdown's components and `facts`.
+ * A president's page, at a glance: who, the historians' own rank (theirs,
+ * named and dated), then where the presidency stands among the others on
+ * each figure it has (PresidentStanding), then what else is on record. No
+ * score: Civitas's 0-100 scores left the site in 2026-10. Every number is
+ * the API's (GET /api/presidents/{id}/peers).
  */
 export default function PresidentScorecard({
   president,
-  breakdown,
+  peers,
   titleAs: Title = "h1",
   scoredOn = null,
 }: {
   president: President;
-  breakdown: PresidentScoreBreakdown | null;
+  peers: PresidentPeers | null;
   titleAs?: "h1" | "h2";
-  /** The latest scoring run: what a shared image's figures are as of. */
+  /** The latest pipeline run: what a shared image's figures are as of. */
   scoredOn?: { date: string } | null;
 }) {
   const [trades, setTrades] = useState<{ total: number } | null | undefined>(undefined);
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
-  const s = president.score;
   const party = presidentParty(president.party);
-  const legacy = breakdown?.historicalLegacy?.facts as HistoricalLegacyFacts | undefined;
+  const legacy = peers?.historians;
+  const survey = `C-SPAN Presidential Historians Survey${legacy?.surveyYear ? `, ${legacy.surveyYear}` : ""}`;
   const termEnd = president.termEnd ? president.termEnd.slice(0, 4) : "present";
-  // What every section's share image says it is from, as on the member
-  // scorecard: the president, and the headline score beside them.
+  // What every section's share image says it is from: the president, and
+  // the historians' rank beside them, named as theirs.
   const shareSubject: ShareSubject = {
     title: president.name,
     subtitle: `${ordinal(president.number)} President · ${party.label} · ${president.termStart.slice(0, 4)} to ${termEnd}`,
     badge:
-      legacy?.historiansRank == null
+      legacy?.rank == null
         ? undefined
         : {
-            label: "Historians' rank",
-            value: `#${legacy.historiansRank}`,
+            label: "Historians' rank (C-SPAN)",
+            value: `#${legacy.rank} of ${legacy.rated}`,
             colorClass: "text-ink-hi",
           },
     url: absoluteUrl(`/politicians/${encodeURIComponent(president.id)}`),
     // The sources the header links (left out of the picture, so named here).
-    source:
-      "American Presidency Project approval polls; BLS jobs; BEA GDP; Federal Register; C-SPAN Presidential Historians Survey",
+    source: `American Presidency Project approval polls; BLS jobs; BEA GDP; Federal Register; ${survey}`,
     asOf: scoredOn?.date ?? null,
-    scaleMax: 100,
   };
 
   useEffect(() => {
@@ -399,13 +109,13 @@ export default function PresidentScorecard({
                 <span className="font-display text-4xl font-semibold leading-none">
                   {president.number}
                 </span>
-                <span className="mt-1 font-mono text-[10px] tracking-[0.12em]">PRESIDENT</span>
+                <span className="mt-1 text-xs">President</span>
               </div>
               <div className="flex min-w-0 flex-col gap-2">
                 <Title className="break-words text-3xl font-semibold leading-tight text-ink-hi sm:text-4xl">
                   {president.name}
                 </Title>
-                <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-lo">
+                <p className="text-sm text-ink-lo">
                   {ordinal(president.number)} President · {party.label} ·{" "}
                   {president.termStart.slice(0, 4)} to {termEnd}
                 </p>
@@ -424,9 +134,11 @@ export default function PresidentScorecard({
                   <a href="https://www.federalregister.gov" className={LINK}>
                     Federal Register
                   </a>
-                  <a href="https://www.c-span.org/presidentsurvey2021/" className={LINK}>
-                    C-SPAN survey
-                  </a>
+                  {legacy?.surveyUrl && (
+                    <a href={legacy.surveyUrl} className={LINK}>
+                      C-SPAN survey
+                    </a>
+                  )}
                   <Link
                     href={`/compare/presidents?left=${encodeURIComponent(president.id)}`}
                     className={LINK}
@@ -437,24 +149,19 @@ export default function PresidentScorecard({
               </div>
             </div>
             <div className="flex flex-col gap-2 border-t border-white/[0.12] pt-5 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
-              <p className="text-[13px] font-semibold uppercase tracking-[0.06em] text-ink-lo">
-                Historians&apos; rank
-              </p>
-              {legacy?.historiansRank != null ? (
+              <p className="text-[13px] font-semibold text-ink-lo">Historians&apos; rank</p>
+              {legacy?.rank != null ? (
                 <>
                   <p className="font-display text-5xl font-semibold leading-none text-ink-hi">
-                    #{legacy.historiansRank}{" "}
-                    <span className="text-2xl text-ink-lo">of {legacy.historiansRated}</span>
+                    #{legacy.rank} <span className="text-2xl text-ink-lo">of {legacy.rated}</span>
                   </p>
                   <p className="text-sm leading-relaxed text-ink-lo">
-                    Their ranking, not Civitas&apos;s: C-SPAN&apos;s Presidential Historians Survey,
-                    by total points ({legacy.points} points). The two measured records, approval and
-                    the economy, are below.
+                    Their ranking, not Civitas&apos;s: the {survey}, by total points (
+                    {legacy.points} points).
                   </p>
                 </>
               ) : (
-                breakdown &&
-                s.historicalLegacy == null && (
+                legacy && (
                   <p className="text-sm leading-relaxed text-ink-lo">
                     Not rated. C-SPAN&apos;s Presidential Historians Survey rates only completed
                     terms, and the newest edition published does not rate this presidency.
@@ -463,20 +170,18 @@ export default function PresidentScorecard({
               )}
               {/* The header names the president itself: no title strip. */}
               <div className="flex justify-end">
-                <ShareSectionButton label="Scorecard summary" withStrip={false} />
+                <ShareSectionButton label="Summary" withStrip={false} />
               </div>
             </div>
           </header>
 
-          <div className="grid grid-cols-1 items-stretch gap-5 md:grid-cols-3">
-            <MandateColumn dim={breakdown?.publicMandate} score={s.publicMandate} />
-            <EffectivenessColumn
-              dim={breakdown?.effectiveness}
-              score={s.effectiveness}
-              isCurrent={president.isCurrent}
-            />
-            <LegacyColumn dim={breakdown?.historicalLegacy} score={s.historicalLegacy} />
-          </div>
+          {peers ? (
+            <PresidentStanding name={president.name} peers={peers} />
+          ) : (
+            <p className="text-sm text-ink-lo">
+              The comparison with other presidents could not be loaded.
+            </p>
+          )}
 
           {/* Only the sitting president's annual report is read; a former
               president's page shows nothing here rather than an empty panel. */}
@@ -485,11 +190,8 @@ export default function PresidentScorecard({
           )}
 
           <section className="flex flex-col gap-3" aria-labelledby="also-on-record">
-            <h2
-              id="also-on-record"
-              className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min"
-            >
-              Also on record, not part of the score
+            <h2 id="also-on-record" className="text-[13px] font-semibold text-ink-lo">
+              Also on record
             </h2>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {president.isCurrent && (
@@ -514,6 +216,30 @@ export default function PresidentScorecard({
                   </span>
                 </button>
               )}
+              {peers?.recentApproval != null && (
+                <div className="flex min-h-24 flex-col gap-1.5 border border-white/[0.18] bg-surface px-5 py-4">
+                  <span className="text-base font-semibold text-ink-hi">
+                    Approval, last 90 days
+                  </span>
+                  <span className="text-sm text-ink-lo">{peers.recentApproval.toFixed(1)}%</span>
+                  <span className="font-mono text-xs text-ink-min">
+                    American Presidency Project
+                  </span>
+                </div>
+              )}
+              {peers?.otherTerms.map((t) => (
+                <Link
+                  key={t.id}
+                  href={`/politicians/${t.id}`}
+                  className="flex min-h-24 flex-col gap-1.5 border border-white/[0.18] bg-surface px-5 py-4 hover:border-ink-min"
+                >
+                  <span className="text-base font-semibold text-ink-hi">
+                    The {ordinal(t.number)}-president term
+                  </span>
+                  <span className="text-sm text-ink-lo">Historians: {t.points} points</span>
+                  <span className="font-mono text-xs text-ink-min">C-SPAN survey</span>
+                </Link>
+              ))}
               {president.eoCount != null && (
                 <div className="flex min-h-24 flex-col gap-1.5 border border-white/[0.18] bg-surface px-5 py-4">
                   <span className="text-base font-semibold text-ink-hi">Executive orders</span>

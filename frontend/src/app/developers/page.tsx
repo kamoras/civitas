@@ -307,10 +307,10 @@ export default async function DevelopersPage() {
             <Section id="deprecations" title="Deprecations">
               <p>
                 The site stopped showing the composite score and ranking members by it in October
-                2026: a weighted average of unlike measures carries a judgment its weights decide,
-                and a rank turns a measurement into a verdict. These fields stay in version 1 for
-                one deprecation cycle and are removed in version 2, after{" "}
-                <strong className="font-semibold">January 4, 2027</strong>:
+                2026, and then presidents&apos; 0 to 100 scores: a weighted average of unlike
+                measures carries a judgment its weights decide, and a rank turns a measurement into
+                a verdict. These fields stay in version 1 for one deprecation cycle and are removed
+                in version 2, after <strong className="font-semibold">January 4, 2027</strong>:
               </p>
               <ul className="list-disc pl-6">
                 <li>
@@ -319,13 +319,18 @@ export default async function DevelopersPage() {
                   <code className={CODE}>overall</code> on a breakdown and on each history snapshot.
                 </li>
                 <li>
+                  <code className={CODE}>score</code> (the Presidential Score and its parts) and{" "}
                   <code className={CODE}>rank</code> on presidents.
                 </li>
                 <li>
                   The <code className={CODE}>rank</code> and <code className={CODE}>overall</code>{" "}
                   columns of <code className={CODE}>senators.csv</code>,{" "}
                   <code className={CODE}>representatives.csv</code> and{" "}
-                  <code className={CODE}>presidents.csv</code>.
+                  <code className={CODE}>presidents.csv</code>, and the president score columns (
+                  <code className={CODE}>public_mandate</code>,{" "}
+                  <code className={CODE}>effectiveness</code>,{" "}
+                  <code className={CODE}>historical_legacy</code>,{" "}
+                  <code className={CODE}>dimensions_available</code>).
                 </li>
               </ul>
               <p>
@@ -333,7 +338,11 @@ export default async function DevelopersPage() {
                 <code className={CODE}>Sunset</code> and a <code className={CODE}>Link</code> to
                 this notice, and the schema below marks the fields deprecated. Read a
                 breakdown&apos;s <code className={CODE}>peerComparison</code> and each
-                snapshot&apos;s <code className={CODE}>facts</code> instead.
+                snapshot&apos;s <code className={CODE}>facts</code> instead, and for a president the
+                record fields (<code className={CODE}>avgApproval</code>,{" "}
+                <code className={CODE}>jobsCreatedMillions</code>,{" "}
+                <code className={CODE}>gdpGrowthAvg</code>, <code className={CODE}>eoCount</code>,{" "}
+                <code className={CODE}>historicalLegacyScore</code>).
               </p>
             </Section>
 
@@ -351,7 +360,7 @@ export default async function DevelopersPage() {
                     "representatives.csv",
                     "Every serving representative's scores, with the method version",
                   ],
-                  ["presidents.csv", "Every president's Presidential Score"],
+                  ["presidents.csv", "Every president's record"],
                 ].map(([file, what]) => (
                   <Item key={file} label={what}>
                     <a
