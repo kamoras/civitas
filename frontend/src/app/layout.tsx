@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import ConfigProvider from "@/components/providers/ConfigProvider";
 import LoadTimingBeacon from "@/components/LoadTimingBeacon";
 import NavigationBeacon from "@/components/NavigationBeacon";
@@ -20,6 +20,16 @@ import { THEME_BOOT } from "@/components/layout/ThemeToggle";
 // here — both are inherited by every route that doesn't set its own, which
 // would declare every page a duplicate of the homepage (see lib/site.ts).
 // Routes set theirs through `pageMetadata()`.
+// The browser chrome takes the page's ground: parchment, or carbon when the
+// system is dark (globals.css's --surface-base). A per-tab theme toggle
+// doesn't move it; the meta follows the system setting only.
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f5efe2" },
+    { media: "(prefers-color-scheme: dark)", color: "#14120f" },
+  ],
+};
+
 export const metadata: Metadata = {
   // Without this, Next resolves relative metadata URLs — including the
   // file-based opengraph-image every route inherits — against
