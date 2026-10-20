@@ -112,6 +112,7 @@ from app.pipeline.fetch.state_candidates_tabular import DEFAULT_SETTLE_DAYS, _se
 from app.pipeline.fetch.election_results import (
     ContestCount,
     StateCount,
+    FeedUnreadable,
     UntrustedCount,
     is_special_contest,
     parse_utc,
@@ -470,7 +471,7 @@ async def fetch_general_results(
         client, _rate_limiter, f"{base_url}/Election/GetElectionList?cid={cid}", f"{state} election list",
     )
     if not isinstance(elections, list):
-        return None
+        raise FeedUnreadable(f"{state} election list could not be read")
     election = pick_election([
         (e.get("electionName") or "", e) for e in elections
         if str(e.get("electionDate") or "").startswith(day) and e.get("electionID")
@@ -480,7 +481,7 @@ async def fetch_general_results(
         return None
     eid = str(election["electionID"])
     if not await _refuse_preview(client, state, source, eid):
-        return None
+        raise FeedUnreadable(f"{state} results site config could not be read")
     search = await fetch_json_with_retry(
         client, _rate_limiter, f"{base_url}/Contest/GetContestSearchList?cid={cid}&electionID={eid}",
         f"{state} contest names",
@@ -490,7 +491,7 @@ async def fetch_general_results(
         f"{state} election info",
     )
     if not isinstance(search, dict) or not isinstance(info, dict):
-        return None
+        raise FeedUnreadable(f"{state} election {eid} contest list or info could not be read")
     # Scope the results request to the federal contests' own type code when
     # they share one (Arkansas's general files them "FED"; its primary said
     # "Federal"): the unscoped call is every city and county contest too.
@@ -504,7 +505,7 @@ async def fetch_general_results(
         url += f"&contestType={next(iter(types))}"
     results = await fetch_json_with_retry(client, _rate_limiter, url, f"{state} results")
     if not isinstance(results, dict):
-        return None
+        raise FeedUnreadable(f"{state} election {eid} results could not be read")
     for body in (search, info, results):
         _check_answer(body, eid, state)
     # The three calls are one read only if they describe one publication.
