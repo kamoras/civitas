@@ -172,9 +172,9 @@ export default function AccessibilityPage() {
                 <P>
                   Labels, buttons, menus and table headings are in sentence case, not capitals.
                   Capitals are slower to read once a label runs past a word or two, and a screen
-                  reader can spell typed capitals out letter by letter. A short heading over a
-                  block may still show in small capitals, but the words underneath are ordinary
-                  text, so they are read as words.
+                  reader can spell typed capitals out letter by letter. A short heading over a block
+                  may still show in small capitals, but the words underneath are ordinary text, so
+                  they are read as words.
                 </P>
               </More>
             </Section>
