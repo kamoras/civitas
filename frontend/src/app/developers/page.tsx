@@ -271,19 +271,13 @@ export default async function DevelopersPage() {
                   . A member&apos;s <code className={CODE}>rank</code> (deprecated, see below) is
                   their place in the whole chamber by the composite score, whatever you filter by.
                 </Item>
-                <Item label="Scores">
-                  Each part runs 0 to 100. <code className={CODE}>representationScore.overall</code>{" "}
-                  is the weighted composite (deprecated, see below); the weights are in the{" "}
-                  <a
-                    href={API}
-                    className="text-signal-cyan underline underline-offset-2 hover:text-phos"
-                  >
-                    index
-                  </a>
-                  . How each one is computed:{" "}
-                  <A href="/about/scores">how senators and representatives are compared</A>. Each
-                  breakdown&apos;s <code className={CODE}>peerComparison</code> is what the site
-                  shows: every measure against peers, with the word&apos;s rule.
+                <Item label="Measures">
+                  Each breakdown&apos;s <code className={CODE}>peerComparison</code> is what the
+                  site shows: every measure against peers, with the word&apos;s rule, and each
+                  dimension&apos;s <code className={CODE}>facts</code> are the figures behind it (
+                  <A href="/about/scores">how senators and representatives are compared</A>). A
+                  member&apos;s 0 to 100 scores are deprecated (see below); presidents&apos; are
+                  not.
                 </Item>
                 <Item label="Errors">
                   An unknown id is 404, a parameter out of range or not among the listed values is
@@ -308,8 +302,9 @@ export default async function DevelopersPage() {
               <p>
                 The site stopped showing the composite score and ranking members by it in October
                 2026: a weighted average of unlike measures carries a judgment its weights decide,
-                and a rank turns a measurement into a verdict. These fields stay in version 1 for
-                one deprecation cycle and are removed in version 2, after{" "}
+                and a rank turns a measurement into a verdict. Member pages then stopped showing the
+                0 to 100 part scores too, in favour of the figures behind them. These fields stay in
+                version 1 for one deprecation cycle and are removed in version 2, after{" "}
                 <strong className="font-semibold">January 4, 2027</strong>:
               </p>
               <ul className="list-disc pl-6">
@@ -319,11 +314,20 @@ export default async function DevelopersPage() {
                   <code className={CODE}>overall</code> on a breakdown and on each history snapshot.
                 </li>
                 <li>
+                  A member&apos;s part scores: <code className={CODE}>fundingIndependence</code>,{" "}
+                  <code className={CODE}>constituentAlignment</code>,{" "}
+                  <code className={CODE}>legislativeEffectiveness</code> and{" "}
+                  <code className={CODE}>fundingDiversity</code> in{" "}
+                  <code className={CODE}>representationScore</code> and on each history snapshot, a
+                  breakdown&apos;s <code className={CODE}>weights</code>, and each breakdown
+                  dimension&apos;s scores, weight and components.
+                </li>
+                <li>
                   <code className={CODE}>rank</code> on presidents.
                 </li>
                 <li>
-                  The <code className={CODE}>rank</code> and <code className={CODE}>overall</code>{" "}
-                  columns of <code className={CODE}>senators.csv</code>,{" "}
+                  The <code className={CODE}>rank</code>, <code className={CODE}>overall</code> and
+                  part-score columns of <code className={CODE}>senators.csv</code>,{" "}
                   <code className={CODE}>representatives.csv</code> and{" "}
                   <code className={CODE}>presidents.csv</code>.
                 </li>

@@ -69,7 +69,7 @@ export default function DataLicense() {
         does the API&apos;s <code className="font-mono text-xs text-ink-hi">algorithmVersion</code>{" "}
         and <code className="font-mono text-xs text-ink-hi">scoredOn</code>), and link the
         record&apos;s page. How each score is computed:{" "}
-        <A href="/about/scores">how senators and representatives are scored</A>.
+        <A href="/about/scores">how senators and representatives are compared</A>.
       </P>
     </>
   );

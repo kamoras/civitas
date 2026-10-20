@@ -41,8 +41,8 @@ export interface ShareSubject {
   title: string;
   /** One line under it: "Representative · TN-2 · Republican". */
   subtitle?: string;
-  /** A headline figure shown at the right of the strip, e.g. the overall
-   *  score. `colorClass` is the Tailwind text-colour class the page uses
+  /** A headline figure shown at the right of the strip, e.g. a
+   *  president's historians' rank. `colorClass` is the Tailwind text-colour class the page uses
    *  for it, resolved to a real colour at capture time so the image and the
    *  page cannot disagree. */
   badge?: { label: string; value: string; colorClass?: string };
@@ -55,9 +55,8 @@ export interface ShareSubject {
   /** YYYY-MM-DD (or an ISO time) the figures are as of, from the backend;
    *  null where the page reads them live, so the capture's day is theirs. */
   asOf: string | null;
-  /** The top of the scale the page's scores are on (100): printed beside
-   *  the badge ("72/100") and in the footer. Omitted where nothing is a
-   *  score. */
+  /** The top of the scale the page's scores are on (100): printed in the
+   *  footer. Omitted where nothing is a score. */
   scaleMax?: number;
 }
 
@@ -331,9 +330,7 @@ export async function captureSection(
   const badgeValueFont = `800 ${34 * scale}px ${sans}`;
   const smallMono = (px: number) => `${px * scale}px ${mono}`;
   let badgeW = 0;
-  const badgeValue = subject.badge
-    ? `${subject.badge.value}${subject.scaleMax ? `/${subject.scaleMax}` : ""}`
-    : "";
+  const badgeValue = subject.badge?.value ?? "";
   if (subject.badge) {
     ctx.font = badgeValueFont;
     const valueW = ctx.measureText(badgeValue).width;

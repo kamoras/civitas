@@ -22,7 +22,7 @@ function bill(overrides: Partial<SponsoredBill>): SponsoredBill {
 }
 
 describe("SponsoredBills", () => {
-  it("marks the bills Legislative Effectiveness weighted 1x as commemorative", () => {
+  it("marks commemorative bills", () => {
     render(
       <SponsoredBills
         bills={[

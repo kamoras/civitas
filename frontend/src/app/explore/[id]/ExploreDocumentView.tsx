@@ -715,7 +715,7 @@ export default function ExploreDocumentView({
                   href={scorecardLink}
                   className="font-mono text-xs text-signal-cyan hover:text-phos transition-colors"
                 >
-                  [View scorecard]
+                  [View record]
                 </Link>
               )}
               {sourceUrl && (

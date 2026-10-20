@@ -33,7 +33,7 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
         </p>
         <p>
           These ranges are not a call. They don&apos;t say who will take any seat, and the page
-          gives no odds. Nothing here feeds Civitas&apos;s Representation Scores.
+          gives no odds. Nothing here feeds any member&apos;s record on Civitas.
         </p>
         <p className="text-sm">
           Polls: {data.sources.polls.attribution}, {data.sources.polls.license}

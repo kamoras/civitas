@@ -333,11 +333,11 @@ export default function NewsChapter() {
           </Item>
         </List>
         <P>
-          When a scored politician is part of a story, it links to their scorecard; related
-          government documents are matched from the Explore index, and only when their titles
-          closely match the story&apos;s: a looser bar once linked boating safety zones in Miami to
-          a story about a Florida golf club. Elections, with the countdown to the next Election Day,
-          have their own page.
+          When a member of Congress or a president is part of a story, it links to their page;
+          related government documents are matched from the Explore index, and only when their
+          titles closely match the story&apos;s: a looser bar once linked boating safety zones in
+          Miami to a story about a Florida golf club. Elections, with the countdown to the next
+          Election Day, have their own page.
         </P>
       </Section>
 
