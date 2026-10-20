@@ -1,5 +1,5 @@
 import type { SectionFigures } from "@/types/sections";
-import { calendarDate, monthLabel, shortDate } from "@/lib/congress";
+import { monthLabel, shortDate } from "@/lib/congress";
 import { formatCurrency, formatUtcDate } from "@/lib/formatting";
 
 /** One section page's live figure, worded: the figure and what it counts. */
@@ -51,49 +51,13 @@ function president(f: SectionFigures["congress"]["president"]): Preview {
 }
 
 /**
- * Each section page's figure from GET /api/sections, keyed by SECTIONS
- * (lib/routes.ts) section and tab. A page with no figure (the leaderboard,
- * the About chapters) has no entry. A figure the site can't give yet says
+ * Each hub card's figure from GET /api/sections, keyed by SECTIONS
+ * (lib/routes.ts) section and tab: the other pages of /congress, /elections
+ * and /agencies (SectionCards). The hub's own page has no card, so no entry. A figure the site can't give yet says
  * what it is waiting on: an empty default is content.
  */
 const PREVIEWS: Record<string, Record<string, (f: SectionFigures) => Preview | null>> = {
-  action: {
-    today: ({ action: { today } }) =>
-      today.date
-        ? today.issues > 0
-          ? {
-              figure: n(today.issues),
-              caption: `${plural(today.issues, "issue")} on ${shortDate(today.date)}`,
-            }
-          : { figure: "None", caption: `issues on ${shortDate(today.date)}; read hourly` }
-        : { figure: "Not yet", caption: "no issues published yet; the news is read hourly" },
-    ongoing: ({ action: { ongoing } }) =>
-      ongoing.monitors > 0
-        ? {
-            figure: n(ongoing.monitors),
-            caption: `ongoing national ${plural(ongoing.monitors, "story", "stories")} tracked`,
-          }
-        : {
-            figure: "None",
-            caption: "no story has run on enough days to track; closed ones listed",
-          },
-    archive: ({ action: { archive } }) =>
-      archive.days > 0 && archive.since
-        ? {
-            figure: n(archive.days),
-            caption: `${plural(archive.days, "day")} of top issues since ${calendarDate(archive.since)}`,
-          }
-        : { figure: "Not yet", caption: "each day's top issue is kept here once one is published" },
-  },
   congress: {
-    reports: ({ congress: { reports, recess } }) =>
-      reports
-        ? votes(
-            reports.recordVotes,
-            `on ${shortDate(reports.date)}, the last day either chamber met`,
-            recess
-          )
-        : { figure: "Not yet", caption: "no day of Congress recorded yet" },
     week: ({ congress: { week, recess } }) =>
       week
         ? votes(week.recordVotes, `in the week of ${shortDate(week.start)}`, recess)
@@ -124,13 +88,6 @@ const PREVIEWS: Record<string, Record<string, (f: SectionFigures) => Preview | n
     president: ({ congress }) => president(congress.president),
   },
   agencies: {
-    directory: ({ agencies: { directory } }) =>
-      directory.count > 0
-        ? {
-            figure: n(directory.count),
-            caption: "departments, agencies and sub-agencies in the Federal Register",
-          }
-        : { figure: "Not yet", caption: "the Federal Register's agency list hasn't been read yet" },
     budget: ({ agencies: { budget } }) =>
       budget
         ? {
@@ -146,43 +103,7 @@ const PREVIEWS: Record<string, Record<string, (f: SectionFigures) => Preview | n
           }
         : { figure: "None", caption: "no Federal Register document takes comments today" },
   },
-  politicians: {
-    directory: ({ politicians: { directory: d } }) =>
-      d.senators + d.representatives > 0
-        ? {
-            figure: n(d.senators + d.representatives),
-            caption: `serving members: ${n(d.senators)} senators, ${n(d.representatives)} representatives`,
-          }
-        : { figure: "Not yet", caption: "the member rosters haven't been read yet" },
-  },
   elections: {
-    ballots: ({ elections: { ballots: b, season } }) => {
-      // Between cycles a general a year or two off is no headline: the
-      // archive's election, or the next primaries, lead instead.
-      if (season?.season === "post_certification" && season.heldCycle)
-        return {
-          figure: String(season.heldCycle),
-          caption: `the ${season.heldCycle} election as recorded · next general ${dated(b.date)}`,
-        };
-      if (season?.season === "off_season")
-        return season.firstPrimary
-          ? {
-              figure: dated(season.firstPrimary),
-              caption: `the ${season.cycle} primaries begin, by the FEC's calendar · ${n(b.states)} ballots`,
-            }
-          : {
-              figure: String(season.cycle),
-              caption: `next general ${dated(b.date)}; its primaries aren't on the FEC's calendar yet`,
-            };
-      return b.phase === "campaign" && b.daysUntil > 0
-        ? {
-            figure: n(b.daysUntil),
-            caption: `${plural(b.daysUntil, "day")} to Election Day, ${shortDate(b.date)} · ${n(b.states)} ballots${season?.season === "ramp" ? " · primaries under way" : ""}`,
-          }
-        : b.daysUntil === 0
-          ? { figure: "Today", caption: `is Election Day · ${n(b.states)} ballots and counts` }
-          : { figure: "Results", caption: `the ${shortDate(b.date)} election, state by state` };
-    },
     map: ({ elections: { map } }) =>
       !map.available
         ? { figure: "Off", caption: map.reason }
@@ -246,22 +167,6 @@ const PREVIEWS: Record<string, Record<string, (f: SectionFigures) => Preview | n
         caption: `of ${n(a.graded)} official ${archive.cycle} margins inside the map's 80% ranges · ${n(a.held95)} inside the 95% · swing map${archive.stillCounting ? " · still counting" : ""}`,
       };
     },
-  },
-  court: {
-    // Destructuring an older backend's answer (no `court`) throws: no figure.
-    court: ({ court: { court } }) =>
-      court
-        ? {
-            figure: n(court.cases),
-            caption: `${plural(court.cases, "case")} decided in the ${court.term} term, ${n(court.unanimous)} unanimous`,
-          }
-        : { figure: "Not yet", caption: "no Supreme Court decision has been read yet" },
-  },
-  explore: {
-    search: ({ explore: { search } }) =>
-      search.documents > 0
-        ? { figure: n(search.documents), caption: "federal documents on file to search" }
-        : { figure: "Not yet", caption: "no federal document has been read yet" },
   },
 };
 
