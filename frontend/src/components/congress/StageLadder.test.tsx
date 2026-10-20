@@ -5,11 +5,29 @@ import StageLadder from "./StageLadder";
 const data = {
   total: 19161,
   milestones: [
-    { label: "Introduced", bills: 19161, share: 1, shareText: "100%" },
-    { label: "Reported by a committee", bills: 2453, share: 0.128, shareText: "13%" },
-    { label: "Passed one chamber", bills: 1640, share: 0.0856, shareText: "9%" },
-    { label: "Passed both chambers", bills: 176, share: 0.0092, shareText: "0.9%" },
-    { label: "Became law", bills: 119, share: 0.0062, shareText: "0.6%" },
+    { label: "Introduced", stage: "INTRODUCED", bills: 19161, share: 1, shareText: "100%" },
+    {
+      label: "Reported by a committee",
+      stage: "REPORTED",
+      bills: 2453,
+      share: 0.128,
+      shareText: "13%",
+    },
+    {
+      label: "Passed one chamber",
+      stage: "PASSED_CHAMBER",
+      bills: 1640,
+      share: 0.0856,
+      shareText: "9%",
+    },
+    {
+      label: "Passed both chambers",
+      stage: "PASSED_BOTH",
+      bills: 176,
+      share: 0.0092,
+      shareText: "0.9%",
+    },
+    { label: "Became law", stage: "ENACTED", bills: 119, share: 0.0062, shareText: "0.6%" },
   ],
   reached: 2,
 };
