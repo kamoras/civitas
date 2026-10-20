@@ -428,7 +428,7 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
               {finishedRuns.map((r) => (
                 <li key={r.key} className="flex flex-wrap items-baseline gap-x-4">
                   <span
-                    className={`text-sm font-mono font-bold ${
+                    className={`text-sm font-mono font-semibold ${
                       r.status === "failed" || r.status === "stuck"
                         ? "text-signal-magenta"
                         : r.status === "partial"

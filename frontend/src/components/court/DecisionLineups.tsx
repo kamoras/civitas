@@ -27,7 +27,7 @@ export default function DecisionLineups({ court }: { court: Court }) {
   if (terms.length === 0) return null;
   return (
     <div className="flex flex-col gap-4">
-      <h3 className="text-lg font-bold text-ink-hi">How the Court split, by term</h3>
+      <h3 className="text-lg font-semibold text-ink-hi">How the Court split, by term</h3>
       <div aria-hidden="true" className="flex flex-col gap-2">
         {terms.map((t) => (
           <div key={t.term} className="flex items-center gap-3">

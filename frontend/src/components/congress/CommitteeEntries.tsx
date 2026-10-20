@@ -31,7 +31,7 @@ export default function CommitteeEntries({ entries }: { entries: CommitteeEntry[
           </p>
           <div className="min-w-0">
             {(e.committee || e.report) && (
-              <p className="text-[15px] font-bold text-ink">{e.committee ?? e.report}</p>
+              <p className="text-[15px] font-semibold text-ink">{e.committee ?? e.report}</p>
             )}
             <p className="text-sm leading-relaxed text-ink-lo">{e.text}</p>
             {e.bills.length > 0 && (

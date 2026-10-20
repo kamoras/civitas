@@ -80,6 +80,16 @@ def _load() -> dict:
     return _cache
 
 
+def register_pages() -> tuple[dict[str, dict], dict | None]:
+    """Each state's `register` entry as the calendar file holds it (a
+    state with none is absent; North Dakota's says `none`), and the
+    registerFallback: the candidates ballot_lookup's nightly check verifies,
+    so the register step reads the one copy of each URL."""
+    data = _load()
+    return ({code: e["register"] for code, e in (data.get("states") or {}).items() if e.get("register")},
+            data.get("registerFallback"))
+
+
 def calendar_election_date() -> str | None:
     """The election the calendar file was built for (ISO date), or None."""
     return _load().get("electionDate")

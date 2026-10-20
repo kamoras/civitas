@@ -302,7 +302,7 @@ export default function MethodsLedger({
     >
       {/* The toggle inside the heading, as CollapsibleSection does it: a
           heading inside a button drops out of the heading list. */}
-      <h2 className="text-[19px] font-bold leading-tight text-ink-hi">
+      <h2 className="text-[19px] font-semibold leading-tight text-ink-hi">
         <button
           type="button"
           onClick={() => setOpen(!open)}
@@ -427,6 +427,7 @@ export default function MethodsLedger({
                   `${api}/votes?per_page=100`,
                   "Every vote this Congress, with its roll call (JSON)",
                 ],
+                [`${api}/votes.csv`, "Every vote this Congress, as a spreadsheet (CSV)"],
                 [`${api}/history`, "Scores after every scoring run (JSON)"],
               ].map(([href, label]) => (
                 <li key={href} className="border-b border-white/[0.07] py-1.5">

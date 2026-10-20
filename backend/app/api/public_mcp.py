@@ -56,7 +56,8 @@ def _operations() -> dict[str, tuple[str, dict]]:
         op["operationId"]: (path, op)
         for path, ops in openapi_spec_dict()["paths"].items()
         for method, op in ops.items()
-        if method == "get"
+        # A CSV download is for a spreadsheet, not a tool: its JSON twin is.
+        if method == "get" and "application/json" in op.get("responses", {}).get("200", {}).get("content", {})
     }
 
 

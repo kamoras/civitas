@@ -42,7 +42,7 @@ export default function MemberSuggestions() {
               href={`/politicians/${p.id}`}
               className="group flex min-h-11 flex-wrap items-baseline justify-between gap-x-3 border border-white/15 px-3 py-2 transition-colors hover:border-phos/60"
             >
-              <span className="font-display text-[15px] text-ink-hi group-hover:text-phos">
+              <span className="font-sans text-[15px] text-ink-hi group-hover:text-phos">
                 {p.name}
               </span>
               <span className="font-mono text-xs text-ink-lo">

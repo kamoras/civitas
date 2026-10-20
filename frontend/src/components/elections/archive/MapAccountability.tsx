@@ -154,7 +154,7 @@ function ChamberCheck({ name, c }: { name: string; c: ChamberAccountability }) {
   return (
     <div className="space-y-4 border border-white/[0.09] bg-surface p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="font-display text-lg font-bold uppercase text-ink-hi">{name}</h3>
+        <h3 className="font-display text-lg font-semibold uppercase text-ink-hi">{name}</h3>
         <span className="font-mono text-xs text-ink-min">
           {c.certified} OF {c.ranged} OFFICIAL · {c.counts.counting} COUNTING · {c.counts.no_count}{" "}
           NO COUNT
@@ -261,7 +261,7 @@ function SenateSwing({ seats }: { seats: AccountabilitySeat[] }) {
   return (
     <svg
       viewBox={`0 0 ${TILE_COLS * (TILE + GAP)} ${TILE_ROWS * (TILE + GAP)}`}
-      className="block h-auto w-full"
+      className="night block h-auto w-full"
       aria-hidden="true"
     >
       {Object.entries(STATE_TILES).map(([state, [col, row]]) => {
@@ -310,7 +310,7 @@ function HouseSwing({ seats }: { seats: AccountabilitySeat[] }) {
   return (
     <svg
       viewBox={`-2 -2 ${layout.width + 4} ${layout.height + 4}`}
-      className="block h-auto w-full"
+      className="night block h-auto w-full"
       aria-hidden="true"
     >
       {layout.blocks.map((b) => (

@@ -4,9 +4,11 @@ import PageMasthead from "@/components/layout/PageMasthead";
 import Footer from "@/components/layout/Footer";
 import CopyText from "@/components/CopyText";
 import { Summary, Point, Section, P, List, Item, More, A } from "@/components/about/AboutPage";
+import DataLicense from "@/components/about/DataLicense";
 import {
   codeSpans,
   endpointsByTag,
+  isCsv,
   nestedObject,
   paramTypeLabel,
   responseSchema,
@@ -166,7 +168,9 @@ function EndpointBlock({ endpoint, spec }: { endpoint: Endpoint; spec: Spec }) {
             <span className="text-ink-hi">{path}</span>
           )}
         </p>
-        <p className="text-xs text-ink-min">MCP tool: {op.operationId}</p>
+        <p className="text-xs text-ink-min">
+          {isCsv(op) ? "CSV download (not an MCP tool)" : `MCP tool: ${op.operationId}`}
+        </p>
       </div>
       {op.description && (
         <div className="space-y-2 text-sm text-ink-mid">
@@ -264,14 +268,12 @@ export default async function DevelopersPage() {
                   Pages of <code className={CODE}>entries</code> with{" "}
                   <code className={CODE}>total</code>, <code className={CODE}>page</code>,{" "}
                   <code className={CODE}>perPage</code> and <code className={CODE}>totalPages</code>
-                  . A member&apos;s <code className={CODE}>rank</code> is their place in the whole
-                  chamber, whatever you filter by, as the site shows it: scores are compared rounded
-                  to a whole number, so members showing the same score share a rank.
+                  . A member&apos;s <code className={CODE}>rank</code> (deprecated, see below) is
+                  their place in the whole chamber by the composite score, whatever you filter by.
                 </Item>
                 <Item label="Scores">
-                  0 to 100, higher is a better representative.{" "}
-                  <code className={CODE}>representationScore.overall</code> is the weighted score;
-                  the weights are in the{" "}
+                  Each part runs 0 to 100. <code className={CODE}>representationScore.overall</code>{" "}
+                  is the weighted composite (deprecated, see below); the weights are in the{" "}
                   <a
                     href={API}
                     className="text-signal-cyan underline underline-offset-2 hover:text-phos"
@@ -279,7 +281,9 @@ export default async function DevelopersPage() {
                     index
                   </a>
                   . How each one is computed:{" "}
-                  <A href="/about/scores">how senators and representatives are scored</A>.
+                  <A href="/about/scores">how senators and representatives are compared</A>. Each
+                  breakdown&apos;s <code className={CODE}>peerComparison</code> is what the site
+                  shows: every measure against peers, with the word&apos;s rule.
                 </Item>
                 <Item label="Errors">
                   An unknown id is 404, a parameter out of range or not among the listed values is
@@ -298,6 +302,72 @@ export default async function DevelopersPage() {
                 <p>The OpenAPI 3 description, to generate a client from:</p>
                 <CopyText text={SPEC_URL} label="OpenAPI spec address" />
               </More>
+            </Section>
+
+            <Section id="deprecations" title="Deprecations">
+              <p>
+                The site stopped showing the composite score and ranking members by it in October
+                2026: a weighted average of unlike measures carries a judgment its weights decide,
+                and a rank turns a measurement into a verdict. These fields stay in version 1 for
+                one deprecation cycle and are removed in version 2, after{" "}
+                <strong className="font-semibold">January 4, 2027</strong>:
+              </p>
+              <ul className="list-disc pl-6">
+                <li>
+                  <code className={CODE}>representationScore.overall</code> and{" "}
+                  <code className={CODE}>rank</code> on members (list, profile),{" "}
+                  <code className={CODE}>overall</code> on a breakdown and on each history snapshot.
+                </li>
+                <li>
+                  <code className={CODE}>rank</code> on presidents.
+                </li>
+                <li>
+                  The <code className={CODE}>rank</code> and <code className={CODE}>overall</code>{" "}
+                  columns of <code className={CODE}>senators.csv</code>,{" "}
+                  <code className={CODE}>representatives.csv</code> and{" "}
+                  <code className={CODE}>presidents.csv</code>.
+                </li>
+              </ul>
+              <p>
+                Responses that carry them send <code className={CODE}>Deprecation</code>,{" "}
+                <code className={CODE}>Sunset</code> and a <code className={CODE}>Link</code> to
+                this notice, and the schema below marks the fields deprecated. Read a
+                breakdown&apos;s <code className={CODE}>peerComparison</code> and each
+                snapshot&apos;s <code className={CODE}>facts</code> instead.
+              </p>
+            </Section>
+
+            <Section id="downloads" title="Spreadsheets (CSV)">
+              <P>
+                The leaderboards, a member&apos;s votes and every member&apos;s position on a roll
+                call are also CSV files, from the same data as the JSON: add{" "}
+                <code className={CODE}>.csv</code> as the endpoints below list. Each file names its
+                columns in its first row, and the reference describes every column.
+              </P>
+              <List>
+                {[
+                  ["senators.csv", "Every serving senator's scores, with the method version"],
+                  [
+                    "representatives.csv",
+                    "Every serving representative's scores, with the method version",
+                  ],
+                  ["presidents.csv", "Every president's Presidential Score"],
+                ].map(([file, what]) => (
+                  <Item key={file} label={what}>
+                    <a
+                      href={`${API}/${file}`}
+                      download
+                      className="font-mono text-xs text-signal-cyan underline underline-offset-2 hover:text-phos"
+                    >
+                      {`${API}/${file}`}
+                    </a>
+                  </Item>
+                ))}
+              </List>
+            </Section>
+
+            <Section id="license" title="Data license and how to cite Civitas">
+              <DataLicense />
             </Section>
 
             <Section id="mcp" title="Use it from an AI assistant (MCP)">

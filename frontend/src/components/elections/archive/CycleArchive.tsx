@@ -139,7 +139,7 @@ function RaceEntry({ race, record }: { race: ArchivedRace; record: ArchiveRecord
       className="border-b border-white/[0.07] px-4 py-4 last:border-b-0 focus:outline-none focus-visible:ring-1 focus-visible:ring-phos/60"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h4 className="font-display text-base font-bold text-ink-hi">
+        <h4 className="font-display text-base font-semibold text-ink-hi">
           {race.office === "S"
             ? `U.S. Senate${race.isSpecial ? " (special)" : ""}`
             : `U.S. House · ${raceLabel(race)}`}
@@ -275,7 +275,7 @@ export default function CycleArchive({
         ].map(([label, n]) => (
           <div key={label} className="bg-surface-base px-4 py-3">
             <dt className="text-[11px] uppercase tracking-[0.12em] text-ink-min">{label}</dt>
-            <dd className="mt-1 text-2xl font-bold tabular-nums text-ink-hi">{n}</dd>
+            <dd className="mt-1 text-2xl font-semibold tabular-nums text-ink-hi">{n}</dd>
           </div>
         ))}
       </dl>
@@ -352,7 +352,7 @@ export default function CycleArchive({
             >
               <h3
                 id={`state-${s.state}-title`}
-                className="border-b border-phos/20 pb-1 font-display text-xl font-extrabold uppercase text-ink-hi"
+                className="border-b border-phos/20 pb-1 font-display text-xl font-semibold uppercase text-ink-hi"
               >
                 {s.stateName}
               </h3>

@@ -37,7 +37,7 @@ export default function RelatedVotes({
             className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 border-b border-white/[0.07] py-2.5"
           >
             <span className="min-w-0">
-              <span className="block font-display text-[15px] leading-snug text-ink-hi">
+              <span className="block font-sans text-[15px] leading-snug text-ink-hi">
                 {[v.billLabel, v.title || v.question].filter(Boolean).join(" · ")}
               </span>
               <span className="mt-0.5 block text-[13px] text-ink-lo">

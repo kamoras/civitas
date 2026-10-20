@@ -119,7 +119,7 @@ describe("SECTIONS covers the site", () => {
 
   it("counts a page as in its section by path, not by prefix text", () => {
     expect(inSection("politicians", "/compare/presidents")).toBe(true);
-    expect(inSection("politicians", "/leaderboard")).toBe(true);
+    expect(inSection("politicians", "/compare")).toBe(true);
     expect(inSection("congress", "/congressional")).toBe(false);
     expect(inSection("agencies", "/explore")).toBe(false);
   });
