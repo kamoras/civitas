@@ -1212,6 +1212,11 @@ class PublicPeerSourceSchema(_PublicModel):
 class PublicPeerMeasureSchema(_PublicModel):
     key: Literal["smallGifts", "pacMoney", "breaks", "billsMoved"]
     label: str
+    question: str = Field(description='The voter question the measure answers ("Who funds the campaign?")')
+    why: str = Field(description="What the figure is and why a voter might care, in one fixed, neutral line")
+    measured: str = Field(description="How the figure is measured, for researchers: definitions, window, caveats")
+    window: Literal["congress", "election"] = Field(description="The span the figure covers: this Congress, or "
+                                                                "the member's most recent completed election")
     direction: str = Field(description="Which way is higher, in words; the word is neutral about which is better")
     unit: Literal["share", "rate", "count"] = Field(description="share and rate are 0-1; count is bills")
     value: float | None = Field(description="The member's figure; null when the record has none")
@@ -1250,6 +1255,7 @@ class PublicPeerComparisonSchema(_PublicModel):
     measures: list[PublicPeerMeasureSchema]
     stands_out: str = Field(description="The one line above the measures: the furthest 'well' row, or that the "
                                         "member is close to peers on every measure")
+    stands_out_why: str = Field(description="Why that line was picked: the rule, and the measure's own why line")
 
 
 class PublicScoreBreakdownSchema(_PublicModel):

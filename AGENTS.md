@@ -1801,9 +1801,13 @@ wrong number on election night is worse than none:
   moved feed fails visibly, never as a quiet night and never worked around.
   A primary's contest labels are not proof of the general's: for the 14 days
   before election day a daily job reads every covered state's staged feed
-  exactly as the sync will and alerts on no count, a refused one, or a race
-  with no contest (`live_results/readiness.py`; it stores nothing and stops
-  the day before). Washington's House labels changed between primary and
+  exactly as the sync will and alerts on no general listed yet, a feed that
+  could not be read, a refused one, or a race with no contest
+  (`live_results/readiness.py`; it stores nothing and stops the day before).
+  A reader returns None only when the state's own list or page was read and
+  shows nothing on the date (a results host redirecting off itself counts);
+  a failed request raises `FeedUnreadable`, so an outage is never alerted as
+  "not staged" (North Dakota's list answered 504 on 2026-10-20 and was). Washington's House labels changed between primary and
   general in 2026; and on 2026-10-12 New Mexico's and Montana's results hosts
   sent their current-election page to their Secretary of State's landing page
   (Montana's says results come "after 8:00 on November 3"), where in 2024 both

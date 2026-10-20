@@ -141,7 +141,7 @@ export const DEFAULT_OG_IMAGE: OgImage = {
   url: "/opengraph-image",
   width: 1200,
   height: 630,
-  alt: "Civitas Research: public-record scorecards for Congress",
+  alt: "Civitas Research: no number without its source. Congress, the money, the votes, elections and agencies, from the public record.",
 };
 
 /**

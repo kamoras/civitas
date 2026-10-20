@@ -1,154 +1,76 @@
 import { ImageResponse } from "next/og";
-import { loadArchivoBold } from "@/lib/ogFonts";
-import { SITE_TAGLINE } from "@/lib/site";
+import { OG_FAMILY, ogFonts } from "@/lib/ogFonts";
+import { OgLockup } from "@/lib/ogLockup";
+import { OG_COLOR as C } from "@/lib/ogTheme";
+import { DEFAULT_OG_IMAGE, SITE_TAGLINE } from "@/lib/site";
 
-export const runtime = "edge";
-export const alt = "Civitas Research: no number without its source";
+export const runtime = "nodejs";
+export const alt = DEFAULT_OG_IMAGE.alt;
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-// Same palette as tailwind.config.ts — Satori (next/og) renders its own box
-// model outside Tailwind, so these are hand-copied rather than imported.
-const BASE = "#0e0c0a";
-const INK_HI = "#f2eee7";
-const INK_LO = "#cdc7bc";
-const INK_MIN = "#bbb5ac";
-
-const WORDMARK = "CIVITAS RESEARCH";
-const SUBTITLE = SITE_TAGLINE.toUpperCase();
-const DESCRIPTION = "Congress · the money · the votes · elections · agencies";
+const DESCRIPTION =
+  "Congress, the money, the votes, elections and agencies, from the public record.";
 const DOMAIN = "civitas-research.org";
 
-const WORDMARK_STYLE = {
-  fontSize: 72,
-  fontFamily: "Archivo",
-  fontWeight: 700 as const,
-  letterSpacing: "0.1em",
-  lineHeight: 1,
-};
-
+/** The site card, set like the first page of a register: the lockup as the
+ *  header carries it, the promise in the title face, a ruled foot with the
+ *  address in the identifier face. Sizes hold at a feed's thumbnail (about
+ *  a third of this), where the tagline is still a 30 px line. */
 export default async function OgImage() {
-  // The old version had no external dependency and never failed. This route
-  // is hit by every crawler unfurling any page link, so an outage on
-  // Google's end (or its response shape changing) degrades to Satori's
-  // default face rather than 500ing every social-share preview on the site.
-  let archivoBold: ArrayBuffer | null = null;
-  try {
-    archivoBold = await loadArchivoBold(`${WORDMARK}${SUBTITLE}${DESCRIPTION}${DOMAIN}`);
-  } catch {
-    // fall through with archivoBold still null
-  }
-
   return new ImageResponse(
     <div
       style={{
-        background: BASE,
         width: "100%",
         height: "100%",
         display: "flex",
         flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        fontFamily: "Archivo",
-        padding: "60px",
-        position: "relative",
+        background: C.parchment,
+        borderTop: `14px solid ${C.accent}`,
+        padding: "56px 80px 52px",
+        fontFamily: OG_FAMILY.sans,
+        color: C.inkHi,
       }}
     >
-      {/* Records-band hairlines, not the old CRT scanline/frame combo. */}
-      <div
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          height: "2px",
-          background: "rgba(187,181,172,0.35)",
-          display: "flex",
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: "2px",
-          background: "rgba(187,181,172,0.35)",
-          display: "flex",
-        }}
-      />
-
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          gap: "28px",
-        }}
-      >
-        {/* The name set plainly, as a masthead: no off-register plates
-            (the chromatic overprint read as an effect of its moment). */}
-        <div style={{ ...WORDMARK_STYLE, color: INK_HI, display: "flex" }}>{WORDMARK}</div>
-
+      <OgLockup size={34} />
+      <div style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: "center" }}>
         <div
           style={{
-            width: "720px",
-            height: "3px",
-            background: INK_HI,
             display: "flex",
-          }}
-        />
-
-        <div
-          style={{
-            fontSize: "22px",
-            color: INK_LO,
-            letterSpacing: "0.2em",
-            textAlign: "center",
-            display: "flex",
+            fontFamily: OG_FAMILY.serif,
+            fontWeight: 600,
+            fontSize: 92,
+            lineHeight: 1.05,
+            letterSpacing: "-0.01em",
+            // Breaks after "without", not before a lone "source."
+            maxWidth: 800,
           }}
         >
-          {SUBTITLE}
+          {SITE_TAGLINE}
         </div>
-
         <div
-          style={{
-            fontSize: "18px",
-            color: INK_MIN,
-            letterSpacing: "0.05em",
-            textAlign: "center",
-            maxWidth: "680px",
-            lineHeight: 1.5,
-            display: "flex",
-          }}
+          style={{ display: "flex", fontSize: 32, lineHeight: 1.4, color: C.inkLo, marginTop: 28 }}
         >
           {DESCRIPTION}
         </div>
-
-        <div
-          style={{
-            marginTop: "12px",
-            border: "1px solid rgba(187,181,172,0.3)",
-            padding: "8px 24px",
-            fontSize: "14px",
-            color: INK_MIN,
-            letterSpacing: "0.2em",
-            display: "flex",
-          }}
-        >
-          {DOMAIN}
-        </div>
+      </div>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          borderTop: `2px solid ${C.rule}`,
+          paddingTop: 22,
+          fontSize: 24,
+          color: C.inkLo,
+        }}
+      >
+        <span style={{ fontFamily: OG_FAMILY.mono }}>{DOMAIN}</span>
+        <span style={{ fontWeight: 600, letterSpacing: "0.08em" }}>
+          AN INDEPENDENT PUBLIC RECORD
+        </span>
       </div>
     </div>,
-    {
-      ...size,
-      // Satori requires at least one *loaded* font — passing an empty array
-      // throws "No fonts are loaded", it isn't a valid empty-fallback value
-      // the way [] usually is. Omitting the key entirely is what actually
-      // falls back to Satori's own default face.
-      ...(archivoBold
-        ? { fonts: [{ name: "Archivo", data: archivoBold, weight: 700, style: "normal" }] }
-        : {}),
-    }
+    { ...size, fonts: await ogFonts() }
   );
 }

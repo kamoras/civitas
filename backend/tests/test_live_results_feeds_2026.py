@@ -9,6 +9,9 @@ Fixtures (tests/fixtures/live_results/, each with its own _source):
       which lists the 2026 general twice under one name, and both payloads.
   wa_general_2026_staged.json  Washington's staged 2026 general, whose
       House labels put the district first.
+  not_staged_2026_10_20.json  Georgia's index and Colorado's elections.json
+      with no 2026 general listed yet, and North Dakota's list once its 504s
+      had passed.
 """
 
 import copy
@@ -28,6 +31,7 @@ from app.pipeline.fetch import (
     state_candidates_clarity as clarity,
     state_candidates_enhanced_voting as ev,
     state_candidates_tally_enr as tally,
+    state_candidates_totalvote as totalvote,
 )
 from app.pipeline.fetch.state_candidate_sources import source_for_state
 
@@ -261,3 +265,77 @@ class TestFlipBarMatrix:
 
     def test_for_places_official_suffices(self):
         assert er.count_is_mostly_in(2, 64, "counties", True, None, self.NOW)
+
+
+class TestNotStagedIsNotUnreadable:
+    """A feed that was read and lists no general yet returns None; one that
+    could not be read raises FeedUnreadable. Until 2026-10-20 both were
+    None, and North Dakota's election list answering 504 three times was
+    alerted as "not staged yet, moved, or unreadable" beside ten states
+    whose lists really held no general."""
+
+    FIX = _json("not_staged_2026_10_20.json")
+
+    @staticmethod
+    def _serve(monkeypatch, bodies):
+        """{url fragment: body, or None for a failed request}."""
+        async def fake(client, rl, method, url, **kw):
+            body = next(v for k, v in bodies.items() if k in url)
+            return None if body is None else SimpleNamespace(json=lambda: body, text=body, headers={})
+
+        monkeypatch.setattr(http_utils, "fetch_with_retry", fake)
+        monkeypatch.setattr(clarity, "fetch_with_retry", fake)
+
+    async def test_georgias_index_without_the_general_is_not_staged(self, monkeypatch):
+        self._serve(monkeypatch, {"jurisdictions/Georgia": self.FIX["ga_index"]})
+        assert await ev.fetch_general_results(None, DAY, "GA", source_for_state("GA")) is None
+
+    async def test_colorados_elections_json_without_the_general_is_not_staged(self, monkeypatch):
+        self._serve(monkeypatch, {"elections.json": self.FIX["co_elections"]})
+        assert await clarity.fetch_general_results(None, DAY, "CO", source_for_state("CO")) is None
+
+    async def test_a_failed_index_is_unreadable(self, monkeypatch):
+        self._serve(monkeypatch, {"jurisdictions/Georgia": None, "elections.json": None, "GetElectionList": None})
+        for reader, state in ((ev, "GA"), (clarity, "CO"), (tally, "ND")):
+            with pytest.raises(election_results.FeedUnreadable):
+                await reader.fetch_general_results(None, DAY, state, source_for_state(state))
+
+    async def test_north_dakotas_list_after_the_504s_names_the_general(self, monkeypatch):
+        elections = self.FIX["nd_elections"]
+        held = [(e["electionName"], e) for e in elections if e["electionDate"].startswith(DAY.isoformat())]
+        assert election_results.pick_election(held, "ND", DAY)["electionID"] == "348"
+
+    async def test_a_totalvote_page_that_cannot_be_read_is_unreadable(self, monkeypatch):
+        async def failed(*a, **kw):
+            return None
+
+        monkeypatch.setattr(http_utils, "fetch_with_retry", failed)
+        with pytest.raises(election_results.FeedUnreadable):
+            await totalvote.fetch_general_results(None, DAY, "MT", source_for_state("MT"))
+
+    @pytest.mark.parametrize("state, location", [
+        # Each host's real answer on 2026-10-20; sosmt.gov answers a bot
+        # challenge, which must not turn "no election served" into an outage.
+        ("MT", "https://sosmt.gov/elections/results/"),
+        ("NM", "https://www.sos.nm.gov/voting-and-elections/election-results/"),
+    ])
+    async def test_a_totalvote_host_redirecting_to_its_sos_site_is_not_staged(self, monkeypatch, state, location):
+        asked = []
+
+        async def redirect(client, rl, method, url, **kw):
+            asked.append(kw.get("follow_redirects"))
+            return SimpleNamespace(status_code=302, headers={"location": location}, text="")
+
+        monkeypatch.setattr(http_utils, "fetch_with_retry", redirect)
+        source = election_results.live_source(source_for_state(state))
+        assert await totalvote.fetch_general_results(None, DAY, state, source) is None
+        assert asked == [False]
+
+    async def test_the_sync_records_an_unreadable_feed_as_unavailable_with_its_reason(self, monkeypatch):
+        async def unreadable(client, state, day):
+            raise election_results.FeedUnreadable("ND election list could not be read")
+
+        monkeypatch.setattr(er, "fetch_state_count", unreadable)
+        monkeypatch.setattr(er, "polls_closed", lambda *a: True)
+        read = await er.read_state(None, "ND", DAY)
+        assert (read.status, read.reason) == ("unavailable", "ND election list could not be read")

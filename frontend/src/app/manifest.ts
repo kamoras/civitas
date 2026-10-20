@@ -11,12 +11,15 @@ export default function manifest(): MetadataRoute.Manifest {
     description: HOME_DESCRIPTION,
     start_url: "/",
     display: "browser",
-    // surface.base, as in icon.svg.
-    background_color: "#0e0c0a",
-    theme_color: "#0e0c0a",
+    // Parchment, the light theme's ground (the layout's theme-color meta
+    // switches to carbon for a dark system; a manifest takes one colour).
+    background_color: "#f5efe2",
+    theme_color: "#f5efe2",
+    // apple-icon.png and icon-512.png are icon.svg rendered (icons.test.ts).
     icons: [
       { src: "/icon.svg", sizes: "any", type: "image/svg+xml" },
       { src: "/apple-icon.png", sizes: "192x192", type: "image/png" },
+      { src: "/icon-512.png", sizes: "512x512", type: "image/png" },
     ],
   };
 }

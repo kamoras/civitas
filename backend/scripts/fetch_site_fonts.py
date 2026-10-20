@@ -26,9 +26,18 @@ through Next's own formula (next/dist/server/font-utils.js), from local
 Times New Roman for a serif face and Arial otherwise, as next/font/google
 does.
 
+It also writes fonts/og/*.ttf, the same faces for the Open Graph images
+(app/opengraph-image.tsx, app/apple-icon.tsx, app/api/og): Satori reads
+TrueType but not woff2, and those images used to fetch Archivo from Google
+per request. Each is the latin and latin-ext subsets merged into one file,
+a variable face pinned to the instance the site uses (Source Serif 4 at
+its display optical size), derived from the woff2 above and nothing else.
+`--og-only` rebuilds just those from the committed woff2 files.
+
 Rerun when a face should move to a newer Google release:
 
     (cd ../frontend && npm ci)   # for Next's capsize metrics
+    pip install -r scripts/requirements-research.txt   # fontTools, for the og files
     python scripts/fetch_site_fonts.py
 """
 
@@ -152,7 +161,60 @@ def _fallback_css(family: str, key: str, capsize: dict) -> str:
     )
 
 
+# The Open Graph faces: output name -> (woff2 stem, axis pins, family name).
+# The latin and latin-ext woff2 of each stem are merged; the images set
+# English titles and names (accented ones included), never Greek or
+# Cyrillic. A merged, instanced file is a Modified Version under the OFL,
+# which may not carry a Reserved Font Name ("Source", "Fira"), so each is
+# renamed; the copyright and licence entries are kept.
+OG_FACES = {
+    "archivo-800": ("archivo", {}, "Civitas OG Wordmark"),
+    "source-serif-4-600": ("source-serif-4", {"opsz": 60}, "Civitas OG Serif"),
+    "fira-sans-400": ("fira-sans-{subset}-400", {}, "Civitas OG Sans"),
+    "fira-sans-600": ("fira-sans-{subset}-600", {}, "Civitas OG Sans SemiBold"),
+    "dm-mono-400": ("dm-mono", {}, "Civitas OG Mono"),
+}
+OG_SUBSETS = ("latin", "latin-ext")
+
+
+def build_og_fonts() -> None:
+    from fontTools.merge import Merger
+    from fontTools.ttLib import TTFont
+    from fontTools.varLib import instancer
+
+    out_dir = FONTS_DIR / "og"
+    out_dir.mkdir(exist_ok=True)
+    for name, (stem, pins, family) in OG_FACES.items():
+        parts = []
+        for subset in OG_SUBSETS:
+            file = stem.format(subset=subset) if "{subset}" in stem else f"{stem}-{subset}"
+            font = TTFont(FONTS_DIR / f"{file}.woff2")
+            if pins:
+                font = instancer.instantiateVariableFont(font, pins)
+            font.flavor = None
+            path = out_dir / f".{name}-{subset}.ttf"
+            font.save(path)
+            parts.append(str(path))
+        merged = Merger().merge(parts)
+        for part in parts:
+            Path(part).unlink()
+        names = merged["name"]
+        for record in list(names.names):
+            if record.nameID in (1, 3, 4, 6, 16, 17, 21, 22, 25):
+                names.removeNames(nameID=record.nameID)
+        names.setName(family, 1, 3, 1, 0x409)
+        names.setName("Regular", 2, 3, 1, 0x409)
+        names.setName(f"{family}; derived by fetch_site_fonts.py", 3, 3, 1, 0x409)
+        names.setName(family, 4, 3, 1, 0x409)
+        names.setName(family.replace(" ", ""), 6, 3, 1, 0x409)
+        merged.save(out_dir / f"{name}.ttf")
+        print(f"og/{name}.ttf: {(out_dir / f'{name}.ttf').stat().st_size} bytes")
+
+
 def main() -> None:
+    if "--og-only" in sys.argv:
+        build_og_fonts()
+        return
     if not CAPSIZE_METRICS.exists():
         sys.exit(f"{CAPSIZE_METRICS} not found; run `npm ci` in frontend/ first")
     capsize = json.loads(CAPSIZE_METRICS.read_text())
@@ -210,6 +272,7 @@ def main() -> None:
     }
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
     fallback_path.write_text(fallback_css)
+    build_og_fonts()
 
 
 if __name__ == "__main__":
