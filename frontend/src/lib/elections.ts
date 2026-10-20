@@ -296,19 +296,47 @@ function andList(items: string[]): string {
 }
 
 /** What the House district filter says when the reader typed a city, town
- * or community by name: "Rivertown is in districts 3, 7 and 11." A
+ * or community by name: "Rivertown is split between districts 3, 7 and 11." A
  * place listed under several districts is split between them, and the
  * reader is told so rather than left to take the first row as theirs.
  * Matches the whole name only (accents, case and the legal type aside),
  * so "san" names nothing and the list alone answers. Two places with the
  * same name ("Kingston city", "Kingston town") keep their legal type. */
 export function placeDistrictSummary(
-  races: { district: number | null; places?: string[] | null }[],
+  races: { district: number | string | null; places?: string[] | null }[],
   query: string
 ): string[] {
+  return placesNamed(races, query).map(({ name, districts }) => {
+    const nums = districts.map((d) => (d === 0 ? "at-large" : String(d)));
+    if (districts.length === 1)
+      return districts[0] === 0
+        ? `${name} is in the at-large district.`
+        : `${name} is in district ${nums[0]}.`;
+    return `${name} is split between districts ${andList(nums)}.`;
+  });
+}
+
+/** A place the reader named in full and the districts it lies in. */
+export interface NamedPlace {
+  /** The name as the page says it ("Springfield", or "Kingston town" when
+   * two places share the short name). */
+  name: string;
+  /** The crosswalk's own name ("Springfield city"), which the district
+   * shape files use too. */
+  fullName: string;
+  /** In order; a number for a House district, a key for a legislative one. */
+  districts: (number | string)[];
+}
+
+/** The places (at most three) whose whole name is `query`, each with the
+ * districts it lies in: more than one means the place is split. */
+export function placesNamed(
+  races: { district: number | string | null; places?: string[] | null }[],
+  query: string
+): NamedPlace[] {
   const q = searchFold(query);
   if (!q) return [];
-  const found = new Map<string, number[]>();
+  const found = new Map<string, (number | string)[]>();
   for (const r of races) {
     for (const p of r.places ?? []) {
       if (searchFold(placeName(p)) !== q && searchFold(p) !== q) continue;
@@ -316,15 +344,11 @@ export function placeDistrictSummary(
     }
   }
   const shortNames = [...found.keys()].map(placeName);
-  return [...found.entries()].slice(0, 3).map(([p, ds], i) => {
-    const name = shortNames.filter((n) => n === shortNames[i]).length > 1 ? p : shortNames[i];
-    const nums = ds.sort((a, b) => a - b).map((d) => (d === 0 ? "at-large" : String(d)));
-    if (ds.length === 1)
-      return ds[0] === 0
-        ? `${name} is in the at-large district.`
-        : `${name} is in district ${nums[0]}.`;
-    return `${name} is in districts ${andList(nums)}: it is split between them, so the part you live in decides which is yours.`;
-  });
+  return [...found.entries()].slice(0, 3).map(([p, ds], i) => ({
+    name: shortNames.filter((n) => n === shortNames[i]).length > 1 ? p : shortNames[i],
+    fullName: p,
+    districts: ds.sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true })),
+  }));
 }
 
 /** What a candidate's money column says: the FEC's contributions for this

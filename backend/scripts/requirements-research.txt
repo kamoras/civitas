@@ -1,5 +1,6 @@
 # Research and calibration scripts only (backend/scripts/research_*.py,
 # calibrate_commemorative.py, audit_funding_components.py, build_district_lean.py,
+# build_district_lookup.py (through build_district_lean),
 # evaluate_embedding_models.py, frozen_clock_plugin.py) — never installed
 # into the backend image.
 #
