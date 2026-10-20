@@ -1441,6 +1441,33 @@ class Justice(Base):
     votes = relationship("JusticeVote", back_populates="justice", cascade="all, delete-orphan")
 
 
+class JusticeAppointment(Base):
+    """Every Supreme Court appointment since 1789, from the Federal Judicial
+    Center's directory of federal judges, refreshed by the justice pipeline
+    (store_appointments): who was appointed, to which seat, by which
+    president (the president in office on the nomination date, from the
+    presidents table, never typed in) and the years served. A justice
+    appointed twice (an associate later made chief) has two rows. Read by
+    a president's page; a row links a justice's own page when the site
+    holds one (justice_figures.justices_appointed_by)."""
+    __tablename__ = "justice_appointments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    fjc_nid: Mapped[str] = mapped_column(String, nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    # For matching a stored justice: the surname, letters only, and the
+    # first initial (the pipeline's own rule, justice_pipeline._appointers).
+    last_key: Mapped[str] = mapped_column(String, nullable=False)
+    first_initial: Mapped[str] = mapped_column(String, nullable=False)
+    seat: Mapped[str] = mapped_column(String, nullable=False)  # "Associate Justice", "Chief Justice"
+    # The presidents table's id; None for a nomination date it covers no
+    # president for.
+    president_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    nominated: Mapped[str] = mapped_column(String, nullable=False)
+    served_from: Mapped[str] = mapped_column(String, nullable=False)
+    served_until: Mapped[str | None] = mapped_column(String, nullable=True)  # None while serving
+
+
 class JusticeVote(Base):
     """Per-case vote record for a justice.
 

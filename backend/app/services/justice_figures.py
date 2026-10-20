@@ -13,12 +13,13 @@ Outside app/pipeline/ on purpose, like peer_comparison: a display rule must
 not move the analysis-code fingerprint. Read path only: ORM queries, no model.
 """
 
+import re
 import statistics
 from datetime import date
 
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import Justice, President
+from app.models import Justice, JusticeAppointment, President
 from app.photos import justice_photo
 from app.schemas import (
     JusticeAppointedBySchema,
@@ -259,14 +260,44 @@ def justice_figures(db: Session, justice_id: str) -> JusticeFiguresSchema | None
     )
 
 
+def _name_key(name: str) -> str:
+    return re.sub(r"[^a-z]", "", name.lower())
+
+
+def _page_for(a: JusticeAppointment, justices: list[Justice]) -> Justice | None:
+    """The stored justice an appointment belongs to, by the pipeline's own
+    rule (justice_pipeline._appointers): the surname ends the justice's
+    name and the first initial begins it, and the justice was serving when
+    the appointment began or after (an associate later made chief has one
+    page for both)."""
+    for j in justices:
+        start = (j.date_start or "")[:10]
+        ended = (j.date_end or "")[:10]
+        # The surname as stored, suffix dropped ("Doe, Jr." is "Doe"); the
+        # full name ends with the suffix, so it can't be matched on.
+        surname = _name_key((j.last_name or j.name).split(",")[0])
+        if (surname.endswith(a.last_key) and j.name[:1].upper() == a.first_initial
+                and (not ended or ended >= a.served_from) and (not start or a.served_until is None
+                                                               or start <= a.served_until)):
+            return j
+    return None
+
+
 def justices_appointed_by(db: Session, president_id: str) -> list[dict] | None:
-    """The stored justices (sitting and former) the president appointed,
-    by start date; None when there is no such president."""
+    """Every Supreme Court appointment the president made, by date, from the
+    Federal Judicial Center's directory (JusticeAppointment, stored by the
+    justice pipeline), each linked to the justice's page where the site
+    holds one; None when there is no such president."""
     president = db.query(President).filter(President.id == president_id).first()
     if president is None:
         return None
-    rows = [j for j in (db.query(Justice).filter(Justice.appointing_president == president.name)
-                        .order_by(Justice.date_start).all())
-            if _appointing(db, j) is president]
-    return [{"id": j.id, "name": j.name, "roleTitle": j.role_title, "dateStart": j.date_start,
-             "dateEnd": j.date_end, "isActive": j.is_active, "photo": justice_photo(j)} for j in rows]
+    justices = db.query(Justice).all()
+    rows = (db.query(JusticeAppointment).filter(JusticeAppointment.president_id == president_id)
+            .order_by(JusticeAppointment.served_from).all())
+    out = []
+    for a in rows:
+        page = _page_for(a, justices)
+        out.append({"id": page.id if page else None, "name": page.name if page else a.name, "seat": a.seat,
+                    "dateStart": a.served_from, "dateEnd": a.served_until,
+                    "isActive": a.served_until is None, "photo": justice_photo(page) if page else None})
+    return out

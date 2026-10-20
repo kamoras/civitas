@@ -109,11 +109,14 @@ export interface JusticeFigures {
   appointer: { rows: JusticeInterval[]; sentence: string; throughTerm: number | null } | null;
 }
 
-/** A justice a president appointed (GET /api/justices/appointed-by/{id}). */
+/** A Supreme Court appointment a president made (GET
+ *  /api/justices/appointed-by/{id}, from the FJC directory). `id` is the
+ *  justice's page on the site, null when the site holds none. */
 export interface AppointedJustice {
-  id: string;
+  id: string | null;
   name: string;
-  roleTitle: string;
+  /** "Associate Justice" or "Chief Justice", as the directory titles it. */
+  seat: string;
   dateStart: string | null;
   dateEnd: string | null;
   isActive: boolean;

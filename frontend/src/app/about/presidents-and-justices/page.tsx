@@ -283,9 +283,11 @@ export default function PresidentsAndJusticesChapter() {
           the majority decided the case), opinions for the Court, dissents and concurrences written,
           years on the Court and the latest Martin-Quinn position. Agreement with each colleague and
           every case on the record (the side taken and the opinion written) follow, and the page
-          links to the appointing president&apos;s page, which lists the justices that president
-          appointed. The record reads the current term and the three before it, and each page names
-          the terms that have decided cases, since a term that has just begun has none. The{" "}
+          links to the appointing president&apos;s page, which lists every Supreme Court appointment
+          that president made, from the Federal Judicial Center&apos;s directory of federal judges
+          (each given to the president in office on the nomination date). The record reads the
+          current term and the three before it, and each page names the terms that have decided
+          cases, since a term that has just begun has none. The{" "}
           <Link href="/court">Court page</Link> puts the sitting justices on one line, shows how
           often each pair voted together and how the Court split term by term, and lists each
           decision&apos;s majority and dissent. The voting record is read from the Supreme Court
