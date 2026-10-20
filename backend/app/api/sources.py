@@ -1,5 +1,5 @@
 """The record's sources, with what each has supplied and how recent it is,
-for the homepage's "Built from the public record" panel.
+for the "On record now" list on /about/data#sources.
 
 Each row is counted from the stored records themselves, never typed: how
 many records the source has supplied in the window the site scores (the

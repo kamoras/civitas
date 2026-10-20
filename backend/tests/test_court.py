@@ -122,7 +122,6 @@ def test_nothing_stored_is_empty_never_a_made_up_figure(db_session):
     assert c["justices"] == [] and c["median"] == [] and c["mqTerm"] is None
     assert c["record"] == {"cases": 0, "unanimous": 0, "oneVote": 0, "unanimousPct": None, "oneVotePct": None, "terms": []}
     assert c["decisions"]["decisions"] == [] and c["agreement"] == []
-    assert court_service.summary(db_session) is None
 
 
 def test_decisions_name_the_lineup_and_link_their_sources(db_session):
@@ -181,15 +180,6 @@ def test_the_record_says_which_terms_it_covers(db_session):
     assert body["recordTerms"] == [2023, 2025]
     # The stored interval stays off this field: [term, position] only.
     assert body["idealPoints"] == [[2023, -2.0], [2024, -2.0]]
-
-
-def test_the_section_figure_is_the_latest_term_with_decisions(db_session):
-    _seat(db_session)
-    _case(db_session, "scotus-2023-1", 2023, "2024-06-01", ALL)
-    _case(db_session, "scotus-2024-1", 2024, "2025-06-01", ALL)
-    _case(db_session, "scotus-2024-2", 2024, "2025-06-02", ALL[1:], ALL[:1])
-    assert court_service.summary(db_session) == {"term": 2024, "cases": 2, "unanimous": 1}
-    assert _get(db_session, "/api/sections").json()["court"] == {"court": {"term": 2024, "cases": 2, "unanimous": 1}}
 
 
 def test_martin_quinn_rows_carry_the_credible_interval(db_session):
