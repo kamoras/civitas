@@ -56,7 +56,7 @@ const record = {
 
 async function openList() {
   render(<VotingRecord senatorId="S1" votingRecord={record} />);
-  await userEvent.click(screen.getByRole("button", { name: /VOTING RECORD/ }));
+  await userEvent.click(screen.getByRole("button", { name: /Voting record/ }));
   await screen.findByText("First bill");
 }
 
@@ -78,9 +78,9 @@ describe("VotingRecord", () => {
     expect(screen.getByText("99%")).toBeInTheDocument();
     expect(screen.getByText("with the party on 288")).toBeInTheDocument();
     expect(screen.getByText("3")).toBeInTheDocument();
-    expect(screen.getByText("BROKE PARTY LINE")).toBeInTheDocument();
+    expect(screen.getByText("Broke party line")).toBeInTheDocument();
     // The old box: 100 minus the rounded loyalty, worked out in the browser.
-    expect(screen.queryByText("INDEPENDENT")).not.toBeInTheDocument();
+    expect(screen.queryByText("Independent")).not.toBeInTheDocument();
   });
 
   it("a slow response to an earlier filter never replaces a later one", async () => {
@@ -90,13 +90,13 @@ describe("VotingRecord", () => {
     let resolveNay: (value: PaginatedVotes) => void = () => {};
     fetchSenatorVotes.mockReturnValueOnce(new Promise<PaginatedVotes>((r) => (resolveNay = r)));
     fetchSenatorVotes.mockResolvedValueOnce(votes("yea", "Yea bill"));
-    await userEvent.click(screen.getByRole("button", { name: /^NAY/ }));
-    await userEvent.click(screen.getByRole("button", { name: /^YEA/ }));
+    await userEvent.click(screen.getByRole("button", { name: /^Nay/ }));
+    await userEvent.click(screen.getByRole("button", { name: /^Yea/ }));
     await screen.findByText("Yea bill");
 
     resolveNay(votes("nay", "Nay bill"));
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /^YEA/ })).toHaveAttribute("aria-pressed", "true")
+      expect(screen.getByRole("button", { name: /^Yea/ })).toHaveAttribute("aria-pressed", "true")
     );
     expect(screen.queryByText("Nay bill")).not.toBeInTheDocument();
     expect(screen.getByText("Yea bill")).toBeInTheDocument();
@@ -107,12 +107,12 @@ describe("VotingRecord", () => {
     await openList();
 
     fetchSenatorVotes.mockRejectedValueOnce(new Error("Failed to load votes: 503"));
-    await userEvent.click(screen.getByRole("button", { name: /^NAY/ }));
+    await userEvent.click(screen.getByRole("button", { name: /^Nay/ }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Failed to load votes: 503");
     expect(screen.getByText("First bill")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^ALL/ })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: /^NAY/ })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: /^All/ })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /^Nay/ })).toHaveAttribute("aria-pressed", "false");
   });
 
   it("disables the pager while a filter change is replacing its list", async () => {
@@ -120,7 +120,7 @@ describe("VotingRecord", () => {
     await openList();
 
     fetchSenatorVotes.mockReturnValueOnce(new Promise<PaginatedVotes>(() => {})); // never resolves
-    await userEvent.click(screen.getByRole("button", { name: /^NAY/ }));
+    await userEvent.click(screen.getByRole("button", { name: /^Nay/ }));
 
     expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
   });
@@ -153,7 +153,7 @@ describe("VotingRecord", () => {
     };
     fetchSenatorVotes.mockResolvedValueOnce({ ...votes("all", "unused"), votes: [warPowers] });
     render(<VotingRecord senatorId="S1" votingRecord={record} />);
-    await userEvent.click(screen.getByRole("button", { name: /VOTING RECORD/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Voting record/ }));
 
     const link = await screen.findByRole("link", {
       name: /War Powers Resolution to remove United States Armed Forces from Lebanon/,
@@ -164,7 +164,7 @@ describe("VotingRecord", () => {
       screen.getByRole("link", { name: "On Agreeing to the Resolution · Jun 4, 2026" })
     ).toHaveAttribute("href", "/congress/votes/house/119/2/201");
     expect(
-      within(link.closest("li") as HTMLElement).getByText("AGAINST PARTY")
+      within(link.closest("li") as HTMLElement).getByText("Against party")
     ).toBeInTheDocument();
     for (const noise of ["BP", "DEFENSE", "HouseRC-2026-201", /STANCE/]) {
       expect(screen.queryByText(noise)).not.toBeInTheDocument();
@@ -182,7 +182,7 @@ describe("VotingRecord", () => {
         counts: { all: 2, yea: 2, nay: 0, againstParty: 0 },
       })
     );
-    await userEvent.type(screen.getByLabelText("SEARCH THESE VOTES"), "hr 7");
+    await userEvent.type(screen.getByLabelText("Search these votes"), "hr 7");
 
     expect(await screen.findByText("Highway bill")).toBeInTheDocument();
     expect(screen.getByText("2 votes match this search")).toBeInTheDocument();
@@ -204,7 +204,7 @@ describe("VotingRecord", () => {
         counts: { all: 0, yea: 0, nay: 0, againstParty: 0 },
       })
     );
-    await userEvent.type(screen.getByLabelText("SEARCH THESE VOTES"), "zzz");
+    await userEvent.type(screen.getByLabelText("Search these votes"), "zzz");
     expect(await screen.findByText(/No vote on record matches this search/)).toBeInTheDocument();
   });
 
@@ -219,10 +219,10 @@ describe("VotingRecord", () => {
         counts: { all: 3, yea: 3, nay: 0, againstParty: 0 },
       })
     );
-    await userEvent.click(screen.getByRole("button", { name: "LAST 30 DAYS" }));
+    await userEvent.click(screen.getByRole("button", { name: "Last 30 days" }));
     expect(await screen.findByText("Last week's bill")).toBeInTheDocument();
     expect(screen.getByText("3 votes")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "LAST 30 DAYS" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "Last 30 days" })).toHaveAttribute(
       "aria-pressed",
       "true"
     );
@@ -242,7 +242,7 @@ describe("VotingRecord", () => {
         counts: { all: 0, yea: 0, nay: 0, againstParty: 0 },
       })
     );
-    await userEvent.click(screen.getByRole("button", { name: "THIS CONGRESS" }));
+    await userEvent.click(screen.getByRole("button", { name: "This Congress" }));
     expect(await screen.findByText("No recorded vote in this Congress yet.")).toBeInTheDocument();
   });
 
@@ -254,7 +254,7 @@ describe("VotingRecord", () => {
       votes: [early, nomination],
     });
     render(<VotingRecord senatorId="S1" votingRecord={record} />);
-    await userEvent.click(screen.getByRole("button", { name: /VOTING RECORD/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Voting record/ }));
 
     expect(await screen.findByRole("link", { name: "S.1071" })).toHaveAttribute(
       "href",

@@ -49,7 +49,7 @@ function ReportsInRecess({ line }: { line: string }) {
 }
 
 const SECTION_LINK =
-  "inline-flex min-h-6 items-center font-mono text-sm uppercase tracking-[0.14em] text-ink-hi hover:text-phos";
+  "inline-flex min-h-6 items-center font-mono text-sm text-ink-hi hover:text-phos";
 const PAGE_LINK =
   "inline-flex min-h-6 items-center text-sm text-ink underline decoration-white/20 underline-offset-4 hover:text-phos";
 
@@ -72,7 +72,7 @@ export default async function SectionsBand() {
     <section aria-labelledby="sections-heading" className="min-w-0">
       <h2
         id="sections-heading"
-        className="border-b border-white/15 pb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
+        className="border-b border-white/15 pb-2 font-mono text-xs text-ink-min"
       >
         Index
       </h2>

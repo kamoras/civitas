@@ -100,7 +100,7 @@ export default function AgreementHeatmap({ court }: { court: Court }) {
         <h2 id="agreement-heading" className="text-xl font-semibold text-ink-hi">
           Who votes with whom
         </h2>
-        <p className="mt-1 font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
+        <p className="mt-1 font-mono text-xs text-ink-min">
           Share of cases both decided the same way · {termsPhrase(court.record.terms)}
         </p>
       </div>
@@ -199,7 +199,7 @@ export default function AgreementHeatmap({ court }: { court: Court }) {
       </div>
 
       <details className="text-sm" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
-        <summary className="inline-flex min-h-6 cursor-pointer items-center font-mono text-xs uppercase tracking-[0.12em] text-ink-lo hover:text-phos">
+        <summary className="inline-flex min-h-6 cursor-pointer items-center font-mono text-xs text-ink-lo hover:text-phos">
           Every pair as a table
         </summary>
         <div className="mt-3 overflow-x-auto" tabIndex={0} role="region" aria-label="Every pair">
@@ -208,7 +208,7 @@ export default function AgreementHeatmap({ court }: { court: Court }) {
               Agreement between each pair of sitting justices, most first
             </caption>
             <thead>
-              <tr className="border-b border-white/15 text-left font-mono text-xs uppercase text-ink-min">
+              <tr className="border-b border-white/15 text-left font-mono text-xs text-ink-min">
                 <th scope="col" className="py-1.5 pr-3 font-normal">
                   Pair
                 </th>

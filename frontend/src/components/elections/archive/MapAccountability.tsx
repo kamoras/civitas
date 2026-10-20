@@ -87,7 +87,7 @@ function CoverageStrip({
   return (
     <div className="grid grid-cols-1 gap-1 sm:grid-cols-[8.5rem_minmax(0,1fr)] sm:items-center sm:gap-3">
       <span className="font-mono text-xs text-ink-lo">
-        {level}% RANGE · {held}/{cell.graded}
+        {level}% range · {held}/{cell.graded}
       </span>
       <div>
         <div className="relative h-4 border border-white/15 bg-surface-base" aria-hidden="true">
@@ -154,10 +154,10 @@ function ChamberCheck({ name, c }: { name: string; c: ChamberAccountability }) {
   return (
     <div className="space-y-4 border border-white/[0.09] bg-surface p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="font-display text-lg font-semibold uppercase text-ink-hi">{name}</h3>
+        <h3 className="font-display text-lg font-semibold text-ink-hi">{name}</h3>
         <span className="font-mono text-xs text-ink-min">
-          {c.certified} OF {c.ranged} OFFICIAL · {c.counts.counting} COUNTING · {c.counts.no_count}{" "}
-          NO COUNT
+          {c.certified} of {c.ranged} official · {c.counts.counting} counting · {c.counts.no_count}{" "}
+          no count
         </span>
       </div>
       <div className="space-y-3">
@@ -178,7 +178,7 @@ function ChamberCheck({ name, c }: { name: string; c: ChamberAccountability }) {
       {c.byBasis.length > 0 && (
         <table className="w-full text-left text-sm">
           <caption className="sr-only">{name} ranges checked, by what each range rested on</caption>
-          <thead className="font-mono text-[11px] uppercase tracking-[0.1em] text-ink-min">
+          <thead className="font-mono text-[11px] text-ink-min">
             <tr>
               <th scope="col" className="py-1 pr-3 font-normal">
                 Range basis
@@ -215,7 +215,7 @@ function ChamberCheck({ name, c }: { name: string; c: ChamberAccountability }) {
         </table>
       )}
       <div>
-        <h4 className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-min">
+        <h4 className="font-mono text-[11px] text-ink-min">
           Outside the 80% range, furthest first
         </h4>
         {c.misses.length === 0 ? (
@@ -227,8 +227,8 @@ function ChamberCheck({ name, c }: { name: string; c: ChamberAccountability }) {
             <MissList misses={c.misses.slice(0, MISSES_SHOWN)} />
             {c.misses.length > MISSES_SHOWN && (
               <details className="mt-1">
-                <summary className="inline-flex min-h-11 cursor-pointer items-center font-mono text-xs tracking-[0.12em] text-ink-lo hover:text-ink-hi">
-                  ALL {c.misses.length} MISSES
+                <summary className="inline-flex min-h-11 cursor-pointer items-center font-mono text-xs text-ink-lo hover:text-ink-hi">
+                  All {c.misses.length} misses
                 </summary>
                 <MissList misses={c.misses.slice(MISSES_SHOWN)} />
               </details>
@@ -344,14 +344,14 @@ function SwingLegend({ bins }: { bins: Data["bins"] }) {
     { bin: "D_strongly", label: `D ${hi}+` },
     { bin: "D_usually", label: `D ${lo}–${hi}` },
     { bin: "D_leans", label: `D <${lo}` },
-    { bin: "close", label: "AS USUAL" },
+    { bin: "close", label: "As usual" },
     { bin: "R_leans", label: `R <${lo}` },
     { bin: "R_usually", label: `R ${lo}–${hi}` },
     { bin: "R_strongly", label: `R ${hi}+` },
   ];
   return (
     <div className="space-y-2">
-      <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-min">
+      <p className="font-mono text-[11px] text-ink-min">
         Ran toward, against its usual vote (margin points)
       </p>
       <ul className="grid grid-cols-4 gap-1 font-mono text-[11px] text-ink-lo sm:grid-cols-8">
@@ -371,7 +371,7 @@ function SwingLegend({ bins }: { bins: Data["bins"] }) {
             style={{ borderColor: WAITING_STROKE, backgroundColor: NO_CONTEST_FILL }}
             aria-hidden="true"
           />
-          NO OFFICIAL COUNT
+          No official count
         </li>
       </ul>
     </div>
@@ -391,12 +391,12 @@ function SwingTable({ seats }: { seats: AccountabilitySeat[] }) {
   if (!rows.length) return null;
   return (
     <details className="mt-3" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
-      <summary className="inline-flex min-h-11 cursor-pointer items-center font-mono text-xs tracking-[0.12em] text-ink-lo hover:text-ink-hi">
-        TABLE · {rows.length} SEATS, LARGEST SWING FIRST
+      <summary className="inline-flex min-h-11 cursor-pointer items-center font-mono text-xs text-ink-lo hover:text-ink-hi">
+        Table · {rows.length} seats, largest swing first
       </summary>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[30rem] text-left text-sm">
-          <thead className="font-mono text-[11px] uppercase tracking-[0.1em] text-ink-min">
+          <thead className="font-mono text-[11px] text-ink-min">
             <tr>
               <th scope="col" className="py-1 pr-3 font-normal">
                 Seat
@@ -463,10 +463,7 @@ export default function MapAccountability({ data, pageUrl }: { data: Data; pageU
       >
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2
-              id="map-check-title"
-              className="font-mono text-sm uppercase tracking-[0.14em] text-ink-hi"
-            >
+            <h2 id="map-check-title" className="font-mono text-sm text-ink-hi">
               Did the map&apos;s ranges hold?
             </h2>
             <p className="mt-1 max-w-3xl text-sm text-ink-lo">
@@ -503,10 +500,7 @@ export default function MapAccountability({ data, pageUrl }: { data: Data; pageU
       >
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2
-              id="swing-map-title"
-              className="font-mono text-sm uppercase tracking-[0.14em] text-ink-hi"
-            >
+            <h2 id="swing-map-title" className="font-mono text-sm text-ink-hi">
               Swing from the usual vote
             </h2>
             <p className="mt-1 max-w-3xl text-sm text-ink-lo">
@@ -519,16 +513,14 @@ export default function MapAccountability({ data, pageUrl }: { data: Data; pageU
         </div>
         {data.stillCounting && (
           <p className="font-mono text-xs text-signal-amber">
-            STILL COUNTING · SEATS FILL IN AS THEIR STATES LIST THE COUNT OFFICIAL
+            Still counting · Seats fill in as their states list the count official
           </p>
         )}
         {chambers.map((c) => {
           const ch = data.chambers[c]!;
           return (
             <div key={c} className="space-y-2">
-              <h3 className="font-mono text-xs uppercase tracking-[0.14em] text-ink-hi">
-                {CHAMBER_NAME[c]}
-              </h3>
+              <h3 className="font-mono text-xs text-ink-hi">{CHAMBER_NAME[c]}</h3>
               <p className="text-sm text-ink-lo">{swingSentence(CHAMBER_NAME[c], ch)}</p>
               <div
                 className="mx-auto max-w-[38rem]"
@@ -549,9 +541,9 @@ export default function MapAccountability({ data, pageUrl }: { data: Data; pageU
         <div {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
           <a
             href={`/api/elections/archive/${data.cycle}/swing.csv`}
-            className="inline-flex min-h-11 items-center border border-white/20 px-4 font-mono text-xs tracking-[0.12em] text-ink-lo hover:text-ink-hi"
+            className="inline-flex min-h-11 items-center border border-white/20 px-4 font-mono text-xs text-ink-lo hover:text-ink-hi"
           >
-            CSV · SWING AND RANGES
+            CSV · Swing and ranges
           </a>
         </div>
         <p className="border-t border-white/[0.07] pt-2 font-mono text-[11px] leading-relaxed text-ink-min">

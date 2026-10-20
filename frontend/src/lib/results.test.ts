@@ -547,7 +547,7 @@ describe("labels", () => {
 describe("describeUpdate", () => {
   it("words a flip as a lead until the state calls it", () => {
     expect(describeUpdate(event("flip"))).toEqual({
-      tag: "FLIP",
+      tag: "Flip",
       tone: "flip",
       text:
         "Ray Jones (R) leads in a seat Democrats hold. Ray Jones (R) 52.6%, Dana Smith (D) 47.4%. " +
@@ -616,7 +616,7 @@ describe("describeUpdate", () => {
       describeUpdate(event("all_reporting", { totalUnits: null, reportingUnits: null })).text
     ).toMatch(/^Every reporting unit is in\./);
     // Never a bare OFFICIAL beside the shares: that reads as a result.
-    expect(describeUpdate(event("official")).tag).toBe("OFFICIAL COUNT");
+    expect(describeUpdate(event("official")).tag).toBe("Official count");
     expect(describeUpdate(event("official")).text).toMatch(/Not called\.$/);
     expect(
       describeUpdate(
@@ -718,12 +718,12 @@ describe("flipShown / flipNotShownText", () => {
     });
     expect(flipShown(tied)).toBe(false);
     expect(flipNotShownText(tied)).toBe("tied in the latest count");
-    expect(flipNotShownTag(tied)).toBe("TIED");
+    expect(flipNotShownTag(tied)).toBe("Tied");
     // Zero votes in a held poll: announced, not shown — never "seat changing party".
     const empty = heldFlip({ votesCounted: 0, leaderParty: "REP" });
     expect(flipShown(empty)).toBe(false);
     expect(flipNotShownText(empty)).toBe("no votes in the latest count");
-    expect(flipNotShownTag(empty)).toBe("NO VOTES IN THIS COUNT");
+    expect(flipNotShownTag(empty)).toBe("No votes in this count");
     // A leader with no party given: what is unknown, not "another party".
     const noParty = heldFlip({
       leaderParty: null,
@@ -733,8 +733,8 @@ describe("flipShown / flipNotShownText", () => {
       ],
     });
     expect(flipNotShownText(noParty)).toBe("leader's party not given in the latest count");
-    expect(flipNotShownTag(noParty)).toBe("LEADER'S PARTY NOT GIVEN");
-    expect(flipNotShownTag(heldFlip())).toBe("HOLDER'S PARTY LEADS");
+    expect(flipNotShownTag(noParty)).toBe("Leader's party not given");
+    expect(flipNotShownTag(heldFlip())).toBe("Holder's party leads");
     expect(flipNotShownTag(race())).toBeNull();
     // No flip announced: neither.
     expect(flipShown(race({ flip: false }))).toBe(false);

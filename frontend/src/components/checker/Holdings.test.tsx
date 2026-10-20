@@ -119,7 +119,7 @@ describe("Holdings", () => {
     // Collapse the list the click would open, so the error must show outside it.
     fetchSenatorHoldings.mockRejectedValueOnce(new Error("Failed to load holdings"));
     await userEvent.click(stocks);
-    await userEvent.click(screen.getByRole("button", { name: /INVESTMENTS & ASSETS/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Investments & assets/ }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Failed to load holdings");
     expect(screen.getByRole("button", { name: /^Stocks/ })).toHaveAttribute(
@@ -189,7 +189,7 @@ describe("Holdings", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText(/paper/)).not.toBeInTheDocument();
     // Nothing to list, so no toggle.
-    expect(screen.queryByRole("button", { name: /INVESTMENTS & ASSETS/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Investments & assets/ })).not.toBeInTheDocument();
   });
 
   it("dates a new-filer report's zero values to its own date, not a year end", async () => {
@@ -243,7 +243,7 @@ describe("Holdings", () => {
         /Also filed, on or after this report.s filing date: the annual report filed 2026-08-12/
       )
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /VIEW THAT FILING/ })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /View that filing/ })).toHaveAttribute(
       "href",
       "https://efd.example/paper/x/"
     );

@@ -139,7 +139,7 @@ describe("held and thin-data marks", () => {
   it("gives the tag's full sentence to screen readers", () => {
     render(<HeldScoreTag held={held} />);
     expect(screen.getByText(/Score from the 2026-10-14 run/)).toHaveClass("sr-only");
-    expect(screen.getByText(/^HELD/).textContent).toBe("HELD · 10-14");
+    expect(screen.getByText(/^Held/).textContent).toBe("Held · 10-14");
   });
 
   it("shows nothing when the score isn't held or the data isn't thin", () => {

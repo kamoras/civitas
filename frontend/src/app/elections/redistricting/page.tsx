@@ -62,7 +62,7 @@ export default async function RedistrictingIndexPage() {
                   <li key={s.state}>
                     <Link
                       href={redistrictingHref(s.state)}
-                      className="flex min-h-11 min-w-11 items-center justify-center border border-white/15 px-3 font-mono text-sm tracking-[0.12em] text-ink-lo transition-colors hover:border-phos/40 hover:text-phos"
+                      className="flex min-h-11 min-w-11 items-center justify-center border border-white/15 px-3 font-mono text-sm text-ink-lo transition-colors hover:border-phos/40 hover:text-phos"
                     >
                       {s.state}
                       <span className="sr-only"> {s.stateName}</span>
@@ -83,25 +83,25 @@ export default async function RedistrictingIndexPage() {
                   >
                     {s.stateName}
                   </Link>
-                  <span className="font-mono text-[11px] tracking-[0.1em] text-ink-min">
-                    {s.summary.seats} SEATS · {s.summary.residentsMovedPct}% IN A MOSTLY NEW
-                    DISTRICT · R-LEANING {s.summary.seatsByLeanBefore.R} →{" "}
+                  <span className="font-mono text-[11px] text-ink-min">
+                    {s.summary.seats} seats · {s.summary.residentsMovedPct}% in a mostly new
+                    district · R-leaning {s.summary.seatsByLeanBefore.R} →{" "}
                     {s.summary.seatsByLeanAfter.R} {netWord(s.summary.netSeatChangeByLean.R)} ·
-                    D-LEANING {s.summary.seatsByLeanBefore.D} → {s.summary.seatsByLeanAfter.D}{" "}
+                    D-leaning {s.summary.seatsByLeanBefore.D} → {s.summary.seatsByLeanAfter.D}{" "}
                     {netWord(s.summary.netSeatChangeByLean.D)}
                   </span>
                 </div>
                 {s.map?.title && <p className="mt-0.5 text-xs text-ink-lo">{s.map.title}</p>}
                 <div className="mt-2 space-y-2">
-                  <SeatStrip label="BEFORE" counts={s.summary.seatsByLeanBefore} />
-                  <SeatStrip label="AFTER" counts={s.summary.seatsByLeanAfter} />
+                  <SeatStrip label="Before" counts={s.summary.seatsByLeanBefore} />
+                  <SeatStrip label="After" counts={s.summary.seatsByLeanAfter} />
                 </div>
                 <Link
                   href={redistrictingHref(s.state)}
-                  className="mt-2 inline-block min-h-[44px] py-2 font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
+                  className="mt-2 inline-block min-h-[44px] py-2 font-mono text-xs text-signal-cyan hover:text-phos"
                   aria-label={`What changed in ${s.stateName}`}
                 >
-                  [ WHAT CHANGED → ]
+                  [ What changed → ]
                 </Link>
               </li>
             ))}
@@ -109,7 +109,7 @@ export default async function RedistrictingIndexPage() {
 
           {(index?.heldMaps ?? []).length > 0 && (
             <section aria-labelledby="held" className="mt-8 border-t border-white/[0.09] pt-4">
-              <h2 id="held" className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
+              <h2 id="held" className="font-mono text-xs text-ink-min">
                 Kept their old lines
               </h2>
               <ul className="mt-2 space-y-2 text-sm text-ink-lo">
@@ -127,7 +127,7 @@ export default async function RedistrictingIndexPage() {
                             rel="noopener noreferrer"
                             className="font-mono text-xs text-signal-cyan hover:text-phos"
                           >
-                            [ OFFICIAL SOURCE ↗ ]
+                            [ Official source ↗ ]
                           </a>
                         </>
                       )}

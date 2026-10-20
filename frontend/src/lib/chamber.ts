@@ -45,6 +45,6 @@ export function chamberBg(chamber: string): string {
 }
 
 export function chamberLabel(chamber: string): string {
-  if (chamber === "Regulatory") return "AGENCY";
-  return chamber?.toUpperCase() || "GOV";
+  if (chamber === "Regulatory") return "Agency";
+  return chamber || "Gov";
 }

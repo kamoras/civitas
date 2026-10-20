@@ -183,7 +183,7 @@ describe("SiteSearch", () => {
     render(<SiteSearch />);
     const link = screen.getByRole("link", { name: /search/i });
     fireEvent.click(link);
-    const dialog = screen.getByRole("dialog", { name: "SEARCH" });
+    const dialog = screen.getByRole("dialog", { name: "Search" });
     expect(dialog.hasAttribute("open")).toBe(true);
     expect(document.activeElement).toBe(screen.getByRole("combobox"));
     fireEvent.click(screen.getByRole("button", { name: /close search/i }));

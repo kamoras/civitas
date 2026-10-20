@@ -34,7 +34,7 @@ export default function CourtLine({ court }: { court: Court }) {
         <h2 id="line-heading" className="text-xl font-semibold text-ink-hi">
           Where the justices sit
         </h2>
-        <p className="mt-1 font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
+        <p className="mt-1 font-mono text-xs text-ink-min">
           Martin-Quinn estimate{court.mqTerm ? `, ${court.mqTerm} term` : ""} · not a score
         </p>
       </div>
@@ -89,7 +89,7 @@ export default function CourtLine({ court }: { court: Court }) {
                 interval
               </caption>
               <thead>
-                <tr className="border-b border-white/15 text-left font-mono text-xs uppercase tracking-[0.1em] text-ink-min">
+                <tr className="border-b border-white/15 text-left font-mono text-xs text-ink-min">
                   <th scope="col" className="py-2 pr-3 font-normal">
                     Justice
                   </th>
@@ -115,7 +115,7 @@ export default function CourtLine({ court }: { court: Court }) {
                           {surname(j)}
                         </Link>
                         {isMedian && (
-                          <span className="ml-2 border border-signal-amber/60 px-1 font-mono text-xs uppercase text-signal-amber">
+                          <span className="ml-2 border border-signal-amber/60 px-1 font-mono text-xs text-signal-amber">
                             Median
                           </span>
                         )}

@@ -100,10 +100,10 @@ export default function AccessibilityPage() {
                 <Item label="Long pages on a phone">
                   A member&apos;s scorecard, a bill, a roll call, a state ballot, the Supreme Court
                   page and the About chapters show a bar under the header once their first section
-                  scrolls up: it names the section you are reading, and SECTIONS opens every section
+                  scrolls up: it names the section you are reading, and sections opens every section
                   in a sheet from the bottom of the screen, the current one marked. Choosing one
                   moves focus to its heading. The sheet keeps focus inside, closes on Escape, its
-                  44-pixel Close button or a tap outside it, and returns focus to SECTIONS.
+                  44-pixel Close button or a tap outside it, and returns focus to sections.
                 </Item>
                 <Item label="Focus">
                   The element with keyboard focus always shows a 2px green outline, and the page
@@ -148,7 +148,7 @@ export default function AccessibilityPage() {
                 <Item label="Touch">
                   Controls are at least 24×24 pixels, WCAG 2.2&apos;s minimum target size, or spaced
                   so a 24-pixel circle around each touches no other; links inside a sentence are the
-                  exception the standard allows. On a phone the MENU button, the way to every
+                  exception the standard allows. On a phone the menu button, the way to every
                   section, is a 44×44 target around the word, every standalone action (calling or
                   writing a member, sharing, paging, a roll call&apos;s names) is 44 pixels tall,
                   and every text box and menu is 44 pixels tall with 16-pixel text, so an iPhone
@@ -167,6 +167,13 @@ export default function AccessibilityPage() {
                   for record identifiers (issue, roll-call and bill numbers), where telling 0 from O
                   and 1 from l matters. The Civitas wordmark is Archivo. All four are open-licence
                   fonts served from this site.
+                </P>
+                <P>
+                  Labels, buttons, menus and table headings are in sentence case, not capitals.
+                  Capitals are slower to read once a label runs past a word or two, and a screen
+                  reader can spell typed capitals out letter by letter. A short heading over a
+                  block may still show in small capitals, but the words underneath are ordinary
+                  text, so they are read as words.
                 </P>
               </More>
             </Section>

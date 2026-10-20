@@ -534,7 +534,7 @@ function StateSheet({
   return (
     <div className="space-y-3 text-sm text-ink-lo">
       <div className="flex items-start justify-between gap-3">
-        <h3 className="font-mono text-xs uppercase tracking-[0.14em] text-ink-hi">
+        <h3 className="font-mono text-xs text-ink-hi">
           {seats[0]?.stateName} · {seats.length} {seats.length === 1 ? "seat" : "seats"}
         </h3>
         <button
@@ -565,7 +565,7 @@ function StateSheet({
           </li>
         ))}
       </ul>
-      <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">Not a race call.</p>
+      <p className="font-mono text-xs text-ink-min">Not a race call.</p>
     </div>
   );
 }
@@ -693,7 +693,7 @@ function RangeBar({ seat }: { seat: RangedSeat }) {
       </div>
       <div className="mt-0.5 flex justify-between font-mono text-[10px] text-ink-min">
         <span>D+{span}</span>
-        <span>EVEN</span>
+        <span>Even</span>
         <span>R+{span}</span>
       </div>
     </div>
@@ -717,7 +717,7 @@ function SeatDetail({
     <div className="space-y-3 text-sm text-ink-lo">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
+          <p className="font-mono text-xs text-ink-min">
             {seat.district != null ? "House" : "Senate"}
             {seat.special ? " · special election" : ""}
           </p>
@@ -749,7 +749,7 @@ function SeatDetail({
       )}
       <dl className="space-y-2">
         <div>
-          <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">Usual vote</dt>
+          <dt className="font-mono text-xs text-ink-min">Usual vote</dt>
           <dd className="text-ink-hi">
             {seat.leanLabel ? `${seat.leanLabel} lean` : "No figure"}{" "}
             <span className="text-ink-min">
@@ -761,13 +761,13 @@ function SeatDetail({
         </div>
         {seat.status === "range" ? (
           <div>
-            <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
+            <dt className="font-mono text-xs text-ink-min">
               {seat.rangeBasisLabel ?? "Margin range"}
             </dt>
             <dd>
               <span className="text-ink-hi">margin {rangeLabel(seat)}</span>
               {crossesEven(seat) && (
-                <span className="ml-2 font-mono text-xs">TOO CLOSE TO TELL</span>
+                <span className="ml-2 font-mono text-xs">Too close to tell</span>
               )}
               <RangeBar seat={seat} />
               <p className="mt-1 text-xs text-ink-min">
@@ -778,7 +778,7 @@ function SeatDetail({
           </div>
         ) : (
           <div>
-            <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">No range</dt>
+            <dt className="font-mono text-xs text-ink-min">No range</dt>
             <dd>{seat.reason}</dd>
           </div>
         )}
@@ -797,9 +797,7 @@ function SeatDetail({
               }
             >
               {seat.fundamentalsOnly && (
-                <li className="font-mono uppercase tracking-[0.12em] text-ink-min">
-                  Newest polls · not in the range
-                </li>
+                <li className="font-mono text-ink-min">Newest polls · not in the range</li>
               )}
               {seat.polls.list.slice(0, 6).map((p, i) => (
                 <li key={`${p.pollster}-${p.end}-${i}`}>
@@ -854,7 +852,7 @@ function SeatDetail({
           (Wikipedia contributors, CC BY-SA 4.0).
         </p>
       )}
-      <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">Not a race call.</p>
+      <p className="font-mono text-xs text-ink-min">Not a race call.</p>
       <Link
         href={raceHref}
         className="inline-flex min-h-11 items-center font-mono text-xs text-ink-hi underline"
@@ -901,7 +899,7 @@ function SeatTable({ data, onSelect }: { data: ElectionMapData; onSelect: (id: s
     >
       <button
         type="button"
-        className="min-h-11 font-mono text-xs uppercase tracking-[0.12em] text-ink-lo hover:text-ink-hi"
+        className="min-h-11 font-mono text-xs text-ink-lo hover:text-ink-hi"
         onClick={() => setSort((s) => ({ key, asc: s.key === key ? !s.asc : true }))}
       >
         {label}
@@ -922,10 +920,7 @@ function SeatTable({ data, onSelect }: { data: ElectionMapData; onSelect: (id: s
             {th("usual", "Usual vote (lean)")}
             {th("range", "Margin range (80%)")}
             {th("polls", "Polls used")}
-            <th
-              scope="col"
-              className="px-2 py-1 text-left font-mono text-xs uppercase tracking-[0.12em]"
-            >
+            <th scope="col" className="px-2 py-1 text-left font-mono text-xs">
               Latest poll
             </th>
             {th("diff", "Difference")}
@@ -1150,11 +1145,7 @@ export default function ElectionMap({
       <div className="space-y-4">
         {/* Clear of the fixed site header when scrolled to: globals.css scroll-padding-top. */}
         <div id="map-views" {...{ [SHARE_EXCLUDE_ATTR]: "" }} className="space-y-3">
-          <div
-            role="group"
-            aria-label="Chamber"
-            className="flex flex-wrap font-mono text-xs tracking-[0.12em]"
-          >
+          <div role="group" aria-label="Chamber" className="flex flex-wrap font-mono text-xs">
             {MAP_CHAMBERS.map((c, i) => (
               <button
                 key={c}
@@ -1179,11 +1170,7 @@ export default function ElectionMap({
                 ? "That map couldn't be loaded; try again."
                 : ""}
           </p>
-          <div
-            role="group"
-            aria-label="Map view"
-            className="flex flex-wrap font-mono text-xs tracking-[0.12em]"
-          >
+          <div role="group" aria-label="Map view" className="flex flex-wrap font-mono text-xs">
             {MAP_VIEWS.map((v, i) => {
               const disabled = v !== "usual" && !hasPolls;
               return (
@@ -1255,10 +1242,7 @@ export default function ElectionMap({
           >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2
-                  id="general-map-stamp"
-                  className="font-mono text-xs uppercase tracking-[0.14em] text-ink-hi"
-                >
+                <h2 id="general-map-stamp" className="font-mono text-xs text-ink-hi">
                   {VIEW_STAMP[view]} · {CHAMBER_LABEL[chamber]}
                 </h2>
                 <p aria-live="polite" className="sr-only">
@@ -1286,7 +1270,7 @@ export default function ElectionMap({
               <div className="mt-3 md:hidden" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
                 <label
                   htmlFor="house-state-picker"
-                  className="block font-mono text-xs uppercase tracking-[0.12em] text-ink-min"
+                  className="block font-mono text-xs text-ink-min"
                 >
                   Pick a state
                 </label>
@@ -1309,14 +1293,14 @@ export default function ElectionMap({
             )}
             {!data.pollsInRange && view !== "usual" && (
               <p className="mt-2 font-mono text-xs text-ink-hi">
-                FUNDAMENTALS ONLY · {data.daysToElection} DAYS OUT.{" "}
+                Fundamentals only · {data.daysToElection} days out.{" "}
                 <span className="text-ink-lo">{fundamentalsSentence(data.pollWindowDays)}</span>
               </p>
             )}
             {data.stale && (
               <p className="mt-2 font-mono text-xs text-signal-amber">
-                NOT UPDATED SINCE {formatAsOf(data.asOf).toUpperCase()}: the latest refreshes
-                failed, so these figures are older than usual.
+                Not updated since {formatAsOf(data.asOf)}: the latest refreshes failed, so these
+                figures are older than usual.
               </p>
             )}
             {chamber === "house" && (
@@ -1394,13 +1378,13 @@ export default function ElectionMap({
             aria-expanded={tableOpen}
             aria-controls="general-map-table"
             onClick={() => setTableOpen((o) => !o)}
-            className="min-h-11 border border-white/20 px-4 font-mono text-xs tracking-[0.12em] text-ink-lo hover:text-ink-hi"
+            className="min-h-11 border border-white/20 px-4 font-mono text-xs text-ink-lo hover:text-ink-hi"
           >
-            TABLE {tableOpen ? "▴" : "▾"}
+            Table {tableOpen ? "▴" : "▾"}
           </button>
           <a
             href={`${mapApi}.csv`}
-            className="inline-flex min-h-11 items-center border border-white/20 px-4 font-mono text-xs tracking-[0.12em] text-ink-lo hover:text-ink-hi"
+            className="inline-flex min-h-11 items-center border border-white/20 px-4 font-mono text-xs text-ink-lo hover:text-ink-hi"
           >
             CSV
           </a>

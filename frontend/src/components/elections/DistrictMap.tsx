@@ -286,8 +286,8 @@ export default function DistrictMap({
   return (
     <div className="mb-4 border border-white/15">
       <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-white/10 px-3 py-2">
-        <p className="font-mono text-xs tracking-[0.1em] text-phos">
-          {results ? "WHO LEADS EACH DISTRICT" : "POINT AT WHERE YOU LIVE"}
+        <p className="font-mono text-xs text-phos">
+          {results ? "Who leads each district" : "Point at where you live"}
         </p>
         {results ? (
           // Every fill a district can get here: resultFill's (including
@@ -549,7 +549,7 @@ function DistrictResultPreview({
       <span className="text-ink-hi">
         {district === 0 ? `${state} at-large` : `${state}-${district}`}
       </span>
-      {tied && <span className="text-ink-hi">TIED</span>}
+      {tied && <span className="text-ink-hi">Tied</span>}
       {!result && feedAnswered ? (
         <span className="text-ink-min">no count shown here</span>
       ) : !result || !result.votesCounted ? (

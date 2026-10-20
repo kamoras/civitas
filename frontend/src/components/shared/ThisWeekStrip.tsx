@@ -1,3 +1,4 @@
+import { EYEBROW } from "@/lib/typeStyles";
 import Link from "next/link";
 import { connection } from "next/server";
 import type { CommentDeadline, StateNextDeadline, ThisWeek } from "@/types/thisWeek";
@@ -56,7 +57,7 @@ export default async function ThisWeekStrip({
   );
 }
 
-const LABEL = "font-mono text-xs uppercase tracking-[0.16em] text-ink-min";
+const LABEL = EYEBROW;
 const LINK = "underline decoration-white/30 underline-offset-4 hover:text-phos";
 
 function electionLine(e: ThisWeek["election"]): { figure: string; caption: string; pick: string } {
@@ -183,7 +184,7 @@ function FullStrip({ data }: { data: ThisWeek }) {
     <section aria-labelledby="this-week-heading" className="mx-auto mt-8 max-w-7xl px-4 sm:px-6">
       <h2
         id="this-week-heading"
-        className="border-b border-white/15 pb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
+        className="border-b border-white/15 pb-2 font-mono text-xs text-ink-min"
       >
         This week
       </h2>
@@ -191,9 +192,7 @@ function FullStrip({ data }: { data: ThisWeek }) {
         <div className="flex flex-col gap-3">
           <p className="font-display text-ink-hi">
             <span className="text-4xl font-semibold leading-none tabular-nums">{line.figure}</span>{" "}
-            <span className="font-mono text-xs uppercase tracking-[0.12em] text-ink-lo">
-              {line.caption}
-            </span>
+            <span className="font-mono text-xs text-ink-lo">{line.caption}</span>
           </p>
           {/* Behind a disclosure, as in the compact strip: 51 boxes were
               the heaviest thing on the homepage and a third of its tab
@@ -233,7 +232,7 @@ function FullStrip({ data }: { data: ThisWeek }) {
               const n = ch.recordVotesThisWeek;
               return (
                 <li key={c}>
-                  {c === "senate" ? "SENATE" : "HOUSE"} · {n === 0 ? "no" : n} record vote
+                  {c === "senate" ? "Senate" : "House"} · {n === 0 ? "no" : n} record vote
                   {n === 1 ? "" : "s"} this week
                 </li>
               );
@@ -324,7 +323,7 @@ function CompactStrip({ data, pageDate }: { data: ThisWeek; pageDate?: string })
       className="mb-6 border border-white/15 bg-surface px-4 py-3 font-mono text-xs text-ink-lo"
     >
       <div className="flex flex-wrap items-baseline gap-x-5 gap-y-2">
-        <span className="uppercase tracking-[0.16em] text-ink-min">{label}</span>
+        <span className="text-ink-min">{label}</span>
         <span>
           <span className="font-semibold text-ink-hi">{line.figure}</span> {line.caption}
         </span>

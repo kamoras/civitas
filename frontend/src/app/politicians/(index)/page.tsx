@@ -94,13 +94,13 @@ function PoliticianCardUI({ p }: { p: PoliticianCard }) {
           <p className="font-mono text-xs text-ink-min mb-2 truncate">{subtitle}</p>
 
           {p.leadershipTitle && (
-            <span className="inline-block max-w-full font-mono text-xs text-signal-amber tracking-widest border border-signal-amber/40 px-1.5 py-0.5 mb-2">
-              {p.leadershipTitle.toUpperCase()}
+            <span className="inline-block max-w-full font-mono text-xs text-signal-amber border border-signal-amber/40 px-1.5 py-0.5 mb-2">
+              {p.leadershipTitle}
             </span>
           )}
 
           {p.isCurrent === false ? (
-            <span className="font-mono text-xs text-ink-lo tracking-widest border border-signal-magenta/40 px-1.5 py-0.5">
+            <span className="font-mono text-xs text-ink-lo border border-signal-magenta/40 px-1.5 py-0.5">
               {formerOfficeBadge(p)}
             </span>
           ) : null}
@@ -110,7 +110,7 @@ function PoliticianCardUI({ p }: { p: PoliticianCard }) {
           <div className="shrink-0 flex items-center gap-1 mt-0.5">
             <span className="inline-block w-1.5 h-1.5 bg-signal-cyan animate-pulse" />
             <span className="font-mono text-xs text-signal-cyan">
-              IN {p.activeIssueCount} {p.activeIssueCount === 1 ? "ISSUE" : "ISSUES"}
+              In {p.activeIssueCount} {p.activeIssueCount === 1 ? "issue" : "issues"}
             </span>
           </div>
         )}
@@ -319,15 +319,15 @@ function PoliticiansPageContent() {
   const showStateFilter = branch === "all" || branch === "senate" || branch === "house";
 
   const branchTabs: { key: BranchFilter; label: string }[] = [
-    { key: "all", label: "ALL" },
-    { key: "senate", label: "SENATE" },
-    { key: "house", label: "HOUSE" },
-    { key: "president", label: "PRESIDENT" },
+    { key: "all", label: "All" },
+    { key: "senate", label: "Senate" },
+    { key: "house", label: "House" },
+    { key: "president", label: "President" },
     { key: "scotus", label: "SCOTUS" },
   ];
 
   const partyTabs: { key: PartyFilter; label: string }[] = [
-    { key: "ALL", label: "ALL" },
+    { key: "ALL", label: "All" },
     { key: "D", label: "DEM" },
     { key: "R", label: "REP" },
     { key: "I", label: "IND" },
@@ -374,7 +374,7 @@ function PoliticiansPageContent() {
                     setParty("ALL");
                   }}
                   aria-pressed={branch === key}
-                  className={`font-mono text-xs tracking-widest px-3 py-1 border transition-colors ${
+                  className={`font-mono text-xs px-3 py-1 border transition-colors ${
                     branch === key ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
                   }`}
                 >
@@ -383,7 +383,7 @@ function PoliticiansPageContent() {
               ))}
               {activeCount > 0 && (
                 <span className="font-mono text-xs text-ink-lo self-center ml-2">
-                  {activeCount} IN ACTION CENTER ISSUES
+                  {activeCount} in action center issues
                 </span>
               )}
             </div>
@@ -394,7 +394,7 @@ function PoliticiansPageContent() {
               <input
                 ref={searchRef}
                 type="text"
-                placeholder="SEARCH NAME..."
+                placeholder="Search name..."
                 aria-label="Search politicians by name"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -425,7 +425,7 @@ function PoliticiansPageContent() {
                   aria-label="Filter by state"
                   className="font-mono text-xs bg-surface-base border border-white/[0.07] text-ink-lo px-2 py-1 outline-none"
                 >
-                  <option value="">ALL STATES</option>
+                  <option value="">All states</option>
                   {STATES_BY_NAME.map((s) => (
                     <option key={s} value={s}>
                       {STATE_NAMES[s]}
@@ -441,9 +441,9 @@ function PoliticiansPageContent() {
                     setParty("ALL");
                     setState("");
                   }}
-                  className="font-mono text-xs text-ink-min hover:text-phos transition-colors tracking-widest"
+                  className="font-mono text-xs text-ink-min hover:text-phos transition-colors"
                 >
-                  CLEAR
+                  Clear
                 </button>
               )}
             </div>
@@ -451,8 +451,8 @@ function PoliticiansPageContent() {
 
           {/* Results */}
           {loading ? (
-            <div className="text-center py-16 font-mono text-xs text-ink-min tracking-widest pulse-subtle">
-              LOADING...
+            <div className="text-center py-16 font-mono text-xs text-ink-min pulse-subtle">
+              Loading...
             </div>
           ) : error ? (
             <>
@@ -462,14 +462,12 @@ function PoliticiansPageContent() {
           ) : filtered.length === 0 ? (
             <>
               {finder}
-              <div className="text-center py-16 font-mono text-xs text-ink-min tracking-widest">
-                NO RESULTS
-              </div>
+              <div className="text-center py-16 font-mono text-xs text-ink-min">No results</div>
             </>
           ) : (
             <>
-              <p className="font-mono text-xs text-ink-min mb-3 tracking-widest">
-                {filtered.length} POLITICIAN{filtered.length !== 1 ? "S" : ""}
+              <p className="font-mono text-xs text-ink-min mb-3">
+                {filtered.length} politician{filtered.length !== 1 ? "s" : ""}
               </p>
               {senators.length > 0 && (
                 <div className={`${CARD_GRID} mb-4`}>

@@ -6,9 +6,7 @@ import type { NominationStatus, NominationSummary } from "@/types/nomination";
 
 export function StatusBadge({ status }: { status: NominationStatus }) {
   return (
-    <span
-      className={`inline-block border px-2 py-0.5 font-mono text-xs uppercase tracking-[0.12em] ${STATUS_STYLE[status]}`}
-    >
+    <span className={`inline-block border px-2 py-0.5 font-mono text-xs ${STATUS_STYLE[status]}`}>
       {STATUS_LABEL[status]}
     </span>
   );

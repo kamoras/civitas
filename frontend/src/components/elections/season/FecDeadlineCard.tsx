@@ -19,7 +19,7 @@ export default function FecDeadlineCard({ event }: { event: FecDeadlineEvent | n
       aria-labelledby="fec-deadline"
       className="mt-6 border font-sans border-signal-cyan/30 bg-surface px-4 py-3"
     >
-      <h2 id="fec-deadline" className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
+      <h2 id="fec-deadline" className="font-mono text-xs text-ink-min">
         FEC filing deadline
       </h2>
       <p className="mt-1 text-sm text-ink-lo">

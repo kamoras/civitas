@@ -16,17 +16,16 @@ export default function CommitteeEntries({ entries }: { entries: CommitteeEntry[
           key={e.id}
           className="grid grid-cols-1 gap-x-6 gap-y-1 border-b border-white/[0.09] py-3 sm:grid-cols-[9rem_minmax(0,1fr)]"
         >
-          <p className="font-mono text-xs leading-relaxed tracking-[0.08em] text-ink-min">
+          <p className="font-mono text-xs leading-relaxed text-ink-min">
             <Link
               href={dayHref(e.date)}
               className="text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
             >
-              {shortDate(e.date).toUpperCase()}, {e.date.slice(0, 4)}
+              {shortDate(e.date)}, {e.date.slice(0, 4)}
             </Link>
             <span className="sm:block">
               <span className="sm:hidden"> · </span>
-              {CHAMBER_NAME[e.chamber].toUpperCase()} ·{" "}
-              {e.kind === "meeting" ? "MEETING" : "REPORT"}
+              {CHAMBER_NAME[e.chamber]} · {e.kind === "meeting" ? "Meeting" : "Report"}
             </span>
           </p>
           <div className="min-w-0">

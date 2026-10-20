@@ -183,15 +183,13 @@ function Row({
     >
       <div className="flex items-baseline justify-between gap-3 md:block">
         <div>
-          <p className="text-[13px] font-semibold uppercase tracking-[0.06em] text-ink-lo">
-            {m.label}
-          </p>
+          <p className="text-[13px] font-semibold text-ink-lo">{m.label}</p>
           <p className="text-[28px] font-semibold leading-tight text-ink-hi sm:text-[32px]">
             {m.shown ?? "No record"}
           </p>
         </div>
         <p
-          className={`text-right text-[13px] font-semibold uppercase tracking-[0.06em] md:hidden ${strong ? "text-signal-orange" : "text-ink-lo"}`}
+          className={`text-right text-[13px] font-semibold md:hidden ${strong ? "text-signal-orange" : "text-ink-lo"}`}
         >
           {m.thin ? "" : m.word}
         </p>
@@ -201,7 +199,7 @@ function Row({
         <Strip m={m} name={name} />
       </div>
       <p
-        className={`hidden self-center text-[13px] font-semibold uppercase tracking-[0.06em] md:block ${strong ? "text-signal-orange" : "text-ink-lo"}`}
+        className={`hidden self-center text-[13px] font-semibold md:block ${strong ? "text-signal-orange" : "text-ink-lo"}`}
       >
         {m.thin ? "" : m.word}
       </p>
@@ -359,9 +357,7 @@ export default function WhereTheyStand({
       {data && (
         <>
           <div className="mt-4 border border-white/25 border-l-4 border-l-signal-orange bg-surface px-4 py-3 sm:px-6">
-            <p className="text-[13px] font-semibold uppercase tracking-[0.06em] text-signal-orange">
-              Stands out
-            </p>
+            <p className="text-[13px] font-semibold text-signal-orange">Stands out</p>
             <p className="font-display text-lg font-semibold leading-snug text-ink-hi">
               {data.standsOut}
             </p>

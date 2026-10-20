@@ -47,7 +47,7 @@ export default function JusticeCases({ justiceId }: { justiceId: string }) {
         <h2 id="cases-heading" className="text-[19px] font-semibold text-ink-hi">
           Every case on the record
         </h2>
-        <p className="mt-1 font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
+        <p className="mt-1 font-mono text-xs text-ink-min">
           {data && data.total > 0
             ? `${data.total} orally argued cases · ${termsPhrase(data.terms)}`
             : "Orally argued cases, newest first"}
@@ -74,7 +74,7 @@ export default function JusticeCases({ justiceId }: { justiceId: string }) {
                 Cases on the record, newest first, page {data.page} of {pages}
               </caption>
               <thead>
-                <tr className="border-b border-white/15 text-left font-mono text-xs uppercase tracking-[0.08em] text-ink-min">
+                <tr className="border-b border-white/15 text-left font-mono text-xs text-ink-min">
                   <th scope="col" className="py-2 pr-3 font-normal">
                     Case
                   </th>

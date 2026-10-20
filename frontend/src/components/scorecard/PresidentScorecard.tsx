@@ -399,13 +399,13 @@ export default function PresidentScorecard({
                 <span className="font-display text-4xl font-semibold leading-none">
                   {president.number}
                 </span>
-                <span className="mt-1 font-mono text-[10px] tracking-[0.12em]">PRESIDENT</span>
+                <span className="mt-1 font-mono text-[10px]">President</span>
               </div>
               <div className="flex min-w-0 flex-col gap-2">
                 <Title className="break-words text-3xl font-semibold leading-tight text-ink-hi sm:text-4xl">
                   {president.name}
                 </Title>
-                <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-lo">
+                <p className="font-mono text-xs text-ink-lo">
                   {ordinal(president.number)} President · {party.label} ·{" "}
                   {president.termStart.slice(0, 4)} to {termEnd}
                 </p>
@@ -437,9 +437,7 @@ export default function PresidentScorecard({
               </div>
             </div>
             <div className="flex flex-col gap-2 border-t border-white/[0.12] pt-5 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
-              <p className="text-[13px] font-semibold uppercase tracking-[0.06em] text-ink-lo">
-                Historians&apos; rank
-              </p>
+              <p className="text-[13px] font-semibold text-ink-lo">Historians&apos; rank</p>
               {legacy?.historiansRank != null ? (
                 <>
                   <p className="font-display text-5xl font-semibold leading-none text-ink-hi">
@@ -485,10 +483,7 @@ export default function PresidentScorecard({
           )}
 
           <section className="flex flex-col gap-3" aria-labelledby="also-on-record">
-            <h2
-              id="also-on-record"
-              className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min"
-            >
+            <h2 id="also-on-record" className="font-mono text-xs text-ink-min">
               Also on record, not part of the score
             </h2>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

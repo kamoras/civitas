@@ -124,7 +124,7 @@ export default function OnThisPage() {
       style={{ top: "var(--header-shown-h, var(--header-height))" }}
     >
       <div className="mx-auto flex h-11 w-full items-center justify-between gap-3 px-4">
-        <p className="min-w-0 truncate font-mono text-[0.8125rem] uppercase tracking-[0.08em] text-ink-hi">
+        <p className="min-w-0 truncate font-mono text-[0.8125rem] text-ink-hi">
           {here ? here.label : "On this page"}
           {here?.count && <span className="text-ink-lo"> · {here.count}</span>}
         </p>
@@ -132,7 +132,7 @@ export default function OnThisPage() {
           type="button"
           aria-haspopup="dialog"
           onClick={() => setOpen(true)}
-          className="inline-flex h-11 shrink-0 items-center font-mono text-[0.8125rem] uppercase tracking-[0.08em] text-ink-lo hover:text-phos"
+          className="inline-flex h-11 shrink-0 items-center font-mono text-[0.8125rem] text-ink-lo hover:text-phos"
         >
           <span aria-hidden="true">[&nbsp;</span>Sections<span aria-hidden="true">&nbsp;▾ ]</span>
         </button>

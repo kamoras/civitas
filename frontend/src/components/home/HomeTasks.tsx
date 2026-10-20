@@ -9,7 +9,7 @@ import StateJump from "./StateJump";
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
 const BOX = "flex min-w-0 flex-col border border-white/30 bg-surface p-4 sm:p-5";
-const LABEL = "text-[13px] font-semibold uppercase tracking-[0.06em] text-ink-lo";
+const LABEL = "text-[13px] font-semibold text-ink-lo";
 const TITLE = "mt-1 font-display text-[22px] font-semibold leading-tight text-ink-hi";
 const BUTTON =
   "mt-3 inline-flex min-h-11 w-fit items-center border border-ink-hi px-3 text-sm font-semibold text-ink-hi hover:bg-white/5";

@@ -3,7 +3,7 @@ import type { CaseLinks, CourtDecisionPage, CourtJustice } from "@/types/court";
 import { splitLabel, surname } from "@/lib/court";
 
 const LINK =
-  "inline-flex min-h-6 items-center font-mono text-xs uppercase tracking-[0.1em] text-ink-lo underline decoration-white/25 underline-offset-4 hover:text-phos";
+  "inline-flex min-h-6 items-center font-mono text-xs text-ink-lo underline decoration-white/25 underline-offset-4 hover:text-phos";
 
 function longDate(iso: string | null): string | null {
   if (!iso) return null;

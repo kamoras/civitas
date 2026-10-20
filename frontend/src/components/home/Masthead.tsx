@@ -13,13 +13,13 @@ const VOTER_LINK =
 export function electionLinks(phase: ElectionPhase | null): { href: string; label: string }[] {
   if (phase === "campaign")
     return [
-      { href: ELECTION_MAP_HREF, label: "SEAT MAP" },
-      { href: REDISTRICTING_HREF, label: "NEW HOUSE MAPS" },
+      { href: ELECTION_MAP_HREF, label: "Seat map" },
+      { href: REDISTRICTING_HREF, label: "New House maps" },
     ];
   if (phase === "election_day" || phase === "results")
     return [
-      { href: "/elections", label: "RESULTS" },
-      { href: REDISTRICTING_HREF, label: "NEW HOUSE MAPS" },
+      { href: "/elections", label: "Results" },
+      { href: REDISTRICTING_HREF, label: "New House maps" },
     ];
   return [];
 }

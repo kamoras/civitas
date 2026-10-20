@@ -21,12 +21,12 @@ export function HeldScoreTag({ held }: { held?: HeldScore | null }) {
   return (
     <span
       title={text}
-      className="ml-2 inline-block whitespace-nowrap border border-signal-amber/40 px-1 font-mono text-xs tracking-[0.08em] text-signal-amber"
+      className="ml-2 inline-block whitespace-nowrap border border-signal-amber/40 px-1 font-mono text-xs text-signal-amber"
     >
       {/* The run's date where a row has room for it; a phone's card keeps
           the member's name instead. */}
       <span aria-hidden="true">
-        HELD
+        Held
         {held.scoredOn && <span className="hidden md:inline"> · {held.scoredOn.slice(5)}</span>}
       </span>
       <span className="sr-only">{text}</span>
@@ -39,7 +39,8 @@ export function HeldScoreNote({ held }: { held?: HeldScore | null }) {
   if (!held) return null;
   return (
     <p className="border-l-2 border-signal-amber/60 pl-3 text-sm leading-relaxed text-ink-lo">
-      <span className="font-mono text-xs uppercase tracking-[0.12em] text-signal-amber">Held</span>{" "}
+      <span className="font-mono text-xs text-signal-amber">Held</span>
+      {""}
       {heldScoreText(held)}
     </p>
   );
@@ -52,11 +53,9 @@ export function ThinDataNote({ dims }: { dims?: string[] }) {
   const which = dims.map((d) => SCORE_TERMS[d as ScoreKey]?.label ?? asLabel(d)).join(", ");
   return (
     <p className="border-l-2 border-signal-amber/60 pl-3 text-sm leading-relaxed text-ink-lo">
-      <span className="font-mono text-xs uppercase tracking-[0.12em] text-signal-amber">
-        Thin data
-      </span>{" "}
-      Little data is behind {which}, so {dims.length === 1 ? "that part is" : "those parts are"}{" "}
-      mostly pulled toward a middle value, not measured.
+      <span className="font-mono text-xs text-signal-amber">Thin data</span> Little data is behind{" "}
+      {which}, so {dims.length === 1 ? "that part is" : "those parts are"} mostly pulled toward a
+      middle value, not measured.
     </p>
   );
 }

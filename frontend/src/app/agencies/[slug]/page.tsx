@@ -39,7 +39,7 @@ const LINKING_TAIL = "Older documents are still being linked to the agency that 
 
 const H2 = "font-display text-xl font-semibold text-ink-hi";
 const MORE =
-  "mt-3 inline-flex min-h-6 items-center font-mono text-xs uppercase tracking-[0.12em] text-signal-cyan hover:text-phos";
+  "mt-3 inline-flex min-h-6 items-center font-mono text-xs text-signal-cyan hover:text-phos";
 
 function paragraphs(text: string | null): string[] {
   return (text ?? "")
@@ -51,7 +51,7 @@ function paragraphs(text: string | null): string[] {
 function Figure({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
     <div className="min-w-0">
-      <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">{label}</dt>
+      <dt className="font-mono text-xs text-ink-min">{label}</dt>
       <dd className="mt-1 font-display text-2xl font-semibold tabular-nums text-ink-hi">{value}</dd>
       {note && <dd className="text-xs text-ink-lo">{note}</dd>}
     </div>
@@ -147,9 +147,7 @@ function BudgetBlock({ a }: { a: AgencyDetail }) {
       )}
       {b.byYear && b.byYear.length > 1 && (
         <div className="mt-5">
-          <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
-            Budgetary resources by fiscal year
-          </p>
+          <p className="font-mono text-xs text-ink-min">Budgetary resources by fiscal year</p>
           <ol className="mt-2 space-y-1.5">
             {b.byYear.map((y) => (
               <li
@@ -370,9 +368,7 @@ export default async function AgencyPage({ params }: PageProps) {
                   <ul className="divide-y divide-white/[0.07]">
                     {a.actionIssues.map((i) => (
                       <li key={i.id} className="py-3">
-                        <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
-                          {readOn(i.date)}
-                        </p>
+                        <p className="font-mono text-xs text-ink-min">{readOn(i.date)}</p>
                         <Link
                           href={`/issue/${i.id}`}
                           className="mt-1 block text-sm leading-snug text-ink-hi hover:text-phos"
@@ -466,7 +462,7 @@ export default async function AgencyPage({ params }: PageProps) {
                   {p}
                 </p>
               ))}
-              <p className="mt-3 flex flex-wrap gap-x-5 gap-y-1 font-mono text-xs uppercase tracking-[0.12em]">
+              <p className="mt-3 flex flex-wrap gap-x-5 gap-y-1 font-mono text-xs">
                 {a.website && (
                   <a
                     href={safeHref(a.website) || "#"}

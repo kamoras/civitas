@@ -26,7 +26,7 @@ export function Figure({
       >
         {value}
       </span>
-      <span className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">{label}</span>
+      <span className="font-mono text-xs text-ink-min">{label}</span>
     </div>
   );
 }
@@ -34,7 +34,7 @@ export function Figure({
 export function FigureGroup({ name, children }: { name: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-2">
-      <span className="font-mono text-xs uppercase tracking-[0.14em] text-ink-lo">{name}</span>
+      <span className="font-mono text-xs text-ink-lo">{name}</span>
       <div className="grid grid-cols-2 sm:grid-cols-4">{children}</div>
     </div>
   );
@@ -90,9 +90,7 @@ const TONE_CLASS = { yes: "text-phos-mid", no: "text-signal-red", neutral: "text
 
 export function ResultLabel({ result, rejected }: { result: string; rejected: boolean | null }) {
   return (
-    <span
-      className={`font-mono text-xs uppercase tracking-[0.12em] ${TONE_CLASS[resultTone(rejected)]}`}
-    >
+    <span className={`font-mono text-xs ${TONE_CLASS[resultTone(rejected)]}`}>
       {result || "Recorded"}
     </span>
   );
@@ -159,7 +157,7 @@ function TallyBar({ yeas, nays }: { yeas: number; nays: number }) {
 export function VoteRow({ vote, showDate = false }: { vote: RollCallSummary; showDate?: boolean }) {
   return (
     <li className="grid grid-cols-[minmax(0,4.5rem)_minmax(0,1fr)] gap-x-4 gap-y-2 border-b border-white/[0.09] py-3 sm:grid-cols-[minmax(0,4.5rem)_minmax(0,1fr)_minmax(0,9.5rem)]">
-      <div className="flex flex-col gap-1 font-mono text-xs uppercase tracking-[0.1em] text-ink-lo">
+      <div className="flex flex-col gap-1 font-mono text-xs text-ink-lo">
         <span>No. {vote.number}</span>
         {showDate && <span className="text-ink-min">{vote.date.slice(5)}</span>}
       </div>
@@ -186,7 +184,7 @@ export function VoteRow({ vote, showDate = false }: { vote: RollCallSummary; sho
         )}
       </div>
       {/* wrap-anywhere: the result ("CONCURRENT RESOLUTION REJECTED") is
-          one long uppercase word after another, wider than this column on a
+          one long word after another, wider than this column on a
           phone at 200% text; it breaks only where it would overflow. */}
       <div className="col-start-2 flex min-w-0 flex-col items-start gap-1.5 wrap-anywhere sm:col-start-auto sm:items-end">
         <ResultLabel result={voteResult(vote)} rejected={vote.rejected} />
@@ -212,7 +210,7 @@ export function MeasureRow({ event, tag }: { event: CongressEvent; tag?: string 
           )}
         </p>
         {tag && (
-          <span className="shrink-0 border border-white/20 px-2 py-0.5 font-mono text-xs uppercase tracking-[0.1em] text-ink-lo">
+          <span className="shrink-0 border border-white/20 px-2 py-0.5 font-mono text-xs text-ink-lo">
             {tag}
           </span>
         )}

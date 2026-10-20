@@ -74,10 +74,10 @@ export default async function SectionCards({
         aria-labelledby={headingId}
         data-share-section={`${section}-pages`}
         {...shareMetaAttrs({ source: SOURCES[section] ?? "Civitas", asOf: null })}
-        className={`${className} `}
+        className={`${className}`}
       >
         <div className="flex flex-wrap items-baseline justify-between gap-x-3 border-b border-white/15 pb-2">
-          <h2 id={headingId} className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
+          <h2 id={headingId} className="font-mono text-xs text-ink-min">
             More in {label}
           </h2>
           <ShareSectionButton label={`${label} pages`} />
@@ -93,7 +93,7 @@ export default async function SectionCards({
                 key={t.key}
                 className="group relative flex flex-col border border-white/[0.07] border-t-white/15 bg-surface px-4 py-3 transition-colors focus-within:border-phos/40 hover:border-phos/40"
               >
-                <h3 className="font-mono text-xs uppercase tracking-[0.14em] text-ink-hi">
+                <h3 className="font-mono text-xs text-ink-hi">
                   <Link
                     href={t.href}
                     className="after:absolute after:inset-0 group-hover:text-phos"

@@ -63,10 +63,7 @@ async function NewOnTheSite() {
             id={`new-${f.id}`}
             className="grid grid-cols-1 gap-1 py-3 sm:grid-cols-[9rem_1fr] sm:gap-4"
           >
-            <time
-              dateTime={f.date}
-              className="font-mono text-xs uppercase tracking-[0.08em] text-signal-amber sm:pt-1"
-            >
+            <time dateTime={f.date} className="font-mono text-xs text-signal-amber sm:pt-1">
               {released(f.date)}
             </time>
             <div>
@@ -107,7 +104,7 @@ function Entry({ v }: { v: ScoreVersion }) {
   const id = anchor(v);
   return (
     <article id={id} aria-labelledby={`${id}-h`} className="border-t border-white/[0.09] pt-6">
-      <p className="font-mono text-xs uppercase tracking-[0.16em] text-signal-cyan">
+      <p className="font-mono text-xs text-signal-cyan">
         {v.version} · released <time dateTime={v.date}>{released(v.date)}</time>
       </p>
       <h3
@@ -195,9 +192,7 @@ export default function ChangelogPage() {
                         key={f}
                         className="grid grid-cols-1 gap-1 py-3 sm:grid-cols-[13rem_1fr] sm:gap-4"
                       >
-                        <dt className="font-mono text-xs uppercase tracking-[0.08em] text-signal-amber sm:pt-0.5">
-                          {f}
-                        </dt>
+                        <dt className="font-mono text-xs text-signal-amber sm:pt-0.5">{f}</dt>
                         <dd className="text-sm leading-relaxed text-ink-lo">
                           <a
                             href={`#${anchor(v)}`}

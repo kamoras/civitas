@@ -62,9 +62,7 @@ export default async function ElectionArchiveIndexPage() {
           </PageMasthead>
           {index.cycles.length === 0 ? (
             <section className="border border-phos/20 bg-surface p-5">
-              <h2 className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-                Nothing archived yet
-              </h2>
+              <h2 className="font-mono text-xs text-ink-min">Nothing archived yet</h2>
               <p className="mt-2 text-ink-lo">{next}</p>
               <p className="mt-3 text-sm">
                 <Link
@@ -85,12 +83,12 @@ export default async function ElectionArchiveIndexPage() {
                       className="block border border-white/[0.09] bg-surface p-4 hover:border-phos/60"
                     >
                       <span className="flex flex-wrap items-baseline justify-between gap-2">
-                        <span className="font-display text-xl font-semibold uppercase text-ink-hi">
+                        <span className="font-display text-xl font-semibold text-ink-hi">
                           The {c.cycle} general election →
                         </span>
                         {c.stillCounting && (
-                          <span className="border border-signal-amber/40 px-2 py-0.5 font-mono text-[11px] tracking-[0.08em] text-ink-hi">
-                            COUNT STILL MOVING
+                          <span className="border border-signal-amber/40 px-2 py-0.5 font-mono text-[11px] text-ink-hi">
+                            Count still moving
                           </span>
                         )}
                       </span>

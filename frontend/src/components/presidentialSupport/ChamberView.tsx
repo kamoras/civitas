@@ -87,10 +87,7 @@ export default function ChamberView({ view }: { view: ChamberSupport }) {
 
         <div className="min-w-0 space-y-4">
           <div>
-            <label
-              htmlFor="ps-find"
-              className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min"
-            >
+            <label htmlFor="ps-find" className="font-mono text-xs text-ink-min">
               Find a member: name, state or district (TX-7)
             </label>
             <input
@@ -104,7 +101,7 @@ export default function ChamberView({ view }: { view: ChamberSupport }) {
             />
             {query.trim() && (
               <div aria-live="polite" className="mt-2">
-                <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
+                <p className="font-mono text-xs text-ink-min">
                   {matches.length} match{matches.length === 1 ? "" : "es"}
                 </p>
                 <ul className="mt-1 max-h-64 overflow-y-auto">
@@ -118,7 +115,7 @@ export default function ChamberView({ view }: { view: ChamberSupport }) {
 
           {member ? (
             <div className="border-t border-white/[0.09] pt-3" aria-live="polite">
-              <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
+              <p className="font-mono text-xs text-ink-min">
                 {member.party}-{seatLabel(member)} · seat {leanLabel(member.seatLean)}
               </p>
               <p className="mt-1 font-sans text-base leading-relaxed text-ink">
@@ -129,7 +126,7 @@ export default function ChamberView({ view }: { view: ChamberSupport }) {
               </div>
               <Link
                 href={`/politicians/${member.id}#ps-heading`}
-                className="mt-3 inline-block font-mono text-xs uppercase tracking-[0.12em] text-signal-cyan hover:text-phos"
+                className="mt-3 inline-block font-mono text-xs text-signal-cyan hover:text-phos"
               >
                 [Every vote behind this, on {member.name}&apos;s page] →
               </Link>
@@ -174,23 +171,20 @@ export default function ChamberView({ view }: { view: ChamberSupport }) {
       </div>
 
       <details className="border-t border-white/[0.09] pt-3">
-        <summary className="cursor-pointer font-mono text-xs uppercase tracking-[0.12em] text-ink-lo hover:text-phos">
+        <summary className="cursor-pointer font-mono text-xs text-ink-lo hover:text-phos">
           [All {view.members.length} members, the {view.rollCalls.length} counted votes, the method
           and the data]
         </summary>
         <div className="mt-4 space-y-8">
           <section aria-labelledby="ps-method">
-            <h2
-              id="ps-method"
-              className="mb-2 font-mono text-xs uppercase tracking-[0.14em] text-ink-min"
-            >
+            <h2 id="ps-method" className="mb-2 font-mono text-xs text-ink-min">
               Method
             </h2>
             <MethodNotes method={view.method} jsonHref={jsonHref} />
           </section>
 
           <section aria-labelledby="ps-all">
-            <h2 id="ps-all" className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
+            <h2 id="ps-all" className="font-mono text-xs text-ink-min">
               Every member · {chamberWord}, {congressOrdinal(view.congress)} Congress
             </h2>
             <div role="group" aria-label="Sort members" className="mt-2 flex flex-wrap gap-2">
@@ -206,7 +200,7 @@ export default function ChamberView({ view }: { view: ChamberSupport }) {
                   type="button"
                   aria-pressed={sort === key}
                   onClick={() => setSort(key)}
-                  className={`min-h-11 border px-3 font-mono text-xs uppercase tracking-[0.12em] ${
+                  className={`min-h-11 border px-3 font-mono text-xs ${
                     sort === key ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
                   }`}
                 >
@@ -217,7 +211,7 @@ export default function ChamberView({ view }: { view: ChamberSupport }) {
             <div className="mt-3 overflow-x-auto">
               <table className="w-full border-collapse font-mono text-xs text-ink-lo">
                 <thead>
-                  <tr className="border-b border-white/[0.09] text-left uppercase tracking-[0.12em] text-ink-min">
+                  <tr className="border-b border-white/[0.09] text-left text-ink-min">
                     <th className="py-2 pr-3 font-normal">Member</th>
                     <th className="py-2 pr-3 font-normal">Seat</th>
                     <th className="py-2 pr-3 text-right font-normal">n</th>
@@ -259,10 +253,7 @@ export default function ChamberView({ view }: { view: ChamberSupport }) {
           </section>
 
           <section aria-labelledby="ps-votes">
-            <h2
-              id="ps-votes"
-              className="mb-2 font-mono text-xs uppercase tracking-[0.14em] text-ink-min"
-            >
+            <h2 id="ps-votes" className="mb-2 font-mono text-xs text-ink-min">
               The {view.rollCalls.length} counted votes, newest first
             </h2>
             <VoteList votes={view.rollCalls} />

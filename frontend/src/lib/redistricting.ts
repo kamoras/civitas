@@ -92,5 +92,5 @@ export function oldDistrictSentence(
 /** "(+4)", "(−3)", "(SAME)": a backend-computed net change, worded.
  * Here, not in the client view, so the server-rendered index can call it. */
 export function netWord(n: number): string {
-  return n === 0 ? "(SAME)" : n > 0 ? `(+${n})` : `(−${Math.abs(n)})`;
+  return n === 0 ? "(Same)" : n > 0 ? `(+${n})` : `(−${Math.abs(n)})`;
 }

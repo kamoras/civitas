@@ -54,9 +54,7 @@ export default function OnTheBallot({ ballot }: { ballot: IssueBallot[] | undefi
           key={b.state}
           className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-b border-white/[0.07] py-3 text-[15px] text-ink"
         >
-          <span className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
-            On the ballot
-          </span>
+          <span className="font-mono text-xs text-ink-min">On the ballot</span>
           <Link
             href={stateBallotHref(b.state)}
             className="font-display text-ink-hi underline decoration-ink-min/60 underline-offset-4 hover:decoration-ink-hi"

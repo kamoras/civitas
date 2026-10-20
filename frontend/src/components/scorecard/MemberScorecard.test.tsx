@@ -283,7 +283,7 @@ describe("MemberScorecard", () => {
       "href",
       "/congress/bills/HR.8800?congress=119"
     );
-    expect(screen.getByText("VOTED YEA")).toBeInTheDocument();
+    expect(screen.getByText("Voted yea")).toBeInTheDocument();
     expect(
       screen.getByText(/Republicans 2 yea, 215 nay · Democrats 211 yea, 0 nay/)
     ).toBeInTheDocument();
@@ -420,7 +420,7 @@ describe("MemberScorecard", () => {
       screen.getByRole("button", { name: /All 2 sponsored bills and resolutions/ })
     );
     const dialog = screen.getByRole("dialog", { name: "Sponsored bills" });
-    expect(within(dialog).getByText(/SPONSORED LEGISLATION/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/Sponsored legislation/)).toBeInTheDocument();
     await userEvent.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
@@ -484,7 +484,7 @@ describe("MemberScorecard", () => {
     );
     await screen.findByText("H.R. 8800");
     expect(
-      screen.getByText(/Tennessee · At-large district · REPUBLICAN · 1 year in office/)
+      screen.getByText(/Tennessee · At-large district · Republican · 1 year in office/)
     ).toBeInTheDocument();
     expect(screen.getByText(/in seats that lean like TN-AL do that/)).toBeInTheDocument();
     expect(screen.queryByText(/District 0|TN-0/)).not.toBeInTheDocument();

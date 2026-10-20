@@ -112,15 +112,13 @@ export default function ScorecardHeader({
           >
             {member.name}
           </Title>
-          <p
-            className={`font-mono tracking-[0.08em] text-ink-lo sm:tracking-[0.12em] ${LONG_LABEL}`}
-          >
+          <p className={`font-mono text-ink-lo ${LONG_LABEL}`}>
             {office} · {place} · {PARTY_LABELS[member.party] ?? member.party} · {tenure}
           </p>
           {(leadershipTitle || member.sponsorshipDescription) && (
             <p className="flex flex-wrap items-center gap-2 text-sm text-ink-lo">
               {leadershipTitle && (
-                <span className="border border-signal-amber/40 bg-signal-amber/10 px-2 py-0.5 font-mono text-xs uppercase tracking-[0.12em] text-signal-amber">
+                <span className="border border-signal-amber/40 bg-signal-amber/10 px-2 py-0.5 font-mono text-xs text-signal-amber">
                   {leadershipTitle}
                 </span>
               )}

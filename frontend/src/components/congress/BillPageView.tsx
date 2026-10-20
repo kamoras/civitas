@@ -117,7 +117,7 @@ function SummaryBody({ paragraphs }: { paragraphs: string[] }) {
       {paragraphs.slice(0, open).map(para)}
       {open < paragraphs.length && (
         <details className="group flex flex-col gap-3">
-          <summary className="inline-flex min-h-6 w-fit cursor-pointer list-none items-center font-mono text-xs uppercase tracking-[0.12em] text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos [&::-webkit-details-marker]:hidden">
+          <summary className="inline-flex min-h-6 w-fit cursor-pointer list-none items-center font-mono text-xs text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos [&::-webkit-details-marker]:hidden">
             <span className="group-open:hidden">
               Read the full CRS summary ({total.toLocaleString("en-US")} words)
             </span>
@@ -250,7 +250,7 @@ export default function BillPageView({
             >
               <header className="flex min-w-0 flex-col gap-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-lo">
+                  <p className="font-mono text-xs text-ink-lo">
                     {label}
                     {record?.congress ? ` · ${ordinal(record.congress)} Congress` : ""}
                     {record?.originChamber ? ` · ${record.originChamber}` : ""}
@@ -258,7 +258,7 @@ export default function BillPageView({
                   <span className="flex items-center gap-3">
                     <a
                       href="#sources"
-                      className="inline-flex min-h-6 items-center font-mono text-xs uppercase tracking-[0.12em] text-ink-lo underline underline-offset-2 hover:text-phos"
+                      className="inline-flex min-h-6 items-center font-mono text-xs text-ink-lo underline underline-offset-2 hover:text-phos"
                     >
                       Data &amp; citation
                     </a>
@@ -278,7 +278,7 @@ export default function BillPageView({
                       {shortTitleType || "Short title"} · Congress.gov
                     </p>
                     <p className="max-w-3xl text-sm leading-relaxed text-ink">
-                      <span className="mr-2 font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
+                      <span className="mr-2 font-mono text-xs text-ink-min">
                         {officialTitle ? "Official title" : "Listed as"}
                       </span>
                       {under}
@@ -296,7 +296,7 @@ export default function BillPageView({
                         )}
                         <a
                           href={`#${id}`}
-                          className="inline-flex min-h-6 items-center px-1 uppercase tracking-[0.12em] underline decoration-white/30 underline-offset-4 hover:text-phos"
+                          className="inline-flex min-h-6 items-center px-1 underline decoration-white/30 underline-offset-4 hover:text-phos"
                         >
                           {name}
                           {/* Text, not a margin: a margin left the link's
@@ -309,9 +309,7 @@ export default function BillPageView({
                 </nav>
                 {record?.sponsors.length ? (
                   <p className="flex flex-wrap items-baseline gap-x-2 text-sm lg:hidden">
-                    <span className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
-                      Sponsor
-                    </span>
+                    <span className="font-mono text-xs text-ink-min">Sponsor</span>
                     {record.sponsors.map((p) => (
                       <Person key={p.bioguideId ?? p.name} p={p} />
                     ))}
@@ -319,9 +317,7 @@ export default function BillPageView({
                 ) : null}
                 {lead && summary && (
                   <div className="flex flex-col gap-1.5">
-                    <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-                      What it does
-                    </p>
+                    <p className="font-mono text-xs text-ink-min">What it does</p>
                     <p className="max-w-3xl text-base leading-relaxed text-ink">{lead}</p>
                     <p className="font-mono text-xs text-ink-min">
                       Congressional Research Service, {shortDate(summary.actionDate)},{" "}
@@ -344,13 +340,13 @@ export default function BillPageView({
                 <div className="flex flex-wrap items-center gap-2">
                   {detail && stage && (
                     <span
-                      className={`border px-2 py-0.5 font-mono text-xs uppercase tracking-widest ${stage.text} ${stage.border} ${stage.bg}`}
+                      className={`border px-2 py-0.5 font-mono text-xs ${stage.text} ${stage.border} ${stage.bg}`}
                     >
                       {stageName ?? detail.stage}
                     </span>
                   )}
                   {detail?.isLaw && (
-                    <span className="border border-phos/30 bg-phos/10 px-2 py-0.5 font-mono text-xs uppercase tracking-widest text-phos">
+                    <span className="border border-phos/30 bg-phos/10 px-2 py-0.5 font-mono text-xs text-phos">
                       Became law
                     </span>
                   )}
@@ -423,9 +419,7 @@ export default function BillPageView({
                 {record?.sponsors.length ? (
                   // On a phone the sponsor is named under the title instead.
                   <div className="hidden flex-col gap-1 lg:flex">
-                    <span className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
-                      Sponsor
-                    </span>
+                    <span className="font-mono text-xs text-ink-min">Sponsor</span>
                     {record.sponsors.map((p) => (
                       <Person key={p.bioguideId ?? p.name} p={p} />
                     ))}
@@ -433,7 +427,7 @@ export default function BillPageView({
                 ) : null}
                 {record && !unavailable.includes("cosponsors") && (
                   <div className="flex flex-col gap-1">
-                    <span className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
+                    <span className="font-mono text-xs text-ink-min">
                       Cosponsors · {record.cosponsors.length}
                     </span>
                     {record.cosponsors.length ? (
@@ -501,7 +495,7 @@ export default function BillPageView({
                 {record && (
                   <a
                     href={record.congressGovUrl}
-                    className="inline-flex min-h-6 w-fit items-center font-mono text-xs uppercase tracking-[0.12em] text-ink-lo hover:text-phos"
+                    className="inline-flex min-h-6 w-fit items-center font-mono text-xs text-ink-lo hover:text-phos"
                   >
                     On Congress.gov
                   </a>
@@ -515,7 +509,7 @@ export default function BillPageView({
                   <SectionHead id="summary" title="Summary" shareable />
                   {record?.summary ? (
                     <>
-                      <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
+                      <p className="font-mono text-xs text-ink-min">
                         Congressional Research Service · {record.summary.actionDesc},{" "}
                         {longDate(record.summary.actionDate)}
                       </p>
@@ -673,7 +667,7 @@ export default function BillPageView({
                   )}
                   <Link
                     href="/congress/committees"
-                    className="inline-flex min-h-6 w-fit items-center font-mono text-xs tracking-[0.1em] text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
+                    className="inline-flex min-h-6 w-fit items-center font-mono text-xs text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
                   >
                     Search every committee meeting and report →
                   </Link>
@@ -696,7 +690,7 @@ export default function BillPageView({
                               </span>
                             )}
                           </span>
-                          <span className="flex flex-wrap gap-x-4 font-mono text-xs uppercase tracking-[0.1em]">
+                          <span className="flex flex-wrap gap-x-4 font-mono text-xs">
                             {Object.entries(t.formats).map(([fmt, url]) => (
                               <a
                                 key={fmt}
@@ -730,9 +724,7 @@ export default function BillPageView({
               <aside aria-label="Where this bill appears" className="flex flex-col gap-6">
                 {record && record.days.length > 0 && (
                   <section className="flex flex-col gap-2 border border-white/15 p-4">
-                    <h2 className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
-                      In the daily reports
-                    </h2>
+                    <h2 className="font-mono text-xs text-ink-min">In the daily reports</h2>
                     <ul className="flex flex-col">
                       {record.days.map((d) => (
                         <li
@@ -750,9 +742,7 @@ export default function BillPageView({
                 )}
                 {detail && detail.relatedIssues.length > 0 && (
                   <section className="flex flex-col gap-2 border border-white/15 p-4">
-                    <h2 className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
-                      In the Action Center
-                    </h2>
+                    <h2 className="font-mono text-xs text-ink-min">In the Action Center</h2>
                     <ul className="flex flex-col gap-2">
                       {detail.relatedIssues.map((issue) => (
                         <li key={issue.id}>
@@ -773,9 +763,7 @@ export default function BillPageView({
                 )}
                 {detail && detail.policyAreas.length > 0 && (
                   <section className="flex flex-col gap-2 border border-white/15 p-4">
-                    <h2 className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
-                      Policy areas (Civitas)
-                    </h2>
+                    <h2 className="font-mono text-xs text-ink-min">Policy areas (Civitas)</h2>
                     <ul className="flex flex-col gap-1 text-sm text-ink">
                       {detail.policyAreas.map((a) => (
                         <li key={a.area}>{policyAreaLabel(a.area)}</li>

@@ -87,7 +87,7 @@ describe("PoliticiansPage state picker", () => {
       await screen.findByRole("combobox", { name: "Filter by state" }),
       "WY"
     );
-    await screen.findByText("1 POLITICIAN");
+    await screen.findByText("1 politician");
     expect(screen.queryByText(/Find your House member by city, town or county/)).toBeNull();
     expect(screen.queryByRole("link", { name: /Find your election district/ })).toBeNull();
   });
