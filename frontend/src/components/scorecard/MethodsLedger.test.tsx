@@ -74,11 +74,6 @@ function renderLedger() {
       member={member}
       chamber="senate"
       breakdown={breakdown}
-      weights={{
-        fundingIndependence: 0.4,
-        constituentAlignment: 0.35,
-        legislativeEffectiveness: 0.25,
-      }}
       scoredOn={{ date: "2026-10-16", algorithmVersion: "v6.35" }}
     />
   );

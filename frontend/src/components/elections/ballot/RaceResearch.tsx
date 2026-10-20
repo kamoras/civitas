@@ -12,8 +12,8 @@ import type { RaceCoverageItem, RaceWithCandidates } from "@/types/election";
 type Tab = "money" | "record" | "news";
 
 /** Voting records for the candidates the API links one for: a member
- * running for re-election, matched to their own record, with their
- * Representation Score and a link to their full scorecard; and a member of
+ * running for re-election, matched to their own record, with a link to
+ * where they stand among peers; and a member of
  * the other chamber running here (a House member running for the Senate),
  * by the bioguide crosswalk, named as what they are now. Everyone else is
  * listed too, marked "not linked" — never "no scorecard" or "no record":
@@ -26,9 +26,9 @@ function RecordPanel({ race }: { race: RaceWithCandidates }) {
   return (
     <div>
       <p className="mb-3 text-[13px] text-ink-lo">
-        A member of Congress in this race is linked to their Representation Score and full scorecard
-        when the match to their record is certain: one running for re-election, or one who serves in
-        the other chamber now. Anyone not linked here may still be under{" "}
+        A member of Congress in this race is linked to their record and peers when the match to
+        their record is certain: one running for re-election, or one who serves in the other chamber
+        now. Anyone not linked here may still be under{" "}
         <Link href="/politicians" className="underline hover:text-phos">
           Politicians
         </Link>

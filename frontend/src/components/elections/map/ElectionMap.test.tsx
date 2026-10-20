@@ -418,7 +418,7 @@ describe("election map", () => {
     expect(sentences).toBeLessThanOrEqual(10);
     expect(summary.textContent).toContain("Ranges like these held the result 79% of the time");
     expect(summary.textContent).toContain("These ranges are not a call.");
-    expect(summary.textContent).toContain("Representation Scores");
+    expect(summary.textContent).toContain("Nothing here feeds any member");
     expect(summary.textContent).toContain("Wikipedia contributors, CC BY-SA 4.0");
     expect(summary.textContent).toContain("Silver Bulletin");
     const details = container.querySelector("details");

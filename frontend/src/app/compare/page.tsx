@@ -468,8 +468,8 @@ const COMPARE_EYEBROW = "Compare · two legislators, side by side";
 const COMPARE_TITLE = "Compare legislators";
 const COMPARE_LEDE = (
   <p>
-    Pick two legislators, or start from a quick comparison, to see their representation scores,
-    funding sources, and constituent alignment side by side. Presidents compare on the{" "}
+    Pick two legislators, or start from a quick comparison, to see their money, votes and bills on
+    the same peer strips. Presidents compare on the{" "}
     <Link
       href="/compare/presidents"
       className="underline decoration-white/30 underline-offset-4 hover:text-phos"

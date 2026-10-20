@@ -14,7 +14,6 @@ import type { RedistrictedSeat } from "@/types/redistricting";
 import type { HouseDistrictsByCounty, PoliticianCard } from "@/types/politicians";
 import type { PaginatedBills } from "@/types/bill";
 import type { LiveResults, PviMap, TownBallot, TownEntry } from "@/types/election";
-import type { SignalOverlap } from "@/types/scoreBreakdown";
 import type { Agreement } from "@/types/compare";
 import type { MemberSupport } from "@/types/presidentialSupport";
 import type { TrendPostsAudit } from "@/types/trendPosts";
@@ -1975,12 +1974,6 @@ export async function setPoliticianVacancy(
     throw new Error(body.detail || `Vacancy update failed: ${res.status}`);
   }
   return res.json();
-}
-
-/** The post-run check that related score components still measure
- * different things. Refreshed by each pipeline run. */
-export async function fetchSignalOverlap(): Promise<SignalOverlap> {
-  return cachedFetch<SignalOverlap>(`${API_BASE}/signal-overlap`, TTL.SHORT);
 }
 
 export async function fetchConfig(): Promise<AppConfig> {

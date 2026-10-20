@@ -454,8 +454,8 @@ export function SeatRaceLine({ race, name }: { race: SeatRace; name: string }) {
 
 /** The seat's usual vote from the election map, linking its place there;
  * nothing out of the campaign, when the map isn't shown. Never the poll
- * range: this page shows the member's Representation Score, and no range
- * is shown beside one (AGENTS.md, the Senate and House map). */
+ * range: this page shows the member's record, and no range is shown
+ * beside one (AGENTS.md, the Senate and House map). */
 function SeatOnMapLine({ raceId }: { raceId: string }) {
   const { data } = useAsyncData(`map-seat:${raceId}`, () => fetchMapSeats({ seat: raceId }));
   const seat = data?.seats[0];

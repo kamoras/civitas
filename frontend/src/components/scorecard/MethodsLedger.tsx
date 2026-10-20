@@ -252,13 +252,11 @@ export default function MethodsLedger({
   member,
   chamber,
   breakdown,
-  weights,
   scoredOn,
 }: {
   member: Senator;
   chamber: "senate" | "house";
   breakdown: RepresentationScoreBreakdown | null;
-  weights?: Record<string, number>;
   scoredOn?: { date: string; algorithmVersion: string | null } | null;
 }) {
   const ref = useRef<HTMLElement>(null);
@@ -334,7 +332,7 @@ export default function MethodsLedger({
           averaged by weight; a part given in points adds or takes that many points. Each total
           shows the sum before rounding.{" "}
           <Link href="/about/scores" className="text-signal-cyan underline underline-offset-2">
-            The full method
+            How each figure is measured
           </Link>
           .
         </p>
@@ -344,7 +342,6 @@ export default function MethodsLedger({
           const shown = value == null ? null : displayScore(value);
           const grade = grades[m.key];
           const dim = breakdown?.[m.key];
-          const weight = weights?.[m.key];
           return (
             <article
               key={m.key}
@@ -359,11 +356,6 @@ export default function MethodsLedger({
                       {shown ?? "—"}
                     </span>
                   </span>
-                  {weight != null && weight > 0 && (
-                    <span>
-                      Weight <span className="text-ink-hi">{Math.round(weight * 100)}%</span>
-                    </span>
-                  )}
                   {grade && (
                     <span>
                       Data behind it <span className="text-ink-hi">{GRADE_TEXT[grade]}</span>
@@ -390,7 +382,7 @@ export default function MethodsLedger({
                     href={`/about/scores#${m.anchor}`}
                     className="underline decoration-white/30 underline-offset-4 hover:text-phos"
                   >
-                    How {m.name.replace(/ \(.*\)$/, "")} is computed
+                    The figures behind {m.name.replace(/ \(.*\)$/, "")}
                   </Link>
                   {m.cites.map((id) => (
                     <Cite key={id} id={id} />

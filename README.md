@@ -2569,7 +2569,7 @@ CI gates, and what a scoring-methodology change needs to argue.
 ## References
 
 Full methodology with inline citations is available on the [About page](/about).
-Each chapter opens with "The short version" (on `/about/scores`, what each score
+Each chapter opens with "The short version" (on `/about/scores`, what each figure
 measures in one or two plain sentences, each reading at grade 7 or below), and a
 chapter with four or more sections lists them under "On this page", built from
 the sections themselves (`components/about/AboutPage.tsx`).

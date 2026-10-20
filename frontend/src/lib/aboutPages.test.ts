@@ -80,7 +80,7 @@ describe("links between About pages", () => {
     }
     // A pattern that stops matching would pass with nothing checked.
     expect(checked).toContain("/about → /about/scores#funding");
-    expect(checked).toContain("/about/scores → /about/scores#leadership");
+    expect(checked).toContain("/about/scores → /about/scores#party-labels");
     expect(broken).toEqual([]);
   });
 

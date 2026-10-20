@@ -200,8 +200,8 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
  * running, and that none of it is a forecast. Descriptive only — Civitas
  * publishes no odds and calls no race. The race links to its cycle's
  * map's poll range for it (lib/electionMap), which is kept off this
- * section on purpose: the section shows the incumbent's Representation
- * Score, and a poll range must never sit beside a score.
+ * section on purpose: the section links to the incumbent's record, and a
+ * poll range must never sit beside a member's record.
  *
  * From election day (`resultsMode`) the lean is left out, as it is from the
  * page header: beside a live count it reads as a prediction of it. */
