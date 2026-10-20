@@ -628,7 +628,7 @@ describe("placeDistrictSummary", () => {
 
   it("names every district a split place is in, in order, and says it is split", () => {
     expect(placeDistrictSummary(races, "rivertown")).toEqual([
-      "Rivertown is in districts 3, 7 and 11: it is split between them, so the part you live in decides which is yours.",
+      "Rivertown is split between districts 3, 7 and 11.",
     ]);
   });
 

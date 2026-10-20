@@ -590,14 +590,26 @@ export default function DataChapter() {
           did there.
         </P>
         <P>
-          The one choice the site holds is the state you pick in the header, so each page that needs
-          a state doesn&apos;t ask again. It is kept in this tab only and is gone when you close it,
-          and it reaches our server only in the address of a page you open, such as a state&apos;s
-          member list. &ldquo;Use my location&rdquo; runs only when you press it. Your browser then
-          works out where you are, which on many devices uses its maker&apos;s own location service
-          (Apple&apos;s, Google&apos;s or Microsoft&apos;s), not Civitas Research. The page turns
-          that position into a state on your device and keeps only the state. The position itself is
-          never sent to us, logged or stored.
+          The choices the site holds are the state you pick in the header, so each page that needs a
+          state doesn&apos;t ask again, and the House district you find on the member directory. It
+          is kept in this tab only and is gone when you close it, and it reaches our server only in
+          the address of a page you open, such as a state&apos;s member list. &ldquo;Use my
+          location&rdquo; runs only when you press it. Your browser then works out where you are,
+          which on many devices uses its maker&apos;s own location service (Apple&apos;s,
+          Google&apos;s or Microsoft&apos;s), not Civitas Research. The page turns that position
+          into a state on your device and keeps only the state. The position itself is never sent to
+          us, logged or stored.
+        </P>
+        <P>
+          The member directory and the ballot pages have &ldquo;Find my district from my
+          location&rdquo; for a town split between districts. It works the same way, one step finer:
+          the page downloads your state&apos;s district outlines from this site (the whole
+          state&apos;s file, the same for everyone) and works out your districts on your device.
+          Tapping your part of a split town on its map is worked out the same way. Neither the
+          position nor the tap is sent, logged or stored; the directory keeps your House district
+          number for this tab only, and the ballot page keeps nothing. For an exact answer from your
+          street address, the pages link house.gov and your state&apos;s own lookup: those sites
+          would then have your address, Civitas never does.
         </P>
         <P>
           Your browser asks nothing of any other host. Every picture comes from this server: the

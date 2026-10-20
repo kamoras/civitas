@@ -966,9 +966,9 @@ districts holding it, so the list agrees with the status line).
 What this rules in and out:
 
 - **Out:** any field asking for a street address, ZIP, precinct, or
-  geolocation permission to personalise what's shown (the one exception
-  is the state below); any per-visitor identifier retained across requests
-  to remember such a choice.
+  geolocation permission to personalise what's shown (the exceptions are
+  the on-device state and district below); any per-visitor identifier
+  retained across requests to remember such a choice.
 - **In, exactly this:** the reader's state, asked once in the header
   (`components/layout/YourStatePicker.tsx`, `hooks/useYourState.ts`) and
   used by every page that needs a state (the member directory, an issue's
@@ -982,9 +982,39 @@ What this rules in and out:
   `/data/states-10m.json`). The coordinates are not sent, logged or
   stored; only the state is kept, as if picked from the list; a refusal
   falls back to the list. On-click, on-device, state only, per tab:
-  nothing finer than a state (no county, district or town from a
-  position), and nothing kept past the tab. `YourStatePicker.test.tsx`
-  holds both (no request carries coordinates; session storage only).
+  nothing kept past the tab. `YourStatePicker.test.tsx` holds both (no
+  request carries coordinates; session storage only).
+- **In, exactly this too:** the reader's districts, the same way
+  (2026-10). A town split between districts can't be settled by its name,
+  so the House finders (`/politicians`, an issue's contact list, the
+  state ballot page) and the
+  ballot's state legislature section offer "Find my district from my
+  location" (`components/districts/DistrictLocator.tsx`): on a click it places the
+  position, on the device (`lib/districtAt.ts`), in the site's own
+  district shapes under `/data/lookup/`, the state's whole file fetched
+  with no query. A typed town that is split also offers a map of just
+  that town (its outline, each district's part, its main roads, from
+  `<ST>.towns.json` beside the House file) where the reader taps their part, with a list of the
+  parts, described by the roads that cross them and the district's other
+  places, as its keyboard and screen-reader path. The coordinates and the
+  tap are never sent, logged or stored; the House district is kept for
+  the tab at most (`hooks/useYourDistrict.ts`: state, map name and
+  number, in `sessionStorage`), and the legislative ones not at all. Each
+  surface reads its own map, never the other's: `congress-<N>/` (the
+  Congress in office, from the API) for who represents the reader; on the
+  ballot, the Congress its election seats where the state redrew
+  (`ballotHouseLines`), and `election-<year>/` for the legislature. The shapes are built and gated by
+  `backend/scripts/build_district_lookup.py`, which places every
+  populated 2020 block's internal point in the simplified and the
+  unsimplified shapes and refuses to write if simplifying costs more than
+  0.01% of a layer's residents, or 0.5% of those within 100m of a line,
+  their block's district (`lookup/_accuracy.json`); a Congress or cycle
+  with no file says it can't place the reader rather than answer from
+  other lines. Beside it, always, the official lookup (house.gov, except
+  on a ballot on new lines; the state's own), worded so the reader knows
+  that site would get their address, not Civitas.
+  `DistrictLocator.test.tsx` holds the rules (no request carries
+  coordinates; only the district and state in session storage).
 - **In:** filtering, maps, and drill-down over data the page already has;
   explicit, unremembered navigation choices (the town selector, the state
   picker); linking out to the official lookup for a reader who wants a
@@ -2315,6 +2345,7 @@ the pending list).
 | Statewide ballot-measure ingestion (verbatim, no LLM) | `backend/app/pipeline/fetch/ballot_measures_pdf.py` (pipeline stage + `STRATEGIES`), one reader per state in `fetch/ballot_measures_<st>.py`, registry `backend/app/data/ballot_measure_pdf_sources.json` |
 | What changed on the new House maps (old/new district overlap, lean before/after, enacting act) | `backend/app/redistricting.py`, `backend/app/api/redistricting.py`, `backend/scripts/build_redistricting_overlap.py` → `app/data/redistricting_overlap.json`, `frontend/src/components/redistricting/`, `frontend/src/app/elections/redistricting/` |
 | Special elections, vacancies and the election calendar (FEC election and reporting dates, House Clerk and Senate vacancies, a special's live count and swing, the season /elections leads with) | `backend/app/pipeline/fetch/special_elections.py`, `backend/app/live_results/specials.py`, `backend/app/special_elections.py`, `backend/app/api/special_elections.py` |
+| On-device district from location, split-town map (district shapes per map, accuracy gate) | `frontend/src/components/districts/DistrictLocator.tsx`, `frontend/src/lib/districtAt.ts`, `frontend/src/hooks/useYourDistrict.ts`, `backend/scripts/build_district_lookup.py` → `frontend/public/data/lookup/` |
 | Official-ballot link table + liveness gating (verified / blocked-unconfirmed / dead) | `backend/app/pipeline/fetch/ballot_lookup.py` |
 | Public API v1 + its MCP server (spec generated from the routes, rendered at `/developers`) | `backend/app/api/public.py`, `backend/app/api/public_mcp.py`, `app/schemas.py` ("Public API v1"), `tests/test_public_api_contract.py`, `frontend/src/app/developers/page.tsx`, `frontend/src/lib/openapi.ts` |
 | Votes with the president's stated positions (OMB SAPs, matching, per-member rate, expected rate by seat; informational, not scored) | `backend/app/pipeline/fetch/omb_statements.py`, `analyze/sap_position.py`, `analyze/presidential_support.py`, `services/presidential_support_service.py`, `frontend/src/components/presidentialSupport/`, `frontend/src/app/congress/president/` |
