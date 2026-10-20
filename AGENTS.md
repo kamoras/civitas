@@ -2517,6 +2517,12 @@ the pending list).
   math" details and notes come from `score_calculator.py` and
   `president_scorer.py`, and `backend/tests/test_shown_text_style.py` fails on
   an em dash in any string there that isn't a docstring or a log message.
+- **On a phone nothing a reader must read is under 13px** (`globals.css`, "A
+  phone's type scale", 2026-10): `text-xs` and the 9-12px one-offs are 13px
+  under 640px and wide tracking is 0.08em. A mono caps label of four words or
+  more is written in sentence case and styled with `labelCase` /
+  `LONG_LABEL` (`lib/controlStyles.ts`), caps only from 640px up; three words
+  or fewer stay caps everywhere.
 - Every metric shown on scorecards has a `MetricTooltip` component providing
   plain-English explanation (hover on desktop, tap on mobile). When adding new
   metrics, always add a corresponding tooltip so users can understand what they

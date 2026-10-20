@@ -132,7 +132,8 @@ describe("ElectionsPage", () => {
     fetchLiveResults.mockResolvedValue(live);
     render(<ElectionsPage />);
     const nav = await screen.findByRole("navigation", { name: "Elections sections" });
-    const tabs = within(nav).getAllByRole("link");
+    // The wide row (a phone's switcher lists the same links).
+    const tabs = within(nav.querySelector<HTMLElement>("[data-section-row]")!).getAllByRole("link");
     expect(tabs.map((t) => t.textContent)).toEqual([
       "Ballots by state",
       "Seat map",

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import YourStatePicker from "./YourStatePicker";
 import { YOUR_STATE_KEY } from "@/hooks/useYourState";
 import { __resetSessionTokenCache } from "@/hooks/useSessionToken";
@@ -50,7 +50,7 @@ describe("YourStatePicker", () => {
       fireEvent.click(screen.getByRole("button", { name: "Use my location" }));
     });
     await waitFor(() =>
-      expect(screen.getByRole("status")).toHaveTextContent("Your state is set to Ohio.")
+      expect(screen.getByRole("status")).toHaveTextContent("Ohio set for this tab.")
     );
     expect(screen.getByLabelText("Your state")).toHaveValue("OH");
     // The only request is the site's own shapes file, with no body and no
@@ -101,6 +101,32 @@ describe("YourStatePicker", () => {
     fireEvent.click(screen.getByRole("button", { name: "Use my location" }));
     expect(screen.getByRole("status")).toHaveTextContent("Location not available.");
     act(() => screen.getByRole("button", { name: "Elsewhere" }).focus());
+    expect(screen.getByRole("status")).toHaveTextContent("");
+  });
+});
+
+describe("YourStatePicker: what setting a state leads to", () => {
+  it("confirms the state and links its members and ballot, in the live region", () => {
+    // Mobile spec P9: picking a state said nothing and offered nothing.
+    render(<YourStatePicker size="lg" />);
+    fireEvent.change(screen.getByLabelText("Your state"), { target: { value: "OH" } });
+    const status = screen.getByRole("status");
+    expect(status).toHaveTextContent("Ohio set for this tab.");
+    expect(within(status).getByRole("link", { name: "Ohio's members →" })).toHaveAttribute(
+      "href",
+      "/politicians?state=OH"
+    );
+    expect(within(status).getByRole("link", { name: "Ohio's ballot →" })).toHaveAttribute(
+      "href",
+      "/elections/states/OH"
+    );
+    for (const a of within(status).getAllByRole("link")) expect(a.className).toContain("min-h-11");
+  });
+
+  it("says nothing more when the state is cleared", () => {
+    render(<YourStatePicker size="lg" />);
+    fireEvent.change(screen.getByLabelText("Your state"), { target: { value: "OH" } });
+    fireEvent.change(screen.getByLabelText("Your state"), { target: { value: "" } });
     expect(screen.getByRole("status")).toHaveTextContent("");
   });
 });

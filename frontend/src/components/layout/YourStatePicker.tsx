@@ -3,9 +3,15 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useYourState } from "@/hooks/useYourState";
 import { stateFromPoint } from "@/lib/stateFromPoint";
+import Link from "next/link";
 import { STATE_CODES, STATE_NAMES } from "@/lib/stateCodes";
+import { stateBallotHref } from "@/lib/elections";
 
 // By name, as a reader looks for their state.
+/** The code itself from the fixed list, or "": the confirmation builds hrefs
+ *  from it, so nothing read from the page goes into a link unchecked. */
+const knownCode = (code: string) => STATE_CODES.find((c) => c === code) ?? "";
+
 const STATES_BY_NAME = [...STATE_CODES].sort((a, b) =>
   (STATE_NAMES[a] ?? a).localeCompare(STATE_NAMES[b] ?? b)
 );
@@ -30,10 +36,21 @@ const BUTTON =
  * stored: only the two-letter answer is kept, as if picked from the list.
  * Refused or failed, it says so in the live region and the list stays.
  */
-export default function YourStatePicker({ size = "sm" }: { size?: "sm" | "lg" }) {
+export default function YourStatePicker({
+  size = "sm",
+  onNavigate,
+}: {
+  size?: "sm" | "lg";
+  /** Called when the reader follows one of the confirmation's links (the
+   *  menu closes itself). */
+  onNavigate?: () => void;
+}) {
   const id = useId();
   const { state, setState } = useYourState();
   const [status, setStatus] = useState("");
+  // The state just set here, which the message confirms with where to go
+  // next (mobile spec P9): setting it used to say nothing and offer nothing.
+  const [confirmed, setConfirmed] = useState("");
   const [locating, setLocating] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
   const tall = size === "lg";
@@ -43,12 +60,17 @@ export default function YourStatePicker({ size = "sm" }: { size?: "sm" | "lg" })
   // never covers a control a reader moves to (WCAG 2.4.11). It has been
   // announced by then: the live region speaks when the text is set.
   useEffect(() => {
-    if (tall || !status || locating) return;
+    if (tall || !(status || confirmed) || locating) return;
     const box = boxRef.current;
     const away = (e: Event) => {
-      if (!box?.contains(e.target as Node)) setStatus("");
+      if (!box?.contains(e.target as Node)) {
+        setStatus("");
+        setConfirmed("");
+      }
     };
-    const timer = window.setTimeout(() => setStatus(""), STATUS_SHOWN_MS);
+    // No timer while it offers links: they stay until the reader moves on
+    // (WCAG 2.2.1).
+    const timer = confirmed ? 0 : window.setTimeout(() => setStatus(""), STATUS_SHOWN_MS);
     document.addEventListener("focusin", away);
     document.addEventListener("pointerdown", away);
     return () => {
@@ -56,8 +78,9 @@ export default function YourStatePicker({ size = "sm" }: { size?: "sm" | "lg" })
       document.removeEventListener("focusin", away);
       document.removeEventListener("pointerdown", away);
     };
-  }, [tall, status, locating]);
+  }, [tall, status, confirmed, locating]);
   const locate = () => {
+    setConfirmed("");
     if (!("geolocation" in navigator)) {
       setStatus("This browser can't share a location. Pick your state from the list.");
       return;
@@ -75,7 +98,8 @@ export default function YourStatePicker({ size = "sm" }: { size?: "sm" | "lg" })
         setLocating(false);
         if (code) {
           setState(code);
-          setStatus(`Your state is set to ${STATE_NAMES[code] ?? code}.`);
+          setStatus("");
+          setConfirmed(knownCode(code));
         } else {
           setStatus("That location isn't in a U.S. state. Pick yours from the list.");
         }
@@ -103,6 +127,7 @@ export default function YourStatePicker({ size = "sm" }: { size?: "sm" | "lg" })
         onChange={(e) => {
           setState(e.target.value);
           setStatus("");
+          setConfirmed(knownCode(e.target.value));
         }}
         className={`${tall ? "min-h-11" : "min-h-6"} border border-ink-min/60 bg-surface-base px-1 font-mono text-xs text-ink`}
       >
@@ -129,14 +154,36 @@ export default function YourStatePicker({ size = "sm" }: { size?: "sm" | "lg" })
         // Always in the tree (an empty live region that appears later may
         // not be announced); boxed only while it has something to say.
         className={
-          !status
+          !(status || confirmed)
             ? "sr-only"
             : tall
               ? "basis-full font-mono text-xs text-ink-lo"
               : "absolute right-0 top-full z-20 mt-2 w-max max-w-xs border border-white/15 bg-surface-base px-3 py-1.5 font-mono text-xs text-ink-lo"
         }
       >
-        {status}
+        {confirmed ? (
+          <>
+            {STATE_NAMES[confirmed] ?? confirmed} set for this tab.{" "}
+            <span className="flex flex-wrap gap-x-4">
+              <Link
+                href={`/politicians?state=${confirmed}`}
+                onClick={onNavigate}
+                className="inline-flex min-h-11 items-center text-signal-cyan underline underline-offset-2 hover:text-phos"
+              >
+                {STATE_NAMES[confirmed] ?? confirmed}&apos;s members →
+              </Link>
+              <Link
+                href={stateBallotHref(confirmed)}
+                onClick={onNavigate}
+                className="inline-flex min-h-11 items-center text-signal-cyan underline underline-offset-2 hover:text-phos"
+              >
+                {STATE_NAMES[confirmed] ?? confirmed}&apos;s ballot →
+              </Link>
+            </span>
+          </>
+        ) : (
+          status
+        )}
       </p>
     </div>
   );
