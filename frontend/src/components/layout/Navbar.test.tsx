@@ -60,11 +60,11 @@ describe("Navbar", () => {
     // profile passes its branch's.
     render(<Navbar section="court" />);
     const row = screen.getByTestId("nav-row");
-    expect(within(row).getByRole("link", { name: /^SUPREME COURT/ })).toHaveAttribute(
+    expect(within(row).getByRole("link", { name: /^Supreme Court/ })).toHaveAttribute(
       "aria-current",
       "page"
     );
-    expect(within(row).getByRole("button", { name: /^ELECTIONS/ })).not.toHaveTextContent(
+    expect(within(row).getByRole("button", { name: /^Elections/ })).not.toHaveTextContent(
       "current section"
     );
   });

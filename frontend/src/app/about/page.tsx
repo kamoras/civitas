@@ -263,11 +263,12 @@ export default function AboutOverview() {
 
       <Section id="who" title="Who runs it">
         <P>
-          One developer, as a hobby, on a Raspberry Pi at home. There is no company, no cloud
-          service, no advertising and no outside money: Civitas takes nothing from parties,
-          candidates or PACs and sells nothing. It exists partly to show that a civic accountability
-          tool doesn&apos;t need venture capital or a data center: the whole thing uses about as
-          much electricity in a year as a refrigerator does in six weeks.
+          One developer, as a hobby, on a Raspberry Pi at home. Civitas is not a company, a charity
+          or any kind of registered group. There is no cloud service, no advertising and no outside
+          money: it takes nothing from parties, candidates or PACs and sells nothing. It exists
+          partly to show that a civic accountability tool doesn&apos;t need venture capital or a
+          data center: the whole thing uses about as much electricity in a year as a refrigerator
+          does in six weeks.
         </P>
         <P>
           Civitas Research (civitas-research.org) is an independent, open-source political

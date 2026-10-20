@@ -130,8 +130,7 @@ export function membersHref(state?: string | null, branch?: "senate" | "house"):
 
 /**
  * The site's sections and each one's pages, in the order the main
- * navigation, the homepage's index and each section's
- * tab bar list them: one table, so a page added here appears in all of
+ * navigation, each section's tab bar and its hub's cards list them: one table, so a page added here appears in all of
  * them. `href` is the section's hub; `match` is the paths that count as
  * being in the section (the main navigation's current-section mark).
  *

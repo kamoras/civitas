@@ -2,6 +2,11 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import config from "../../tailwind.config";
+import { SERIES, STATUS } from "@/components/admin/charts/palette";
+import { BIN_OPACITY } from "./electionMap";
+import { FAINT, UNKNOWN_SHARE } from "./results";
+import { chartMark, fade, partyMark } from "./chartColors";
+import { THEMES, resolve, ratio as ratioOf, type Theme } from "./themePalette.testutil";
 
 /**
  * WCAG 2.2 AA contrast (SC 1.4.3), computed from the palette itself.
@@ -18,7 +23,14 @@ import config from "../../tailwind.config";
  *      (the same variant: `hover:`, `aria-selected:` ...), composited the
  *      way the browser does;
  *   3. the ink ramp on every translucent wash a class string uses, since
- *      text inside a tinted box inherits its colour from further up.
+ *      text inside a tinted box inherits its colour from further up;
+ *   4. chart and map marks (WCAG 1.4.11, 3:1) on both grounds of each
+ *      theme: the party marks and every strength the maps fade them to,
+ *      the categorical series, and every colour the API sends for a chart
+ *      (backend config_definitions.py) as chartMark draws it. The Court's
+ *      heat ramp and split shades are in court.test.ts, the results maps'
+ *      textures in results.test.ts. A chart takes its colours from the
+ *      theme (lib/chartColors), never a dark panel of its own.
  *
  * jsdom does no layout, so the browser half of this (text drawn over a chart,
  * a map tile, an image) is the production-build sweep, scripts/axe-routes.mjs.
@@ -32,18 +44,6 @@ const colors = (config.theme?.extend?.colors ?? {}) as Record<
 >;
 
 const CSS = readFileSync(join(import.meta.dirname, "../app/globals.css"), "utf8");
-
-/** A theme's custom properties, from the block globals.css marks
- * `THEME <name>` ... `THEME end`. */
-function themeVars(name: string): Record<string, string> {
-  const block = CSS.match(new RegExp(`/\\* THEME ${name} \\*/([\\s\\S]*?)/\\* THEME end \\*/`));
-  if (!block) throw new Error(`no THEME ${name} block in globals.css`);
-  return Object.fromEntries(
-    [...block[1].matchAll(/(--[\w-]+):\s*(#[0-9a-fA-F]{6})/g)].map((m) => [m[1], m[2]])
-  );
-}
-
-const THEMES = { light: themeVars("light"), dark: themeVars("dark") };
 
 /** The palette flattened to Tailwind's class names (`ink`, `ink-hi`,
  * `phos-mid`), each resolved to its hex in `theme`. */
@@ -131,10 +131,13 @@ function suite(theme: keyof typeof THEMES) {
     }
 
     it("keeps the system-dark block equal to the chosen-dark block", () => {
-      const chosen = CSS.match(/:root\[data-theme="dark"\],\n\.night \{([\s\S]*?)\n\}/)?.[1] ?? "";
+      const chosen = CSS.match(/:root\[data-theme="dark"\] \{([\s\S]*?)\n\}/)?.[1] ?? "";
       const vars = Object.fromEntries(
-        [...chosen.matchAll(/(--[\w-]+):\s*(#[0-9a-fA-F]{6})/g)].map((m) => [m[1], m[2]])
+        [...chosen.matchAll(/(--[\w-]+):\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()])
       );
+      // No other selector borrows the dark palette: a chart on a dark plate
+      // in the light theme is what this file exists to rule out.
+      expect(CSS).not.toMatch(/data-theme="dark"\],\s*\./);
       expect(vars).toEqual(THEMES.dark);
       expect(Object.keys(THEMES.dark).sort()).toEqual(Object.keys(THEMES.light).sort());
     });
@@ -275,6 +278,53 @@ function suite(theme: keyof typeof THEMES) {
         );
       });
     }
+  });
+  describe(`${theme}: chart and map marks clear ${AA_LARGE}:1 on every ground`, () => {
+    const grounds = ["var(--surface-base)", "var(--surface)"].map((g) => resolve(g, theme));
+    /** The lowest ratio of `mark`, composited over each ground, to it. */
+    const markWorst = (mark: string) =>
+      Math.min(
+        ...grounds.map((g) => {
+          const [r, gr, b, a] = resolve(mark, theme as Theme);
+          const drawn = [0, 1, 2].map((i) => a * [r, gr, b][i] + (1 - a) * g[i]).concat(1);
+          return ratioOf(drawn as typeof g, g);
+        })
+      );
+    const check = (marks: string[]) => {
+      const failures = marks
+        .map((m) => [m, markWorst(m)] as const)
+        .filter(([, r]) => r < AA_LARGE)
+        .map(([m, r]) => `${m}: ${r.toFixed(2)}:1`);
+      expect(failures).toEqual([]);
+    };
+
+    it("the party marks, at every strength the maps draw them", () => {
+      // The seat map's bins, and the results maps' faintest-to-solid steps
+      // (resultFill / aggregateOpacity in lib/results).
+      const strengths = [...Object.values(BIN_OPACITY), FAINT, UNKNOWN_SHARE, 0.675, 0.9];
+      check(
+        ["DEM", "REP", "IND"].flatMap((p) => [
+          partyMark(p),
+          ...strengths.map((s) => fade(partyMark(p), s)),
+        ])
+      );
+    });
+
+    it("the categorical series and run status", () => {
+      check([...SERIES, ...Object.values(STATUS)]);
+    });
+
+    it("every colour the API sends for a chart, as chartMark draws it", () => {
+      const py = readFileSync(
+        join(import.meta.dirname, "../../../backend/app/config_definitions.py"),
+        "utf8"
+      );
+      const sent = [
+        ...new Set([...py.matchAll(/"color":\s*"(#[0-9a-fA-F]{6})"/g)].map((m) => m[1])),
+      ];
+      expect(sent.length).toBeGreaterThan(20);
+      check(sent.map(chartMark));
+    });
   });
 }
 

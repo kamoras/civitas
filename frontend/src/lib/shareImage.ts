@@ -279,6 +279,11 @@ export async function captureSection(
   const { domToCanvas } = await import("modern-screenshot");
   await document.fonts.ready;
 
+  // A capture is drawn in the theme the reader is viewing: the frame from
+  // these variables, the section from its computed styles, and every chart
+  // and map in it follows the theme too (lib/chartColors), so a light page
+  // never shares a picture with a dark plate in it, nor the reverse. The
+  // source line is ink-lo, which clears 4.5:1 on either ground.
   const surfaceBase = cssVar("--surface-base", "#0e0c0a");
   const inkHi = cssVar("--ink-hi", "#f2eee7");
   const inkLo = cssVar("--ink-lo", "#cdc7bc");

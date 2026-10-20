@@ -1,6 +1,7 @@
 "use client";
 
 import { asLabel } from "@/lib/formatting";
+import { fade, overlay, partyMark } from "@/lib/chartColors";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -37,10 +38,11 @@ import {
   stateShade,
   summarizeState,
   uncountedSenateRaces,
+  FAINT,
 } from "@/lib/results";
 import type { ListedSenateRace, LiveRaceResult, LiveResults } from "@/types/election";
 
-const DC_FILL = "rgba(255, 255, 255, 0.06)";
+const DC_FILL = overlay(0.06);
 
 /** A legend key. Every swatch has a faint border, so the near-background
  * fills (UNCOVERED_FILL, AWAITING_FILL) still read as a key and not a gap;
@@ -296,16 +298,16 @@ export default function ResultsOverview({
             </div>
             <ul className="flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-xs text-ink-lo">
               <li className="flex items-center gap-1.5">
-                <Swatch color="rgba(130,172,255,0.85)" /> D leads
+                <Swatch color={fade(partyMark("DEM"), 0.85)} /> D leads
               </li>
               <li className="flex items-center gap-1.5">
-                <Swatch color="rgba(255,137,137,0.85)" /> R leads
+                <Swatch color={fade(partyMark("REP"), 0.85)} /> R leads
               </li>
               <li className="flex items-center gap-1.5">
                 {/* Either party's colour, fainter: not a blue-only state. */}
                 <span className="flex">
-                  <Swatch color="rgba(130,172,255,0.3)" />
-                  <Swatch color="rgba(255,137,137,0.3)" />
+                  <Swatch color={fade(partyMark("DEM"), FAINT)} />
+                  <Swatch color={fade(partyMark("REP"), FAINT)} />
                 </span>{" "}
                 Fainter: under half in
               </li>
@@ -315,7 +317,7 @@ export default function ResultsOverview({
               <li className="flex items-center gap-1.5">
                 {/* A Senate race led by an independent (Nebraska's, in 2026)
                     is purple too, not only a House delegation. */}
-                <Swatch color="rgba(201,149,255,0.6)" /> Other or unstated party leads
+                <Swatch color={fade(partyMark("IND"), 0.6)} /> Other or unstated party leads
               </li>
               <li className="flex items-center gap-1.5">
                 <Swatch color={POLLS_OPEN_FILL} texture={POLLS_OPEN_SWATCH} /> Polls not yet closed
@@ -333,7 +335,7 @@ export default function ResultsOverview({
               <li className="flex items-center gap-1.5">
                 {/* A count no longer refreshed keeps its leader's colour
                     under the stripe. */}
-                <Swatch color="rgba(255,137,137,0.6)" texture={STALE_SWATCH} />{" "}
+                <Swatch color={fade(partyMark("REP"), 0.6)} texture={STALE_SWATCH} />{" "}
                 {refreshFailed ? "Not live: this page couldn't refresh" : "Stale: not refreshed"}
               </li>
               <li className="flex items-center gap-1.5">

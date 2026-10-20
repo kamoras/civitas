@@ -110,7 +110,7 @@ export default function AgreementHeatmap({ court }: { court: Court }) {
         who vote alike sit in blocks.
       </p>
 
-      <div className="night overflow-x-auto p-2">
+      <div className="overflow-x-auto p-2">
         <table
           role="grid"
           aria-labelledby="agreement-heading"

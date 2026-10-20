@@ -13,6 +13,7 @@ import {
   houseLayout,
 } from "@/lib/electionMap";
 import { MAP_LABEL_HALO, raceLabel } from "@/lib/results";
+import { overlay } from "@/lib/chartColors";
 import type { MapBin, MapChamberKey } from "@/types/electionMap";
 import type {
   AccountabilitySeat,
@@ -30,7 +31,7 @@ const GAP = 1;
 const ACCOUNTABILITY_SOURCE =
   "Civitas: the pre-election map as frozen on election day; counts from each state's own results system, used once the state lists them official; usual vote from official returns (MEDSL, FEC, VEST, Census); polls: Wikipedia contributors, CC BY-SA 4.0";
 
-const WAITING_STROKE = "#CDC7BC";
+const WAITING_STROKE = "var(--ink-lo)";
 
 function pct(share: number | null): string {
   return share == null ? "n/a" : `${Math.round(share * 100)}%`;
@@ -245,7 +246,7 @@ function tileFill(s: AccountabilitySeat): {
   stroke: string;
   strokeDasharray?: string;
 } {
-  if (s.swingBin) return { fill: binFill(s.swingBin as MapBin), stroke: "rgba(255,255,255,0.18)" };
+  if (s.swingBin) return { fill: binFill(s.swingBin as MapBin), stroke: overlay(0.18) };
   return { fill: NO_CONTEST_FILL, stroke: WAITING_STROKE, strokeDasharray: "0.8 0.8" };
 }
 
@@ -261,7 +262,7 @@ function SenateSwing({ seats }: { seats: AccountabilitySeat[] }) {
   return (
     <svg
       viewBox={`0 0 ${TILE_COLS * (TILE + GAP)} ${TILE_ROWS * (TILE + GAP)}`}
-      className="night block h-auto w-full"
+      className="block h-auto w-full"
       aria-hidden="true"
     >
       {Object.entries(STATE_TILES).map(([state, [col, row]]) => {
@@ -310,7 +311,7 @@ function HouseSwing({ seats }: { seats: AccountabilitySeat[] }) {
   return (
     <svg
       viewBox={`-2 -2 ${layout.width + 4} ${layout.height + 4}`}
-      className="night block h-auto w-full"
+      className="block h-auto w-full"
       aria-hidden="true"
     >
       {layout.blocks.map((b) => (

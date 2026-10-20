@@ -118,10 +118,11 @@ export default function AccessibilityPage() {
                   footer (kept for this tab only). Text colours come from a fixed palette in each
                   theme with no dimmer shades to reach for. The faintest text clears 4.5:1 against
                   every background any text sits on, in both themes, and stays at or above APCA Lc
-                  58. Links inside a sentence are underlined, not only coloured. Maps and the
-                  Court&apos;s agreement grid are drawn on a dark plate in both themes, the ground
-                  their tile colours were measured on; letters on map tiles sit on a dark outline,
-                  so they read on any tile colour.
+                  58. Links inside a sentence are underlined, not only coloured. Charts and maps
+                  follow the theme you are viewing: their marks clear 3:1 against the page in both
+                  themes, text on a filled cell clears 4.5:1, and letters on map tiles sit on an
+                  outline in the page&apos;s colour, so they read on any tile colour. A shared
+                  picture of a section is drawn in the theme you are viewing.
                 </Item>
                 <Item label="Screen readers">
                   Pages use landmarks (header, navigation, main) and headings in order. Tabs,
