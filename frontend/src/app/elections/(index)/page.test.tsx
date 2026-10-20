@@ -149,6 +149,66 @@ describe("ElectionsPage", () => {
     expect(screen.queryByText(/Poll ranges →/)).not.toBeInTheDocument();
   });
 
+  it("puts the state picker first, registration in one line, and the FEC deadline after the directory", async () => {
+    // A voter on a phone scrolled about three screens, past the FEC's
+    // filing deadline and every state closing registration, to pick a state.
+    fetchPviMap.mockResolvedValue({ states: { GA: 3 }, districts: {}, cycleYear: 2026 });
+    const closing = (state: string, stateName: string, closesOn: string, daysLeft: number) => ({
+      state,
+      stateName,
+      sentence: `Registration closes ${closesOn}`,
+      closesOn,
+      daysLeft,
+      countdown: `${daysLeft} days`,
+      sameDay: null,
+      register: null,
+    });
+    const initial: ElectionsInitial = {
+      pvi: { states: { GA: 3 }, districts: {}, cycleYear: 2026 } as never,
+      phase: null,
+      specials: null,
+      calendar: null,
+      renderedAt: Date.parse("2026-10-20T12:00:00Z"),
+      fecDeadline: {
+        date: "2026-10-22",
+        label: "Pre-general report",
+        reportType: "12G",
+        reportYear: 2026,
+        status: "upcoming",
+        daysLeft: 2,
+        daysAgo: null,
+        leads: true,
+        source: "https://www.fec.gov/",
+      },
+      registrationClosing: [
+        closing("TX", "Texas", "2026-10-24", 4),
+        closing("GA", "Georgia", "2026-10-21", 1),
+      ],
+      closingSoonDays: 10,
+    };
+    render(
+      <ElectionsInitialProvider value={initial}>
+        <ElectionsPage />
+      </ElectionsInitialProvider>
+    );
+    const picker = await screen.findByRole("region", { name: "Your state's ballot" });
+    const select = within(picker).getByRole("combobox", { name: "State" });
+    // Never focused by itself: a phone opens its picker on focus.
+    expect(select).not.toHaveFocus();
+    const map = await screen.findByTestId("race-map");
+    const follows = (a: Node, b: Node) =>
+      !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(follows(picker, map)).toBe(true);
+    // Registration closing: one line to the calendar, not a row per state.
+    const line = screen.getByRole("link", { name: /Registration closes in the next 10 days/ });
+    expect(line).toHaveTextContent("in 2 states, soonest tomorrow");
+    expect(line).toHaveAttribute("href", "/elections/calendar");
+    expect(screen.queryByRole("link", { name: "Texas" })).not.toBeInTheDocument();
+    // The FEC's filing deadline is for candidates: after the directory.
+    const fec = screen.getByRole("region", { name: /FEC|report/i });
+    expect(follows(screen.getByText("All states"), fec)).toBe(true);
+  });
+
   it("leads with the specials and the calendar between general elections", async () => {
     // In an odd year the page used to be a countdown to a general a year or
     // more off and the same lean map; the backend's season now says the
@@ -345,7 +405,11 @@ describe("ElectionsPage", () => {
     expect(await screen.findByRole("heading", { name: "The 2028 primaries" })).toBeTruthy();
     expect(screen.getByText(/run through September 26, 2028/)).toBeTruthy();
     expect(screen.getByText("Nevada (Primary election), Nevada (Caucus)")).toBeTruthy();
-    expect(screen.queryByText(/Florida/)).not.toBeInTheDocument();
+    // The special is not a primary (the state picker lists every state).
+    const primaries = screen
+      .getByRole("heading", { name: "The 2028 primaries" })
+      .closest("section") as HTMLElement;
+    expect(within(primaries).queryByText(/Florida/)).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
       "2028 elections: primary season"
     );

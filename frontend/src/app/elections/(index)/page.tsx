@@ -4,6 +4,9 @@ import { membersHref } from "@/lib/routes";
 import { fade, overlay, partyMark } from "@/lib/chartColors";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import StateJump from "@/components/home/StateJump";
+import ClosingLine from "@/components/elections/ClosingLine";
+import { INLINE_LINK } from "@/lib/controlStyles";
 import SectionTabs from "@/components/layout/SectionTabs";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
@@ -454,27 +457,53 @@ export default function ElectionsPage() {
             ) : null}
           </PageMasthead>
 
-          {/* The state chosen in the header, one tap from its ballot. */}
-          {yours.state && (
-            <p className="mb-6 flex flex-wrap items-center gap-x-4 font-mono text-xs text-ink-min">
-              <span>
-                Your state:{" "}
-                <span className="text-ink-hi">{STATE_NAMES[yours.state] ?? yours.state}</span>
-              </span>
-              <Link
-                href={stateBallotHref(yours.state)}
-                className="inline-flex min-h-11 items-center border-b border-phos-mid/40 text-phos-mid hover:text-phos"
-              >
-                {STATE_NAMES[yours.state] ?? yours.state}&apos;s ballot &rarr;
-              </Link>
-              <Link
-                href={membersHref(yours.state)}
-                className="inline-flex min-h-11 items-center border-b border-phos-mid/40 text-phos-mid hover:text-phos"
-              >
-                {STATE_NAMES[yours.state] ?? yours.state}&apos;s members &rarr;
-              </Link>
-            </p>
-          )}
+          {/* ── Pick a state ── First in every mode, right under the
+              masthead: a voter came for one state's ballot (or, from
+              election day, its count), and on a phone the map and the
+              directory below sit screens down. An explicit, unremembered
+              choice (AGENTS.md section 8); the select doesn't take focus
+              by itself, since a phone opens its picker on focus. */}
+          <section
+            aria-labelledby="pick-state-heading"
+            className="mb-6 max-w-xl border border-white/30 bg-surface p-4"
+          >
+            <h2
+              id="pick-state-heading"
+              className="font-display text-lg font-semibold leading-tight text-ink-hi"
+            >
+              {resultsMode ? "Your state's count and ballot" : "Your state's ballot"}
+            </h2>
+            {/* The state chosen in the header, one tap from its ballot. */}
+            {yours.state && (
+              <p className="mt-1 flex flex-wrap items-center gap-x-4 text-sm text-ink-lo">
+                <span>
+                  Your state:{" "}
+                  <span className="text-ink-hi">{STATE_NAMES[yours.state] ?? yours.state}</span>
+                </span>
+                <Link
+                  href={stateBallotHref(yours.state)}
+                  className={`inline-flex min-h-11 items-center ${INLINE_LINK}`}
+                >
+                  {STATE_NAMES[yours.state] ?? yours.state}&apos;s ballot &rarr;
+                </Link>
+                <Link
+                  href={membersHref(yours.state)}
+                  className={`inline-flex min-h-11 items-center ${INLINE_LINK}`}
+                >
+                  {STATE_NAMES[yours.state] ?? yours.state}&apos;s members &rarr;
+                </Link>
+              </p>
+            )}
+            <StateJump label="State" to="ballot" showYours={false} />
+          </section>
+
+          {/* Registration closing soon: one line to the calendar, which
+              lists every state's deadline with where to register. */}
+          <ClosingLine
+            rows={initial?.registrationClosing ?? []}
+            days={initial?.closingSoonDays}
+            className="mb-6"
+          />
 
           {postCount && season && (
             <ArchiveLead season={season} archive={initial?.archive ?? null} />
@@ -488,22 +517,6 @@ export default function ElectionsPage() {
             <PrimariesLead season={season} cal={initial?.calendar ?? null} />
           )}
 
-          {campaignMode && <FecDeadlineCard event={initial?.fecDeadline ?? null} />}
-
-          {season?.season === "off_season" && campaignMode && (
-            <NewCongress data={initial?.newCongress ?? null} />
-          )}
-
-          {(betweenCycles || primarySeason) && <NextField field={initial?.field ?? null} />}
-
-          {campaignMode && <PresidentialContest data={initial?.presidential ?? null} />}
-
-          {betweenCycles && <OddYearStates data={initial?.oddYear ?? null} />}
-
-          {betweenCycles && <RedistrictingWatch watch={initial?.redistrictingWatch} compact />}
-
-          {betweenCycles && <ElectionAdministration data={initial?.administration ?? null} />}
-
           {resultsMode && results && (
             <ResultsOverview
               results={results}
@@ -512,8 +525,6 @@ export default function ElectionsPage() {
               refreshFailed={!!resultsError}
             />
           )}
-
-          {hub}
 
           {error && campaignMode && (
             <div
@@ -615,6 +626,27 @@ export default function ElectionsPage() {
               </section>
             </>
           )}
+
+          {/* ── Reference ── After the map and the directory: useful to
+              know about the cycle, but not what a voter came for. The
+              FEC's filing deadline is for candidates and researchers. */}
+          {season?.season === "off_season" && campaignMode && (
+            <NewCongress data={initial?.newCongress ?? null} />
+          )}
+
+          {(betweenCycles || primarySeason) && <NextField field={initial?.field ?? null} />}
+
+          {campaignMode && <PresidentialContest data={initial?.presidential ?? null} />}
+
+          {betweenCycles && <OddYearStates data={initial?.oddYear ?? null} />}
+
+          {betweenCycles && <RedistrictingWatch watch={initial?.redistrictingWatch} compact />}
+
+          {betweenCycles && <ElectionAdministration data={initial?.administration ?? null} />}
+
+          {campaignMode && <FecDeadlineCard event={initial?.fecDeadline ?? null} />}
+
+          {hub}
         </div>
       </main>
       <BackToTop />

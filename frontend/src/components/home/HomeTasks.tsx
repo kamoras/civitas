@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { connection } from "next/server";
-import type { RegistrationClosing, ThisWeek } from "@/types/thisWeek";
+import type { ThisWeek } from "@/types/thisWeek";
 import { shortDate } from "@/lib/congress";
-import { CALENDAR_HREF } from "@/lib/routes";
+import ClosingLine from "@/components/elections/ClosingLine";
 import StateJump from "./StateJump";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
@@ -28,30 +28,6 @@ function ballotLine(e: ThisWeek["election"]): string {
   if (e.phase === "results") return "The count, as states report it";
   if (e.phase === "election_day" || e.daysUntil === 0) return "Election Day is today";
   return `${e.daysUntil} day${e.daysUntil === 1 ? "" : "s"} to Election Day`;
-}
-
-/** The states closing registration soon, as one line to the calendar: it
- * matters before the election, but the day's record leads the page. */
-function Closing({ rows, days }: { rows: RegistrationClosing[]; days: number }) {
-  if (rows.length === 0) return null;
-  const soonest = rows.reduce((a, r) => (r.closesOn < a.closesOn ? r : a));
-  const when =
-    soonest.daysLeft === 0
-      ? "today"
-      : soonest.daysLeft === 1
-        ? "tomorrow"
-        : shortDate(soonest.closesOn);
-  return (
-    <p className="mt-3 border border-white/30 border-l-4 border-l-signal-orange bg-surface px-4 py-2 text-sm">
-      <Link
-        href={CALENDAR_HREF}
-        className="inline-flex min-h-6 items-center font-semibold text-ink-hi underline underline-offset-2 hover:text-phos"
-      >
-        Registration closes in the next {days} days in {rows.length}{" "}
-        {rows.length === 1 ? "state" : "states"}, soonest {when} ▸
-      </Link>
-    </p>
-  );
 }
 
 /**
@@ -102,7 +78,7 @@ export default async function HomeTasks() {
         </section>
       </div>
       {election?.registrationClosing && (
-        <Closing rows={election.registrationClosing} days={election.closingSoonDays ?? 10} />
+        <ClosingLine rows={election.registrationClosing} days={election.closingSoonDays ?? 10} />
       )}
     </div>
   );

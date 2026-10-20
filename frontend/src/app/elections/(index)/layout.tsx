@@ -16,7 +16,6 @@ import { TOPIC_FEEDS, pageMetadata } from "@/lib/site";
 import { describeElections } from "@/lib/seo";
 import { everyLiveStateVoting, showsResults } from "@/lib/results";
 import SectionCards from "@/components/sections/SectionCards";
-import ClosingSoon from "@/components/elections/ClosingSoon";
 import type { ThisWeek } from "@/types/thisWeek";
 import { ElectionsInitialProvider, type ElectionsInitial } from "./ElectionsInitial";
 
@@ -156,24 +155,14 @@ async function readInitial(): Promise<ElectionsInitial> {
 
 export default async function ElectionsLayout({ children }: { children: React.ReactNode }) {
   const [initial, week] = await Promise.all([readInitial(), fetchJson<ThisWeek>("/api/this-week")]);
-  const closing = week?.election.registrationClosing;
   return (
     <ElectionsInitialProvider
-      value={initial}
-      hub={
-        <>
-          {/* Registration closing soon, with where to register: the
-              deadline a reader can still act on comes before the map. */}
-          {closing && (
-            <ClosingSoon
-              rows={closing}
-              days={week?.election.closingSoonDays}
-              className="mt-6 border border-phos/20 bg-surface px-4 py-3"
-            />
-          )}
-          <SectionCards section="elections" current="ballots" />
-        </>
-      }
+      value={{
+        ...initial,
+        registrationClosing: week?.election.registrationClosing ?? null,
+        closingSoonDays: week?.election.closingSoonDays,
+      }}
+      hub={<SectionCards section="elections" current="ballots" />}
     >
       {children}
     </ElectionsInitialProvider>
