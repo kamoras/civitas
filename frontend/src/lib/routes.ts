@@ -1,5 +1,6 @@
 import { ABOUT_CHAPTERS, ABOUT_OVERVIEW_HREF } from "./aboutPages";
 import { COURT_HREF } from "./court";
+import type { PoliticianBranch } from "@/types/politicians";
 
 /**
  * Shared hrefs for in-app navigation targets that need a specific URL shape.
@@ -86,6 +87,9 @@ export function archivedRaceHref(cycle: number, raceId: string): string {
   return `${electionArchiveHref(cycle)}#race-${raceId}`;
 }
 
+/** Congress's members: the page a member's breadcrumb leads back to. */
+export const MEMBERS_HREF = "/congress/members";
+
 /**
  * The site's sections and each one's pages, in the order the main
  * navigation, the homepage's index and each section's
@@ -123,7 +127,7 @@ export const SECTIONS = {
       { key: "week", label: "Latest week", href: "/congress/week" },
       { key: "month", label: "Latest month", href: "/congress/month" },
       { key: "bills", label: "Bills", href: "/congress/bills" },
-      { key: "members", label: "Members", href: "/congress/members" },
+      { key: "members", label: "Members", href: MEMBERS_HREF },
       { key: "committees", label: "Committees", href: "/congress/committees" },
       { key: "nominations", label: "Nominations", href: "/congress/nominations" },
       // "Votes with the president", not "With the president": the page is
@@ -197,8 +201,66 @@ export function sectionSubpages(section: SectionKey) {
   return tabs.filter((t) => t.href !== href);
 }
 
-/** Whether `pathname` (no query string, as usePathname gives it) is in the
- * section. */
-export function inSection(section: SectionKey, pathname: string): boolean {
-  return SECTIONS[section].match.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+/**
+ * The section `pathname` (no query string, as usePathname gives it) is in:
+ * the one whose `match` names the longest prefix of it, by whole path
+ * segments, so `/compare/presidents` belongs to the section that lists it
+ * even when another lists `/compare`. Null for a page that is no section's
+ * (the footer's pages, the homepage). A record shared by several sections
+ * (`/politicians/[id]`) passes its own to the Navbar instead: see
+ * recordTrail.
+ */
+export function currentSection(pathname: string): SectionKey | null {
+  let best: SectionKey | null = null;
+  let bestLength = -1;
+  for (const key of Object.keys(SECTIONS) as SectionKey[]) {
+    for (const p of SECTIONS[key].match) {
+      if ((pathname === p || pathname.startsWith(`${p}/`)) && p.length > bestLength) {
+        best = key;
+        bestLength = p.length;
+      }
+    }
+  }
+  return best;
+}
+
+/** One step of a breadcrumb: a page's name and address. */
+export interface Crumb {
+  label: string;
+  href: string;
+}
+
+/**
+ * Where a member's, president's or justice's record sits in the site: the
+ * section of the branch they serve in (the Navbar's current-section mark)
+ * and the breadcrumb down to the record. The record keeps one URL,
+ * `/politicians/[id]`, whatever the branch (a member who moves from the
+ * House to the Senate keeps it, and the public API and feeds link it), so
+ * its path can't say which section it is in; the branch does.
+ */
+export function recordTrail(branch: PoliticianBranch): { section: SectionKey; crumbs: Crumb[] } {
+  switch (branch) {
+    case "senate":
+    case "house":
+      return {
+        section: "congress",
+        crumbs: [
+          { label: SECTIONS.congress.label, href: SECTIONS.congress.href },
+          { label: "Members", href: MEMBERS_HREF },
+        ],
+      };
+    case "president":
+      return {
+        section: "politicians",
+        crumbs: [
+          { label: SECTIONS.politicians.label, href: SECTIONS.politicians.href },
+          { label: "Presidents", href: "/politicians?branch=president" },
+        ],
+      };
+    case "scotus":
+      return {
+        section: "court",
+        crumbs: [{ label: SECTIONS.court.label, href: SECTIONS.court.href }],
+      };
+  }
 }

@@ -2590,6 +2590,13 @@ the pending list).
   aside). A page with a live figure gets it from `GET /api/sections`
   (`app/api/sections.py`), worded in `lib/sectionPreviews.ts`; a figure not
   read yet says so, never a bare zero.
+- **The main navigation's current section is the longest match** in
+  `SECTIONS[*].match` (`currentSection` in `src/lib/routes.ts`), so a nested
+  page belongs to the section that names it, and no prefix may be claimed by
+  two sections (`routes.test.ts`). A record whose one URL serves several
+  sections, `/politicians/[id]`, passes its branch's section to the Navbar
+  (`<Navbar section>`) and draws its breadcrumb from the same place
+  (`recordTrail`), which the JSON-LD breadcrumb also reads.
 - Tabbed UIs follow the WAI-ARIA tabs pattern with a roving `tabindex`.
   Activating a tab must focus **the incoming tab**, not its panel — the
   Arrow/Home/End handler lives on the `role="tablist"` container, so moving

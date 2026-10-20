@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { SECTIONS, inSection, sectionSubpages, type SectionKey } from "@/lib/routes";
+import { SECTIONS, currentSection, sectionSubpages, type SectionKey } from "@/lib/routes";
 import { BSKY_PROFILE_URL } from "@/lib/site";
 import HeaderClearance from "./HeaderClearance";
 import RecordsBand, { RunStatusSquare } from "./RecordsBand";
@@ -307,8 +307,16 @@ export function useHideOnScroll(
   return hidden;
 }
 
-export default function Navbar() {
+export default function Navbar({
+  section: recordSection,
+}: {
+  /** The current section, for a page whose path can't say (a record shared
+   *  by several sections: lib/routes.ts recordTrail). Otherwise the path's
+   *  longest match in SECTIONS decides. */
+  section?: SectionKey;
+} = {}) {
   const pathname = usePathname();
+  const here = recordSection ?? currentSection(pathname);
   const [menuOpen, setMenuOpen] = useState(false);
   // The section whose pages are open in the phone menu: null for the
   // current section's, "" for none.
@@ -465,7 +473,7 @@ export default function Navbar() {
               <SectionItem
                 key={section}
                 section={section}
-                active={inSection(section, pathname)}
+                active={here === section}
                 open={openSection === section}
                 onToggle={() =>
                   setOpened(openSection === section ? null : { section, path: pathname })
@@ -532,7 +540,7 @@ export default function Navbar() {
             <ul>
               {NAV.map((section) => {
                 const { label, href } = SECTIONS[section];
-                const active = inSection(section, pathname);
+                const active = here === section;
                 const subs = sectionSubpages(section);
                 const expanded = (shownPages ?? (active ? section : null)) === section;
                 const listId = `menu-pages-${section}`;

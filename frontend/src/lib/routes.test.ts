@@ -3,7 +3,8 @@ import { join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   CALENDAR_HREF,
-  inSection,
+  currentSection,
+  recordTrail,
   issuesUrl,
   monitorHref,
   SECTIONS,
@@ -101,9 +102,7 @@ describe("SECTIONS covers the site", () => {
     const app = join(import.meta.dirname, "..", "app");
     const orphans = pageRoutes(app, app)
       .filter((r) => r.includes("["))
-      .filter(
-        (r) => !(Object.keys(SECTIONS) as (keyof typeof SECTIONS)[]).some((k) => inSection(k, r))
-      );
+      .filter((r) => currentSection(r) === null);
     expect(orphans).toEqual([]);
   });
 
@@ -118,9 +117,44 @@ describe("SECTIONS covers the site", () => {
   });
 
   it("counts a page as in its section by path, not by prefix text", () => {
-    expect(inSection("politicians", "/compare/presidents")).toBe(true);
-    expect(inSection("politicians", "/compare")).toBe(true);
-    expect(inSection("congress", "/congressional")).toBe(false);
-    expect(inSection("agencies", "/explore")).toBe(false);
+    expect(currentSection("/compare/presidents")).toBe("politicians");
+    expect(currentSection("/compare")).toBe("politicians");
+    expect(currentSection("/congressional")).toBe(null);
+    expect(currentSection("/explore")).toBe("explore");
+  });
+
+  it("puts every page in exactly one section: no prefix is claimed twice", () => {
+    // currentSection takes the longest match, so two sections can share a
+    // page only by naming the same prefix.
+    const prefixes = Object.values(SECTIONS).flatMap((s) => [...s.match]);
+    expect(prefixes.length).toBe(new Set(prefixes).size);
+    const app = join(import.meta.dirname, "..", "app");
+    for (const r of pageRoutes(app, app)) {
+      if (NOT_IN_A_SECTION.has(r)) continue;
+      expect(currentSection(r), r).not.toBeNull();
+    }
+  });
+
+  it("takes the longest matching prefix", () => {
+    // A stand-in table is not needed: every nested prefix in SECTIONS
+    // resolves to the section naming the deeper one.
+    for (const [key, s] of Object.entries(SECTIONS)) {
+      for (const p of s.match) expect(currentSection(`${p}/x`), p).toBe(key);
+    }
+  });
+});
+
+describe("recordTrail", () => {
+  it("files a member under Congress and a justice under the Court", () => {
+    expect(recordTrail("senate").section).toBe("congress");
+    expect(recordTrail("house").crumbs.map((c) => c.label)).toEqual(["Congress", "Members"]);
+    expect(recordTrail("scotus").section).toBe("court");
+  });
+
+  it("leads every crumb to a page in the record's own section", () => {
+    for (const branch of ["senate", "house", "president", "scotus"] as const) {
+      const { section, crumbs } = recordTrail(branch);
+      for (const c of crumbs) expect(currentSection(c.href.split("?")[0]), c.href).toBe(section);
+    }
   });
 });
