@@ -12,6 +12,7 @@ import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
 import BallotMeasureCard, { measureAnchor } from "@/components/elections/BallotMeasureCard";
 import BallotBasisNotice from "@/components/elections/BallotBasisNotice";
 import VoterCalendar from "@/components/elections/VoterCalendar";
+import VoteSteps from "@/components/elections/VoteSteps";
 import GeneralRunoffNotice, {
   otherPrimaryLabel,
   RankedChoiceNotice,
@@ -1063,7 +1064,7 @@ function HouseDetail({
       <div>
         <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-[15px] font-bold text-ink-hi">
+            <p className="text-[15px] font-semibold text-ink-hi">
               {picked.district === 0 ? "At-large seat" : `District ${picked.district}`}
               {!resultsMode && (
                 <span className={`ml-2 font-mono text-xs font-normal ${leanTextClass(picked)}`}>
@@ -1406,7 +1407,7 @@ function ContestOverview({
               {groupStatewideRaces(ballot.statewideRaces).map((g) =>
                 g.race ? (
                   <li key={g.key} className="border-b border-white/[0.09] px-4 py-2">
-                    <span className="block text-[13px] font-bold text-ink-hi">
+                    <span className="block text-[13px] font-semibold text-ink-hi">
                       {g.race.label}
                       {termPhrase(g.race.termYears) && (
                         <span className="font-normal text-ink-lo">
@@ -1426,7 +1427,7 @@ function ContestOverview({
                   // elected: listed flat, New Hampshire's five council
                   // districts read as five offices every voter marks.
                   <li key={g.key} className="border-b border-white/[0.09] px-4 py-2">
-                    <span className="block text-[13px] font-bold text-ink-hi">
+                    <span className="block text-[13px] font-semibold text-ink-hi">
                       {g.seats![0].officeLabel || g.seats![0].label}
                       <span className="font-normal text-ink-lo">
                         {" "}
@@ -1475,7 +1476,7 @@ function ContestOverview({
                 key={c.chamber}
                 className="border-b border-white/[0.09] px-4 py-2 text-[13px] text-ink-lo"
               >
-                <span className="font-bold text-ink-hi">{c.label}</span> · {c.districts.length}{" "}
+                <span className="font-semibold text-ink-hi">{c.label}</span> · {c.districts.length}{" "}
                 {c.districts.length === 1 ? "seat" : "seats"} contested
                 {termPhrase(c.termYears) && ` · ${termPhrase(c.termYears)}`}
               </li>
@@ -1498,7 +1499,7 @@ function ContestOverview({
                   key={c.court}
                   className="border-b border-white/[0.09] px-4 py-2 text-[13px] text-ink-lo"
                 >
-                  <span className="font-bold text-ink-hi">{c.label}</span> · {c.seats.length}{" "}
+                  <span className="font-semibold text-ink-hi">{c.label}</span> · {c.seats.length}{" "}
                   {c.seats.length === 1 ? "seat" : "seats"}
                   {termPhrase(c.termYears) && ` · ${termPhrase(c.termYears)}`}
                 </li>
@@ -1627,12 +1628,6 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   // A rejected URL falls back to the national directory, so it isn't the
   // state's own site whatever the flag says.
   const lookupIsStateSpecific = officialLookup.isStateSpecific && !!safeHref(officialLookup.url);
-  // The state's own lookup behind a bot wall the link check can't get
-  // past: shown, but said to be unconfirmed, with the national directory
-  // as the backup (ballot_lookup.lookup_for_state).
-  const lookupUnconfirmed = lookupIsStateSpecific && !!officialLookup.unconfirmed;
-  const fallbackHref =
-    safeHref(officialLookup.fallback?.url ?? "") || "https://www.usa.gov/election-office";
   const stateName = ballot.stateName ?? ballot.state;
 
   const [towns, setTowns] = useState<TownEntry[]>([]);
@@ -1881,7 +1876,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                   {resultsFraming ? "RESULTS" : "BALLOT RESEARCH"} · {stateName.toUpperCase()} ·{" "}
                   <span>{longDate(ballot.electionDate).toUpperCase()}</span>
                 </p>
-                <h1 className="mt-1 font-display text-2xl font-extrabold text-ink-hi sm:text-[28px]">
+                <h1 className="mt-1 font-display text-2xl font-semibold text-ink-hi sm:text-[28px]">
                   {resultsFraming ? (
                     `${stateName} results`
                   ) : (
@@ -1927,37 +1922,21 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                 <span className="text-xs text-ink-lo">
                   A research tool, not an official ballot.
                 </span>
-                <a
-                  href={lookupHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label={`${officialLookup.label} (opens in new tab)`}
-                  className="font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
-                >
-                  {/* lookupIsStateSpecific, not the raw flag: a URL safeHref
-                    rejected sends this link to USAGov. "Voter lookup", not
-                    "your full ballot": some states' link is their polling-
-                    place page, which shows where to vote, not the ballot. */}
-                  {lookupUnconfirmed
-                    ? `${stateName.toUpperCase()}'S OFFICIAL VOTER LOOKUP ↗`
-                    : lookupIsStateSpecific
+                {/* The voter lookup is a step in "Your vote, step by step"
+                  below, named for its task; an older API without steps
+                  keeps this one link. */}
+                {!ballot.voteSteps?.length && (
+                  <a
+                    href={lookupHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`${officialLookup.label} (opens in new tab)`}
+                    className="font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
+                  >
+                    {lookupIsStateSpecific
                       ? `${ballot.state} OFFICIAL VOTER LOOKUP ↗`
                       : "FIND YOUR ELECTION OFFICE ↗"}
-                </a>
-                {lookupUnconfirmed && (
-                  <p className="max-w-xs text-xs text-ink-lo">
-                    This site blocks automated checks, so we can&apos;t confirm it&apos;s up. If it
-                    doesn&apos;t open, use the{" "}
-                    <a
-                      href={fallbackHref}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label={`${officialLookup.fallback?.label ?? "National directory of election offices"} (opens in new tab)`}
-                      className={INLINE_LINK}
-                    >
-                      national directory ↗
-                    </a>
-                  </p>
+                  </a>
                 )}
                 <FollowFeed subject={stateName} feed={stateFeed(ballot.state, stateName)} />
                 {/* Before election day nothing on the page says what it
@@ -1976,8 +1955,13 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
             {/* Before the ballot: a reader who isn't registered by the
               deadline can't vote on any of it. Gone in the results window,
               when every deadline has passed. */}
+            {!resultsMode && ballot.voteSteps && (
+              <VoteSteps steps={ballot.voteSteps} stateName={stateName} />
+            )}
+
             {!resultsMode && ballot.voterCalendar && (
               <VoterCalendar
+                showRegister={!ballot.voteSteps?.length}
                 calendar={ballot.voterCalendar}
                 stateName={stateName}
                 lookupHref={lookupHref}
@@ -2097,7 +2081,9 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                                 {contests.indexOf(c) + 1}
                               </span>
                               <span className="flex min-w-0 flex-1 flex-col">
-                                <span className="text-[15px] font-bold text-ink-hi">{c.title}</span>
+                                <span className="text-[15px] font-semibold text-ink-hi">
+                                  {c.title}
+                                </span>
                                 <span className="text-[13px] text-ink-lo">{c.summary}</span>
                               </span>
                               <span aria-hidden="true" className="text-ink-lo">
@@ -2148,13 +2134,13 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                 <button
                   type="button"
                   onClick={() => openContest(contests[0].key)}
-                  className="mt-3 min-h-[48px] w-full bg-phos font-bold text-surface-base hover:bg-phos-mid"
+                  className="mt-3 min-h-[48px] w-full bg-phos font-semibold text-surface-base hover:bg-phos-mid"
                 >
                   Research contest 1 →
                 </button>
               )}
               <details className="mt-3 border border-white/25 bg-surface p-4">
-                <summary className="cursor-pointer text-sm font-bold text-ink-hi">
+                <summary className="cursor-pointer text-sm font-semibold text-ink-hi">
                   Not on this page
                 </summary>
                 <ul className="mt-2 list-disc pl-5 text-[13px] text-ink-lo">

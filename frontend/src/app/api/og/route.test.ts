@@ -124,12 +124,12 @@ describe("parsePoliticianId", () => {
 });
 
 describe("scoreFooterLabel", () => {
-  it("calls only the congressional score a representation score", () => {
-    expect(scoreFooterLabel("senate")).toBe("REPRESENTATION SCORE");
-    expect(scoreFooterLabel("house")).toBe("REPRESENTATION SCORE");
-    expect(scoreFooterLabel("scotus")).toBe("NOT SCORED");
-    expect(scoreFooterLabel("president")).toBe("CIVITAS SCORE");
-    expect(scoreFooterLabel(undefined)).toBe("CIVITAS SCORE");
+  it("names what each page holds, never a composite score", () => {
+    expect(scoreFooterLabel("senate")).toBe("WHERE THEY STAND AMONG PEERS");
+    expect(scoreFooterLabel("house")).toBe("WHERE THEY STAND AMONG PEERS");
+    expect(scoreFooterLabel("scotus")).toBe("VOTES AND DECISIONS");
+    expect(scoreFooterLabel("president")).toBe("THE PUBLIC RECORD");
+    expect(scoreFooterLabel(undefined)).toBe("THE PUBLIC RECORD");
   });
 });
 

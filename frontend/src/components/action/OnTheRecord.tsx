@@ -185,7 +185,7 @@ export default function OnTheRecord({
           <h4 id={`${sectionId}-heading`}>On the record</h4>
           <ShareSectionButton label="On the record" anchor={null} />
         </div>
-        <p className="mt-2 font-display text-[15px] leading-relaxed text-ink-lo">
+        <p className="mt-2 font-sans text-[15px] leading-relaxed text-ink-lo">
           {votes.length} related vote{votes.length === 1 ? "" : "s"} in Congress, {shortDay(first)}{" "}
           to {fullDay(last)}, matched to this concern&apos;s updates by the words of their record. A
           related vote is not necessarily the one a story reported. Each square is one vote: higher

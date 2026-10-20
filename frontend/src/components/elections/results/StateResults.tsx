@@ -154,7 +154,7 @@ export default function StateResults({
   if (!results && error) {
     return (
       <section role="alert" className="mb-8 border border-signal-red/40 bg-surface p-4">
-        <h2 className="font-display text-lg font-extrabold text-ink-hi">
+        <h2 className="font-display text-lg font-semibold text-ink-hi">
           The live count couldn&apos;t be loaded
         </h2>
         <p className="mt-1 max-w-3xl text-sm text-ink-lo">
@@ -184,7 +184,7 @@ export default function StateResults({
   if (!showsResults(results.phase)) {
     return (
       <section role="status" className="mb-8 border border-white/[0.09] bg-surface p-4">
-        <h2 className="font-display text-lg font-extrabold text-ink-hi">
+        <h2 className="font-display text-lg font-semibold text-ink-hi">
           The live count has ended here
         </h2>
         <p className="mt-1 max-w-3xl text-sm text-ink-lo">
@@ -203,7 +203,7 @@ export default function StateResults({
   if (!isLive) {
     return (
       <section className="mb-8 border border-white/[0.09] bg-surface p-4">
-        <h2 className="font-display text-lg font-extrabold text-ink-hi">
+        <h2 className="font-display text-lg font-semibold text-ink-hi">
           No live count for {stateName} here
         </h2>
         <p className="mt-1 max-w-3xl text-sm text-ink-lo">
@@ -382,7 +382,7 @@ export default function StateResults({
             <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-white/[0.09] px-4 py-3">
               <h2
                 id="house-results-heading"
-                className="font-display text-xl font-extrabold text-ink-hi"
+                className="font-display text-xl font-semibold text-ink-hi"
               >
                 U.S. House
               </h2>

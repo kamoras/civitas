@@ -44,7 +44,7 @@ export default function JusticeCases({ justiceId }: { justiceId: string }) {
       className="flex flex-col gap-4 border border-white/25 bg-surface px-5 py-5 font-sans"
     >
       <div>
-        <h2 id="cases-heading" className="text-[19px] font-bold text-ink-hi">
+        <h2 id="cases-heading" className="text-[19px] font-semibold text-ink-hi">
           Every case on the record
         </h2>
         <p className="mt-1 font-mono text-xs uppercase tracking-[0.14em] text-ink-min">

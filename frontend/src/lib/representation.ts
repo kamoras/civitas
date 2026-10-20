@@ -38,14 +38,6 @@ export function getScoreLabel(score: number): string {
 // wrong vocabulary — a low-scoring president was being labelled "DEEPLY
 // CAPTURED" and a high one "STRONGLY REPRESENTATIVE", neither of which is
 // what the presidential score means. Same numeric tiers as getScoreColor.
-export function getPresidentLabel(score: number): string {
-  if (score >= 81) return "STRONG PERFORMANCE";
-  if (score >= 61) return "EFFECTIVE";
-  if (score >= 41) return "MIXED PERFORMANCE";
-  if (score >= 21) return "WEAK PERFORMANCE";
-  return "FAILING";
-}
-
 export function getScoreColor(score: number): string {
   if (score >= 81) return "text-phos";
   if (score >= 61) return "text-signal-cyan";

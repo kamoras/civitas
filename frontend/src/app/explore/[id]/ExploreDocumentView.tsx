@@ -457,7 +457,7 @@ function CommentsSection({
                 <div key={c.id} className="border border-white/[0.07] p-4 bg-phos/[0.02]">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-ink font-medium">
+                      <span className="text-xs text-ink font-semibold">
                         {c.submitterName || "Anonymous"}
                       </span>
                       {c.organization && (
@@ -467,7 +467,7 @@ function CommentsSection({
                     <span className="text-xs text-ink-min">{formatCommentDate(c.postedDate)}</span>
                   </div>
                   {c.title && c.title !== c.body?.slice(0, 50) && (
-                    <p className="text-xs text-ink-lo font-medium mb-1">{c.title}</p>
+                    <p className="text-xs text-ink-lo font-semibold mb-1">{c.title}</p>
                   )}
                   <p className="text-base text-ink-lo leading-relaxed whitespace-pre-wrap">
                     {c.body || "(No comment text available)"}
@@ -692,7 +692,7 @@ export default function ExploreDocumentView({
               )}
             </div>
 
-            <h1 className="text-lg sm:text-xl text-ink-hi font-medium leading-snug mb-4">
+            <h1 className="text-lg sm:text-xl text-ink-hi font-semibold leading-snug mb-4">
               {doc.title}
             </h1>
 

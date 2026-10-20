@@ -55,7 +55,7 @@ export default function BallotRaceRows({
           <li key={c.id} className="border-b border-white/[0.09] px-4 py-2.5">
             <div className="flex items-baseline justify-between gap-3">
               <span className="flex min-w-0 flex-col">
-                <span className="break-words text-[15px] font-bold text-ink-hi">
+                <span className="break-words text-[15px] font-semibold text-ink-hi">
                   {candidateName(c)}
                   {c.incumbentChallenge === "I" && (
                     <span className="ml-2 whitespace-nowrap align-middle font-mono text-[10px] font-normal tracking-[0.08em] text-ink-lo">

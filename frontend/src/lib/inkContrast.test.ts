@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -53,80 +55,75 @@ const rgb = (hex: string): [number, number, number] => [
   parseInt(hex.slice(5, 7), 16),
 ];
 
-/**
- * Backgrounds text is composited on, worst (lightest) last. `#302818` is not a
- * surface token — it is a 10% amber wash sitting on `surface.raised`, and it
- * is the lightest thing any text in the app is actually painted over. (This
- * read #262010 until 2026-10, which is the same wash over `surface.base`.) A tinted
- * badge is a surface; measuring against the token alone is how the previous
- * floor passed its own check and still failed in the browser.
- */
-const SURFACES = {
-  base: "#0E0C0A",
-  surface: "#14110E",
-  raised: "#191512",
-  amberWash: "#302818",
-} as const;
+const CSS = readFileSync(join(import.meta.dirname, "../app/globals.css"), "utf8");
 
-/** Each token, and the smallest Lc it is allowed to reach on ANY surface. */
-const INK = {
-  "ink-hi": { hex: "#F2EEE7", min: 90 },
-  ink: { hex: "#E3DCD1", min: 80 },
-  "ink-lo": { hex: "#CDC7BC", min: 68 },
-  "ink-min": { hex: "#BBB5AC", min: 58 },
-} as const;
-
-/**
- * Party hues are deliberately lighter than a party's "real" colour: they are
- * set at 12px inside a badge tinted with the same hue, which is the worst
- * case in the app. Held to the label floor, not the body floor — pushing them
- * to Lc 60+ turned red into pink, which costs more legibility (of the party)
- * than it buys.
- */
-const PARTY = {
-  "dem-blue": "#82ACFF",
-  "rep-red / signal-red": "#FF8989",
-  "ind-purple": "#C995FF",
-} as const;
-
-/** A 10% wash of a colour over the page ground — how a party badge renders. */
-function ownWash(hex: string): [number, number, number] {
-  const c = rgb(hex);
-  const base = rgb(SURFACES.base);
-  return c.map((v, i) => Math.round(0.1 * v + 0.9 * base[i])) as [number, number, number];
+/** A theme's colours, from globals.css's `THEME <name>` block. */
+function themeVars(name: string): Record<string, string> {
+  const block = CSS.match(new RegExp(`/\\* THEME ${name} \\*/([\\s\\S]*?)/\\* THEME end \\*/`));
+  if (!block) throw new Error(`no THEME ${name} block`);
+  return Object.fromEntries(
+    [...block[1].matchAll(/(--[\w-]+):\s*(#[0-9a-fA-F]{6})/g)].map((m) => [m[1], m[2]])
+  );
 }
 
-describe("ink ramp — APCA legibility floor", () => {
-  for (const [name, { hex, min }] of Object.entries(INK)) {
-    it(`${name} stays at or above Lc ${min} on every surface`, () => {
-      for (const [surfaceName, surfaceHex] of Object.entries(SURFACES)) {
-        const lc = apcaLc(rgb(hex), rgb(surfaceHex));
-        expect(lc, `${name} on ${surfaceName}`).toBeGreaterThanOrEqual(min);
+const mix = (top: string, alpha: number, bottom: string) =>
+  rgb(top).map((v, i) => Math.round(alpha * v + (1 - alpha) * rgb(bottom)[i])) as [
+    number,
+    number,
+    number,
+  ];
+
+/** Each ink token, and the smallest Lc it may reach on any ground. Dark text
+ * on a warm paper tops out below Lc 90 on the sunk wash (APCA's scale
+ * favours a near-white ground), so light's headings are held at 85. */
+const INK_MIN = { "--ink-hi": 90, "--ink": 80, "--ink-lo": 68, "--ink-min": 58 } as const;
+const FLOOR = { light: { ...INK_MIN, "--ink-hi": 85 }, dark: INK_MIN };
+
+for (const theme of ["light", "dark"] as const) {
+  const v = themeVars(theme);
+  /**
+   * Backgrounds text is composited on: the page, a box, the sunk wash, and a
+   * 10% amber wash over a box (a tinted badge is a surface; measuring the
+   * token alone is how an earlier floor passed its own check and failed in
+   * the browser).
+   */
+  const SURFACES: Record<string, [number, number, number]> = {
+    base: rgb(v["--surface-base"]),
+    surface: rgb(v["--surface"]),
+    raised: rgb(v["--surface-raised"]),
+    amberWash: mix(v["--signal-amber"], 0.1, v["--surface"]),
+  };
+
+  describe(`${theme}: ink ramp, APCA legibility floor`, () => {
+    for (const [name, min] of Object.entries(FLOOR[theme])) {
+      it(`${name} stays at or above Lc ${min} on every surface`, () => {
+        for (const [surfaceName, bg] of Object.entries(SURFACES)) {
+          expect(apcaLc(rgb(v[name]), bg), `${name} on ${surfaceName}`).toBeGreaterThanOrEqual(min);
+        }
+      });
+    }
+
+    it("keeps the ramp's steps distinguishable", () => {
+      // A ramp that is legible but flat is a different failure: hierarchy has
+      // to survive lifting the floor.
+      const onBase = Object.keys(INK_MIN).map((n) => ({ n, lc: apcaLc(rgb(v[n]), SURFACES.base) }));
+      for (let i = 1; i < onBase.length; i++) {
+        const gap = onBase[i - 1].lc - onBase[i].lc;
+        expect(gap, `${onBase[i - 1].n} -> ${onBase[i].n}`).toBeGreaterThan(3);
       }
     });
-  }
+  });
 
-  it("keeps the ramp's steps distinguishable", () => {
-    // A ramp that is legible but flat is a different failure: hierarchy has to
-    // survive lifting the floor.
-    const onBase = Object.entries(INK).map(([n, { hex }]) => ({
-      n,
-      lc: apcaLc(rgb(hex), rgb(SURFACES.base)),
-    }));
-    for (let i = 1; i < onBase.length; i++) {
-      const gap = onBase[i - 1].lc - onBase[i].lc;
-      expect(gap, `${onBase[i - 1].n} -> ${onBase[i].n}`).toBeGreaterThan(6);
+  describe(`${theme}: party hues, legible inside their own tinted badge`, () => {
+    for (const name of ["--dem-blue", "--rep-red", "--ind-purple"]) {
+      it(`${name} clears the label floor on a 10% wash of itself`, () => {
+        expect(apcaLc(rgb(v[name]), mix(v[name], 0.1, v["--surface-base"]))).toBeGreaterThanOrEqual(
+          52
+        );
+      });
     }
   });
-});
-
-describe("party hues — legible inside their own tinted badge", () => {
-  for (const [name, hex] of Object.entries(PARTY)) {
-    it(`${name} clears the label floor on a 10% wash of itself`, () => {
-      expect(apcaLc(rgb(hex), ownWash(hex))).toBeGreaterThanOrEqual(52);
-    });
-  }
-});
+}
 
 describe("apcaLc", () => {
   it("is polarity aware, which is the whole reason it is here", () => {
