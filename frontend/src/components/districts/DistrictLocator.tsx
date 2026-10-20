@@ -30,7 +30,7 @@ interface HouseDistrict {
 }
 
 const BUTTON =
-  "inline-flex min-h-11 items-center border border-white/15 px-3 font-mono text-xs uppercase tracking-[0.12em] text-ink-hi hover:border-phos/40 hover:text-phos disabled:opacity-70";
+  "inline-flex min-h-11 items-center border border-white/15 px-3 font-mono text-xs text-ink-hi hover:border-phos/40 hover:text-phos disabled:opacity-70";
 const INLINE_LINK = "underline underline-offset-2 hover:text-phos";
 
 // A fix this loose can't settle a street near a district line: say so.
