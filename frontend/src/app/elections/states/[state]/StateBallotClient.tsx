@@ -19,6 +19,8 @@ import GeneralRunoffNotice, {
   TopPrimaryNotice,
 } from "@/components/elections/GeneralRunoffNotice";
 import DistrictFinder from "@/components/elections/DistrictFinder";
+import DistrictLocator from "@/components/districts/DistrictLocator";
+import { ballotHouseLines } from "@/lib/districtAt";
 import DistrictMap from "@/components/elections/DistrictMap";
 import TownContestCard from "@/components/elections/TownContestCard";
 import FollowFeed from "@/components/shared/FollowFeed";
@@ -163,13 +165,25 @@ function StateLegSeatRow({ seat, filter }: { seat: StateLegDistrict; filter: str
  * three things a person knows about themselves without being asked
  * where they live. Civitas does not ask.
  */
-function StateLegChamberSection({ chamber }: { chamber: StateLegChamber }) {
-  const [filter, setFilter] = useState("");
+function StateLegChamberSection({
+  chamber,
+  initialFilter = "",
+}: {
+  chamber: StateLegChamber;
+  /** A district found by location: the section opens filtered to it. */
+  initialFilter?: string;
+}) {
+  const [filter, setFilter] = useState(initialFilter);
   const shown = filterDistricts(chamber.districts, filter, (d) => ({
     district: d.district,
     areas: d.towns,
     candidates: d.nominees,
   }));
+  // A town split between seats says so, as the House filter does.
+  const placeSummary = placeDistrictSummary(
+    chamber.districts.map((d) => ({ district: d.district, places: d.towns })),
+    filter
+  );
 
   return (
     <div className="mb-5 last:mb-0">
@@ -192,9 +206,19 @@ function StateLegChamberSection({ chamber }: { chamber: StateLegChamber }) {
           />
           <p role="status" aria-live="polite" className="sr-only">
             {filter.trim()
-              ? `${shown.length} of ${chamber.districts.length} ${chamber.label} seats match ${filter}`
+              ? `${shown.length} of ${chamber.districts.length} ${chamber.label} seats match ${filter}. ${placeSummary.join(" ")}`
               : ""}
           </p>
+          {placeSummary.length > 0 && (
+            <div aria-hidden="true" className="mt-2 text-[13px] text-ink">
+              {placeSummary.map((line) => (
+                <p key={line}>{line}</p>
+              ))}
+              <p className="text-xs text-ink-lo">
+                Use your location above to tell which seat is yours.
+              </p>
+            </div>
+          )}
         </div>
       )}
       <div className="space-y-1">
@@ -212,15 +236,38 @@ function StateLegChamberSection({ chamber }: { chamber: StateLegChamber }) {
   );
 }
 
-function StateLegislatureDetail({ ballot }: { ballot: StateBallot }) {
+function StateLegislatureDetail({
+  ballot,
+  officialLookup,
+}: {
+  ballot: StateBallot;
+  officialLookup: { href: string; label: string } | null;
+}) {
+  // Seat keys found by location, per chamber ("upper" from the state
+  // senate shapes, "lower" from the state house's).
+  const [located, setLocated] = useState<Record<string, string | null>>({});
   return (
     <div>
       <p className="text-xs text-ink-min mb-3">
         Each voter votes in exactly one seat per chamber. Each is listed with the places and
         counties it covers: filter by yours to find it.
       </p>
+      <DistrictLocator
+        state={ballot.state}
+        lines={`election-${ballot.cycleYear}`}
+        linesLabel={`the ${ballot.cycleYear} election's lines`}
+        districts={[]}
+        query=""
+        legislature
+        onFound={(found) => setLocated({ upper: found.sldu, lower: found.sldl })}
+        officialLookup={officialLookup}
+      />
       {ballot.stateLegRaces.map((chamber) => (
-        <StateLegChamberSection key={chamber.chamber} chamber={chamber} />
+        <StateLegChamberSection
+          key={`${chamber.chamber}:${located[chamber.chamber] ?? ""}`}
+          chamber={chamber}
+          initialFilter={located[chamber.chamber] ?? ""}
+        />
       ))}
       <p className="mt-1 text-[10px] text-ink-min">
         {ballot.statewideCoverage.ballotList
@@ -1260,6 +1307,24 @@ function HouseDetail({
           ))}
         </div>
       )}
+      {houseRaces.length > 1 && (
+        <DistrictLocator
+          state={ballot.state}
+          lines={ballotHouseLines(ballot.cycleYear, newLines)}
+          linesLabel={`the ${ballot.cycleYear} election's lines`}
+          districts={houseRaces.map((r) => ({ district: r.district ?? 0, places: r.places }))}
+          query={filter}
+          onFound={(found) => {
+            const race = houseRaces.find((r) => (r.district ?? 0) === found.house);
+            if (race) onPick(race.id);
+          }}
+          officialLookup={
+            lookupIsStateSpecific
+              ? { href: lookupHref, label: `${stateName}'s own voter lookup` }
+              : null
+          }
+        />
+      )}
       {shown.map((r) => (
         <HouseDistrictOption
           key={r.id}
@@ -1824,7 +1889,17 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
       case "statewide":
         return <StatewideExecutiveDetail ballot={ballot} lookupHref={lookupHref} />;
       case "stateleg":
-        return <StateLegislatureDetail ballot={ballot} />;
+        return (
+          <StateLegislatureDetail
+            ballot={ballot}
+            officialLookup={{
+              href: lookupHref,
+              label: lookupIsStateSpecific
+                ? `${stateName}'s own voter lookup`
+                : "your election office (listed by USA.gov)",
+            }}
+          />
+        );
       case "judicial":
         return <JudicialDetail ballot={ballot} />;
       case "stateNone":

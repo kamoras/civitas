@@ -1060,6 +1060,28 @@ unless every state's district numbers match
 `county_district_crosswalk.json` and none was lost to simplification.
 At-large states get no map — one shape is nothing to choose between.
 
+**A town split between districts** can't be settled by its name, and
+Civitas won't ask for the street (AGENTS.md §8). So the House finders (the
+member directory, an issue's contact list and the state ballot page) and
+the ballot's state legislature section offer **"Use my location"**, and a
+typed town that is split offers a **map of just that town**: its outline,
+each district's part of it, its main roads, and a list of the parts
+(described by the roads that cross them and the district's other places)
+as the keyboard and screen-reader path. Both are worked out in the browser
+(`frontend/src/lib/districtAt.ts`) against the site's own district shapes,
+`frontend/public/data/lookup/<lines>/<ST>.json`: `congress-119` for who
+represents the reader (the Congress the API says is in office) and
+`election-2026` for the ballot, with the state senate and house in a
+separate `<ST>.legislature.json`. The position and the tap never leave the
+page; only a House district number is kept, for the tab. Beside them is
+always the official lookup, worded so the reader knows that site would get
+their address. The shapes are TIGER/Line, simplified by Douglas-Peucker at
+10m and built by `backend/scripts/build_district_lookup.py`, which places
+every populated 2020 census block's internal point in them and refuses to
+write if fewer than 99.99% of a state's residents, or 99.9% of those within
+100m of a district line, land in their block's district
+(`lookup/_accuracy.json` has the figures; SIZES_PLACEHOLDER).
+
 **The 2026 lines are not the 2024 lines.** Nine states redrew between the
 two elections (AL, CA, FL, LA, NC, OH, TN, TX, UT); until 2026-09 every page
 drew and listed those states' districts on the old lines under the new

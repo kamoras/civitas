@@ -18,6 +18,8 @@ import { PARTY_COLORS } from "@/lib/partyStyles";
 import { boxedControl } from "@/lib/controlStyles";
 import { STATE_CODES, STATE_NAMES } from "@/lib/stateCodes";
 import { useYourState } from "@/hooks/useYourState";
+import { useYourDistrict } from "@/hooks/useYourDistrict";
+import DistrictLocator from "@/components/districts/DistrictLocator";
 import { rollCallHref } from "@/lib/congress";
 import type { ActionIssue, IssueMember, IssueVote } from "@/types/action";
 
@@ -297,6 +299,9 @@ export default function ContactYourMembers({
     if (next) yours.setState(next);
   };
   const [place, setPlace] = useState("");
+  // A House district found by location or a town's map, here or on the
+  // member directory, for this tab (useYourDistrict).
+  const yourDistrict = useYourDistrict();
   const [showAllHouse, setShowAllHouse] = useState(false);
   const selectId = useId();
   const placeId = useId();
@@ -324,10 +329,17 @@ export default function ContactYourMembers({
         : [],
     [finder, lines, place]
   );
+  const linesName = lines ? `congress-${lines.congress}` : "";
+  const located =
+    finder && yourDistrict.district?.state === state && yourDistrict.district.lines === linesName
+      ? yourDistrict.district.house
+      : null;
   const shownReps =
     !finder || showAllHouse
       ? reps
-      : reps.filter((r) => matchedDistricts.some((d) => d.district === r.district));
+      : located != null
+        ? reps.filter((r) => r.district === located)
+        : reps.filter((r) => matchedDistricts.some((d) => d.district === r.district));
   const stateName = STATE_NAMES[state] ?? state;
   const status = finder
     ? countyFinderStatus(
@@ -405,7 +417,10 @@ export default function ContactYourMembers({
                 type="search"
                 list={`${placeId}-places`}
                 value={place}
-                onChange={(e) => setPlace(e.target.value)}
+                onChange={(e) => {
+                  setPlace(e.target.value);
+                  if (located != null) yourDistrict.setDistrict(null);
+                }}
                 placeholder="City, town or county"
                 autoComplete="off"
                 className="mt-1 min-h-[36px] w-full max-w-xs border border-white/15 bg-surface-base px-2 font-mono text-sm text-ink-hi placeholder:text-ink-min outline-none focus:border-ink-lo"
@@ -420,6 +435,22 @@ export default function ContactYourMembers({
                   {status}
                 </p>
               )}
+              <DistrictLocator
+                state={state}
+                lines={linesName}
+                linesLabel="the lines today's members were elected on"
+                districts={lines!.districts}
+                query={place}
+                onFound={(found) =>
+                  found.house != null &&
+                  yourDistrict.setDistrict({
+                    state: found.state,
+                    lines: linesName,
+                    house: found.house,
+                  })
+                }
+                onOtherState={setState}
+              />
               {!showAllHouse && (
                 <button type="button" className={COMMAND} onClick={() => setShowAllHouse(true)}>
                   [ All {reps.length} ]
