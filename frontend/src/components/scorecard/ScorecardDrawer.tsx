@@ -49,7 +49,7 @@ export default function ScorecardDrawer({
       >
         <div className="flex items-start justify-between gap-3 border-b border-white/25 bg-surface-raised px-5 py-4">
           <div className="min-w-0">
-            <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">{subtitle}</p>
+            <p className="font-mono text-xs text-ink-min">{subtitle}</p>
             <h2
               id="scorecard-drawer-title"
               ref={heading}
@@ -62,9 +62,9 @@ export default function ScorecardDrawer({
           <button
             type="button"
             onClick={onClose}
-            className="min-h-[44px] min-w-[44px] shrink-0 border border-white/25 px-3 font-mono text-xs tracking-[0.1em] text-ink hover:border-white/50 hover:text-phos"
+            className="min-h-[44px] min-w-[44px] shrink-0 border border-white/25 px-3 font-mono text-xs text-ink hover:border-white/50 hover:text-phos"
           >
-            CLOSE
+            Close
           </button>
         </div>
         <div data-drawer-body className="flex-1 overflow-y-auto px-5 pb-8 pt-5">

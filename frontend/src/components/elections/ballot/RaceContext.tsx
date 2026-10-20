@@ -66,10 +66,7 @@ function LeanAxis({ context, seatLabel }: { context: LeanContext; seatLabel: str
   return (
     <div className="mt-3">
       <div role="img" aria-label={summary} data-testid="lean-axis">
-        <div
-          className="relative h-5 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-hi"
-          aria-hidden="true"
-        >
+        <div className="relative h-5 font-mono text-[10px] text-ink-hi" aria-hidden="true">
           <span
             className="absolute bottom-0 whitespace-nowrap"
             // The ▼ over the seat's column: half its width back past the edge.
@@ -124,20 +121,20 @@ function LeanAxis({ context, seatLabel }: { context: LeanContext; seatLabel: str
           />
         </svg>
         <div
-          className="relative mt-1 flex justify-between gap-2 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-min"
+          className="relative mt-1 flex justify-between gap-2 font-mono text-[10px] text-ink-min"
           aria-hidden="true"
         >
           <span>← {dist[0].label}</span>
           {even != null && even > 0.2 && even < 0.8 && (
             <span className="absolute -translate-x-1/2" style={{ left: `${even * 100}%` }}>
-              EVEN
+              Even
             </span>
           )}
           <span>{dist[dist.length - 1].label} →</span>
         </div>
       </div>
       <details className="mt-2" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
-        <summary className="inline-flex min-h-6 cursor-pointer items-center font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos">
+        <summary className="inline-flex min-h-6 cursor-pointer items-center font-mono text-xs text-signal-cyan hover:text-phos">
           Seats at each lean, as a table
         </summary>
         <div
@@ -189,7 +186,7 @@ export function usualPoints(label: string): number {
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="border-b border-white/[0.07] py-3 last:border-b-0">
-      <dt className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-min">{label}</dt>
+      <dt className="font-mono text-[11px] text-ink-min">{label}</dt>
       <dd className="mt-1 text-[14px] leading-relaxed text-ink-lo">{children}</dd>
     </div>
   );
@@ -200,8 +197,8 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
  * running, and that none of it is a forecast. Descriptive only — Civitas
  * publishes no odds and calls no race. The race links to its cycle's
  * map's poll range for it (lib/electionMap), which is kept off this
- * section on purpose: the section shows the incumbent's Representation
- * Score, and a poll range must never sit beside a score.
+ * section on purpose: the section links to the incumbent's record, and a
+ * poll range must never sit beside a member's record.
  *
  * From election day (`resultsMode`) the lean is left out, as it is from the
  * page header: beside a live count it reads as a prediction of it. */
@@ -239,15 +236,12 @@ export default function RaceContext({
       })}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 border-b border-white/[0.09] pb-1">
-        <h3
-          id={`context-${race.id}`}
-          className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min"
-        >
+        <h3 id={`context-${race.id}`} className="font-mono text-xs text-ink-min">
           What shapes this race · {seatName}
         </h3>
         {/* The figures below as data, and how they are made: links, so
             left out of a picture of the section. */}
-        <span className="flex items-center gap-x-2 font-mono text-[11px] uppercase tracking-[0.1em]">
+        <span className="flex items-center gap-x-2 font-mono text-[11px]">
           <ShareSectionButton label={`What shapes this race: ${seatName}`} anchor={null} />
           <span className="flex gap-x-2" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
             <a
@@ -270,7 +264,7 @@ export default function RaceContext({
               aria-label="Method: how these figures are made"
               className="inline-flex min-h-[24px] items-center text-signal-cyan hover:text-phos"
             >
-              [ METHOD ]
+              [ Method ]
             </Link>
           </span>
         </span>
@@ -287,10 +281,10 @@ export default function RaceContext({
             {race.district == null ? "state" : "district"} usually votes.{" "}
             <Link
               href={mapHref("polls", race.district == null ? "senate" : "house", race.id)}
-              className="whitespace-nowrap font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
+              className="whitespace-nowrap font-mono text-xs text-signal-cyan hover:text-phos"
               {...{ [SHARE_EXCLUDE_ATTR]: "" }}
             >
-              [ {race.district == null ? "SENATE" : "HOUSE"} MAP → ]
+              [ {race.district == null ? "Senate" : "House"} map → ]
             </Link>
           </>
         )}
@@ -337,9 +331,9 @@ export default function RaceContext({
             measure against colleagues in the same party:{" "}
             <Link
               href={`/politicians/${incumbent.incumbentRecord.id}`}
-              className="whitespace-nowrap font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
+              className="whitespace-nowrap font-mono text-xs text-signal-cyan hover:text-phos"
             >
-              [ WHERE THEY STAND → ]
+              [ Where they stand → ]
             </Link>
           </Row>
         )}

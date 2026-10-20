@@ -48,7 +48,7 @@ import { exploreHref } from "@/lib/exploreHref";
 
 /** Hairline section header: the one used by RecordIndex and /elections. */
 export const SECTION_HEADING =
-  "flex items-baseline justify-between gap-3 border-b border-white/15 pb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min";
+  "flex items-baseline justify-between gap-3 border-b border-white/15 pb-2 font-mono text-xs text-ink-min";
 
 /** A standalone link's target on a phone: 44px tall (mobile spec P10), its
  *  own height from 640px up. Not for a link inside a sentence. */
@@ -112,7 +112,7 @@ export function IssueImage({
         className="max-h-96 w-full border border-white/[0.07] object-cover"
       />
       {(issue.imageAlt || issue.imageCredit) && (
-        <figcaption className="mt-1.5 font-mono text-xs tracking-wide text-ink-min">
+        <figcaption className="mt-1.5 font-mono text-xs text-ink-min">
           {issue.imageAlt}
           {issue.imageAlt && issue.imageCredit && " · "}
           {issue.imageCredit && `Photo: ${issue.imageCredit}`}
@@ -143,12 +143,8 @@ export function IssueMeta({
   as?: "p" | "span";
 }) {
   return (
-    <Tag className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 font-mono text-xs tracking-[0.08em] text-ink-min">
-      {lead && (
-        <span className="border border-white/15 px-2 py-0.5 uppercase tracking-[0.14em] text-ink-hi">
-          {lead}
-        </span>
-      )}
+    <Tag className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 font-mono text-xs text-ink-min">
+      {lead && <span className="border border-white/15 px-2 py-0.5 text-ink-hi">{lead}</span>}
       <span>{issueDateLabel(issue)}</span>
       {withRef && (
         <>
@@ -261,7 +257,7 @@ export function IssueTags({
   if (areas.length === 0 && monitors.length === 0) return null;
   return (
     <div
-      className={`flex flex-wrap items-baseline gap-x-4 gap-y-1.5 font-mono text-xs tracking-[0.08em] text-ink-lo ${className}`}
+      className={`flex flex-wrap items-baseline gap-x-4 gap-y-1.5 font-mono text-xs text-ink-lo ${className}`}
     >
       {areas.map((area) => (
         <span key={area}>{policyAreaLabel(area)}</span>
@@ -446,7 +442,7 @@ function actionRows(issue: ActionIssue, today: string): ActionRow[] {
       ),
       href: url ?? `/politicians/${m.id}`,
       internal: !url,
-      label: url ? "Contact ↗" : "Scorecard →",
+      label: url ? "Contact ↗" : "Record →",
       tap: url ? "write" : undefined,
     });
   }
@@ -627,7 +623,7 @@ export function WhatYouCanDo({
               key={row.key}
               className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 gap-y-1 border-b border-white/[0.07] py-3 sm:grid-cols-[5.5rem_minmax(0,1fr)_auto]"
             >
-              <span className="col-span-2 font-mono text-xs uppercase tracking-[0.12em] text-ink-min sm:col-span-1">
+              <span className="col-span-2 font-mono text-xs text-ink-min sm:col-span-1">
                 {row.verb}
               </span>
               <div
@@ -749,9 +745,9 @@ function CountAsOf({ issue }: { issue: ActionIssue }) {
   return (
     <p className="mt-4 text-xs text-ink-min">
       {countIsOfficial(issue) ? (
-        <span className="text-ink-hi">OFFICIAL COUNT</span>
+        <span className="text-ink-hi">Official count</span>
       ) : (
-        <span className="text-signal-amber">NOT FINAL</span>
+        <span className="text-signal-amber">Not final</span>
       )}{" "}
       · {when ? `the count as of ${when}, when Civitas read it. ` : ""}
       The state&apos;s own results site has the current count.
@@ -765,7 +761,7 @@ export function SourceList({ issue, className = "" }: { issue: ActionIssue; clas
   if (names.length === 0) return null;
   return (
     <p
-      className={`flex flex-wrap items-baseline gap-x-2 gap-y-1 font-mono text-xs tracking-[0.08em] text-ink-min ${className}`}
+      className={`flex flex-wrap items-baseline gap-x-2 gap-y-1 font-mono text-xs text-ink-min ${className}`}
     >
       <span>Sources</span>
       {names.map((name, i) => {

@@ -58,7 +58,7 @@ export const ABOUT_CHAPTERS: readonly AboutChapter[] = [
     href: "/about/limitations",
     title: "Known limitations",
     blurb:
-      "What the scores can't tell you, stated plainly, with the reason each gap is still open.",
+      "What the figures can't tell you, stated plainly, with the reason each gap is still open.",
   },
   {
     href: "/about/references",

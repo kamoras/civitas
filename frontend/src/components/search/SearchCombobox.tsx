@@ -172,10 +172,7 @@ export default function SearchCombobox({
 
   return (
     <form role="search" action="/search" method="get" className="@container relative w-full">
-      <label
-        htmlFor={inputId}
-        className="mb-2 block font-mono text-xs uppercase tracking-[0.14em] text-ink-lo"
-      >
+      <label htmlFor={inputId} className="mb-2 block font-mono text-xs text-ink-lo">
         {label}
       </label>
       {/* GO under the field in a narrow box (a 320 px phone, or a doubled
@@ -215,7 +212,7 @@ export default function SearchCombobox({
         />
         <button
           type="submit"
-          className="min-h-11 w-full border-t-2 border-ink-lo px-3 font-mono text-xs uppercase tracking-[0.14em] text-ink-hi hover:bg-white/10 @[20rem]:w-auto @[20rem]:min-w-16 @[20rem]:border-t-0 @[20rem]:border-l-2"
+          className="min-h-11 w-full border-t-2 border-ink-lo px-3 font-mono text-xs text-ink-hi hover:bg-white/10 @[20rem]:w-auto @[20rem]:min-w-16 @[20rem]:border-t-0 @[20rem]:border-l-2"
         >
           Go
         </button>
@@ -249,7 +246,7 @@ export default function SearchCombobox({
             <span className="flex items-baseline justify-between gap-3">
               <span className="min-w-0 font-sans text-sm font-semibold">{item.label}</span>
               <span
-                className={`shrink-0 font-mono text-[11px] uppercase tracking-[0.12em] ${
+                className={`shrink-0 font-mono text-[11px] ${
                   i === active ? "text-surface-base" : "text-ink-lo"
                 }`}
               >

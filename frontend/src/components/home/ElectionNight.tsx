@@ -8,12 +8,12 @@ import { fetchResultsSummary } from "@/lib/resultsSummaryServer";
 const SHOWN = 5;
 
 const STATUS: Record<ResultsSummaryState["status"], { tag: string; tone: string }> = {
-  not_final: { tag: `LEADING · ${NOT_FINAL}`, tone: "text-signal-amber" },
-  official: { tag: "LEADS · OFFICIAL COUNT", tone: "text-phos" },
+  not_final: { tag: `Leading · ${NOT_FINAL}`, tone: "text-signal-amber" },
+  official: { tag: "Leads · Official count", tone: "text-phos" },
 };
 
 const COMMAND =
-  "inline-flex min-h-[32px] items-center font-mono text-xs tracking-[0.12em] text-phos-mid hover:text-phos";
+  "inline-flex min-h-[32px] items-center font-mono text-xs text-phos-mid hover:text-phos";
 
 /**
  * The live count, state by state, at the top of the homepage while the
@@ -35,8 +35,8 @@ function Entry({ entry }: { entry: ResultsSummaryState }) {
   const status = STATUS[entry.status];
   return (
     <li className="grid grid-cols-1 gap-x-8 gap-y-1 border-b border-white/[0.07] py-3 md:grid-cols-[11rem_minmax(0,1fr)_auto]">
-      <p className="font-mono text-xs leading-relaxed tracking-[0.08em]">
-        <span className="text-ink-hi md:block">{entry.stateName.toUpperCase()}</span>
+      <p className="font-mono text-xs leading-relaxed">
+        <span className="text-ink-hi md:block">{entry.stateName}</span>
         <span className="md:hidden text-ink-min"> · </span>
         <span className={`md:block ${status.tone}`}>{status.tag}</span>
       </p>
@@ -46,13 +46,13 @@ function Entry({ entry }: { entry: ResultsSummaryState }) {
             {line}
           </p>
         ))}
-        <p className="mt-0.5 font-mono text-xs tracking-[0.06em] text-ink-min">
+        <p className="mt-0.5 font-mono text-xs text-ink-min">
           {entry.source} · {formatEasternTime(entry.lastChangeAt)}
         </p>
       </div>
       <p>
         <Link href={entry.href} className={COMMAND}>
-          [ {entry.stateName.toUpperCase()} RESULTS ]
+          [ {entry.stateName} results ]
         </Link>
       </p>
     </li>
@@ -66,14 +66,14 @@ export function ElectionNightList({ data }: { data: ResultsSummary }) {
     <section aria-labelledby="election-night" className="mx-auto mt-8 max-w-7xl px-4 sm:px-6">
       <h2
         id="election-night"
-        className="flex flex-wrap items-baseline justify-between gap-x-4 border-b border-white/15 pb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
+        className="flex flex-wrap items-baseline justify-between gap-x-4 border-b border-white/15 pb-2 font-mono text-xs text-ink-min"
       >
         <span>
           The count · {data.states.length} {data.states.length === 1 ? "state" : "states"} counting
         </span>
         <Link
           href="/elections"
-          className="normal-case tracking-[0.06em] underline decoration-white/30 underline-offset-4 hover:text-phos"
+          className="underline decoration-white/30 underline-offset-4 hover:text-phos"
         >
           Every state&apos;s count &rarr;
         </Link>
@@ -84,8 +84,8 @@ export function ElectionNightList({ data }: { data: ResultsSummary }) {
         ))}
       </ul>
       {more.length > 0 && (
-        <p className="py-3 font-mono text-xs leading-loose tracking-[0.08em] text-ink-min">
-          ALSO COUNTING:{" "}
+        <p className="py-3 font-mono text-xs leading-loose text-ink-min">
+          Also counting:{" "}
           {more.map((e, i) => (
             <span key={e.state}>
               {i > 0 && " · "}

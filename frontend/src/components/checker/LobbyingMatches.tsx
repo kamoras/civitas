@@ -42,15 +42,15 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
               </div>
 
               <div className="text-xs font-mono text-ink-lo mb-3 space-y-1">
-                <div>INDUSTRY CONTRIBUTIONS: {formatCurrency(match.donationToSenator)}</div>
+                <div>Industry contributions: {formatCurrency(match.donationToSenator)}</div>
                 {/* Can be one unspaced token: wrap it rather than let the
                     panel cut it off. */}
                 <div className="[overflow-wrap:anywhere]">
-                  LARGEST DONOR IN THIS INDUSTRY: {match.lobbyistOrg}
+                  Largest donor in this industry: {match.lobbyistOrg}
                 </div>
                 {(match.lobbyingClients ?? []).length > 0 && (
                   <div>
-                    <div>REGISTERED LOBBYING, BY CLIENT (see the total below):</div>
+                    <div>Registered lobbying, by client (see the total below):</div>
                     <ul className="mt-1 space-y-1 pl-3">
                       {(match.lobbyingClients ?? []).map((c) => (
                         <li key={c.client}>
@@ -68,11 +68,11 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
                   </div>
                 )}
                 {match.lobbyingChecked === false && (
-                  <div>LOBBYING REGISTRY: lookup failed on the last run, spend unknown</div>
+                  <div>Lobbying registry: lookup failed on the last run, spend unknown</div>
                 )}
                 {lobbied.length > 0 && (
                   <div>
-                    <div>NAMED IN LOBBYING FILINGS FOR CLIENTS OF THIS NAME:</div>
+                    <div>Named in lobbying filings for clients of this name:</div>
                     <ul className="mt-1 space-y-1 pl-3">
                       {lobbied.map((b) => {
                         const bill = billPageHref(b.billId);
@@ -120,7 +120,7 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
                 )}
                 {topical.length > 0 && votes.length === 0 && (
                   <div className="flex items-center gap-1 flex-wrap">
-                    <span>TOPICALLY RELATED BILLS:</span>
+                    <span>Topically related bills:</span>
                     {topical.map((b, j) => {
                       const href = billPageHref(b);
                       return href ? (
@@ -144,7 +144,7 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
               {votes.length > 0 && (
                 <div className="mt-3">
                   <div className="text-xs font-mono text-ink-lo">
-                    THIS MEMBER&apos;S VOTES ON THE RELATED BILLS:
+                    This member&apos;s votes on the related bills:
                   </div>
                   <ul>
                     {votes.map((v) => (

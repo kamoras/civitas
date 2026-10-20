@@ -19,7 +19,7 @@ type Capture =
   { state: "working" } | { state: "ready"; blob: Blob; previewUrl: string } | { state: "failed" };
 
 const ACTION =
-  "inline-flex min-h-[44px] items-center border px-3 font-mono text-xs uppercase tracking-[0.12em] transition-colors";
+  "inline-flex min-h-[44px] items-center border px-3 font-mono text-xs transition-colors";
 
 /**
  * "Share" for one section of a page: turns the section (the nearest
@@ -36,7 +36,7 @@ export default function ShareSectionButton({
   withStrip = true,
   anchor,
   children = "Share",
-  className = `inline-flex min-h-11 sm:min-h-6 items-center border px-2 font-mono text-xs uppercase tracking-[0.12em] transition-colors ${BOXED_CONTROL.unselected}`,
+  className = `inline-flex min-h-11 sm:min-h-6 items-center border px-2 font-mono text-xs transition-colors ${BOXED_CONTROL.unselected}`,
 }: {
   /** The section's name, for the button's accessible name and the dialog. */
   label: string;

@@ -4,6 +4,7 @@ import FollowFeed from "@/components/shared/FollowFeed";
 import { memberFeed } from "@/lib/site";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
+import { membersHref, recordTrail } from "@/lib/routes";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
@@ -11,7 +12,7 @@ import MemberScorecard from "@/components/scorecard/MemberScorecard";
 import PresidentScorecard from "@/components/scorecard/PresidentScorecard";
 import JusticeScorecard from "@/components/scorecard/JusticeScorecard";
 import { formerOfficeNotice } from "@/lib/officeStatus";
-import { issueDateLabel } from "@/lib/formatting";
+import { issueDateLabel, asLabel } from "@/lib/formatting";
 import { houseSeatLabel, stateBallotHref } from "@/lib/elections";
 import { STATE_NAMES } from "@/lib/stateCodes";
 import type { PoliticianProfile, GovernmentDoc, SeatRace } from "@/types/politicians";
@@ -32,33 +33,21 @@ import { onThisPage } from "@/lib/onThisPage";
 import { LONG_LABEL } from "@/lib/controlStyles";
 
 const DOC_TYPE_LABELS: Record<string, string> = {
-  "Senate Floor Speech": "FLOOR SPEECH",
-  "House Floor Speech": "FLOOR SPEECH",
-  "Executive Order": "EXEC ORDER",
-  Proclamation: "PROCLAMATION",
-  "Supreme Court Opinion": "COURT OPINION",
-  "Presidential Memorandum": "MEMO",
+  "Senate Floor Speech": "Floor speech",
+  "House Floor Speech": "Floor speech",
+  "Executive Order": "Exec order",
+  Proclamation: "Proclamation",
+  "Supreme Court Opinion": "Court opinion",
+  "Presidential Memorandum": "Memo",
 };
 
-function branchLabel(branch: string) {
-  const map: Record<string, string> = {
-    senate: "SENATE",
-    house: "HOUSE",
-    president: "EXECUTIVE",
-    scotus: "JUDICIAL",
-  };
-  return map[branch] ?? branch.toUpperCase();
-}
-
 function DocRow({ doc }: { doc: GovernmentDoc }) {
-  const typeLabel = DOC_TYPE_LABELS[doc.docType] ?? doc.docType.toUpperCase();
+  const typeLabel = DOC_TYPE_LABELS[doc.docType] ?? asLabel(doc.docType);
   return (
     <div className="flex items-start gap-3 py-2 border-b border-white/[0.07] last:border-0">
-      <span className="font-mono text-xs text-ink-min tracking-widest shrink-0 mt-0.5 w-24">
-        {doc.date ?? "—"}
-      </span>
+      <span className="font-mono text-xs text-ink-min shrink-0 mt-0.5 w-24">{doc.date ?? "—"}</span>
       <div className="flex-1 min-w-0">
-        <span className="font-mono text-xs text-ink-lo tracking-widest mr-2">[{typeLabel}]</span>
+        <span className="font-mono text-xs text-ink-lo mr-2">[{typeLabel}]</span>
         {doc.url ? (
           <a
             href={doc.url}
@@ -125,10 +114,11 @@ export default function PoliticianProfileClient({
   // say the term is over: no banner (screen readers hear the years).
   const formerOffice =
     hasLeftOffice && branch !== "president" ? formerOfficeNotice({ branch, ...identity }) : null;
+  const trail = recordTrail(branch);
 
   return (
     <div className="min-h-screen bg-surface-base text-ink-hi">
-      <Navbar />
+      <Navbar section={trail.section} />
       <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
         {/* A phone's section bar: fixed under the header once the score
             scrolls away (it lists the sections marked with onThisPage). */}
@@ -139,13 +129,29 @@ export default function PoliticianProfileClient({
               changes and disclosures). One row, not two lines before the
               member's name. */}
           <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4">
-            <div className="flex min-h-11 items-center font-mono text-xs text-ink-min">
-              <Link href="/politicians" className="hover:text-phos transition-colors">
-                ← POLITICIANS
-              </Link>
-              <span className="mx-2">/</span>
-              <span className="text-ink-lo">{branchLabel(branch)}</span>
-            </div>
+            {/* The branch's own trail (lib/routes.ts recordTrail): the
+                record's URL is the same for every branch, so the path
+                can't say which section the reader is in. */}
+            <nav aria-label="Breadcrumb">
+              <ol className="flex min-h-11 flex-wrap items-center font-mono text-xs text-ink-min">
+                {trail.crumbs.map((c) => (
+                  <li key={c.href} className="flex items-center">
+                    <Link
+                      href={c.href}
+                      className="inline-flex min-h-11 items-center hover:text-phos transition-colors"
+                    >
+                      {c.label}
+                    </Link>
+                    <span aria-hidden="true" className="mx-2">
+                      ›
+                    </span>
+                  </li>
+                ))}
+                <li aria-current="page" className="text-ink-lo">
+                  {identity.name}
+                </li>
+              </ol>
+            </nav>
             {isMember && (
               <FollowFeed subject={identity.name} feed={memberFeed(profile.id, identity.name)} />
             )}
@@ -154,9 +160,7 @@ export default function PoliticianProfileClient({
           {/* Left-office banner — wording is branch-specific, see officeStatus.ts */}
           {formerOffice && (
             <div className="mb-6 border border-signal-magenta/40 bg-signal-magenta/10 px-4 py-3">
-              <p className="font-mono text-xs text-signal-magenta tracking-widest uppercase mb-1">
-                {formerOffice.label}
-              </p>
+              <p className="font-mono text-xs text-signal-magenta mb-1">{formerOffice.label}</p>
               <p className="font-mono text-xs text-ink-lo">{formerOffice.detail}</p>
             </div>
           )}
@@ -242,8 +246,8 @@ export default function PoliticianProfileClient({
               {(branch === "senate" || branch === "house") && identity.state && (
                 <div className="mt-3 text-center">
                   <Link
-                    href={`/politicians?branch=${branch}&state=${identity.state}`}
-                    className={`font-mono tracking-widest text-ink-min transition-colors hover:text-phos ${LONG_LABEL}`}
+                    href={membersHref(identity.state, branch)}
+                    className={`font-mono text-ink-min transition-colors hover:text-phos ${LONG_LABEL}`}
                   >
                     Compare all {identity.stateName ?? identity.state}{" "}
                     {branch === "senate" ? "senators" : "representatives"} →
@@ -264,7 +268,7 @@ export default function PoliticianProfileClient({
           {/* Active Issues */}
           {activeIssues.length > 0 && (
             <SectionBlock title="In the Action Center" id="in-the-action-center">
-              <p className={`mb-3 font-mono tracking-widest text-ink-min ${LONG_LABEL}`}>
+              <p className={`mb-3 font-mono text-ink-min ${LONG_LABEL}`}>
                 Currently active in {activeIssues.length} issue
                 {activeIssues.length !== 1 ? "s" : ""}
               </p>
@@ -274,7 +278,7 @@ export default function PoliticianProfileClient({
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-x-2 mb-1">
-                          <span className="font-mono text-xs text-ink-min">RANK #{issue.rank}</span>
+                          <span className="font-mono text-xs text-ink-min">Rank #{issue.rank}</span>
                           <span className="font-mono text-xs text-ink-min">
                             {issueDateLabel(issue)}
                           </span>
@@ -288,9 +292,9 @@ export default function PoliticianProfileClient({
                       </div>
                       <Link
                         href={`/issue/${issue.publicId}`}
-                        className="shrink-0 font-mono text-xs text-ink-lo hover:text-phos transition-colors tracking-widest whitespace-nowrap"
+                        className="shrink-0 font-mono text-xs text-ink-lo hover:text-phos transition-colors whitespace-nowrap"
                       >
-                        VIEW →
+                        View →
                       </Link>
                     </div>
                   </div>
@@ -302,7 +306,7 @@ export default function PoliticianProfileClient({
           {/* Government Record */}
           {governmentRecord.totalDocs > 0 && (
             <SectionBlock title="Government record" id="government-record">
-              <p className={`mb-3 font-mono tracking-widest text-ink-min ${LONG_LABEL}`}>
+              <p className={`mb-3 font-mono text-ink-min ${LONG_LABEL}`}>
                 {governmentRecord.totalDocs} document{governmentRecord.totalDocs !== 1 ? "s" : ""}{" "}
                 on public record · verbatim source links
               </p>
@@ -312,7 +316,7 @@ export default function PoliticianProfileClient({
               {governmentRecord.totalDocs > 5 && (
                 <Link
                   href={`/explore?politician_id=${profile.id}`}
-                  className={`mt-3 block font-mono tracking-widest text-ink-min transition-colors hover:text-phos ${LONG_LABEL}`}
+                  className={`mt-3 block font-mono text-ink-min transition-colors hover:text-phos ${LONG_LABEL}`}
                 >
                   View all {governmentRecord.totalDocs} documents →
                 </Link>
@@ -331,8 +335,8 @@ export default function PoliticianProfileClient({
                   >
                     <span className="font-mono text-xs text-ink">{c.committeeName}</span>
                     {c.title && (
-                      <span className="font-mono text-xs tracking-widest border border-white/15 text-ink-lo px-1.5 py-0.5 shrink-0">
-                        {c.title.toUpperCase()}
+                      <span className="font-mono text-xs border border-white/15 text-ink-lo px-1.5 py-0.5 shrink-0">
+                        {c.title}
                       </span>
                     )}
                   </div>
@@ -342,7 +346,7 @@ export default function PoliticianProfileClient({
           )}
 
           {!scorecard && (
-            <SectionBlock title="Scorecard">
+            <SectionBlock title="Record">
               {/* No card header will render below to carry identity, so
                   show a minimal one here — otherwise a not-yet-scored
                   official's page has no name/photo/party anywhere on it. */}
@@ -362,14 +366,14 @@ export default function PoliticianProfileClient({
                   <h1 className="font-display font-semibold text-base text-ink-hi">
                     {identity.name}
                   </h1>
-                  <p className="font-mono text-xs text-ink-min tracking-widest">
+                  <p className="font-mono text-xs text-ink-min">
                     {identity.role}
                     {identity.state ? ` · ${identity.stateName ?? identity.state}` : ""}
                   </p>
                 </div>
               </div>
-              <p className="font-mono text-xs text-ink-min tracking-widest text-center py-4">
-                SCORECARD NOT YET GENERATED: CHECK BACK AFTER NEXT PIPELINE RUN
+              <p className="font-mono text-xs text-ink-min text-center py-4">
+                Record not yet built: check back after the next nightly run
               </p>
             </SectionBlock>
           )}
@@ -392,25 +396,25 @@ export function OnBallotLine({ race }: { race: NonNullable<PoliticianProfile["on
         ? "U.S. House, at-large"
         : `U.S. House, District ${race.district}`;
   return (
-    <p className="mb-3 border border-white/15 bg-surface px-3 py-2 font-mono text-xs tracking-[0.08em] text-ink-lo">
+    <p className="mb-3 border border-white/15 bg-surface px-3 py-2 font-mono text-xs text-ink-lo">
       {/* Short on a phone, where the long line took three lines of the
           first screen: the seat's short name, and the link's first words. */}
-      <span className="hidden sm:inline">ON THE </span>
-      {race.cycleYear} BALLOT ·{" "}
+      <span className="hidden sm:inline">On the </span>
+      {race.cycleYear} ballot ·{" "}
       <span className="sm:hidden">
         {race.office === "S"
-          ? `U.S. SENATE, ${race.state}`
+          ? `U.S. Senate, ${race.state}`
           : houseSeatLabel(race.state, race.district ?? 0)}
       </span>
       <span className="hidden sm:inline">
-        {office.toUpperCase()}, {state.toUpperCase()}
+        {office}, {state}
       </span>{" "}
       ·{" "}
       <Link
         href={`${stateBallotHref(race.state)}#race-${race.raceId}`}
         className="inline-block min-h-[24px] text-signal-cyan hover:text-phos"
       >
-        WHO&apos;S RUNNING<span className="hidden sm:inline"> AND WHO FUNDS THEM</span> →
+        Who&apos;s running<span className="hidden sm:inline"> And who funds them</span> →
       </Link>
       <SeatOnMapLine raceId={race.raceId} />
     </p>
@@ -431,9 +435,9 @@ export function SeatRaceLine({ race, name }: { race: SeatRace; name: string }) {
         : `${name} is not among the nominees ${state}'s primary results confirm for this seat`;
   return (
     <div className="mb-3 border border-white/15 bg-surface px-3 py-2 text-sm text-ink">
-      <p className="font-mono text-xs tracking-[0.08em] text-ink-lo">
-        THIS SEAT · {race.cycleYear} BALLOT · {seat}
-        {race.redrawn && <span className="text-ink-min"> (NEW MAP)</span>}
+      <p className="font-mono text-xs text-ink-lo">
+        This seat · {race.cycleYear} ballot · {seat}
+        {race.redrawn && <span className="text-ink-min"> (New map)</span>}
       </p>
       <p className="mt-1">
         {status}
@@ -449,9 +453,9 @@ export function SeatRaceLine({ race, name }: { race: SeatRace; name: string }) {
         )}
         <Link
           href={`${stateBallotHref(race.state)}#race-${race.raceId}`}
-          className="inline-flex min-h-6 items-center font-mono text-xs tracking-[0.08em] text-signal-cyan hover:text-phos"
+          className="inline-flex min-h-6 items-center font-mono text-xs text-signal-cyan hover:text-phos"
         >
-          {race.status === "unconfirmed" ? "WHO HAS FILED" : "WHO'S RUNNING"} FOR {seat} →
+          {race.status === "unconfirmed" ? "Who has filed" : "Who's running"} for {seat} →
         </Link>
       </p>
     </div>
@@ -460,15 +464,15 @@ export function SeatRaceLine({ race, name }: { race: SeatRace; name: string }) {
 
 /** The seat's usual vote from the election map, linking its place there;
  * nothing out of the campaign, when the map isn't shown. Never the poll
- * range: this page shows the member's Representation Score, and no range
- * is shown beside one (AGENTS.md, the Senate and House map). */
+ * range: this page shows the member's record, and no range is shown
+ * beside one (AGENTS.md, the Senate and House map). */
 function SeatOnMapLine({ raceId }: { raceId: string }) {
   const { data } = useAsyncData(`map-seat:${raceId}`, () => fetchMapSeats({ seat: raceId }));
   const seat = data?.seats[0];
   if (!seat) return null;
   return (
     <span className="mt-1 block">
-      <SeatOnMap seat={seat} label="ON THE MAP" usualOnly />
+      <SeatOnMap seat={seat} label="On the map" usualOnly />
     </span>
   );
 }

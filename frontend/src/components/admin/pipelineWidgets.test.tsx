@@ -15,7 +15,7 @@ const failed = {
 describe("PipelineRunDetailCard", () => {
   it("shows a failed run's cause, with its traceback one click away", () => {
     render(<PipelineRunDetailCard title="Senate: last run" run={failed} />);
-    const summary = screen.getByText(/^CAUSE: classify_donors: MemoryError/);
+    const summary = screen.getByText(/^Cause: classify_donors: MemoryError/);
     expect(summary.tagName).toBe("SUMMARY");
     const details = summary.closest("details");
     expect(details?.open).toBe(false);
@@ -28,6 +28,6 @@ describe("PipelineRunDetailCard", () => {
     render(
       <PipelineRunDetailCard title="House: last run" run={{ ...failed, errorDetail: null }} />
     );
-    expect(screen.queryByText(/^CAUSE:/)).toBeNull();
+    expect(screen.queryByText(/^Cause:/)).toBeNull();
   });
 });

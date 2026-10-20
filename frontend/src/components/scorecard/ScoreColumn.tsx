@@ -6,9 +6,9 @@ import MetricTooltip from "@/components/checker/MetricTooltip";
 import { onThisPage } from "@/lib/onThisPage";
 import { LONG_LABEL, labelCase } from "@/lib/controlStyles";
 
-/** One of a member's three scored dimensions, as a column: its name, its
- *  share of the Representation Score, the score itself, and the evidence
- *  behind it — laid out the way the ballot page lays out a contest (a
+/** One column of a record: a member's money, votes or bills, or a
+ *  president's scored dimension (with its score), and the evidence behind
+ *  it, laid out the way the ballot page lays out a contest (a
  *  shaded header over a hairline-ruled box). The body grows so columns in
  *  a row share one height, and the "all of it" link sits on the bottom
  *  edge, level across the row. */
@@ -28,8 +28,8 @@ export default function ScoreColumn({
   tooltip?: string;
   /** The column's anchor id; also what its shared image and link are named by. */
   shareId: string;
-  score: number | null | undefined;
-  /** What the score found, in one plain sentence (the breakdown API's). */
+  score?: number | null;
+  /** What the record shows, in one plain sentence (the breakdown API's). */
   finding?: string | null;
   /** How the score is computed (its components and their statistics),
    *  kept behind a disclosure under the evidence. */
@@ -53,11 +53,7 @@ export default function ScoreColumn({
             {tooltip ? <MetricTooltip text={tooltip}>{title}</MetricTooltip> : title}
           </h2>
         </div>
-        {aside ? (
-          <span className="shrink-0 font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-            {aside}
-          </span>
-        ) : null}
+        {aside ? <span className="shrink-0 font-mono text-xs text-ink-min">{aside}</span> : null}
       </header>
       <div className="flex flex-1 flex-col gap-5 px-5 py-4">
         {finding && (
@@ -70,7 +66,7 @@ export default function ScoreColumn({
             className="group border-t border-white/[0.08] pt-4"
           >
             <summary
-              className={`flex min-h-[44px] cursor-pointer list-none items-center gap-2 font-mono tracking-[0.14em] text-ink-lo hover:text-phos [&::-webkit-details-marker]:hidden ${LONG_LABEL}`}
+              className={`flex min-h-[44px] cursor-pointer list-none items-center gap-2 font-mono text-ink-lo hover:text-phos [&::-webkit-details-marker]:hidden ${LONG_LABEL}`}
             >
               <span aria-hidden="true" className="inline-block group-open:rotate-90">
                 &#9656;
@@ -112,9 +108,7 @@ export default function ScoreColumn({
  *  label's text when the children aren't plain text (a tooltip around it). */
 export function BlockLabel({ children, words }: { children: ReactNode; words?: string }) {
   const text = typeof children === "string" ? children : (words ?? "");
-  return (
-    <h3 className={`font-mono tracking-[0.14em] text-ink-min ${labelCase(text)}`}>{children}</h3>
-  );
+  return <h3 className={`font-mono text-ink-min ${labelCase(text)}`}>{children}</h3>;
 }
 
 /** A column block set off by a hairline above it. */

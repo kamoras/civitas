@@ -1,3 +1,4 @@
+import { asLabel } from "./formatting";
 import type { PoliticianBranch } from "@/types/politicians";
 
 /**
@@ -79,8 +80,8 @@ export function formerOfficeBadge(input: OfficeStatusInput): string {
   const suffix =
     input.branch === "senate" || input.branch === "house"
       ? input.vacancyReason
-        ? ` · ${input.vacancyReason.toUpperCase()}`
+        ? ` · ${asLabel(input.vacancyReason)}`
         : ""
       : "";
-  return `${label.toUpperCase()}${suffix}`;
+  return `${label}${suffix}`;
 }

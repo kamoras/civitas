@@ -69,7 +69,7 @@ export default function DistrictFinder({
   return (
     <div className="mb-4 border border-white/15 p-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="font-mono text-xs tracking-[0.1em] text-phos">FIND YOUR DISTRICT</p>
+        <p className="font-mono text-xs text-phos">Find your district</p>
         {picked && (
           <button
             type="button"

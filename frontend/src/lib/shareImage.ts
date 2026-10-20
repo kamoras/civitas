@@ -41,8 +41,8 @@ export interface ShareSubject {
   title: string;
   /** One line under it: "Representative · TN-2 · Republican". */
   subtitle?: string;
-  /** A headline figure shown at the right of the strip, e.g. the overall
-   *  score. `colorClass` is the Tailwind text-colour class the page uses
+  /** A headline figure shown at the right of the strip, e.g. a
+   *  president's historians' rank. `colorClass` is the Tailwind text-colour class the page uses
    *  for it, resolved to a real colour at capture time so the image and the
    *  page cannot disagree. */
   badge?: { label: string; value: string; colorClass?: string };
@@ -55,9 +55,8 @@ export interface ShareSubject {
   /** YYYY-MM-DD (or an ISO time) the figures are as of, from the backend;
    *  null where the page reads them live, so the capture's day is theirs. */
   asOf: string | null;
-  /** The top of the scale the page's scores are on (100): printed beside
-   *  the badge ("72/100") and in the footer. Omitted where nothing is a
-   *  score. */
+  /** The top of the scale the page's scores are on (100): printed in the
+   *  footer. Omitted where nothing is a score. */
   scaleMax?: number;
 }
 
@@ -331,14 +330,12 @@ export async function captureSection(
   const badgeValueFont = `800 ${34 * scale}px ${sans}`;
   const smallMono = (px: number) => `${px * scale}px ${mono}`;
   let badgeW = 0;
-  const badgeValue = subject.badge
-    ? `${subject.badge.value}${subject.scaleMax ? `/${subject.scaleMax}` : ""}`
-    : "";
+  const badgeValue = subject.badge?.value ?? "";
   if (subject.badge) {
     ctx.font = badgeValueFont;
     const valueW = ctx.measureText(badgeValue).width;
     ctx.font = smallMono(11);
-    badgeW = Math.max(valueW, ctx.measureText(subject.badge.label.toUpperCase()).width);
+    badgeW = Math.max(valueW, ctx.measureText(subject.badge.label).width);
   }
   const titleMax = innerW - (badgeW ? badgeW + 24 * scale : 0);
   ctx.font = titleFont;
@@ -352,9 +349,7 @@ export async function captureSection(
   const subtitleLineH = 18 * scale;
   ctx.font = smallMono(12);
   const subtitleLines =
-    withStrip && subject.subtitle
-      ? wrapWords(ctx, subject.subtitle.toUpperCase(), subtitleMax, 2)
-      : [];
+    withStrip && subject.subtitle ? wrapWords(ctx, subject.subtitle, subtitleMax, 2) : [];
   const stripBottom = subtitleLines.length
     ? subtitleBaseline + (subtitleLines.length - 1) * subtitleLineH
     : subtitleBaseline - 22 * scale;
@@ -388,7 +383,7 @@ export async function captureSection(
       ctx.textAlign = "right";
       ctx.font = smallMono(11);
       ctx.fillStyle = inkMin;
-      ctx.fillText(subject.badge.label.toUpperCase(), right, y + 14 * scale);
+      ctx.fillText(subject.badge.label, right, y + 14 * scale);
       ctx.font = badgeValueFont;
       ctx.fillStyle = resolveClassStyle(subject.badge.colorClass, "color", inkHi);
       ctx.fillText(badgeValue, right, y + 50 * scale);

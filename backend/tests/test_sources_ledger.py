@@ -36,18 +36,18 @@ def test_counts_and_dates_from_the_records(db_session):
     ])
     db_session.commit()
     rows = _by_label(sources.source_ledger(db_session))
-    assert rows["VOTES"]["coverage"] == "2 roll calls, 119th Congress"
-    assert rows["VOTES"]["latest"] == "2026-09-30"
-    assert rows["BILLS"]["count"] == 1 and rows["BILLS"]["latest"] == "2026-10-01"
-    assert rows["MONEY"]["coverage"] == "2 serving members with campaign filings"
-    assert (rows["MONEY"]["latest"], rows["MONEY"]["dateLabel"]) == ("2026-10-04", "last read")
-    assert rows["RULES"]["latest"] == "2026-10-03"
-    assert rows["TRADES"]["latest"] == "2026-10-02"
+    assert rows["Votes"]["coverage"] == "2 roll calls, 119th Congress"
+    assert rows["Votes"]["latest"] == "2026-09-30"
+    assert rows["Bills"]["count"] == 1 and rows["Bills"]["latest"] == "2026-10-01"
+    assert rows["Money"]["coverage"] == "2 serving members with campaign filings"
+    assert (rows["Money"]["latest"], rows["Money"]["dateLabel"]) == ("2026-10-04", "last read")
+    assert rows["Rules"]["latest"] == "2026-10-03"
+    assert rows["Trades"]["latest"] == "2026-10-02"
 
 
 def test_an_empty_source_is_listed_with_nothing_on_record(db_session):
     rows = _by_label(sources.source_ledger(db_session))
-    assert rows["COURT"]["count"] == 0 and rows["COURT"]["latest"] is None
+    assert rows["Court"]["count"] == 0 and rows["Court"]["latest"] is None
     assert len(rows) == 7
 
 

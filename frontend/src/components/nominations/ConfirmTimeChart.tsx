@@ -59,7 +59,7 @@ function Panel({
   return (
     <figure className="m-0">
       <figcaption className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <span className="font-mono text-xs uppercase tracking-[0.14em] text-ink-hi">{label}</span>
+        <span className="font-mono text-xs text-ink-hi">{label}</span>
         <span className="font-mono text-xs text-ink-lo">
           {dist.n === 0 ? (
             "None confirmed yet"

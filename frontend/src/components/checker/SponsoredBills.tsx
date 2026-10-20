@@ -85,7 +85,7 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
 
   return (
     <CollapsibleSection
-      title="SPONSORED LEGISLATION"
+      title="Sponsored legislation"
       summary={summaryParts.join(" · ")}
       source="congress.gov"
     >
@@ -93,7 +93,7 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
         <div className="grid grid-cols-3 gap-2 text-center text-sm">
           <FilterTile
             count={bills.length}
-            label="BILLS SPONSORED"
+            label="Bills sponsored"
             help="Number of bills and resolutions this member introduced as primary sponsor this congress. Sponsoring a bill means they authored or championed it."
             pressed={filter === "all"}
             onSelect={() => setFilter("all")}
@@ -102,7 +102,7 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
           />
           <FilterTile
             count={lawCount}
-            label="BECAME LAW"
+            label="Became law"
             help="How many of this member's sponsored bills (S./H.R./joint resolutions, not simple/concurrent resolutions) were signed into law. Most bills never pass; even one is notable. Click to filter the list below to just these."
             pressed={filter === "law"}
             onSelect={() => toggleFilter("law")}
@@ -111,8 +111,8 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
           />
           <FilterTile
             count={advancedCount}
-            label="ADVANCING"
-            help="Bills (S./H.R./joint resolutions) that have been reported out of committee or gone further (to the floor, through a chamber, to the President) and haven't yet become law. Being referred to committee doesn't count: nearly every bill is, automatically. Simple/concurrent resolutions (e.g. designating an awareness month) are left out: they're routinely agreed to without debate, and Legislative Effectiveness weights them a fifth as much as a bill. Click to filter the list below to just these."
+            label="Advancing"
+            help="Bills (S./H.R./joint resolutions) that have been reported out of committee or gone further (to the floor, through a chamber, to the President) and haven't yet become law. Being referred to committee doesn't count: nearly every bill is, automatically. Simple/concurrent resolutions (e.g. designating an awareness month) are left out: they're routinely agreed to without debate. Click to filter the list below to just these."
             pressed={filter === "advancing"}
             onSelect={() => toggleFilter("advancing")}
             activeClass="border-signal-amber/40 bg-signal-amber/10"
@@ -123,9 +123,9 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
         {filter !== "all" && (
           <button
             onClick={() => setFilter("all")}
-            className="font-mono text-xs text-ink-min hover:text-phos transition-colors tracking-widest"
+            className="font-mono text-xs text-ink-min hover:text-phos transition-colors"
           >
-            CLEAR FILTER
+            Clear filter
           </button>
         )}
 
@@ -158,13 +158,13 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
                       )}
                       {bill.isLaw && (
                         <span className="text-xs px-1.5 py-0.5 border text-signal-cyan border-white/15 bg-signal-cyan/10 font-mono">
-                          SIGNED INTO LAW
+                          Signed into law
                         </span>
                       )}
                       {bill.commemorative && (
                         <span className="text-xs px-1.5 py-0.5 border border-white/15 text-ink-lo font-mono">
-                          <MetricTooltip text="Reads as commemorative: naming a post office or building, awarding a medal, recognising a person or event. Legislative Effectiveness weights it 1× instead of a bill's 5×, as Volden & Wiseman's scores do. Detected from the title by a classifier calibrated against their coding.">
-                            COMMEMORATIVE · 1×
+                          <MetricTooltip text="Reads as commemorative: naming a post office or building, awarding a medal, recognising a person or event. Detected from the title by a classifier calibrated against their coding.">
+                            Commemorative · 1×
                           </MetricTooltip>
                         </span>
                       )}

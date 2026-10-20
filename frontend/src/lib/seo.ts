@@ -64,8 +64,8 @@ export function describeProfile(profile: PoliticianProfile): {
         : (stateName ?? state);
     const partyWord = PARTY_ADJECTIVES[party] ?? party;
     return {
-      title: `${prefix} ${name} (${party}-${state}): Voting Record, Donors & Scorecard`,
-      description: `${name}, ${former ? "former " : ""}${partyWord} ${role.toLowerCase()} for ${seat}: voting record, top donors and PAC money, sponsored bills, and representation score.`,
+      title: `${prefix} ${name} (${party}-${state}): Voting Record, Donors & Bills`,
+      description: `${name}, ${former ? "former " : ""}${partyWord} ${role.toLowerCase()} for ${seat}: voting record, top donors and PAC money, sponsored bills, and where they stand among peers.`,
     };
   }
   if (branch === "president") {
@@ -442,6 +442,43 @@ export function describeElectionArchive(
   return {
     title: `${cycle} general election: results, ballot and pre-election map`,
     description: `The ${cycle} U.S. general election as Civitas recorded it: the count in ${races} Senate and House races as each state reported it, the candidates on the ballot and ${measures} statewide ballot measure${measures === 1 ? "" : "s"}, quoted from their sources, and the seat map as it stood before election day. No race is called.`,
+  };
+}
+
+/** The find-your-members directory (`/congress/members`): what people
+ *  type is "my senator", "who represents me", a state's members. */
+export function describeMembersDirectory(): { title: string; description: string } {
+  return {
+    title: "Find Your Members of Congress by State: Senators & Representatives",
+    description:
+      "Find your two U.S. senators and your House representative by state, city, town or county, and open each one's votes, donors and record.",
+  };
+}
+
+/** The chamber measure by measure (`/congress/members/measures`). */
+export function describeMeasures(): { title: string; description: string } {
+  return {
+    title: "Congress, Measure by Measure: Small Gifts, PAC Money, Party Breaks, Bills",
+    description:
+      "Every senator and representative on four measures from FEC filings, roll calls and Congress.gov, side by side, with no rank and no score.",
+  };
+}
+
+/** The executive branch's hub (`/executive`). */
+export function describeExecutive(): { title: string; description: string } {
+  return {
+    title: "The Executive Branch: the President, Federal Agencies, Orders & Nominations",
+    description:
+      "The sitting president's latest executive orders and proclamations, the federal rules open for public comment, what the largest agencies spend, and the nominations pending in the Senate.",
+  };
+}
+
+/** Every president (`/executive/presidents`). */
+export function describePresidents(): { title: string; description: string } {
+  return {
+    title: "Every U.S. President, With the Historians' Rank",
+    description:
+      "Every president from Washington to the sitting president: party, years in office and where the C-SPAN Presidential Historians Survey ranks each presidency, with each one's record.",
   };
 }
 

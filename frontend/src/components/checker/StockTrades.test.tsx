@@ -68,18 +68,18 @@ vi.mock("@/lib/api", () => ({
 describe("StockTrades", () => {
   it("shows timeliness only where the date supports it", async () => {
     render(<StockTrades politicianId="trump-47" filer="president" />);
-    await userEvent.click(await screen.findByRole("button", { name: /STOCK & CRYPTO TRADES/ }));
-    expect(screen.getByText("ANNUAL REPORT")).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("button", { name: /Stock & crypto trades/ }));
+    expect(screen.getByText("Annual report")).toBeInTheDocument();
     // Only the row the backend marks as predating the term.
-    expect(screen.getAllByText("BEFORE TAKING OFFICE")).toHaveLength(1);
-    expect(screen.getAllByText("READ FROM A SCAN")).toHaveLength(3);
+    expect(screen.getAllByText("Before taking office")).toHaveLength(1);
+    expect(screen.getAllByText("Read from a scan")).toHaveLength(3);
     // A scanned row whose date isn't legible says so, with its filing date.
     expect(screen.getByText("date not legible in the scan · filed 2026-05-14")).toBeInTheDocument();
     // ...and never an empty "filed" when the filing date is unknown.
     expect(screen.getByText("date not legible in the scan")).toBeInTheDocument();
     // One timeliness badge: the text-read periodic trade. Neither the
     // annual report's row nor the scan's asserts on-time or late.
-    expect(screen.getAllByText(/LATE DISCLOSURE|ON TIME/)).toHaveLength(1);
-    expect(screen.getByText("LATE DISCLOSURE")).toBeInTheDocument();
+    expect(screen.getAllByText(/Late disclosure|on time/)).toHaveLength(1);
+    expect(screen.getByText("Late disclosure")).toBeInTheDocument();
   });
 });

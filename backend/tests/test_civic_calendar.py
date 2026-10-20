@@ -20,11 +20,10 @@ def test_the_court_term_begins_on_the_first_monday_in_october(year, first_monday
 
 def test_every_link_is_a_page_the_site_has():
     events = _upcoming_civic_events(2029, date(2029, 1, 1))  # inauguration, Congress, Court, no election
-    links = {e["link"].split("?")[0] for e in events}
-    assert "/scorecard" not in links
-    # /leaderboard is a redirect since the composite left the site: link where it lands.
-    assert "/leaderboard" not in links
-    assert links <= {"/politicians", "/congress/members", "/elections"}
+    links = {e["link"] for e in events}
+    # Each its page, never an address that redirects (/politicians,
+    # /leaderboard, /scorecard went in the 2026-10 navigation by branch).
+    assert links == {"/executive/presidents", "/congress/members", "/court"}
 
 
 def test_election_day_links_to_the_elections_page():

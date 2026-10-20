@@ -39,7 +39,7 @@ export default function LiveUpdates({
         <h2 id="live-updates-heading" className="font-display text-lg font-semibold text-ink-hi">
           Live updates
         </h2>
-        <span className="font-mono text-xs tracking-[0.1em] text-ink-min">NEWEST FIRST</span>
+        <span className="font-mono text-xs text-ink-min">Newest first</span>
       </div>
       {shown.length === 0 ? (
         <p className="px-4 py-4 text-sm text-ink-lo">
@@ -52,7 +52,7 @@ export default function LiveUpdates({
             const label = raceLabel(event);
             return (
               <li key={event.id} className="border-b border-white/[0.07] px-4 py-3 last:border-b-0">
-                <p className="flex flex-wrap items-center gap-2 font-mono text-xs tracking-[0.08em]">
+                <p className="flex flex-wrap items-center gap-2 font-mono text-xs">
                   <time dateTime={event.at} className="text-ink-min">
                     {formatEasternTime(event.at)}
                   </time>

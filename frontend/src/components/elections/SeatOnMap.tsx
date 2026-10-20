@@ -6,17 +6,15 @@ import type { MapSeatLine } from "@/types/electionMap";
  * re-derived; just the usual vote for a seat with no range, or where
  * `usualOnly` asks for it. */
 export function seatFigures(seat: MapSeatLine, usualOnly = false): string {
-  const usual = seat.leanLabel ? `USUAL VOTE ${seat.leanLabel}` : "NO USUAL-VOTE FIGURE";
-  return seat.range80Label && !usualOnly
-    ? `${usual} · POLLS ${seat.range80Label.toUpperCase()}`
-    : usual;
+  const usual = seat.leanLabel ? `Usual vote ${seat.leanLabel}` : "No usual-vote figure";
+  return seat.range80Label && !usualOnly ? `${usual} · Polls ${seat.range80Label}` : usual;
 }
 
 /** One seat's line, linking its place on the seat map (the polls view when
  * it shows a range, the usual vote otherwise).
  *
- * `usualOnly` for a page that shows a Representation Score: no poll range
- * is ever shown beside one (AGENTS.md, the Senate and House map: "Separate
+ * `usualOnly` for a member's page: no poll range is ever shown beside a
+ * member's record (AGENTS.md, the Senate and House map: "Separate
  * from scoring"), so there the line is the usual vote and the link, as
  * RaceContext does. Where a range is shown, PollRangeSource must name its
  * source and licence beside it. */
@@ -37,7 +35,7 @@ export default function SeatOnMap({
     >
       <span className="text-ink-lo">{label}</span>
       <span>{seatFigures(seat, usualOnly)}</span>
-      <span>· SEAT MAP →</span>
+      <span>· Seat map →</span>
     </Link>
   );
 }

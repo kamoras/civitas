@@ -8,9 +8,9 @@ import { cashOnHandDisplay, formatCurrency } from "@/lib/formatting";
 // mirrors PresidentScorecard.tsx's local PARTY map and its fallback
 // pattern rather than reusing partyStyles.ts directly.
 export const PARTY_META: Record<string, { label: string; color: string; rule: string }> = {
-  DEM: { label: "DEMOCRAT", color: "text-dem-blue", rule: "bg-dem-blue" },
-  REP: { label: "REPUBLICAN", color: "text-signal-red", rule: "bg-signal-red" },
-  IND: { label: "INDEPENDENT", color: "text-ind-purple", rule: "bg-ind-purple" },
+  DEM: { label: "Democrat", color: "text-dem-blue", rule: "bg-dem-blue" },
+  REP: { label: "Republican", color: "text-signal-red", rule: "bg-signal-red" },
+  IND: { label: "Independent", color: "text-ind-purple", rule: "bg-ind-purple" },
   // State affiliates of the Democratic Party, labelled with their own name
   // ("DEMOCRAT (DFL)") from lib/elections.ts's DEM_AFFILIATE_PARTIES. That
   // list is labels only: which codes are the same party is the backend's
@@ -19,20 +19,20 @@ export const PARTY_META: Record<string, { label: string; color: string; rule: st
   ...Object.fromEntries(
     Object.entries(DEM_AFFILIATE_PARTIES).map(([code, suffix]) => [
       code,
-      { label: `DEMOCRAT (${suffix})`, color: "text-dem-blue", rule: "bg-dem-blue" },
+      { label: `Democrat (${suffix})`, color: "text-dem-blue", rule: "bg-dem-blue" },
     ])
   ),
-  LIB: { label: "LIBERTARIAN", color: "text-ink-lo", rule: "bg-ink-min" },
-  GRE: { label: "GREEN", color: "text-phos-mid", rule: "bg-phos-mid" },
-  CON: { label: "CONSTITUTION", color: "text-ink-lo", rule: "bg-ink-min" },
-  NON: { label: "NO PARTY AFFILIATION", color: "text-ink-lo", rule: "bg-ink-min" },
-  NPA: { label: "NO PARTY AFFILIATION", color: "text-ink-lo", rule: "bg-ink-min" },
-  NNE: { label: "NO PARTY AFFILIATION", color: "text-ink-lo", rule: "bg-ink-min" },
-  UN: { label: "UNAFFILIATED", color: "text-ink-lo", rule: "bg-ink-min" },
-  NOP: { label: "NO PARTY PREFERENCE", color: "text-ink-lo", rule: "bg-ink-min" },
-  UNK: { label: "UNAFFILIATED/UNKNOWN", color: "text-ink-lo", rule: "bg-ink-min" },
+  LIB: { label: "Libertarian", color: "text-ink-lo", rule: "bg-ink-min" },
+  GRE: { label: "Green", color: "text-phos-mid", rule: "bg-phos-mid" },
+  CON: { label: "Constitution", color: "text-ink-lo", rule: "bg-ink-min" },
+  NON: { label: "No party affiliation", color: "text-ink-lo", rule: "bg-ink-min" },
+  NPA: { label: "No party affiliation", color: "text-ink-lo", rule: "bg-ink-min" },
+  NNE: { label: "No party affiliation", color: "text-ink-lo", rule: "bg-ink-min" },
+  UN: { label: "Unaffiliated", color: "text-ink-lo", rule: "bg-ink-min" },
+  NOP: { label: "No party preference", color: "text-ink-lo", rule: "bg-ink-min" },
+  UNK: { label: "Unaffiliated/unknown", color: "text-ink-lo", rule: "bg-ink-min" },
   // FEC's code for a declared write-in: on the state's list, not printed on the ballot.
-  W: { label: "WRITE-IN", color: "text-ink-lo", rule: "bg-ink-min" },
+  W: { label: "Write-in", color: "text-ink-lo", rule: "bg-ink-min" },
 };
 
 /** A candidate's party label and colours: their own FEC code's where
@@ -47,7 +47,7 @@ export function getPartyMeta(c: {
   return (
     PARTY_META[c.party] ??
     PARTY_META[c.partyGroup ?? ""] ?? {
-      label: (c.partyLabel ?? c.party).toUpperCase(),
+      label: c.partyLabel ?? c.party,
       color: "text-ink-lo",
       rule: "bg-ink-min",
     }
@@ -112,20 +112,20 @@ export default function CandidateCard({
               </a>
             )}
           </h3>
-          <p className={`mt-0.5 font-mono text-xs tracking-[0.1em] ${pm.color}`}>{pm.label}</p>
+          <p className={`mt-0.5 font-mono text-xs ${pm.color}`}>{pm.label}</p>
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
           {showUnconfirmed && !candidate.confirmed && (
             <span
-              className="border border-dashed border-white/20 px-2 py-0.5 font-mono text-xs tracking-[0.1em] text-ink-min"
+              className="border border-dashed border-white/20 px-2 py-0.5 font-mono text-xs text-ink-min"
               title="This state's primary file doesn't list this candidate: an uncontested primary isn't held, so there is no result to read. Their FEC filing is the source."
             >
-              UNCONFIRMED
+              Unconfirmed
             </span>
           )}
           {incumbency && (
-            <span className="whitespace-nowrap border border-white/15 px-2 py-0.5 font-mono text-xs tracking-[0.1em] text-ink-lo">
+            <span className="whitespace-nowrap border border-white/15 px-2 py-0.5 font-mono text-xs text-ink-lo">
               {incumbency}
             </span>
           )}
@@ -134,41 +134,39 @@ export default function CandidateCard({
               href={`/politicians/${candidate.incumbentRecord.id}`}
               className="font-mono text-xs text-ink-lo hover:underline"
             >
-              WHERE THIS MEMBER STANDS →
+              Where this member stands →
             </Link>
           )}
         </div>
       </div>
 
       {candidate.fecFiled === false ? (
-        <p className="mt-3 font-mono text-xs tracking-[0.12em] text-ink-min">
-          ON THE STATE&apos;S BALLOT · NO FEC FILING
+        <p className="mt-3 font-mono text-xs text-ink-min">
+          On the state&apos;s ballot · No FEC filing
         </p>
       ) : syncedOn == null ? (
         // Never synced ≠ raised $0 — don't show figures that read as zeros.
-        <p className="mt-3 font-mono text-xs tracking-[0.12em] text-ink-min">AWAITING FEC SYNC</p>
+        <p className="mt-3 font-mono text-xs text-ink-min">Awaiting FEC sync</p>
       ) : (
         <>
           <dl className="mt-3 grid grid-cols-2 gap-x-8 gap-y-1">
             <div>
-              <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">Raised</dt>
+              <dt className="font-mono text-xs text-ink-min">Raised</dt>
               <dd className="font-mono text-xl tabular-nums text-ink-hi">
                 {candidate.contributions != null ? formatCurrency(candidate.contributions) : "—"}
               </dd>
             </div>
             <div>
-              <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
-                {cash?.label ?? "Cash on hand"}
-              </dt>
+              <dt className="font-mono text-xs text-ink-min">{cash?.label ?? "Cash on hand"}</dt>
               <dd className="font-mono text-xl tabular-nums text-ink-hi">{cash?.amount ?? "—"}</dd>
             </div>
           </dl>
-          <p className="mt-2 font-mono text-xs tracking-[0.08em] text-ink-min">
+          <p className="mt-2 font-mono text-xs text-ink-min">
             {candidate.financialsThrough
-              ? `FEC REPORTS THROUGH ${candidate.financialsThrough} · CHECKED ${syncedOn}`
+              ? `FEC reports through ${candidate.financialsThrough} · Checked ${syncedOn}`
               : candidate.contributions == null && candidate.cashOnHand == null
-                ? `NO FEC REPORT FOR THIS ELECTION · CHECKED ${syncedOn}`
-                : `CHECKED ${syncedOn}`}
+                ? `No FEC report for this election · Checked ${syncedOn}`
+                : `Checked ${syncedOn}`}
           </p>
         </>
       )}

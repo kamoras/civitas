@@ -24,7 +24,7 @@ export type MapView = (typeof MAP_VIEWS)[number];
 export const MAP_CHAMBERS = ["senate", "house"] as const;
 export type MapChamber = MapChamberKey;
 
-export const CHAMBER_LABEL: Record<MapChamber, string> = { senate: "SENATE", house: "HOUSE" };
+export const CHAMBER_LABEL: Record<MapChamber, string> = { senate: "Senate", house: "House" };
 const CHAMBER_WORD: Record<MapChamber, string> = { senate: "Senate", house: "House" };
 
 /** "2028 House map": the map's name, from the API's cycle. */
@@ -143,15 +143,15 @@ export function parseChamber(value: string | string[] | undefined | null): MapCh
 }
 
 export const VIEW_LABEL: Record<MapView, string> = {
-  usual: "USUAL VOTE",
-  polls: "POLLS",
-  diff: "DIFFERENCE",
+  usual: "Usual vote",
+  polls: "Polls",
+  diff: "Difference",
 };
 
 export const VIEW_STAMP: Record<MapView, string> = {
-  usual: "HOW EACH SEAT USUALLY VOTES",
-  polls: "MARGIN RANGES, FROM POLLS WHERE A SEAT HAS ANY",
-  diff: "WHERE POLLS DISAGREE WITH THE USUAL VOTE",
+  usual: "How each seat usually votes",
+  polls: "Margin ranges, from polls where a seat has any",
+  diff: "Where polls disagree with the usual vote",
 };
 
 export const VIEW_EXPLAINER: Record<MapView, string> = {
@@ -215,7 +215,7 @@ export function legendCells(
     { bin: "D_strongly", label: `D ${hi}+` },
     { bin: "D_usually", label: `D ${lo}–${hi}` },
     { bin: "D_leans", label: `D <${lo}` },
-    { bin: "close", label: view === "polls" ? "TOO CLOSE TO TELL" : "EVEN" },
+    { bin: "close", label: view === "polls" ? "Too close to tell" : "EVEN" },
     { bin: "R_leans", label: `R <${lo}` },
     { bin: "R_usually", label: `R ${lo}–${hi}` },
     { bin: "R_strongly", label: `R ${hi}+` },
@@ -348,7 +348,7 @@ export function footerText(data: ElectionMapData): string {
     ? ` Past polls the ranges are fitted on: ${data.sources.trainingPolls.attribution}.`
     : "";
   const fundamentals = data.pollsInRange ? "" : " Fundamentals only, no poll in the ranges.";
-  return `${data.stale ? "NOT UPDATED SINCE " + formatAsOf(data.asOf) + ". " : ""}Usual vote: ${usual}. Polls: ${data.sources.polls.attribution}, ${data.sources.polls.license}.${training}${fundamentals} As of ${formatAsOf(data.asOf)}. Ranges, not results. Not a race call.`;
+  return `${data.stale ? "Not updated since " + formatAsOf(data.asOf) + ". " : ""}Usual vote: ${usual}. Polls: ${data.sources.polls.attribution}, ${data.sources.polls.license}.${training}${fundamentals} As of ${formatAsOf(data.asOf)}. Ranges, not results. Not a race call.`;
 }
 
 /** The Difference view's glyph for a seat: « ‹ toward D, › » toward R. */

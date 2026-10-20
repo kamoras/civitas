@@ -12,7 +12,7 @@ import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
 import BallotMeasureCard, { measureAnchor } from "@/components/elections/BallotMeasureCard";
 import BallotBasisNotice from "@/components/elections/BallotBasisNotice";
 import VoterCalendar from "@/components/elections/VoterCalendar";
-import VoteSteps from "@/components/elections/VoteSteps";
+import VoteSteps, { VoteStepsLead } from "@/components/elections/VoteSteps";
 import GeneralRunoffNotice, {
   otherPrimaryLabel,
   RankedChoiceNotice,
@@ -174,10 +174,10 @@ function StateLegChamberSection({ chamber }: { chamber: StateLegChamber }) {
   return (
     <div className="mb-5 last:mb-0">
       <h3 className="font-mono text-xs text-ink-lo mb-1">
-        {chamber.label.toUpperCase()} · {chamber.districts.length}{" "}
-        {chamber.districts.length === 1 ? "SEAT" : "SEATS"} CONTESTED
+        {chamber.label} · {chamber.districts.length}{" "}
+        {chamber.districts.length === 1 ? "seat" : "seats"} contested
         {termPhrase(chamber.termYears) && (
-          <span className="text-ink-min"> · {termPhrase(chamber.termYears)!.toUpperCase()}</span>
+          <span className="text-ink-min"> · {termPhrase(chamber.termYears)!}</span>
         )}
       </h3>
       {chamber.districts.length > 3 && (
@@ -262,9 +262,9 @@ function JudicialDetail({ ballot }: { ballot: StateBallot }) {
       {judicialRaces.map((court) => (
         <div key={court.court} className="mb-4 last:mb-0">
           <h3 className="font-mono text-xs text-ink-lo mb-2">
-            {court.label.toUpperCase()}
+            {court.label}
             {termPhrase(court.termYears) && (
-              <span className="text-ink-min"> · {termPhrase(court.termYears)!.toUpperCase()}</span>
+              <span className="text-ink-min"> · {termPhrase(court.termYears)!}</span>
             )}
           </h3>
           <div className="space-y-1.5">
@@ -346,9 +346,9 @@ function StatewideSeatGroup({ seats, lookupHref }: { seats: StatewideRace[]; loo
   return (
     <div className="border border-white/[0.09] bg-surface px-3 py-2.5">
       <h3 className="font-mono text-xs text-ink-lo">
-        {label.toUpperCase()} · {seats.length} {seats.length === 1 ? "SEAT" : "SEATS"}
+        {label} · {seats.length} {seats.length === 1 ? "seat" : "seats"}
         {termPhrase(first.termYears) && (
-          <span className="text-ink-min"> · {termPhrase(first.termYears)!.toUpperCase()}</span>
+          <span className="text-ink-min"> · {termPhrase(first.termYears)!}</span>
         )}
       </h3>
       {byDistrict && (
@@ -481,7 +481,7 @@ function StatewideExecutiveDetail({
             ? " Every candidate on the state's list for the November ballot."
             : ` ${PRIMARY_RESULTS_CAVEAT}`)}
         {statewideRaces.length > 0 &&
-          " These offices have no federal campaign-finance filings, so no funding figures or Representation Scores exist for them."}
+          " These offices have no federal campaign-finance filings, so no funding figures or member records exist for them."}
       </p>
     </div>
   );
@@ -648,7 +648,7 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
             the other thirteen to reach it. */}
         {measures.length > 3 && (
           <nav aria-label="Jump to a measure" className="border border-white/[0.09] p-3">
-            <p className="mb-2 font-mono text-xs tracking-[0.1em] text-ink-lo">JUMP TO A MEASURE</p>
+            <p className="mb-2 font-mono text-xs text-ink-lo">Jump to a measure</p>
             <ul className="flex flex-wrap gap-1.5">
               {measures.map((m) => (
                 <li key={m.id} className="max-w-full">
@@ -1089,9 +1089,9 @@ function HouseDetail({
                 {newDistrictSentence(picked.redistricting, !resultsMode)}{" "}
                 <Link
                   href={redistrictingHref(ballot.state, `new-${picked.district ?? 0}`)}
-                  className="font-mono text-xs tracking-[0.1em] text-signal-cyan underline decoration-signal-cyan/40 underline-offset-4 hover:text-phos"
+                  className="font-mono text-xs text-signal-cyan underline decoration-signal-cyan/40 underline-offset-4 hover:text-phos"
                 >
-                  [ WHAT CHANGED → ]
+                  [ What changed → ]
                 </Link>
               </p>
             )}
@@ -1100,9 +1100,9 @@ function HouseDetail({
             <button
               type="button"
               onClick={() => onPick(null)}
-              className="min-h-[44px] font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
+              className="min-h-[44px] font-mono text-xs text-signal-cyan hover:text-phos"
             >
-              ← PICK ANOTHER DISTRICT
+              ← Pick another district
             </button>
           )}
         </div>
@@ -1190,9 +1190,9 @@ function HouseDetail({
         </p>
       )}
       {houseRaces.some((r) => r.redistricting) && (
-        <p className="mb-3 font-mono text-xs tracking-[0.1em]">
+        <p className="mb-3 font-mono text-xs">
           <Link href={redistrictingHref(ballot.state)} className={INLINE_LINK}>
-            [ WHAT CHANGED ON THE NEW MAP → ]
+            [ What changed on the new map → ]
           </Link>{" "}
           <span className="font-sans tracking-normal text-ink-min">
             where each district&apos;s residents lived before
@@ -1290,7 +1290,7 @@ function OpenButton({ label, onClick }: { label: string; onClick: () => void }) 
       type="button"
       onClick={onClick}
       {...{ [SHARE_EXCLUDE_ATTR]: "" }}
-      className="min-h-[44px] w-full px-4 text-left font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
+      className="min-h-[44px] w-full px-4 text-left font-mono text-xs text-signal-cyan hover:text-phos"
     >
       {label} →
     </button>
@@ -1335,7 +1335,7 @@ function ContestOverview({
             resultsMode={resultsMode}
           />
           <OpenButton
-            label={`RESEARCH THIS RACE${stories ? ` · ${stories} ${stories === 1 ? "STORY" : "STORIES"}` : ""}`}
+            label={`Research this race${stories ? ` · ${stories} ${stories === 1 ? "story" : "stories"}` : ""}`}
             onClick={() => onOpen(contest.key)}
           />
         </>
@@ -1351,7 +1351,7 @@ function ContestOverview({
               resultsMode={resultsMode}
             />
             <OpenButton
-              label="RESEARCH THIS RACE"
+              label="Research this race"
               onClick={() => onOpen("house", ballot.houseRaces[0].id)}
             />
           </>,
@@ -1366,9 +1366,9 @@ function ContestOverview({
           <button
             type="button"
             onClick={() => onOpen("house", null)}
-            className="mb-2 min-h-[44px] font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
+            className="mb-2 min-h-[44px] font-mono text-xs text-signal-cyan hover:text-phos"
           >
-            DON&apos;T KNOW YOUR DISTRICT? MAP, TOWN OR COUNTY →
+            Don&apos;t know your district? Map, town or county →
           </button>
           <p className="mb-2 text-[13px] text-ink-lo">Or pick its number to research the race:</p>
           <div className="grid grid-cols-7 gap-1.5">
@@ -1390,9 +1390,9 @@ function ContestOverview({
           {ballot.houseRaces.some((r) => r.redistricting) && (
             <Link
               href={redistrictingHref(ballot.state)}
-              className="mt-3 inline-block min-h-[44px] py-2 font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
+              className="mt-3 inline-block min-h-[44px] py-2 font-mono text-xs text-signal-cyan hover:text-phos"
             >
-              NEW LINES THIS YEAR: WHAT CHANGED →
+              New lines this year: what changed →
             </Link>
           )}
         </div>,
@@ -1467,7 +1467,7 @@ function ContestOverview({
                 )
               )}
             </ul>
-            <OpenButton label="SOURCE AND NOTES" onClick={() => onOpen(contest.key)} />
+            <OpenButton label="Source and notes" onClick={() => onOpen(contest.key)} />
           </>
         )
       );
@@ -1486,7 +1486,7 @@ function ContestOverview({
               </li>
             ))}
           </ul>
-          <OpenButton label="FIND YOUR SEATS BY TOWN" onClick={() => onOpen(contest.key)} />
+          <OpenButton label="Find your seats by town" onClick={() => onOpen(contest.key)} />
         </>
       );
     case "judicial":
@@ -1509,7 +1509,7 @@ function ContestOverview({
                 </li>
               ))}
             </ul>
-            <OpenButton label="SEE THE CANDIDATES" onClick={() => onOpen(contest.key)} />
+            <OpenButton label="See the candidates" onClick={() => onOpen(contest.key)} />
           </>
         )
       );
@@ -1520,7 +1520,7 @@ function ContestOverview({
             Civitas does not have this state&apos;s own offices yet: that does not mean there are
             none on the ballot.
           </p>
-          <OpenButton label="DETAILS" onClick={() => onOpen(contest.key)} />
+          <OpenButton label="Details" onClick={() => onOpen(contest.key)} />
         </>
       );
     case "measures":
@@ -1562,15 +1562,13 @@ function ContestOverview({
                     <span className="mr-2 font-mono text-xs text-ink-lo">{m.number}</span>
                     {m.title}
                     {(m.status === "removed" || m.status === "withdrawn") && (
-                      <span className="ml-2 font-mono text-[10px] uppercase text-signal-red">
-                        {m.status}
-                      </span>
+                      <span className="ml-2 font-mono text-[10px] text-signal-red">{m.status}</span>
                     )}
                   </button>
                 </li>
               ))}
             </ul>
-            <OpenButton label="READ THE MEASURES" onClick={() => onOpen(contest.key)} />
+            <OpenButton label="Read the measures" onClick={() => onOpen(contest.key)} />
           </>
         ) : (
           <>
@@ -1581,17 +1579,17 @@ function ContestOverview({
                   : "No statewide measures are on record for this ballot."
                 : "Civitas does not have this state's measures yet: that does not mean there are none."}
             </p>
-            <OpenButton label="DETAILS" onClick={() => onOpen(contest.key)} />
+            <OpenButton label="Details" onClick={() => onOpen(contest.key)} />
           </>
         )
       );
     case "local":
-      return box(<OpenButton label="CHOOSE YOUR TOWN" onClick={() => onOpen(contest.key)} />);
+      return box(<OpenButton label="Choose your town" onClick={() => onOpen(contest.key)} />);
     case "news":
       return box(
         <OpenButton
           label={
-            ballot.coverage.length ? `READ ${ballot.coverage.length} STORIES` : "NO COVERAGE YET"
+            ballot.coverage.length ? `Read ${ballot.coverage.length} stories` : "No coverage yet"
           }
           onClick={() => onOpen(contest.key)}
         />
@@ -1616,9 +1614,9 @@ function NoSenateBox({ ballot }: { ballot: StateBallot }) {
 }
 
 const COLUMN_TITLES: Record<BallotContest["column"], string> = {
-  federal: "FEDERAL OFFICES",
-  state: "STATE OFFICES",
-  local: "MEASURES · LOCAL",
+  federal: "Federal offices",
+  state: "State offices",
+  local: "Measures · Local",
 };
 
 export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
@@ -1875,11 +1873,11 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
           target="_blank"
           rel="noopener noreferrer"
           aria-label={`${officialLookup.label} (opens in new tab)`}
-          className="font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
+          className="font-mono text-xs text-signal-cyan hover:text-phos"
         >
           {lookupIsStateSpecific
-            ? `${ballot.state} OFFICIAL VOTER LOOKUP ↗`
-            : "FIND YOUR ELECTION OFFICE ↗"}
+            ? `${ballot.state} official voter lookup ↗`
+            : "Find your election office ↗"}
         </a>
       )}
       <FollowFeed subject={stateName} feed={stateFeed(ballot.state, stateName)} />
@@ -1909,14 +1907,14 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
               href="/elections"
               className="mb-4 hidden font-mono text-xs text-ink-lo transition-colors hover:text-phos sm:inline-block"
             >
-              ← ALL STATES
+              ← All states
             </Link>
 
             <header className="mb-5 flex flex-col gap-4 border-b border-white/[0.14] pb-5 font-sans lg:flex-row lg:items-end lg:justify-between">
               <div className="min-w-0">
-                <p className="font-mono text-xs tracking-[0.14em] text-phos">
-                  {resultsFraming ? "RESULTS" : "BALLOT RESEARCH"} · {stateName.toUpperCase()} ·{" "}
-                  <span>{longDate(ballot.electionDate).toUpperCase()}</span>
+                <p className="font-mono text-xs text-phos">
+                  {resultsFraming ? "Results" : "Ballot research"} · {stateName} ·{" "}
+                  <span>{longDate(ballot.electionDate)}</span>
                 </p>
                 <h1 className="mt-1 font-display text-2xl font-semibold text-ink-hi sm:text-[28px]">
                   {resultsFraming
@@ -1951,11 +1949,11 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                 </p>
                 {ballot.primaryDate && (
                   <p className="mt-0.5 font-mono text-xs text-ink-min">
-                    PRIMARY: {calendarDate(ballot.primaryDate).toUpperCase()}
+                    Primary: {calendarDate(ballot.primaryDate)}
                     {(ballot.otherPrimaries ?? []).map((o) => (
                       <span key={`${String(o.offices)}-${o.date}`}>
                         {" · "}
-                        {otherPrimaryLabel(o)}: {calendarDate(o.date).toUpperCase()}
+                        {otherPrimaryLabel(o)}: {calendarDate(o.date)}
                       </span>
                     ))}
                   </p>
@@ -1976,21 +1974,15 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
               </div>
             </header>
 
-            {/* Before the ballot: a reader who isn't registered by the
-              deadline can't vote on any of it. Gone in the results window,
-              when every deadline has passed. */}
-            {!resultsMode && ballot.voteSteps && (
-              <VoteSteps steps={ballot.voteSteps} stateName={stateName} />
-            )}
-
-            {!resultsMode && ballot.voterCalendar && (
-              <VoterCalendar
-                showRegister={!ballot.voteSteps?.length}
-                calendar={ballot.voterCalendar}
-                stateName={stateName}
-                lookupHref={lookupHref}
-                lookupIsStateSpecific={lookupIsStateSpecific}
-              />
+            {/* Before the ballot: the official sample-ballot lookup as a
+              button (#1123: a reader who couldn't find it clicked
+              registration), then in one line the next voter deadline and a
+              jump to the steps and the full calendar, which follow the
+              contests. As full blocks here they put the ballot two screens
+              down on a phone. Gone in the results window, when every
+              deadline has passed. */}
+            {!resultsMode && (
+              <VoteStepsLead calendar={ballot.voterCalendar} steps={ballot.voteSteps} />
             )}
 
             <StateAtAGlance
@@ -2013,8 +2005,8 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                   lookupIsStateSpecific={lookupIsStateSpecific}
                 />
                 {resultsFraming && (
-                  <h2 className="mb-4 border-b border-white/[0.14] pb-2 font-mono text-xs tracking-[0.16em] text-ink-min">
-                    BALLOT RESEARCH · WHO WAS ON THE BALLOT, AND WHO WAS BEHIND THEM
+                  <h2 className="mb-4 border-b border-white/[0.14] pb-2 font-mono text-xs text-ink-min">
+                    Ballot research · Who was on the ballot, and who was behind them
                   </h2>
                 )}
               </>
@@ -2043,9 +2035,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
             <div className="hidden gap-5 lg:grid lg:grid-cols-3" data-testid="ballot-columns">
               {columns.map((col) => (
                 <div key={col} className="flex flex-col gap-4">
-                  <h2 className="font-mono text-xs tracking-[0.16em] text-phos">
-                    {COLUMN_TITLES[col]}
-                  </h2>
+                  <h2 className="font-mono text-xs text-phos">{COLUMN_TITLES[col]}</h2>
                   {col === "federal" &&
                     ballot.senateRaces.length === 0 &&
                     ballot.nextSenateElection !== null &&
@@ -2095,7 +2085,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                   if (inCol.length === 0) return null;
                   return (
                     <div key={col}>
-                      <p className="px-4 pb-1.5 pt-3 font-mono text-[11px] tracking-[0.16em] text-phos">
+                      <p className="px-4 pb-1.5 pt-3 font-mono text-[11px] text-phos">
                         {COLUMN_TITLES[col]}
                       </p>
                       <ul>
@@ -2186,6 +2176,23 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                 {ballotLinks}
               </div>
             </div>
+
+            {/* The steps and every deadline, after the contests (the line
+              above the ballot leads here). */}
+            {!resultsMode && (ballot.voteSteps?.length || ballot.voterCalendar) && (
+              <div className="mt-8">
+                {ballot.voteSteps && <VoteSteps steps={ballot.voteSteps} stateName={stateName} />}
+                {ballot.voterCalendar && (
+                  <VoterCalendar
+                    showRegister={!ballot.voteSteps?.length}
+                    calendar={ballot.voterCalendar}
+                    stateName={stateName}
+                    lookupHref={lookupHref}
+                    lookupIsStateSpecific={lookupIsStateSpecific}
+                  />
+                )}
+              </div>
+            )}
           </div>
         </main>
 

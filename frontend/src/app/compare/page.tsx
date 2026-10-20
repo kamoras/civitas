@@ -54,7 +54,7 @@ function SenatorSelector({
   const shownState = stateTouched ? selectedState : yours.state;
   const [members, setMembers] = useState<Senator[]>([]);
   const [loading, setLoading] = useState(false);
-  const label = side === "left" ? "LEFT" : "RIGHT";
+  const label = side === "left" ? "Left" : "Right";
 
   useEffect(() => {
     fetchStates()
@@ -108,9 +108,7 @@ function SenatorSelector({
 
   return (
     <div className="panel p-4 space-y-3">
-      <div className="font-mono text-xs text-ink-lo tracking-widest">
-        {label} · SELECT LEGISLATOR
-      </div>
+      <div className="font-mono text-xs text-ink-lo">{label} · Select legislator</div>
 
       {/* Chamber toggle */}
       <div className="flex gap-2">
@@ -121,7 +119,7 @@ function SenatorSelector({
             chamber === "senate" ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
           }`}
         >
-          SEN
+          Sen
         </button>
         <button
           onClick={() => handleChamberToggle("house")}
@@ -130,7 +128,7 @@ function SenatorSelector({
             chamber === "house" ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
           }`}
         >
-          HOUSE
+          House
         </button>
       </div>
 
@@ -160,11 +158,7 @@ function SenatorSelector({
         </select>
       </div>
 
-      {loading && (
-        <div className="text-ink-min font-mono text-xs tracking-widest pulse-subtle">
-          LOADING...
-        </div>
-      )}
+      {loading && <div className="text-ink-min font-mono text-xs pulse-subtle">Loading...</div>}
 
       {members.length > 0 && (
         <div className="space-y-1.5">
@@ -248,7 +242,7 @@ function ComparePresets({
 
   return (
     <div className="panel mb-4 flex flex-col gap-3 p-4">
-      <div className="font-mono text-xs tracking-widest text-ink-lo">QUICK COMPARISONS</div>
+      <div className="font-mono text-xs text-ink-lo">Quick comparisons</div>
       <div className="flex flex-wrap items-center gap-2">
         <label htmlFor="preset-state" className="font-mono text-xs text-ink">
           Both senators from
@@ -268,7 +262,7 @@ function ComparePresets({
               </option>
             ))}
         </select>
-        {busy && <span className="font-mono text-xs text-ink-min">LOADING…</span>}
+        {busy && <span className="font-mono text-xs text-ink-min">Loading…</span>}
         {failed && (
           <span role="alert" className="font-mono text-xs text-signal-red">
             Could not load that state&apos;s senators.
@@ -325,13 +319,13 @@ function ComparisonTable({
           <div className="font-display text-lg font-semibold leading-snug text-ink-hi">
             {left.name}
           </div>
-          <div className="text-ink-min font-mono text-xs mt-0.5 uppercase tracking-wide">
+          <div className="text-ink-min font-mono text-xs mt-0.5">
             {leftChamber === "house" ? "House" : "Senate"}
           </div>
           <ScoredOn member={left} />
         </div>
         <div className="p-3 flex items-center justify-center">
-          <span className="text-ink-min font-mono text-xs">VS</span>
+          <span className="text-ink-min font-mono text-xs">vs</span>
         </div>
         <div className="p-3 text-center">
           <div className={`font-mono text-xs ${PARTY_COLORS[right.party]}`}>
@@ -340,7 +334,7 @@ function ComparisonTable({
           <div className="font-display text-lg font-semibold leading-snug text-ink-hi">
             {right.name}
           </div>
-          <div className="text-ink-min font-mono text-xs mt-0.5 uppercase tracking-wide">
+          <div className="text-ink-min font-mono text-xs mt-0.5">
             {rightChamber === "house" ? "House" : "Senate"}
           </div>
           <ScoredOn member={right} />
@@ -356,7 +350,7 @@ function ComparisonTable({
           a like-for-like comparison the methodology doesn't support. */}
       {leftChamber !== rightChamber && (
         <div className="px-3 py-2 border-b border-signal-amber/40 bg-signal-amber/10 text-center">
-          <span className="text-signal-amber font-mono text-xs uppercase tracking-wide">
+          <span className="text-signal-amber font-mono text-xs">
             Different chambers: each is measured among their own chamber, so the strips are left
             out; the plain figures are below
           </span>
@@ -383,12 +377,12 @@ function ComparisonTable({
       <div className="border-t border-white/[0.07] bg-white/[0.03] divide-y divide-white/[0.07]">
         {[
           {
-            label: "TOTAL RAISED",
+            label: "Total raised",
             lv: formatCurrency(left.funding.totalRaised),
             rv: formatCurrency(right.funding.totalRaised),
           },
           {
-            label: "PAC MONEY",
+            label: "PAC money",
             lv: formatCurrency(left.funding.totalFromPacs),
             rv: formatCurrency(right.funding.totalFromPacs),
           },
@@ -396,7 +390,7 @@ function ComparisonTable({
         ].map(({ label, lv, rv }) => (
           <div key={label} className="grid grid-cols-3 items-center px-3 py-1.5">
             <div className="text-right font-mono text-xs text-ink-lo">{lv}</div>
-            <div className="text-center text-xs text-ink-min font-mono tracking-wide">{label}</div>
+            <div className="text-center text-xs text-ink-min font-mono">{label}</div>
             <div className="text-left font-mono text-xs text-ink-lo">{rv}</div>
           </div>
         ))}
@@ -406,22 +400,20 @@ function ComparisonTable({
       <div className="grid grid-cols-2 border-t border-white/[0.07]">
         <a
           href={leftScorecardUrl}
-          className="p-3 text-center font-mono text-xs tracking-widest text-ink-lo hover:bg-signal-cyan/10 hover:text-phos transition-colors border-r border-white/[0.07]"
+          className="p-3 text-center font-mono text-xs text-ink-lo hover:bg-signal-cyan/10 hover:text-phos transition-colors border-r border-white/[0.07]"
         >
-          MEMBER PAGE →
+          Member page →
         </a>
         <a
           href={rightScorecardUrl}
-          className="p-3 text-center font-mono text-xs tracking-widest text-ink-lo hover:bg-signal-cyan/10 hover:text-phos transition-colors"
+          className="p-3 text-center font-mono text-xs text-ink-lo hover:bg-signal-cyan/10 hover:text-phos transition-colors"
         >
-          MEMBER PAGE →
+          Member page →
         </a>
       </div>
 
       <div className="border-t border-white/[0.07] p-3">
-        <h3 className="mb-2 font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-          Cite this comparison
-        </h3>
+        <h3 className="mb-2 font-mono text-xs text-ink-min">Cite this comparison</h3>
         <CiteThis
           title={`${left.name} and ${right.name} compared${methodNote(left, right)}`}
           date={[left.scoredOn, right.scoredOn].filter(Boolean).sort().pop() ?? null}
@@ -432,13 +424,13 @@ function ComparisonTable({
   );
 }
 
-/** "Scored 2026-10-16 · v6.35": which run and method stored the member's
+/** "Updated 2026-10-16 · v6.35": which run and method stored the member's
  *  scores, so a held or older score reads as such beside a newer one. */
 function ScoredOn({ member }: { member: Senator }) {
   if (!member.scoredOn) return null;
   return (
     <div className="mt-0.5 font-mono text-xs text-ink-min">
-      Scored {member.scoredOn}
+      Updated {member.scoredOn}
       {member.algorithmVersion ? ` · ${member.algorithmVersion}` : ""}
     </div>
   );
@@ -468,8 +460,8 @@ const COMPARE_EYEBROW = "Compare · two legislators, side by side";
 const COMPARE_TITLE = "Compare legislators";
 const COMPARE_LEDE = (
   <p>
-    Pick two legislators, or start from a quick comparison, to see their representation scores,
-    funding sources, and constituent alignment side by side. Presidents compare on the{" "}
+    Pick two legislators, or start from a quick comparison, to see their money, votes and bills on
+    the same peer strips. Presidents compare on the{" "}
     <Link
       href="/compare/presidents"
       className="underline decoration-white/30 underline-offset-4 hover:text-phos"
@@ -603,9 +595,7 @@ function ComparePageInner() {
               {COMPARE_LEDE}
             </PageMasthead>
             <div className="panel p-8 text-center">
-              <div className="font-mono text-xs text-ink-min tracking-widest pulse-subtle">
-                LOADING...
-              </div>
+              <div className="font-mono text-xs text-ink-min pulse-subtle">Loading...</div>
             </div>
           </div>
         </main>
@@ -655,8 +645,8 @@ function ComparePageInner() {
             <div className="panel p-8 text-center space-y-4">
               <div className="font-mono text-sm text-ink-min">
                 {!leftSenator && !rightSenator
-                  ? "SELECT TWO LEGISLATORS ABOVE TO COMPARE"
-                  : "SELECT A SECOND LEGISLATOR TO COMPARE"}
+                  ? "Select two legislators above to compare"
+                  : "Select a second legislator to compare"}
               </div>
             </div>
           )}

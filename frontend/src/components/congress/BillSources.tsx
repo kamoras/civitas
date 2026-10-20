@@ -72,9 +72,9 @@ export default function BillSources({
       <>
         Civitas&apos;s reading of the action history, the stages{" "}
         <Link href="/about/scores#effectiveness" className={LINK}>
-          Legislative Effectiveness
+          a member&apos;s bills moved
         </Link>{" "}
-        scores, counted over the bills sitting members sponsored.
+        are counted on, over the bills sitting members sponsored.
       </>,
     ]);
   }
@@ -93,16 +93,14 @@ export default function BillSources({
       <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-sm sm:grid-cols-[7rem_minmax(0,1fr)]">
         {sources.map(([term, text]) => (
           <div key={term} className="contents">
-            <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">{term}</dt>
+            <dt className="font-mono text-xs text-ink-min">{term}</dt>
             <dd className="leading-relaxed text-ink-lo">{text}</dd>
           </div>
         ))}
       </dl>
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
         <div className="flex flex-col gap-2">
-          <h3 className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-            The record as data
-          </h3>
+          <h3 className="font-mono text-xs text-ink-min">The record as data</h3>
           <ul className="flex flex-col text-sm">
             <li className="border-b border-white/[0.07] py-1.5">
               <a href={votesJson} className={LINK}>
@@ -130,9 +128,7 @@ export default function BillSources({
           </ul>
         </div>
         <div className="flex flex-col gap-2">
-          <h3 className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-            Cite this bill page
-          </h3>
+          <h3 className="font-mono text-xs text-ink-min">Cite this bill page</h3>
           <CiteThis
             title={`${label}${title && title !== label ? `: ${title}` : ""}${congress ? ` (${ordinal(congress)} Congress)` : ""}`}
             date={record?.introducedDate ?? detail?.introducedDate ?? null}

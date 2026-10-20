@@ -1,5 +1,6 @@
 "use client";
 
+import { asLabel } from "@/lib/formatting";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import type { PipelineHistoryRun, PipelineStepInfo } from "@/lib/api";
@@ -9,13 +10,13 @@ import { historyPreview } from "./trends";
 import { NotLoaded } from "./widgets";
 
 export const PHASE_LABELS: Record<string, string> = {
-  fetch: "FETCHING DATA",
-  transform: "TRANSFORMING",
-  analyze: "ANALYZING",
-  explore: "EXPLORE DOCS",
+  fetch: "Fetching data",
+  transform: "Transforming",
+  analyze: "Analyzing",
+  explore: "Explore docs",
   justices: "SCOTUS",
-  presidents: "PRESIDENTS",
-  finalize: "FINALIZING",
+  presidents: "Presidents",
+  finalize: "Finalizing",
 };
 
 const PHASE_ORDER = ["fetch", "transform", "analyze", "finalize"] as const;
@@ -46,7 +47,7 @@ function ElapsedTimer({ startedAt }: { startedAt: string | null | undefined }) {
 function PhaseSteps({ currentPhase }: { currentPhase: string | null | undefined }) {
   const activeIdx = PHASE_ORDER.indexOf((currentPhase ?? "fetch") as (typeof PHASE_ORDER)[number]);
   return (
-    <div className="flex items-center gap-1 text-xs font-mono tracking-wider">
+    <div className="flex items-center gap-1 text-xs font-mono">
       {PHASE_ORDER.map((p, i) => {
         const done = i < activeIdx;
         const active = i === activeIdx;
@@ -242,7 +243,7 @@ export function PipelineProgressBar({
     } else {
       phaseGroups.push({
         phase: s.phase,
-        label: PHASE_LABELS[s.phase] ?? s.phase.toUpperCase(),
+        label: PHASE_LABELS[s.phase] ?? asLabel(s.phase),
         steps: [s],
       });
     }
@@ -266,7 +267,7 @@ export function PipelineProgressBar({
       <div className="mt-3">
         <div className="flex items-center justify-between mb-1">
           <span className="text-ink-lo text-xs font-mono">
-            {activeStep ? activeStep.label.toUpperCase() : "INITIALIZING"}
+            {activeStep ? asLabel(activeStep.label) : "Initializing"}
           </span>
           <span className="text-ink-hi text-xs font-mono tabular-nums">
             {doneSteps}/{totalSteps} steps ({overallPct}%)
@@ -304,7 +305,7 @@ export function PipelineProgressBar({
             return (
               <div key={group.phase}>
                 <div
-                  className={`text-xs font-mono tracking-wider mb-1.5 ${
+                  className={`text-xs font-mono mb-1.5 ${
                     groupActive ? "text-signal-cyan" : groupDone ? "text-ink" : "text-ink-min"
                   }`}
                 >
@@ -403,25 +404,25 @@ export function RunHistory({ runs: allRuns }: { runs: PipelineHistoryRun[] | nul
         <thead>
           <tr className="text-ink-lo border-b border-white/[0.07]">
             <th scope="col" className="text-left py-1 pr-3">
-              TYPE
+              Type
             </th>
             <th scope="col" className="text-left py-1 pr-3">
-              STARTED
+              Started
             </th>
             <th scope="col" className="text-left py-1 pr-3">
-              STATUS
+              Status
             </th>
             <th scope="col" className="text-left py-1 pr-3">
-              DURATION
+              Duration
             </th>
             <th scope="col" className="text-right py-1 pr-3">
-              PROCESSED
+              Processed
             </th>
             <th scope="col" className="text-right py-1 pr-3">
               LLM
             </th>
             <th scope="col" className="text-right py-1">
-              CACHE
+              Cache
             </th>
           </tr>
         </thead>
@@ -454,7 +455,7 @@ export function RunHistory({ runs: allRuns }: { runs: PipelineHistoryRun[] | nul
                 </td>
                 <td className="py-1.5 pr-3 text-ink">{formatTime(r.startedAt)}</td>
                 <td className="py-1.5 pr-3">
-                  <span className={statusColor}>{r.status.toUpperCase()}</span>
+                  <span className={statusColor}>{asLabel(r.status)}</span>
                   {r.errorMessage && (
                     <span
                       className="ml-2 text-ink-lo text-xs"
@@ -529,16 +530,14 @@ export function PipelineStatusRow({
         <span className="text-ink-lo">{label}</span>
         <span className={isRunning ? "text-signal-cyan pulse-subtle" : "text-ink-lo"}>
           {isRunning ? (
-            "RUNNING"
+            "Running"
           ) : run ? (
             <span>
-              <span className={statusClassName}>
-                {isStuck ? "STUCK" : run.status.toUpperCase()}
-              </span>
+              <span className={statusClassName}>{isStuck ? "Stuck" : asLabel(run.status)}</span>
               {detail}
             </span>
           ) : (
-            "IDLE"
+            "Idle"
           )}
         </span>
       </div>
@@ -550,7 +549,7 @@ export function PipelineStatusRow({
             className="text-xs font-mono text-signal-amber hover:text-signal-amber border border-signal-amber/30 hover:border-signal-amber/60
                        px-2 py-0.5  transition-colors disabled:opacity-40"
           >
-            {clearing ? "CLEARING..." : "[CLEAR STUCK RUN]"}
+            {clearing ? "Clearing..." : "[Clear stuck run]"}
           </button>
         </div>
       )}
@@ -595,7 +594,7 @@ export function PipelineRunDetailCard({
       <div className="p-4">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm font-mono">
           <div>
-            <span className="text-ink-lo text-xs block">STATUS</span>
+            <span className="text-ink-lo text-xs block">Status</span>
             <span
               className={
                 run.status === "completed"
@@ -605,22 +604,22 @@ export function PipelineRunDetailCard({
                     : "text-signal-cyan"
               }
             >
-              {run.status.toUpperCase()}
+              {asLabel(run.status)}
             </span>
           </div>
           <div>
-            <span className="text-ink-lo text-xs block">STARTED</span>
+            <span className="text-ink-lo text-xs block">Started</span>
             <span>{formatTime(run.startedAt)}</span>
           </div>
           <div>
-            <span className="text-ink-lo text-xs block">DURATION</span>
+            <span className="text-ink-lo text-xs block">Duration</span>
             <span>{formatDuration(run.elapsedSeconds)}</span>
           </div>
           {extraStats}
         </div>
         {run.errorMessage && (
           <div className="mt-3 p-2 border border-signal-magenta/40 bg-signal-magenta/10">
-            <span className="text-signal-magenta text-xs font-mono">ERROR: {run.errorMessage}</span>
+            <span className="text-signal-magenta text-xs font-mono">Error: {run.errorMessage}</span>
           </div>
         )}
         <ErrorDetail detail={run.errorDetail} />
@@ -638,7 +637,7 @@ function ErrorDetail({ detail }: { detail?: string | null }) {
   return (
     <details className="mt-2 text-xs font-mono">
       <summary className="cursor-pointer text-signal-magenta">
-        CAUSE: {detail.split("\n", 1)[0]}
+        Cause: {detail.split("\n", 1)[0]}
       </summary>
       <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words p-2 border border-white/[0.1] text-ink-lo">
         {detail}
@@ -659,7 +658,7 @@ export function LastRunSteps({ steps }: { steps?: PipelineStepInfo[] | null }) {
         aria-label={`Step breakdown, ${steps.length} steps`}
         className="text-xs font-mono text-ink-lo hover:text-phos transition-colors"
       >
-        {expanded ? "▼" : "▶"} STEP BREAKDOWN ({steps.length} steps)
+        {expanded ? "▼" : "▶"} step breakdown ({steps.length} steps)
       </button>
       {expanded && (
         <div className="mt-2 space-y-0.5">

@@ -31,7 +31,10 @@ describe("record 404s", () => {
       "/politicians/pat-kelley"
     );
     expect(String(fetch.mock.calls[0][0])).toMatch(/\/politicians\/suggest\?q=pat-kelly$/);
-    expect(screen.getByRole("link", { name: /directory/ })).toHaveAttribute("href", "/politicians");
+    expect(screen.getByRole("link", { name: /directory/ })).toHaveAttribute(
+      "href",
+      "/congress/members"
+    );
     expect(screen.getByRole("heading", { level: 1, name: "404" })).toBeInTheDocument();
   });
 

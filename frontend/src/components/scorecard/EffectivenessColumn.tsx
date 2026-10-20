@@ -4,7 +4,6 @@ import Link from "next/link";
 import type { SponsoredBill } from "@/types/senator";
 import type { EffectivenessFacts, ScoreBreakdownDimension } from "@/types/scoreBreakdown";
 import { useConfig } from "@/hooks/useConfig";
-import ComponentBars from "./ComponentBars";
 import ScoreColumn, { Block } from "./ScoreColumn";
 import { count } from "./format";
 import { billHref } from "@/lib/congress";
@@ -13,7 +12,7 @@ import { billHref } from "@/lib/congress";
 const BILLS_SHOWN = 4;
 
 const TOOLTIP =
-  "Whether the member's legislation goes anywhere, following Volden and Wiseman's Legislative Effectiveness Score. 60% is the member's bills, each credited at every stage it reached (a law counts for far more than an introduction), against the median sponsor of the same majority or minority status in this chamber; simple and concurrent resolutions count a fifth as much as bills. 25% is how central the member is in the chamber's cosponsorship network, pulled toward 50 for under six years in office. 15% is the share of cosponsors on the member's own bills who come from the other party, against the median member of the same party. Without cosponsorship data it is 70% bills and 30% network.";
+  "How far the member's bills and joint resolutions got this Congress, from Congress.gov bill status: introduced only, action in committee, past committee, passed the chamber, became law. Simple and concurrent resolutions are counted apart.";
 
 function stageLabels(chamber: "senate" | "house"): string[] {
   return [
@@ -57,13 +56,11 @@ export default function EffectivenessColumn({
   chamber,
   bills,
   dimension,
-  score,
   onMore,
 }: {
   chamber: "senate" | "house";
   bills: SponsoredBill[];
   dimension: ScoreBreakdownDimension | undefined;
-  score: number;
   onMore: () => void;
 }) {
   const config = useConfig();
@@ -88,9 +85,7 @@ export default function EffectivenessColumn({
       title="Bills"
       shareId="legislative-effectiveness"
       tooltip={TOOLTIP}
-      score={score}
       finding={dimension?.finding}
-      method={dimension && <ComponentBars components={dimension.components} />}
       more={{
         label: `All ${bills.length} sponsored bills and resolutions`,
         onClick: onMore,
@@ -149,7 +144,7 @@ export default function EffectivenessColumn({
                 >
                   {b.title}
                 </Link>
-                <span className="shrink-0 font-mono text-xs uppercase text-ink-min">
+                <span className="shrink-0 font-mono text-xs text-ink-min">
                   {(b.stage && config?.billStages[b.stage]?.name) || b.stage}
                 </span>
               </li>

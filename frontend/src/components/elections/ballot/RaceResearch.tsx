@@ -1,5 +1,6 @@
 "use client";
 
+import { MEMBERS_HREF } from "@/lib/routes";
 import { useId, useRef, useState, type KeyboardEvent } from "react";
 import Link from "next/link";
 import RaceFullDetail from "@/components/elections/RaceFullDetail";
@@ -12,8 +13,8 @@ import type { RaceCoverageItem, RaceWithCandidates } from "@/types/election";
 type Tab = "money" | "record" | "news";
 
 /** Voting records for the candidates the API links one for: a member
- * running for re-election, matched to their own record, with their
- * Representation Score and a link to their full scorecard; and a member of
+ * running for re-election, matched to their own record, with a link to
+ * where they stand among peers; and a member of
  * the other chamber running here (a House member running for the Senate),
  * by the bioguide crosswalk, named as what they are now. Everyone else is
  * listed too, marked "not linked" — never "no scorecard" or "no record":
@@ -26,11 +27,11 @@ function RecordPanel({ race }: { race: RaceWithCandidates }) {
   return (
     <div>
       <p className="mb-3 text-[13px] text-ink-lo">
-        A member of Congress in this race is linked to their Representation Score and full scorecard
-        when the match to their record is certain: one running for re-election, or one who serves in
-        the other chamber now. Anyone not linked here may still be under{" "}
-        <Link href="/politicians" className="underline hover:text-phos">
-          Politicians
+        A member of Congress in this race is linked to their record and peers when the match to
+        their record is certain: one running for re-election, or one who serves in the other chamber
+        now. Anyone not linked here may still be under{" "}
+        <Link href={MEMBERS_HREF} className="underline hover:text-phos">
+          Members of Congress
         </Link>
         .
       </p>
@@ -42,7 +43,7 @@ function RecordPanel({ race }: { race: RaceWithCandidates }) {
           >
             <span className="flex min-w-0 flex-col">
               <span className="text-[15px] font-semibold text-ink-hi">{candidateName(c)}</span>
-              <span className={`font-mono text-[11px] tracking-[0.08em] ${getPartyMeta(c).color}`}>
+              <span className={`font-mono text-[11px] ${getPartyMeta(c).color}`}>
                 {getPartyMeta(c).label}
               </span>
             </span>
@@ -68,7 +69,7 @@ function RecordPanel({ race }: { race: RaceWithCandidates }) {
       </ul>
       {withRecord.length === 0 && (
         <p className="mt-3 text-[13px] text-ink-lo">
-          No one in this race is linked to a Civitas scorecard.
+          No one in this race is linked to a member&apos;s record on Civitas.
         </p>
       )}
     </div>

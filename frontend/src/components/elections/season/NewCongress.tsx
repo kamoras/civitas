@@ -17,7 +17,7 @@ export default function NewCongress({ data }: { data: Compared | null }) {
     >
       <h2
         id="new-congress"
-        className="border-b border-white/[0.07] py-2.5 font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
+        className="border-b border-white/[0.07] py-2.5 font-mono text-xs text-ink-min"
       >
         {data ? `The ${congressOrdinal(data.congress)} Congress, compared` : "The new Congress"}
       </h2>
@@ -52,7 +52,7 @@ export default function NewCongress({ data }: { data: Compared | null }) {
 function Chamber({ name, c }: { name: string; c: ChamberCompared }) {
   return (
     <div className="border-t border-white/[0.07] py-2">
-      <h3 className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">{name}</h3>
+      <h3 className="font-mono text-xs text-ink-min">{name}</h3>
       {c.read === 0 ? (
         <p className="mt-1 text-sm text-ink-lo">
           No member&apos;s Congress.gov record lists this Congress yet ({c.members} sitting); the

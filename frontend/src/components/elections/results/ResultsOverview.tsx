@@ -1,5 +1,6 @@
 "use client";
 
+import { asLabel } from "@/lib/formatting";
 import { fade, overlay, partyMark } from "@/lib/chartColors";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -202,7 +203,7 @@ export default function ResultsOverview({
       from,
     ];
   };
-  const staleNote = (state: string) => staleParts(state).join(" · ").toUpperCase();
+  const staleNote = (state: string) => asLabel(staleParts(state).join(" · "));
   // A covered state still voting: nothing is said about its count — not
   // "no votes yet" — until its last polls close.
   const voting = (state: string) => live.has(state) && pollsStillOpen(results, state, now);
@@ -278,11 +279,7 @@ export default function ResultsOverview({
             <h2 id="results-map-heading" className="sr-only">
               Results map
             </h2>
-            <div
-              role="group"
-              aria-label="Chamber"
-              className="flex flex-wrap font-mono text-xs tracking-[0.12em]"
-            >
+            <div role="group" aria-label="Chamber" className="flex flex-wrap font-mono text-xs">
               {(["S", "H"] as const).map((c) => (
                 <button
                   key={c}
@@ -295,16 +292,16 @@ export default function ResultsOverview({
                       : "border-white/20 text-ink-min hover:text-ink-hi"
                   } ${c === "H" ? "-ml-px" : ""}`}
                 >
-                  {c === "S" ? "SENATE" : "HOUSE"}
+                  {c === "S" ? "Senate" : "House"}
                 </button>
               ))}
             </div>
             <ul className="flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-xs text-ink-lo">
               <li className="flex items-center gap-1.5">
-                <Swatch color={fade(partyMark("DEM"), 0.85)} /> D LEADS
+                <Swatch color={fade(partyMark("DEM"), 0.85)} /> D leads
               </li>
               <li className="flex items-center gap-1.5">
-                <Swatch color={fade(partyMark("REP"), 0.85)} /> R LEADS
+                <Swatch color={fade(partyMark("REP"), 0.85)} /> R leads
               </li>
               <li className="flex items-center gap-1.5">
                 {/* Either party's colour, fainter: not a blue-only state. */}
@@ -312,39 +309,38 @@ export default function ResultsOverview({
                   <Swatch color={fade(partyMark("DEM"), FAINT)} />
                   <Swatch color={fade(partyMark("REP"), FAINT)} />
                 </span>{" "}
-                FAINTER: UNDER HALF IN
+                Fainter: under half in
               </li>
               <li className="flex items-center gap-1.5">
-                <Swatch color={TIED_FILL} /> TIED / SPLIT
+                <Swatch color={TIED_FILL} /> Tied / split
               </li>
               <li className="flex items-center gap-1.5">
                 {/* A Senate race led by an independent (Nebraska's, in 2026)
                     is purple too, not only a House delegation. */}
-                <Swatch color={fade(partyMark("IND"), 0.6)} /> OTHER OR UNSTATED PARTY LEADS
+                <Swatch color={fade(partyMark("IND"), 0.6)} /> Other or unstated party leads
               </li>
               <li className="flex items-center gap-1.5">
-                <Swatch color={POLLS_OPEN_FILL} texture={POLLS_OPEN_SWATCH} /> POLLS NOT YET CLOSED
+                <Swatch color={POLLS_OPEN_FILL} texture={POLLS_OPEN_SWATCH} /> Polls not yet closed
               </li>
               <li className="flex items-center gap-1.5">
-                <Swatch color={AWAITING_FILL} texture={AWAITING_SWATCH} /> NO VOTES YET
+                <Swatch color={AWAITING_FILL} texture={AWAITING_SWATCH} /> No votes yet
               </li>
               <li className="flex items-center gap-1.5">
                 {/* A count for the state's other chamber, none for this one. */}
-                <Swatch color={AWAITING_FILL} texture={NO_COUNT_SWATCH} />{" "}
-                {NO_COUNT_TEXT.toUpperCase()}
+                <Swatch color={AWAITING_FILL} texture={NO_COUNT_SWATCH} /> {asLabel(NO_COUNT_TEXT)}
               </li>
               <li className="flex items-center gap-1.5">
-                <Swatch color={FEED_FAILED_FILL} texture={FEED_FAILED_SWATCH} /> FEED NOT READ
+                <Swatch color={FEED_FAILED_FILL} texture={FEED_FAILED_SWATCH} /> Feed not read
               </li>
               <li className="flex items-center gap-1.5">
                 {/* A count no longer refreshed keeps its leader's colour
                     under the stripe. */}
                 <Swatch color={fade(partyMark("REP"), 0.6)} texture={STALE_SWATCH} />{" "}
-                {refreshFailed ? "NOT LIVE: THIS PAGE COULDN'T REFRESH" : "STALE: NOT REFRESHED"}
+                {refreshFailed ? "Not live: this page couldn't refresh" : "Stale: not refreshed"}
               </li>
               <li className="flex items-center gap-1.5">
                 <Swatch color={UNCOVERED_FILL} />{" "}
-                {chamber === "S" ? "NO RACE / NO LIVE FEED" : "NO LIVE FEED"}
+                {chamber === "S" ? "No race / no live feed" : "No live feed"}
               </li>
             </ul>
           </div>
@@ -390,7 +386,7 @@ export default function ResultsOverview({
 
       <section aria-label="Totals" className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="border border-white/[0.09] bg-surface p-4">
-          <p className="font-mono text-xs tracking-[0.12em] text-ink-min">SENATE SEATS LED</p>
+          <p className="font-mono text-xs text-ink-min">Senate seats led</p>
           <div className="mt-2">
             <LedTally led={seatsLed(senate)} />
           </div>
@@ -400,7 +396,7 @@ export default function ResultsOverview({
           </p>
         </div>
         <div className="border border-white/[0.09] bg-surface p-4">
-          <p className="font-mono text-xs tracking-[0.12em] text-ink-min">HOUSE SEATS LED</p>
+          <p className="font-mono text-xs text-ink-min">House seats led</p>
           <div className="mt-2">
             <LedTally led={seatsLed(house)} />
           </div>
@@ -413,9 +409,7 @@ export default function ResultsOverview({
         <div
           className={`border bg-surface p-4 ${flips.length ? "border-signal-amber/60" : "border-white/[0.09]"}`}
         >
-          <p className="font-mono text-xs tracking-[0.12em] text-signal-amber">
-            SEATS CHANGING PARTY
-          </p>
+          <p className="font-mono text-xs text-signal-amber">Seats changing party</p>
           <p className="mt-2 font-display text-3xl font-semibold tabular-nums text-ink-hi">
             {flips.length}
           </p>
@@ -452,7 +446,7 @@ export default function ResultsOverview({
       <section aria-labelledby="results-by-state">
         <h2
           id="results-by-state"
-          className="flex items-baseline justify-between border-b border-white/15 pb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
+          className="flex items-baseline justify-between border-b border-white/15 pb-2 font-mono text-xs text-ink-min"
         >
           <span>By state</span>
           <span>Ballot research stays on every state page</span>
@@ -465,30 +459,30 @@ export default function ResultsOverview({
             const hasCount = (byState.get(state) ?? []).length > 0;
             const stillVoting = voting(state);
             const badge = !isLive
-              ? { text: "NO FEED", className: "border-white/15 text-ink-min" }
+              ? { text: "No feed", className: "border-white/15 text-ink-min" }
               : refreshFailed
                 ? {
                     // This page's failure, not the state's: no LIVE, no
                     // amber, nothing said about its feed.
-                    text: "NOT REFRESHED",
+                    text: "Not refreshed",
                     className: "border-dashed border-white/30 text-ink-lo",
                   }
                 : stillVoting
                   ? {
                       // Not "polls open": from midnight on election day,
                       // before any poll opens, this is true too.
-                      text: "POLLS NOT CLOSED",
+                      text: "Polls not closed",
                       className: "border-signal-cyan/50 text-signal-cyan",
                     }
                   : failed
                     ? {
-                        text: hasCount ? "STALE" : "FEED NOT READ",
+                        text: hasCount ? "Stale" : "Feed not read",
                         // Not LIVE's look with other words: dashed, and
                         // carrying the map's stripe for the same state.
                         className: "border-dashed border-signal-amber/70 text-ink-hi",
                         texture: hasCount ? STALE_SWATCH : FEED_FAILED_SWATCH,
                       }
-                    : { text: "LIVE", className: "border-signal-amber/50 text-signal-amber" };
+                    : { text: "Live", className: "border-signal-amber/50 text-signal-amber" };
             return (
               <li key={state}>
                 <Link
@@ -498,7 +492,7 @@ export default function ResultsOverview({
                   <span className="flex items-baseline justify-between gap-2">
                     <span className="font-mono text-sm text-ink-hi">{state}</span>
                     <span
-                      className={`flex items-center gap-1 border px-1.5 font-mono text-[11px] tracking-[0.1em] ${badge.className}`}
+                      className={`flex items-center gap-1 border px-1.5 font-mono text-[11px] ${badge.className}`}
                     >
                       {"texture" in badge && badge.texture && (
                         <span
@@ -546,15 +540,13 @@ export default function ResultsOverview({
                   )}
                   {summary.house.length > 0 ? (
                     <span className="font-mono text-xs text-ink-min">
-                      HOUSE {formatLed(summary.houseLeads)} LEADING
+                      House {formatLed(summary.houseLeads)} leading
                       {anyCountNotFinal(summary.house) ? ` · ${NOT_FINAL}` : ""}
                     </span>
                   ) : (
                     isLive &&
                     hasCount && (
-                      <span className="font-mono text-xs text-ink-min">
-                        HOUSE: {NO_COUNT_TEXT.toUpperCase()}
-                      </span>
+                      <span className="font-mono text-xs text-ink-min">House: {NO_COUNT_TEXT}</span>
                     )
                   )}
                   {failed && hasCount && !stillVoting && (
@@ -562,8 +554,7 @@ export default function ResultsOverview({
                   )}
                   {refreshFailed && isLive && hasCount && countReadAt(results, state) && (
                     <span className="font-mono text-xs text-ink-min">
-                      COUNT FROM{" "}
-                      {formatEasternTime(countReadAt(results, state) ?? "").toUpperCase()}
+                      Count from {formatEasternTime(countReadAt(results, state) ?? "")}
                     </span>
                   )}
                 </Link>

@@ -60,11 +60,7 @@ function ItemLink({ item, showGroup = false }: { item: SearchItem; showGroup?: b
         <span className="font-sans text-base font-semibold text-ink-hi underline decoration-ink-min underline-offset-4 group-hover:decoration-ink-hi">
           {item.label}
         </span>
-        {showGroup && (
-          <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-lo">
-            {item.group}
-          </span>
-        )}
+        {showGroup && <span className="font-mono text-[11px] text-ink-lo">{item.group}</span>}
       </span>
       {item.context && <span className="font-mono text-xs text-ink-min">{item.context}</span>}
     </Link>
@@ -135,7 +131,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Param
 
           {data && !data.unavailable && (
             <div className="mt-8 flex flex-col gap-8">
-              <h2 className="font-mono text-sm uppercase tracking-[0.14em] text-ink-lo">
+              <h2 className="font-mono text-sm text-ink-lo">
                 {total > 0 ? `${matches(total)} for “${q}”` : `Nothing on file for “${q}”`}
               </h2>
 
@@ -144,10 +140,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Param
                   aria-labelledby="close-call"
                   className="border-2 border-signal-amber/60 p-4"
                 >
-                  <h3
-                    id="close-call"
-                    className="font-mono text-xs uppercase tracking-[0.14em] text-signal-amber"
-                  >
+                  <h3 id="close-call" className="font-mono text-xs text-signal-amber">
                     Close call. Which one did you mean?
                   </h3>
                   <div className="mt-2">
@@ -186,7 +179,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Param
                 <section key={g.kind} aria-labelledby={`group-${g.kind}`}>
                   <h3
                     id={`group-${g.kind}`}
-                    className="flex items-baseline justify-between border-b-2 border-ink-lo pb-1 font-mono text-xs uppercase tracking-[0.14em] text-ink-hi"
+                    className="flex items-baseline justify-between border-b-2 border-ink-lo pb-1 font-mono text-xs text-ink-hi"
                   >
                     <span>{g.label}</span>
                     <span className="text-ink-lo">
@@ -204,10 +197,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Param
               ))}
 
               <section aria-labelledby="group-explore" className="border-2 border-white/25 p-4">
-                <h3
-                  id="group-explore"
-                  className="font-mono text-xs uppercase tracking-[0.14em] text-ink-hi"
-                >
+                <h3 id="group-explore" className="font-mono text-xs text-ink-hi">
                   Full text, in Explore
                 </h3>
                 <p className="mt-2 font-sans text-base text-ink-lo">
@@ -221,7 +211,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Param
                 </p>
                 <Link
                   href={data.explore.url}
-                  className="mt-2 inline-flex min-h-11 items-center font-mono text-xs uppercase tracking-[0.14em] text-ink-hi underline underline-offset-4"
+                  className="mt-2 inline-flex min-h-11 items-center font-mono text-xs text-ink-hi underline underline-offset-4"
                 >
                   More in Explore &rarr;
                 </Link>

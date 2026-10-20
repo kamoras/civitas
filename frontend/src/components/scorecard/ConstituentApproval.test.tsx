@@ -33,9 +33,9 @@ describe("ConstituentApproval", () => {
     expect(screen.getByText(/too few respondents to measure/)).toBeTruthy();
   });
 
-  it("names the survey and the member it asked about, and says it isn't scored", () => {
+  it("names the survey and the member it asked about", () => {
     render(<ConstituentApproval approval={approval} />);
-    expect(screen.getByText(/rating .Ruth Pryor.\. Informational, not scored\./)).toBeTruthy();
+    expect(screen.getByText(/rating .Ruth Pryor.\.$/)).toBeTruthy();
   });
 
   it("renders nothing without a reading", () => {

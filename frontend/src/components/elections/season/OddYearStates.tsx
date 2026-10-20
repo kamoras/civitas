@@ -14,7 +14,7 @@ export default function OddYearStates({ data }: { data: Odd | null }) {
     >
       <h2
         id="odd-year"
-        className="border-b border-white/[0.07] py-2.5 font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
+        className="border-b border-white/[0.07] py-2.5 font-mono text-xs text-ink-min"
       >
         State elections in {data.year}
       </h2>

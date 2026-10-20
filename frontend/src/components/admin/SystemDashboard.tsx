@@ -1,5 +1,6 @@
 "use client";
 
+import { asLabel } from "@/lib/formatting";
 import { useNow } from "@/hooks/useNow";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import type { AdminDashboard, HostStats, UptimeInfo } from "@/lib/api";
@@ -53,10 +54,8 @@ export function UptimeTracker({
               there), so this is its start: the process whose restart ends a
               running pipeline, not the API workers serving pages. */}
           <div className="sm:col-span-2">
-            <div className="text-xs font-mono text-ink-lo tracking-wider mb-2">
-              PIPELINE PROCESS UPTIME
-            </div>
-            <div className="font-mono text-2xl sm:text-3xl text-signal-cyan tabular-nums tracking-wider">
+            <div className="text-xs font-mono text-ink-lo mb-2">Pipeline process uptime</div>
+            <div className="font-mono text-2xl sm:text-3xl text-signal-cyan tabular-nums">
               {appUptimeSec != null ? tickingUptime(appUptimeSec) : "—"}
             </div>
             <div className="text-xs font-mono text-ink-min mt-1.5">
@@ -69,13 +68,13 @@ export function UptimeTracker({
           {/* Sidebar stats */}
           <div className="space-y-3">
             <div>
-              <div className="text-xs font-mono text-ink-lo tracking-wider mb-0.5">HOST UPTIME</div>
+              <div className="text-xs font-mono text-ink-lo mb-0.5">Host uptime</div>
               <div className="font-mono text-sm text-ink-hi tabular-nums">
                 {hostUptime != null ? tickingUptime(hostUptime) : "—"}
               </div>
             </div>
             <div>
-              <div className="text-xs font-mono text-ink-lo tracking-wider mb-0.5">SERVICE AGE</div>
+              <div className="text-xs font-mono text-ink-lo mb-0.5">Service age</div>
               <div className="font-mono text-sm text-ink-hi">
                 {totalServiceDays != null
                   ? `${totalServiceDays} day${totalServiceDays !== 1 ? "s" : ""}`
@@ -92,7 +91,7 @@ export function UptimeTracker({
         {appUptimeSec != null && (
           <div className="mt-4 pt-3 border-t border-white/[0.07]">
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-xs font-mono text-ink-min">SESSION HEALTH</span>
+              <span className="text-xs font-mono text-ink-min">Session health</span>
               <span className="text-xs font-mono text-ink-lo tabular-nums">
                 {appUptimeSec >= 86400
                   ? `${Math.floor(appUptimeSec / 86400)}d`
@@ -159,7 +158,7 @@ function HostMeters({ stats, net }: { stats: HostStats; net: HostSample | undefi
     <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
       <div>
         <div className="flex items-center justify-between mb-1">
-          <span className="text-ink-lo text-xs font-mono tracking-wider">CPU</span>
+          <span className="text-ink-lo text-xs font-mono">CPU</span>
           <span className="text-ink-hi text-xs font-mono tabular-nums">
             {cpuPct != null ? formatPct(cpuPct) : "—"}
           </span>
@@ -180,7 +179,7 @@ function HostMeters({ stats, net }: { stats: HostStats; net: HostSample | undefi
       </div>
       <div>
         <div className="flex items-center justify-between mb-1">
-          <span className="text-ink-lo text-xs font-mono tracking-wider">MEMORY</span>
+          <span className="text-ink-lo text-xs font-mono">Memory</span>
           <span className="text-ink-hi text-xs font-mono tabular-nums">{stats.memUsedPct}%</span>
         </div>
         <UsageBar
@@ -194,7 +193,7 @@ function HostMeters({ stats, net }: { stats: HostStats; net: HostSample | undefi
       </div>
       <div>
         <div className="flex items-center justify-between mb-1">
-          <span className="text-ink-lo text-xs font-mono tracking-wider">DISK</span>
+          <span className="text-ink-lo text-xs font-mono">Disk</span>
           <span className="text-ink-hi text-xs font-mono tabular-nums">{stats.diskUsedPct}%</span>
         </div>
         <UsageBar
@@ -210,7 +209,7 @@ function HostMeters({ stats, net }: { stats: HostStats; net: HostSample | undefi
       </div>
       <div>
         <div className="flex items-center justify-between mb-1">
-          <span className="text-ink-lo text-xs font-mono tracking-wider">CPU TEMP</span>
+          <span className="text-ink-lo text-xs font-mono">CPU temp</span>
           <span className={`text-xs font-mono tabular-nums ${tempColor}`}>
             {stats.cpuTempC != null ? `${stats.cpuTempC}°C` : "—"}
           </span>
@@ -234,7 +233,7 @@ function HostMeters({ stats, net }: { stats: HostStats; net: HostSample | undefi
               interfaces plus the rate the API containers record
               (net_stats.py) — a container sees only its own. The byte
               totals below are the pipeline container's alone. */}
-          <span className="text-ink-lo text-xs font-mono tracking-wider">NETWORK</span>
+          <span className="text-ink-lo text-xs font-mono">Network</span>
           <span className="text-ink-hi text-xs font-mono tabular-nums">
             {rx != null && tx != null ? formatRate(rx + tx) : "—"}
           </span>
@@ -259,34 +258,34 @@ export function ServiceHealth({ d }: { d: AdminDashboard | null }) {
   return (
     <div className="space-y-2 text-sm font-mono">
       <div className="flex justify-between">
-        <span className="text-ink-lo">DATABASE</span>
+        <span className="text-ink-lo">Database</span>
         <span className="flex items-center gap-2">
           <StatusDot ok={d?.system.database === "ok"} />
-          {d?.system.database?.toUpperCase() ?? "—"}
+          {(d?.system.database ? asLabel(d?.system.database) : undefined) ?? "—"}
         </span>
       </div>
       <div className="flex justify-between">
         <span className="text-ink-lo">LLM</span>
         <span className="flex items-center gap-2">
           <StatusDot ok={d?.system.ollama === "ok"} />
-          {d?.system.ollama?.toUpperCase() ?? "—"}
+          {(d?.system.ollama ? asLabel(d?.system.ollama) : undefined) ?? "—"}
         </span>
       </div>
       <div className="flex justify-between gap-3">
-        <span className="text-ink-lo">MODEL</span>
+        <span className="text-ink-lo">Model</span>
         <span className="text-ink truncate">{d?.system.ollamaModel ?? "—"}</span>
       </div>
       <div className="flex justify-between">
-        <span className="text-ink-lo">DB SIZE</span>
+        <span className="text-ink-lo">DB size</span>
         <span>{formatBytes(d?.system.dbSizeBytes ?? 0)}</span>
       </div>
       <div className="flex justify-between gap-3">
-        <span className="text-ink-lo">VECTOR DB</span>
+        <span className="text-ink-lo">Vector DB</span>
         <span className="flex items-center gap-2 text-right">
           <StatusDot ok={d?.system.vectorDb?.status === "ok"} />
           {d?.system.vectorDb?.status === "ok"
             ? `${(d?.system.vectorDb?.totalVectors ?? 0).toLocaleString()} vectors / ${formatBytes(d?.system.vectorDb?.sizeBytes ?? 0)}`
-            : "UNAVAILABLE"}
+            : "Unavailable"}
         </span>
       </div>
     </div>
@@ -321,7 +320,7 @@ export function SystemDashboard({
         </p>
         <div className="mt-3 grid grid-cols-1 gap-6 lg:grid-cols-2">
           <LineChart
-            title="CPU & MEMORY"
+            title="CPU & memory"
             subtitle="% of capacity"
             xLabels={labels}
             series={[
@@ -344,7 +343,7 @@ export function SystemDashboard({
             emptyMessage="Collecting readings…"
           />
           <LineChart
-            title="NETWORK THROUGHPUT"
+            title="Network throughput"
             subtitle="bytes per second, API and pipeline together"
             xLabels={labels}
             series={[
@@ -363,7 +362,7 @@ export function SystemDashboard({
           />
           {hasTemp && (
             <LineChart
-              title="CPU TEMPERATURE"
+              title="CPU temperature"
               subtitle="°C"
               xLabels={labels}
               series={[

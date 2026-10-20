@@ -840,7 +840,8 @@ def _score_columns(house: bool) -> Columns:
         ("state", "two-letter state code"),
         *([("district", "congressional district; 0 for an at-large seat")] if house else []),
         ("overall", "the representation score, 0-100 (the weighted sum of the three weighted parts)"),
-        *[(col, f"the {col.replace('_', ' ')} score, 0-100") for _, col in _DIMENSIONS],
+        *[(col, f"the {col.replace('_', ' ')} score, 0-100 (deprecated: removed in v2; member pages no "
+                f"longer show it)") for _, col in _DIMENSIONS],
         *[(f"{col}_data", f"how much data backs {col.replace('_', ' ')}: high, medium or low")
           for _, col in _DIMENSIONS],
         ("thin_data", "weighted parts with low data, semicolon-separated"),

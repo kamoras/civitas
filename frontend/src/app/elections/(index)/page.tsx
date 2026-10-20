@@ -1,8 +1,12 @@
 "use client";
 
+import { membersHref } from "@/lib/routes";
 import { fade, overlay, partyMark } from "@/lib/chartColors";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import StateJump from "@/components/home/StateJump";
+import ClosingLine from "@/components/elections/ClosingLine";
+import { INLINE_LINK } from "@/lib/controlStyles";
 import SectionTabs from "@/components/layout/SectionTabs";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
@@ -110,13 +114,13 @@ function ElectionCountdown({
   if (days === null || days < 0) return null;
   return (
     <div className="text-right">
-      <p className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
+      <p className="font-mono text-xs text-ink-min">
         {label} · {formatUtcDate(electionDay, { month: "short", day: "numeric", year: "numeric" })}
       </p>
       <p className="mt-1 font-display text-3xl font-semibold leading-none tabular-nums text-ink-hi">
         {days === 0 ? "Today" : days}
         {days > 0 && (
-          <span className="ml-2 font-mono text-xs font-normal uppercase tracking-[0.12em] text-ink-lo">
+          <span className="ml-2 font-mono text-xs font-normal text-ink-lo">
             day{days !== 1 ? "s" : ""} away
           </span>
         )}
@@ -143,7 +147,7 @@ export default function ElectionsPage() {
   // day is near, so a page left open switches over by itself. A request
   // that keeps failing is retried on a growing backoff.
   const { data: results, error: resultsError, retryMs, failedAt } = useLiveResults();
-  const retryEvery = describeInterval(retryMs ?? 60_000).toUpperCase();
+  const retryEvery = describeInterval(retryMs ?? 60_000);
   // Until the page's own read answers, the mode the server read decides, so
   // the frame it sent is the one that stays.
   const serverMode = results ? null : (initial?.phase?.mode ?? null);
@@ -184,18 +188,18 @@ export default function ElectionsPage() {
   const range = results ? countReadRange(results) : null;
   const readAtText = range
     ? range.oldest === range.newest
-      ? `SHOWING THE COUNT READ AT ${formatEasternTime(range.newest).toUpperCase()}`
-      : `SHOWING COUNTS READ BETWEEN ${formatEasternTime(range.oldest).toUpperCase()} AND ${formatEasternTime(range.newest).toUpperCase()}`
+      ? `Showing the count read at ${formatEasternTime(range.newest)}`
+      : `Showing counts read between ${formatEasternTime(range.oldest)} and ${formatEasternTime(range.newest)}`
     : null;
   const refreshFailedDetail = [
     failedAt != null
       ? // On the server's clock, like the read times beside it: the
         // browser's can be hours off, and would date the failure before
         // the count it failed to refresh.
-        `AT ${formatEasternTime(new Date(serverTimeOf(results, failedAt)).toISOString()).toUpperCase()}`
+        `At ${formatEasternTime(new Date(serverTimeOf(results, failedAt)).toISOString())}`
       : null,
     stillVoting ? null : readAtText,
-    `RETRYING ${retryEvery}`,
+    `Retrying ${retryEvery}`,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -217,10 +221,10 @@ export default function ElectionsPage() {
   // stopped reading, or it reads and every read fails.
   const staleWhy =
     behindStates.length === closedLive.length
-      ? "NO STATE'S FEED CHECKED LATELY"
+      ? "No state's feed checked lately"
       : behindStates.length === 0
-        ? "EVERY STATE'S LATEST FEED READ FAILED"
-        : "NO STATE'S FEED READ SUCCESSFULLY LATELY";
+        ? "Every state's latest feed read failed"
+        : "No state's feed read successfully lately";
 
   // The masthead's one status line (see the masthead below): `text` is the
   // live region — what the page's state is, which changes only on a
@@ -230,33 +234,33 @@ export default function ElectionsPage() {
   const status: { text: string; detail?: string; tone: "cyan" | "amber" | "muted" } | null =
     stillVoting && results
       ? resultsError
-        ? { tone: "cyan", text: "REFRESH FAILED", detail: refreshFailedDetail }
+        ? { tone: "cyan", text: "Refresh failed", detail: refreshFailedDetail }
         : {
             tone: "cyan",
-            text: "ELECTION DAY",
+            text: "Election day",
             detail: firstCount
-              ? `FIRST STATE'S COUNT SHOWN AFTER ${formatEasternTime(firstCount).toUpperCase()}`
-              : "NO COUNT SHOWN UNTIL A STATE'S LAST POLLS CLOSE",
+              ? `First state's count shown after ${formatEasternTime(firstCount)}`
+              : "No count shown until a state's last polls close",
           }
       : resultsMode && results
         ? resultsError
-          ? { tone: "amber", text: "REFRESH FAILED", detail: refreshFailedDetail }
+          ? { tone: "amber", text: "Refresh failed", detail: refreshFailedDetail }
           : results.liveStates.length === 0
-            ? { tone: "muted", text: "NO STATE'S COUNT IS READ LIVE HERE" }
+            ? { tone: "muted", text: "No state's count is read live here" }
             : nothingLive
-              ? { tone: "amber", text: `STALE · ${staleWhy}`, detail: readAtText ?? undefined }
+              ? { tone: "amber", text: `Stale · ${staleWhy}`, detail: readAtText ?? undefined }
               : {
                   tone: "amber",
-                  text: "LIVE",
+                  text: "Live",
                   detail: results.phase.lastResultChange
-                    ? `LAST CHANGE ${formatEasternTime(results.phase.lastResultChange).toUpperCase()}`
-                    : "NO COUNT HAS COME IN YET",
+                    ? `Last change ${formatEasternTime(results.phase.lastResultChange)}`
+                    : "No count has come in yet",
                 }
         : campaignMode && resultsError && !results
           ? {
               tone: "muted",
-              text: "COULDN'T CHECK FOR LIVE RESULTS",
-              detail: `RETRYING ${retryEvery}`,
+              text: "Couldn't check for live results",
+              detail: `Retrying ${retryEvery}`,
             }
           : null;
 
@@ -370,7 +374,7 @@ export default function ElectionsPage() {
                 <p
                   className={
                     status
-                      ? `flex flex-wrap items-center gap-x-2 border px-3 py-1.5 font-mono text-xs tracking-[0.12em] ${
+                      ? `flex flex-wrap items-center gap-x-2 border px-3 py-1.5 font-mono text-xs ${
                           status.tone === "cyan"
                             ? "border-signal-cyan/40 text-signal-cyan"
                             : status.tone === "amber"
@@ -453,27 +457,53 @@ export default function ElectionsPage() {
             ) : null}
           </PageMasthead>
 
-          {/* The state chosen in the header, one tap from its ballot. */}
-          {yours.state && (
-            <p className="mb-6 flex flex-wrap items-center gap-x-4 font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
-              <span>
-                Your state:{" "}
-                <span className="text-ink-hi">{STATE_NAMES[yours.state] ?? yours.state}</span>
-              </span>
-              <Link
-                href={stateBallotHref(yours.state)}
-                className="inline-flex min-h-11 items-center border-b border-phos-mid/40 text-phos-mid hover:text-phos"
-              >
-                {(STATE_NAMES[yours.state] ?? yours.state).toUpperCase()}&apos;S BALLOT &rarr;
-              </Link>
-              <Link
-                href={`/politicians?state=${yours.state}`}
-                className="inline-flex min-h-11 items-center border-b border-phos-mid/40 text-phos-mid hover:text-phos"
-              >
-                {(STATE_NAMES[yours.state] ?? yours.state).toUpperCase()}&apos;S MEMBERS &rarr;
-              </Link>
-            </p>
-          )}
+          {/* ── Pick a state ── First in every mode, right under the
+              masthead: a voter came for one state's ballot (or, from
+              election day, its count), and on a phone the map and the
+              directory below sit screens down. An explicit, unremembered
+              choice (AGENTS.md section 8); the select doesn't take focus
+              by itself, since a phone opens its picker on focus. */}
+          <section
+            aria-labelledby="pick-state-heading"
+            className="mb-6 max-w-xl border border-white/30 bg-surface p-4"
+          >
+            <h2
+              id="pick-state-heading"
+              className="font-display text-lg font-semibold leading-tight text-ink-hi"
+            >
+              {resultsMode ? "Your state's count and ballot" : "Your state's ballot"}
+            </h2>
+            {/* The state chosen in the header, one tap from its ballot. */}
+            {yours.state && (
+              <p className="mt-1 flex flex-wrap items-center gap-x-4 text-sm text-ink-lo">
+                <span>
+                  Your state:{" "}
+                  <span className="text-ink-hi">{STATE_NAMES[yours.state] ?? yours.state}</span>
+                </span>
+                <Link
+                  href={stateBallotHref(yours.state)}
+                  className={`inline-flex min-h-11 items-center ${INLINE_LINK}`}
+                >
+                  {STATE_NAMES[yours.state] ?? yours.state}&apos;s ballot &rarr;
+                </Link>
+                <Link
+                  href={membersHref(yours.state)}
+                  className={`inline-flex min-h-11 items-center ${INLINE_LINK}`}
+                >
+                  {STATE_NAMES[yours.state] ?? yours.state}&apos;s members &rarr;
+                </Link>
+              </p>
+            )}
+            <StateJump label="State" to="ballot" showYours={false} />
+          </section>
+
+          {/* Registration closing soon: one line to the calendar, which
+              lists every state's deadline with where to register. */}
+          <ClosingLine
+            rows={initial?.registrationClosing ?? []}
+            days={initial?.closingSoonDays}
+            className="mb-6"
+          />
 
           {postCount && season && (
             <ArchiveLead season={season} archive={initial?.archive ?? null} />
@@ -487,22 +517,6 @@ export default function ElectionsPage() {
             <PrimariesLead season={season} cal={initial?.calendar ?? null} />
           )}
 
-          {campaignMode && <FecDeadlineCard event={initial?.fecDeadline ?? null} />}
-
-          {season?.season === "off_season" && campaignMode && (
-            <NewCongress data={initial?.newCongress ?? null} />
-          )}
-
-          {(betweenCycles || primarySeason) && <NextField field={initial?.field ?? null} />}
-
-          {campaignMode && <PresidentialContest data={initial?.presidential ?? null} />}
-
-          {betweenCycles && <OddYearStates data={initial?.oddYear ?? null} />}
-
-          {betweenCycles && <RedistrictingWatch watch={initial?.redistrictingWatch} compact />}
-
-          {betweenCycles && <ElectionAdministration data={initial?.administration ?? null} />}
-
           {resultsMode && results && (
             <ResultsOverview
               results={results}
@@ -511,8 +525,6 @@ export default function ElectionsPage() {
               refreshFailed={!!resultsError}
             />
           )}
-
-          {hub}
 
           {error && campaignMode && (
             <div
@@ -524,12 +536,8 @@ export default function ElectionsPage() {
           )}
 
           {!error && (!pvi || !phaseKnown) && !resultsMode && (
-            <p
-              role="status"
-              aria-live="polite"
-              className="mt-8 font-mono text-sm tracking-[0.12em] text-ink-min"
-            >
-              READING THE LEAN MAP…
+            <p role="status" aria-live="polite" className="mt-8 font-mono text-sm text-ink-min">
+              Reading the lean map…
             </p>
           )}
 
@@ -538,9 +546,7 @@ export default function ElectionsPage() {
               {/* ── Map ── */}
               <section className="mt-6 border border-phos/20 bg-surface">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.07] px-4 py-2.5">
-                  <h2 className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
-                    Click a state for its ballot
-                  </h2>
+                  <h2 className="font-mono text-xs text-ink-min">Click a state for its ballot</h2>
                   <div className="flex flex-wrap items-center gap-4">
                     <span className="flex items-center gap-2 font-mono text-xs text-ink-lo">
                       <span
@@ -548,7 +554,7 @@ export default function ElectionsPage() {
                         style={{ backgroundColor: pviFillColor(-1) }}
                         aria-hidden="true"
                       />
-                      D-LEANING <span className="text-ink-min">{dLean}</span>
+                      D-leaning <span className="text-ink-min">{dLean}</span>
                     </span>
                     <span className="flex items-center gap-2 font-mono text-xs text-ink-lo">
                       <span
@@ -556,7 +562,7 @@ export default function ElectionsPage() {
                         style={{ backgroundColor: pviFillColor(1) }}
                         aria-hidden="true"
                       />
-                      R-LEANING <span className="text-ink-min">{rLean}</span>
+                      R-leaning <span className="text-ink-min">{rLean}</span>
                     </span>
                     <span className="flex items-center gap-2 font-mono text-xs text-ink-lo">
                       <span
@@ -564,7 +570,7 @@ export default function ElectionsPage() {
                         style={{ backgroundColor: pviFillColor(0) }}
                         aria-hidden="true"
                       />
-                      EVEN <span className="text-ink-min">{even}</span>
+                      Even <span className="text-ink-min">{even}</span>
                     </span>
                   </div>
                 </div>
@@ -591,7 +597,7 @@ export default function ElectionsPage() {
 
               {/* ── Directory ── */}
               <section className="mt-10">
-                <h2 className="flex items-baseline justify-between border-b border-white/15 pb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
+                <h2 className="flex items-baseline justify-between border-b border-white/15 pb-2 font-mono text-xs text-ink-min">
                   <span>All states</span>
                   <span aria-hidden="true">{STATES.length} on file</span>
                 </h2>
@@ -620,6 +626,27 @@ export default function ElectionsPage() {
               </section>
             </>
           )}
+
+          {/* ── Reference ── After the map and the directory: useful to
+              know about the cycle, but not what a voter came for. The
+              FEC's filing deadline is for candidates and researchers. */}
+          {season?.season === "off_season" && campaignMode && (
+            <NewCongress data={initial?.newCongress ?? null} />
+          )}
+
+          {(betweenCycles || primarySeason) && <NextField field={initial?.field ?? null} />}
+
+          {campaignMode && <PresidentialContest data={initial?.presidential ?? null} />}
+
+          {betweenCycles && <OddYearStates data={initial?.oddYear ?? null} />}
+
+          {betweenCycles && <RedistrictingWatch watch={initial?.redistrictingWatch} compact />}
+
+          {betweenCycles && <ElectionAdministration data={initial?.administration ?? null} />}
+
+          {campaignMode && <FecDeadlineCard event={initial?.fecDeadline ?? null} />}
+
+          {hub}
         </div>
       </main>
       <BackToTop />

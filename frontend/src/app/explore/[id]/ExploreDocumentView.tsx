@@ -4,7 +4,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
-import { commentDaysLeft, formatUtcDate, isCommentPeriodOpen, safeHref } from "@/lib/formatting";
+import {
+  commentDaysLeft,
+  formatUtcDate,
+  isCommentPeriodOpen,
+  safeHref,
+  asLabel,
+} from "@/lib/formatting";
 import { chamberColor, chamberBorder, chamberLabel } from "@/lib/chamber";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import CopyText from "@/components/CopyText";
@@ -114,26 +120,21 @@ function HelpMeCommentPanel({ doc, remaining }: { doc: ExploreDocumentDetail; re
                    text-phos-mid hover:text-phos hover:bg-phos/10
                    transition-colors"
       >
-        {open ? "CLOSE" : "HELP ME WRITE A COMMENT"}
+        {open ? "Close" : "Help me write a comment"}
       </button>
 
       {open && (
         <div className="mt-4 p-4 border border-phos/20 bg-phos/5 space-y-4">
           {plainSummary && (
             <div>
-              <p className="text-xs font-mono text-ink-lo mb-1 tracking-wider">
-                WHAT THIS DOCUMENT DOES
-              </p>
+              <p className="text-xs font-mono text-ink-lo mb-1">What this document does</p>
               <p className="font-sans text-base leading-relaxed text-ink">{plainSummary}</p>
             </div>
           )}
 
           <div>
-            <label
-              htmlFor="comment-draft"
-              className="text-xs font-mono text-ink-lo block mb-1 tracking-wider"
-            >
-              YOUR COMMENT: EDIT BEFORE SUBMITTING
+            <label htmlFor="comment-draft" className="text-xs font-mono text-ink-lo block mb-1">
+              Your comment: edit before submitting
             </label>
             <textarea
               id="comment-draft"
@@ -167,7 +168,7 @@ function HelpMeCommentPanel({ doc, remaining }: { doc: ExploreDocumentDetail; re
                          hover:bg-phos/30 hover:border-phos/70
                          transition-colors"
             >
-              OPEN COMMENT FORM ↗
+              Open comment form ↗
             </a>
           </div>
           <p className="text-xs text-ink-min leading-relaxed">
@@ -260,8 +261,8 @@ function CommentsSection({
         <TerminalTitlebar title="Public comments" />
         <div className="p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xs font-mono text-ink-lo tracking-wider">
-              PUBLIC COMMENTS
+            <h3 className="text-xs font-mono text-ink-lo">
+              Public comments
               {commentsLoaded && totalComments > 0 && (
                 <span className="ml-2 text-ink-min">({totalComments})</span>
               )}
@@ -276,7 +277,7 @@ function CommentsSection({
                   className="text-xs font-mono px-3 py-1.5 bg-phos/20 text-phos border border-phos/40
                              hover:bg-phos/30 transition-colors"
                 >
-                  {showForm ? "CANCEL" : "WRITE COMMENT"}
+                  {showForm ? "Cancel" : "Write comment"}
                 </button>
               )}
               {!commentsLoaded && (
@@ -287,7 +288,7 @@ function CommentsSection({
                              hover:bg-signal-cyan/10 hover:text-phos transition-colors
                              disabled:opacity-50"
                 >
-                  {commentsLoading ? "LOADING..." : "LOAD COMMENTS"}
+                  {commentsLoading ? "Loading..." : "Load comments"}
                 </button>
               )}
             </div>
@@ -321,7 +322,7 @@ function CommentsSection({
                     htmlFor="comment-name"
                     className="text-xs font-mono text-ink-min block mb-1"
                   >
-                    YOUR NAME
+                    Your name
                   </label>
                   <input
                     id="comment-name"
@@ -340,7 +341,7 @@ function CommentsSection({
                     htmlFor="comment-org"
                     className="text-xs font-mono text-ink-min block mb-1"
                   >
-                    ORGANIZATION <span className="text-ink-min">(OPTIONAL)</span>
+                    Organization <span className="text-ink-min">(Optional)</span>
                   </label>
                   <input
                     id="comment-org"
@@ -358,7 +359,7 @@ function CommentsSection({
 
               <div className="mb-3">
                 <label htmlFor="comment-text" className="text-xs font-mono text-ink-min block mb-1">
-                  YOUR COMMENT
+                  Your comment
                 </label>
                 <textarea
                   id="comment-text"
@@ -397,7 +398,7 @@ function CommentsSection({
                              hover:bg-phos/30 hover:border-phos/70
                              transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  {submitting ? "SUBMITTING..." : "SUBMIT TO OFFICIAL RECORD"}
+                  {submitting ? "Submitting..." : "Submit to official record"}
                 </button>
               </div>
 
@@ -427,7 +428,7 @@ function CommentsSection({
                   rel="noopener noreferrer"
                   className="inline-block mt-3 text-xs font-mono text-signal-cyan hover:text-phos transition-colors"
                 >
-                  VIEW COMMENTS ON REGULATIONS.GOV →
+                  View comments on Regulations.gov →
                 </a>
               )}
             </div>
@@ -445,7 +446,7 @@ function CommentsSection({
                   onClick={() => setShowForm(true)}
                   className="mt-3 text-xs font-mono text-phos-mid hover:text-phos transition-colors"
                 >
-                  BE THE FIRST TO COMMENT →
+                  Be the first to comment →
                 </button>
               )}
             </div>
@@ -483,7 +484,7 @@ function CommentsSection({
                     disabled={commentsPage <= 1 || commentsLoading}
                     className="text-xs font-mono text-ink-lo hover:text-phos disabled:text-ink-min disabled:cursor-not-allowed transition-colors"
                   >
-                    ← PREV
+                    ← Prev
                   </button>
                   <span className="text-xs text-ink-min">
                     Page {commentsPage} of {totalPages}
@@ -493,7 +494,7 @@ function CommentsSection({
                     disabled={commentsPage >= totalPages || commentsLoading}
                     className="text-xs font-mono text-ink-lo hover:text-phos disabled:text-ink-min disabled:cursor-not-allowed transition-colors"
                   >
-                    NEXT →
+                    Next →
                   </button>
                 </div>
               )}
@@ -509,7 +510,7 @@ function CommentsSection({
                 rel="noopener noreferrer"
                 className="text-xs font-mono text-ink-min hover:text-phos transition-colors"
               >
-                VIEW ALL COMMENTS ON REGULATIONS.GOV →
+                View all comments on Regulations.gov →
               </a>
             </div>
           )}
@@ -523,7 +524,7 @@ function CommentsSection({
 // (ExploreDocumentDetail.bodyExtent). "Full text" over every body read as a
 // claim of completeness for Federal Register bodies cut at the stored
 // limit and for Supreme Court cases, whose body is a summary.
-const BODY_HEADINGS = { full: "FULL TEXT", excerpt: "EXCERPT", summary: "CASE SUMMARY" } as const;
+const BODY_HEADINGS = { full: "Full text", excerpt: "Excerpt", summary: "Case summary" } as const;
 
 /**
  * A document's page, rendered on the server from the record (page.tsx), so
@@ -616,7 +617,7 @@ export default function ExploreDocumentView({
             href={query ? `/explore?q=${encodeURIComponent(query)}` : "/explore"}
             className="inline-block text-xs font-mono text-ink-lo hover:text-phos transition-colors mb-2"
           >
-            {query ? "← BACK TO RESULTS" : "← EXPLORE"}
+            {query ? "← Back to results" : "← Explore"}
           </Link>
           {/* What this site is, for a reader who arrived here from a search
               engine or a shared link: one line, in the homepage's words. */}
@@ -640,7 +641,7 @@ export default function ExploreDocumentView({
                 <div>
                   <div className="flex flex-wrap items-center gap-x-2 mb-1">
                     <span className="text-xs font-mono px-2 py-0.5 bg-phos/20 text-phos border border-phos/30">
-                      OPEN FOR PUBLIC COMMENT
+                      Open for public comment
                     </span>
                     <span className="text-ink-lo text-xs">
                       {remaining === 0
@@ -669,7 +670,7 @@ export default function ExploreDocumentView({
                              hover:bg-phos/30 hover:border-phos/70
                              transition-colors shrink-0"
                 >
-                  SUBMIT YOUR COMMENT ↗
+                  Submit your comment ↗
                 </a>
               </div>
               <HelpMeCommentPanel doc={doc} remaining={remaining} />
@@ -679,7 +680,7 @@ export default function ExploreDocumentView({
           {/* Document header */}
           <div className={`border p-6 mb-6 ${chamberBorder(doc.chamber)} bg-surface-base`}>
             <div className="flex items-center gap-2 flex-wrap mb-3">
-              <span className={`text-xs font-mono tracking-wider ${chamberColor(doc.chamber)}`}>
+              <span className={`text-xs font-mono ${chamberColor(doc.chamber)}`}>
                 {chamberLabel(doc.chamber)}
               </span>
               <span className="text-ink-min text-xs">|</span>
@@ -714,7 +715,7 @@ export default function ExploreDocumentView({
                   href={scorecardLink}
                   className="font-mono text-xs text-signal-cyan hover:text-phos transition-colors"
                 >
-                  [VIEW SCORECARD]
+                  [View record]
                 </Link>
               )}
               {sourceUrl && (
@@ -724,14 +725,14 @@ export default function ExploreDocumentView({
                   rel="noopener noreferrer"
                   className="font-mono text-xs text-ink-min hover:text-phos transition-colors"
                 >
-                  [{sourceLabel.toUpperCase()}]
+                  [{asLabel(sourceLabel)}]
                 </a>
               )}
               <a
                 href="#cite"
                 className="font-mono text-xs text-ink-min hover:text-phos transition-colors"
               >
-                [CITE]
+                [Cite]
               </a>
             </div>
 
@@ -739,7 +740,7 @@ export default function ExploreDocumentView({
                 stated subject, linked to the bill's page. */}
             {(doc.bills ?? []).length > 0 && (
               <p className="mt-3 font-mono text-xs text-ink-lo">
-                {(doc.bills ?? []).length > 1 ? "BILLS: " : "BILL: "}
+                {(doc.bills ?? []).length > 1 ? "Bills: " : "Bill: "}
                 {(doc.bills ?? []).map((b, i) => (
                   <span key={b.billId}>
                     {i > 0 && " · "}
@@ -779,9 +780,7 @@ export default function ExploreDocumentView({
                 <div className="space-y-4" aria-live="polite">
                   {displayedSummary.summary && (
                     <div>
-                      <h2 className="text-xs font-mono text-ink-lo tracking-wider mb-2">
-                        AI SUMMARY
-                      </h2>
+                      <h2 className="text-xs font-mono text-ink-lo mb-2">AI summary</h2>
                       <p className="text-base text-ink-hi leading-relaxed">
                         {displayedSummary.summary}
                         {summaryStreaming && !summary && (
@@ -793,9 +792,7 @@ export default function ExploreDocumentView({
 
                   {displayedSummary.keyPoints.length > 0 && (
                     <div>
-                      <h2 className="text-xs font-mono text-ink-lo tracking-wider mb-2">
-                        KEY POINTS
-                      </h2>
+                      <h2 className="text-xs font-mono text-ink-lo mb-2">Key points</h2>
                       <ul className="space-y-1.5">
                         {displayedSummary.keyPoints.map((point, i) => (
                           <li key={i} className="flex gap-2 text-sm text-ink">
@@ -809,7 +806,7 @@ export default function ExploreDocumentView({
 
                   {displayedSummary.impact && (
                     <div className="border-t border-white/[0.07] pt-3">
-                      <h2 className="text-xs font-mono text-ink-lo tracking-wider mb-2">IMPACT</h2>
+                      <h2 className="text-xs font-mono text-ink-lo mb-2">Impact</h2>
                       <p className="font-sans text-base leading-relaxed text-ink">
                         {displayedSummary.impact}
                       </p>
@@ -839,17 +836,14 @@ export default function ExploreDocumentView({
             <div className="p-5">
               {doc.summary && doc.summary !== doc.body?.slice(0, 300) && (
                 <div className="mb-4 pb-4 border-b border-white/[0.07]">
-                  <h2 className="text-xs font-mono text-ink-lo tracking-wider mb-2">SUMMARY</h2>
+                  <h2 className="text-xs font-mono text-ink-lo mb-2">Summary</h2>
                   <p className="font-sans text-base leading-relaxed text-ink">{doc.summary}</p>
                 </div>
               )}
 
               {doc.body && (
                 <div>
-                  <h2
-                    id="full-text-heading"
-                    className="mb-2 font-mono text-xs tracking-wider text-ink-lo"
-                  >
+                  <h2 id="full-text-heading" className="mb-2 font-mono text-xs text-ink-lo">
                     {BODY_HEADINGS[doc.bodyExtent ?? "full"]}
                   </h2>
                   {doc.bodyExtent && doc.bodyExtent !== "full" && (
@@ -909,10 +903,7 @@ export default function ExploreDocumentView({
             aria-labelledby="cite-heading"
             className="mt-8 flex flex-col gap-2 border-t border-white/[0.07] pt-6"
           >
-            <h2
-              id="cite-heading"
-              className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min"
-            >
+            <h2 id="cite-heading" className="font-mono text-xs text-ink-min">
               Cite this document
             </h2>
             {doc.frCitation && <CopyText text={doc.frCitation} label="Federal Register citation" />}

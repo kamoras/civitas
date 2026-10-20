@@ -22,7 +22,7 @@ function bill(overrides: Partial<SponsoredBill>): SponsoredBill {
 }
 
 describe("SponsoredBills", () => {
-  it("marks the bills Legislative Effectiveness weighted 1x as commemorative", () => {
+  it("marks commemorative bills", () => {
     render(
       <SponsoredBills
         bills={[
@@ -35,8 +35,8 @@ describe("SponsoredBills", () => {
         ]}
       />
     );
-    fireEvent.click(screen.getByRole("button", { name: /SPONSORED LEGISLATION/ }));
-    expect(screen.getAllByText("COMMEMORATIVE · 1×")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: /Sponsored legislation/ }));
+    expect(screen.getAllByText("Commemorative · 1×")).toHaveLength(1);
   });
 
   it("does not count a bill that is only in committee as advancing", () => {
@@ -60,12 +60,12 @@ describe("SponsoredBills", () => {
         ]}
       />
     );
-    fireEvent.click(screen.getByRole("button", { name: /SPONSORED LEGISLATION/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Sponsored legislation/ }));
     expect(container.querySelectorAll("button button, [role=button] button")).toHaveLength(0);
-    const law = screen.getByRole("button", { name: "1 BECAME LAW" });
+    const law = screen.getByRole("button", { name: "1 Became law" });
     fireEvent.click(law);
     expect(law).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByText("Pending Act")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "0 ADVANCING" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "0 Advancing" })).toBeDisabled();
   });
 });

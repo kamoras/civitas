@@ -43,7 +43,7 @@ function href(search: Search, page: number): string {
 
 const FIELD =
   "min-h-11 w-full border border-white/15 bg-surface-base px-3 font-mono text-sm text-ink-hi outline-none focus:border-phos/40";
-const LABEL = "font-mono text-xs uppercase tracking-[0.14em] text-ink-min";
+const LABEL = "font-mono text-xs text-ink-min";
 
 /**
  * Committee meetings and reports, findable without knowing the date: by
@@ -141,14 +141,14 @@ export default async function CommitteesPage({
             <div className="flex flex-wrap items-center gap-4 sm:col-span-2">
               <button
                 type="submit"
-                className="min-h-11 border border-phos/40 px-5 font-mono text-sm tracking-[0.12em] text-phos hover:bg-phos/10"
+                className="min-h-11 border border-phos/40 px-5 font-mono text-sm text-phos hover:bg-phos/10"
               >
-                [ FIND ]
+                [ Find ]
               </button>
               {filtered && (
                 <Link
                   href="/congress/committees"
-                  className="font-mono text-xs tracking-[0.1em] text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
+                  className="font-mono text-xs text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
                 >
                   Clear
                 </Link>
@@ -159,7 +159,7 @@ export default async function CommitteesPage({
           <section aria-labelledby="committee-results" className="flex flex-col gap-3">
             <h2
               id="committee-results"
-              className="flex flex-wrap items-baseline justify-between gap-x-4 border-b border-white/15 pb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
+              className="flex flex-wrap items-baseline justify-between gap-x-4 border-b border-white/15 pb-2 font-mono text-xs text-ink-min"
             >
               <span>
                 {total.toLocaleString("en-US")} {total === 1 ? "entry" : "entries"}

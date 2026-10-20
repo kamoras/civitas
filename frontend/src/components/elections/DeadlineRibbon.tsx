@@ -82,21 +82,21 @@ export default function DeadlineRibbon({
         />
         {pct(today) < 80 && (
           <span
-            className={`absolute top-10 whitespace-nowrap font-mono text-[11px] tracking-[0.12em] text-ink-hi ${anchor(today)}`}
+            className={`absolute top-10 whitespace-nowrap font-mono text-[11px] text-ink-hi ${anchor(today)}`}
             style={{ left: at(today) }}
           >
-            TODAY
+            Today
           </span>
         )}
-        <span className="absolute right-0 top-10 font-mono text-[11px] tracking-[0.12em] text-ink-hi">
-          {shortDate(electionDay).toUpperCase()}
+        <span className="absolute right-0 top-10 font-mono text-[11px] text-ink-hi">
+          {shortDate(electionDay)}
         </span>
         {registerBy && day(registerBy) >= now && (
           <span
-            className={`absolute top-0 whitespace-nowrap font-mono text-[11px] tracking-[0.12em] text-phos ${anchor(registerBy)}`}
+            className={`absolute top-0 whitespace-nowrap font-mono text-[11px] text-phos ${anchor(registerBy)}`}
             style={{ left: at(registerBy) }}
           >
-            REGISTER BY {shortDate(registerBy).toUpperCase()}
+            Register by {shortDate(registerBy)}
           </span>
         )}
       </div>

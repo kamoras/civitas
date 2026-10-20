@@ -16,19 +16,19 @@ describe("getScoreLabel", () => {
   it("completes the ladder in one vocabulary, on unmoved band boundaries", () => {
     // Both sides of every cutoff: renaming the bottom band must not have
     // moved any boundary.
-    expect(getScoreLabel(0)).toBe("NOT REPRESENTATIVE");
-    expect(getScoreLabel(20)).toBe("NOT REPRESENTATIVE");
-    expect(getScoreLabel(21)).toBe("WEAKLY REPRESENTATIVE");
-    expect(getScoreLabel(40)).toBe("WEAKLY REPRESENTATIVE");
-    expect(getScoreLabel(41)).toBe("MIXED REPRESENTATION");
-    expect(getScoreLabel(60)).toBe("MIXED REPRESENTATION");
-    expect(getScoreLabel(61)).toBe("REPRESENTATIVE");
-    expect(getScoreLabel(80)).toBe("REPRESENTATIVE");
-    expect(getScoreLabel(81)).toBe("STRONGLY REPRESENTATIVE");
+    expect(getScoreLabel(0)).toBe("Not representative");
+    expect(getScoreLabel(20)).toBe("Not representative");
+    expect(getScoreLabel(21)).toBe("Weakly representative");
+    expect(getScoreLabel(40)).toBe("Weakly representative");
+    expect(getScoreLabel(41)).toBe("Mixed representation");
+    expect(getScoreLabel(60)).toBe("Mixed representation");
+    expect(getScoreLabel(61)).toBe("Representative");
+    expect(getScoreLabel(80)).toBe("Representative");
+    expect(getScoreLabel(81)).toBe("Strongly representative");
   });
 
   it("keeps the top band reachable — a scale that cannot say 'good' is a hit piece", () => {
-    expect(getScoreLabel(100)).toBe("STRONGLY REPRESENTATIVE");
+    expect(getScoreLabel(100)).toBe("Strongly representative");
     expect(getScoreColor(100)).toBe("text-phos");
   });
 });

@@ -43,7 +43,7 @@ export default function SeatChart({
   const shown = ORDER.filter((b) => parties.some((p) => p[b] > 0));
   return (
     <figure className="flex min-w-0 flex-col gap-3">
-      <figcaption className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
+      <figcaption className="font-mono text-xs text-ink-min">
         The {chamberName}, one dot per member
       </figcaption>
       <div aria-hidden="true" className="flex flex-col gap-2.5">
@@ -78,15 +78,11 @@ export default function SeatChart({
           <caption className="sr-only">How each party voted</caption>
           <thead>
             <tr className="text-ink-min">
-              <th scope="col" className="py-1 pr-3 font-normal uppercase tracking-[0.1em]">
+              <th scope="col" className="py-1 pr-3 font-normal">
                 Party
               </th>
               {shown.map((b) => (
-                <th
-                  key={b}
-                  scope="col"
-                  className="py-1 pr-3 text-right font-normal uppercase tracking-[0.1em]"
-                >
+                <th key={b} scope="col" className="py-1 pr-3 text-right font-normal">
                   {MARK[b].label}
                 </th>
               ))}

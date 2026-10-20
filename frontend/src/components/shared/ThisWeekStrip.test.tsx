@@ -93,8 +93,8 @@ describe("ThisWeekStrip", () => {
     ).toBeInTheDocument();
     expect(document.querySelector("input, select, textarea")).toBeNull();
     expect(screen.getByText("Congress is out until Tuesday, October 20.")).toBeInTheDocument();
-    expect(screen.getByText(/SENATE · no record votes this week/)).toBeInTheDocument();
-    expect(screen.getByText(/HOUSE · 1 record vote this week/)).toBeInTheDocument();
+    expect(screen.getByText(/Senate · no record votes this week/)).toBeInTheDocument();
+    expect(screen.getByText(/House · 1 record vote this week/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /H\.R\. 1: A bill to do a thing/ })).toHaveAttribute(
       "href",
       "/congress/votes/house/119/2/500"

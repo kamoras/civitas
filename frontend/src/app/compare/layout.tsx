@@ -7,7 +7,7 @@ export const metadata = {
   ...pageMetadata({
     title: TITLE,
     description:
-      "Compare any two senators or representatives side by side: voting records, campaign donors, PAC funding, and representation scores from public federal data.",
+      "Compare any two senators or representatives side by side: small gifts, PAC money, breaks with the party and bills moved, from public federal data.",
     path: "/compare",
   }),
   // A layout's plain-string title ends the root layout's template for the

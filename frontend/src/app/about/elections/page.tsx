@@ -101,15 +101,15 @@ export default async function ElectionsChapter() {
           Each federal contest&apos;s research opens with what shapes the race. Civitas publishes no
           odds or rating for any race, and calls none; these figures describe a race. The one place
           this year&apos;s polls appear is the <A href="#election-map">Senate and House map</A>, as
-          a range for the margin, kept apart from this block because the block shows the
-          incumbent&apos;s Representation Score.
+          a range for the margin, kept apart from this block, which links to the incumbent&apos;s
+          record.
         </P>
         <P>
           <strong>The seat.</strong> Its lean is the figure the election map shows, computed by
           Civitas with Cook&apos;s formula (Cook&apos;s own PVI is shown beside it as a
           cross-check): how much more Republican or Democratic it voted than the nation in the last
           two presidential elections. Under it, every seat of its kind on one axis of lean against
-          the nation, from the most Democratic-leaning at the left, through EVEN, to the most
+          the nation, from the most Democratic-leaning at the left, through even, to the most
           Republican: every U.S. House district on the lines this election is fought on, or the 50
           states for a Senate race. Each seat is one mark, stacked with the seats of the same lean,
           coloured by the side its own lean falls on, and this seat&apos;s column is outlined; the
@@ -166,12 +166,12 @@ export default async function ElectionsChapter() {
           same way (when a range leaned one way by this much, how often that side carried the seat),
           and why there is no seat total. The archive&apos;s polls reach only the final weeks before
           election day, so further out the map shows each seat&apos;s structural range alone,
-          labelled fundamentals only, with its polls listed beside it. It has nothing to do with
-          Representation Scores, which measure a member&apos;s record, not an election. Only
-          Democrat-versus-Republican races whose November ballot Civitas has confirmed get a range.
-          The House fit covers every cycle from 2018 whose House results the FEC has compiled, with
-          each district&apos;s lean rebuilt from precinct returns as it stood before each election,
-          on the lines it was held on.
+          labelled fundamentals only, with its polls listed beside it. It has nothing to do with a
+          member&apos;s record on their page, which describes what the member did, not an election.
+          Only Democrat-versus-Republican races whose November ballot Civitas has confirmed get a
+          range. The House fit covers every cycle from 2018 whose House results the FEC has
+          compiled, with each district&apos;s lean rebuilt from precinct returns as it stood before
+          each election, on the lines it was held on.
         </P>
         <P>
           This year&apos;s polls come from Wikipedia&apos;s race articles. The poll figures and the
@@ -309,19 +309,21 @@ export default async function ElectionsChapter() {
           legislative line in a year the state elects no legislature.
         </P>
         <P>
-          Each state page opens with &ldquo;Your vote, step by step&rdquo;: five buttons, in the
-          order you do them (check your registration, register, see your sample ballot, find your
-          polling place, vote early or by mail). Each names the site it opens and carries its
-          deadline. Every link is the state&apos;s own page, found through the Secretaries of
-          State&apos;s directory (NASS&apos;s Can I Vote) and opened to check it. A sample ballot
-          button goes to the state&apos;s lookup only where that lookup says it shows one; elsewhere
-          it goes to your county election office. Each night Civitas checks that every link still
-          opens its page; when one doesn&apos;t (the page is gone, or moved to the site&apos;s
-          homepage), that step goes to vote.gov for registering, NASS&apos;s Can I Vote for the
-          rest, or USAGov&apos;s directory for a sample ballot. Some states&apos; sites turn away
-          every automated check, though they open for a person. Civitas never gets past that block,
-          so it can&apos;t confirm those links are up: the step still links the state&apos;s page,
-          says it couldn&apos;t be checked, and gives the backup beside it.
+          Above the ballot, each state page has one button to your official sample ballot, then its
+          next voter deadline in one line, which leads to &ldquo;Your vote, step by step&rdquo;
+          after the contests: five buttons, in the order you do them (check your registration,
+          register, see your sample ballot, find your polling place, vote early or by mail). Each
+          names the site it opens and carries its deadline. Every link is the state&apos;s own page,
+          found through the Secretaries of State&apos;s directory (NASS&apos;s Can I Vote) and
+          opened to check it. A sample ballot button goes to the state&apos;s lookup only where that
+          lookup says it shows one; elsewhere it goes to your county election office. Each night
+          Civitas checks that every link still opens its page; when one doesn&apos;t (the page is
+          gone, or moved to the site&apos;s homepage), that step goes to vote.gov for registering,
+          NASS&apos;s Can I Vote for the rest, or USAGov&apos;s directory for a sample ballot. Some
+          states&apos; sites turn away every automated check, though they open for a person. Civitas
+          never gets past that block, so it can&apos;t confirm those links are up: the step still
+          links the state&apos;s page, says it couldn&apos;t be checked, and gives the backup beside
+          it.
         </P>
       </Section>
 
@@ -378,8 +380,8 @@ export default async function ElectionsChapter() {
           JSON. It describes who is in which district; it says nothing about why a line was drawn.
         </P>
         <P>
-          To find who represents you today, use the Politicians directory instead: pick your state,
-          then type your city, town or county. It uses the districts as of the current Congress, the
+          To find who represents you today, use Congress › Members instead: pick your state, then
+          type your city, town or county. It uses the districts as of the current Congress, the
           lines today&apos;s members were elected on (the Census Bureau&apos;s file for that
           Congress), not the lines of the next election. In a state that has redrawn since, the two
           give different answers, and each page says which map it shows. From the day a new Congress
@@ -759,7 +761,7 @@ export default async function ElectionsChapter() {
             <Item label="Leads, not wins">
               A candidate &ldquo;leads&rdquo;. The lead is &ldquo;not final&rdquo; while the state
               hasn&apos;t listed its count as official, and the tag beside the leader says so itself
-              (LEADING · NOT FINAL), not only the note under the candidates. It still
+              (leading · Not final), not only the note under the candidates. It still
               &ldquo;leads&rdquo; once it has, and never &ldquo;wins&rdquo;: an official
               count&apos;s leader can still face a runoff (Georgia requires a majority), a recount
               or a court.
@@ -872,7 +874,7 @@ export default async function ElectionsChapter() {
       <Section id="measures" title="Ballot measures: quoted, never rewritten">
         <P>
           Each measure shows its official ballot title, official summary, fiscal impact statement,
-          and the state&apos;s own description of what a YES and a NO vote do: all verbatim, linked
+          and the state&apos;s own description of what a yes and a no vote do: all verbatim, linked
           to the source. Where a state publishes no yes/no description, none is shown. We never
           infer one: the intuitive reading (&ldquo;yes enacts it&rdquo;) is backwards on a veto
           referendum, where approving <em>keeps</em> the law being challenged.
@@ -913,7 +915,7 @@ export default async function ElectionsChapter() {
             Ballot language is hard to read (statewide measures averaged a grade-21 reading level in
             2025), and a plain-language version would genuinely help. We left it out on purpose. Our
             checks on generated text confirm that its words appear in the source; they can&apos;t
-            tell whether a sentence points the same direction. &ldquo;A YES vote repeals this
+            tell whether a sentence points the same direction. &ldquo;A yes vote repeals this
             tax&rdquo;, when the official text says approval <em>keeps</em> it, passes every check,
             because every word is in the source. On a page that can change how someone votes, an
             error we can&apos;t detect is one we won&apos;t ship.

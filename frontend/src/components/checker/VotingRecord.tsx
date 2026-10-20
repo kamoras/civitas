@@ -1,5 +1,6 @@
 "use client";
 
+import { asLabel } from "@/lib/formatting";
 import { useCallback, useEffect, useId, useState } from "react";
 import {
   KeyVote,
@@ -22,9 +23,9 @@ const VOTES_PER_PAGE = 15;
 const SEARCH_DEBOUNCE_MS = 300;
 
 const PERIODS: { key: VotePeriod; label: string; empty: string }[] = [
-  { key: "month", label: "LAST 30 DAYS", empty: "No recorded vote in the last 30 days." },
-  { key: "congress", label: "THIS CONGRESS", empty: "No recorded vote in this Congress yet." },
-  { key: "all", label: "ANY DATE", empty: "" },
+  { key: "month", label: "Last 30 days", empty: "No recorded vote in the last 30 days." },
+  { key: "congress", label: "This Congress", empty: "No recorded vote in this Congress yet." },
+  { key: "all", label: "Any date", empty: "" },
 ];
 
 interface VotingRecordProps {
@@ -40,11 +41,7 @@ function VoteBadge({ vote }: { vote: string }) {
       : vote === "Nay"
         ? "text-signal-red bg-signal-red/10 border-signal-red/40"
         : "text-signal-amber bg-signal-amber/10 border-signal-amber/40";
-  return (
-    <span className={`font-mono text-xs tracking-widest px-2 py-1 border ${styles}`}>
-      {vote.toUpperCase()}
-    </span>
-  );
+  return <span className={`font-mono text-xs px-2 py-1 border ${styles}`}>{asLabel(vote)}</span>;
 }
 
 /** One vote, on one line: what was voted on (linked to the bill's page,
@@ -106,7 +103,7 @@ export function VoteRow({
       <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
         {vote.votedWithParty === false && (
           <span className="border border-signal-magenta/40 bg-signal-magenta/10 px-1.5 py-0.5 font-mono text-xs text-signal-magenta">
-            AGAINST PARTY
+            Against party
           </span>
         )}
         <VoteBadge vote={vote.vote} />
@@ -241,26 +238,26 @@ function PaginatedVoteList({
       {(voteCount > VOTES_PER_PAGE || (narrowed && counts.all > VOTES_PER_PAGE)) && (
         <div className="flex items-center gap-1.5 mb-3 flex-wrap">
           <VoteFilter
-            label="ALL"
+            label="All"
             active={filter === "all"}
             count={counts.all}
             onClick={() => handleFilterChange("all")}
           />
           <VoteFilter
-            label="YEA"
+            label="Yea"
             active={filter === "yea"}
             count={counts.yea}
             onClick={() => handleFilterChange("yea")}
           />
           <VoteFilter
-            label="NAY"
+            label="Nay"
             active={filter === "nay"}
             count={counts.nay}
             onClick={() => handleFilterChange("nay")}
           />
           {counts.againstParty > 0 && (
             <VoteFilter
-              label="AGAINST PARTY"
+              label="Against party"
               active={filter === "against-party"}
               count={counts.againstParty}
               onClick={() => handleFilterChange("against-party")}
@@ -333,7 +330,7 @@ export default function VotingRecord({
         </div>
         <div className="[&>span]:justify-center text-ink-min text-[11px] sm:text-xs">
           <MetricTooltip text="Roll-call votes listed below for this member: the chamber's latest votes and the key bills Civitas follows, from Congress.gov and Senate.gov. The party-line figures beside it cover every party-line vote of this Congress, not only these.">
-            TOTAL TRACKED
+            Total tracked
           </MetricTooltip>
         </div>
       </div>
@@ -342,8 +339,8 @@ export default function VotingRecord({
           {Math.round(partyLoyaltyPct)}%
         </div>
         <div className="[&>span]:justify-center text-ink-min text-[11px] sm:text-xs">
-          <MetricTooltip text="The share of this Congress's party-line votes (at least 65% of one party voting yes and at most 35% of the other) on which the member voted with most of their own party. Each bill or nomination counts once, however many times it came to a vote, and a vote against the party from its own flank isn't counted against it: the same count Constituent Alignment scores.">
-            PARTY LOYALTY
+          <MetricTooltip text="The share of this Congress's party-line votes (at least 65% of one party voting yes and at most 35% of the other) on which the member voted with most of their own party. Each bill or nomination counts once, however many times it came to a vote, and a vote against the party from its own flank isn't counted against it: the same count the profile's breaks figure uses.">
+            Party loyalty
           </MetricTooltip>
         </div>
         <div className="text-xs text-ink-lo">
@@ -355,8 +352,8 @@ export default function VotingRecord({
           {votedAgainstPartyCount.toLocaleString()}
         </div>
         <div className="[&>span]:justify-center text-ink-min text-[11px] sm:text-xs">
-          <MetricTooltip text="Party-line votes this Congress on which the member sided with the other party, each bill or nomination once: the breaks Constituent Alignment counts. Breaks from the party's own flank are listed on the scorecard but not counted.">
-            BROKE PARTY LINE
+          <MetricTooltip text="Party-line votes this Congress on which the member sided with the other party, each bill or nomination once: the breaks figure the profile compares with peers. Breaks from the party's own flank are listed on the member page but not counted.">
+            Broke party line
           </MetricTooltip>
         </div>
         <div className="text-xs text-ink-lo">toward the other party</div>
@@ -366,7 +363,7 @@ export default function VotingRecord({
 
   return (
     <CollapsibleSection
-      title="VOTING RECORD"
+      title="Voting record"
       summary={`${totalVotes} votes · ${Math.round(partyLoyaltyPct)}% party loyalty`}
       source="congress.gov &amp; senate.gov"
       alwaysVisible={statBoxes}
@@ -374,8 +371,8 @@ export default function VotingRecord({
       <div className="space-y-6 mt-4">
         {totalVotes > 0 && (
           <div role="group" aria-labelledby={periodId} className="flex flex-col gap-1">
-            <span id={periodId} className="font-mono text-xs tracking-widest text-ink-lo">
-              WHEN
+            <span id={periodId} className="font-mono text-xs text-ink-lo">
+              When
             </span>
             <div className="flex flex-wrap gap-1.5">
               {PERIODS.map(({ key, label }) => (
@@ -398,8 +395,8 @@ export default function VotingRecord({
         )}
         {totalVotes > VOTES_PER_PAGE && (
           <div className="flex flex-col gap-1">
-            <label htmlFor={searchId} className="font-mono text-xs tracking-widest text-ink-lo">
-              SEARCH THESE VOTES
+            <label htmlFor={searchId} className="font-mono text-xs text-ink-lo">
+              Search these votes
             </label>
             <input
               id={searchId}
@@ -424,14 +421,14 @@ export default function VotingRecord({
           <>
             <p className="text-xs text-ink-lo">
               Each vote links to its bill.{" "}
-              <span className="font-mono text-signal-magenta">AGAINST PARTY</span> marks a vote with
+              <span className="font-mono text-signal-magenta">Against party</span> marks a vote with
               the other side on a roll call the parties split on, including votes against the party
               from its own flank and repeat votes on one bill, which the counts above leave out.
             </p>
             {keyVoteCount > 0 && (
               <div>
-                <div className="text-xs text-ink-lo mb-2 font-mono tracking-widest">
-                  KEY VOTES: LONG-TERM SUMMARY
+                <div className="text-xs text-ink-lo mb-2 font-mono">
+                  Key votes: long-term summary
                 </div>
                 <PaginatedVoteList
                   senatorId={senatorId}
@@ -444,8 +441,8 @@ export default function VotingRecord({
 
             {recentVoteCount > 0 && (
               <div>
-                <div className="text-xs text-ink-lo mb-2 font-mono tracking-widest">
-                  RECENT VOTES ({recentVoteCount})
+                <div className="text-xs text-ink-lo mb-2 font-mono">
+                  Recent votes ({recentVoteCount})
                 </div>
                 <PaginatedVoteList
                   senatorId={senatorId}

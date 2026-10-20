@@ -6,11 +6,11 @@
 export type DisclosureOwner = "self" | "spouse" | "joint" | "dependent" | "unknown";
 
 export const OWNER_LABEL: Record<DisclosureOwner, string> = {
-  self: "SELF",
-  spouse: "SPOUSE",
-  joint: "JOINT",
-  dependent: "DEPENDENT",
-  unknown: "OWNER NOT STATED",
+  self: "Self",
+  spouse: "Spouse",
+  joint: "Joint",
+  dependent: "Dependent",
+  unknown: "Owner not stated",
 };
 
 /** A disclosed amount bracket, or a sum of them. The forms' open-ended top

@@ -13,7 +13,6 @@ import type { RedistrictedSeat } from "@/types/redistricting";
 import type { HouseDistrictsByCounty, PoliticianCard } from "@/types/politicians";
 import type { PaginatedBills } from "@/types/bill";
 import type { LiveResults, PviMap, TownBallot, TownEntry } from "@/types/election";
-import type { SignalOverlap } from "@/types/scoreBreakdown";
 import type { Agreement } from "@/types/compare";
 import type { MemberSupport } from "@/types/presidentialSupport";
 import type { TrendPostsAudit } from "@/types/trendPosts";
@@ -479,9 +478,13 @@ export async function fetchBillsInFlight(options?: {
   sort?: "recent" | "hot" | "stale";
   page?: number;
   perPage?: number;
+  /** A milestone's stage code: this Congress's bills that got at least
+   * that far, exactly the bills /congress's pipeline row counts. */
+  reached?: string;
 }): Promise<PaginatedBills> {
   const params = new URLSearchParams();
   if (options?.stage) params.set("stage", options.stage);
+  if (options?.reached) params.set("reached", options.reached);
   if (options?.chamber) params.set("chamber", options.chamber);
   if (options?.party) params.set("party", options.party);
   if (options?.q) params.set("q", options.q);
@@ -1964,12 +1967,6 @@ export async function setPoliticianVacancy(
   return res.json();
 }
 
-/** The post-run check that related score components still measure
- * different things. Refreshed by each pipeline run. */
-export async function fetchSignalOverlap(): Promise<SignalOverlap> {
-  return cachedFetch<SignalOverlap>(`${API_BASE}/signal-overlap`, TTL.SHORT);
-}
-
 export async function fetchConfig(): Promise<AppConfig> {
   if (_cachedConfig) return _cachedConfig;
   try {
@@ -2019,8 +2016,8 @@ export interface ScoreSnapshot {
   /** Dimension name -> score. Keys differ by entity type (senator/rep:
    * fundingIndependence/constituentAlignment/
    * fundingDiversity/legislativeEffectiveness; president: publicMandate/
-   * effectiveness/historicalLegacy) — untyped here since
-   * ScoreTrend (the only consumer) only ever reads date/overallScore. */
+   * effectiveness/historicalLegacy). Not shown for members; the profile
+   * reads only date and facts. */
   scores: Record<string, number>;
   /** The peer-comparison measures that day (backend app/measures.py), keyed
    *  like PeerMeasure.key; null before they were kept (2026-10-19). */
@@ -2047,6 +2044,8 @@ export async function fetchRepresentativeHistory(repId: string): Promise<ScoreHi
 
 export interface OpenCommentItem {
   id: number;
+  /** The document's permanent Explore key (exploreHref). */
+  key?: string;
   title: string;
   /** The abstract's opening sentence, verbatim; null when none is whole. */
   firstSentence?: string | null;

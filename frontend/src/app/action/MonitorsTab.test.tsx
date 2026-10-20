@@ -121,11 +121,11 @@ describe("A monitor opened", () => {
       screen.getByRole("img", { name: /Senate: 1 vote, closest 49–50, Sep 24/ })
     ).toBeInTheDocument();
     expect(screen.getAllByText(/^Update \d+$/)).toHaveLength(10);
-    fireEvent.click(screen.getByRole("button", { name: "[ SHOW 10 MORE OF 15 ]" }));
+    fireEvent.click(screen.getByRole("button", { name: "[ Show 10 more of 15 ]" }));
     expect(screen.getAllByText(/^Update \d+$/)).toHaveLength(20);
-    fireEvent.click(screen.getByRole("button", { name: "[ SHOW 5 MORE OF 5 ]" }));
+    fireEvent.click(screen.getByRole("button", { name: "[ Show 5 more of 5 ]" }));
     expect(screen.getAllByText(/^Update \d+$/)).toHaveLength(25);
-    expect(screen.queryByRole("button", { name: /SHOW/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Show/ })).not.toBeInTheDocument();
   });
 });
 

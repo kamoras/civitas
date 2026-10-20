@@ -9,6 +9,13 @@
       "url": "/politicians?branch=president"
     },
     {
+      "id": "member-pages-figures-not-scores",
+      "date": "2026-10-20",
+      "title": "Member pages show figures, not scores",
+      "summary": "Each member page shows the money, votes and bills behind the peer comparison as the figures themselves, with no 0 to 100 scores, and the public API marks its member score fields as deprecated.",
+      "url": "/about/scores"
+    },
+    {
       "id": "presidential-contest",
       "date": "2026-10-20",
       "title": "The presidential contest",

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import { fetchPipelineStatus } from "@/lib/api";
 import type { PipelineStatus } from "@/lib/api";
-import { parseUtc } from "@/lib/formatting";
+import { parseUtc, asLabel } from "@/lib/formatting";
 
 /**
  * The document header band that sits above every page.
@@ -79,33 +79,33 @@ const plain = (label: string, tone: string): RunState => ({
  * should weigh. "COMPLETE" only when every link's latest run completed.
  */
 export function describeRunState(status: PipelineStatus | null): RunState {
-  if (!status) return plain("STATUS UNAVAILABLE", "text-ink-min");
+  if (!status) return plain("Status unavailable", "text-ink-min");
   const links = status.links ?? [];
-  if (links.length === 0) return plain("NO RUN RECORDED", "text-ink-min");
+  if (links.length === 0) return plain("No run recorded", "text-ink-min");
 
   for (const [state, verb, shortVerb, tone] of [
-    ["failed", "FAILED", "FAILED", "text-signal-red"],
-    ["partial", "PARTIAL", "PARTIAL", "text-signal-amber"],
-    ["running", "IN PROGRESS", "RUNNING", "text-signal-amber"],
+    ["failed", "failed", "failed", "text-signal-red"],
+    ["partial", "partial", "partial", "text-signal-amber"],
+    ["running", "in progress", "running", "text-signal-amber"],
   ] as const) {
     const hit = links.filter((l) => l.state === state);
     if (hit.length === 0) continue;
     // Two or more name the first and count the rest: every name in a row
     // ("SENATE + SUPPLEMENTARY + STOCK TRADES RUNS FAILED") wrapped the band
     // at 640px and the phone line at 320, past the header's clearance.
-    const first = hit[0].label.toUpperCase();
+    const first = asLabel(hit[0].label);
     const one = hit.length === 1;
     return {
       // "DATA": the band is about Civitas's own nightly runs. "SENATE
       // FAILED 05:26 UTC", the first words a phone visitor read, said to a
       // student that the Senate had failed.
       label: one
-        ? `${first} DATA RUN ${verb}`
-        : `${first} + ${hit.length - 1} MORE DATA RUNS ${verb}`,
+        ? `${first} data run ${verb}`
+        : `${first} + ${hit.length - 1} more data runs ${verb}`,
       // Two or more, on a phone, by count alone ("3 DATA RUNS FAILED"):
       // the first name plus a count overran 320px; every name is in the
       // link's title and accessible name.
-      short: one ? `${first} DATA ${shortVerb}` : `${hit.length} DATA RUNS ${shortVerb}`,
+      short: one ? `${first} data ${shortVerb}` : `${hit.length} data runs ${shortVerb}`,
       everyName: one ? null : hit.map((l) => l.label).join(", "),
       tone,
       // One time per line: with two links named, whose time it was is unclear.
@@ -113,7 +113,7 @@ export function describeRunState(status: PipelineStatus | null): RunState {
       complete: false,
     };
   }
-  return { ...plain("COMPLETE", "text-phos"), complete: true };
+  return { ...plain("Complete", "text-phos"), complete: true };
 }
 
 const Dot = () => (
@@ -210,7 +210,7 @@ function StatusLine({ status, loaded }: { status: PipelineStatus | null; loaded:
   const atShort = state.at ? formatRunTime(state.at) : null;
 
   return (
-    <span className="font-mono text-xs tracking-[0.06em] text-ink-lo lg:tracking-[0.16em]">
+    <span className="font-mono text-xs text-ink-lo">
       {loaded ? (
         <>
           {/* One line at every width: the fixed header's 96px clearance
@@ -228,7 +228,7 @@ function StatusLine({ status, loaded }: { status: PipelineStatus | null; loaded:
             <>
               {filedAt && (
                 <>
-                  FILED {filedAt}
+                  Filed {filedAt}
                   <Dot />
                 </>
               )}
@@ -259,10 +259,10 @@ function StatusLine({ status, loaded }: { status: PipelineStatus | null; loaded:
               </Link>
               <Dot />
               <span className="sm:hidden">
-                {done}/{total} FILED
+                {done}/{total} filed
               </span>
               <span className="hidden sm:inline">
-                {done} OF {total} FILED
+                {done} of {total} filed
                 {filedAt && <span className="hidden lg:inline"> {filedAt}</span>}
               </span>
             </>
@@ -271,7 +271,7 @@ function StatusLine({ status, loaded }: { status: PipelineStatus | null; loaded:
           )}
         </>
       ) : (
-        <span className="text-ink-min">READING RUN STATUS…</span>
+        <span className="text-ink-min">Reading run status…</span>
       )}
     </span>
   );

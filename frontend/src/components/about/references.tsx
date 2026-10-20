@@ -241,16 +241,6 @@ export const REFERENCES = {
       </>
     ),
   },
-  harbridge2011: {
-    short: "Harbridge & Malhotra 2011",
-    entry: (
-      <>
-        Harbridge, L. &amp; Malhotra, N. (2011). Electoral Incentives and Partisan Conflict in
-        Congress: Evidence from Survey Experiments. <J>American Journal of Political Science</J>,
-        55(3), 494–510.
-      </>
-    ),
-  },
   harbridgeyong2023: {
     short: "Harbridge-Yong et al. 2023",
     entry: (
