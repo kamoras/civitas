@@ -41,14 +41,14 @@ export default async function Home() {
             until the count settles): the count is the news then. */}
         <ElectionNight />
         <Masthead electionPhase={summary?.phase.phase ?? null} />
-        {/* Ordered by how often each block changes: the day's record (its
-            first row the day's top issue), this week, the week's notable
-            votes. Where it comes from is on /about/data; the header menu
-            is the one list of the site's pages. */}
-        {/* The three tasks a visitor comes for, and registration closing
-            soon, in the first screen; then the day's record. */}
-        <HomeTasks />
+        {/* The day's record first (its first row the day's top issue), in
+            the first screen at 1280x900 and 390x844; then the three tasks
+            a visitor comes for, with registration closing soon as one line;
+            then the week's notable votes. Where it all comes from is on
+            /about/data; the header menu is the one list of the site's
+            pages. */}
         <RecordIndex />
+        <HomeTasks />
         <OnTheRecord />
       </main>
       <Footer />
