@@ -38,9 +38,10 @@ from app.election_calendar import senate_classes
 from app.models import FecReportingDeadline, FederalElectionDate, SeatVacancy
 from app.pipeline.fetch.fec import _fetch_with_retry
 from app.pipeline.fetch.house_clerk import MEMBER_DATA_URL, _VOTING_DISTRICT
-from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
+from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S, fetch_bytes_with_retry
 from app.pipeline.fetch.senate_classes import SENATORS_URL, _ROMAN
 from app.pipeline.fetch.state_election_dates import _FEC_MAX_PAGES, fetch_fec_rows, is_special_row
+from app.pipeline.rate_limiter import RateLimiter
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -227,14 +228,16 @@ def parse_senate_vacancies(xml: bytes, classes: dict[int, frozenset[str]]) -> li
     ]
 
 
+_rate_limiter = RateLimiter(rps=1.0)
+
+
 async def _get(client: httpx.AsyncClient, url: str) -> bytes | None:
-    try:
-        resp = await client.get(url, timeout=DEFAULT_FETCH_TIMEOUT_S)
-        resp.raise_for_status()
-    except httpx.HTTPError as e:
-        logger.warning("%s unavailable: %s", url, e)
-        return None
-    return resp.content
+    """The member list's body, or None once retries are spent. One bare
+    GET used to decide it: on 2026-10-18 a single failed request to the
+    Senate's list (logged as "unavailable: " with an empty message) kept
+    the Senate's vacancies unread for a day while the list read fine."""
+    return await fetch_bytes_with_retry(client, _rate_limiter, url, url, headers=None,
+                                        timeout=DEFAULT_FETCH_TIMEOUT_S)
 
 
 def save_vacancies(db: Session, office: str, vacancies: list[dict]) -> None:

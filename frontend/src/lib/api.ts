@@ -1,14 +1,13 @@
 import {
   Holdings,
   LeaderboardEntry,
-  ScoreSpread,
   PaginatedStockTrades,
   PaginatedVotes,
   Senator,
 } from "@/types/senator";
 import type { CommentWindow } from "@/types/commentWindow";
-import type { President, PresidentLeaderboardEntry } from "@/types/president";
-import type { Court, JusticeCasePage } from "@/types/court";
+import type { PresidentLeaderboardEntry } from "@/types/president";
+import type { JusticeCasePage } from "@/types/court";
 import type { JusticeLeaderboardEntry } from "@/types/justice";
 import type { ActionIssuesResponse, IssueMembers, IssueVote } from "@/types/action";
 import type { RedistrictedSeat } from "@/types/redistricting";
@@ -21,6 +20,7 @@ import type { MemberSupport } from "@/types/presidentialSupport";
 import type { TrendPostsAudit } from "@/types/trendPosts";
 import type { MapSeatLines } from "@/types/electionMap";
 import type { SearchSuggestions } from "@/types/search";
+import type { ChamberMeasures, PeerComparison, PeerGroupKey } from "@/types/peers";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 
@@ -266,8 +266,23 @@ export async function fetchCompareAgreement(
   return cachedFetch(`${API_BASE}/compare/agreement?${params}`, TTL.SHORT);
 }
 
-export async function fetchLeaderboardSpread(chamber: "senate" | "house"): Promise<ScoreSpread> {
-  return cachedFetch(`${API_BASE}/leaderboard/spread?chamber=${chamber}`, TTL.SHORT);
+/** The whole chamber, measure by measure (the measures page and compare). */
+export async function fetchChamberMeasures(chamber: "senate" | "house"): Promise<ChamberMeasures> {
+  return cachedFetch(`${API_BASE}/congress/measures?chamber=${chamber}`, TTL.SHORT);
+}
+
+/** Where a member stands among peers on each measure (the member page's
+ *  "Where they stand"). */
+export async function fetchPeerComparison(
+  chamber: "senate" | "house",
+  id: string,
+  group: PeerGroupKey
+): Promise<PeerComparison> {
+  const path = chamber === "senate" ? "senators" : "representatives";
+  return cachedFetch(
+    `${API_BASE}/${path}/${encodeURIComponent(id)}/peers?group=${group}`,
+    TTL.SHORT
+  );
 }
 
 // --- House Representatives ---
@@ -306,35 +321,6 @@ export async function fetchRepresentativesByState(
 
 export async function fetchRepresentative(repId: string): Promise<Senator> {
   return requestJson(`${API_BASE}/representatives/${repId}`, "Representative not found");
-}
-
-export interface PaginatedLeaderboard {
-  entries: LeaderboardEntry[];
-  total: number;
-  page: number;
-  perPage: number;
-  totalPages: number;
-}
-
-export async function fetchRepLeaderboard(
-  page: number = 1,
-  perPage: number = 50,
-  party?: string,
-  sort?: string,
-  dir?: "asc" | "desc"
-): Promise<PaginatedLeaderboard> {
-  const params = new URLSearchParams({ page: String(page), per_page: String(perPage) });
-  if (party) params.set("party", party);
-  // The House is paginated, so it is sorted and ranked on the server, over
-  // the whole chamber — never by re-sorting one page here.
-  if (sort) params.set("sort", sort);
-  if (dir) params.set("dir", dir);
-  const url = `${API_BASE}/representatives/leaderboard?${params}`;
-  return withShape<PaginatedLeaderboard>(
-    await requestJson(url, "Failed to load house leaderboard"),
-    { lists: ["entries"] },
-    url
-  );
 }
 
 // Shared by the fetchRepVotes/fetchSenatorVotes and fetchRepStockTrades/
@@ -757,20 +743,6 @@ export async function fetchPresidentLeaderboard(): Promise<PresidentLeaderboardE
   return asList(await requestJson(url, "Failed to load president leaderboard"), url);
 }
 
-/** Null when no president is currently serving (excluded from
- * /presidents/leaderboard — see the backend's get_president_leaderboard
- * docstring) — a real, if brief, possible state (e.g. a same-day
- * transition), not an error. */
-export async function fetchCurrentPresident(): Promise<President | null> {
-  const res = await fetch(`${API_BASE}/presidents/current`);
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`Failed to load current president: ${res.status}`);
-  // No camelizeKeys: the endpoint serializes camelCase via model_dump(
-  // by_alias=True) — see fetchPresidentLeaderboard's comment for why
-  // re-camelizing is a data-keyed-map landmine.
-  return (await res.json()) as President;
-}
-
 /** One member's votes with the president's stated positions; null for a
  * member none of whose votes count yet (404). */
 export async function fetchMemberPresidentialSupport(
@@ -789,12 +761,6 @@ export async function fetchMemberPresidentialSupport(
 export async function fetchJusticeCases(id: string, page: number): Promise<JusticeCasePage> {
   const url = `${API_BASE}/justices/${encodeURIComponent(id)}/cases?page=${page}&per_page=20`;
   return cachedFetch(url, TTL.SHORT);
-}
-
-/** The Court page's record (court_service.court), for the leaderboard's
- *  Supreme Court tab to lead with. */
-export async function fetchCourt(): Promise<Court> {
-  return cachedFetch(`${API_BASE}/court`, TTL.SHORT);
 }
 
 export async function fetchJusticeLeaderboard(): Promise<JusticeLeaderboardEntry[]> {
@@ -2069,6 +2035,9 @@ export interface ScoreSnapshot {
    * effectiveness/historicalLegacy) — untyped here since
    * ScoreTrend (the only consumer) only ever reads date/overallScore. */
   scores: Record<string, number>;
+  /** The peer-comparison measures that day (backend app/measures.py), keyed
+   *  like PeerMeasure.key; null before they were kept (2026-10-19). */
+  facts?: Record<string, number | null> | null;
 }
 
 export interface ScoreHistory {
@@ -2086,11 +2055,6 @@ export async function fetchSenatorHistory(senatorId: string): Promise<ScoreHisto
 
 export async function fetchRepresentativeHistory(repId: string): Promise<ScoreHistory> {
   const url = `${API_BASE}/representatives/${repId}/history`;
-  return withShape<ScoreHistory>(await cachedFetch(url, TTL.SHORT), { lists: ["snapshots"] }, url);
-}
-
-export async function fetchPresidentHistory(presidentId: string): Promise<ScoreHistory> {
-  const url = `${API_BASE}/presidents/${presidentId}/history`;
   return withShape<ScoreHistory>(await cachedFetch(url, TTL.SHORT), { lists: ["snapshots"] }, url);
 }
 

@@ -182,7 +182,7 @@ export default function MetricTooltip({ text, children }: MetricTooltipProps) {
               left: coords ? `${coords.left}px` : "-9999px",
               top: coords ? `${coords.top}px` : "-9999px",
             }}
-            className={`fixed z-[100] w-48 sm:w-56 max-w-[calc(100vw-16px)] px-2.5 py-2 text-xs leading-snug text-ink-hi bg-black/95 border border-white/15 shadow-lg transition-opacity ${
+            className={`fixed z-[100] w-48 sm:w-56 max-w-[calc(100vw-16px)] px-2.5 py-2 text-xs leading-snug text-ink-hi bg-surface border border-ink-min shadow-lg transition-opacity ${
               coords ? "opacity-100" : "opacity-0"
             }`}
           >

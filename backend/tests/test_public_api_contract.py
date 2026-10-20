@@ -8,6 +8,8 @@ against its documented schema; the Public* schemas forbid extra fields,
 so drift in either direction fails here.
 """
 
+import csv as csv_module
+import io as io_module
 import json
 from datetime import datetime
 
@@ -15,7 +17,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.api import public
+from app.api import public, public_mcp
 from app.api.router import api_router
 from app.database import get_db
 from app.models import (
@@ -39,6 +41,7 @@ from app.models import (
 )
 from app.pipeline.lexical_index import ensure_lexical_index
 from app.schemas import (
+    PublicSenatorRowSchema,
     PublicAgencyDetailSchema,
     PublicAgencyListSchema,
     PublicApiIndexSchema,
@@ -614,3 +617,97 @@ def test_agencies_and_open_comment_periods(client, monkeypatch):
     assert period["commentUrl"].startswith("https://www.regulations.gov/")
     monkeypatch.setattr(public, "comment_period_today", lambda: "2099-01-02")
     assert _body(client, "/comment-periods")["entries"] == []
+
+
+@pytest.mark.parametrize("path", ["/senators", "/senators/S000001", "/senators/S000001/breakdown",
+                                  "/senators/S000001/history", "/presidents"])
+def test_composite_responses_carry_deprecation_and_sunset(client, path):
+    """The composite (overall, rank) is deprecated: headers say so, and the
+    OpenAPI schema marks the fields."""
+    res = client.get(f"/api/public/v1{path}")
+    assert res.status_code == 200
+    assert res.headers["Deprecation"].startswith("@")
+    assert res.headers["Sunset"].endswith("GMT")
+    assert 'rel="deprecation"' in res.headers["Link"]
+
+
+def test_unrelated_responses_carry_no_deprecation(client):
+    assert "Deprecation" not in client.get("/api/public/v1/states").headers
+
+
+def test_composite_fields_are_marked_deprecated_in_the_schema():
+    assert PublicScoreBreakdownSchema.model_json_schema()["properties"]["overall"]["deprecated"] is True
+    assert PublicSenatorRowSchema.model_json_schema()["properties"]["rank"]["deprecated"] is True
+
+
+def _csv_rows(client, path, **params):
+    resp = client.get(f"/api/public/v1{path}", params=params)
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["content-type"].startswith("text/csv")
+    assert resp.headers["link"] == f'<{public.LICENSE_URL}>; rel="license"'
+    assert resp.headers["content-disposition"].startswith("attachment;")
+    return list(csv_module.DictReader(io_module.StringIO(resp.text)))
+
+
+@pytest.mark.parametrize("path,template,columns", [
+    ("/senators.csv", "/senators.csv", public._score_columns(False)),
+    ("/representatives.csv", "/representatives.csv", public._score_columns(True)),
+    ("/presidents.csv", "/presidents.csv", public._PRESIDENT_COLUMNS),
+    ("/senators/S000001/votes.csv", "/senators/{senator_id}/votes.csv", public._VOTE_COLUMNS),
+    ("/representatives/R000001/votes.csv", "/representatives/{rep_id}/votes.csv", public._VOTE_COLUMNS),
+    ("/roll-calls/senate/119/1/5.csv", "/roll-calls/{chamber}/{congress}/{session}/{number}.csv",
+     public._POSITION_COLUMNS),
+])
+def test_every_csv_has_its_documented_columns_and_license(client, monkeypatch, path, template, columns):
+    rows = _csv_rows(client, path)
+    assert rows and list(rows[0]) == [name for name, _ in columns]
+    monkeypatch.setattr(public, "_spec", None)
+    description = _body(client, "/openapi.json")["paths"][f"/api/public/v1{template}"]["get"]["description"]
+    assert all(f"`{name}`" in description for name, _ in columns)
+
+
+def test_score_csv_is_the_leaderboard_with_its_method(client, db_session):
+    db_session.add(ScoreSnapshot(entity_type="senator", entity_id="S000001", date="2026-10-01", overall_score=60,
+                                 score_1=60, score_2=50, score_3=55, score_4=40, score_5=70,
+                                 algorithm_version="v6.35"))
+    db_session.commit()
+    rows = _csv_rows(client, "/senators.csv")
+    listed = _body(client, "/senators")["entries"]
+    assert [(r["id"], int(r["rank"])) for r in rows] == [(e["id"], e["rank"]) for e in listed]
+    doe = next(r for r in rows if r["id"] == "S000001")
+    assert (doe["algorithm_version"], doe["scored_on"], doe["funding_independence_data"]) == ("v6.35", "2026-10-01",
+                                                                                               "high")
+    assert float(doe["overall"]) == next(e for e in listed if e["id"] == "S000001")["representationScore"]["overall"]
+
+
+def test_votes_csv_names_bills_in_the_one_spelling(client, db_session):
+    db_session.query(KeyVote).filter_by(senator_id="S000001").update({"bill_id": "H.R. 1"})
+    db_session.query(RollCall).filter_by(id=1).update({"bill_id": None})
+    db_session.commit()
+    (row,) = _csv_rows(client, "/senators/S000001/votes.csv")
+    assert row["bill_id"] == "HR.1"
+
+
+def test_votes_csv_is_every_position(client):
+    (row,) = _csv_rows(client, "/senators/S000001/votes.csv")
+    assert (row["vote"], row["voted_with_party"], row["bill_id"], row["number"]) == ("Yea", "true", "HR.1", "5")
+    assert row["roll_call_url"].endswith("/congress/votes/senate/119/1/5")
+
+
+def test_roll_call_csv_lists_every_position(client):
+    rows = _csv_rows(client, "/roll-calls/senate/119/1/5.csv")
+    assert len(rows) == 6 and {r["bucket"] for r in rows} == {"yea", "nay"}
+    assert client.get("/api/public/v1/roll-calls/senate/119/1/999.csv").status_code == 404
+    not_held = client.get("/api/public/v1/roll-calls/senate/100/1/5.csv")
+    assert not_held.status_code == 404 and not_held.json()["detail"].startswith("Not held")
+
+
+def test_the_index_and_spec_name_the_data_license(client, monkeypatch):
+    monkeypatch.setattr(public, "_spec", None)
+    assert _body(client, "/")["license"] == {"name": public.DATA_LICENSE, "url": public.LICENSE_URL}
+    assert _body(client, "/openapi.json")["info"]["license"]["url"].endswith("/about/data#license")
+
+
+def test_csv_downloads_are_not_mcp_tools():
+    names = set(public_mcp._operations())
+    assert "senators_csv" not in names and "list_senators" in names and "get_roll_call" in names

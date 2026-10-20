@@ -58,10 +58,13 @@ async def mcp_client(db_session):
 async def test_every_public_endpoint_is_a_read_only_tool(db_session):
     async with mcp_client(db_session) as mcp:
         tools = {t["name"]: t for t in (await mcp("tools/list"))["tools"]}
+        # Every JSON endpoint; a CSV download is for a spreadsheet, its JSON twin the tool.
         documented = {
             op["operationId"] for ops in public.openapi_spec_dict()["paths"].values() for op in ops.values()
+            if "application/json" in op["responses"]["200"]["content"]
         }
         assert set(tools) == documented
+        assert not any(name.endswith("_csv") for name in tools)
         assert {"list_senators", "get_senator", "search_documents"} <= set(tools)
         get_senator = tools["get_senator"]
         assert get_senator["inputSchema"]["required"] == ["senator_id"]

@@ -73,9 +73,11 @@ function Row({ d, register }: { d: VoterDeadline; register?: Calendar["register"
  *  registration. Falls back to the older API's summary sentence. */
 function Registration({
   calendar,
+  showRegister,
   part = "all",
 }: {
   calendar: Calendar;
+  showRegister: boolean;
   /** "lead": the sentence, its countdown and the register link (a phone's
    *  folded calendar); "rest": what follows the deadline; "all": both. */
   part?: "all" | "lead" | "rest";
@@ -91,7 +93,7 @@ function Registration({
   }
   const left =
     line.status === "open" ? countdownText({ status: "open", countdown: line.countdown }) : null;
-  const link = calendar.register;
+  const link = showRegister ? calendar.register : null;
   const canRegister = line.status === "open" || line.status === "same_day";
   if (part === "rest")
     return line.sameDay ? (
@@ -135,8 +137,13 @@ export default function VoterCalendar({
   stateName,
   lookupHref,
   lookupIsStateSpecific,
+  showRegister = true,
 }: {
   calendar: Calendar;
+  /** Off on the state ballot page, whose "Your vote, step by step" carries
+   *  the one register button (a second "Register" beside the deadlines is
+   *  how a reader looking for the ballot clicked register instead). */
+  showRegister?: boolean;
   stateName: string;
   /** Where to send a reader when no deadline could be read: the state's
    *  own voter lookup, or the national directory of election offices. */
@@ -186,7 +193,7 @@ export default function VoterCalendar({
         <Row
           key={`${d.kind}-${d.method}-${d.basis}-${d.date}`}
           d={d}
-          register={calendar.register}
+          register={showRegister ? calendar.register : undefined}
         />
       ))}
     </ul>
@@ -250,7 +257,7 @@ export default function VoterCalendar({
           into the first screen (mobile spec #5). Every date stays quoted with
           its rule and source, one tap away (AGENTS.md §7). */}
       <div className="lg:hidden" data-calendar="phone">
-        <Registration calendar={calendar} part="lead" />
+        <Registration calendar={calendar} showRegister={showRegister} part="lead" />
         <details className="group mt-1">
           <summary className="inline-flex min-h-11 cursor-pointer list-none items-center font-mono text-xs text-signal-cyan hover:text-phos [&::-webkit-details-marker]:hidden">
             Every deadline, with its source{" "}
@@ -258,12 +265,12 @@ export default function VoterCalendar({
               &#9662;
             </span>
           </summary>
-          <Registration calendar={calendar} part="rest" />
+          <Registration calendar={calendar} showRegister={showRegister} part="rest" />
           {details(false)}
         </details>
       </div>
       <div className="hidden lg:block" data-calendar="wide">
-        <Registration calendar={calendar} />
+        <Registration calendar={calendar} showRegister={showRegister} />
         {details(true)}
       </div>
     </section>

@@ -77,7 +77,9 @@ function ActionCenterStatus({ ac }: { ac: ActionRefreshState | null }) {
       {/* Status + elapsed */}
       <div className="flex items-center justify-between">
         <span className="text-ink-lo">STATUS</span>
-        <span className={ac.isRunning ? "text-signal-cyan pulse-subtle font-bold" : "text-ink-lo"}>
+        <span
+          className={ac.isRunning ? "text-signal-cyan pulse-subtle font-semibold" : "text-ink-lo"}
+        >
           {ac.isRunning ? `RUNNING · ${formatDuration(totalElapsed)}` : "IDLE"}
         </span>
       </div>
@@ -86,7 +88,7 @@ function ActionCenterStatus({ ac }: { ac: ActionRefreshState | null }) {
       {ac.isRunning && stageLabel && (
         <div className="border border-white/15 px-3 py-2 bg-signal-cyan/10">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-signal-cyan font-bold tracking-wider">{stageLabel}</span>
+            <span className="text-signal-cyan font-semibold tracking-wider">{stageLabel}</span>
             <span className="text-signal-cyan shrink-0">
               {progressDone !== null && progressTotal !== null
                 ? `${progressDone}/${progressTotal}`

@@ -187,6 +187,15 @@ def get_president_score_breakdown(db: Session, president_id: str) -> dict | None
         for o in db.query(President).filter(President.name == p.name, President.id != p.id).order_by(President.number)
         if o.historical_legacy_score is not None
     ]
+    # The historians' own ranking, attributed to them: the place of this
+    # presidency's survey points among every rated presidency (competition
+    # rank, ties shared), what the page shows in place of a composite.
+    rated = [v for (v,) in db.query(President.historical_legacy_score)
+             .filter(President.historical_legacy_score.isnot(None)).all()]
+    points = p.historical_legacy_score
+    legacy_facts = breakdown["historicalLegacy"]["facts"]
+    legacy_facts["historiansRank"] = (1 + sum(1 for v in rated if v > points)) if points is not None else None
+    legacy_facts["historiansRated"] = len(rated)
     return breakdown
 
 

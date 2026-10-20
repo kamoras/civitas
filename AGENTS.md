@@ -292,6 +292,17 @@ alias table. This prevents label fragmentation from diluting kNN vote weights.
 
 ### 3. Deterministic, auditable scoring
 
+**No composite is displayed** (2026-10). The weighted Representation Score
+and its rank are not shown on any page; each is still computed for public
+API v1's deprecated `overall` and `rank` (removed in v2). What the site
+shows is each measure against peers (`app/peer_comparison.py`): the member's
+figure, the seat-adjusted expected figure, the peers' distribution, and an
+evaluative word per measure ("well above / above / near / below / well below
+peers") from a fixed percentile rule whose cut points are conventions, served
+with every comparison as `rule`. The words are neutral about direction (above
+and below, never better and worse). Never add a page that ranks members by a
+blend of unlike measures, or a word not from that rule.
+
 The representation sub-scores — Funding Independence, Constituent Alignment
 and Legislative Effectiveness (weighted, `SCORE_WEIGHTS`), plus the
 informational Funding Diversity (Promise Persistence, which has had no input
@@ -900,11 +911,14 @@ Corollaries that follow from the same rule, all enforced in code:
   back to one, since that would publish past the refusal; and the card
   names both ("as republished by Eureka County Clerk-Recorder"). Getting
   past the wall itself is not an option: it is the state saying no.
-  A wall is not a dead link, though. A state's voter lookup the nightly
-  link check is refused on (`ballot_lookup._check` → `blocked_at`) is still
-  linked, worded as unconfirmed ("This site blocks automated checks, so we
-  can't confirm it's up") with USAGov's directory beside it; only a link
-  that answers 404, or lands on its site's homepage, falls back alone. That
+  A wall is not a dead link, though. A voting step's link (the state
+  page's "Your vote, step by step", one official link per task,
+  `ballot_lookup.vote_steps`) the nightly link check is refused on
+  (`ballot_lookup._check` → `blocked_at`) is still linked, worded as
+  unconfirmed ("This site blocks automated checks, so we can't confirm
+  it's up") with the task's fallback beside it (vote.gov, NASS's Can I
+  Vote, USAGov's directory); only a link that answers 404, or lands on its
+  site's homepage, falls back alone. That
   is enforced in the HTTP layer for every source: the client forgets the
   cookies a challenge response sets (`http_client.is_bot_challenge`), and
   `fetch_with_retry` never retries a challenge. Until 2026-10 a retry sent
@@ -1345,10 +1359,11 @@ longer on Oyez's sitting list inactive (`retire_departed_justices`, never a
 delete, refused below the Court's quorum of six) and the Supplementary run
 checks that list nightly so a confirmation or departure doesn't wait for the
 weekly refresh (`court_roster_changed`). Relatedly,
-the Senate/House leaderboards rank only currently-serving members, while the
-presidential leaderboard ranks the *historical* field and excludes the
-sitting president (see `president_service.get_president_leaderboard`) — for
-that office, comparison against predecessors is the only meaningful ranking.
+the leaderboard API (no longer a page since 2026-10, §3; kept for public API
+v1's deprecated rank) ranks only currently-serving members, and for
+presidents the *historical* field without the sitting president
+(`president_service.get_president_leaderboard`). A president's page shows
+the historians' own rank, attributed, instead of a blend.
 
 **Trend posts ("On the record", `analyze/trend_poster.py`)** run after each
 hourly Action Center refresh (`scheduler._post_trends`, under the same lease).
@@ -1918,16 +1933,24 @@ it keeps, each enforced by a test (`tests/test_forecast_model.py`,
   historical lean uses only the two presidential elections before it.
 - **The House fit's lean is rebuilt, not borrowed.** `scripts/
   build_house_lean_history.py` makes each district's pre-election lean for
-  2018, 2020 and 2022 on the lines each was held on, with
+  2018, 2020, 2022 and 2024 on the lines each was held on, with
   `build_district_lean.py`'s own block method (VEST 2016/2020 on Census 2020
-  blocks; 116th lines from TIGER polygons, 118th from the BEF), into
+  blocks; 116th lines from TIGER polygons, 118th and 119th from the BEFs), into
   `app/data/forecast_house_lean.json`; results and incumbency come from the
-  FEC's Federal Elections workbooks. Three cycles cannot identify the
+  FEC's Federal Elections workbooks, and for a year the FEC has not compiled,
+  from the Clerk of the House's Statistics of the Presidential and
+  Congressional Election (found by year on the Clerk's Election Information
+  page) with incumbency from the FEC's general-election candidate list.
+  The Clerk's PDF is gated (`clerk_house`, `clerk_results`): each
+  district's lines must sum to the Clerk's own recapitulation total, every
+  seat of the lines listed once, every FEC incumbent their party's nominee;
+  a failure stops the refit, which alerts. A few cycles cannot identify the
   generic-ballot coefficient, so the House takes the Senate fit's
   (`model.fit(national_coef=)`), refitted without each held-out cycle. Don't
   add a House cycle from a source behind a sign-in form (MEDSL's House file
   is one: its guestbook) or a lean made another way; the fit takes every
-  FEC compilation the FEC's results index links.
+  FEC compilation the FEC's results index links, and the Clerk's edition
+  only for a year the FEC hasn't compiled.
 - **Polls from Wikipedia, gated, attributed.** `forecast/polls.py` reads each
   race article's current revision (recorded per seat), parses the table whose
   columns are the confirmed nominees, and rejects the whole table on a failed
@@ -2316,12 +2339,13 @@ the pending list).
 | SEO: per-route metadata, canonicals, JSON-LD, sitemap | `frontend/src/lib/site.ts`, `frontend/src/lib/seo.ts`, `frontend/src/app/sitemap.ts`, `backend/app/api/sitemap.py` |
 | Frontend types | `frontend/src/types/` |
 | Metric explanations (tooltips on all scorecard metrics) | `frontend/src/components/checker/MetricTooltip.tsx` |
-| Detail pages' two layers: chamber strip, scorecard in short, methods ledger, bill stage ladder and sources, "cite this", held and thin-data marks | `frontend/src/components/scorecard/ChamberStrip.tsx`, `AtAGlance.tsx`, `MethodsLedger.tsx`, `HeldScore.tsx`, `frontend/src/components/congress/StageLadder.tsx`, `BillSources.tsx`, `frontend/src/components/shared/CiteThis.tsx` (a government document or record cites its issuer: `frontend/src/lib/citedSources.ts`); data from `api/politicians.py` (`_chamber_field`, `_scored_on`) and `bill_service.stage_milestones` |
+| Detail pages' two layers: where a member stands among peers, methods ledger, bill stage ladder and sources, "cite this", held and thin-data marks | `frontend/src/components/scorecard/WhereTheyStand.tsx`, `MethodsLedger.tsx`, `HeldScore.tsx`, `frontend/src/components/congress/StageLadder.tsx`, `BillSources.tsx`, `frontend/src/components/shared/CiteThis.tsx` (a government document or record cites its issuer: `frontend/src/lib/citedSources.ts`); data from `api/politicians.py` (`_chamber_field`, `_scored_on`) and `bill_service.stage_milestones` |
 | Action Center issue parts (shared with `/issue/[id]`: meta, tags, "What you can do", coverage, sources) | `frontend/src/components/action/IssueEnrichment.tsx` |
-| Leaderboard spread strip, ties and thin-data marks | `backend/app/api/leaderboard.py`, `backend/app/score_display.py` (`score_spread`, `thin_dimensions`), `frontend/src/components/leaderboard/ScoreSpreadStrip.tsx` |
+| Where a member stands among peers (per-measure figure, expected, percentile, word by a fixed rule, template sentence) | `backend/app/peer_comparison.py`, `GET /api/{senators,representatives}/{id}/peers`, public breakdown `peerComparison` |
+| The chamber measure by measure (replaced the leaderboard page; `/leaderboard` redirects), compare's pair strips; the leaderboard API stays for the deprecated composite | `frontend/src/app/congress/members/`, `frontend/src/components/compare/PairStrips.tsx`, `GET /api/congress/measures` (`peer_comparison.chamber_measures`); `backend/app/api/leaderboard.py`, `backend/app/score_display.py` (`score_spread`, `thin_dimensions`) |
 | Site navigation: sections, main menu, footer (site pages only), section tabs, hub cards and the homepage index | `frontend/src/lib/routes.ts` (`SECTIONS`), `frontend/src/components/layout/Navbar.tsx`, `Footer.tsx`, `SectionTabs.tsx`, `frontend/src/components/sections/SectionCards.tsx`, `frontend/src/components/home/SectionsBand.tsx`, `frontend/src/lib/sectionPreviews.ts`, `backend/app/api/sections.py` |
 
-| Homepage (masthead, on-the-record entries, record index, sources panel) | `frontend/src/components/home/Masthead.tsx`, `OnTheRecord.tsx` (from `backend/app/api/notable.py`), `RecordIndex.tsx`, `Holdings.tsx` |
+| Homepage (masthead, task boxes and registration closing, on-the-record entries, record index, sources panel) | `frontend/src/components/home/Masthead.tsx`, `HomeTasks.tsx`, `StateJump.tsx`, `OnTheRecord.tsx` (from `backend/app/api/notable.py`), `RecordIndex.tsx`, `Holdings.tsx` |
 
 ## Conventions
 
@@ -2362,7 +2386,18 @@ the pending list).
   descriptions; `/developers` and the MCP tools are generated from exactly
   that, so nothing else needs editing. `tests/test_public_api_contract.py`
   must cover the new endpoint, since those routes return `JSONResponse` and
-  FastAPI would otherwise never check the body against the documented shape.
+  FastAPI would otherwise never check the body against the documented shape. A CSV download (`…/x.csv`) declares
+  `response_class=CsvResponse` and `_CSV_RESPONSES`, and is written and
+  documented from one column list (`_csv`, `_csv_doc`): the contract test
+  checks its header against that list, and it is not an MCP tool.
+- **A bill's id has one spelling in every response** (`HR.997`, `SJRES.138`;
+  `app/bill_ids.py`). Stored records keep their source's spelling (a Senate
+  roll call names "H.R. 997"), so the API's `JSONResponse`
+  (`api/response_helpers.py`, also the app's and the API router's default
+  response class) rewrites every `billId` and `billIds` at render. API
+  modules import `JSONResponse` from there, never from FastAPI
+  (`tests/test_bill_ids.py`). The display label (`billLabel`, "H.R. 997") is
+  a separate field. Input takes any spelling through `canonical_bill_id`.
 - **Read path must stay lightweight**: never load the embedding model or LLM on
   API read requests (GET endpoints). All ML inference happens at pipeline write
   time. Anything a response needs that takes a model — the Action Center's
@@ -2448,6 +2483,25 @@ the pending list).
 - Tailwind CSS for styling
 - API calls go through `src/lib/api.ts`
 - Dynamic configuration fetched from `GET /api/config` — never hardcode industry codes, score weights, or category labels
+- **Two themes, one set of classes** (2026-10). The palette is CSS custom
+  properties in `src/app/globals.css`, one `THEME` block per theme: "register
+  paper" (light, the default) and "night register" (warm dark, by
+  `prefers-color-scheme` or the footer's per-tab `ThemeToggle`, sessionStorage
+  only per §8). Tailwind's colours point at them, and `white` is the overlay
+  (ink on paper, white on carbon), so `border-white/15` is a hairline in both.
+  Never write a hex in a component: use a token or a `var(--…)`.
+  `wcagContrast.test.ts` and `inkContrast.test.ts` compute both themes from
+  globals.css. Maps and the Court's agreement grid draw on a `.night` plate in
+  both themes, the ground their tile palettes were measured on.
+- **Type** (2026-10, `src/app/fonts.ts`): Source Serif 4 600 for titles
+  (`font-display`), Fira Sans 400/600 for everything else (`font-sans`; the
+  long-standing `font-mono` class maps to Fira Sans too, so a label keeps its
+  class and loses the monospace), DM Mono for record identifiers only
+  (`font-id`, never prose), Archivo 800 for the wordmark (`font-wordmark`).
+  Tabular figures are on for the whole body. Only the loaded weights exist:
+  no `font-bold`/`font-extrabold` (they would be synthesised), except the
+  wordmark. Fonts come from `backend/scripts/fetch_site_fonts.py`, which
+  writes the files, `fonts/manifest.json` and `fonts/fallback.css`.
 - **Site prose uses no em dashes** (2026-10). Use a comma, colon, parentheses or a
   full stop; for a separator inside a label, the middle dot " · ". A string that is
   only "—" is the table placeholder for no data and stays.
