@@ -45,7 +45,7 @@ export default function PageMasthead({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">{eyebrow}</p>
-          <h1 className="mt-3 font-display text-3xl font-extrabold uppercase leading-none tracking-[-0.02em] text-ink-hi sm:text-4xl">
+          <h1 className="mt-3 font-display text-3xl font-semibold uppercase leading-none tracking-[-0.02em] text-ink-hi sm:text-4xl">
             {title}
           </h1>
         </div>
@@ -53,7 +53,7 @@ export default function PageMasthead({
       </div>
       {(children || more) && (
         <div
-          className={`mt-3 max-w-2xl font-display text-base leading-relaxed text-ink-lo ${children ? "" : "hidden sm:block"}`}
+          className={`mt-3 max-w-2xl font-sans text-base leading-relaxed text-ink-lo ${children ? "" : "hidden sm:block"}`}
         >
           {children}
           {more && (
@@ -69,7 +69,7 @@ export default function PageMasthead({
           <summary className="inline-flex min-h-11 cursor-pointer items-center font-mono text-[0.8125rem] uppercase tracking-[0.08em] text-ink-lo hover:text-phos">
             More about this page
           </summary>
-          <p className="max-w-2xl font-display text-base leading-relaxed text-ink-lo">{more}</p>
+          <p className="max-w-2xl font-sans text-base leading-relaxed text-ink-lo">{more}</p>
         </details>
       )}
     </header>

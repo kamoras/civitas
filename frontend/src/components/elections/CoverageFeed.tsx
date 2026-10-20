@@ -98,7 +98,7 @@ export default function CoverageFeed({ items }: { items: RaceCoverageItem[] }) {
               {isRecent && <span className="tracking-[0.1em] text-phos-mid">LAST 24H</span>}
             </div>
 
-            <p className="mt-2 font-display text-base leading-relaxed text-ink">{item.summary}</p>
+            <p className="mt-2 font-sans text-base leading-relaxed text-ink">{item.summary}</p>
 
             {href ? (
               <a

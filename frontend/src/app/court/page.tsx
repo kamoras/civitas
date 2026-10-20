@@ -105,7 +105,7 @@ export default async function CourtPage({ searchParams }: { searchParams: Promis
               </h2>
               {lead ? (
                 <div className="flex flex-col gap-x-6 gap-y-2 sm:flex-row sm:items-center">
-                  <p className="shrink-0 font-display text-6xl font-extrabold leading-none tabular-nums text-ink-hi sm:text-7xl">
+                  <p className="shrink-0 font-display text-6xl font-semibold leading-none tabular-nums text-ink-hi sm:text-7xl">
                     {lead.figure}
                   </p>
                   <div className="flex flex-col gap-1">
@@ -141,12 +141,14 @@ export default async function CourtPage({ searchParams }: { searchParams: Promis
               aria-labelledby="decisions-heading"
               className="flex flex-col gap-6 border border-white/25 bg-surface px-4 py-5 sm:px-6"
             >
-              <h2 id="decisions-heading" className="text-xl font-bold text-ink-hi">
+              <h2 id="decisions-heading" className="text-xl font-semibold text-ink-hi">
                 Decisions
               </h2>
               <DecisionLineups court={court} />
               <div className="flex flex-col gap-3">
-                <h3 className="text-lg font-bold text-ink-hi">Latest decisions and who joined</h3>
+                <h3 className="text-lg font-semibold text-ink-hi">
+                  Latest decisions and who joined
+                </h3>
                 <p
                   className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-ink-lo"
                   aria-hidden="true"
@@ -172,7 +174,7 @@ export default async function CourtPage({ searchParams }: { searchParams: Promis
               aria-labelledby="methods-heading"
               className="flex flex-col gap-3 border border-white/25 bg-surface px-4 py-5 text-base leading-relaxed text-ink sm:px-6"
             >
-              <h2 id="methods-heading" className="text-xl font-bold text-ink-hi">
+              <h2 id="methods-heading" className="text-xl font-semibold text-ink-hi">
                 Methods and sources
               </h2>
               <p>

@@ -6,7 +6,7 @@ import Holdings from "@/components/home/Holdings";
 import OnTheRecord from "@/components/home/OnTheRecord";
 import SectionsBand from "@/components/home/SectionsBand";
 import ElectionNight from "@/components/home/ElectionNight";
-import ThisWeekStrip from "@/components/shared/ThisWeekStrip";
+import HomeTasks from "@/components/home/HomeTasks";
 import JsonLd from "@/components/seo/JsonLd";
 import { HOME_DESCRIPTION, HOME_TITLE, pageMetadata } from "@/lib/site";
 import { siteJsonLd } from "@/lib/seo";
@@ -47,8 +47,10 @@ export default async function Home() {
             first row the day's top issue), this week, the week's notable
             votes; then the one index of every way into the site, beside
             the sources it is all built from. */}
+        {/* The three tasks a visitor comes for, and registration closing
+            soon, in the first screen; then the day's record. */}
+        <HomeTasks />
         <RecordIndex />
-        <ThisWeekStrip variant="full" />
         <OnTheRecord />
         <div className="mx-auto mt-10 grid max-w-7xl grid-cols-1 gap-8 px-4 sm:px-6 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] md:gap-9">
           <SectionsBand />

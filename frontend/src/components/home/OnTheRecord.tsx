@@ -76,7 +76,7 @@ function Entry({ entry }: { entry: NotableEntry }) {
           <span className="md:block">{shortDate(v.date).toUpperCase()}</span>
           <span className="md:hidden"> · </span>
           <span className="md:block">
-            {chamberWord(v.chamber)} ROLL CALL {v.number}
+            {chamberWord(v.chamber)} ROLL CALL <span className="font-id">{v.number}</span>
           </span>
         </span>
       </p>
@@ -84,7 +84,7 @@ function Entry({ entry }: { entry: NotableEntry }) {
         <p className="font-display text-base font-semibold leading-snug text-ink-hi">
           {entry.sentence}
         </p>
-        <p className="mt-0.5 line-clamp-2 font-display text-sm leading-snug text-ink-lo">
+        <p className="mt-0.5 line-clamp-2 font-sans text-sm leading-snug text-ink-lo">
           {what}
           {v.title && v.title !== v.question ? ` · ${v.title}` : ""}
         </p>

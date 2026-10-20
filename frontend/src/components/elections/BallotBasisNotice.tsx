@@ -41,7 +41,7 @@ export default function BallotBasisNotice({ basis }: { basis?: BallotBasis | nul
         <p className="font-mono text-xs tracking-[0.12em] text-signal-red">
           THESE ARE NOT BALLOT POSITIONS
         </p>
-        <p className="mt-2 font-display text-sm leading-relaxed text-ink-hi">
+        <p className="mt-2 font-sans text-sm leading-relaxed text-ink-hi">
           This state&apos;s primary was held
           {typeof days === "number" ? ` ${days} days ago` : ""}, so its November ballot is already
           decided, but we do not have the certified list yet.

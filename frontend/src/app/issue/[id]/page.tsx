@@ -69,7 +69,7 @@ function Withdrawn({ retraction }: { retraction: Retraction }) {
           <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
             Withdrawn {retraction.date}
           </p>
-          <h1 className="font-display text-3xl font-extrabold text-ink-hi">
+          <h1 className="font-display text-3xl font-semibold text-ink-hi">
             This issue was withdrawn
           </h1>
           <p className="leading-relaxed text-ink">{retraction.reason}</p>
@@ -195,11 +195,11 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
               {/* The header names the issue itself: no title strip. */}
               <ShareSectionButton label="Issue summary" withStrip={false} />
             </div>
-            <h1 className="mt-3 text-balance font-display text-3xl font-extrabold leading-tight tracking-[-0.01em] text-ink-hi sm:text-4xl">
+            <h1 className="mt-3 text-balance font-display text-3xl font-semibold leading-tight tracking-[-0.01em] text-ink-hi sm:text-4xl">
               {issue.title}
             </h1>
             {!restatesTitle(issue.title, issue.summary) && (
-              <p className="mt-4 font-display text-base leading-relaxed text-ink sm:text-[17px]">
+              <p className="mt-4 font-sans text-base leading-relaxed text-ink sm:text-[17px]">
                 {issue.summary}
                 <SummarySource issue={issue} />
               </p>
@@ -228,7 +228,7 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
 
           {/* Full story */}
           {paragraphs ? (
-            <article className="mb-4 mt-8 space-y-5 font-display text-base leading-relaxed text-ink">
+            <article className="mb-4 mt-8 space-y-5 font-sans text-base leading-relaxed text-ink">
               {paragraphs.map((para, i) => {
                 // claims.build_story's only structure: "## Outlet" above
                 // that outlet's verbatim claims. Everything else is a

@@ -85,7 +85,7 @@ export default async function ElectionArchiveIndexPage() {
                       className="block border border-white/[0.09] bg-surface p-4 hover:border-phos/60"
                     >
                       <span className="flex flex-wrap items-baseline justify-between gap-2">
-                        <span className="font-display text-xl font-extrabold uppercase text-ink-hi">
+                        <span className="font-display text-xl font-semibold uppercase text-ink-hi">
                           The {c.cycle} general election →
                         </span>
                         {c.stillCounting && (

@@ -123,6 +123,7 @@ export const SECTIONS = {
       { key: "week", label: "Latest week", href: "/congress/week" },
       { key: "month", label: "Latest month", href: "/congress/month" },
       { key: "bills", label: "Bills", href: "/congress/bills" },
+      { key: "members", label: "Members", href: "/congress/members" },
       { key: "committees", label: "Committees", href: "/congress/committees" },
       { key: "nominations", label: "Nominations", href: "/congress/nominations" },
       // "Votes with the president", not "With the president": the page is
@@ -149,10 +150,10 @@ export const SECTIONS = {
   politicians: {
     label: "Politicians",
     href: "/politicians",
-    match: ["/politicians", "/leaderboard", "/compare"],
+    match: ["/politicians", "/compare"],
     tabs: [
       { key: "directory", label: "Every member", href: "/politicians" },
-      { key: "leaderboard", label: "Leaderboard", href: "/leaderboard" },
+      { key: "measures", label: "Measure by measure", href: "/congress/members" },
       { key: "compare", label: "Compare members", href: "/compare" },
       { key: "presidents", label: "Compare presidents", href: "/compare/presidents" },
     ],

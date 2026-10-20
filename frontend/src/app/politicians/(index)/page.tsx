@@ -1,6 +1,5 @@
 "use client";
 
-import { displayScore } from "@/lib/formatting";
 import {
   districtName,
   filterDistricts,
@@ -19,7 +18,6 @@ import PageFallback from "@/components/layout/PageFallback";
 import { countyFinderStatus, countyNames, finderSuggestions } from "@/lib/countyFinder";
 import { fetchHouseDistrictsByCounty, fetchPoliticianDirectory } from "@/lib/api";
 import { useAsyncData } from "@/hooks/useAsyncData";
-import { getScoreBgColor } from "@/lib/representation";
 import { formerOfficeBadge } from "@/lib/officeStatus";
 import { delegationOrder } from "@/lib/delegationOrder";
 import type { HouseDistrictsByCounty, PoliticianCard } from "@/types/politicians";
@@ -40,19 +38,6 @@ const STATES_BY_NAME = [...STATE_CODES].sort((a, b) =>
 function partyDot(party: string) {
   const cls = party === "D" ? "bg-dem-blue" : party === "R" ? "bg-signal-red" : "bg-ind-purple";
   return <span className={`inline-block w-2 h-2 ${cls} mr-1.5`} />;
-}
-
-function ScoreBar({ score: raw }: { score: number }) {
-  const score = displayScore(raw);
-  const color = getScoreBgColor(score);
-  return (
-    <div className="flex items-center gap-2 min-w-0">
-      <div className="flex-1 h-1 bg-white/[0.03] overflow-hidden">
-        <div className={`h-full ${color}`} style={{ width: `${score}%` }} />
-      </div>
-      <span className="font-mono text-xs text-ink w-8 text-right shrink-0">{score}</span>
-    </div>
-  );
 }
 
 function Initials({ name }: { name: string }) {
@@ -118,16 +103,7 @@ function PoliticianCardUI({ p }: { p: PoliticianCard }) {
             <span className="font-mono text-xs text-ink-lo tracking-widest border border-signal-magenta/40 px-1.5 py-0.5">
               {formerOfficeBadge(p)}
             </span>
-          ) : p.hasScorecard && p.overallScore != null ? (
-            <ScoreBar score={p.overallScore} />
-          ) : p.branch === "scotus" ? (
-            // Justice v3: justices are not scored, not "pending".
-            <span className="font-mono text-xs text-ink-min tracking-widest">NOT SCORED</span>
-          ) : (
-            <span className="font-mono text-xs text-ink-min tracking-widest">
-              SCORECARD PENDING
-            </span>
-          )}
+          ) : null}
         </div>
 
         {p.activeIssueCount > 0 && (
@@ -192,7 +168,7 @@ function CountyFinder({
   );
   return (
     <div className="mb-4 border border-white/[0.07] p-4">
-      <label htmlFor={id} className="block text-sm font-bold text-ink-hi">
+      <label htmlFor={id} className="block text-sm font-semibold text-ink-hi">
         Find your House member by city, town or county
       </label>
       <p className="mt-1 text-xs text-ink-lo">

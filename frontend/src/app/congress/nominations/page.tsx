@@ -233,7 +233,7 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
             )}
 
             <section id="list" aria-labelledby="list-title" className="flex flex-col gap-4">
-              <h2 id="list-title" className="font-display text-2xl font-extrabold text-ink-hi">
+              <h2 id="list-title" className="font-display text-2xl font-semibold text-ink-hi">
                 {complete ? "Every nomination" : "Nominations read so far"}
               </h2>
               <form

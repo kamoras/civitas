@@ -95,7 +95,7 @@ export default async function Holdings() {
         ))}
       </dl>
 
-      <p className="mt-4 font-display text-base leading-relaxed text-ink-lo">
+      <p className="mt-4 font-sans text-base leading-relaxed text-ink-lo">
         Civitas is run by volunteers. It is not a company, a charity or any kind of registered
         group. It sells nothing.
       </p>

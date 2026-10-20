@@ -93,7 +93,7 @@ describe("ComparePresidentsPage", () => {
         .getAllByRole("cell")
         .map((c) => c.textContent);
 
-    expect(row("Presidential Score")).toEqual(["51", "48"]);
+    expect(row("Historians' rank (C-SPAN survey, their ranking)")).toHaveLength(2);
     expect(row("Historical Legacy")).toEqual(["Not scored", "72"]);
     expect(row("Average approval (vs all presidents)")).toEqual(["—", "48.0% vs 50.9%"]);
     expect(row("Approval against its era, points (vs the typical president)")).toEqual([

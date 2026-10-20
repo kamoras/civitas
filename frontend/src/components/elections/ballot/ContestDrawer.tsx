@@ -114,7 +114,7 @@ export default function ContestDrawer({
                   id="contest-drawer-title"
                   ref={heading}
                   tabIndex={-1}
-                  className="text-[19px] font-bold leading-tight text-ink-hi outline-none"
+                  className="text-[19px] font-semibold leading-tight text-ink-hi outline-none"
                 >
                   {contest.title}
                 </h2>
@@ -143,7 +143,7 @@ export default function ContestDrawer({
           <button
             type="button"
             onClick={() => (next ? onNavigate(next.key) : onClose())}
-            className="min-h-[48px] bg-phos px-3 text-right text-sm font-bold text-surface-base hover:bg-phos-mid"
+            className="min-h-[48px] bg-phos px-3 text-right text-sm font-semibold text-surface-base hover:bg-phos-mid"
           >
             {next ? `${next.title}\u00a0→` : "Back to the ballot"}
           </button>

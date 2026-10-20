@@ -77,7 +77,8 @@ def test_the_route_takes_q(senator):
         body = TestClient(app).get("/api/senators/s1/votes", params={"category": "all", "q": "7008"}).json()
     finally:
         app.dependency_overrides.clear()
-    assert [v["billId"] for v in body["votes"]] == ["H.R. 7008"]
+    # Stored as the Senate's roll call prints it; served in the one spelling (app/bill_ids.py).
+    assert [v["billId"] for v in body["votes"]] == ["HR.7008"]
 
 
 # A date range (?period=), so "what did they vote on lately" is one tap.
