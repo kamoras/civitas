@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
+import { MEASURES_HREF } from "@/lib/routes";
 import Footer from "@/components/layout/Footer";
 import { axisMax, fmt } from "@/components/scorecard/WhereTheyStand";
 import { STATE_NAMES } from "@/lib/stateCodes";
@@ -344,7 +345,7 @@ export default function MeasuresClient({
             {(["senate", "house"] as const).map((c) => (
               <Link
                 key={c}
-                href={`/congress/members?chamber=${c}`}
+                href={`${MEASURES_HREF}?chamber=${c}`}
                 aria-current={c === chamber ? "page" : undefined}
                 className={`-ml-px inline-flex min-h-11 items-center border px-4 text-sm font-semibold first:ml-0 ${c === chamber ? TAB_ON : TAB_OFF}`}
               >

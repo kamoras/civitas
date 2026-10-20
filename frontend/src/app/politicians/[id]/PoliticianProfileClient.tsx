@@ -4,7 +4,7 @@ import FollowFeed from "@/components/shared/FollowFeed";
 import { memberFeed } from "@/lib/site";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
-import { recordTrail } from "@/lib/routes";
+import { membersHref, recordTrail } from "@/lib/routes";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
@@ -244,7 +244,7 @@ export default function PoliticianProfileClient({
               {(branch === "senate" || branch === "house") && identity.state && (
                 <div className="mt-3 text-center">
                   <Link
-                    href={`/politicians?branch=${branch}&state=${identity.state}`}
+                    href={membersHref(identity.state, branch)}
                     className={`font-mono tracking-widest text-ink-min transition-colors hover:text-phos ${LONG_LABEL}`}
                   >
                     Compare all {identity.stateName ?? identity.state}{" "}

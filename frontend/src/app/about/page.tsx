@@ -4,7 +4,7 @@ import { pageMetadata, GITHUB_REPO_URL } from "@/lib/site";
 import { aboutPageJsonLd } from "@/lib/seo";
 import JsonLd from "@/components/seo/JsonLd";
 import { ABOUT_CHAPTERS } from "@/lib/aboutPages";
-import { ACTION_CENTER_HREF } from "@/lib/routes";
+import { ACTION_CENTER_HREF, MEMBERS_HREF } from "@/lib/routes";
 import { AboutPage, Section, P, A } from "@/components/about/AboutPage";
 import ScoreWeightBar from "@/components/about/ScoreWeightBar";
 import LegacyAboutAnchor from "@/components/about/LegacyAboutAnchor";
@@ -86,13 +86,13 @@ const SCORE_PARTS: readonly {
 const COVERAGE: readonly { what: string; detail: string; href: string }[] = [
   {
     what: "Senate & House",
-    detail: "Every sitting member, measure by measure",
-    href: "/politicians",
+    detail: "Every sitting member, found by state, town or county",
+    href: MEMBERS_HREF,
   },
   {
     what: "Presidents",
     detail: "Every president, on economic, public and historical records",
-    href: "/politicians?branch=president",
+    href: "/compare/presidents",
   },
   {
     what: "Supreme Court",

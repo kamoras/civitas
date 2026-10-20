@@ -100,9 +100,9 @@ external API calls to cloud AI services.
                            ▼
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │  Next.js 16 frontend  (port 3000)                                            │
-│  /politicians  /congress  /congress/members  /action  /explore  /compare     │
+│  /congress  /congress/members[/measures]  /politicians/<id>  /action         │
 │  /elections  /elections/states/<ST>  /issue  /about  /changelog  /admin       │
-│  /accessibility  /feedback  /compare/presidents                              │
+│  /explore  /compare  /accessibility  /feedback  /compare/presidents          │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -122,11 +122,11 @@ external API calls to cloud AI services.
 
 **A phone's header is one row and gets out of the way.** Under 56rem (the MENU layout) the records band ("FILED … · COMPLETE") folds into a status square left of the wordmark (`RunStatusSquare` in `RecordsBand.tsx`): filled when every nightly run completed, hollow and red or amber otherwise, in a 44px button named with the whole status line, which a tap opens under the bar. The header goes from 86px to 51px (13.2% → 7.7% of an iPhone 14's screen; `--header-clearance` 3.75rem there). Past the first screen it hides while the reader scrolls down and comes back on any scroll up (`useHideOnScroll` in `Navbar.tsx`), never with reduced motion asked for, never while focus is in it (focus there shows it) and never with the menu or a sheet open; `data-header-hidden` on `<html>` sets `--header-shown-h` to 0, and the section bar and the Action Center's tab row (which read it, not the old literal `top-[82px]` that tucked 4px under an 86px header) move up to the top edge with it.
 
-**"Your state" leads somewhere.** Picking a state in the header (this tab only, as before) now confirms it in the picker's polite live region with two next steps, "Ohio's members →" (`/politicians?state=OH`) and "Ohio's ballot →", 44px each, with no timer while they show (`YourStatePicker`). the home page's members and ballot boxes lead with "Ohio's members →" and "Ohio's ballot →" (`StateJump`), `/elections` leads with "Your state: Ohio" and both links, and a roll call (and a bill's vote) lists the state's members and how each voted before any list is opened (`VoteMembers`). The phone menu is in phone order: the eight sections as 52px rows in the sans face, each section's pages behind its own ▸ (the current section's open), then the state, then Bluesky; it showed 33 caps links at one weight, the pages beside their sections. My members from the header: MENU, pick, "Ohio's members", 3 taps and a pick (5 taps and a pick before, with no confirmation).
+**"Your state" leads somewhere.** Picking a state in the header (this tab only, as before) now confirms it in the picker's polite live region with two next steps, "Ohio's members →" (`/congress/members?state=OH`) and "Ohio's ballot →", 44px each, with no timer while they show (`YourStatePicker`). the home page's members and ballot boxes lead with "Ohio's members →" and "Ohio's ballot →" (`StateJump`), `/elections` leads with "Your state: Ohio" and both links, and a roll call (and a bill's vote) lists the state's members and how each voted before any list is opened (`VoteMembers`). The phone menu is in phone order: the eight sections as 52px rows in the sans face, each section's pages behind its own ▸ (the current section's open), then the state, then Bluesky; it showed 33 caps links at one weight, the pages beside their sections. My members from the header: MENU, pick, "Ohio's members", 3 taps and a pick (5 taps and a pick before, with no confirmation).
 
 **Standalone actions are 44px on a phone** (mobile spec P10): an issue's `[ CALL … ]`, `[ WRITE ↗ ]` and `[ WHAT TO SAY ]` (32px before), its action rows, "Read full story" and "Comment →", the share links, the homepage's voter links, the pagers (Previous/Next, numbered pages, the Action Center's day pager), the names on a roll call, and `/elections`'s state directory, which is two columns of named rows there (`TAP_TARGET` in `components/action/IssueEnrichment.tsx` for the issue's links). Links inside a sentence and the footer's directory keep their own height (24px, WCAG 2.5.8's minimum). Targets under 44px at 390px: a roll call 148 → 48, `/elections` 186 → 135, the Action Center 78 → 61, an issue 56 → 49 (most of what is left on each is the footer and links in running text).
 
-**Server rendering:** `/action`, `/explore`, `/politicians` and the other
+**Server rendering:** `/action`, `/explore`, `/congress/members` and the other
 search-param pages keep their view state in the address bar, and `useSearchParams()` has
 no value during SSR — so React suspends and the server renders the nearest
 `<Suspense>` fallback. Each of those pages supplies a real one
@@ -1175,7 +1175,7 @@ sits.
 **Who represents a county today is a different question.** The election
 crosswalk answers "which district do I vote in"; in a redrawn state it gives
 the new district, whose number names a different place from the one its
-sitting member won. `/politicians` answers "who represents me" from a second
+sitting member won. `/congress/members` answers "who represents me" from a second
 file on the lines the sitting members were elected on,
 `county_district_crosswalk_sitting.json` (every state on the 119th-Congress
 block file, `build_county_district_crosswalk.py --sitting`), with the
@@ -1922,7 +1922,7 @@ The homepage's "Built from the public record" panel lists each source with what 
 
 ## The chamber, measure by measure
 
-`/congress/members?chamber=senate|house` replaced the leaderboard (redesign 2026-10; `/leaderboard` answers with a permanent redirect there, `?branch=president` to the presidents' directory and `?branch=scotus` to `/court`). It ranks no one and shows no composite score. Four strips, one per measure (small gifts, PAC money, breaks with party, bills past committee), draw every serving member as a mark shaped by party (D circle, R square, independent diamond, so party never rests on colour), with the chamber median, and name the three members furthest above and below the figure expected for them (their seat's where the scorer has one, else the chamber median). Below, one table of plain facts (member, seat, small gifts, PAC share, breaks over party-line votes, bills past committee, passed, law), alphabetical by default and sortable by any column (`aria-sort`), filtered by state, party and, in the House, seat lean from the sitting lines' Cook PVI (bands stated on the page as conventions). Data: `GET /api/congress/measures?chamber=` (`peer_comparison.chamber_measures`). `/compare` draws the same four strips with the two members as a filled and an outlined marker, beside the fact table, with no winner marks.
+`/congress/members/measures?chamber=senate|house` replaced the leaderboard (redesign 2026-10; it was at `/congress/members` until Congress › Members became the find-your-members directory, and a link there with `?chamber=` still lands on it). `/leaderboard` answers with a permanent redirect there, `?branch=president` to the presidents and `?branch=scotus` to `/court`. It ranks no one and shows no composite score. Four strips, one per measure (small gifts, PAC money, breaks with party, bills past committee), draw every serving member as a mark shaped by party (D circle, R square, independent diamond, so party never rests on colour), with the chamber median, and name the three members furthest above and below the figure expected for them (their seat's where the scorer has one, else the chamber median). Below, one table of plain facts (member, seat, small gifts, PAC share, breaks over party-line votes, bills past committee, passed, law), alphabetical by default and sortable by any column (`aria-sort`), filtered by state, party and, in the House, seat lean from the sitting lines' Cook PVI (bands stated on the page as conventions). Data: `GET /api/congress/measures?chamber=` (`peer_comparison.chamber_measures`). `/compare` draws the same four strips with the two members as a filled and an outlined marker, beside the fact table, with no winner marks.
 
 ## On the record
 
@@ -2503,7 +2503,7 @@ civitas/
 │   │   ├── about/            # Methodology page with full citations
 │   │   ├── action/           # Action Center (issues, monitors, timeline)
 │   │   ├── issue/[id]/       # Permanent issue permalinks (Bluesky link target)
-│   │   ├── politicians/      # Unified directory + per-member profile
+│   │   ├── politicians/      # Per-member profile (the directory moved to congress/members)
 │   │   │   └── [id]/         #   (senator, representative, president, and justice
 │   │   │                     #    scorecards all render into this one page)
 │   │   ├── congress/         # Daily/weekly/monthly Congress reports; bills/ (in-motion list, any bill's page)
@@ -2511,7 +2511,8 @@ civitas/
 │   │   ├── explore/          # Hybrid search over government documents
 │   │   ├── elections/        # State index, per-state ballot pages (federal contests
 │   │   │                     #   + statewide measures), race/candidate detail
-│   │   ├── congress/members/ # The chamber measure by measure (replaced the leaderboard)
+│   │   ├── congress/members/ # Find your members (Senate, House; state, town, county)
+│   │   │   └── measures/     #   The chamber measure by measure (replaced the leaderboard)
 │   │   ├── environmental/    # Environmental policy tracking
 │   │   ├── accessibility/    # Accessibility statement
 │   │   ├── feedback/         # On-site feedback form -> files a GitHub issue

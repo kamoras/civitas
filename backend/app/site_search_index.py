@@ -312,7 +312,7 @@ def _elections(db: Session) -> list[Entity]:
         out.append(Entity("state", name, f"/elections/states/{code}", f"{name}'s ballot: federal races and statewide measures",
                           importance=0.9, aliases=[code, f"{name} ballot"], keys=[f"state:{code}"]))
         if code in current_states:
-            out.append(Entity("state", f"{name} members of Congress", f"/politicians?state={code}",
+            out.append(Entity("state", f"{name} members of Congress", f"/congress/members?state={code}",
                               f"{name}'s senators and representatives",
                               importance=0.7, aliases=[f"{code} members", f"{name} delegation",
                                                        f"{name} senators", f"{name} representatives"]))

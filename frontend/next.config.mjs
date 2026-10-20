@@ -12,27 +12,54 @@ const nextConfig = {
   htmlLimitedBots: /.*/,
   // Old paths that still have links out in the world — search results,
   // Bluesky posts, Action Center issues — keep working. Query strings are
-  // carried over. /bills moved under /congress (2026-09); /scorecard became
-  // /politicians (same ?branch= and ?state=).
+  // carried over. /bills moved under /congress (2026-09).
   async redirects() {
     return [
       { source: "/bills", destination: "/congress/bills", permanent: true },
       { source: "/bills/:id", destination: "/congress/bills/:id", permanent: true },
-      { source: "/scorecard", destination: "/politicians", permanent: true },
-      // The leaderboard ranked members by the composite score, which the
-      // site no longer shows (redesign 2026-10). Each chamber's view is now
-      // its measures page; presidents and justices go to their own lists.
+      // Each old directory or ranking address goes straight to its page,
+      // never through another redirect. The members directory moved from
+      // /politicians to /congress/members (2026-10), which reads the same
+      // ?branch=senate|house, ?state= and ?county=; the measures page that
+      // was briefly at /congress/members (its own ?chamber=) moved to
+      // /congress/members/measures. /scorecard was the directory before
+      // /politicians was. The leaderboard ranked members by the composite
+      // score, which the site no longer shows (redesign 2026-10).
+      // Presidents have no page of their own yet: their old addresses go
+      // to compare presidents with a temporary redirect, so no browser
+      // keeps it once they do.
+      ...["/politicians", "/scorecard"].flatMap((source) => [
+        {
+          source,
+          has: [{ type: "query", key: "branch", value: "president" }],
+          destination: "/compare/presidents",
+          permanent: false,
+        },
+        {
+          source,
+          has: [{ type: "query", key: "branch", value: "scotus" }],
+          destination: "/court",
+          permanent: true,
+        },
+        { source, destination: "/congress/members", permanent: true },
+      ]),
+      {
+        source: "/congress/members",
+        has: [{ type: "query", key: "chamber" }],
+        destination: "/congress/members/measures",
+        permanent: true,
+      },
       {
         source: "/leaderboard",
         has: [{ type: "query", key: "branch", value: "house" }],
-        destination: "/congress/members?chamber=house",
+        destination: "/congress/members/measures?chamber=house",
         permanent: true,
       },
       {
         source: "/leaderboard",
         has: [{ type: "query", key: "branch", value: "president" }],
-        destination: "/politicians?branch=president",
-        permanent: true,
+        destination: "/compare/presidents",
+        permanent: false,
       },
       {
         source: "/leaderboard",
@@ -40,7 +67,7 @@ const nextConfig = {
         destination: "/court",
         permanent: true,
       },
-      { source: "/leaderboard", destination: "/congress/members", permanent: true },
+      { source: "/leaderboard", destination: "/congress/members/measures", permanent: true },
       // No feed is at /feed itself; the page listing them is (nginx sends
       // /feed/ there too, before Next sees it).
       { source: "/feed", destination: "/feeds", permanent: true },

@@ -1,5 +1,6 @@
 "use client";
 
+import { membersHref } from "@/lib/routes";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import SectionTabs from "@/components/layout/SectionTabs";
@@ -465,7 +466,7 @@ export default function ElectionsPage() {
                 {(STATE_NAMES[yours.state] ?? yours.state).toUpperCase()}&apos;S BALLOT &rarr;
               </Link>
               <Link
-                href={`/politicians?state=${yours.state}`}
+                href={membersHref(yours.state)}
                 className="inline-flex min-h-11 items-center border-b border-phos-mid/40 text-phos-mid hover:text-phos"
               >
                 {(STATE_NAMES[yours.state] ?? yours.state).toUpperCase()}&apos;S MEMBERS &rarr;

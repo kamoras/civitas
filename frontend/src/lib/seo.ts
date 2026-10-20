@@ -445,6 +445,25 @@ export function describeElectionArchive(
   };
 }
 
+/** The find-your-members directory (`/congress/members`): what people
+ *  type is "my senator", "who represents me", a state's members. */
+export function describeMembersDirectory(): { title: string; description: string } {
+  return {
+    title: "Find Your Members of Congress by State: Senators & Representatives",
+    description:
+      "Find your two U.S. senators and your House representative by state, city, town or county, and open each one's votes, donors and record.",
+  };
+}
+
+/** The chamber measure by measure (`/congress/members/measures`). */
+export function describeMeasures(): { title: string; description: string } {
+  return {
+    title: "Congress, Measure by Measure: Small Gifts, PAC Money, Party Breaks, Bills",
+    description:
+      "Every senator and representative on four measures from FEC filings, roll calls and Congress.gov, side by side, with no rank and no score.",
+  };
+}
+
 /** The agency directory: "Federal agencies: budgets, rules and comment periods". */
 export function describeAgencyIndex(): { title: string; description: string } {
   return {

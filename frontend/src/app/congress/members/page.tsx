@@ -1,34 +1,16 @@
 import type { Metadata } from "next";
 import { pageMetadata } from "@/lib/site";
-import type { ChamberMeasures } from "@/types/peers";
-import MeasuresClient from "./MeasuresClient";
+import { MEMBERS_HREF } from "@/lib/routes";
+import { describeMembersDirectory } from "@/lib/seo";
+import MembersDirectory from "./MembersDirectory";
 
-const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
-
+// A client page's metadata, set by its server page (the directory reads the
+// query string in the browser).
 export const metadata: Metadata = pageMetadata({
-  title: "Congress, Measure by Measure: Small Gifts, PAC Money, Party Breaks, Bills",
-  description:
-    "Every senator and representative on four measures from FEC filings, roll calls and Congress.gov, side by side, with no rank and no score.",
-  path: "/congress/members",
+  ...describeMembersDirectory(),
+  path: MEMBERS_HREF,
 });
 
-async function fetchMeasures(chamber: "senate" | "house"): Promise<ChamberMeasures | null> {
-  try {
-    const res = await fetch(`${BACKEND}/api/congress/measures?chamber=${chamber}`, {
-      next: { revalidate: 300 },
-    });
-    return res.ok ? ((await res.json()) as ChamberMeasures) : null;
-  } catch {
-    return null;
-  }
-}
-
-export default async function MembersPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ chamber?: string }>;
-}) {
-  const chamber = (await searchParams).chamber === "house" ? "house" : "senate";
-  const data = await fetchMeasures(chamber);
-  return <MeasuresClient chamber={chamber} data={data} />;
+export default function MembersPage() {
+  return <MembersDirectory />;
 }

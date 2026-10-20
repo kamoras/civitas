@@ -1,3 +1,4 @@
+import { MEMBERS_HREF } from "@/lib/routes";
 import RecordNotFound from "@/components/notFound/RecordNotFound";
 import MemberSuggestions from "@/components/notFound/MemberSuggestions";
 
@@ -8,7 +9,7 @@ export default function PoliticianNotFound() {
     <RecordNotFound
       label="No politician at this address"
       message="No member of Congress, president or justice has this address."
-      steps={[{ href: "/politicians", label: "Find them in the directory, by name or state" }]}
+      steps={[{ href: MEMBERS_HREF, label: "Find them in the directory, by name or state" }]}
     >
       <MemberSuggestions />
     </RecordNotFound>

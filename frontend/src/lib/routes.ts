@@ -87,8 +87,29 @@ export function archivedRaceHref(cycle: number, raceId: string): string {
   return `${electionArchiveHref(cycle)}#race-${raceId}`;
 }
 
-/** Congress's members: the page a member's breadcrumb leads back to. */
+/**
+ * Congress's members: the directory, where a reader finds their senators
+ * and representative by state, town or county (`?branch=senate|house`,
+ * `?state=`, `?county=`). The page a member's breadcrumb leads back to.
+ * `/politicians` redirects here (next.config.mjs). It never reads
+ * `?chamber=`: that was the measures page's parameter when it lived at
+ * this address, and a `/congress/members?chamber=` link redirects to
+ * MEASURES_HREF.
+ */
 export const MEMBERS_HREF = "/congress/members";
+
+/** Every member of a chamber on four plain measures, side by side
+ *  (`?chamber=senate|house`). */
+export const MEASURES_HREF = "/congress/members/measures";
+
+/** The directory filtered to a state (and a chamber). */
+export function membersHref(state?: string | null, branch?: "senate" | "house"): string {
+  const params = new URLSearchParams();
+  if (branch) params.set("branch", branch);
+  if (state) params.set("state", state);
+  const q = params.toString();
+  return q ? `${MEMBERS_HREF}?${q}` : MEMBERS_HREF;
+}
 
 /**
  * The site's sections and each one's pages, in the order the main
@@ -126,8 +147,12 @@ export const SECTIONS = {
       { key: "reports", label: "Reports", href: "/congress" },
       { key: "week", label: "Latest week", href: "/congress/week" },
       { key: "month", label: "Latest month", href: "/congress/month" },
-      { key: "bills", label: "Bills", href: "/congress/bills" },
+      // Members first of the people pages: it is where a reader finds their
+      // own (the directory), and the measures and the pair compare it.
       { key: "members", label: "Members", href: MEMBERS_HREF },
+      { key: "measures", label: "Measure by measure", href: MEASURES_HREF },
+      { key: "compare", label: "Compare members", href: "/compare" },
+      { key: "bills", label: "Bills", href: "/congress/bills" },
       { key: "committees", label: "Committees", href: "/congress/committees" },
       { key: "nominations", label: "Nominations", href: "/congress/nominations" },
       // "Votes with the president", not "With the president": the page is
@@ -153,11 +178,10 @@ export const SECTIONS = {
   },
   politicians: {
     label: "Politicians",
-    href: "/politicians",
+    href: MEMBERS_HREF,
     match: ["/politicians", "/compare"],
     tabs: [
-      { key: "directory", label: "Every member", href: "/politicians" },
-      { key: "measures", label: "Measure by measure", href: "/congress/members" },
+      { key: "directory", label: "Every member", href: MEMBERS_HREF },
       { key: "compare", label: "Compare members", href: "/compare" },
       { key: "presidents", label: "Compare presidents", href: "/compare/presidents" },
     ],
@@ -252,10 +276,7 @@ export function recordTrail(branch: PoliticianBranch): { section: SectionKey; cr
     case "president":
       return {
         section: "politicians",
-        crumbs: [
-          { label: SECTIONS.politicians.label, href: SECTIONS.politicians.href },
-          { label: "Presidents", href: "/politicians?branch=president" },
-        ],
+        crumbs: [{ label: "Presidents", href: "/politicians?branch=president" }],
       };
     case "scotus":
       return {

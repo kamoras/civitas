@@ -24,9 +24,10 @@ import type { HouseDistrictsByCounty, PoliticianCard } from "@/types/politicians
 import { BOXED_CONTROL } from "@/lib/controlStyles";
 import Photo from "@/components/Photo";
 import { STATE_CODES, STATE_NAMES } from "@/lib/stateCodes";
+import SectionTabs from "@/components/layout/SectionTabs";
 import { useYourState } from "@/hooks/useYourState";
 
-type BranchFilter = "all" | "senate" | "house" | "president" | "scotus";
+type BranchFilter = "all" | "senate" | "house";
 type PartyFilter = "ALL" | "D" | "R" | "I";
 
 // By full name, as a reader looks for their state: a list of postal codes
@@ -211,35 +212,48 @@ function CountyFinder({
 }
 
 // The masthead's line, sent with the server's fallback too (PageFallback).
-const POLITICIANS_EYEBROW = "Directory · currently serving officials";
-const POLITICIANS_LEDE = (
-  <p>Everyone currently holding federal office, as recorded in the public register.</p>
+const MEMBERS_EYEBROW = "Congress · find your members";
+const MEMBERS_TITLE = "Members of Congress";
+const MEMBERS_LEDE = (
+  <p>
+    Every serving senator and representative. Pick a state for its two senators and its House
+    members, then a city, town or county to find the district.
+  </p>
 );
 
-export default function PoliticiansPage() {
+/** Only the chambers: a president or justice isn't anyone's member by
+ *  state (they have their own pages), and `?branch=` written by the old
+ *  directory for them never reaches here (next.config.mjs). */
+function branchParam(value: string | null): BranchFilter {
+  return value === "senate" || value === "house" ? value : "all";
+}
+
+/** The find-your-members directory (`/congress/members`): Senate and House,
+ *  filtered by state, town or county, party and name. */
+export default function MembersDirectory() {
   return (
     // The frame and a skeleton in the first paint: the content reads the
     // query string, which the server does not have (PageFallback).
     <Suspense
       fallback={
         <PageFallback
-          eyebrow={POLITICIANS_EYEBROW}
-          title="Politicians"
-          lede={POLITICIANS_LEDE}
+          eyebrow={MEMBERS_EYEBROW}
+          title={MEMBERS_TITLE}
+          lede={MEMBERS_LEDE}
           width="max-w-7xl"
           mastheadClassName="mb-8"
           rows={6}
         />
       }
     >
-      <PoliticiansPageContent />
+      <MembersDirectoryContent />
     </Suspense>
   );
 }
 
-function PoliticiansPageContent() {
+function MembersDirectoryContent() {
   const searchParams = useSearchParams();
-  const initialBranch = (searchParams.get("branch") as BranchFilter) || "all";
+  const initialBranch = branchParam(searchParams.get("branch"));
   const initialState = searchParams.get("state") || "";
   // Latched at mount (AGENTS.md "Client-side URL state"): writing ?county=
   // brings it straight back through useSearchParams.
@@ -272,14 +286,17 @@ function PoliticiansPageContent() {
   const directory = useAsyncData(`politicians:${branch}`, () =>
     fetchPoliticianDirectory({ branch: branch === "all" ? undefined : branch })
   );
-  const all = directory.data ?? EMPTY_DIRECTORY;
+  // Both chambers: the unfiltered directory also lists the president and
+  // the justices, who have pages of their own.
+  const all = useMemo(
+    () =>
+      (directory.data ?? EMPTY_DIRECTORY).filter(
+        (p) => p.branch === "senate" || p.branch === "house"
+      ),
+    [directory.data]
+  );
 
-  const showCountyFinder =
-    !!state &&
-    state !== "DC" &&
-    branch !== "senate" &&
-    branch !== "president" &&
-    branch !== "scotus";
+  const showCountyFinder = !!state && state !== "DC" && branch !== "senate";
   const houseLines = useAsyncData(
     `house-districts:${state}`,
     showCountyFinder ? () => fetchHouseDistrictsByCounty(state) : null
@@ -298,7 +315,7 @@ function PoliticiansPageContent() {
     [linesReady, houseLines, county]
   );
   const loading = directory.loading;
-  const error = directory.error ? "Failed to load politicians." : null;
+  const error = directory.error ? "Failed to load the members." : null;
 
   const filtered = useMemo(() => {
     let list = all;
@@ -316,14 +333,10 @@ function PoliticiansPageContent() {
     return list;
   }, [all, party, state, search, linesReady, county, countyMatches]);
 
-  const showStateFilter = branch === "all" || branch === "senate" || branch === "house";
-
   const branchTabs: { key: BranchFilter; label: string }[] = [
-    { key: "all", label: "ALL" },
-    { key: "senate", label: "SENATE" },
-    { key: "house", label: "HOUSE" },
-    { key: "president", label: "PRESIDENT" },
-    { key: "scotus", label: "SCOTUS" },
+    { key: "all", label: "Both chambers" },
+    { key: "senate", label: "Senate" },
+    { key: "house", label: "House" },
   ];
 
   const partyTabs: { key: PartyFilter; label: string }[] = [
@@ -357,8 +370,9 @@ function PoliticiansPageContent() {
       <Navbar />
       <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
         <div className="max-w-7xl mx-auto">
-          <PageMasthead className="mb-8" eyebrow={POLITICIANS_EYEBROW} title="Politicians">
-            {POLITICIANS_LEDE}
+          <SectionTabs section="congress" active="members" />
+          <PageMasthead className="mb-8" eyebrow={MEMBERS_EYEBROW} title={MEMBERS_TITLE}>
+            {MEMBERS_LEDE}
           </PageMasthead>
 
           <TerminalTitlebar title="Directory" />
@@ -370,8 +384,8 @@ function PoliticiansPageContent() {
                   key={key}
                   onClick={() => {
                     setBranch(key);
-                    setState("");
                     setParty("ALL");
+                    writeParams({ branch: key === "all" ? "" : key });
                   }}
                   aria-pressed={branch === key}
                   className={`font-mono text-xs tracking-widest px-3 py-1 border transition-colors ${
@@ -395,7 +409,7 @@ function PoliticiansPageContent() {
                 ref={searchRef}
                 type="text"
                 placeholder="SEARCH NAME..."
-                aria-label="Search politicians by name"
+                aria-label="Search members by name"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="font-mono text-xs bg-surface-base border border-white/[0.07] focus:border-phos/40 text-ink-hi placeholder:text-ink-min px-3 py-1.5 outline-none w-48 max-w-full"
@@ -418,21 +432,19 @@ function PoliticiansPageContent() {
               </div>
 
               {/* State filter (senate/house/all) */}
-              {showStateFilter && (
-                <select
-                  value={state}
-                  onChange={(e) => setState(e.target.value)}
-                  aria-label="Filter by state"
-                  className="font-mono text-xs bg-surface-base border border-white/[0.07] text-ink-lo px-2 py-1 outline-none"
-                >
-                  <option value="">ALL STATES</option>
-                  {STATES_BY_NAME.map((s) => (
-                    <option key={s} value={s}>
-                      {STATE_NAMES[s]}
-                    </option>
-                  ))}
-                </select>
-              )}
+              <select
+                value={state}
+                onChange={(e) => setState(e.target.value)}
+                aria-label="Filter by state"
+                className="font-mono text-xs bg-surface-base border border-white/[0.07] text-ink-lo px-2 py-1 outline-none"
+              >
+                <option value="">ALL STATES</option>
+                {STATES_BY_NAME.map((s) => (
+                  <option key={s} value={s}>
+                    {STATE_NAMES[s]}
+                  </option>
+                ))}
+              </select>
 
               {(search || party !== "ALL" || state) && (
                 <button
@@ -469,7 +481,7 @@ function PoliticiansPageContent() {
           ) : (
             <>
               <p className="font-mono text-xs text-ink-min mb-3 tracking-widest">
-                {filtered.length} POLITICIAN{filtered.length !== 1 ? "S" : ""}
+                {filtered.length} MEMBER{filtered.length !== 1 ? "S" : ""}
               </p>
               {senators.length > 0 && (
                 <div className={`${CARD_GRID} mb-4`}>
