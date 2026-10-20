@@ -88,14 +88,29 @@ export default function AccessibilityPage() {
                   the navigation. In a set of tabs, the arrow keys, Home and End move between tabs
                   and Tab moves into the content. In the main navigation, the button beside each
                   section lists its pages as plain links; Escape closes the list and returns focus
-                  to the button, and moving focus away closes it too. The mobile menu, the share
-                  dialog, the map&apos;s seat sheet and the scorecard and ballot drawers keep focus
-                  inside while open (Tab and Shift+Tab both wrap), close on Escape, and return focus
-                  to what opened them. Map tiles are one keyboard stop per state, opened with Enter.
+                  to the button, and moving focus away closes it too. In the phone menu each
+                  section&apos;s pages open from a button beside it that says whether they are
+                  showing. Choosing your state says what it set, in a message a screen reader reads
+                  out, with links to that state&apos;s members and ballot. The mobile menu, the
+                  share dialog, the map&apos;s seat sheet and the scorecard and ballot drawers keep
+                  focus inside while open (Tab and Shift+Tab both wrap), close on Escape, and return
+                  focus to what opened them. Map tiles are one keyboard stop per state, opened with
+                  Enter.
+                </Item>
+                <Item label="Long pages on a phone">
+                  A member&apos;s scorecard, a bill, a roll call, a state ballot, the Supreme Court
+                  page and the About chapters show a bar under the header once their first section
+                  scrolls up: it names the section you are reading, and SECTIONS opens every section
+                  in a sheet from the bottom of the screen, the current one marked. Choosing one
+                  moves focus to its heading. The sheet keeps focus inside, closes on Escape, its
+                  44-pixel Close button or a tap outside it, and returns focus to SECTIONS.
                 </Item>
                 <Item label="Focus">
                   The element with keyboard focus always shows a 2px green outline, and the page
-                  scrolls so it is never hidden under the fixed header.
+                  scrolls so it is never hidden under the fixed header, or under a phone&apos;s
+                  section bar. A phone&apos;s header comes back whenever focus moves into it. Its
+                  data status is a small square beside the name, a button that reads out and shows
+                  the whole status line.
                 </Item>
                 <Item label="Contrast">
                   The site is dark text on a warm paper by default, and a warm dark theme follows
@@ -123,7 +138,8 @@ export default function AccessibilityPage() {
                 </Item>
                 <Item label="Motion">
                   With reduced motion turned on in your system settings, animations stop,
-                  transitions are instant and the page jumps instead of scrolling smoothly.
+                  transitions are instant and the page jumps instead of scrolling smoothly. On a
+                  phone the header, which otherwise slides away while you scroll down, stays put.
                 </Item>
                 <Item label="Windows High Contrast">
                   In forced-colours mode, decorative colour effects that would smear text are
@@ -133,7 +149,10 @@ export default function AccessibilityPage() {
                   Controls are at least 24×24 pixels, WCAG 2.2&apos;s minimum target size, or spaced
                   so a 24-pixel circle around each touches no other; links inside a sentence are the
                   exception the standard allows. On a phone the MENU button, the way to every
-                  section, is a 44×44 target around the word. Nothing needs dragging.
+                  section, is a 44×44 target around the word, every standalone action (calling or
+                  writing a member, sharing, paging, a roll call&apos;s names) is 44 pixels tall,
+                  and every text box and menu is 44 pixels tall with 16-pixel text, so an iPhone
+                  doesn&apos;t zoom the page when one is tapped. Nothing needs dragging.
                 </Item>
                 <Item label="Pop-up explanations">
                   A score&apos;s explanation opens on hover, focus or tap, stays open while the
@@ -165,7 +184,8 @@ export default function AccessibilityPage() {
                   The same routes, on the same production build, are loaded in Chrome at 320 and
                   1280 pixels wide and checked against every axe-core rule for WCAG 2.0, 2.1 and 2.2
                   at levels A and AA, including colour contrast and target size. A page wider than a
-                  320-pixel screen fails too.
+                  320-pixel screen fails too, and so does a text box or menu under 16 pixels or 44
+                  pixels tall at that width.
                 </Item>
                 <Item label="axe-core, in the test suite">
                   The member, president and justice scorecards, the Congress report pages and the

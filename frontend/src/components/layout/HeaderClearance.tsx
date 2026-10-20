@@ -16,6 +16,10 @@ const AIR_PX = 8;
  * Measured, not a second fixed number: a wrapped header's height depends on
  * the text size and the buttons beside the wordmark (the header search is
  * one), and a hard-coded value would drift from them.
+ *
+ * Also publishes the header's own height as `--header-height`, for anything that
+ * sits directly under it (the phone's "on this page" bar, the Action Center's tabs): 86px today, more
+ * when the bar wraps.
  */
 export default function HeaderClearance() {
   useEffect(() => {
@@ -24,7 +28,7 @@ export default function HeaderClearance() {
     const root = document.documentElement;
     const update = () => {
       // The header's own bottom, for what sticks under it (the Action
-      // Center's tabs), at any size.
+      // Center's tabs, the phone's section bar), at any size.
       root.style.setProperty(
         "--header-height",
         `${Math.ceil(header.getBoundingClientRect().height)}px`

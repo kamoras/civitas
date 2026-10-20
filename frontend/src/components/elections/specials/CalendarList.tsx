@@ -152,7 +152,7 @@ export default function CalendarList({ cal }: { cal: ElectionCalendar }) {
         <select
           value={state}
           onChange={(ev) => setState(ev.target.value)}
-          className="min-h-11 border border-white/15 bg-surface-base px-3 font-mono text-sm normal-case tracking-normal text-ink-hi"
+          className="min-h-11 max-w-full border border-white/15 bg-surface-base px-3 font-mono text-sm normal-case tracking-normal text-ink-hi"
         >
           <option value="">Every state</option>
           {states.map(([code, name]) => (

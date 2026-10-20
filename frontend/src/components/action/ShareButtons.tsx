@@ -69,8 +69,9 @@ export default function ShareButtons({
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
+  // 44px on a phone (mobile spec P10).
   const linkCls =
-    "font-mono text-xs tracking-[0.08em] text-ink-lo underline decoration-white/20 underline-offset-4 transition-colors hover:text-ink-hi";
+    "inline-flex min-h-11 items-center sm:min-h-0 font-mono text-xs tracking-[0.08em] text-ink-lo underline decoration-white/20 underline-offset-4 transition-colors hover:text-ink-hi";
 
   return (
     <div

@@ -103,7 +103,8 @@ export default async function StateRedistrictingPage({
       <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
         <div className="mx-auto max-w-4xl">
           <SectionTabs section="elections" active="redistricting" className="mb-4" />
-          <nav aria-label="Breadcrumb" className="mb-6 text-sm text-ink-lo">
+          {/* Under 640px the section row above names where this page sits. */}
+          <nav aria-label="Breadcrumb" className="hidden sm:block mb-6 text-sm text-ink-lo">
             <Link href="/elections" className="inline-flex min-h-6 items-center hover:text-phos">
               Elections
             </Link>

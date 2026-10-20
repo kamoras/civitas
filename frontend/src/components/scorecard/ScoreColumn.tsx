@@ -3,6 +3,8 @@ import { displayScore } from "@/lib/formatting";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import MetricTooltip from "@/components/checker/MetricTooltip";
+import { onThisPage } from "@/lib/onThisPage";
+import { LONG_LABEL, labelCase } from "@/lib/controlStyles";
 
 /** One of a member's three scored dimensions, as a column: its name, its
  *  share of the Representation Score, the score itself, and the evidence
@@ -42,6 +44,7 @@ export default function ScoreColumn({
     <section
       id={shareId}
       {...{ [SHARE_SECTION_ATTR]: shareId }}
+      {...onThisPage(title, shown ?? undefined)}
       className="flex flex-col border border-white/25 bg-surface font-sans"
     >
       <header className="flex items-end justify-between gap-3 border-b border-white/25 bg-surface-raised px-5 py-4">
@@ -66,7 +69,9 @@ export default function ScoreColumn({
             {...{ [SHARE_EXCLUDE_ATTR]: "" }}
             className="group border-t border-white/[0.08] pt-4"
           >
-            <summary className="flex min-h-[44px] cursor-pointer list-none items-center gap-2 font-mono text-xs uppercase tracking-[0.14em] text-ink-lo hover:text-phos [&::-webkit-details-marker]:hidden">
+            <summary
+              className={`flex min-h-[44px] cursor-pointer list-none items-center gap-2 font-mono tracking-[0.14em] text-ink-lo hover:text-phos [&::-webkit-details-marker]:hidden ${LONG_LABEL}`}
+            >
               <span aria-hidden="true" className="inline-block group-open:rotate-90">
                 &#9656;
               </span>
@@ -102,9 +107,14 @@ export default function ScoreColumn({
   );
 }
 
-/** A small uppercase label over a block inside a column. */
-export function BlockLabel({ children }: { children: ReactNode }) {
-  return <h3 className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">{children}</h3>;
+/** A small mono label over a block inside a column: caps, or sentence case
+ *  on a phone when it runs past three words (labelCase). `words` is the
+ *  label's text when the children aren't plain text (a tooltip around it). */
+export function BlockLabel({ children, words }: { children: ReactNode; words?: string }) {
+  const text = typeof children === "string" ? children : (words ?? "");
+  return (
+    <h3 className={`font-mono tracking-[0.14em] text-ink-min ${labelCase(text)}`}>{children}</h3>
+  );
 }
 
 /** A column block set off by a hairline above it. */

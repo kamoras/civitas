@@ -383,7 +383,8 @@ class TestTallyRefusesTestData:
         assert got is not None and got.contests
 
     async def test_an_unreadable_config_is_unavailable_not_refused(self, monkeypatch):
-        assert await self._fetch(monkeypatch, config="<html>502</html>") is None
+        with pytest.raises(election_results.FeedUnreadable):
+            await self._fetch(monkeypatch, config="<html>502</html>")
 
     async def test_placeholder_answer(self, monkeypatch):
         """An unknown id answers 200 with lastUpdated 0001-01-01 and no id."""

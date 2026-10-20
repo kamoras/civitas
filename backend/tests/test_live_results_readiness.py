@@ -9,7 +9,7 @@ import pytest
 from app.live_results import readiness
 from app.models import Race
 from app.pipeline.fetch import election_results, poll_close
-from app.pipeline.fetch.election_results import ContestCount, StateCount, UntrustedCount
+from app.pipeline.fetch.election_results import ContestCount, FeedUnreadable, StateCount, UntrustedCount
 
 DAY = date(2026, 11, 3)
 
@@ -62,6 +62,9 @@ class TestReadiness:
             # to a landing page, so the reader finds no general.
             "NM": None,
             "MT": RuntimeError("boom"),
+            # North Dakota's election list answering 504 (2026-10-20): an
+            # outage, not a general that isn't staged.
+            "AR": FeedUnreadable("AR election list could not be read"),
             "GA": UntrustedCount("GA Enhanced Voting election x is not production data"),
             # The Senate contest is missing (a label the reader can't parse).
             "NE": _count(ContestCount(office="H", district=1, candidates=[("A", "R", 0)])),
@@ -70,8 +73,9 @@ class TestReadiness:
         })
         problems = await readiness.check_feed_readiness(db_session, None, DAY, date(2026, 10, 25))
         sent, resolved = alerts
-        assert set(problems) == {"NM", "MT", "GA", "NE", "VA"}
-        assert "not staged yet, moved, or unreadable" in problems["NM"]
+        assert set(problems) == {"NM", "MT", "AR", "GA", "NE", "VA"}
+        assert problems["NM"].startswith("its results site lists no election on 2026-11-03 yet")
+        assert problems["AR"] == "its feed could not be read: AR election list could not be read"
         assert "RuntimeError" in problems["MT"]
         assert "not production data" in problems["GA"]
         assert problems["NE"].endswith("none for 2026-SEN-NE (a label the reader can't parse, or a contest not "

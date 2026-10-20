@@ -6,6 +6,8 @@ import { PARTY_BORDER, PARTY_COLORS, PARTY_LABELS } from "@/lib/partyStyles";
 import MetricTooltip from "@/components/checker/MetricTooltip";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import Photo from "@/components/Photo";
+import { onThisPage } from "@/lib/onThisPage";
+import { LONG_LABEL } from "@/lib/controlStyles";
 
 /**
  * `min-h-6` for WCAG 2.2 SC 2.5.8 (24x24 targets): the links sit in a
@@ -78,6 +80,7 @@ export default function ScorecardHeader({
     <header
       id="overview"
       {...{ [SHARE_SECTION_ATTR]: "overview" }}
+      {...onThisPage("Overview")}
       className={`grid grid-cols-[minmax(0,1fr)] gap-4 border border-white/25 border-t-[3px] bg-surface px-5 py-6 font-sans sm:px-8 ${PARTY_BORDER[member.party]}`}
     >
       {/* Three blocks in reading order for a phone — who, the score, then
@@ -109,7 +112,9 @@ export default function ScorecardHeader({
           >
             {member.name}
           </Title>
-          <p className="font-mono text-xs uppercase tracking-[0.08em] text-ink-lo sm:tracking-[0.12em]">
+          <p
+            className={`font-mono tracking-[0.08em] text-ink-lo sm:tracking-[0.12em] ${LONG_LABEL}`}
+          >
             {office} · {place} · {PARTY_LABELS[member.party] ?? member.party} · {tenure}
           </p>
           {(leadershipTitle || member.sponsorshipDescription) && (

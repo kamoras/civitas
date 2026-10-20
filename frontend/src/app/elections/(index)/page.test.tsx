@@ -132,7 +132,8 @@ describe("ElectionsPage", () => {
     fetchLiveResults.mockResolvedValue(live);
     render(<ElectionsPage />);
     const nav = await screen.findByRole("navigation", { name: "Elections sections" });
-    const tabs = within(nav).getAllByRole("link");
+    // The wide row (a phone's switcher lists the same links).
+    const tabs = within(nav.querySelector<HTMLElement>("[data-section-row]")!).getAllByRole("link");
     expect(tabs.map((t) => t.textContent)).toEqual([
       "Ballots by state",
       "Seat map",
@@ -180,6 +181,174 @@ describe("ElectionsPage", () => {
     expect(screen.getByText(/The 2028 primaries are not on the FEC's calendar yet/)).toBeTruthy();
     expect(screen.getByText(/Every seat in Congress is filled/)).toBeTruthy();
     expect(screen.getByText(/The calendar couldn't be read just now/)).toBeTruthy();
+  });
+
+  function seasonInitial(season: Record<string, unknown>, extra: Record<string, unknown> = {}) {
+    return {
+      pvi: { states: { GA: 3 }, districts: {}, cycleYear: 2028, electionDay: "2028-11-07" },
+      phase: null,
+      renderedAt: Date.parse("2026-12-15T12:00:00Z"),
+      calendar: null,
+      archive: null,
+      specials: {
+        asOf: "2026-12-15",
+        vacancies: [],
+        vacanciesReadAt: null,
+        upcoming: [],
+        recent: [],
+        lastSpecial: null,
+        averageSwing: { swing: null, count: 0, of: 0, since: "2025-12-15", sentence: null },
+        sources: { fec: "https://www.fec.gov/data/election-dates/" },
+        season: {
+          cycle: 2028,
+          electionDay: "2028-11-07",
+          heldCycle: 2026,
+          until: null,
+          firstPrimary: null,
+          lastPrimary: null,
+          lead: [],
+          ...season,
+        },
+      },
+      ...extra,
+    } as unknown as ElectionsInitial;
+  }
+
+  it("after the count settles, leads with the election as kept, and no countdown", async () => {
+    fetchPviMap.mockResolvedValue({ states: { GA: 3 }, districts: {}, cycleYear: 2028 });
+    const initial = seasonInitial(
+      { season: "post_certification", betweenCycles: true, until: "2027-01-02" },
+      {
+        archive: {
+          current: { cycle: 2028, electionDay: "2028-11-07", phase: "campaign" },
+          cycles: [
+            {
+              cycle: 2026,
+              electionDay: "2026-11-03",
+              races: 470,
+              counted: 400,
+              official: 312,
+              measures: 120,
+              states: 50,
+              recordAsOf: null,
+              mapAsOf: null,
+              hasMap: true,
+              stillCounting: false,
+              accountability: {
+                ranged: 35,
+                certified: 30,
+                official: 30,
+                graded: 30,
+                held80: 25,
+                held95: 29,
+                swingSeats: 30,
+              },
+            },
+          ],
+        },
+      }
+    );
+    render(
+      <ElectionsInitialProvider value={initial}>
+        <ElectionsPage />
+      </ElectionsInitialProvider>
+    );
+    expect(
+      await screen.findByRole("heading", { name: "The 2026 election, on the record" })
+    ).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("2026 midterm results");
+    expect(
+      screen.getByText("312 of 400 counted races listed official by their states")
+    ).toBeTruthy();
+    expect(screen.getByText(/25 of 30 margins inside the 80% range/)).toBeTruthy();
+    expect(screen.getByText(/seated on January 3, 2027/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "[ THE 2026 RECORD → ]" })).toHaveAttribute(
+      "href",
+      "/elections/2026"
+    );
+    // A general two years off is no countdown.
+    expect(screen.queryByText(/days? away/)).not.toBeInTheDocument();
+    // The specials and the calendar still follow.
+    expect(screen.getByRole("heading", { name: "Between general elections" })).toBeTruthy();
+  });
+
+  it("before the primaries counts down to the first of them, not the general", async () => {
+    fetchPviMap.mockResolvedValue({ states: { GA: 3 }, districts: {}, cycleYear: 2028 });
+    render(
+      <ElectionsInitialProvider
+        value={seasonInitial({
+          season: "off_season",
+          betweenCycles: true,
+          firstPrimary: "2028-01-15",
+        })}
+      >
+        <ElectionsPage />
+      </ElectionsInitialProvider>
+    );
+    expect(await screen.findByText(/First primary/)).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
+      "2028 elections: before the primaries"
+    );
+  });
+
+  it("in primary season leads with the primaries ahead", async () => {
+    fetchPviMap.mockResolvedValue({ states: { GA: 3 }, districts: {}, cycleYear: 2028 });
+    const day = (
+      date: string,
+      state: string,
+      stateName: string,
+      typeCode: string,
+      label: string
+    ) => ({
+      id: `${date}-${state}`,
+      date,
+      state,
+      stateName,
+      office: "P",
+      district: null,
+      seat: stateName,
+      typeCode,
+      label,
+      special: false,
+      note: null,
+      status: "upcoming",
+      daysLeft: 5,
+    });
+    const initial = seasonInitial(
+      {
+        season: "ramp",
+        betweenCycles: false,
+        firstPrimary: "2028-01-15",
+        lastPrimary: "2028-09-26",
+      },
+      {
+        renderedAt: Date.parse("2028-02-01T12:00:00Z"),
+        calendar: {
+          elections: [
+            day("2028-02-06", "NV", "Nevada", "P", "Primary election"),
+            day("2028-02-06", "NV", "Nevada", "CAU", "Caucus"),
+            {
+              ...day("2028-02-10", "FL", "Florida", "SG", "Special election general"),
+              special: true,
+            },
+          ],
+          voterDeadlines: [],
+          fecDeadlines: [],
+        },
+      }
+    );
+    render(
+      <ElectionsInitialProvider value={initial}>
+        <ElectionsPage />
+      </ElectionsInitialProvider>
+    );
+    expect(await screen.findByRole("heading", { name: "The 2028 primaries" })).toBeTruthy();
+    expect(screen.getByText(/run through September 26, 2028/)).toBeTruthy();
+    expect(screen.getByText("Nevada (Primary election), Nevada (Caucus)")).toBeTruthy();
+    expect(screen.queryByText(/Florida/)).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
+      "2028 elections: primary season"
+    );
   });
 
   it("still renders the directory when the payload carries no lean data", async () => {

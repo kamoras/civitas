@@ -35,5 +35,5 @@ rdata==1.1.0
 six==1.17.0
 statsmodels==0.15.0
 time-machine==3.5.1
-wrapt==2.5.0
+wrapt==2.5.1
 xarray==2026.9.0

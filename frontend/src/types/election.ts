@@ -605,6 +605,9 @@ export interface StateBallot {
    * the real ballot is settled and this platform does not have it. On
    * 2026-09-26 that was true of eleven states, Ohio by 144 days. */
   ballotBasis?: BallotBasis;
+  /** In a presidential cycle, the state's electoral votes (House seats plus
+   * two; DC three); null otherwise. Optional for an older backend. */
+  electoralVotes?: number | null;
   /** Statewide PVI — null only if the underlying PVI map lacks this
    * state, never a fabricated 0. */
   statePvi: number | null;

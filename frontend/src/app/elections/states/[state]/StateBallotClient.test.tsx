@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import StateBallotClient from "./StateBallotClient";
 import type { RaceWithCandidates, StateBallot, VoteStep } from "@/types/election";
@@ -125,11 +125,28 @@ describe("the ballot page", () => {
     const b = ballot();
     render(<StateBallotClient ballot={b} />);
     const name = b.stateName ?? b.state;
-    expect(screen.getByRole("link", { name: `Follow ${name} without an account` })).toHaveAttribute(
-      "href",
-      `/feed/states/${b.state}.xml`
-    );
-    expect(screen.getByRole("link", { name: "about feeds" })).toHaveAttribute("href", "/feeds");
+    // Beside the title from lg up, and after the contests on a phone, so the
+    // ballot is the first thing under a phone's title (mobile spec #5).
+    const head = document.querySelector<HTMLElement>("main header")!;
+    const phone = screen.getByTestId("ballot-index");
+    for (const where of [head, phone]) {
+      expect(
+        within(where).getByRole("link", { name: `Follow ${name} without an account` })
+      ).toHaveAttribute("href", `/feed/states/${b.state}.xml`);
+      expect(within(where).getByRole("link", { name: "about feeds" })).toHaveAttribute(
+        "href",
+        "/feeds"
+      );
+      expect(within(where).getByText("A research tool, not an official ballot.")).toBeTruthy();
+    }
+    expect(
+      within(head).getByText("A research tool, not an official ballot.").parentElement!.className
+    ).toMatch(/\bhidden\b.*\blg:flex\b/);
+    const contests = within(phone).getByRole("navigation", { name: "Contests on this ballot" });
+    expect(
+      contests.compareDocumentPosition(within(phone).getByText(/^A research tool/)) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
   });
 
   it("lays the ballot out as contests, federal first, with no drawer open", () => {
@@ -180,7 +197,7 @@ describe("the ballot page", () => {
     );
     expect(
       screen.getByText(
-        /3 federal candidates, 1 outside the two major parties · 1 with a congressional voting record/
+        /3 registered with the FEC, 1 outside the two major parties · 1 with a congressional voting record/
       )
     ).toBeInTheDocument();
   });
@@ -191,7 +208,26 @@ describe("the ballot page", () => {
         ballot={ballot({ houseRaces: [houseRace({ candidates: [candidate({ id: "d" })] })] })}
       />
     );
-    expect(screen.getByText(/^1 contest · 1 federal candidate/)).toBeInTheDocument();
+    expect(screen.getByText(/^1 contest · 1 registered with the FEC/)).toBeInTheDocument();
+    cleanup();
+    // Once the state has confirmed its list, it is the ballot's candidates.
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          ballotBasis: {
+            basis: "confirmed",
+            primaryPassed: true,
+            daysSincePrimary: 60,
+            supersededByPrimary: false,
+          },
+          houseRaces: [houseRace({ candidates: [candidate({ id: "d" })] })],
+        })}
+      />
+    );
+    expect(screen.getByText(/^1 contest · 1 federal candidate(?!s)/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+      "Everyone on OH's ballot, and who is behind them"
+    );
   });
 
   it("shows a candidate the state certified even with no FEC activity", () => {
@@ -324,7 +360,7 @@ describe("the ballot page", () => {
 
   it("gives a verified lookup no caveat", () => {
     render(<StateBallotClient ballot={ballot()} />);
-    expect(screen.queryByText(/This site blocks automated checks/)).not.toBeInTheDocument();
+    expect(screen.queryAllByText(/This site blocks automated checks/)).toHaveLength(0);
   });
 });
 
@@ -340,6 +376,22 @@ describe("the contest drawer", () => {
     expect(drawer.getByRole("heading", { name: "U.S. Senator" })).toBeInTheDocument();
     expect(drawer.getByRole("tab", { name: "Money" })).toHaveAttribute("aria-selected", "true");
     await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("opens as a sheet from the bottom of a phone's screen, closed by a tap above it", async () => {
+    // Mobile spec P7: a phone's contest research covered the whole screen.
+    render(<StateBallotClient ballot={twoContests()} />);
+    await openContest(/U\.S\. Senator/);
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.className).toMatch(/\bh-\[85svh\]/);
+    expect(dialog.className).toMatch(/\blg:h-full\b/);
+    const backdrop = screen.getByRole("button", {
+      name: "Close and return to the ballot",
+      hidden: true,
+    });
+    expect(backdrop.className).not.toMatch(/\bhidden\b/);
+    await userEvent.click(backdrop);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 

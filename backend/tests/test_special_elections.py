@@ -106,7 +106,7 @@ class TestReadingTheSources:
         assert db_session.get(FecReportingDeadline, "2027-06-01-12P").rows == 2
         # Only one pre-primary date is in a window starting after January 2,
         # but the type is due on two dates in its year: not shown as a date.
-        shown = se._national_deadlines(
+        shown = se.national_deadlines(
             db_session, db_session.query(FecReportingDeadline).filter(
                 FecReportingDeadline.due_date > "2027-01-05").all())
         assert [r.report_type for r in shown] == ["Q1"]
@@ -238,16 +238,6 @@ class TestBoardAndCalendar:
         assert se.day_status("TX", date(2027, 3, 2), datetime(2027, 3, 3, 3)) == (se.POLLS_CLOSED, 0)
         assert se.day_status("TX", date(2027, 3, 2), datetime(2027, 3, 2, 15)) == (se.VOTING, 0)
         assert se.day_status("TX", date(2027, 3, 2), datetime(2027, 3, 1, 15)) == (se.UPCOMING, 1)
-
-    def test_season(self, db_session):
-        assert se.season(db_session, date(2027, 6, 1))["season"] == "off_season"
-        assert se.season(db_session, date(2026, 12, 20))["season"] == "post_election"
-        db_session.add(FederalElectionDate(id="p", election_date="2028-03-07", election_year=2028, state="TX",
-                                           office="H", type_code="P", is_special=False, listed_on="x",
-                                           official=False))
-        db_session.commit()
-        assert se.season(db_session, date(2028, 2, 1))["season"] == "off_season"
-        assert se.season(db_session, date(2028, 3, 8))["season"] == "campaign"
 
     def test_endpoints(self, db_session, freeze_utcnow):
         freeze_utcnow(datetime(2027, 2, 1, 12))

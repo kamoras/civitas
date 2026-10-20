@@ -9,13 +9,30 @@ import type { RegistrationClosing } from "@/types/thisWeek";
 /** Where an election day stands on its state's own clock. */
 export type DayStatus = "upcoming" | "voting" | "polls_closed" | "held";
 
+/** The six stretches of the election calendar /elections and its hub are
+ * laid out by (backend election_phase.season). */
+export type SeasonName =
+  "campaign" | "election_night" | "results" | "post_certification" | "off_season" | "ramp";
+
 export interface Season {
-  season: "campaign" | "results" | "post_election" | "off_season";
-  /** Between cycles (post-election or off-season): /elections leads with
-   * the specials and the calendar. */
+  season: SeasonName;
+  /** Between cycles (post-certification or off-season): /elections leads
+   * with the archive, the specials and the calendar. */
   betweenCycles: boolean;
+  /** The general election the season leads up to, or the one being
+   * counted. */
   cycle: number;
+  electionDay: string;
+  /** The last general election held, the archive's; null before any. */
+  heldCycle: number | null;
+  /** The season's last day, where the calendar states it. */
+  until: string | null;
+  /** The cycle's first primary or caucus and last primary or runoff, by
+   * the FEC's calendar; null until listed. */
   firstPrimary: string | null;
+  lastPrimary: string | null;
+  /** The section's pages, most useful first this season. */
+  lead: string[];
 }
 
 export interface UsualVote {

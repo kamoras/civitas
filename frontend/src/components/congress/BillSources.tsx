@@ -6,6 +6,7 @@ import CiteThis from "@/components/shared/CiteThis";
 import { congressGovCitedSource } from "@/lib/citedSources";
 import { longDate } from "@/lib/congress";
 import { ordinal } from "@/components/scorecard/format";
+import { onThisPage } from "@/lib/onThisPage";
 
 const LINK = "text-ink underline decoration-white/30 underline-offset-4 hover:text-phos";
 
@@ -82,7 +83,11 @@ export default function BillSources({
       aria-labelledby="sources"
       className="flex flex-col gap-6 border border-white/25 bg-surface p-5"
     >
-      <h2 id="sources" className="font-display text-2xl font-semibold text-ink-hi">
+      <h2
+        id="sources"
+        {...onThisPage("Data and citation")}
+        className="font-display text-2xl font-semibold text-ink-hi"
+      >
         Sources, data and citation
       </h2>
       <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-sm sm:grid-cols-[7rem_minmax(0,1fr)]">

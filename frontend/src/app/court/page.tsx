@@ -16,6 +16,8 @@ import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import { absoluteUrl, pageMetadata } from "@/lib/site";
 import { fetchRecord } from "@/lib/ssrPayload";
 import type { Court, CourtDecisionPage } from "@/types/court";
+import OnThisPage from "@/components/shared/OnThisPage";
+import { onThisPage } from "@/lib/onThisPage";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 const PER_PAGE = 10;
@@ -79,6 +81,7 @@ export default async function CourtPage({ searchParams }: { searchParams: Promis
       <div className="min-h-screen bg-surface-base font-sans text-ink-hi">
         <Navbar />
         <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
+          <OnThisPage />
           <div className="mx-auto flex max-w-5xl flex-col gap-8">
             <div>
               <SectionTabs section="court" active="court" />
@@ -93,6 +96,7 @@ export default async function CourtPage({ searchParams }: { searchParams: Promis
             <section
               id="summary"
               aria-labelledby="summary-heading"
+              {...onThisPage("The record in short")}
               {...{ [SHARE_SECTION_ATTR]: "summary" }}
               className="flex flex-col gap-3 border border-white/25 border-t-[3px] border-t-ink-hi bg-surface px-4 py-5 sm:px-6"
             >
@@ -133,6 +137,7 @@ export default async function CourtPage({ searchParams }: { searchParams: Promis
 
             <section
               id="decisions"
+              {...onThisPage("Decisions")}
               aria-labelledby="decisions-heading"
               className="flex flex-col gap-6 border border-white/25 bg-surface px-4 py-5 sm:px-6"
             >
@@ -165,6 +170,7 @@ export default async function CourtPage({ searchParams }: { searchParams: Promis
 
             <section
               id="methods"
+              {...onThisPage("Methods and sources")}
               aria-labelledby="methods-heading"
               className="flex flex-col gap-3 border border-white/25 bg-surface px-4 py-5 text-base leading-relaxed text-ink sm:px-6"
             >

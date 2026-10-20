@@ -148,7 +148,7 @@ function BillsPageContent() {
                 className="font-mono text-xs bg-surface-base border border-white/[0.07] focus:border-phos/40 text-ink-hi placeholder:text-ink-min px-3 py-1.5 outline-none w-60"
               />
 
-              <div className="flex gap-1" role="group" aria-label="Filter by chamber">
+              <div className="flex flex-wrap gap-1" role="group" aria-label="Filter by chamber">
                 {(["all", "senate", "house"] as ChamberFilter[]).map((c) => (
                   <button
                     key={c}
@@ -163,7 +163,11 @@ function BillsPageContent() {
                 ))}
               </div>
 
-              <div className="flex gap-1" role="group" aria-label="Filter by sponsor's party">
+              <div
+                className="flex flex-wrap gap-1"
+                role="group"
+                aria-label="Filter by sponsor's party"
+              >
                 {(["ALL", "D", "R", "I"] as PartyFilter[]).map((p) => (
                   <button
                     key={p}

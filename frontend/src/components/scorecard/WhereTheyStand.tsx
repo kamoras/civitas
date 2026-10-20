@@ -8,6 +8,7 @@ import { fetchPeerComparison, fetchRepresentativeHistory, fetchSenatorHistory } 
 import type { ScoreSnapshot } from "@/lib/api";
 import { shortDate } from "@/lib/congress";
 import type { PeerComparison, PeerGroupKey, PeerMeasure } from "@/types/peers";
+import { onThisPage } from "@/lib/onThisPage";
 
 /** How each row's figure is printed on its axis and in its table: the
  *  backend's values, formatted only. */
@@ -314,6 +315,7 @@ export default function WhereTheyStand({
       <div className="flex flex-wrap items-end justify-between gap-3 border-t-[3px] border-ink-hi pt-3">
         <h2
           id="where-heading"
+          {...onThisPage("Where they stand")}
           className="font-display text-[22px] font-semibold text-ink-hi sm:text-[26px]"
         >
           Where {name} stands
