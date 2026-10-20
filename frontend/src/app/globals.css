@@ -482,7 +482,8 @@ input:focus-visible {
    directory's text and half of a member page (2026-10-16), and at that
    tracking 13px caps take the width of 17px text and break mid-phrase.
    Under 640px `text-xs` is 13px, the 9-12px one-offs are too, and wide
-   tracking drops to 0.08em. Tokens, so every label follows; unlayered, so
+   tracking drops to 0.08em (text boxes and menus excepted: they take 16px,
+   "Form controls on a phone" below). Tokens, so every label follows; unlayered, so
    they beat the utilities. SVG text keeps its size: a chart's labels are
    laid out for it (P6 takes those one by one). Labels of four words or more
    also go to sentence case on a phone, where they are written
@@ -492,7 +493,12 @@ input:focus-visible {
     --text-xs: 0.8125rem;
     --tracking-widest: 0.08em;
   }
-  :is(.text-\[9px\], .text-\[10px\], .text-\[11px\], .text-\[12px\]):not(svg *) {
+  :is(.text-\[9px\], .text-\[10px\], .text-\[11px\], .text-\[12px\]):not(
+    svg *,
+    input,
+    select,
+    textarea
+  ) {
     font-size: 0.8125rem;
   }
   :is(
@@ -506,6 +512,39 @@ input:focus-visible {
     .tracking-\[0\.3em\]
   ) {
     letter-spacing: 0.08em;
+  }
+}
+
+/* ===== FORM CONTROLS ON A PHONE =====
+   iOS Safari zooms the whole page when a control whose text is under 16px
+   takes focus, and leaves it zoomed: every search box and filter on the site
+   (12-14px, 20-36px tall) did that on an iPhone, 9 of 9 measured 2026-10-16.
+   16px stops the zoom without `maximum-scale=1`, which would also stop a
+   reader zooming on purpose (WCAG 1.4.4). 44px is the phone target height
+   the rest of the site's controls use.
+
+   Unlayered on purpose: it beats every Tailwind size utility on the control,
+   so a new input can't opt back into the zoom by naming `text-xs`.
+   `max(16px, 1rem)` follows a reader's own larger text setting (no control on
+   the site is set larger than body text).
+   The phone-width check in scripts/axe-routes.mjs holds every route to it. */
+@media (max-width: 639.98px) {
+  input:not(
+    [type="checkbox"],
+    [type="radio"],
+    [type="range"],
+    [type="hidden"],
+    [type="submit"],
+    [type="button"],
+    [type="reset"],
+    [type="image"],
+    [type="color"],
+    [type="file"]
+  ),
+  select,
+  textarea {
+    font-size: max(16px, 1rem);
+    min-height: 44px;
   }
 }
 
