@@ -6,6 +6,7 @@ deliberate per-router choice, just accretion as each entity type's routes
 were added over time.
 """
 
+import json
 from fastapi import responses
 from sqlalchemy.orm import Session
 
@@ -120,6 +121,14 @@ PRESIDENT_DIMENSION_LABELS = {
 }
 
 
+def _facts(stored: str | None) -> dict | None:
+    try:
+        facts = json.loads(stored or "null")
+    except (TypeError, ValueError):
+        return None
+    return facts if isinstance(facts, dict) else None
+
+
 def score_history_json(
     db: Session,
     entity_type: str,
@@ -158,6 +167,9 @@ def score_history_json(
                     label: round(getattr(s, slot), 1)
                     for slot, label in dimension_labels.items()
                 },
+                # The measures' figures on the day (app/measures.py), or
+                # None for a snapshot recorded before they were kept.
+                "facts": _facts(s.facts),
             }
             for s in snapshots
         ]

@@ -296,7 +296,7 @@ export default function MethodsLedger({
     <section ref={ref} id="methods" className="border border-white/25 bg-surface font-sans">
       {/* The toggle inside the heading, as CollapsibleSection does it: a
           heading inside a button drops out of the heading list. */}
-      <h2 className="text-[19px] font-bold leading-tight text-ink-hi">
+      <h2 className="text-[19px] font-semibold leading-tight text-ink-hi">
         <button
           type="button"
           onClick={() => setOpen(!open)}

@@ -31,7 +31,7 @@ function MemberCard({ m }: { m: StateMemberRecord }) {
           />
         )}
         <div className="min-w-0">
-          <h3 className="font-display text-base font-bold text-ink-hi">
+          <h3 className="font-display text-base font-semibold text-ink-hi">
             <Link href={`/politicians/${m.id}`} className="hover:text-phos">
               {m.name}
             </Link>{" "}

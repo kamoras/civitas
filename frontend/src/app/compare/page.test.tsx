@@ -38,6 +38,7 @@ function member(id: string, name: string, state: string, party: "D" | "R"): Sena
 const NORTH = [member("n-1", "Member One", "NA", "D"), member("n-2", "Member Two", "NA", "R")];
 
 vi.mock("@/lib/api", () => ({
+  fetchChamberMeasures: vi.fn(() => new Promise(() => {})),
   fetchStates: vi.fn(async () => [
     { code: "NA", name: "North", senatorCount: 2 },
     { code: "SO", name: "South", senatorCount: 1 },
@@ -69,7 +70,7 @@ afterEach(() => {
 });
 
 describe("compare: citable", () => {
-  it("names each score's run and method, shows Funding Diversity apart, and cites the pair", async () => {
+  it("names each member's run and method and cites the pair", async () => {
     window.history.replaceState(
       null,
       "",
@@ -77,13 +78,9 @@ describe("compare: citable", () => {
     );
     render(<ComparePage />);
     expect(await screen.findAllByText("Scored 2026-10-16 · v6.35")).toHaveLength(2);
-    expect(screen.getByText("FUNDING DIVERSITY")).toBeInTheDocument();
-    expect(screen.getByText("not in the score")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Cite this comparison" })).toBeInTheDocument();
     expect(
-      screen.getByText(
-        /Member One and Member Two: Representation scores compared, scoring method v6\.35/
-      )
+      screen.getByText(/Member One and Member Two compared, scoring method v6\.35/)
     ).toBeInTheDocument();
   });
 });

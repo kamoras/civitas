@@ -1,7 +1,8 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import axe from "axe-core";
-import config from "../../../tailwind.config";
 import AmendmentPurpose from "./AmendmentPurpose";
 import SeatChart from "./SeatChart";
 import BillJourney from "./BillJourney";
@@ -146,7 +147,7 @@ describe("BillJourney", () => {
   it("lists every stop in order, dated, with where the bill is now", async () => {
     render(<BillJourney journey={journey} passage={passage} />);
     const items = screen.getAllByRole("listitem").slice(0, 4);
-    expect(items.map((li) => li.querySelector(".font-bold")?.textContent)).toEqual([
+    expect(items.map((li) => li.querySelector(".font-semibold")?.textContent)).toEqual([
       "Introduced in the Senate",
       "Committee",
       "Senate floor (where it is now)",
@@ -173,8 +174,16 @@ describe("VotePanel without a roll call", () => {
 
 describe("chart marks", () => {
   // WCAG 1.4.11: each mark a reader must tell apart is 3:1 or more on every
-  // ground the chart and the journey sit on. The site has one theme (dark).
-  const palette = (config.theme?.extend?.colors ?? {}) as Record<string, Record<string, string>>;
+  // ground the chart and the journey sit on, in both themes (globals.css).
+  const css = readFileSync(join(import.meta.dirname, "../../app/globals.css"), "utf8");
+  const theme = (name: string) =>
+    Object.fromEntries(
+      [
+        ...(
+          css.match(new RegExp(`/\\* THEME ${name} \\*/([\\s\\S]*?)/\\* THEME end`))?.[1] ?? ""
+        ).matchAll(/(--[\w-]+):\s*(#[0-9a-fA-F]{6})/g),
+      ].map((m) => [m[1], m[2]])
+    );
   const lum = (hex: string) => {
     const [r, g, b] = [1, 3, 5].map((i) => {
       const c = parseInt(hex.slice(i, i + 2), 16) / 255;
@@ -186,14 +195,10 @@ describe("chart marks", () => {
     const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m);
     return (x + 0.05) / (y + 0.05);
   };
-  it.each([
-    ["phos", "mid"],
-    ["signal", "red"],
-    ["signal", "cyan"],
-    ["ink", "lo"],
-    ["ink", "min"],
-  ])("%s-%s is 3:1 or more on every surface", (group, step) => {
-    for (const ground of Object.values(palette.surface))
-      expect(ratio(palette[group][step], ground)).toBeGreaterThanOrEqual(3);
+  it.each([["light"], ["dark"]])("%s: every mark is 3:1 or more on every surface", (name) => {
+    const v = theme(name);
+    for (const mark of ["--phos-mid", "--signal-red", "--signal-cyan", "--ink-lo", "--ink-min"])
+      for (const ground of ["--surface-base", "--surface", "--surface-raised"])
+        expect(ratio(v[mark], v[ground]), `${mark} on ${ground}`).toBeGreaterThanOrEqual(3);
   });
 });

@@ -94,8 +94,8 @@ describe("font family stacks", () => {
 
   it.each([
     ["--font-archivo", "archivo", FALLBACKS.archivo],
-    ["--font-press-start", "press-start-2p", FALLBACKS.pressStart],
-    ["--font-share-tech", "share-tech-mono", FALLBACKS.shareTech],
+    ["--font-serif", "source-serif-4", FALLBACKS.sourceSerif],
+    ["--font-fira", "fira-sans", FALLBACKS.firaSans],
   ])("%s lists every subset, then the generated fallback", (variable, font, fallback) => {
     const stack = variables[variable].split(", ");
     expect(stack).toHaveLength(manifest.fonts[font].files.length + 1);
@@ -103,5 +103,12 @@ describe("font family stacks", () => {
     expect(stack.slice(0, -1).every((name) => !name.includes("Fallback"))).toBe(true);
     expect(manifest.fonts[font].fallback).toBe(fallback);
     expect(css).toContain(`font-family: "${fallback}"`);
+  });
+
+  it("gives DM Mono, which has no capsize metrics, every face and no fallback", () => {
+    expect(variables["--font-dm-mono"].split(", ")).toHaveLength(
+      manifest.fonts["dm-mono"].files.length
+    );
+    expect(manifest.fonts["dm-mono"].fallback).toBeNull();
   });
 });

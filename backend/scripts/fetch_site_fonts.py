@@ -22,8 +22,9 @@ so its fallback came out sized for SemiBold — about 4% too wide for the
 400-weight prose it stands in for, which then reflowed when the font
 loaded. Instead this uses the source next/font/google used: capsize's
 per-family metrics, which Next ships as capsize-font-metrics.json, run
-through Next's own formula (next/dist/server/font-utils.js). The three
-fallbacks come out identical to the ones the site had before.
+through Next's own formula (next/dist/server/font-utils.js), from local
+Times New Roman for a serif face and Arial otherwise, as next/font/google
+does.
 
 Rerun when a face should move to a newer Google release:
 
@@ -60,10 +61,15 @@ USER_AGENT = (
 
 # The same families and axes the root layout asked next/font/google for,
 # and each one's key in capsize's metrics (next's formatName: camelCase).
+# Archivo is the wordmark alone (800). Source Serif 4 sets page and section
+# titles, Fira Sans everything else (humanist, tabular figures), DM Mono
+# record identifiers only. All four are SIL Open Font License 1.1. DM Mono
+# has no capsize entry, so it gets no metric-matched fallback (None).
 FAMILIES = {
-    "archivo": ("Archivo:wght@400;600;800", "archivo"),
-    "press-start-2p": ("Press+Start+2P", "pressStart2P"),
-    "share-tech-mono": ("Share+Tech+Mono", "shareTechMono"),
+    "archivo": ("Archivo:wght@800", "archivo"),
+    "source-serif-4": ("Source+Serif+4:opsz,wght@8..60,600", "sourceSerif4"),
+    "fira-sans": ("Fira+Sans:wght@400;600", "firaSans"),
+    "dm-mono": ("DM+Mono:wght@400", None),
 }
 
 # next/font/google was called with subsets: ["latin"] — only these preload.
@@ -88,17 +94,25 @@ def _css(client: httpx.Client, query: str) -> str:
 
 
 def _faces(css: str) -> dict[str, dict]:
-    """subset -> {src, unicodeRange, weights} from one CSS2 response."""
+    """"subset" (one variable file) or "subset-weight" (a static family's
+    file per weight) -> {subset, src, unicodeRange, weights}, from one CSS2
+    response."""
     faces: dict[str, dict] = {}
-    for subset, body in _BLOCK.findall(css):
+    blocks = _BLOCK.findall(css)
+    static = len({_STATIC_SRC.search(b).group(0) for _, b in blocks if _STATIC_SRC.search(b)}) > len(
+        {sub for sub, _ in blocks}
+    )
+    for subset, body in blocks:
         src = _STATIC_SRC.search(body)
         weight = re.search(r"font-weight:\s*(\d+)", body)
         ranges = re.search(r"unicode-range:\s*([^;]+);", body)
         if not (src and weight and ranges):
             sys.exit(f"unexpected @font-face for {subset}: {body.strip()}")
+        key = f"{subset}-{weight.group(1)}" if static else subset
         face = faces.setdefault(
-            subset,
+            key,
             {
+                "subset": subset,
                 "src": src.group(0),
                 "unicodeRange": ranges.group(1).strip(),
                 "weights": [],
@@ -116,9 +130,10 @@ def _fallback_css(family: str, key: str, capsize: dict) -> str:
     """An @font-face resizing local Arial to one face's capsize metrics, by
     next/font/google's formula (calculateSizeAdjustValues). Arial is its
     fallback for every category but serif, which none of these faces is."""
-    font, arial = capsize[key], capsize["arial"]
-    if font["category"] == "serif":
-        sys.exit(f"{key} is a serif face; its fallback would be Times New Roman")
+    font = capsize[key]
+    # next/font/google's choice: Times New Roman for a serif, else Arial.
+    local = "Times New Roman" if font["category"] == "serif" else "Arial"
+    arial = capsize["timesNewRoman" if local == "Times New Roman" else "arial"]
     upem = font["unitsPerEm"]
     size_adjust = (font["xWidthAvg"] / upem) / (
         arial["xWidthAvg"] / arial["unitsPerEm"]
@@ -129,7 +144,7 @@ def _fallback_css(family: str, key: str, capsize: dict) -> str:
         return f"{abs(value * 100):.2f}".rstrip("0").rstrip(".") + "%"
 
     return (
-        f'@font-face {{\n  font-family: "{family}";\n  src: local("Arial");\n'
+        f'@font-face {{\n  font-family: "{family}";\n  src: local("{local}");\n'
         f"  ascent-override: {pct(font['ascent'] / (upem * size_adjust))};\n"
         f"  descent-override: {pct(font['descent'] / (upem * size_adjust))};\n"
         f"  line-gap-override: {pct(font['lineGap'] / (upem * size_adjust))};\n"
@@ -147,11 +162,12 @@ def main() -> None:
     FONTS_DIR.mkdir(parents=True, exist_ok=True)
     with httpx.Client(headers={"User-Agent": USER_AGENT}, timeout=30) as client:
         for name, (query, capsize_key) in FAMILIES.items():
-            family = capsize[capsize_key]["familyName"]
+            family = capsize[capsize_key]["familyName"] if capsize_key else None
             entries = []
-            for subset, face in _faces(_css(client, query)).items():
+            for key, face in _faces(_css(client, query)).items():
+                subset = face["subset"]
                 data = client.get(face["src"]).raise_for_status().content
-                file = f"{name}-{subset}.woff2"
+                file = f"{name}-{key}.woff2"
                 (FONTS_DIR / file).write_bytes(data)
                 entries.append(
                     {
@@ -163,13 +179,14 @@ def main() -> None:
                     }
                 )
                 print(f"{file}: {len(data)} bytes, weights {face['weights']}")
-            fonts[name] = {"fallback": f"{family} Fallback", "files": entries}
-            fallbacks.append(_fallback_css(f"{family} Fallback", capsize_key, capsize))
+            fonts[name] = {"fallback": f"{family} Fallback" if family else None, "files": entries}
+            if family:
+                fallbacks.append(_fallback_css(f"{family} Fallback", capsize_key, capsize))
 
     fallback_path = FONTS_DIR / "fallback.css"
     fallback_css = (
         "/* Generated by backend/scripts/fetch_site_fonts.py - do not edit.\n"
-        "   Each face's metric-matched Arial fallback (see the script). */\n"
+        "   Each face's metric-matched fallback, local Arial or Times New Roman (see the script). */\n"
         + "\n".join(fallbacks)
     )
     # Keep the old date when nothing changed — files, ranges and fallback

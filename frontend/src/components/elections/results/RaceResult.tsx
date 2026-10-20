@@ -101,7 +101,7 @@ export function RaceResultCard({
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <Heading
           id={`result-${result.raceId}-title`}
-          className="font-display text-xl font-extrabold text-ink-hi"
+          className="font-display text-xl font-semibold text-ink-hi"
         >
           {result.office === "S"
             ? `U.S. Senate${result.isSpecial ? " (special)" : ""}`
@@ -156,7 +156,7 @@ export function RaceResultCard({
                 style={{ width: `${c.pct ?? 0}%`, backgroundColor: partyBarColor(c.party) }}
               />
             </span>
-            <span className="text-right font-display text-lg font-extrabold tabular-nums text-ink-hi">
+            <span className="text-right font-display text-lg font-semibold tabular-nums text-ink-hi">
               {c.pct != null ? `${c.pct.toFixed(1)}%` : "—"}
             </span>
             <span className="hidden text-right font-mono text-xs tabular-nums text-ink-lo sm:block">
@@ -278,11 +278,17 @@ export function HouseResultRow({ result }: { result: LiveRaceResult }) {
         </span>
         <span className="mt-1 flex h-1.5 bg-surface-raised" aria-hidden="true">
           <span
-            style={{ width: `${(100 * (dem?.votes ?? 0)) / total}%`, backgroundColor: "#82acff" }}
+            style={{
+              width: `${(100 * (dem?.votes ?? 0)) / total}%`,
+              backgroundColor: "var(--dem-blue)",
+            }}
           />
           <span
             className="ml-auto"
-            style={{ width: `${(100 * (rep?.votes ?? 0)) / total}%`, backgroundColor: "#ff8989" }}
+            style={{
+              width: `${(100 * (rep?.votes ?? 0)) / total}%`,
+              backgroundColor: "var(--rep-red)",
+            }}
           />
         </span>
         {/* On a phone the reporting column is folded in here: a lead with
@@ -362,7 +368,7 @@ export function SenateNoCountCard({
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <Heading
           id={`result-${raceId}-title`}
-          className="font-display text-xl font-extrabold text-ink-hi"
+          className="font-display text-xl font-semibold text-ink-hi"
         >
           {`U.S. Senate${isSpecial ? " (special)" : ""}`}
         </Heading>

@@ -229,7 +229,7 @@ function SectionItem({
                     href={t.href}
                     aria-current={current ? "page" : undefined}
                     onClick={() => onClose()}
-                    className={`flex min-h-11 items-center border-l-2 pl-3 font-display text-sm transition-colors ${
+                    className={`flex min-h-11 items-center border-l-2 pl-3 font-sans text-sm transition-colors ${
                       current
                         ? "border-ink-hi text-ink-hi"
                         : "border-white/15 text-ink-lo hover:border-ink-lo hover:text-ink-hi"
@@ -334,8 +334,8 @@ export default function Navbar() {
           ref={barRef}
           className="@container max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-y-4 [&>:last-child]:ml-auto"
         >
-          {/* The lockup: the pixel mark, the site's one use of that face,
-              and RESEARCH beside it in the mono, after a hairline. */}
+          {/* The lockup: the Archivo mark, the site's one use of that face,
+              and RESEARCH beside it in the label face, after a hairline. */}
           {/* In a bar under 20rem wide (a 320 px phone at the default text
               size) RESEARCH would push MENU off the bar, so the mark stands
               alone there; the link's name is the full one. A container
@@ -353,7 +353,7 @@ export default function Navbar() {
             aria-label="Civitas Research"
             className="group inline-flex min-h-6 items-center gap-2.5 text-ink-hi"
           >
-            <span className="font-pixel text-xs tracking-widest transition-colors group-hover:text-phos sm:text-sm min-[56rem]:text-xs xl:text-sm">
+            <span className="font-wordmark text-base font-extrabold tracking-[0.14em] transition-colors group-hover:text-phos min-[56rem]:text-sm xl:text-base">
               CIVITAS
             </span>
             <span

@@ -58,7 +58,7 @@ export function Section({
 }) {
   const Heading = level === 2 ? "h2" : "h3";
   const heading = (
-    <Heading className="inline font-display text-base font-bold text-ink-hi">
+    <Heading className="inline font-display text-base font-semibold text-ink-hi">
       {title}
       {count !== undefined && count !== null && (
         <span className="ml-2 font-mono text-sm font-normal text-ink-min">
@@ -201,7 +201,7 @@ export function MeasureRow({ event, tag }: { event: CongressEvent; tag?: string 
   return (
     <li className="flex flex-col gap-1.5 border-b border-white/[0.09] py-3">
       <div className="flex items-baseline justify-between gap-3">
-        <p className="min-w-0 text-base font-bold text-ink-hi">
+        <p className="min-w-0 text-base font-semibold text-ink-hi">
           {event.billId && event.billLabel ? (
             <Link href={billHref(event.billId, event.congress)} className="hover:text-phos">
               <span className="mr-2 font-mono font-normal text-ink-lo">{event.billLabel}</span>

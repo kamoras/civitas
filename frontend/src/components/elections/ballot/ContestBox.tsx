@@ -37,7 +37,7 @@ export default function ContestBox({
           button together would otherwise squeeze the title to a word a line. */}
       <header className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-2 border-b border-white/25 bg-surface-raised px-4 py-3">
         <div className="min-w-0">
-          <Heading className="text-[17px] font-bold leading-tight text-ink-hi">{title}</Heading>
+          <Heading className="text-[17px] font-semibold leading-tight text-ink-hi">{title}</Heading>
           {subtitle && <p className="mt-0.5 text-[13px] text-ink-lo">{subtitle}</p>}
         </div>
         {(instruction || shareId) && (

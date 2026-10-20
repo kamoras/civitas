@@ -352,6 +352,7 @@ export default function DistrictMap({
       </div>
 
       <ComposableMap
+        className="night"
         projection="geoMercator"
         projectionConfig={{ center: fit.center, scale: fit.scale }}
         width={WIDTH}
@@ -442,7 +443,8 @@ export default function DistrictMap({
                   style={{
                     fill,
                     fillOpacity: opacity,
-                    stroke: isPicked || isHovered ? "#00ff41" : unshaded ? UNSHADED_BORDER : BORDER,
+                    stroke:
+                      isPicked || isHovered ? "var(--phos)" : unshaded ? UNSHADED_BORDER : BORDER,
                     strokeWidth: isPicked ? 2 : isHovered ? 1.2 : unshaded ? 0.8 : 0.6,
                     outline: "none",
                     cursor: pickId ? "pointer" : "default",
