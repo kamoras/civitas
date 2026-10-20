@@ -60,7 +60,7 @@ function Chamber({ name, c }: { name: string; c: ChamberCompared }) {
         </p>
       ) : (
         <>
-          <p className="mt-1 font-display text-2xl font-extrabold leading-none tabular-nums text-ink-hi">
+          <p className="mt-1 font-display text-2xl font-semibold leading-none tabular-nums text-ink-hi">
             {c.new} new{c.newShare != null ? ` · ${pct(c.newShare)}` : ""}
           </p>
           <p className="mt-1 text-sm text-ink-lo">

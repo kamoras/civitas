@@ -2,6 +2,7 @@ import { Metadata } from "next";
 import { notFound, permanentRedirect } from "next/navigation";
 import type { PoliticianProfile } from "@/types/politicians";
 import type { RepresentationScoreBreakdown } from "@/types/scoreBreakdown";
+import type { PeerComparison } from "@/types/peers";
 import { fetchRecord } from "@/lib/ssrPayload";
 import { absoluteUrl, memberFeed, notFoundMetadata, pageMetadata } from "@/lib/site";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
@@ -46,6 +47,24 @@ async function fetchBreakdown(
     if (!res.ok) return null;
     const body = await res.json();
     return body && typeof body === "object" ? (body as RepresentationScoreBreakdown) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Where a member stands among the caucus, for the first view; null on
+ *  any failure (the section then fetches it in the browser). */
+async function fetchPeers(branch: string, id: string): Promise<PeerComparison | null> {
+  if (branch !== "senate" && branch !== "house") return null;
+  const segment = branch === "senate" ? "senators" : "representatives";
+  try {
+    const res = await fetch(
+      `${BACKEND}/api/${segment}/${encodeURIComponent(id)}/peers?group=caucus`,
+      {
+        next: { revalidate: 120 },
+      }
+    );
+    return res.ok ? ((await res.json()) as PeerComparison) : null;
   } catch {
     return null;
   }
@@ -96,7 +115,10 @@ export default async function PoliticianProfilePage({
   // backend answers the old id with the member under their current id):
   // a permanent redirect, so links and search engines move to the new URL.
   if (profile.id !== id) permanentRedirect(`/politicians/${encodeURIComponent(profile.id)}`);
-  const breakdown = await fetchBreakdown(profile.branch, id);
+  const [breakdown, peers] = await Promise.all([
+    fetchBreakdown(profile.branch, id),
+    fetchPeers(profile.branch, id),
+  ]);
 
   return (
     <>
@@ -116,6 +138,7 @@ export default async function PoliticianProfilePage({
       <PoliticianProfileClient
         profile={profile}
         breakdown={breakdown}
+        peers={peers}
         strip={<ThisWeekStrip variant="compact" />}
         supportLine={
           profile.branch === "senate" || profile.branch === "house" ? (

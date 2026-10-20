@@ -190,7 +190,7 @@ export default async function NominationPage({ params }: PageProps) {
                 </div>
                 <h1
                   id="nomination-title"
-                  className="max-w-4xl font-display text-2xl font-extrabold leading-tight text-ink-hi sm:text-4xl"
+                  className="max-w-4xl font-display text-2xl font-semibold leading-tight text-ink-hi sm:text-4xl"
                 >
                   {title}
                 </h1>
@@ -239,7 +239,7 @@ export default async function NominationPage({ params }: PageProps) {
 
             {n.finalVote && (
               <section aria-labelledby="senators" className="flex flex-col gap-4">
-                <h2 id="senators" className="font-display text-2xl font-extrabold text-ink-hi">
+                <h2 id="senators" className="font-display text-2xl font-semibold text-ink-hi">
                   How each senator voted
                 </h2>
                 <p className="text-sm text-ink-lo">
@@ -258,7 +258,7 @@ export default async function NominationPage({ params }: PageProps) {
 
             {n.rollCalls.length > 0 && (
               <section aria-labelledby="votes" className="flex flex-col gap-3">
-                <h2 id="votes" className="font-display text-2xl font-extrabold text-ink-hi">
+                <h2 id="votes" className="font-display text-2xl font-semibold text-ink-hi">
                   Every recorded vote on it
                 </h2>
                 <ul className="border-t border-white/[0.09]">
@@ -283,7 +283,7 @@ export default async function NominationPage({ params }: PageProps) {
 
             {names.length > 1 && (
               <section aria-labelledby="nominees" className="flex flex-col gap-3">
-                <h2 id="nominees" className="font-display text-2xl font-extrabold text-ink-hi">
+                <h2 id="nominees" className="font-display text-2xl font-semibold text-ink-hi">
                   The {n.nomineeCount.toLocaleString()} nominees
                 </h2>
                 {n.nominees[0]?.introText && (
@@ -302,7 +302,7 @@ export default async function NominationPage({ params }: PageProps) {
             )}
 
             <section aria-labelledby="actions" className="flex flex-col gap-3">
-              <h2 id="actions" className="font-display text-2xl font-extrabold text-ink-hi">
+              <h2 id="actions" className="font-display text-2xl font-semibold text-ink-hi">
                 Every action, newest first
               </h2>
               <ol className="border-t border-white/[0.09]">

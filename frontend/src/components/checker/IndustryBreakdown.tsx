@@ -30,7 +30,7 @@ export default function IndustryBreakdown({ industries, donors }: IndustryBreakd
         {sorted.map((ind) => {
           const info = industryMap[ind.industry];
           const displayName = info?.name || ind.name || ind.industry.replace(/_/g, " ");
-          const color = info?.color || "#444444";
+          const color = info?.color || "var(--chart-muted)";
           const barWidth = Math.round((ind.total / maxTotal) * 100);
           const isExpanded = expandedIndustry === ind.industry;
           const industryDonors = getDonorsForIndustry(ind.industry);

@@ -251,7 +251,7 @@ export function PipelineProgressBar({
   return (
     <div className="border border-signal-cyan/40 p-4 bg-signal-cyan/10">
       <div className="flex items-center justify-between mb-3">
-        <span className="text-signal-cyan text-sm font-mono font-bold flex items-center gap-2">
+        <span className="text-signal-cyan text-sm font-mono font-semibold flex items-center gap-2">
           <span className="inline-block w-2 h-2 bg-signal-cyan animate-pulse" />
           {title}
         </span>

@@ -12,6 +12,16 @@ def to_camel(string: str) -> str:
     return components[0] + "".join(x.title() for x in components[1:])
 
 
+
+# Public API v1's composite fields (a member's `overall` and `rank`, a
+# president's `rank`): the site stopped showing the composite in 2026-10
+# (AGENTS.md section 3). Kept for one deprecation cycle, marked deprecated in
+# the OpenAPI schema (and so on /developers), with Deprecation and Sunset
+# headers on the responses that carry them (api/public.py); removed in v2.
+API_V1_SUNSET = "2027-01-04"
+_DEPRECATED = f"Deprecated: the composite is no longer shown on the site (2026-10); removed in API v2, sunset {API_V1_SUNSET}. "
+_DEPRECATED_FIELD = {"deprecated": True}
+
 class CamelModel(BaseModel):
     model_config = ConfigDict(
         alias_generator=to_camel,
@@ -71,7 +81,8 @@ class RepresentationScoreSchema(CamelModel):
     # Backend-computed overall (score_calculator.compute_overall_score) — the
     # frontend must never recompute this from the sub-scores itself (see
     # lib/representation.ts's removed weightedScore).
-    overall: float = Field(0.0, description="The weighted overall score, 0-100 (weights: the API index's scoreWeights)")
+    overall: float = Field(0.0, description=_DEPRECATED + "The weighted overall score, 0-100 (weights: the API "
+                                                         "index's scoreWeights)", json_schema_extra=_DEPRECATED_FIELD)
     confidence: dict[str, str] | None = Field(
         None, description='How much data backs each sub-score, by its name: "high", "medium" or "low". Also '
                           'constituentAlignmentVotePart, how that score\'s vote part was scored: "full"; '
@@ -734,7 +745,7 @@ class _PublicModel(CamelModel):
 
 
 _SITE_URL = Field(description="This record's page on Civitas")
-_RANK = Field(description="Place in the whole chamber by overall score, whatever the filters, as the site shows it: "
+_RANK = Field(json_schema_extra=_DEPRECATED_FIELD, description=_DEPRECATED + "Place in the whole chamber by overall score, whatever the filters, as the site shows it: "
                           "scores are compared as displayed, rounded to a whole number, and members who show the "
                           "same score share a rank (1, 2, 2, 4)")
 
@@ -995,9 +1006,20 @@ class PublicBillVotesSchema(_PublicModel):
                                                                 "bill has had no recorded vote")
 
 
+class PublicSnapshotFactsSchema(_PublicModel):
+    small_gifts: float | None = Field(description="Share of contributions in gifts of $200 or less, 0-1")
+    pac_money: float | None = Field(description="Share of contributions from PACs, 0-1")
+    breaks: float | None = Field(description="Breaks with the party over party-line votes, 0-1")
+    bills_moved: float | None = Field(description="Bills sponsored this Congress that got past committee")
+    party_votes: int | None = Field(description="Party-line votes behind breaks")
+    break_count: int | None = Field(description="Breaks with the party")
+    bills: int | None = Field(description="Bills sponsored this Congress")
+
+
 class PublicScoreSnapshotSchema(_PublicModel):
     date: str = Field(description="When the scores were computed, YYYY-MM-DD")
-    overall: float = Field(description="0-100, like the sub-scores here; see representationScore for each")
+    overall: float = Field(description=_DEPRECATED + "0-100, like the sub-scores here; read `facts` instead",
+                           json_schema_extra=_DEPRECATED_FIELD)
     funding_independence: float
     promise_persistence: float | None = Field(None, description="Always null: see representationScore")
     constituent_alignment: float
@@ -1007,6 +1029,9 @@ class PublicScoreSnapshotSchema(_PublicModel):
                                                       "change between two snapshots is a method change, not "
                                                       "only a change in the record. Null for snapshots taken "
                                                       "before versions were recorded")
+    facts: PublicSnapshotFactsSchema | None = Field(
+        description="The measures the site compares members on, as they stood that day (the history to read "
+                    "in place of overall); null for snapshots recorded before 2026-10-19")
 
 
 class PublicHistorySchema(_PublicModel):
@@ -1171,6 +1196,62 @@ class PublicScoreReferencesSchema(_PublicModel):
                     "before this was recorded, which was scored on its bills as fetched")
 
 
+class PublicPeerGroupSchema(_PublicModel):
+    key: Literal["caucus", "chamber"] = Field(description="caucus: the chamber's members who caucus with the "
+                                                          "member's party (independents with theirs); chamber: "
+                                                          "every serving member")
+    label: str = Field(description='The group as the page names it ("Senate Democrats and independents")')
+    n: int = Field(description="Members in the group with a figure for this measure, the member included")
+
+
+class PublicPeerSourceSchema(_PublicModel):
+    name: str
+    url: str
+
+
+class PublicPeerMeasureSchema(_PublicModel):
+    key: Literal["smallGifts", "pacMoney", "breaks", "billsMoved"]
+    label: str
+    direction: str = Field(description="Which way is higher, in words; the word is neutral about which is better")
+    unit: Literal["share", "rate", "count"] = Field(description="share and rate are 0-1; count is bills")
+    value: float | None = Field(description="The member's figure; null when the record has none")
+    shown: str | None = Field(description='The figure as the page prints it ("13%", "0 of 493", "9 of 89")')
+    expected: float | None = Field(description="The figure expected: the scorer's seat-adjusted reference where it "
+                                               "has one, else the peer median (expectedBasis)")
+    expected_basis: Literal["seat", "peer median"]
+    median: float | None = Field(description="The peer group's median")
+    peer_group: PublicPeerGroupSchema
+    distribution: list[float] = Field(description="Every peer's figure, the member's included, ascending")
+    distribution_ids: list[str] = Field(description="The member id behind each distribution value, same order")
+    distribution_names: list[str] = Field(description="The member's name behind each distribution value, same order")
+    record: int | None = Field(description="How much record backs the figure (party-line votes for breaks, bills "
+                                           "sponsored for bills moved, 1 when there are contributions)")
+    source: PublicPeerSourceSchema
+    percentile: float | None = Field(description="Mid-rank percentile among the peers, 0-100")
+    word: str | None = Field(description='"well above peers", "above peers", "near peers", "below peers" or "well '
+                                         'below peers", by rule; null when thin')
+    sentence: str | None = Field(description="One template sentence: the fact and how many peers sit beyond it")
+    thin: bool = Field(description="Too little record for a word: fewer than rule.minRecord peers or party-line "
+                                   "votes, or a dimension the scorer graded low")
+    gap_sd: float | None = Field(default=None, description="(value - expected) / the peers' standard deviation")
+
+
+class PublicPeerRuleSchema(_PublicModel):
+    well_outside: list[float] = Field(description="Percentiles outside which a word can be a 'well' word")
+    outside: list[float] = Field(description="Percentiles outside which the word is above or below")
+    well_gap_sd: float = Field(description="Distance from expected, in peer standard deviations, a 'well' word "
+                                           "also needs")
+    min_record: int = Field(description="Smallest peer group and party-line record a word is drawn from")
+
+
+class PublicPeerComparisonSchema(_PublicModel):
+    group: Literal["caucus", "chamber"]
+    rule: PublicPeerRuleSchema = Field(description="The word's cut points: conventions, not fitted values")
+    measures: list[PublicPeerMeasureSchema]
+    stands_out: str = Field(description="The one line above the measures: the furthest 'well' row, or that the "
+                                        "member is close to peers on every measure")
+
+
 class PublicScoreBreakdownSchema(_PublicModel):
     id: str = Field(description="The member's id")
     name: str
@@ -1181,13 +1262,16 @@ class PublicScoreBreakdownSchema(_PublicModel):
     scored_on: str | None = _SCORED_ON
     recomputed_with: str = Field(description="The scoring version today's recompute used (sinceScored, and a "
                                              "dimension whose basis is recomputed)")
-    overall: float = Field(description="representationScore.overall: sum(weights[k] x dimensions[k].storedScore), "
+    overall: float = Field(json_schema_extra=_DEPRECATED_FIELD, description=_DEPRECATED + "representationScore.overall: sum(weights[k] x dimensions[k].storedScore), "
                                        "rounded to 2 decimals")
     weights: dict[str, float] = Field(description="Each weighted dimension's weight in overall (they sum to 1)")
     dimensions: PublicScoreDimensionsSchema
     references: PublicScoreReferencesSchema = Field(
         description="The population and seat reference values the components were compared against, as the "
                     "last run wrote them")
+    peer_comparison: PublicPeerComparisonSchema | None = Field(
+        description="Where the member stands among peers on each measure (the site's headline in place of the "
+                    "composite); null for a member not serving")
 
 
 class PublicPolicyStatementSchema(_PublicModel):
@@ -1845,7 +1929,7 @@ class PublicRollCallPageSchema(_PublicModel):
     entries: list[PublicBillRollCallSchema] = Field(description="Newest first")
 
 
-_PRESIDENT_RANK = Field(description="Place among the former presidents by Presidential Score as the site shows it "
+_PRESIDENT_RANK = Field(json_schema_extra=_DEPRECATED_FIELD, description=_DEPRECATED + "Place among the former presidents by Presidential Score as the site shows it "
                                     "(compared as displayed, a whole number; equal scores share a rank). Null for a "
                                     "sitting president, whose term is not complete and is not ranked")
 

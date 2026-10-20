@@ -24,7 +24,7 @@ export default function PresidentialContest({ data }: { data: Contest | null }) 
         President · {data.cycle}
       </h2>
       {ev.total > 0 ? (
-        <p className="mt-3 font-display text-2xl font-extrabold leading-tight text-ink-hi">
+        <p className="mt-3 font-display text-2xl font-semibold leading-tight text-ink-hi">
           {ev.total} electoral votes · {ev.toWin} to win
         </p>
       ) : (

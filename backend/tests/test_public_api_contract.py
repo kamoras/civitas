@@ -41,6 +41,7 @@ from app.models import (
 )
 from app.pipeline.lexical_index import ensure_lexical_index
 from app.schemas import (
+    PublicSenatorRowSchema,
     PublicAgencyDetailSchema,
     PublicAgencyListSchema,
     PublicApiIndexSchema,
@@ -616,6 +617,27 @@ def test_agencies_and_open_comment_periods(client, monkeypatch):
     assert period["commentUrl"].startswith("https://www.regulations.gov/")
     monkeypatch.setattr(public, "comment_period_today", lambda: "2099-01-02")
     assert _body(client, "/comment-periods")["entries"] == []
+
+
+@pytest.mark.parametrize("path", ["/senators", "/senators/S000001", "/senators/S000001/breakdown",
+                                  "/senators/S000001/history", "/presidents"])
+def test_composite_responses_carry_deprecation_and_sunset(client, path):
+    """The composite (overall, rank) is deprecated: headers say so, and the
+    OpenAPI schema marks the fields."""
+    res = client.get(f"/api/public/v1{path}")
+    assert res.status_code == 200
+    assert res.headers["Deprecation"].startswith("@")
+    assert res.headers["Sunset"].endswith("GMT")
+    assert 'rel="deprecation"' in res.headers["Link"]
+
+
+def test_unrelated_responses_carry_no_deprecation(client):
+    assert "Deprecation" not in client.get("/api/public/v1/states").headers
+
+
+def test_composite_fields_are_marked_deprecated_in_the_schema():
+    assert PublicScoreBreakdownSchema.model_json_schema()["properties"]["overall"]["deprecated"] is True
+    assert PublicSenatorRowSchema.model_json_schema()["properties"]["rank"]["deprecated"] is True
 
 
 def _csv_rows(client, path, **params):

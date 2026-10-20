@@ -86,18 +86,18 @@ const SCORE_PARTS: readonly {
 const COVERAGE: readonly { what: string; detail: string; href: string }[] = [
   {
     what: "Senate & House",
-    detail: "Every sitting member, scored and ranked",
+    detail: "Every sitting member, measure by measure",
     href: "/politicians",
   },
   {
     what: "Presidents",
     detail: "Every president, on economic, public and historical records",
-    href: "/leaderboard?branch=president",
+    href: "/politicians?branch=president",
   },
   {
     what: "Supreme Court",
     detail: "The sitting justices",
-    href: "/leaderboard?branch=scotus",
+    href: "/court",
   },
   {
     what: "Your state's ballot",

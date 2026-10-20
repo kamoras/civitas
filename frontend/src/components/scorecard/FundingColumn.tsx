@@ -22,13 +22,13 @@ const DONOR_KIND: Record<string, string> = {
 // one bar, its two largest sources for nearly every member (#00ff41 and
 // #39ff14) sit side by side and read as one. These are set apart here.
 const SEGMENT_COLOR: Record<string, string> = {
-  SMALL_DONORS: "#00FF41",
-  LARGE_INDIVIDUAL: "#CDC7BC",
-  OTHER: "#8A8378",
-  UNCLASSIFIED: "#5A554D",
-  CANDIDATE_FUNDS: "#B08D57",
+  SMALL_DONORS: "var(--phos)",
+  LARGE_INDIVIDUAL: "var(--ink-lo)",
+  OTHER: "var(--chart-muted)",
+  UNCLASSIFIED: "var(--chart-faint)",
+  CANDIDATE_FUNDS: "var(--chart-gold)",
 };
-const FALLBACK_COLOR = "#8A8378";
+const FALLBACK_COLOR = "var(--chart-muted)";
 
 // Industries shown by name under the bar; the rest are in the drawer.
 const INDUSTRIES_NAMED = 6;
@@ -78,7 +78,6 @@ export default function FundingColumn({
   funding,
   dimension,
   score,
-  weight,
   onMore,
   donorVoteLinks = 0,
   onDonorVotes,
@@ -86,7 +85,6 @@ export default function FundingColumn({
   funding: Senator["funding"];
   dimension: ScoreBreakdownDimension | undefined;
   score: number;
-  weight?: number;
   onMore: () => void;
   /** Stored donor-vote overlaps; with `onDonorVotes`, a link to them here,
    *  beside the money, rather than only in the tiles at the foot of the
@@ -111,10 +109,9 @@ export default function FundingColumn({
 
   return (
     <ScoreColumn
-      title="Funding Independence"
+      title="Money"
       shareId="funding-independence"
       tooltip={TOOLTIP}
-      weight={weight}
       score={score}
       finding={dimension?.finding}
       method={dimension && <ComponentBars components={dimension.components} />}

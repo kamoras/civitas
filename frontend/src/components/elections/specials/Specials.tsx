@@ -83,7 +83,7 @@ export function SpecialItem({ s }: { s: SpecialElection }) {
   return (
     <li id={`special-${s.id}`} className="border-t border-white/[0.07] py-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <p className="font-display text-base font-bold text-ink-hi">{s.seat}</p>
+        <p className="font-display text-base font-semibold text-ink-hi">{s.seat}</p>
         <p className="font-mono text-[11px] tracking-[0.12em] text-ink-min">
           {longDate(s.date).toUpperCase()} · {dayText(s.status, s.daysLeft)}
         </p>
@@ -104,7 +104,7 @@ function VacancyItem({ v }: { v: SeatVacancy }) {
   return (
     <li className="border-t border-white/[0.07] py-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <p className="font-display text-base font-bold text-ink-hi">{v.seat}</p>
+        <p className="font-display text-base font-semibold text-ink-hi">{v.seat}</p>
         {v.vacatedOn && (
           <p className="font-mono text-[11px] tracking-[0.12em] text-ink-min">
             VACANT SINCE {longDate(v.vacatedOn).toUpperCase()}

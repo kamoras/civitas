@@ -27,7 +27,7 @@ export default function NextField({ field }: { field: Field | null }) {
         <p className="mt-3 text-sm text-ink-lo">The FEC filings couldn&apos;t be read just now.</p>
       ) : (
         <>
-          <p className="mt-3 font-display text-2xl font-extrabold leading-tight text-ink-hi">
+          <p className="mt-3 font-display text-2xl font-semibold leading-tight text-ink-hi">
             {field.registered > 0
               ? `${n(field.registered)} ${field.registered === 1 ? "candidate has" : "candidates have"} registered for federal races`
               : "No candidate has registered for a Senate or House race yet"}
@@ -99,7 +99,7 @@ function Stat({ figure, label }: { figure: string; label: string }) {
   return (
     <div className="bg-surface px-3 py-2.5">
       <dt className="sr-only">{label}</dt>
-      <dd className="font-display text-2xl font-extrabold leading-none tabular-nums text-ink-hi">
+      <dd className="font-display text-2xl font-semibold leading-none tabular-nums text-ink-hi">
         {figure}
       </dd>
       <dd className="mt-1 text-sm leading-snug text-ink-lo" aria-hidden="true">

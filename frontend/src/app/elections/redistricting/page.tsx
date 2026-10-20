@@ -79,7 +79,7 @@ export default async function RedistrictingIndexPage() {
                 <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                   <Link
                     href={redistrictingHref(s.state)}
-                    className="font-display text-lg font-bold text-ink-hi hover:text-phos"
+                    className="font-display text-lg font-semibold text-ink-hi hover:text-phos"
                   >
                     {s.stateName}
                   </Link>

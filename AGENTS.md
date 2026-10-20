@@ -292,6 +292,17 @@ alias table. This prevents label fragmentation from diluting kNN vote weights.
 
 ### 3. Deterministic, auditable scoring
 
+**No composite is displayed** (2026-10). The weighted Representation Score
+and its rank are not shown on any page; each is still computed for public
+API v1's deprecated `overall` and `rank` (removed in v2). What the site
+shows is each measure against peers (`app/peer_comparison.py`): the member's
+figure, the seat-adjusted expected figure, the peers' distribution, and an
+evaluative word per measure ("well above / above / near / below / well below
+peers") from a fixed percentile rule whose cut points are conventions, served
+with every comparison as `rule`. The words are neutral about direction (above
+and below, never better and worse). Never add a page that ranks members by a
+blend of unlike measures, or a word not from that rule.
+
 The representation sub-scores — Funding Independence, Constituent Alignment
 and Legislative Effectiveness (weighted, `SCORE_WEIGHTS`), plus the
 informational Funding Diversity (Promise Persistence, which has had no input
@@ -1348,10 +1359,11 @@ longer on Oyez's sitting list inactive (`retire_departed_justices`, never a
 delete, refused below the Court's quorum of six) and the Supplementary run
 checks that list nightly so a confirmation or departure doesn't wait for the
 weekly refresh (`court_roster_changed`). Relatedly,
-the Senate/House leaderboards rank only currently-serving members, while the
-presidential leaderboard ranks the *historical* field and excludes the
-sitting president (see `president_service.get_president_leaderboard`) — for
-that office, comparison against predecessors is the only meaningful ranking.
+the leaderboard API (no longer a page since 2026-10, §3; kept for public API
+v1's deprecated rank) ranks only currently-serving members, and for
+presidents the *historical* field without the sitting president
+(`president_service.get_president_leaderboard`). A president's page shows
+the historians' own rank, attributed, instead of a blend.
 
 **Trend posts ("On the record", `analyze/trend_poster.py`)** run after each
 hourly Action Center refresh (`scheduler._post_trends`, under the same lease).
@@ -2334,12 +2346,13 @@ the pending list).
 | SEO: per-route metadata, canonicals, JSON-LD, sitemap | `frontend/src/lib/site.ts`, `frontend/src/lib/seo.ts`, `frontend/src/app/sitemap.ts`, `backend/app/api/sitemap.py` |
 | Frontend types | `frontend/src/types/` |
 | Metric explanations (tooltips on all scorecard metrics) | `frontend/src/components/checker/MetricTooltip.tsx` |
-| Detail pages' two layers: chamber strip, scorecard in short, methods ledger, bill stage ladder and sources, "cite this", held and thin-data marks | `frontend/src/components/scorecard/ChamberStrip.tsx`, `AtAGlance.tsx`, `MethodsLedger.tsx`, `HeldScore.tsx`, `frontend/src/components/congress/StageLadder.tsx`, `BillSources.tsx`, `frontend/src/components/shared/CiteThis.tsx` (a government document or record cites its issuer: `frontend/src/lib/citedSources.ts`); data from `api/politicians.py` (`_chamber_field`, `_scored_on`) and `bill_service.stage_milestones` |
+| Detail pages' two layers: where a member stands among peers, methods ledger, bill stage ladder and sources, "cite this", held and thin-data marks | `frontend/src/components/scorecard/WhereTheyStand.tsx`, `MethodsLedger.tsx`, `HeldScore.tsx`, `frontend/src/components/congress/StageLadder.tsx`, `BillSources.tsx`, `frontend/src/components/shared/CiteThis.tsx` (a government document or record cites its issuer: `frontend/src/lib/citedSources.ts`); data from `api/politicians.py` (`_chamber_field`, `_scored_on`) and `bill_service.stage_milestones` |
 | Action Center issue parts (shared with `/issue/[id]`: meta, tags, "What you can do", coverage, sources) | `frontend/src/components/action/IssueEnrichment.tsx` |
-| Leaderboard spread strip, ties and thin-data marks | `backend/app/api/leaderboard.py`, `backend/app/score_display.py` (`score_spread`, `thin_dimensions`), `frontend/src/components/leaderboard/ScoreSpreadStrip.tsx` |
+| Where a member stands among peers (per-measure figure, expected, percentile, word by a fixed rule, template sentence) | `backend/app/peer_comparison.py`, `GET /api/{senators,representatives}/{id}/peers`, public breakdown `peerComparison` |
+| The chamber measure by measure (replaced the leaderboard page; `/leaderboard` redirects), compare's pair strips; the leaderboard API stays for the deprecated composite | `frontend/src/app/congress/members/`, `frontend/src/components/compare/PairStrips.tsx`, `GET /api/congress/measures` (`peer_comparison.chamber_measures`); `backend/app/api/leaderboard.py`, `backend/app/score_display.py` (`score_spread`, `thin_dimensions`) |
 | Site navigation: sections, main menu, footer (site pages only), section tabs, hub cards and the homepage index | `frontend/src/lib/routes.ts` (`SECTIONS`), `frontend/src/components/layout/Navbar.tsx`, `Footer.tsx`, `SectionTabs.tsx`, `frontend/src/components/sections/SectionCards.tsx`, `frontend/src/components/home/SectionsBand.tsx`, `frontend/src/lib/sectionPreviews.ts`, `backend/app/api/sections.py` |
 
-| Homepage (masthead, on-the-record entries, record index, sources panel) | `frontend/src/components/home/Masthead.tsx`, `OnTheRecord.tsx` (from `backend/app/api/notable.py`), `RecordIndex.tsx`, `Holdings.tsx` |
+| Homepage (masthead, task boxes and registration closing, on-the-record entries, record index, sources panel) | `frontend/src/components/home/Masthead.tsx`, `HomeTasks.tsx`, `StateJump.tsx`, `OnTheRecord.tsx` (from `backend/app/api/notable.py`), `RecordIndex.tsx`, `Holdings.tsx` |
 
 ## Conventions
 
@@ -2477,6 +2490,25 @@ the pending list).
 - Tailwind CSS for styling
 - API calls go through `src/lib/api.ts`
 - Dynamic configuration fetched from `GET /api/config` — never hardcode industry codes, score weights, or category labels
+- **Two themes, one set of classes** (2026-10). The palette is CSS custom
+  properties in `src/app/globals.css`, one `THEME` block per theme: "register
+  paper" (light, the default) and "night register" (warm dark, by
+  `prefers-color-scheme` or the footer's per-tab `ThemeToggle`, sessionStorage
+  only per §8). Tailwind's colours point at them, and `white` is the overlay
+  (ink on paper, white on carbon), so `border-white/15` is a hairline in both.
+  Never write a hex in a component: use a token or a `var(--…)`.
+  `wcagContrast.test.ts` and `inkContrast.test.ts` compute both themes from
+  globals.css. Maps and the Court's agreement grid draw on a `.night` plate in
+  both themes, the ground their tile palettes were measured on.
+- **Type** (2026-10, `src/app/fonts.ts`): Source Serif 4 600 for titles
+  (`font-display`), Fira Sans 400/600 for everything else (`font-sans`; the
+  long-standing `font-mono` class maps to Fira Sans too, so a label keeps its
+  class and loses the monospace), DM Mono for record identifiers only
+  (`font-id`, never prose), Archivo 800 for the wordmark (`font-wordmark`).
+  Tabular figures are on for the whole body. Only the loaded weights exist:
+  no `font-bold`/`font-extrabold` (they would be synthesised), except the
+  wordmark. Fonts come from `backend/scripts/fetch_site_fonts.py`, which
+  writes the files, `fonts/manifest.json` and `fonts/fallback.css`.
 - **Site prose uses no em dashes** (2026-10). Use a comma, colon, parentheses or a
   full stop; for a separator inside a label, the middle dot " · ". A string that is
   only "—" is the table placeholder for no data and stays.

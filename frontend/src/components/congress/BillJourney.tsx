@@ -69,7 +69,9 @@ export default function BillJourney({
                 <Mark status={s.status} />
               </span>
               <span className={`flex min-w-0 flex-col ${reached ? "" : "opacity-70"}`}>
-                <span className={`text-sm font-bold ${reached ? "text-ink-hi" : "text-ink-lo"}`}>
+                <span
+                  className={`text-sm font-semibold ${reached ? "text-ink-hi" : "text-ink-lo"}`}
+                >
                   {s.label}
                   <span className="sr-only">{STATUS_TEXT[s.status]}</span>
                 </span>
@@ -115,7 +117,7 @@ export default function BillJourney({
             <dl className="flex flex-col gap-1 text-sm leading-relaxed text-ink-lo">
               {[...methods.values()].map((p) => (
                 <div key={p.methodTerm}>
-                  <dt className="inline font-bold text-ink">{p.methodTerm}:</dt>{" "}
+                  <dt className="inline font-semibold text-ink">{p.methodTerm}:</dt>{" "}
                   <dd className="inline">{p.methodMeaning}</dd>
                 </div>
               ))}

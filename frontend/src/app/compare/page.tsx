@@ -17,47 +17,15 @@ import {
 } from "@/lib/api";
 import type { StateInfo, RepStateInfo } from "@/lib/api";
 import type { Senator } from "@/types/senator";
-import { getScoreColor, asciiScoreBar } from "@/lib/representation";
-import { displayScore, formatCurrency } from "@/lib/formatting";
+import { formatCurrency } from "@/lib/formatting";
 import { PARTY_COLORS } from "@/lib/partyStyles";
 import { BOXED_CONTROL } from "@/lib/controlStyles";
 import VotingAgreement from "@/components/compare/VotingAgreement";
-import { HeldScoreTag, heldScoreText } from "@/components/scorecard/HeldScore";
+import PairStrips from "@/components/compare/PairStrips";
 import CiteThis from "@/components/shared/CiteThis";
 import { useYourState } from "@/hooks/useYourState";
 
 type Chamber = "senate" | "house";
-
-// v6.5: fundingDiversity folded into fundingIndependence — no longer its
-// own scored dimension.
-const SCORE_KEYS = [
-  "fundingIndependence",
-  "constituentAlignment",
-  "legislativeEffectiveness",
-] as const;
-
-type ScoreKey = (typeof SCORE_KEYS)[number];
-
-const SCORE_LABELS: Record<ScoreKey, string> = {
-  fundingIndependence: "FUNDING INDEP",
-  constituentAlignment: "ALIGNMENT",
-  legislativeEffectiveness: "LEGIS EFFECT",
-};
-
-function ScoreBar({ value, colorClass }: { value: number; colorClass: string }) {
-  return (
-    // Sized to the screen, capped at text-xs: twenty block characters at
-    // 200% text (24px) were 400px wide in a 200px column on a 640px screen,
-    // and pushed the row off the page (WCAG 1.4.4). The bar is decoration;
-    // the number beside it is the value, and it does grow with the text.
-    <span
-      className={`font-mono text-[clamp(6px,1vw,0.75rem)] tracking-tight ${colorClass}`}
-      aria-hidden="true"
-    >
-      {asciiScoreBar(value)}
-    </span>
-  );
-}
 
 function SenatorSelector({
   side,
@@ -340,36 +308,8 @@ function ComparisonTable({
   leftChamber: Chamber;
   rightChamber: Chamber;
 }) {
-  const leftOverall = displayScore(left.representationScore.overall);
-  const rightOverall = displayScore(right.representationScore.overall);
-  const leftColorClass = getScoreColor(leftOverall);
-  const rightColorClass = getScoreColor(rightOverall);
   const leftPacPct = Math.round(left.funding.pacSharePct);
   const rightPacPct = Math.round(right.funding.pacSharePct);
-
-  function winner(a: number, b: number, higherIsBetter = true) {
-    // No winner markers across chambers: calibration is chamber-specific,
-    // so declaring a cross-chamber "better score" asserts a like-for-like
-    // comparison the methodology doesn't support (see the caveat banner).
-    if (leftChamber !== rightChamber) return null;
-    if (a === b) return null;
-    return (higherIsBetter ? a > b : a < b) ? "left" : "right";
-  }
-
-  function WinnerTag({
-    side,
-    actual,
-  }: {
-    side: "left" | "right" | null;
-    actual: "left" | "right";
-  }) {
-    if (side !== actual) return <span className="w-4" />;
-    return (
-      <span className="text-ink-hi font-mono text-xs" aria-label="better score">
-        ▲
-      </span>
-    );
-  }
 
   const leftScorecardUrl = `/politicians/${left.id}`;
   const rightScorecardUrl = `/politicians/${right.id}`;
@@ -379,14 +319,12 @@ function ComparisonTable({
       {/* Header */}
       <div className="grid grid-cols-3 border-b border-white/[0.07] bg-white/[0.03]">
         <div className="p-3 text-center">
-          <div className={`font-display font-semibold text-2xl ${leftColorClass}`}>
-            {leftOverall}
-          </div>
           <div className={`font-mono text-xs ${PARTY_COLORS[left.party]}`}>
             [{left.party}] {left.state}
           </div>
-          <div className="text-ink text-xs font-mono leading-snug mt-1">{left.name}</div>
-          <HeldScoreTag held={left.representationScore.held} />
+          <div className="font-display text-lg font-semibold leading-snug text-ink-hi">
+            {left.name}
+          </div>
           <div className="text-ink-min font-mono text-xs mt-0.5 uppercase tracking-wide">
             {leftChamber === "house" ? "House" : "Senate"}
           </div>
@@ -396,14 +334,12 @@ function ComparisonTable({
           <span className="text-ink-min font-mono text-xs">VS</span>
         </div>
         <div className="p-3 text-center">
-          <div className={`font-display font-semibold text-2xl ${rightColorClass}`}>
-            {rightOverall}
-          </div>
           <div className={`font-mono text-xs ${PARTY_COLORS[right.party]}`}>
             [{right.party}] {right.state}
           </div>
-          <div className="text-ink text-xs font-mono leading-snug mt-1">{right.name}</div>
-          <HeldScoreTag held={right.representationScore.held} />
+          <div className="font-display text-lg font-semibold leading-snug text-ink-hi">
+            {right.name}
+          </div>
           <div className="text-ink-min font-mono text-xs mt-0.5 uppercase tracking-wide">
             {rightChamber === "house" ? "House" : "Senate"}
           </div>
@@ -421,79 +357,19 @@ function ComparisonTable({
       {leftChamber !== rightChamber && (
         <div className="px-3 py-2 border-b border-signal-amber/40 bg-signal-amber/10 text-center">
           <span className="text-signal-amber font-mono text-xs uppercase tracking-wide">
-            Cross-chamber comparison: scores are calibrated within each chamber, so side-by-side
-            numbers are indicative, not like-for-like
+            Different chambers: each is measured among their own chamber, so the strips are left
+            out; the plain figures are below
           </span>
         </div>
       )}
 
-      {/* A score held from an earlier run sits beside the other's newer
-          one: say so in words, not only in the tag. */}
-      {[left, right].map((m) => {
-        const held = m.representationScore.held;
-        return held ? (
-          <p
-            key={m.id}
-            className="px-3 py-2 border-b border-signal-amber/40 bg-signal-amber/10 text-center font-sans text-xs text-ink-lo"
-          >
-            {m.name}: {heldScoreText(held)}
-          </p>
-        ) : null;
-      })}
-
-      {/* Score metrics */}
-      <div className="divide-y divide-white/[0.07]">
-        {SCORE_KEYS.map((key) => {
-          const lv = left.representationScore[key];
-          const rv = right.representationScore[key];
-          const w = winner(lv, rv);
-          const lColor = getScoreColor(lv);
-          const rColor = getScoreColor(rv);
-
-          return (
-            <div key={key} className="grid grid-cols-3 items-center px-3 py-2">
-              <div className="flex items-center justify-end gap-1.5">
-                <WinnerTag side={w} actual="left" />
-                <div className="text-right">
-                  <div className={`font-mono text-sm ${lColor}`}>{lv}</div>
-                  <div className="hidden sm:block">
-                    <ScoreBar value={lv} colorClass={lColor} />
-                  </div>
-                </div>
-              </div>
-              <div className="text-center px-1">
-                <div className="text-xs text-ink-lo font-mono leading-snug tracking-wide">
-                  {SCORE_LABELS[key]}
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="text-left">
-                  <div className={`font-mono text-sm ${rColor}`}>{rv}</div>
-                  <div className="hidden sm:block">
-                    <ScoreBar value={rv} colorClass={rColor} />
-                  </div>
-                </div>
-                <WinnerTag side={w} actual="right" />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Informational: measured and shown, but not part of the overall
-          score (v6.5), so no "better score" marker. */}
-      <div className="grid grid-cols-3 items-center border-t border-white/[0.07] px-3 py-2">
-        <div className="text-right font-mono text-sm text-ink-lo">
-          {left.representationScore.fundingDiversity}
-        </div>
-        <div className="text-center px-1 text-xs text-ink-lo font-mono leading-snug tracking-wide">
-          FUNDING DIVERSITY
-          <span className="block text-ink-min normal-case tracking-normal">not in the score</span>
-        </div>
-        <div className="text-left font-mono text-sm text-ink-lo">
-          {right.representationScore.fundingDiversity}
-        </div>
-      </div>
+      {leftChamber === rightChamber && (
+        <PairStrips
+          chamber={leftChamber}
+          left={{ id: left.id, name: left.name }}
+          right={{ id: right.id, name: right.name }}
+        />
+      )}
 
       {leftChamber === rightChamber && (
         <VotingAgreement
@@ -532,13 +408,13 @@ function ComparisonTable({
           href={leftScorecardUrl}
           className="p-3 text-center font-mono text-xs tracking-widest text-ink-lo hover:bg-signal-cyan/10 hover:text-phos transition-colors border-r border-white/[0.07]"
         >
-          FULL SCORECARD →
+          MEMBER PAGE →
         </a>
         <a
           href={rightScorecardUrl}
           className="p-3 text-center font-mono text-xs tracking-widest text-ink-lo hover:bg-signal-cyan/10 hover:text-phos transition-colors"
         >
-          FULL SCORECARD →
+          MEMBER PAGE →
         </a>
       </div>
 
@@ -547,7 +423,7 @@ function ComparisonTable({
           Cite this comparison
         </h3>
         <CiteThis
-          title={`${left.name} and ${right.name}: Representation scores compared${methodNote(left, right)}`}
+          title={`${left.name} and ${right.name} compared${methodNote(left, right)}`}
           date={[left.scoredOn, right.scoredOn].filter(Boolean).sort().pop() ?? null}
           path={comparePath(left, right, leftChamber, rightChamber)}
         />

@@ -34,7 +34,7 @@ export default function ElectionAdministration({ data }: { data: Admin | null })
         {RATES.map(({ key, label }) => (
           <div key={key} className="bg-surface px-3 py-2.5">
             <dt className="sr-only">{label}</dt>
-            <dd className="font-display text-2xl font-extrabold leading-none tabular-nums text-ink-hi">
+            <dd className="font-display text-2xl font-semibold leading-none tabular-nums text-ink-hi">
               {pct(data.national[key].rate)}
             </dd>
             <dd className="mt-1 text-sm leading-snug text-ink-lo">

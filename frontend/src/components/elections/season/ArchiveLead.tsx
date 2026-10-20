@@ -43,7 +43,7 @@ export default function ArchiveLead({
       </h2>
       {kept ? (
         <>
-          <p className="mt-3 font-display text-2xl font-extrabold leading-tight text-ink-hi">
+          <p className="mt-3 font-display text-2xl font-semibold leading-tight text-ink-hi">
             {kept.counted > 0
               ? `${kept.official} of ${kept.counted} counted races listed official by their states`
               : `${kept.races} federal races on the record; no state's count was read`}
