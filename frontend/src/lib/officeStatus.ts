@@ -42,6 +42,8 @@ function yearOf(date?: string | null): string {
 }
 
 const RECORD_NOTE = "The scores and data below reflect their record in office.";
+// A president has no score (2026-10): the page is the record of the term.
+const PRESIDENT_RECORD_NOTE = "The record below covers the time in office.";
 
 export function formerOfficeNotice(input: OfficeStatusInput): OfficeStatusNotice {
   const { branch, name } = input;
@@ -50,10 +52,10 @@ export function formerOfficeNotice(input: OfficeStatusInput): OfficeStatusNotice
     const office = input.number != null ? `the ${ordinal(input.number)} President` : "President";
     const start = yearOf(input.termStart);
     const end = yearOf(input.termEnd);
-    const span = start ? ` from ${start} to ${end || "the end of their term"}` : "";
+    const span = start ? ` from ${start} to ${end || "the end of the term"}` : "";
     return {
       label: "Former President",
-      detail: `${name} served as ${office}${span} and is no longer in office. ${RECORD_NOTE}`,
+      detail: `${name} served as ${office}${span} and is no longer in office. ${PRESIDENT_RECORD_NOTE}`,
     };
   }
 

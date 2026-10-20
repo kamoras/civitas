@@ -70,8 +70,8 @@ export function describeProfile(profile: PoliticianProfile): {
   }
   if (branch === "president") {
     return {
-      title: `${name}: Presidential Record & Scorecard`,
-      description: `${name}, ${role}: executive orders, public record, and scorecard, built from Federal Register and other public federal records.`,
+      title: `${name}: Presidential Record, Approval & Economy`,
+      description: `${name}, ${role}: approval polls, jobs, growth, unemployment and inflation beside past presidents, the historians' own rank, and executive orders, from public records.`,
     };
   }
   // Justices: the profile's role is Oyez's full title ("Associate Justice of

@@ -34,7 +34,7 @@ export const ABOUT_CHAPTERS: readonly AboutChapter[] = [
     href: "/about/presidents-and-justices",
     title: "Presidents & justices",
     blurb:
-      "How presidents are scored, why some scores read N/A, and why Supreme Court justices are not scored.",
+      "What a president's page shows (approval, the economy, the historians' rank) and why Supreme Court justices are not scored.",
   },
   {
     href: "/about/elections",

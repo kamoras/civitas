@@ -6,7 +6,6 @@ import {
   Senator,
 } from "@/types/senator";
 import type { CommentWindow } from "@/types/commentWindow";
-import type { PresidentLeaderboardEntry } from "@/types/president";
 import type { JusticeCasePage } from "@/types/court";
 import type { JusticeLeaderboardEntry } from "@/types/justice";
 import type { ActionIssuesResponse, IssueMembers, IssueVote } from "@/types/action";
@@ -732,18 +731,6 @@ export function camelizeKeys(obj: unknown): unknown {
     );
   }
   return obj;
-}
-
-export async function fetchPresidentLeaderboard(): Promise<PresidentLeaderboardEntry[]> {
-  // No camelize: the endpoint already serializes camelCase via model_dump(
-  // by_alias=True). Recursively re-camelizing is a no-op on scalar fields but
-  // would corrupt any data-keyed map field the moment one is added — the
-  // justice /justices/{id} response once carried `agreementMatrix`, a map
-  // keyed by justice IDs ("sonia_sotomayor"); recursively camelizing
-  // rewrote those keys to "soniaSotomayor", rendered as a run-together
-  // "SoniaSotomayor" wherever the ID was split on "_".
-  const url = `${API_BASE}/presidents/leaderboard`;
-  return asList(await requestJson(url, "Failed to load president leaderboard"), url);
 }
 
 /** One member's votes with the president's stated positions; null for a

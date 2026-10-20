@@ -15,6 +15,7 @@ from app.api.response_helpers import (
     cached_json as _cached_json,
     score_history_json,
 )
+from app.president_peers import president_peers
 from app.services.holdings_service import HOLDING_CATEGORY_PATTERN, get_president_holdings
 from app.services.president_service import (
     get_president_list,
@@ -133,6 +134,17 @@ def get_holdings(
     if result is None:
         raise HTTPException(status_code=404, detail="President not found")
     return _cached_json(result.model_dump(by_alias=True), max_age=CACHE_TTL_DETAIL_S)
+
+
+@router.get("/{president_id}/peers")
+def peers(president_id: str, db: Session = Depends(get_db)):
+    """Where the president stands among the other presidencies, figure by
+    figure: what a president's page draws in place of a score (app/
+    president_peers.py)."""
+    result = president_peers(db, president_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="President not found")
+    return _cached_json(result, max_age=CACHE_TTL_DETAIL_S)
 
 
 @router.get("/{president_id}/score-breakdown")

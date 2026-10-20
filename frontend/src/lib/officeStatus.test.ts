@@ -24,21 +24,21 @@ describe("formerOfficeNotice", () => {
   it("never says a seat is vacant for a former president", () => {
     const notice = formerOfficeNotice({
       branch: "president",
-      name: "Barack Obama",
+      name: "Jane Doe",
       number: 44,
       termStart: "2009-01-20",
       termEnd: "2017-01-20",
     });
     expect(notice.label).toBe("Former President");
     expect(notice.detail).toBe(
-      "Barack Obama served as the 44th President from 2009 to 2017 and is no longer in office. " +
-        "The scores and data below reflect their record in office."
+      "Jane Doe served as the 44th President from 2009 to 2017 and is no longer in office. " +
+        "The record below covers the time in office."
     );
     expect(notice.detail.toLowerCase()).not.toContain("vacant");
   });
 
   it("uses the right ordinal for teens", () => {
-    const notice = formerOfficeNotice({ branch: "president", name: "Abraham Lincoln", number: 16 });
+    const notice = formerOfficeNotice({ branch: "president", name: "Jane Doe", number: 16 });
     expect(notice.detail).toContain("the 16th President");
   });
 
@@ -50,7 +50,7 @@ describe("formerOfficeNotice", () => {
       termStart: "2001-01-20",
       termEnd: null,
     });
-    expect(notice.detail).toContain("from 2001 to the end of their term");
+    expect(notice.detail).toContain("from 2001 to the end of the term");
   });
 
   it("describes a retired justice as former, not vacant", () => {

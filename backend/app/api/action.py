@@ -1294,7 +1294,7 @@ def _upcoming_civic_events(year: int, today: date) -> list[dict]:
                                " and leadership elections take place.",
                 "category": "congress",
                 "link": "/congress/members",
-                "linkLabel": "View the members of Congress",
+                "linkLabel": "See the members' records",
             })
 
     if year % 4 == 1:
@@ -1308,7 +1308,7 @@ def _upcoming_civic_events(year: int, today: date) -> list[dict]:
                 "description": "The president-elect is sworn into office at the U.S. Capitol.",
                 "category": "executive",
                 "link": "/executive/presidents",
-                "linkLabel": "View every president",
+                "linkLabel": "See the presidents' records",
             })
 
     return sorted(events, key=lambda e: e["date"])
