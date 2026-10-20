@@ -378,8 +378,8 @@ export default async function ElectionsChapter() {
           JSON. It describes who is in which district; it says nothing about why a line was drawn.
         </P>
         <P>
-          To find who represents you today, use the Politicians directory instead: pick your state,
-          then type your city, town or county. It uses the districts as of the current Congress, the
+          To find who represents you today, use Congress › Members instead: pick your state, then
+          type your city, town or county. It uses the districts as of the current Congress, the
           lines today&apos;s members were elected on (the Census Bureau&apos;s file for that
           Congress), not the lines of the next election. In a state that has redrawn since, the two
           give different answers, and each page says which map it shows. From the day a new Congress

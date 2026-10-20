@@ -3,7 +3,13 @@ import { STATE_CODES } from "@/lib/stateCodes";
 import { SITE_URL } from "@/lib/site";
 import { ABOUT_CHAPTERS } from "@/lib/aboutPages";
 import { rollCallHref } from "@/lib/congress";
-import { ELECTIONS_ARCHIVE_HREF } from "@/lib/routes";
+import {
+  ELECTIONS_ARCHIVE_HREF,
+  EXECUTIVE_HREF,
+  MEASURES_HREF,
+  MEMBERS_HREF,
+  PRESIDENTS_HREF,
+} from "@/lib/routes";
 import { nominationHref } from "@/lib/nominations";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
@@ -96,7 +102,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticRoutes: MetadataRoute.Sitemap = [
     { url: `${SITE_URL}/`, changeFrequency: "daily", priority: 1 },
     { url: `${SITE_URL}/action`, changeFrequency: "hourly", priority: 0.9 },
-    { url: `${SITE_URL}/politicians`, changeFrequency: "daily", priority: 0.9 },
     { url: `${SITE_URL}/elections`, changeFrequency: "daily", priority: 0.9 },
     { url: `${SITE_URL}/elections/redistricting`, changeFrequency: "monthly", priority: 0.6 },
     { url: `${SITE_URL}/elections/map`, changeFrequency: "daily", priority: 0.7 },
@@ -105,12 +110,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}/congress`, changeFrequency: "hourly", priority: 0.8 },
     { url: `${SITE_URL}/congress/bills`, changeFrequency: "hourly", priority: 0.8 },
     { url: `${SITE_URL}/congress/committees`, changeFrequency: "daily", priority: 0.6 },
+    { url: `${SITE_URL}${EXECUTIVE_HREF}`, changeFrequency: "daily", priority: 0.8 },
+    { url: `${SITE_URL}${PRESIDENTS_HREF}`, changeFrequency: "weekly", priority: 0.7 },
     { url: `${SITE_URL}/agencies`, changeFrequency: "weekly", priority: 0.7 },
     { url: `${SITE_URL}/court`, changeFrequency: "weekly", priority: 0.7 },
     { url: `${SITE_URL}/congress/nominations`, changeFrequency: "daily", priority: 0.7 },
     { url: `${SITE_URL}/congress/president/house`, changeFrequency: "daily", priority: 0.6 },
     { url: `${SITE_URL}/congress/president/senate`, changeFrequency: "daily", priority: 0.6 },
-    { url: `${SITE_URL}/congress/members`, changeFrequency: "daily", priority: 0.8 },
+    { url: `${SITE_URL}${MEMBERS_HREF}`, changeFrequency: "daily", priority: 0.9 },
+    { url: `${SITE_URL}${MEASURES_HREF}`, changeFrequency: "daily", priority: 0.8 },
     { url: `${SITE_URL}/compare`, changeFrequency: "weekly", priority: 0.6 },
     { url: `${SITE_URL}/compare/presidents`, changeFrequency: "weekly", priority: 0.6 },
     { url: `${SITE_URL}/explore`, changeFrequency: "daily", priority: 0.6 },

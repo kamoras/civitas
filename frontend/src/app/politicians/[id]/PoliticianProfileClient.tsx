@@ -4,6 +4,7 @@ import FollowFeed from "@/components/shared/FollowFeed";
 import { memberFeed } from "@/lib/site";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
+import { membersHref, recordTrail } from "@/lib/routes";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
@@ -38,16 +39,6 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   "Supreme Court Opinion": "Court opinion",
   "Presidential Memorandum": "Memo",
 };
-
-function branchLabel(branch: string) {
-  const map: Record<string, string> = {
-    senate: "Senate",
-    house: "House",
-    president: "Executive",
-    scotus: "Judicial",
-  };
-  return map[branch] ?? asLabel(branch);
-}
 
 function DocRow({ doc }: { doc: GovernmentDoc }) {
   const typeLabel = DOC_TYPE_LABELS[doc.docType] ?? asLabel(doc.docType);
@@ -117,10 +108,11 @@ export default function PoliticianProfileClient({
   const hasLeftOffice =
     branch === "scotus" ? identity.isActive === false : identity.isCurrent === false;
   const formerOffice = hasLeftOffice ? formerOfficeNotice({ branch, ...identity }) : null;
+  const trail = recordTrail(branch);
 
   return (
     <div className="min-h-screen bg-surface-base text-ink-hi">
-      <Navbar />
+      <Navbar section={trail.section} />
       <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
         {/* A phone's section bar: fixed under the header once the score
             scrolls away (it lists the sections marked with onThisPage). */}
@@ -131,13 +123,29 @@ export default function PoliticianProfileClient({
               changes and disclosures). One row, not two lines before the
               member's name. */}
           <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4">
-            <div className="flex min-h-11 items-center font-mono text-xs text-ink-min">
-              <Link href="/politicians" className="hover:text-phos transition-colors">
-                ← Politicians
-              </Link>
-              <span className="mx-2">/</span>
-              <span className="text-ink-lo">{branchLabel(branch)}</span>
-            </div>
+            {/* The branch's own trail (lib/routes.ts recordTrail): the
+                record's URL is the same for every branch, so the path
+                can't say which section the reader is in. */}
+            <nav aria-label="Breadcrumb">
+              <ol className="flex min-h-11 flex-wrap items-center font-mono text-xs text-ink-min">
+                {trail.crumbs.map((c) => (
+                  <li key={c.href} className="flex items-center">
+                    <Link
+                      href={c.href}
+                      className="inline-flex min-h-11 items-center hover:text-phos transition-colors"
+                    >
+                      {c.label}
+                    </Link>
+                    <span aria-hidden="true" className="mx-2">
+                      ›
+                    </span>
+                  </li>
+                ))}
+                <li aria-current="page" className="text-ink-lo">
+                  {identity.name}
+                </li>
+              </ol>
+            </nav>
             {isMember && (
               <FollowFeed subject={identity.name} feed={memberFeed(profile.id, identity.name)} />
             )}
@@ -232,7 +240,7 @@ export default function PoliticianProfileClient({
               {(branch === "senate" || branch === "house") && identity.state && (
                 <div className="mt-3 text-center">
                   <Link
-                    href={`/politicians?branch=${branch}&state=${identity.state}`}
+                    href={membersHref(identity.state, branch)}
                     className={`font-mono text-ink-min transition-colors hover:text-phos ${LONG_LABEL}`}
                   >
                     Compare all {identity.stateName ?? identity.state}{" "}

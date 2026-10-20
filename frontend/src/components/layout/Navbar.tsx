@@ -4,7 +4,7 @@ import { EYEBROW } from "@/lib/typeStyles";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { SECTIONS, inSection, sectionSubpages, type SectionKey } from "@/lib/routes";
+import { SECTIONS, currentSection, sectionSubpages, type SectionKey } from "@/lib/routes";
 import { BSKY_PROFILE_URL } from "@/lib/site";
 import HeaderClearance from "./HeaderClearance";
 import RecordsBand, { RunStatusSquare } from "./RecordsBand";
@@ -12,9 +12,10 @@ import SiteSearch from "@/components/search/SiteSearch";
 import YourStatePicker from "./YourStatePicker";
 
 // The main navigation is the SECTIONS table (lib/routes.ts): each section's
-// hub, with its other pages one step below it. Leaderboard and Compare are
-// Politicians' pages, not two more top-level links: seven sections fit a
-// 768 px row with a menu button each, nine did not.
+// hub, with its other pages one step below it: the branches (Congress, the
+// Executive, the Supreme Court, Articles I to III) beside the two tasks
+// (Action Center, Elections). A person's record is reached from their
+// branch, never from a section of people (recordTrail).
 const NAV = Object.keys(SECTIONS) as SectionKey[];
 // The Action Center is the one section drawn in the brighter ink.
 const ACCENT: SectionKey = "action";
@@ -120,7 +121,7 @@ const SUBLINK = "flex min-h-11 items-center font-mono text-xs transition-colors"
  * button with aria-expanded and a plain list of links, no menu role, so Tab
  * walks it like any other links). Escape closes it and returns focus to the
  * button; so does focus or a pointer leaving it. A section with one page
- * (Explore) is a plain link.
+ * (Explore, the Supreme Court) is a plain link.
  *
  * It was the section's link with a separate 24 px ▾ button beside it, and
  * a narrow box floating under the label: two controls that looked like one,
@@ -307,8 +308,16 @@ export function useHideOnScroll(
   return hidden;
 }
 
-export default function Navbar() {
+export default function Navbar({
+  section: recordSection,
+}: {
+  /** The current section, for a page whose path can't say (a record shared
+   *  by several sections: lib/routes.ts recordTrail). Otherwise the path's
+   *  longest match in SECTIONS decides. */
+  section?: SectionKey;
+} = {}) {
   const pathname = usePathname();
+  const here = recordSection ?? currentSection(pathname);
   const [menuOpen, setMenuOpen] = useState(false);
   // The section whose pages are open in the phone menu: null for the
   // current section's, "" for none.
@@ -465,7 +474,7 @@ export default function Navbar() {
               <SectionItem
                 key={section}
                 section={section}
-                active={inSection(section, pathname)}
+                active={here === section}
                 open={openSection === section}
                 onToggle={() =>
                   setOpened(openSection === section ? null : { section, path: pathname })
@@ -532,7 +541,7 @@ export default function Navbar() {
             <ul>
               {NAV.map((section) => {
                 const { label, href } = SECTIONS[section];
-                const active = inSection(section, pathname);
+                const active = here === section;
                 const subs = sectionSubpages(section);
                 const expanded = (shownPages ?? (active ? section : null)) === section;
                 const listId = `menu-pages-${section}`;

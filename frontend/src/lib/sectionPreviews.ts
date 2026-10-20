@@ -122,9 +122,20 @@ const PREVIEWS: Record<string, Record<string, (f: SectionFigures) => Preview | n
           }
         : { figure: "Not yet", caption: "no committee meeting recorded yet" },
     president: ({ congress }) => president(congress.president),
+    // The member directory (the figures are under `politicians` in GET
+    // /api/sections).
+    members: ({ politicians: { directory: d } }) =>
+      d.senators + d.representatives > 0
+        ? {
+            figure: n(d.senators + d.representatives),
+            caption: `serving members: ${n(d.senators)} senators, ${n(d.representatives)} representatives`,
+          }
+        : { figure: "Not yet", caption: "the member rosters haven't been read yet" },
   },
-  agencies: {
-    directory: ({ agencies: { directory } }) =>
+  // The executive branch's agency pages (the figures are under `agencies`
+  // in GET /api/sections).
+  executive: {
+    agencies: ({ agencies: { directory } }) =>
       directory.count > 0
         ? {
             figure: n(directory.count),
@@ -145,15 +156,6 @@ const PREVIEWS: Record<string, Record<string, (f: SectionFigures) => Preview | n
             caption: `federal ${plural(comments.open, "document")} open for public comment today`,
           }
         : { figure: "None", caption: "no Federal Register document takes comments today" },
-  },
-  politicians: {
-    directory: ({ politicians: { directory: d } }) =>
-      d.senators + d.representatives > 0
-        ? {
-            figure: n(d.senators + d.representatives),
-            caption: `serving members: ${n(d.senators)} senators, ${n(d.representatives)} representatives`,
-          }
-        : { figure: "Not yet", caption: "the member rosters haven't been read yet" },
   },
   elections: {
     ballots: ({ elections: { ballots: b, season } }) => {

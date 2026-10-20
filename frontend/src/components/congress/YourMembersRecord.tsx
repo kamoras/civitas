@@ -1,5 +1,6 @@
 "use client";
 
+import { membersHref } from "@/lib/routes";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { StateMemberRecord } from "@/types/congress";
@@ -136,7 +137,7 @@ export default function YourMembersRecord() {
       {failed ? (
         <p className="mt-3 text-sm text-ink-lo">
           {name}&apos;s members couldn&apos;t be loaded just now.{" "}
-          <Link href={`/politicians?state=${state}`} className={LINK}>
+          <Link href={membersHref(state)} className={LINK}>
             Find them in the directory
           </Link>
         </p>

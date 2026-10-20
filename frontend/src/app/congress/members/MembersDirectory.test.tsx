@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import PoliticiansPage from "./page";
+import MembersDirectory from "./MembersDirectory";
 import type { PoliticianCard } from "@/types/politicians";
 
 const api = vi.hoisted(() => ({
@@ -15,6 +15,7 @@ vi.mock("@/lib/api", async (importOriginal) => ({
 let params = new URLSearchParams();
 vi.mock("next/navigation", () => ({ useSearchParams: () => params }));
 vi.mock("@/components/layout/Navbar", () => ({ default: () => <header /> }));
+vi.mock("@/components/layout/SectionTabs", () => ({ default: () => <nav /> }));
 vi.mock("@/components/layout/Footer", () => ({ default: () => <footer /> }));
 vi.mock("@/components/BackToTop", () => ({ default: () => null }));
 
@@ -52,7 +53,7 @@ function open(search: string) {
             { district: 2, counties: ["Adams"] },
           ],
   }));
-  return render(<PoliticiansPage />);
+  return render(<MembersDirectory />);
 }
 
 afterEach(() => {
@@ -60,7 +61,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("PoliticiansPage state picker", () => {
+describe("MembersDirectory state picker", () => {
   it("names states in full, in alphabetical order of the name", () => {
     open("");
     const picker = screen.getByRole("combobox", { name: "Filter by state" });
@@ -87,13 +88,13 @@ describe("PoliticiansPage state picker", () => {
       await screen.findByRole("combobox", { name: "Filter by state" }),
       "WY"
     );
-    await screen.findByText("1 politician");
+    await screen.findByText("1 member");
     expect(screen.queryByText(/Find your House member by city, town or county/)).toBeNull();
     expect(screen.queryByRole("link", { name: /Find your election district/ })).toBeNull();
   });
 });
 
-describe("PoliticiansPage delegation order", () => {
+describe("MembersDirectory delegation order", () => {
   it("puts a picked state's senators before the House finder, and its House members after", async () => {
     open("state=OH");
     const finder = await screen.findByText(/Find your House member by city, town or county/);
@@ -102,5 +103,41 @@ describe("PoliticiansPage delegation order", () => {
     const FOLLOWING = Node.DOCUMENT_POSITION_FOLLOWING;
     expect(senator.compareDocumentPosition(finder) & FOLLOWING).toBeTruthy();
     for (const h of house) expect(finder.compareDocumentPosition(h) & FOLLOWING).toBeTruthy();
+  });
+});
+
+describe("MembersDirectory chambers", () => {
+  it("lists members of Congress only, never the president or a justice", async () => {
+    directory.push(
+      card({
+        id: "p1",
+        branch: "president",
+        role: "President (47th)",
+      }),
+      card({
+        id: "j1",
+        branch: "scotus",
+        role: "Associate Justice",
+      })
+    );
+    try {
+      open("state=OH");
+      await screen.findAllByRole("link", { name: /Senator · Ohio/ });
+      expect(screen.queryByRole("link", { name: /President|Justice/ })).toBeNull();
+      expect(screen.queryByRole("button", { name: /president|scotus/i })).toBeNull();
+    } finally {
+      directory.splice(-2);
+    }
+  });
+
+  it("reads ?branch= for a chamber and ignores any other value", async () => {
+    open("branch=senate");
+    expect(screen.getByRole("button", { name: "Senate" })).toHaveAttribute("aria-pressed", "true");
+    cleanup();
+    open("branch=president");
+    expect(screen.getByRole("button", { name: "Both chambers" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
   });
 });

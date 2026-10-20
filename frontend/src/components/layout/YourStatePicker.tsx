@@ -1,5 +1,6 @@
 "use client";
 
+import { membersHref } from "@/lib/routes";
 import { useEffect, useId, useRef, useState } from "react";
 import { useYourState } from "@/hooks/useYourState";
 import { stateFromPoint } from "@/lib/stateFromPoint";
@@ -166,7 +167,7 @@ export default function YourStatePicker({
             {STATE_NAMES[confirmed] ?? confirmed} set for this tab.{" "}
             <span className="flex flex-wrap gap-x-4">
               <Link
-                href={`/politicians?state=${confirmed}`}
+                href={membersHref(confirmed)}
                 onClick={onNavigate}
                 className="inline-flex min-h-11 items-center text-signal-cyan underline underline-offset-2 hover:text-phos"
               >

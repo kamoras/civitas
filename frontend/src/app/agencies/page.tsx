@@ -4,7 +4,7 @@ import { describeAgencyIndex } from "@/lib/seo";
 import { fetchAgencyIndex } from "@/lib/agencyServer";
 import { fiscalYearLabel, matchAgencies } from "@/lib/agencies";
 import { formatCurrency } from "@/lib/formatting";
-import { agencyHref } from "@/lib/routes";
+import { EXECUTIVE_HREF, agencyHref } from "@/lib/routes";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
@@ -142,6 +142,7 @@ export default async function AgenciesPage({
         data={[
           breadcrumbList([
             { name: "Home", url: absoluteUrl("/") },
+            { name: "Executive", url: absoluteUrl(EXECUTIVE_HREF) },
             { name: "Agencies", url: absoluteUrl("/agencies") },
           ]),
         ]}
@@ -150,11 +151,7 @@ export default async function AgenciesPage({
         <Navbar />
         <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
           <div className="mx-auto max-w-5xl">
-            <PageMasthead
-              className="mb-8"
-              eyebrow="Agencies · the executive branch"
-              title="Federal agencies"
-            >
+            <PageMasthead className="mb-8" eyebrow="Executive · agencies" title="Federal agencies">
               <p>
                 The agencies that run the government day to day: what each one spends, the rules it
                 proposes and issues, and when you can comment on them. Pick an agency for its page.
@@ -181,7 +178,7 @@ export default async function AgenciesPage({
               </button>
             </form>
 
-            <SectionCards section="agencies" current="directory" className="mb-10" />
+            <SectionCards section="executive" current="agencies" className="mb-10" />
 
             {!budget && (
               <p className="mb-10 text-sm text-ink-lo">

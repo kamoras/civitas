@@ -55,6 +55,20 @@ describe("Navbar search", () => {
 });
 
 describe("Navbar", () => {
+  it("marks the section a record names over the one its path would", () => {
+    // A record's URL is shared by several sections (recordTrail): the
+    // profile passes its branch's.
+    render(<Navbar section="court" />);
+    const row = screen.getByTestId("nav-row");
+    expect(within(row).getByRole("link", { name: /^SUPREME COURT/ })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
+    expect(within(row).getByRole("button", { name: /^ELECTIONS/ })).not.toHaveTextContent(
+      "current section"
+    );
+  });
+
   it("opens a section's pages from one trigger, not a menu, and Escape closes it", () => {
     render(<Navbar />);
     const row = screen.getByTestId("nav-row");
