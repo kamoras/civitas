@@ -43,7 +43,9 @@ const DATA: ChamberMeasures = {
   measures: [
     {
       key: "pacMoney",
-      label: "PAC money",
+      label: "Money from PACs",
+      question: "Who funds the campaign?",
+      why: "Share of campaign contributions from PACs.",
       direction: "higher means more of the money came from PACs",
       unit: "share",
       median: 0.2,
@@ -78,9 +80,9 @@ describe("MeasuresClient", () => {
         .getAllByRole("link")
         .map((a) => a.textContent);
     expect(names()).toEqual(["Al Fox", "Bea Ray", "Cy Ng"]);
-    await userEvent.click(within(table).getByRole("button", { name: "PAC money" }));
+    await userEvent.click(within(table).getByRole("button", { name: "From PACs" }));
     expect(names()).toEqual(["Cy Ng", "Al Fox", "Bea Ray"]);
-    expect(within(table).getByRole("columnheader", { name: /PAC money/ })).toHaveAttribute(
+    expect(within(table).getByRole("columnheader", { name: /From PACs/ })).toHaveAttribute(
       "aria-sort",
       "descending"
     );

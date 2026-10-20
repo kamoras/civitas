@@ -1,7 +1,9 @@
 import { restatesTitle } from "@/lib/formatting";
 import { ImageResponse } from "next/og";
 import { NextRequest } from "next/server";
-import { loadArchivoBold } from "@/lib/ogFonts";
+import { OG_FAMILY, ogFonts } from "@/lib/ogFonts";
+import { OgLockup } from "@/lib/ogLockup";
+import { OG_COLOR as C } from "@/lib/ogTheme";
 import { fetchPhoto, parsePhotoPath } from "@/lib/photos";
 import { STATE_CODES } from "@/lib/stateCodes";
 import { usableRecord } from "@/lib/ssrPayload";
@@ -21,37 +23,27 @@ const OG_HEADERS = { "Cache-Control": "public, max-age=300" };
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
-// Raw hex, not the Tailwind tokens used elsewhere on the site — Satori
-// (next/og's renderer) doesn't resolve Tailwind classes or CSS custom
-// properties, only inline style objects, so these are hand-copied from
-// tailwind.config.ts. This route originally shipped with the PRE-REBRAND
-// green-terminal look (#00ff41 as structural text, plain "monospace",
-// ad-hoc greys) — tailwind.config.ts's own comments document that look as
-// retired ("the migration finished with zero call sites left"), and this
-// route was simply never updated when the rest of the site was. Fixed
-// live 2026-09-02 after a report that OG images "follow our old theme."
-const INK_HI = "#F2EEE7";
-const INK = "#E3DCD1";
-const INK_LO = "#CDC7BC";
-const INK_MIN = "#BBB5AC";
-const SURFACE_BASE = "#0E0C0A";
-// Same 7%-white hairline used for every card/divider border on the site
-// (Tailwind's border-white/[0.07]) — not an ink-tinted line.
-const HAIRLINE = "rgba(255,255,255,0.07)";
+// Satori (next/og's renderer) takes inline style objects only, no Tailwind
+// classes or CSS custom properties, so the cards read the light theme's
+// tokens from lib/ogTheme.ts (kept equal to globals.css by its test). A
+// shared link lands in feeds of every colour; the cards use the parchment
+// theme, the site's default.
+const INK_HI = C.inkHi;
+const INK = C.ink;
+const INK_LO = C.inkLo;
+const INK_MIN = C.inkMin;
+const SURFACE_BASE = C.parchment;
+// Box borders and the foot rule: rule-strong, 3:1 on parchment.
+const HAIRLINE = C.rule;
+// The ledger-green band across the top of every card.
+const TOP_BAND = `10px solid ${C.accent}`;
 const DOMAIN = "civitas-research.org";
 
 const PARTY_ACCENT: Record<string, string> = {
-  D: "#82acff",
-  R: "#ff8989",
-  I: "#c995ff",
+  D: C.dem,
+  R: C.rep,
+  I: C.ind,
 };
-
-// Mirrors lib/representation.ts's getScoreColor exactly (same 81/61/41/21
-// tiers) — that file returns a Tailwind class name for DOM rendering,
-// which Satori can't consume, so this is the hex-returning equivalent.
-// Keep these two in sync: the whole point of a single shared scoring
-// function elsewhere in the app was stopping the same score from
-// rendering a different tier depending on which page shows it.
 
 async function fetchIssue(id: string) {
   try {
@@ -106,15 +98,12 @@ async function fetchStateBallot(state: string): Promise<StateBallot | null> {
 
 function Header({ section, date }: { section: string; date?: string }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 48 }}>
-      <span style={{ color: INK_HI, fontSize: 18, letterSpacing: 6 }}>CIVITAS</span>
-      <span style={{ color: INK_MIN, fontSize: 18 }}>|</span>
-      <span style={{ color: INK_LO, fontSize: 14, letterSpacing: 4 }}>{section}</span>
-      {date && (
-        <span style={{ marginLeft: "auto", color: INK_MIN, fontSize: 18, letterSpacing: 2 }}>
-          {date}
-        </span>
-      )}
+    <div style={{ display: "flex", alignItems: "center", gap: 28, marginBottom: 44 }}>
+      <OgLockup size={24} />
+      <span style={{ color: INK_LO, fontSize: 20, fontWeight: 600, letterSpacing: 3 }}>
+        {section}
+      </span>
+      {date && <span style={{ marginLeft: "auto", color: INK_LO, fontSize: 22 }}>{date}</span>}
     </div>
   );
 }
@@ -126,12 +115,14 @@ function Footer({ label }: { label: string }) {
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
-        borderTop: `1px solid ${HAIRLINE}`,
+        borderTop: `2px solid ${HAIRLINE}`,
         paddingTop: 28,
       }}
     >
-      <span style={{ color: INK_LO, fontSize: 14, letterSpacing: 2 }}>{DOMAIN}</span>
-      <span style={{ color: INK_MIN, fontSize: 13, letterSpacing: 1 }}>{label}</span>
+      <span style={{ color: INK_LO, fontSize: 22, fontFamily: OG_FAMILY.mono }}>{DOMAIN}</span>
+      <span style={{ color: INK_LO, fontSize: 20, fontWeight: 600, letterSpacing: 2 }}>
+        {label}
+      </span>
     </div>
   );
 }
@@ -194,17 +185,6 @@ async function issueImage(issue: OgIssue | null) {
   // article ran.
   const photoDataUri = issue?.imageUrl ? await fetchPhotoAsDataUri(issue.imageUrl) : null;
 
-  // See lib/ogFonts.ts: subset text must cover every string actually
-  // rendered below, or the leftover characters fall back to Satori's own
-  // default face instead of Archivo.
-  let archivoBold: ArrayBuffer | null = null;
-  try {
-    archivoBold = await loadArchivoBold(`CIVITAS|${Object.values(t).join("")}`);
-  } catch {
-    // fall through with archivoBold still null — degrade to Satori's
-    // default face rather than fail the whole image over a font fetch.
-  }
-
   return new ImageResponse(
     <div
       style={{
@@ -214,8 +194,8 @@ async function issueImage(issue: OgIssue | null) {
         display: "flex",
         flexDirection: "column",
         padding: "60px 72px",
-        fontFamily: "Archivo",
-        border: `1px solid ${HAIRLINE}`,
+        fontFamily: OG_FAMILY.sans,
+        borderTop: TOP_BAND,
       }}
     >
       <Header section={t.section} date={t.date} />
@@ -224,17 +204,18 @@ async function issueImage(issue: OgIssue | null) {
           <div
             style={{
               color: INK_HI,
-              fontSize: t.title.length > 60 ? 38 : 46,
-              fontWeight: 700,
-              lineHeight: 1.2,
+              fontSize: t.title.length > 60 ? 46 : 56,
+              fontFamily: OG_FAMILY.serif,
+              fontWeight: 600,
+              lineHeight: 1.15,
               marginBottom: 32,
             }}
           >
             {t.title}
           </div>
-          <div style={{ color: INK, fontSize: 22, lineHeight: 1.5 }}>{t.summary}</div>
+          <div style={{ color: INK, fontSize: 26, lineHeight: 1.45 }}>{t.summary}</div>
           {t.summaryCredit && (
-            <div style={{ color: INK_LO, fontSize: 18, marginTop: 10 }}>{t.summaryCredit}</div>
+            <div style={{ color: INK_LO, fontSize: 20, marginTop: 10 }}>{t.summaryCredit}</div>
           )}
         </div>
         {photoDataUri && (
@@ -247,7 +228,7 @@ async function issueImage(issue: OgIssue | null) {
               height={320}
               style={{ objectFit: "cover", border: `1px solid ${HAIRLINE}` }}
             />
-            {t.photoCredit && <span style={{ color: INK_MIN, fontSize: 14 }}>{t.photoCredit}</span>}
+            {t.photoCredit && <span style={{ color: INK_MIN, fontSize: 18 }}>{t.photoCredit}</span>}
           </div>
         )}
       </div>
@@ -257,18 +238,7 @@ async function issueImage(issue: OgIssue | null) {
       width: 1200,
       height: 630,
       headers: OG_HEADERS,
-      ...(archivoBold
-        ? {
-            fonts: [
-              {
-                name: "Archivo",
-                data: archivoBold,
-                weight: 700 as const,
-                style: "normal" as const,
-              },
-            ],
-          }
-        : {}),
+      fonts: await ogFonts(),
     }
   );
 }
@@ -281,12 +251,12 @@ function IssueFooter({ link, sources }: { link: string; sources: string }) {
         justifyContent: "space-between",
         alignItems: "center",
         gap: 24,
-        borderTop: `1px solid ${HAIRLINE}`,
+        borderTop: `2px solid ${HAIRLINE}`,
         paddingTop: 28,
       }}
     >
-      <span style={{ color: INK_LO, fontSize: 16, letterSpacing: 1 }}>{link}</span>
-      <span style={{ color: INK_LO, fontSize: 16 }}>{sources}</span>
+      <span style={{ color: INK_LO, fontSize: 20, fontFamily: OG_FAMILY.mono }}>{link}</span>
+      <span style={{ color: INK_LO, fontSize: 20 }}>{sources}</span>
     </div>
   );
 }
@@ -334,7 +304,7 @@ async function politicianImage(
   const identity = profile?.identity;
   const name = identity?.name ?? "Civitas Research";
   const party = identity?.party ?? "";
-  const accent = PARTY_ACCENT[party] ?? "#F2EEE7";
+  const accent = PARTY_ACCENT[party] ?? INK_HI;
   const standing = formatStanding(identity);
   const section = identity?.role?.toUpperCase() ?? "PUBLIC RECORD";
   const footerLabel = scoreFooterLabel(profile?.branch);
@@ -342,19 +312,6 @@ async function politicianImage(
   const photoDataUri = identity?.thumbnailUrl
     ? await fetchPhotoAsDataUri(identity.thumbnailUrl)
     : null;
-
-  // See lib/ogFonts.ts: subset text must cover every string actually
-  // rendered below, or the leftover characters fall back to Satori's own
-  // default face instead of Archivo.
-  let archivoBold: ArrayBuffer | null = null;
-  try {
-    archivoBold = await loadArchivoBold(
-      `CIVITAS${section}${name}${standing}${DOMAIN}${footerLabel}|`
-    );
-  } catch {
-    // fall through with archivoBold still null — degrade to Satori's
-    // default face rather than fail the whole image over a font fetch.
-  }
 
   return new ImageResponse(
     <div
@@ -365,8 +322,8 @@ async function politicianImage(
         display: "flex",
         flexDirection: "column",
         padding: "60px 72px",
-        fontFamily: "Archivo",
-        border: `1px solid ${HAIRLINE}`,
+        fontFamily: OG_FAMILY.sans,
+        borderTop: TOP_BAND,
       }}
     >
       <Header section={section} />
@@ -388,11 +345,27 @@ async function politicianImage(
           />
         )}
         <div style={{ display: "flex", flexDirection: "column" }}>
-          <div style={{ color: INK_HI, fontSize: 52, fontWeight: 700, lineHeight: 1.2 }}>
+          <div
+            style={{
+              color: INK_HI,
+              fontSize: 56,
+              fontFamily: OG_FAMILY.serif,
+              fontWeight: 600,
+              lineHeight: 1.15,
+            }}
+          >
             {name}
           </div>
           {standing && (
-            <div style={{ color: accent, fontSize: 28, marginTop: 12, letterSpacing: 2 }}>
+            <div
+              style={{
+                color: accent,
+                fontSize: 30,
+                fontWeight: 600,
+                marginTop: 12,
+                letterSpacing: 2,
+              }}
+            >
               {standing}
             </div>
           )}
@@ -404,18 +377,7 @@ async function politicianImage(
       width: 1200,
       height: 630,
       headers: OG_HEADERS,
-      ...(archivoBold
-        ? {
-            fonts: [
-              {
-                name: "Archivo",
-                data: archivoBold,
-                weight: 700 as const,
-                style: "normal" as const,
-              },
-            ],
-          }
-        : {}),
+      fonts: await ogFonts(),
     }
   );
 }
@@ -436,16 +398,6 @@ async function genericCard({
   description: string;
   footerLabel: string;
 }) {
-  let archivoBold: ArrayBuffer | null = null;
-  try {
-    archivoBold = await loadArchivoBold(
-      `CIVITAS${section}${title}${description}${DOMAIN}${footerLabel}`
-    );
-  } catch {
-    // fall through with archivoBold still null — degrade to Satori's
-    // default face rather than fail the whole image over a font fetch.
-  }
-
   return new ImageResponse(
     <div
       style={{
@@ -455,14 +407,24 @@ async function genericCard({
         display: "flex",
         flexDirection: "column",
         padding: "60px 72px",
-        fontFamily: "Archivo",
-        border: `1px solid ${HAIRLINE}`,
+        fontFamily: OG_FAMILY.sans,
+        borderTop: TOP_BAND,
       }}
     >
       <Header section={section} />
       <div style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: "center" }}>
-        <div style={{ color: INK_HI, fontSize: 46, fontWeight: 700, lineHeight: 1.2 }}>{title}</div>
-        <div style={{ color: INK, fontSize: 22, marginTop: 16 }}>{description}</div>
+        <div
+          style={{
+            color: INK_HI,
+            fontSize: 52,
+            fontFamily: OG_FAMILY.serif,
+            fontWeight: 600,
+            lineHeight: 1.15,
+          }}
+        >
+          {title}
+        </div>
+        <div style={{ color: INK, fontSize: 28, marginTop: 18 }}>{description}</div>
       </div>
       <Footer label={footerLabel} />
     </div>,
@@ -470,18 +432,7 @@ async function genericCard({
       width: 1200,
       height: 630,
       headers: OG_HEADERS,
-      ...(archivoBold
-        ? {
-            fonts: [
-              {
-                name: "Archivo",
-                data: archivoBold,
-                weight: 700 as const,
-                style: "normal" as const,
-              },
-            ],
-          }
-        : {}),
+      fonts: await ogFonts(),
     }
   );
 }
@@ -494,11 +445,16 @@ function StatTile({ value, label }: { value: string; label: string }) {
         flexDirection: "column",
         flex: 1,
         padding: "20px 24px",
-        border: `1px solid ${HAIRLINE}`,
+        background: C.paper,
+        border: `2px solid ${HAIRLINE}`,
       }}
     >
-      <span style={{ color: INK_HI, fontSize: 40, fontWeight: 700 }}>{value}</span>
-      <span style={{ color: INK_LO, fontSize: 15, letterSpacing: 1, marginTop: 8 }}>{label}</span>
+      <span style={{ color: INK_HI, fontSize: 44, fontWeight: 600 }}>{value}</span>
+      <span
+        style={{ color: INK_LO, fontSize: 19, fontWeight: 600, letterSpacing: 1, marginTop: 8 }}
+      >
+        {label}
+      </span>
     </div>
   );
 }
@@ -518,23 +474,6 @@ async function tileCard({
   tiles: { value: string; label: string }[];
   footerLabel: string;
 }) {
-  // See lib/ogFonts.ts: subset text must cover every string actually
-  // rendered below, or the leftover characters fall back to Satori's own
-  // default face instead of Archivo. Every label is interpolated rather
-  // than hand-typed as a word list: a hand-typed guess at "the extra
-  // characters these labels need" once left "BALLOT MEASURES" with a
-  // mismatched fallback-font glyph.
-  let archivoBold: ArrayBuffer | null = null;
-  try {
-    archivoBold = await loadArchivoBold(
-      `CIVITAS${section}${title}${description}${DOMAIN}${footerLabel}` +
-        tiles.map((t) => `${t.value}${t.label}`).join("")
-    );
-  } catch {
-    // fall through with archivoBold still null — degrade to Satori's
-    // default face rather than fail the whole image over a font fetch.
-  }
-
   return new ImageResponse(
     <div
       style={{
@@ -544,8 +483,8 @@ async function tileCard({
         display: "flex",
         flexDirection: "column",
         padding: "60px 72px",
-        fontFamily: "Archivo",
-        border: `1px solid ${HAIRLINE}`,
+        fontFamily: OG_FAMILY.sans,
+        borderTop: TOP_BAND,
       }}
     >
       <Header section={section} />
@@ -554,13 +493,14 @@ async function tileCard({
           style={{
             color: INK_HI,
             fontSize: title.length > 30 ? 44 : 56,
-            fontWeight: 700,
-            lineHeight: 1.2,
+            fontFamily: OG_FAMILY.serif,
+            fontWeight: 600,
+            lineHeight: 1.15,
           }}
         >
           {title}
         </div>
-        <div style={{ color: INK, fontSize: 24, marginTop: 16, marginBottom: 48 }}>
+        <div style={{ color: INK, fontSize: 28, marginTop: 16, marginBottom: 44 }}>
           {description}
         </div>
         <div style={{ display: "flex", gap: 20 }}>
@@ -575,18 +515,7 @@ async function tileCard({
       width: 1200,
       height: 630,
       headers: OG_HEADERS,
-      ...(archivoBold
-        ? {
-            fonts: [
-              {
-                name: "Archivo",
-                data: archivoBold,
-                weight: 700 as const,
-                style: "normal" as const,
-              },
-            ],
-          }
-        : {}),
+      fonts: await ogFonts(),
     }
   );
 }
@@ -766,9 +695,9 @@ function countedParties(row: RecordCardTally): RecordCardParty[] {
   return row.parties.filter((p) => p.count > 0);
 }
 
-/** Every string the record card image renders, in order. The font subset
- *  is built from these, and the tests check each is one of the card's own
- *  fields. The date is the record's, written as the alt text writes it. */
+/** Every string the record card image renders, in order. The tests check
+ *  each is one of the card's own fields, so the image says nothing its alt
+ *  text doesn't. The date is the record's, written as the alt text writes it. */
 export function recordCardTexts(card: RecordCard): string[] {
   return [
     card.eyebrow,
@@ -794,13 +723,6 @@ function headlineSize(card: RecordCard): number {
 async function recordCardImage(card: RecordCard) {
   const date = recordDate(card);
   const widest = Math.max(1, ...card.tally.map((row) => row.total));
-  let archivoBold: ArrayBuffer | null = null;
-  try {
-    archivoBold = await loadArchivoBold(recordCardTexts(card).join(""));
-  } catch {
-    // fall through with archivoBold still null — degrade to Satori's
-    // default face rather than fail the whole image over a font fetch.
-  }
 
   return new ImageResponse(
     <div
@@ -811,8 +733,8 @@ async function recordCardImage(card: RecordCard) {
         display: "flex",
         flexDirection: "column",
         padding: "56px 72px 48px",
-        fontFamily: "Archivo",
-        border: `1px solid ${HAIRLINE}`,
+        fontFamily: OG_FAMILY.sans,
+        borderTop: TOP_BAND,
       }}
     >
       <div
@@ -821,13 +743,14 @@ async function recordCardImage(card: RecordCard) {
           justifyContent: "space-between",
           gap: 24,
           color: INK_LO,
-          fontSize: 18,
+          fontSize: 22,
+          fontWeight: 600,
           letterSpacing: 2,
           marginBottom: 28,
         }}
       >
         <span>{card.eyebrow}</span>
-        {date && <span style={{ color: INK_MIN }}>{date}</span>}
+        {date && <span style={{ color: INK_LO, fontWeight: 400, letterSpacing: 0 }}>{date}</span>}
       </div>
       <div style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: "center" }}>
         {card.headline && (
@@ -835,15 +758,16 @@ async function recordCardImage(card: RecordCard) {
             style={{
               color: INK_HI,
               fontSize: headlineSize(card),
-              fontWeight: 700,
-              lineHeight: 1.2,
+              fontFamily: OG_FAMILY.serif,
+              fontWeight: 600,
+              lineHeight: 1.15,
             }}
           >
             {card.headline}
           </div>
         )}
         {card.lines.map((line) => (
-          <div key={line} style={{ color: INK, fontSize: 20, lineHeight: 1.4, marginTop: 16 }}>
+          <div key={line} style={{ color: INK, fontSize: 24, lineHeight: 1.4, marginTop: 16 }}>
             {line}
           </div>
         ))}
@@ -851,7 +775,7 @@ async function recordCardImage(card: RecordCard) {
           <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 28 }}>
             {card.tally.map((row) => (
               <div key={row.position} style={{ display: "flex", alignItems: "center", gap: 20 }}>
-                <span style={{ display: "flex", width: 150, color: INK_LO, fontSize: 20 }}>
+                <span style={{ display: "flex", width: 170, color: INK_LO, fontSize: 22 }}>
                   {row.label}
                 </span>
                 <span
@@ -861,7 +785,7 @@ async function recordCardImage(card: RecordCard) {
                     justifyContent: "flex-end",
                     color: INK_HI,
                     fontSize: 26,
-                    fontWeight: 700,
+                    fontWeight: 600,
                   }}
                 >
                   {String(row.total)}
@@ -880,7 +804,7 @@ async function recordCardImage(card: RecordCard) {
                       />
                     ))}
                   </div>
-                  <div style={{ display: "flex", gap: 18, fontSize: 15 }}>
+                  <div style={{ display: "flex", gap: 18, fontSize: 19, fontWeight: 600 }}>
                     {countedParties(row).map((p) => (
                       <span key={p.party} style={{ color: PARTY_ACCENT[p.party] ?? INK_MIN }}>
                         {`${p.name} ${p.count}`}
@@ -896,11 +820,11 @@ async function recordCardImage(card: RecordCard) {
       <div
         style={{
           display: "flex",
-          borderTop: `1px solid ${HAIRLINE}`,
+          borderTop: `2px solid ${HAIRLINE}`,
           paddingTop: 22,
           marginTop: 24,
           color: INK_LO,
-          fontSize: 16,
+          fontSize: 20,
         }}
       >
         {card.source}
@@ -910,18 +834,7 @@ async function recordCardImage(card: RecordCard) {
       width: 1200,
       height: 630,
       headers: OG_HEADERS,
-      ...(archivoBold
-        ? {
-            fonts: [
-              {
-                name: "Archivo",
-                data: archivoBold,
-                weight: 700 as const,
-                style: "normal" as const,
-              },
-            ],
-          }
-        : {}),
+      fonts: await ogFonts(),
     }
   );
 }

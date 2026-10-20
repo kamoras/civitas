@@ -105,6 +105,16 @@ class UntrustedCount(Exception):
     is stored."""
 
 
+class FeedUnreadable(Exception):
+    """A request the read needs failed (a timeout, a 5xx, a 404, a bot
+    wall) or answered something that could not be parsed. The feed could
+    not be checked, which is not the same as it listing no election that
+    day: a reader returns None only when the state's own election list or
+    page was read and shows nothing held on the date. Until 2026-10 both
+    were None, and North Dakota's election list answering 504 three times
+    was alerted as "not staged yet, moved, or unreadable"."""
+
+
 def parse_utc(raw) -> datetime | None:
     """An ISO timestamp ("2025-01-07T16:55:00.63Z", with or without an
     offset) as naive UTC; None for anything else, including the
@@ -317,21 +327,21 @@ async def fetch_state_count(
     client: httpx.AsyncClient, state: str, election_day: date,
 ) -> StateCount | None:
     """The state's federal count for `election_day`, or None when its
-    source can't be read or hasn't published that election. A published
-    election with nothing counted yet is a StateCount with zero votes —
-    the difference between "no results yet" and "couldn't check". Raises
-    UntrustedCount for test or preview data, or a mismatched election."""
+    source lists no such election yet. A published election with nothing
+    counted yet is a StateCount with zero votes. Raises FeedUnreadable when
+    the source couldn't be read ("couldn't check" is not "not published"),
+    and UntrustedCount for test or preview data, or a mismatched election."""
     source = source_for_state(state)
     reader = _reader_for(source) if source else None
     if reader is None:
         return None
     try:
         count = await reader(client, election_day, state.upper(), live_source(source))
-    except UntrustedCount:
+    except (UntrustedCount, FeedUnreadable):
         raise
-    except (httpx.HTTPError, ValueError, KeyError, TypeError):
+    except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
         logger.exception("%s live results read failed", state)
-        return None
+        raise FeedUnreadable(f"{state} live results read failed ({type(exc).__name__})") from exc
     if count is not None:
         count.contests = _without_unnumbered_house_collisions(state, count.contests)
     return count

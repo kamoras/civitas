@@ -102,12 +102,14 @@ only NEBRASKA is opted in:
 import logging
 import re
 from datetime import datetime, timezone
+from urllib.parse import urljoin, urlsplit
 from zoneinfo import ZoneInfo
 
 import httpx
 from lxml import html as lxml_html
 
-from app.pipeline.fetch.http_utils import fetch_text_with_retry
+from app.pipeline.fetch import http_utils
+from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_text_with_retry
 from app.pipeline.fetch.state_candidates_common import (
     runoff_threshold,
     clean_display_name,
@@ -120,7 +122,13 @@ from app.pipeline.fetch.state_candidates_common import (
     surname,
 )
 from app.pipeline.fetch.state_candidates_tabular import DEFAULT_SETTLE_DAYS, _settled
-from app.pipeline.fetch.election_results import ContestCount, StateCount, UntrustedCount, is_special_contest
+from app.pipeline.fetch.election_results import (
+    ContestCount,
+    FeedUnreadable,
+    StateCount,
+    UntrustedCount,
+    is_special_contest,
+)
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -493,8 +501,28 @@ async def fetch_general_results(
     stamps = []
     for query in queries:
         url = f"{base_url}/resultsSW.aspx?type={query['type']}&map={query['map']}"
-        html = await fetch_text_with_retry(client, _rate_limiter, url, f"{state} general results {query['type']}")
-        if html is None or _general_held_on(html) != election_day.isoformat():
+        label = f"{state} general results {query['type']}"
+        resp = await http_utils.fetch_with_retry(
+            client, _rate_limiter, "GET", url, log_label=label, headers=BROWSER_HEADERS, follow_redirects=False,
+        )
+        if resp is None:
+            raise FeedUnreadable(f"{state} results page {url} could not be read")
+        if 300 <= getattr(resp, "status_code", 200) < 400:
+            # Between elections the host sends its results page to the
+            # Secretary of State's own site (New Mexico's and Montana's,
+            # 2026-10; Montana's behind a bot wall): it serves no election,
+            # which is "not published yet", not an outage. A redirect within
+            # the host is followed.
+            target = urljoin(url, resp.headers.get("location") or "")
+            if urlsplit(target).hostname != urlsplit(url).hostname:
+                logger.info("%s results page redirects off its host to %s: no election served", state, target)
+                return None
+            html = await fetch_text_with_retry(client, _rate_limiter, url, label)
+            if html is None:
+                raise FeedUnreadable(f"{state} results page {url} could not be read")
+        else:
+            html = resp.text
+        if _general_held_on(html) != election_day.isoformat():
             return None
         if (message := _testing_message(html)) is not None:
             raise UntrustedCount(f"{state} results page says {message!r}")

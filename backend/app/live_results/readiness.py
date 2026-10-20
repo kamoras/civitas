@@ -14,9 +14,11 @@ serves the general: that is the honest state of its feed.
 
 So for the READINESS_DAYS before election day, once a day, every covered
 state is read exactly as the sync reads it and the problems are raised as
-ops alerts: no count for the general (not staged yet, moved, or
-unreadable), a refused one (test, preview or another election's data), or
-one whose federal contests don't account for the state's races. Nothing is
+ops alerts: a feed that lists no general yet (not staged, or a source
+entry reading a list the state no longer updates), one that can't be read
+(an outage, a moved URL, a wall), a refused one (test, preview or
+another election's data), or one whose federal contests don't account
+for the state's races. Nothing is
 stored: before polls close nothing of a count is kept or shown
 (fetch/poll_close.py), and a staged feed holds no votes anyway. It stops
 the day before election day, when the sync's own checks take over.
@@ -31,7 +33,7 @@ from sqlalchemy.orm import Session
 from app.live_results.sync import _contest_race, contest_is_sane
 from app.models import Race
 from app.ops_alerts import resolve_ops_alert, send_ops_alert
-from app.pipeline.fetch.election_results import UntrustedCount, fetch_state_count, live_results_states
+from app.pipeline.fetch.election_results import FeedUnreadable, UntrustedCount, fetch_state_count, live_results_states
 
 logger = logging.getLogger(__name__)
 
@@ -59,12 +61,16 @@ async def state_readiness(db: Session, client: httpx.AsyncClient, state: str, el
         count = await fetch_state_count(client, state, election_day)
     except UntrustedCount as refused:
         return f"its feed was refused: {refused}"
+    except FeedUnreadable as unread:
+        return f"its feed could not be read: {unread}"
     except Exception as exc:  # one state's broken feed never stops the check
         logger.exception("Readiness read failed for %s", state)
         return f"its feed could not be read ({type(exc).__name__})"
     if count is None:
-        return (f"its feed has no count for the {election_day.isoformat()} general: not staged yet, moved, "
-                "or unreadable")
+        # The reader read the state's own election list or results page and
+        # it shows nothing held that day (a failed read raises instead).
+        return (f"its results site lists no election on {election_day.isoformat()} yet: the general is not "
+                "staged, or the source entry reads a list the state no longer updates")
     matched = set()
     for contest in count.contests:
         race = _contest_race(db, election_day.year, state, contest) if contest_is_sane(contest) else None
