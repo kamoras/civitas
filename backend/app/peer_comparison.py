@@ -1,8 +1,8 @@
 """Where a member stands among peers, measure by measure.
 
 The member page's "Where they stand" stack and the measures page read this
-instead of the composite Representation Score: for each measure (small
-gifts, PAC money, breaks with party, bills moved), the member's plain
+instead of the composite Representation Score: for each measure (breaks
+with party, PAC money, small donors, bills past committee), the member's plain
 figure, the figure expected for the seat (the scorer's own seat-adjusted
 reference where it has one, else the peer median, and the row says which),
 every peer's figure, the member's percentile among them, and a word from a
@@ -28,7 +28,7 @@ import time
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.measures import MEASURES, Measure, alignment_facts, bill_facts, past_committee
+from app.measures import BY_KEY, MEASURES, Measure, alignment_facts, bill_facts, past_committee
 from app.models import Representative, Senator
 from app.pipeline.analyze.score_calculator import ALGORITHM_VERSION, _seat_pvi
 from app.score_keeping import load_breakdown
@@ -164,7 +164,7 @@ def _group_label(chamber: str, group: str, caucus: str, members: list[dict]) -> 
 # Template sentences, about grade 8 and subjectless (never a pronoun):
 # the fact, then how many of the other peers sit on the far side of it.
 _FACT = {
-    "smallGifts": "Gifts of $200 or less were {shown} of the money.",
+    "smallGifts": "Donors who gave $200 or less gave {shown} of the money.",
     "pacMoney": "PACs gave {shown} of the money.",
     "breaks": "Broke with the party on {shown} party-line votes.",
     "billsMoved": "{shown} bills got past committee.",
@@ -190,6 +190,10 @@ def _row(measure: Measure, me: dict, peers: list[dict], chamber: str, group: str
     row = {
         "key": measure.key,
         "label": measure.label,
+        "question": measure.question,
+        "why": measure.why,
+        "measured": measure.measured,
+        "window": measure.window,
         "direction": measure.direction,
         "unit": measure.unit,
         "value": value,
@@ -242,7 +246,8 @@ def peer_comparison(db: Session, chamber: str, member_id: str, group: str = "cau
         return None
     peers = rows if group == "chamber" else [r for r in rows if r["caucus"] == me["caucus"]]
     measures = [_row(m, me, peers, chamber, group) for m in MEASURES]
-    return {"group": group, "rule": RULE, "measures": measures, "standsOut": stands_out(measures)}
+    line, reason = stands_out(measures)
+    return {"group": group, "rule": RULE, "measures": measures, "standsOut": line, "standsOutWhy": reason}
 
 
 def chamber_measures(db: Session, chamber: str) -> dict:
@@ -271,7 +276,8 @@ def chamber_measures(db: Session, chamber: str) -> dict:
         entries = [entry(r, v) for r, v in points]
         ranked = sorted((e for e in entries if e["gap"] is not None), key=lambda e: e["gap"])
         out.append({
-            "key": m.key, "label": m.label, "direction": m.direction, "unit": m.unit,
+            "key": m.key, "label": m.label, "question": m.question, "why": m.why,
+            "direction": m.direction, "unit": m.unit,
             "median": median, "n": len(entries), "source": m.source,
             "points": sorted(entries, key=lambda e: e["value"]),
             "mostAbove": [e for e in reversed(ranked[-3:]) if e["gap"] > 0],
@@ -286,8 +292,8 @@ def chamber_measures(db: Session, chamber: str) -> dict:
             "id": r["id"], "name": r["name"], "party": r["party"], "caucus": r["caucus"],
             "state": r["state"], "district": r["district"],
             "lean": seat_lean(r["state"], r["district"]) if chamber == "house" else None,
-            "smallGifts": MEASURES[0].value(f),
-            "pacMoney": MEASURES[1].value(f),
+            "smallGifts": BY_KEY["smallGifts"].value(f),
+            "pacMoney": BY_KEY["pacMoney"].value(f),
             "breaks": alignment_facts(f).get("breaks"),
             "partyVotes": alignment_facts(f).get("partyVotes"),
             "billsPastCommittee": past_committee(f),
@@ -299,12 +305,19 @@ def chamber_measures(db: Session, chamber: str) -> dict:
     return {"chamber": chamber, "measures": out, "members": members}
 
 
-def stands_out(measures: list[dict]) -> str:
-    """The one line above the stack: the measure furthest from the middle of
-    its peers, in percentile terms, when its word is a "well" word; else
-    that the member is close to peers on every measure."""
+# Why the line above the stack says what it says: the rule, in a sentence.
+STANDS_OUT_WHY = "Picked by rule: of the four figures, this one is furthest from the middle of the group."
+NONE_STANDS_OUT_WHY = ("A figure is picked only when it is in the top or bottom tenth of the group "
+                       "and far from what is expected. None is.")
+
+
+def stands_out(measures: list[dict]) -> tuple[str, str]:
+    """The one line above the stack and why it was picked: the measure
+    furthest from the middle of its peers, in percentile terms, when its
+    word is a "well" word, with that measure's own reason to care; else
+    that the member is close to peers on every measure, and the rule."""
     strong = [m for m in measures if (m.get("word") or "").startswith("well")]
     if not strong:
-        return "Close to peers on every measure."
+        return "Close to peers on every measure.", NONE_STANDS_OUT_WHY
     top = max(strong, key=lambda m: abs(m["percentile"] - 50))
-    return f"{top['label']}: {top['sentence']}"
+    return f"{top['label']}: {top['sentence']}", f"{STANDS_OUT_WHY} {top['why']}"

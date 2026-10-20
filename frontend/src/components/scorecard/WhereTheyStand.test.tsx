@@ -10,20 +10,28 @@ vi.mock("@/lib/api", () => ({
   fetchPeerComparison: (...a: unknown[]) => fetchPeerComparison(...a),
   fetchSenatorHistory: vi.fn(async () => ({
     snapshots: [
+      // The last Congress: never drawn beside this one.
+      {
+        date: "2024-06-01",
+        overallScore: 60,
+        algorithmVersion: "v7",
+        scores: {},
+        facts: { breaks: 0.5 },
+      },
       { date: "2026-10-18", overallScore: 60, algorithmVersion: "v7", scores: {}, facts: null },
       {
         date: "2026-10-19",
         overallScore: 60,
         algorithmVersion: "v7",
         scores: {},
-        facts: { smallGifts: 0.13 },
+        facts: { smallGifts: 0.13, breaks: 0.01 },
       },
       {
         date: "2026-10-26",
         overallScore: 60,
         algorithmVersion: "v7",
         scores: {},
-        facts: { smallGifts: 0.2 },
+        facts: { smallGifts: 0.2, breaks: 0.02 },
       },
     ],
   })),
@@ -33,7 +41,11 @@ vi.mock("@/lib/api", () => ({
 function measure(over: Partial<PeerMeasure>): PeerMeasure {
   return {
     key: "smallGifts",
-    label: "Small gifts",
+    label: "Money from small donors",
+    question: "Who funds the campaign?",
+    why: "Share of contributions from people who gave the campaign $200 or less in total.",
+    measured: "The FEC's unitemized individual contributions over all contributions.",
+    window: "election",
     direction: "higher means more of the money came in gifts of $200 or less",
     unit: "share",
     value: 0.13,
@@ -63,7 +75,10 @@ const DATA: PeerComparison = {
     measure({}),
     measure({
       key: "breaks",
-      label: "Breaks with party",
+      label: "Votes against the party",
+      question: "How does this member vote?",
+      why: "Share of party-line votes where this member sided with most of the other party.",
+      window: "congress",
       unit: "rate",
       shown: "0 of 6",
       thin: true,
@@ -71,7 +86,9 @@ const DATA: PeerComparison = {
       record: 6,
     }),
   ],
-  standsOut: "Small gifts: Gifts of $200 or less were 13% of the money.",
+  standsOut: "Money from small donors: Donors who gave $200 or less gave 13% of the money.",
+  standsOutWhy:
+    "Picked by rule: of the four figures, this one is furthest from the middle of the group.",
 };
 
 describe("WhereTheyStand", () => {
@@ -83,6 +100,16 @@ describe("WhereTheyStand", () => {
     );
     expect(screen.getByRole("heading", { name: "Where Pat Lee stands" })).toBeInTheDocument();
     expect(screen.getByText(DATA.standsOut)).toBeInTheDocument();
+    expect(screen.getByText(DATA.standsOutWhy)).toBeInTheDocument();
+    // Each question heads its rows once; each row says why it is there.
+    expect(
+      screen.getByRole("heading", { level: 3, name: "Who funds the campaign?" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 3, name: "How does this member vote?" })
+    ).toBeInTheDocument();
+    expect(screen.getByText(DATA.measures[0].why)).toBeInTheDocument();
+    expect(screen.getAllByText("How this is measured")).toHaveLength(2);
     const caption = screen.getByText(/Gifts of \$200 or less were 13% of the money\. 2 of/);
     expect(caption.closest("figure")).toHaveAttribute(
       "aria-labelledby",
@@ -91,9 +118,11 @@ describe("WhereTheyStand", () => {
     expect(screen.getAllByText("well below peers")[0]).toBeInTheDocument();
     // The measure over time, from the snapshots that kept it.
     expect(
-      await screen.findByText(/Over time: 13% on Mon, Oct 19, 20% on Mon, Oct 26\./)
+      await screen.findByText(/Over time: 1\.0% on Mon, Oct 19, 2\.0% on Mon, Oct 26\./)
     ).toBeInTheDocument();
-    expect(screen.getByText(/Over time: kept nightly from the next run\./)).toBeInTheDocument();
+    // Funding covers the last election, so it is never drawn over time, even
+    // though its figure moved between these snapshots.
+    expect(screen.getAllByText(/Over time:/)).toHaveLength(1);
     // A thin row keeps its figure and draws no word.
     expect(
       screen.getByText(/Not enough record yet to compare \(6 party-line votes\)/)

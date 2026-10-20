@@ -100,7 +100,7 @@ function ChamberStrip({ m, house }: { m: ChamberMeasure; house: boolean }) {
           </a>
         </p>
       </div>
-      <p className="text-sm text-ink-lo">{m.direction}</p>
+      <p className="max-w-prose text-sm text-ink">{m.why}</p>
       <div aria-hidden="true" className="relative mt-2 h-14">
         <div className="absolute inset-x-0 top-[30px] h-px bg-white/40" />
         {m.points.map((p, i) => (
@@ -138,9 +138,9 @@ type SortKey =
 const COLUMNS: { key: SortKey; label: string; numeric: boolean }[] = [
   { key: "name", label: "Member", numeric: false },
   { key: "state", label: "Seat", numeric: false },
-  { key: "smallGifts", label: "Small gifts", numeric: true },
-  { key: "pacMoney", label: "PAC money", numeric: true },
-  { key: "breaks", label: "Breaks / party votes", numeric: true },
+  { key: "breaks", label: "Votes against party / party-line votes", numeric: true },
+  { key: "pacMoney", label: "From PACs", numeric: true },
+  { key: "smallGifts", label: "From small donors", numeric: true },
   { key: "billsPastCommittee", label: "Bills past committee", numeric: true },
   { key: "passed", label: "Passed", numeric: true },
   { key: "law", label: "Law", numeric: true },
@@ -287,11 +287,11 @@ function FactTable({ members, house }: { members: ChamberMember[]; house: boolea
                 <td className="px-3 py-1.5 text-ink-lo">
                   {m.party}-{seatName(m, house)}
                 </td>
-                <td className="px-3 py-1.5 text-right">{pct(m.smallGifts)}</td>
-                <td className="px-3 py-1.5 text-right">{pct(m.pacMoney)}</td>
                 <td className="px-3 py-1.5 text-right">
                   {m.partyVotes == null ? "—" : `${m.breaks ?? 0} / ${m.partyVotes}`}
                 </td>
+                <td className="px-3 py-1.5 text-right">{pct(m.pacMoney)}</td>
+                <td className="px-3 py-1.5 text-right">{pct(m.smallGifts)}</td>
                 <td className="px-3 py-1.5 text-right">{m.billsPastCommittee ?? "—"}</td>
                 <td className="px-3 py-1.5 text-right">{m.passed ?? "—"}</td>
                 <td className="px-3 py-1.5 text-right">{m.law ?? "—"}</td>
