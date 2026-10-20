@@ -92,14 +92,14 @@ export default function AccessibilityPage() {
                   section&apos;s pages open from a button beside it that says whether they are
                   showing. Choosing your state says what it set, in a message a screen reader reads
                   out, with links to that state&apos;s members and ballot. The mobile menu, the
-                  share dialog, the map&apos;s seat sheet and the scorecard and ballot drawers keep
-                  focus inside while open (Tab and Shift+Tab both wrap), close on Escape, and return
-                  focus to what opened them. Map tiles are one keyboard stop per state, opened with
-                  Enter.
+                  share dialog, the map&apos;s seat sheet and the member-page and ballot drawers
+                  keep focus inside while open (Tab and Shift+Tab both wrap), close on Escape, and
+                  return focus to what opened them. Map tiles are one keyboard stop per state,
+                  opened with Enter.
                 </Item>
                 <Item label="Long pages on a phone">
-                  A member&apos;s scorecard, a bill, a roll call, a state ballot, the Supreme Court
-                  page and the About chapters show a bar under the header once their first section
+                  A member&apos;s page, a bill, a roll call, a state ballot, the Supreme Court page
+                  and the About chapters show a bar under the header once their first section
                   scrolls up: it names the section you are reading, and sections opens every section
                   in a sheet from the bottom of the screen, the current one marked. Choosing one
                   moves focus to its heading. The sheet keeps focus inside, closes on Escape, its
@@ -196,9 +196,9 @@ export default function AccessibilityPage() {
                   pixels tall at that width.
                 </Item>
                 <Item label="axe-core, in the test suite">
-                  The member, president and justice scorecards, the Congress report pages and the
-                  state ballot page are rendered in tests and checked with axe-core. These tests run
-                  on every change.
+                  The member, president and justice pages, the Congress report pages and the state
+                  ballot page are rendered in tests and checked with axe-core. These tests run on
+                  every change.
                 </Item>
                 <Item label="Lint">
                   ESLint&apos;s jsx-a11y rules check ARIA attributes, labels and roles as code is

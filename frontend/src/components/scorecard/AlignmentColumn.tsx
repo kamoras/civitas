@@ -7,7 +7,6 @@ import { rollCallHref } from "@/lib/congress";
 import { voteNominationLine, voteSubjectHref } from "@/lib/nominations";
 import type { AlignmentFacts, BreakVote, ScoreBreakdownDimension } from "@/types/scoreBreakdown";
 import type { ConstituentApproval as Approval } from "@/types/senator";
-import ComponentBars from "./ComponentBars";
 import ConstituentApproval from "./ConstituentApproval";
 import ScoreColumn, { Block } from "./ScoreColumn";
 import { count, partyMembers, percentOneDecimal, shortDate, voteTitle } from "./format";
@@ -20,7 +19,7 @@ const BREAKS_SHOWN = 6;
 const FLANK_SHOWN = 3;
 
 const TOOLTIP =
-  "Whether the member votes the way their seat elected them to. 70% is how often they break with their party on this Congress's party-line votes, against how often members of their own party in seats that lean the same way do: matching that rate scores 100, and breaking more often, or (at half the cost) less often, lowers it. 30% is where their overall voting record sits (Voteview's position for this Congress) against what a same-party member of a similar seat holds, left out until this Congress's positions pass our checks. For a senator, approval among the state's other-party voters and independents then moves the score up or down by as much as the position part can.";
+  "How often the member broke with the party on this Congress's party-line votes, beside how often members of the same party in seats that lean the same way do. Only breaks toward the other party count; votes against the party from its own flank are listed apart. Below, how the member's own constituents rate them, by party.";
 
 /** A break as the list shows it: the breakdown's (BreakVote) or, before the
  *  member's whole-Congress record is measured, a stored vote. */
@@ -168,7 +167,6 @@ export default function AlignmentColumn({
   breaks,
   approval,
   dimension,
-  score,
   onMore,
 }: {
   memberId: string;
@@ -184,14 +182,9 @@ export default function AlignmentColumn({
    *  (informational, not scored); absent when the survey has none. */
   approval?: Approval | null;
   dimension: ScoreBreakdownDimension | undefined;
-  score: number;
   onMore: () => void;
 }) {
   const facts = dimension?.facts as AlignmentFacts | undefined;
-  // Early in a Congress, before its positions pass our checks, the position
-  // part is left out while breaks are still sorted on the last positions;
-  // with no positions at all, it is left out and every break counts.
-  const positionScored = !!dimension?.components?.some((c) => c.label === "Position congruence");
   // The breaks the score counts, served with it. Until the member's
   // whole-Congress record is measured, the stored votes against the party.
   const counted = facts?.breakVotes;
@@ -218,9 +211,7 @@ export default function AlignmentColumn({
       title="Votes"
       shareId="constituent-alignment"
       tooltip={TOOLTIP}
-      score={score}
       finding={dimension?.finding}
-      method={dimension && <ComponentBars components={dimension.components} />}
       more={{ label: "Every recorded vote", onClick: onMore }}
     >
       {facts ? (
@@ -267,9 +258,8 @@ export default function AlignmentColumn({
         >
           <p className="text-xs leading-relaxed text-ink-min">
             On these votes the {PARTY_SHORT[facts.party] ?? "members"} who broke sit further from
-            the {OTHER_PARTY[facts.party] ?? "other party"} than the party does. How far toward the
-            flank the member sits is measured by position congruence
-            {positionScored ? ", scored below." : ", which isn't scored for this Congress yet."}
+            the {OTHER_PARTY[facts.party] ?? "other party"} than the party does, so they are not
+            counted as breaks toward the other party.
           </p>
           <ul className="flex flex-col gap-2.5">
             {flank.slice(0, FLANK_SHOWN).map((v, i) => (
@@ -282,10 +272,7 @@ export default function AlignmentColumn({
         </Block>
       )}
 
-      <ConstituentApproval
-        approval={approval}
-        scored={facts?.approval?.groups.map((g) => g.group) ?? []}
-      />
+      <ConstituentApproval approval={approval} />
     </ScoreColumn>
   );
 }

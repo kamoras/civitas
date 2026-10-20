@@ -6,22 +6,21 @@ import JsonLd from "@/components/seo/JsonLd";
 import { ABOUT_CHAPTERS } from "@/lib/aboutPages";
 import { ACTION_CENTER_HREF, MEMBERS_HREF, PRESIDENTS_HREF } from "@/lib/routes";
 import { AboutPage, Section, P, A } from "@/components/about/AboutPage";
-import ScoreWeightBar from "@/components/about/ScoreWeightBar";
 import LegacyAboutAnchor from "@/components/about/LegacyAboutAnchor";
 
 const ABOUT_DESCRIPTION =
-  "What Civitas Research is, how it scores senators, representatives and presidents from public records (and why not justices), and the rules it holds itself to.";
+  "What Civitas Research is, how it sets each member of Congress beside peers from public records, how presidents are measured (and why not justices), and the rules it holds itself to.";
 
 // Absolute: the page names the site itself, so the template's
 // " | Civitas Research" would say it twice.
 export const metadata = pageMetadata({
-  title: "About Civitas Research: How Members of Congress Are Scored",
+  title: "About Civitas Research: How Members of Congress Are Compared",
   absoluteTitle: true,
   description: ABOUT_DESCRIPTION,
   path: "/about",
 });
 
-// The overview. It says what Civitas is and how a score works in the time a
+// The overview. It says what Civitas is and how a member is shown in the time a
 // reader will actually give it, then hands off to the chapters (see
 // lib/aboutPages.ts). Nothing here is the only place a fact is stated: every
 // claim links to the chapter that explains it in full.
@@ -29,19 +28,19 @@ export const metadata = pageMetadata({
 const PRINCIPLES: readonly { title: string; body: string }[] = [
   {
     title: "Public records only",
-    body: "Every score is computed from official records: Congress.gov, the FEC, the Federal Register, the courts. Nothing is purchased, and nothing is invented to fill a gap.",
+    body: "Every figure comes from official records: Congress.gov, the FEC, the Federal Register, the courts. Nothing is purchased, and nothing is invented to fill a gap.",
   },
   {
     title: "One formula for every party",
-    body: "The same record in the same seat gets the same score, Democrat or Republican. No formula has a party term in it.",
+    body: "The same record in the same seat reads the same way, Democrat or Republican. No formula has a party term in it.",
   },
   {
-    title: "No AI in any score",
-    body: "Scores come from published formulas you can check by hand. AI sorts records into categories; it never decides a number.",
+    title: "No AI in any figure",
+    body: "Figures come from published formulas you can check by hand. AI sorts records into categories; it never decides a number.",
   },
   {
     title: "Missing data is neutral, not zero",
-    body: "Nobody is penalized for what can't be measured. A thin record is pulled toward the middle rather than pushed to an extreme.",
+    body: "What can't be measured is marked as such, never counted as zero. A figure with too little record behind it gets no word beside it.",
   },
   {
     title: "Quoted, never rewritten",
@@ -50,36 +49,6 @@ const PRINCIPLES: readonly { title: string; body: string }[] = [
   {
     title: "Nothing asked about you",
     body: "No account, no address, no ZIP code, no tracking cookies. Visits are counted in a way that can't be traced back to anyone once the day is over.",
-  },
-];
-
-const SCORE_PARTS: readonly {
-  href: string;
-  name: string;
-  question: string;
-  high: string;
-  low: string;
-}[] = [
-  {
-    href: "/about/scores#funding",
-    name: "Funding Independence",
-    question: "Who pays for their campaigns?",
-    high: "Many small donors, money spread across many sources.",
-    low: "Heavy reliance on PACs, a few big donors, or one industry.",
-  },
-  {
-    href: "/about/scores#alignment",
-    name: "Constituent Alignment",
-    question: "Do they vote the way their seat elected them to?",
-    high: "Breaks with their party about as often as members in similar seats.",
-    low: "Breaks far more often than that, or, less costly, far less.",
-  },
-  {
-    href: "/about/scores#effectiveness",
-    name: "Legislative Effectiveness",
-    question: "Do they get legislation done?",
-    high: "Bills that advance and become law; cosponsors from both parties.",
-    low: "Bills introduced and never moved.",
   },
 ];
 
@@ -131,9 +100,9 @@ export default function AboutOverview() {
       title="About Civitas Research"
       lede={
         <p>
-          Civitas scores the people who represent you (senators, representatives and presidents)
-          using only public records and formulas anyone can check, and keeps the record of Supreme
-          Court justices, who are not scored.
+          Civitas sets the record of the people who represent you (senators, representatives and
+          presidents) beside their peers, using only public records and formulas anyone can check,
+          and keeps the record of Supreme Court justices.
         </p>
       }
     >
@@ -151,41 +120,17 @@ export default function AboutOverview() {
         </ul>
       </Section>
 
-      <Section id="the-score" title="How a member of Congress is scored">
+      <Section id="peers" title="How a member of Congress is shown">
         <P>
-          Every senator and representative gets a Representation Score from 0 to 100, higher is
-          better. It asks one question: does this member carry out the will of the people who
-          elected them, rather than a few wealthy donors? It is built from three parts, each also 0
-          to 100.
+          Each member page sets four figures beside the same figures for colleagues in the same
+          party: <A href="/about/scores#funding">small gifts and PAC money</A>,{" "}
+          <A href="/about/scores#alignment">breaks with the party</A> and{" "}
+          <A href="/about/scores#effectiveness">bills moved</A>. A word says if the member is above,
+          near or below them, by a fixed rule. There is no overall score and no rank.
         </P>
-        <ScoreWeightBar />
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {SCORE_PARTS.map((s) => (
-            <Link
-              key={s.href}
-              href={s.href}
-              className="panel flex flex-col p-4 transition-colors hover:border-ink-min"
-            >
-              <span className="font-display text-base font-semibold text-ink-hi">{s.name}</span>
-              <span className="mt-1 text-sm text-ink">{s.question}</span>
-              <span className="mt-3 text-sm text-ink-lo">
-                <span className="font-mono text-xs text-phos-mid">Higher</span> {s.high}
-              </span>
-              <span className="mt-1.5 text-sm text-ink-lo">
-                <span className="font-mono text-xs text-signal-red">Lower</span> {s.low}
-              </span>
-              <span className="mt-auto pt-3 font-mono text-xs text-signal-cyan">
-                How it works →
-              </span>
-            </Link>
-          ))}
-        </div>
         <P>
-          Scores cover the current Congress (two years of votes and bills), not a whole career,
-          except funding, which covers the election that won the member their seat. The
-          Representation Score, each of its three parts and each of their components has a{" "}
-          <span className="font-mono text-ink-hi">[?]</span> beside it explaining what it measures.{" "}
-          <A href="/about/scores">Read how each part is calculated</A>.
+          Figures cover the current Congress, except money, which covers the election that won the
+          seat. <A href="/about/scores">How each figure is measured</A>.
         </P>
       </Section>
 
@@ -210,12 +155,12 @@ export default function AboutOverview() {
         </ul>
       </Section>
 
-      <Section id="cannot-tell-you" title="What a score can't tell you">
+      <Section id="cannot-tell-you" title="What the figures can't tell you">
         <ul className="space-y-3">
           <Caveat>
-            <strong className="text-ink-hi">Why someone voted.</strong> A score reads what members
-            did, not their reasons. A donor whose industry lines up with a vote shows where money
-            and votes meet, not that the money bought the vote.
+            <strong className="text-ink-hi">Why someone voted.</strong> The record shows what
+            members did, not their reasons. A donor whose industry lines up with a vote shows where
+            money and votes meet, not that the money bought the vote.
           </Caveat>
           <Caveat>
             <strong className="text-ink-hi">
@@ -226,8 +171,8 @@ export default function AboutOverview() {
           </Caveat>
           <Caveat>
             <strong className="text-ink-hi">Which party is better.</strong> Democrats and
-            Republicans fund campaigns differently on average, so average funding scores differ by
-            party. The formula is the same for both; the fundraising isn&apos;t.
+            Republicans fund campaigns differently on average, so their funding figures differ too.
+            The method is the same for both; the fundraising isn&apos;t.
           </Caveat>
           <Caveat>
             <strong className="text-ink-hi">Your exact ballot.</strong> Ballots differ street by
@@ -281,7 +226,7 @@ export default function AboutOverview() {
           </PillLink>
           <PillLink href="/developers">Public API and MCP server</PillLink>
           <PillLink href="/changelog">Changelog</PillLink>
-          <PillLink href="/feedback">Disagree with a score? Tell us</PillLink>
+          <PillLink href="/feedback">Disagree with a figure? Tell us</PillLink>
         </div>
       </Section>
     </AboutPage>

@@ -472,7 +472,7 @@ describe("the contest drawer", () => {
     expect(drawer.getAllByText("not linked")).toHaveLength(2);
     expect(drawer.queryByText(/no scorecard|has a Civitas scorecard/i)).toBeNull();
     expect(
-      drawer.getByText("No one in this race is linked to a Civitas scorecard.")
+      drawer.getByText("No one in this race is linked to a member's record on Civitas.")
     ).toBeInTheDocument();
   });
 

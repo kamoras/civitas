@@ -481,7 +481,7 @@ function StatewideExecutiveDetail({
             ? " Every candidate on the state's list for the November ballot."
             : ` ${PRIMARY_RESULTS_CAVEAT}`)}
         {statewideRaces.length > 0 &&
-          " These offices have no federal campaign-finance filings, so no funding figures or Representation Scores exist for them."}
+          " These offices have no federal campaign-finance filings, so no funding figures or member records exist for them."}
       </p>
     </div>
   );

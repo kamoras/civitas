@@ -75,7 +75,7 @@ def _member(db):
     db.commit()
 
 
-def test_a_members_feed_holds_votes_bills_score_changes_and_trades(client, db_session):
+def test_a_members_feed_holds_votes_bills_and_trades_but_no_score(client, db_session):
     _member(db_session)
     entries = _entries(client.get("/api/feed/members/jane-doe.xml"))
     by_term = {}
@@ -91,12 +91,8 @@ def test_a_members_feed_holds_votes_bills_score_changes_and_trades(client, db_se
     bill = by_term["bill-action"][0]
     assert bill["title"] == "H.R. 2, sponsored by Jane Doe: Referred to the Committee on Ways and Means."
     assert bill["page"] == "https://civitas-research.org/congress/bills/HR.2"
-    # Rounded as shown: 63.6 -> 63.8 is no change; the method change is said.
-    assert [e["title"] for e in by_term["score"]] == [
-        "Jane Doe's representation score went from 64 to 58",
-        "Jane Doe's representation score went from 60 to 64",
-    ]
-    assert "changed from v1 to v2" in by_term["score"][0]["content"]
+    # Snapshots are stored, but no score reaches the feed.
+    assert "score" not in by_term
     trades = by_term["trades"]
     assert len(trades) == 1 and trades[0]["title"] == "Jane Doe disclosed 2 stock trades on 2026-03-06"
     assert "$1,001 to $15,000" in trades[0]["content"]

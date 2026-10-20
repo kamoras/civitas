@@ -159,10 +159,10 @@ describe("WhatYouCanDo", () => {
       "href",
       "https://alvarez.senate.gov/contact"
     );
-    // No contact URL on file: the scorecard, not a generic senate.gov page
+    // No contact URL on file: the member page, not a generic senate.gov page
     // (wrong for a House member).
     expect(within(rep).getByText(/Rep\. Tom Reed/)).toBeInTheDocument();
-    expect(within(rep).getByRole("link", { name: "Scorecard →" })).toHaveAttribute(
+    expect(within(rep).getByRole("link", { name: "Record →" })).toHaveAttribute(
       "href",
       "/politicians/H1"
     );

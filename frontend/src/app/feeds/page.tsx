@@ -204,12 +204,12 @@ export default async function FeedsPage() {
                 confirmed; a day of pro forma sessions isn&apos;t posted. Before a week of business,
                 a weekend post says when each chamber next meets, from the Record&apos;s own notice,
                 and which bills passed one chamber the week before and go to the other. A member
-                spotlight is the one finding where their scorecard stands furthest from their
-                chamber&apos;s, in the scorecard&apos;s own fixed sentence, then their score and
-                rank. A race update names who did what, both parts copied word for word from a news
-                report about that race, never one already posted, then names the outlet; it links to
-                the state&apos;s ballot page, and the entry carries the article as its source. Posts
-                by members of the public are never restated, and there are at most four a day. An
+                spotlight is the one finding where their record stands furthest from their
+                chamber&apos;s, in the member page&apos;s own fixed sentence, with no score or rank.
+                A race update names who did what, both parts copied word for word from a news report
+                about that race, never one already posted, then names the outlet; it links to the
+                state&apos;s ballot page, and the entry carries the article as its source. Posts by
+                members of the public are never restated, and there are at most four a day. An
                 election-night post is a state&apos;s own count (who leads, their share and how much
                 is in) in a fixed sentence, saying &ldquo;leads&rdquo; until the state lists its
                 count as official; Civitas never calls a race. An &ldquo;On the record&rdquo; post

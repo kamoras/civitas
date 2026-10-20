@@ -340,7 +340,7 @@ export default function PoliticianProfileClient({
           )}
 
           {!scorecard && (
-            <SectionBlock title="Scorecard">
+            <SectionBlock title="Record">
               {/* No card header will render below to carry identity, so
                   show a minimal one here — otherwise a not-yet-scored
                   official's page has no name/photo/party anywhere on it. */}
@@ -367,7 +367,7 @@ export default function PoliticianProfileClient({
                 </div>
               </div>
               <p className="font-mono text-xs text-ink-min text-center py-4">
-                Scorecard not yet generated: check back after next pipeline run
+                Record not yet built: check back after the next nightly run
               </p>
             </SectionBlock>
           )}
@@ -458,8 +458,8 @@ export function SeatRaceLine({ race, name }: { race: SeatRace; name: string }) {
 
 /** The seat's usual vote from the election map, linking its place there;
  * nothing out of the campaign, when the map isn't shown. Never the poll
- * range: this page shows the member's Representation Score, and no range
- * is shown beside one (AGENTS.md, the Senate and House map). */
+ * range: this page shows the member's record, and no range is shown
+ * beside one (AGENTS.md, the Senate and House map). */
 function SeatOnMapLine({ raceId }: { raceId: string }) {
   const { data } = useAsyncData(`map-seat:${raceId}`, () => fetchMapSeats({ seat: raceId }));
   const seat = data?.seats[0];
