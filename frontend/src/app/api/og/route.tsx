@@ -284,11 +284,7 @@ export function formatStanding(identity: OgPoliticianIdentity | undefined): stri
   return "";
 }
 
-// "Representation" is what the congressional score measures (how well a
-// member represents constituents). Presidents are scored on other
-// dimensions, so their cards take the neutral name the score line already
-// uses. Justices are not scored (justice v3): their card says so rather
-// than naming a score it doesn't show.
+// What each card's footer names: what the page holds, never a score.
 export function scoreFooterLabel(branch: string | undefined): string {
   // No composite score on any card (redesign 2026-10): what the page holds.
   if (branch === "senate" || branch === "house") return "WHERE THEY STAND AMONG PEERS";

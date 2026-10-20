@@ -170,7 +170,8 @@ of these approaches:
   verbatim spans), and on-request Explore document summaries
   (`POST /api/explore/{id}/summary`, a write). Spotlight, issue, trend and
   early-signal posts are fixed templates around stored figures or verified
-  ledes, and the justice profile carries no generated summary. Never a score, and never ballot content (§7). (Per-senator/rep
+  ledes, and the justice profile carries no generated summary (it draws
+  the stored record beside the sitting justices', `justice_figures.py`). Never a score, and never ballot content (§7). (Per-senator/rep
   narrative generation and promise evaluation used to be LLM-based; both
   were removed in 2026-07 after live audits found the output unreliable
   regardless of prompting approach — see `cross_reference.py`'s and
@@ -2293,6 +2294,7 @@ the pending list).
 | Issue principal actor + weekly actor concentration (admin) | `backend/app/pipeline/analyze/story_actor.py`, `GET /api/admin/actor-concentration`, `frontend/src/components/admin/ActionCenterDashboard.tsx` |
 | Justice record and appointer estimate (not scored, justice v3) | `backend/app/pipeline/justice_pipeline.py`, `backend/app/pipeline/analyze/justice_loyalty.py` |
 | The Court page (`/court`: Martin-Quinn line, agreement grid, splits by term, decision lineups) and each justice's case list | `backend/app/services/court_service.py`, `backend/app/api/court.py`, `frontend/src/app/court/page.tsx`, `frontend/src/components/court/`, `frontend/src/components/scorecard/JusticeCases.tsx` |
+| A justice's page (no score: each figure beside every sitting justice's, the appointing president linked, the appointer estimate as every justice's interval) and a president's "Justices appointed" | `backend/app/services/justice_figures.py`, `frontend/src/components/justice/`, `GET /api/justices/appointed-by/{president_id}` |
 | Election cycle pipeline (candidates, financials, ballot measures, coverage) | `backend/app/pipeline/election_pipeline.py` |
 | What shapes a race (seat lean among all seats, FEC contribution categories, state CSV; descriptive, no forecast) | `backend/app/race_context.py`, `frontend/src/components/elections/ballot/RaceContext.tsx`, `RaceMoneyBars.tsx` |
 | Election phase (campaign / election day / results) + results grace period | `backend/app/election_phase.py` |

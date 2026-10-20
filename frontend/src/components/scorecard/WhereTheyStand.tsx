@@ -192,7 +192,7 @@ function Row({
     >
       <div className="flex items-baseline justify-between gap-3 md:block">
         <div>
-          <p className="text-[13px] font-semibold text-ink-lo">{m.label}</p>
+          <div className="text-[13px] font-semibold text-ink-lo">{m.label}</div>
           <p className="text-[28px] font-semibold leading-tight text-ink-hi sm:text-[32px]">
             {m.shown ?? "No record"}
           </p>
