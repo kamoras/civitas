@@ -1,5 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import axe from "axe-core";
 import StageLadder from "./StageLadder";
 
 const data = {
@@ -41,5 +42,21 @@ describe("StageLadder", () => {
     expect(screen.getAllByRole("listitem")).toHaveLength(5);
     expect(screen.getByText("0.6%")).toBeInTheDocument();
     expect(screen.getByText(/Share of the 19,161 bills/)).toBeInTheDocument();
+  });
+
+  // Each step opens the bills that got at least that far (?reached=), named
+  // like /congress's rows; this bill's mark stays outside its link.
+  it("links each step to its bills and keeps this bill's mark out of the link", async () => {
+    render(
+      <main>
+        <StageLadder data={data} />
+      </main>
+    );
+    const link = screen.getByRole("link", { name: "Passed one chamber: 1,640 bills" });
+    expect(link).toHaveAttribute("href", "/congress/bills?reached=PASSED_CHAMBER");
+    expect(within(link).queryByText("This bill")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link")).toHaveLength(5);
+    const r = await axe.run(document.body, { rules: { "color-contrast": { enabled: false } } });
+    expect(r.violations.map((v) => v.id)).toEqual([]);
   });
 });
