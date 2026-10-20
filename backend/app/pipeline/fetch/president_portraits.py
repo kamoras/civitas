@@ -13,19 +13,29 @@ and that president's page keeps its placeholder. The credit shown is the
 file's author and credit lines from the same metadata, with the Commons page
 linked.
 
+Where Wikidata's image isn't public domain (checked 2026-10-20: one
+president's is a library's CC BY scan), the National Portrait Gallery's open
+access collection stands in: the Smithsonian's API (api.data.gov key), an
+object whose media the Smithsonian marks CC0 and whose one sitter is the
+president (each word of the roster's name matching the sitter's, an initial
+standing for a name). The credit is the object's artist and the gallery.
+
 Stored in api_cache for the read path (`stored_portraits`), which serves the
 image through the site's own `/photo/president/<id>` (AGENTS.md §8): the
-thumbnail URL is on upload.wikimedia.org, which `app.photos` allows for the
-kind. An outage keeps the last stored set.
+thumbnail URLs are on Wikimedia's and the Smithsonian's image hosts, which
+`app.photos` allows for the kind. An outage keeps the last stored set.
 """
 
 import logging
 import re
+from urllib.parse import urlencode
 
 import httpx
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.contact import BOT_USER_AGENT
+from app.models import President
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
@@ -50,6 +60,11 @@ _NO_EXPIRY_HOURS = 24 * 365 * 100
 _THUMB_WIDTH = 480
 _HEADERS = {"User-Agent": BOT_USER_AGENT}
 _RATE_LIMITER = RateLimiter(rps=1.0)
+_SI_SEARCH = "https://api.si.edu/openaccess/api/v1.0/search"
+# The Smithsonian's image delivery service: the only media address used.
+_NPG_IMAGE_PREFIX = "https://ids.si.edu/ids/deliveryService?id="
+# Generational suffixes in a roster name ("Jr."), not name words to match.
+_SUFFIXES = {"jr", "sr", "ii", "iii"}
 _PUBLIC_DOMAIN = re.compile(r"\bpublic domain\b|^pd\b|^pd-|^cc0", re.IGNORECASE)
 _TAG = re.compile(r"<[^>]*>")
 
@@ -75,6 +90,67 @@ def portrait_from_imageinfo(page: dict) -> dict | None:
         "artist": _text(meta, "Artist") or None,
         "credit": _text(meta, "Credit") or None,
     }
+
+
+def _name_words(name: str) -> list[str]:
+    return [w for w in re.split(r"[\s.,]+", name.lower()) if w and w not in _SUFFIXES]
+
+
+def sitter_is(roster_name: str, sitter: str) -> bool:
+    """Every word of the roster's name is a word of the sitter's ("Franklin
+    Delano Roosevelt, 30 Jan 1882 - 12 Apr 1945"), or its initial."""
+    sitter_words = _name_words(sitter.split(",", 1)[0])
+    return bool(sitter_words) and all(
+        w in sitter_words or (len(w) == 1 and any(s.startswith(w) for s in sitter_words))
+        for w in _name_words(roster_name)
+    )
+
+
+def npg_portrait_from_row(row: dict, roster_name: str) -> dict | None:
+    """The stored portrait for one Smithsonian search row: an NPG object with
+    CC0 image media whose only sitter is the president; else None."""
+    content = row.get("content") or {}
+    names = (content.get("freetext") or {}).get("name") or []
+    sitters = [n.get("content", "") for n in names if n.get("label") == "Sitter"]
+    if len(sitters) != 1 or not sitter_is(roster_name, sitters[0]):
+        return None
+    meta = content.get("descriptiveNonRepeating") or {}
+    if meta.get("unit_code") != "NPG":
+        return None
+    media = next((m for m in ((meta.get("online_media") or {}).get("media") or [])
+                  if (m.get("usage") or {}).get("access") == "CC0" and m.get("type") == "Images"), None)
+    if not media or not str(media.get("content", "")).startswith(_NPG_IMAGE_PREFIX):
+        return None
+    artist = next((n.get("content", "").split(",")[0] for n in names if n.get("label") == "Artist"), None)
+    return {
+        "url": f"{media['content']}&max={_THUMB_WIDTH}",
+        "page": meta.get("record_link"),
+        "license": "CC0",
+        "artist": artist,
+        "credit": "National Portrait Gallery, Smithsonian Institution",
+        "via": "the National Portrait Gallery, Smithsonian Institution",
+    }
+
+
+async def npg_portrait(client: httpx.AsyncClient, roster_name: str) -> dict | None:
+    """The first CC0 portrait of the president alone in the NPG's open access
+    collection, or None (also when no key is set or the API can't be read)."""
+    if not settings.DATA_GOV_API_KEY:
+        return None
+    resp = await fetch_with_retry(
+        client, _RATE_LIMITER, "GET", _SI_SEARCH, log_label="Smithsonian NPG portraits",
+        request_url=_SI_SEARCH + "?" + urlencode({
+            "q": f'{roster_name} AND unit_code:NPG AND online_media_type:"Images"', "rows": 20,
+            "api_key": settings.DATA_GOV_API_KEY}),
+        headers=_HEADERS,
+    )
+    if resp is None or resp.status_code != 200:
+        logger.warning("Smithsonian open access search could not be read")
+        return None
+    for row in (resp.json().get("response") or {}).get("rows") or []:
+        if portrait := npg_portrait_from_row(row, roster_name):
+            return portrait
+    return None
 
 
 async def fetch_president_portraits(client: httpx.AsyncClient, db: Session) -> dict[str, dict] | None:
@@ -123,6 +199,15 @@ async def fetch_president_portraits(client: httpx.AsyncClient, db: Session) -> d
     for number, title in files.items():
         if title in by_title:
             portraits[number] = by_title[title]
+    # The gallery stands in for anyone left: same person under every number.
+    for p in sorted(db.query(President).all(), key=lambda p: p.number):
+        if str(p.number) in portraits:
+            continue
+        same = next((portraits[str(o.number)] for o in db.query(President).filter(President.name == p.name)
+                     if str(o.number) in portraits), None)
+        found = same or await npg_portrait(client, p.name)
+        if found:
+            portraits[str(p.number)] = found
     if not portraits:
         logger.warning("No public-domain president portrait found; keeping the last stored set")
         return None

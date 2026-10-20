@@ -53,8 +53,10 @@ PHOTO_SOURCE_HOSTS: dict[str, frozenset[str]] = {
     # A president's public-domain portrait on Wikimedia Commons
     # (pipeline/fetch/president_portraits.py): the API's thumbnail URLs are
     # on thumb.wikimedia.org, and a thumbnail not yet rendered redirects to
-    # upload.wikimedia.org (checked 2026-10-20).
-    "president": frozenset({"thumb.wikimedia.org", "upload.wikimedia.org"}),
+    # upload.wikimedia.org (checked 2026-10-20); a National Portrait Gallery
+    # CC0 portrait, where Wikidata's is not public domain, is on the
+    # Smithsonian's image service, ids.si.edu.
+    "president": frozenset({"thumb.wikimedia.org", "upload.wikimedia.org", "ids.si.edu"}),
 }
 
 
@@ -152,7 +154,7 @@ def portrait_credit(portrait: dict | None) -> dict | None:
     named = artist and "unknown" not in artist.lower() and artist.lower() != "photographer"
     return {
         "text": f"Portrait{': ' + artist if named else ''}. {portrait.get('license') or 'Public domain'}, "
-                "via Wikimedia Commons.",
+                f"via {portrait.get('via') or 'Wikimedia Commons'}.",
         "url": portrait.get("page"),
     }
 

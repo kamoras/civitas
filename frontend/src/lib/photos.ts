@@ -45,7 +45,7 @@ export const PHOTO_HOSTS: Record<PhotoKind, readonly string[]> = {
   bioguide: ["www.congress.gov", "bioguide.congress.gov"],
   justice: ["api.oyez.org"],
   issue: ["rollcall.com"],
-  president: ["thumb.wikimedia.org", "upload.wikimedia.org"],
+  president: ["thumb.wikimedia.org", "upload.wikimedia.org", "ids.si.edu"],
 };
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";

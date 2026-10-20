@@ -621,7 +621,8 @@ export default function DataChapter() {
           credited photo, or whose record photo a face detector run on this server finds is not a
           head-and-shoulders shot where the portrait is), the presidents&apos; portraits
           (public-domain images on Wikimedia Commons, found through Wikidata and used only when
-          Commons marks the file public domain, each credited on its page with its author and
+          Commons marks the file public domain, or else a CC0 portrait from the National Portrait
+          Gallery&apos;s open access collection, each credited on its page with its author and
           license), the justices&apos; photos (from Oyez) and a news photo on an Action Center issue
           (from the outlet that licensed it) are fetched by this server, which keeps a copy and
           serves it to you, so those sites never see who is looking. The fonts, scripts, maps and
