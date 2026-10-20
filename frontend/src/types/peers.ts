@@ -11,6 +11,9 @@ export interface PeerMeasure {
   why: string;
   /** How it is measured, for researchers. */
   measured: string;
+  /** The span the figure covers: this Congress, or the member's most recent
+   *  completed election (funding, flat between elections: never drawn over time). */
+  window: "congress" | "election";
   /** Which way is higher, in words; the word is neutral about which is better. */
   direction: string;
   unit: "share" | "rate" | "count";

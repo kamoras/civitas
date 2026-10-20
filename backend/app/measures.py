@@ -27,6 +27,11 @@ class Measure:
     question: str = ""
     why: str = ""
     measured: str = ""
+    # The span the figure covers: "congress" (this Congress, so it moves
+    # night to night and can be drawn over time) or "election" (the
+    # member's most recent completed election, AGENTS.md section 6, so it
+    # stays flat between elections and is never drawn as a nightly line).
+    window: str = "congress"
 
 
 def funding_facts(facts: dict) -> dict:
@@ -71,7 +76,7 @@ MEASURES = (
                  "other way tend to break more."),
             measured=("A party-line vote is a roll call where most Democrats and most Republicans "
                       "voted on opposite sides. A break is a vote with the other party's majority, "
-                      "over the whole current Congress; a vote against the party from its outer "
+                      "counted over this Congress; a vote against the party from its outer "
                       "flank (judged by the member's Voteview position) is not counted, and each "
                       "measure counts once. The tick is the usual break rate for the same party in "
                       "seats with the same Cook PVI lean, measured each run from every member. "
@@ -86,10 +91,11 @@ MEASURES = (
                  "groups and causes. A larger share means more of the money came from groups, less "
                  "from individual donors."),
             measured=("Contributions from other political committees (PACs, not party committees) "
-                      "over all contributions, from the FEC's totals for the member's most recent "
-                      "completed election: six years of filings for a senator, two for a "
-                      "representative. There is no seat-based expectation here, so the tick is the "
-                      "peer median.")),
+                      "over all contributions, from the FEC's totals. Window: the member's "
+                      "most recent completed election, not this Congress: six years of filings "
+                      "for a senator, two for a representative. There is no seat-based "
+                      "expectation here, so the tick is the peer median."),
+            window="election"),
     Measure("smallGifts", "Money from small donors", "fundingIndependence",
             "higher means more of the money came from donors who gave $200 or less", "share", _FEC,
             lambda f: funding_facts(f).get("smallDonorShare"),
@@ -102,14 +108,16 @@ MEASURES = (
             why=("Share of contributions from people who gave the campaign $200 or less in total. "
                  "More small donors can mean broader grassroots support; less can mean more "
                  "reliance on large donors and PACs."),
-            measured=("The FEC's unitemized individual contributions over all contributions, same "
-                      "election as the PAC share. A campaign must name each donor whose gifts add "
-                      "up to more than $200 in the election cycle (52 U.S.C. 30104(b)(3)(A), "
+            measured=("The FEC's unitemized individual contributions over all contributions. "
+                      "Window: the member's most recent completed election, as for the PAC "
+                      "share. A campaign must name each donor whose gifts add up to more than "
+                      "$200 in the election cycle (52 U.S.C. 30104(b)(3)(A), "
                       "11 CFR 104.3(a)(4)); the rest are filed as one unnamed total. ActBlue and "
                       "WinRed name every donor whatever the size, so gifts through them are left "
                       "out and the share undercounts small donors; a campaign that names every "
                       "donor shows no figure. The tick is the share expected for a state of that "
-                      "size for a senator, the peer median for a representative.")),
+                      "size for a senator, the peer median for a representative."),
+            window="election"),
     Measure("billsMoved", "Bills past committee", "legislativeEffectiveness",
             "higher means more of the member's bills got past committee", "count",
             {"name": "Congress.gov", "url": "https://www.congress.gov/"},
@@ -120,7 +128,7 @@ MEASURES = (
             why=("How many bills this member sponsored this Congress got past committee, where "
                  "most bills stop. It shows whether the member's own bills get acted on; members "
                  "of the majority party usually move more."),
-            measured=("Bills the member sponsored in the current Congress, from Congress.gov's "
+            measured=("Bills the member sponsored in this Congress, from Congress.gov's "
                       "actions, counted once reported by a committee, passed by a chamber or "
                       "enacted. Bills a member shapes as a cosponsor or through another member's "
                       "bill are not counted. The tick is the peer median.")),

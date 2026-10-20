@@ -193,6 +193,7 @@ def _row(measure: Measure, me: dict, peers: list[dict], chamber: str, group: str
         "question": measure.question,
         "why": measure.why,
         "measured": measure.measured,
+        "window": measure.window,
         "direction": measure.direction,
         "unit": measure.unit,
         "value": value,

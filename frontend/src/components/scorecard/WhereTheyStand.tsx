@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { fetchPeerComparison, fetchRepresentativeHistory, fetchSenatorHistory } from "@/lib/api";
 import type { ScoreSnapshot } from "@/lib/api";
-import { shortDate } from "@/lib/congress";
+import { currentCongress, shortDate } from "@/lib/congress";
 import type { PeerComparison, PeerGroupKey, PeerMeasure } from "@/types/peers";
 
 /** How each row's figure is printed on its axis and in its table: the
@@ -134,21 +134,19 @@ function Strip({ m, name }: { m: PeerMeasure; name: string }) {
 
 /** This measure over time, from the score snapshots' facts: a line of the
  *  member's own figure, night by night, and its first and latest values.
- *  Kept since 2026-10-19, so early on it says how long it has been kept. */
+ *  Only for a measure that covers this Congress (votes, bills): funding
+ *  covers the last completed election and stays flat between elections.
+ *  Only snapshots in the latest snapshot's Congress, and only once the
+ *  figure has actually changed; otherwise nothing at all. */
 function OverTime({ m, snapshots }: { m: PeerMeasure; snapshots: ScoreSnapshot[] | null }) {
-  if (!snapshots) return null;
-  const points = snapshots
+  if (!snapshots || m.window !== "congress") return null;
+  const all = snapshots
     .map((s) => ({ date: s.date, v: s.facts?.[m.key] }))
     .filter((p): p is { date: string; v: number } => typeof p.v === "number");
-  if (points.length < 2) {
-    return (
-      <p className="text-xs text-ink-min">
-        Over time: kept nightly
-        {points[0] ? ` since ${shortDate(points[0].date)}` : " from the next run"}.
-      </p>
-    );
-  }
+  const latest = all.length ? currentCongress(new Date(all[all.length - 1].date)) : null;
+  const points = all.filter((p) => currentCongress(new Date(p.date)) === latest);
   const vs = points.map((p) => p.v);
+  if (new Set(vs).size < 2) return null;
   const lo = Math.min(...vs);
   const span = Math.max(...vs) - lo || 1;
   const path = points
@@ -157,7 +155,7 @@ function OverTime({ m, snapshots }: { m: PeerMeasure; snapshots: ScoreSnapshot[]
   const first = points[0];
   const last = points[points.length - 1];
   return (
-    <p className="flex flex-wrap items-center gap-2 text-xs text-ink-lo">
+    <p className="flex flex-wrap items-center gap-2 text-xs text-ink-lo md:col-span-3">
       <svg viewBox="0 0 100 20" preserveAspectRatio="none" className="h-5 w-24" aria-hidden="true">
         <polyline
           points={path}
@@ -230,9 +228,7 @@ function Row({
           {m.source.name} ↗
         </a>
       </figcaption>
-      <div className="md:col-span-3">
-        <OverTime m={m} snapshots={snapshots} />
-      </div>
+      <OverTime m={m} snapshots={snapshots} />
       <details className="group text-sm text-ink-lo md:col-span-3">
         <summary className="inline-flex min-h-6 cursor-pointer items-center gap-1 font-semibold text-ink-hi underline-offset-2 hover:underline">
           How this is measured

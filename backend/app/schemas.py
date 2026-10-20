@@ -1215,6 +1215,8 @@ class PublicPeerMeasureSchema(_PublicModel):
     question: str = Field(description='The voter question the measure answers ("Who funds the campaign?")')
     why: str = Field(description="What the figure is and why a voter might care, in one fixed, neutral line")
     measured: str = Field(description="How the figure is measured, for researchers: definitions, window, caveats")
+    window: Literal["congress", "election"] = Field(description="The span the figure covers: this Congress, or "
+                                                                "the member's most recent completed election")
     direction: str = Field(description="Which way is higher, in words; the word is neutral about which is better")
     unit: Literal["share", "rate", "count"] = Field(description="share and rate are 0-1; count is bills")
     value: float | None = Field(description="The member's figure; null when the record has none")

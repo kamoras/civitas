@@ -111,6 +111,9 @@ def test_every_strip_says_what_it_answers_and_why(monkeypatch):
     assert [m["key"] for m in out["measures"]] == ["breaks", "pacMoney", "smallGifts", "billsMoved"]
     for m in out["measures"]:
         assert m["question"].endswith("?") and m["why"] and m["measured"]
+        # Funding covers the last completed election; votes and bills, this Congress.
+        assert m["window"] == ("election" if m["key"] in ("pacMoney", "smallGifts") else "congress")
+        assert ("most recent completed election" if m["window"] == "election" else "this Congress") in m["measured"]
         assert "\u2014" not in m["why"] + m["measured"]
         assert not ({"better", "worse", "good", "bad"} & set(m["why"].lower().replace(";", " ").split()))
     assert out["standsOut"] == "Close to peers on every measure."
