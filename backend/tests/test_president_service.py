@@ -1,6 +1,7 @@
 """Tests for president_service's response building and score breakdown."""
 
 from app.models import President
+from app.pipeline.cache import api_cache_set
 from app.services.president_service import (
     get_president_list,
     get_current_president,
@@ -129,17 +130,17 @@ class TestGetPresidentScoreBreakdown:
     def test_facts_carry_each_figure_and_the_average_it_is_scored_against(self, db_session):
         """The scorecard states these; it computes none of them."""
         db_session.add(_make_president(
-            "trump-47", name="Donald J. Trump", number=47, term_start="2025-01-20",
+            "doe-47", name="Jane Doe", number=47, term_start="2025-01-20",
             avg_approval=37.3, approval_trend=-5.6, recent_avg_approval=35.4,
             jobs_created_millions=0.5,
         ))
         db_session.add(_make_president(
-            "trump-45", name="Donald J. Trump", number=45, term_start="2017-01-20", term_end="2021-01-20",
+            "doe-45", name="Jane Doe", number=45, term_start="2017-01-20", term_end="2021-01-20",
             is_current=False, historical_legacy_score=312, score_historical_legacy=12.0,
         ))
         db_session.commit()
 
-        b = get_president_score_breakdown(db_session, "trump-47")
+        b = get_president_score_breakdown(db_session, "doe-47")
         mandate = b["publicMandate"]["facts"]
         assert (mandate["approval"], mandate["approvalTrend"], mandate["recentApproval"]) == (37.3, -5.6, 35.4)
         assert mandate["approvalMean"] is not None  # the all-president average it's scored against
@@ -148,5 +149,17 @@ class TestGetPresidentScoreBreakdown:
         # presidency's rating is named.
         assert b["historicalLegacy"]["facts"]["points"] is None
         assert b["historicalLegacy"]["facts"]["otherTerms"] == [
-            {"id": "trump-45", "number": 45, "points": 312, "score": 12.0},
+            {"id": "doe-45", "number": 45, "points": 312},
         ]
+
+
+def test_breakdown_names_the_survey_edition_it_read(db_session):
+    """The historians' rank is labelled with its year: the edition the
+    stored points came from, and none when no read is on record."""
+    db_session.add(_make_president("a-1", historical_legacy_score=700))
+    db_session.commit()
+    facts = lambda: get_president_score_breakdown(db_session, "a-1")["historicalLegacy"]["facts"]  # noqa: E731
+    assert facts()["surveyYear"] is None and facts()["surveyUrl"] is None
+    api_cache_set(db_session, "cspan-historians-survey", "latest-overall", {"edition": 2021, "data": {}})
+    assert facts()["surveyYear"] == 2021
+    assert facts()["surveyUrl"] == "https://www.c-span.org/presidentsurvey2021/"
