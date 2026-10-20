@@ -82,7 +82,7 @@ export default function BillSources({
       aria-labelledby="sources"
       className="flex flex-col gap-6 border border-white/25 bg-surface p-5"
     >
-      <h2 id="sources" className="font-display text-2xl font-extrabold text-ink-hi">
+      <h2 id="sources" className="font-display text-2xl font-semibold text-ink-hi">
         Sources, data and citation
       </h2>
       <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-sm sm:grid-cols-[7rem_minmax(0,1fr)]">

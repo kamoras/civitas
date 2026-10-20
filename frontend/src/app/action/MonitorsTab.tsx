@@ -79,7 +79,7 @@ function MonitorUpdates({ slug, title }: { slug: string; title: string }) {
     <>
       <OnTheRecord slug={slug} title={title} votes={votes} />
       {updates.length === 0 ? (
-        <p className="py-3 font-display text-sm text-ink-lo">No updates recorded yet.</p>
+        <p className="py-3 font-sans text-sm text-ink-lo">No updates recorded yet.</p>
       ) : (
         <>
           <h4 className="mt-6 font-mono text-xs uppercase tracking-[0.12em] text-ink-lo">
@@ -95,9 +95,7 @@ function MonitorUpdates({ slug, title }: { slug: string; title: string }) {
                 <span className="font-mono text-xs tracking-[0.08em] text-ink-min">
                   {updateTime(u)}
                 </span>
-                <p className="mt-1 font-display text-[15px] leading-relaxed text-ink">
-                  {u.summary}
-                </p>
+                <p className="mt-1 font-sans text-[15px] leading-relaxed text-ink">{u.summary}</p>
                 <a
                   href={safeHref(u.sourceUrl) || "#"}
                   target="_blank"
@@ -190,7 +188,7 @@ function MonitorRow({
               {monitor.title}
             </span>
             {!open && monitor.description && (
-              <span className="mt-1 line-clamp-2 block font-display text-[15px] leading-relaxed text-ink-lo">
+              <span className="mt-1 line-clamp-2 block font-sans text-[15px] leading-relaxed text-ink-lo">
                 {monitor.description}
               </span>
             )}
@@ -207,7 +205,7 @@ function MonitorRow({
       {open && (
         <div id={`monitor-detail-${monitor.slug}`} className="pb-5">
           {monitor.description && (
-            <p className="max-w-3xl font-display text-[15px] leading-relaxed text-ink">
+            <p className="max-w-3xl font-sans text-[15px] leading-relaxed text-ink">
               {monitor.description}
             </p>
           )}
@@ -251,7 +249,7 @@ function OffListMonitor({ slug }: { slug: string }) {
         ref={noteRef}
         tabIndex={-1}
         role="status"
-        className="mb-6 border-l-2 border-ink-min/60 py-2 pl-4 font-display text-base text-ink-lo"
+        className="mb-6 border-l-2 border-ink-min/60 py-2 pl-4 font-sans text-base text-ink-lo"
       >
         {gone ? (
           "That concern is no longer tracked, and its record has been removed."
@@ -315,7 +313,7 @@ export default function MonitorsTab({ initialSlug }: { initialSlug?: string | nu
 
   return (
     <div>
-      <p className="mb-6 max-w-2xl font-display text-base leading-relaxed text-ink-lo">
+      <p className="mb-6 max-w-2xl font-sans text-base leading-relaxed text-ink-lo">
         Concerns that keep coming back across days of coverage, detected automatically. Each one
         gathers the dated updates that fed it, with a source for every entry. One with no new
         coverage for a week is marked watching until coverage returns; after a month it closes. A
@@ -332,7 +330,7 @@ export default function MonitorsTab({ initialSlug }: { initialSlug?: string | nu
           </span>
         </h2>
         {monitors.length === 0 ? (
-          <p className="py-4 font-display text-base text-ink-lo">
+          <p className="py-4 font-sans text-base text-ink-lo">
             Nothing is being tracked right now. A monitor opens when a story comes back on five
             separate days within two weeks.
           </p>

@@ -52,7 +52,7 @@ export const SECTION_HEADING =
 
 /** An underlined sentence-case link, the records pages' only link treatment. */
 export const TEXT_LINK =
-  "font-display text-sm text-ink-hi underline decoration-ink-min/60 underline-offset-4 transition-colors hover:decoration-ink-hi";
+  "font-sans text-sm text-ink-hi underline decoration-ink-min/60 underline-offset-4 transition-colors hover:decoration-ink-hi";
 
 /** An issue's rights-cleared source photo, in the two sizes it renders at.
  *
@@ -415,9 +415,8 @@ function actionRows(issue: ActionIssue, today: string): ActionRow[] {
           <Link
             href={`/politicians/${m.id}`}
             className="font-mono text-xs text-phos-mid hover:underline"
-            aria-label={`${m.name}'s scorecard, overall score ${Math.round(m.overallScore)}`}
           >
-            · {Math.round(m.overallScore)}
+            · record
           </Link>
         </>
       ),
@@ -628,7 +627,7 @@ export function WhatYouCanDo({
                 {row.verb}
               </span>
               <div
-                className={`min-w-0 font-display text-[15px] leading-snug text-ink-hi ${row.href ? "" : "col-span-2 sm:col-span-2"}`}
+                className={`min-w-0 font-sans text-[15px] leading-snug text-ink-hi ${row.href ? "" : "col-span-2 sm:col-span-2"}`}
               >
                 {row.what}
                 {row.detail && (
@@ -716,7 +715,7 @@ export function Coverage({
             <span className="pt-0.5 font-mono text-xs text-ink-min" aria-hidden="true">
               {String(i + 1).padStart(2, "0")}
             </span>
-            <p className="font-display text-[15px] leading-relaxed text-ink">
+            <p className="font-sans text-[15px] leading-relaxed text-ink">
               {fact}
               {issue.factSources?.[i] && (
                 <span className="ml-2 whitespace-nowrap font-mono text-xs text-ink-min">

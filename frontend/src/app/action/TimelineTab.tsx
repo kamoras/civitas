@@ -58,17 +58,17 @@ function DayRow({
         {openable ? (
           <button
             onClick={() => onOpenDay(entry.date)}
-            className="text-left font-display text-[15px] leading-snug text-ink-hi hover:underline"
+            className="text-left font-sans text-[15px] leading-snug text-ink-hi hover:underline"
           >
             {entry.title}
           </button>
         ) : (
           <>
-            <span className="block font-display text-[15px] leading-snug text-ink-hi">
+            <span className="block font-sans text-[15px] leading-snug text-ink-hi">
               {entry.title}
             </span>
             {entry.summary && (
-              <span className="mt-0.5 block font-display text-[13px] leading-snug text-ink-lo">
+              <span className="mt-0.5 block font-sans text-[13px] leading-snug text-ink-lo">
                 {entry.summary.length > 200 ? `${entry.summary.slice(0, 200)}…` : entry.summary}
               </span>
             )}
@@ -124,7 +124,7 @@ function DayList({ entries, ...handlers }: { entries: TimelineEntry[] } & Handle
 
 function PeriodSummary({ children }: { children: React.ReactNode }) {
   return (
-    <p className="my-3 max-w-3xl font-display text-[15px] leading-relaxed text-ink">{children}</p>
+    <p className="my-3 max-w-3xl font-sans text-[15px] leading-relaxed text-ink">{children}</p>
   );
 }
 
@@ -184,11 +184,11 @@ function ComingUp({ events, asOf }: { events: UpcomingEvent[]; asOf: number }) {
               <span className="min-w-0">
                 <Link
                   href={ev.link}
-                  className="font-display text-[15px] leading-snug text-ink-hi hover:underline"
+                  className="font-sans text-[15px] leading-snug text-ink-hi hover:underline"
                 >
                   {ev.title}
                 </Link>
-                <span className="mt-0.5 block font-display text-[13px] leading-snug text-ink-lo">
+                <span className="mt-0.5 block font-sans text-[13px] leading-snug text-ink-lo">
                   {ev.description}
                 </span>
               </span>
@@ -246,7 +246,7 @@ export default function TimelineTab(handlers: Handlers) {
 
   if (!data || (!data.totalDays && months.length === 0 && upcomingEvents.length === 0)) {
     return (
-      <p className="border-l-2 border-ink-min/60 py-2 pl-4 font-display text-base text-ink-lo">
+      <p className="border-l-2 border-ink-min/60 py-2 pl-4 font-sans text-base text-ink-lo">
         The archive fills in as each day&apos;s top issue is recorded. Nothing is on it yet.
       </p>
     );
@@ -259,7 +259,7 @@ export default function TimelineTab(handlers: Handlers) {
 
   return (
     <div>
-      <p className="mb-5 max-w-2xl font-display text-base leading-relaxed text-ink-lo">
+      <p className="mb-5 max-w-2xl font-sans text-base leading-relaxed text-ink-lo">
         Each day&apos;s top issue since January, with a summary of each finished week and month.
         Recent days open in Today, with every issue from that day.
       </p>
@@ -269,7 +269,7 @@ export default function TimelineTab(handlers: Handlers) {
           <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
             Days on record · {data.year}
           </dt>
-          <dd className="mt-1.5 font-display text-2xl font-bold tabular-nums text-ink-hi">
+          <dd className="mt-1.5 font-display text-2xl font-semibold tabular-nums text-ink-hi">
             {data.totalDays}
           </dd>
         </div>
@@ -277,7 +277,7 @@ export default function TimelineTab(handlers: Handlers) {
           <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
             Most covered
           </dt>
-          <dd className="mt-1.5 font-display text-2xl font-bold text-ink-hi">
+          <dd className="mt-1.5 font-display text-2xl font-semibold text-ink-hi">
             {top ? (
               <>
                 {top.area}{" "}
@@ -294,7 +294,7 @@ export default function TimelineTab(handlers: Handlers) {
           <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
             Concerns tracked
           </dt>
-          <dd className="mt-1.5 font-display text-2xl font-bold tabular-nums text-ink-hi">
+          <dd className="mt-1.5 font-display text-2xl font-semibold tabular-nums text-ink-hi">
             {monitors.length} {/* Parenthesised: run together, "1 0 active" read as one number. */}
             <span className="text-sm font-normal text-ink-lo">({activeMonitors} active)</span>
           </dd>

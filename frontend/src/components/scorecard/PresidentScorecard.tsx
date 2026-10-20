@@ -10,13 +10,11 @@ import type {
   PublicMandateFacts,
   ScoreBreakdownDimension,
 } from "@/types/scoreBreakdown";
-import { useConfig } from "@/hooks/useConfig";
 import { fetchPresidentStockTrades } from "@/lib/api";
 import { displayScore } from "@/lib/formatting";
-import { getPresidentLabel, getScoreBgColor, getScoreColor } from "@/lib/representation";
+import { getScoreBgColor, getScoreColor } from "@/lib/representation";
 import { SectionHeadingLevelProvider } from "@/components/shared/CollapsibleSection";
 import Holdings from "@/components/checker/Holdings";
-import ScoreTrendSection from "@/components/checker/ScoreTrendSection";
 import StockTrades from "@/components/checker/StockTrades";
 import ComparisonScale from "./ComparisonScale";
 import ComponentBars from "./ComponentBars";
@@ -102,15 +100,7 @@ function ahead(points: number) {
   return `${one(Math.abs(points))} points a year ${points >= 0 ? "ahead" : "behind"}`;
 }
 
-function MandateColumn({
-  dim,
-  score,
-  weight,
-}: {
-  dim?: ScoreBreakdownDimension;
-  score: number | null;
-  weight?: number;
-}) {
+function MandateColumn({ dim, score }: { dim?: ScoreBreakdownDimension; score: number | null }) {
   const f = dim?.facts as PublicMandateFacts | undefined;
   // The sitting president is compared with predecessors over the same
   // stretch of their terms; everyone else with completed terms.
@@ -120,7 +110,6 @@ function MandateColumn({
     <ScoreColumn
       title="Public Mandate"
       shareId="public-mandate"
-      weight={weight}
       score={score}
       method={dim && <ComponentBars components={dim.components} />}
     >
@@ -207,12 +196,10 @@ function MandateColumn({
 function EffectivenessColumn({
   dim,
   score,
-  weight,
   isCurrent,
 }: {
   dim?: ScoreBreakdownDimension;
   score: number | null;
-  weight?: number;
   isCurrent: boolean;
 }) {
   const f = dim?.facts as PresidentEffectivenessFacts | undefined;
@@ -221,7 +208,6 @@ function EffectivenessColumn({
     <ScoreColumn
       title="Effectiveness"
       shareId="effectiveness"
-      weight={weight}
       score={score}
       method={dim && <ComponentBars components={dim.components} />}
     >
@@ -293,21 +279,12 @@ function EffectivenessColumn({
   );
 }
 
-function LegacyColumn({
-  dim,
-  score,
-  weight,
-}: {
-  dim?: ScoreBreakdownDimension;
-  score: number | null;
-  weight?: number;
-}) {
+function LegacyColumn({ dim, score }: { dim?: ScoreBreakdownDimension; score: number | null }) {
   const f = dim?.facts as HistoricalLegacyFacts | undefined;
   return (
     <ScoreColumn
       title="Historical Legacy"
       shareId="historical-legacy"
-      weight={weight}
       score={score}
       method={dim && <ComponentBars components={dim.components} />}
     >
@@ -355,27 +332,21 @@ function LegacyColumn({
 export default function PresidentScorecard({
   president,
   breakdown,
-  rank,
   titleAs: Title = "h1",
   scoredOn = null,
 }: {
   president: President;
   breakdown: PresidentScoreBreakdown | null;
-  rank?: { rank: number; of: number } | null;
   titleAs?: "h1" | "h2";
   /** The latest scoring run: what a shared image's figures are as of. */
   scoredOn?: { date: string } | null;
 }) {
-  // Each score's actual share of this president's overall, from the
-  // backend; the nominal weights only for a payload that predates it.
-  const nominal = useConfig()?.presidentScoreWeights;
-  const weights = president.score.effectiveWeights ?? nominal;
   const [trades, setTrades] = useState<{ total: number } | null | undefined>(undefined);
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
   const s = president.score;
   const party = presidentParty(president.party);
-  const overall = displayScore(s.overall);
+  const legacy = breakdown?.historicalLegacy?.facts as HistoricalLegacyFacts | undefined;
   const termEnd = president.termEnd ? president.termEnd.slice(0, 4) : "present";
   // What every section's share image says it is from, as on the member
   // scorecard: the president, and the headline score beside them.
@@ -383,12 +354,12 @@ export default function PresidentScorecard({
     title: president.name,
     subtitle: `${ordinal(president.number)} President · ${party.label} · ${president.termStart.slice(0, 4)} to ${termEnd}`,
     badge:
-      s.dimensionsAvailable === 0
+      legacy?.historiansRank == null
         ? undefined
         : {
-            label: "Presidential score",
-            value: String(overall),
-            colorClass: getScoreColor(overall),
+            label: "Historians' rank",
+            value: `#${legacy.historiansRank}`,
+            colorClass: "text-ink-hi",
           },
     url: absoluteUrl(`/politicians/${encodeURIComponent(president.id)}`),
     // The sources the header links (left out of the picture, so named here).
@@ -425,13 +396,13 @@ export default function PresidentScorecard({
                 className={`flex h-24 w-20 shrink-0 flex-col items-center justify-center border-2 sm:h-28 sm:w-24 ${party.border} ${party.text}`}
                 aria-hidden="true"
               >
-                <span className="font-display text-4xl font-extrabold leading-none">
+                <span className="font-display text-4xl font-semibold leading-none">
                   {president.number}
                 </span>
                 <span className="mt-1 font-mono text-[10px] tracking-[0.12em]">PRESIDENT</span>
               </div>
               <div className="flex min-w-0 flex-col gap-2">
-                <Title className="break-words text-3xl font-extrabold leading-tight text-ink-hi sm:text-4xl">
+                <Title className="break-words text-3xl font-semibold leading-tight text-ink-hi sm:text-4xl">
                   {president.name}
                 </Title>
                 <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-lo">
@@ -466,48 +437,30 @@ export default function PresidentScorecard({
               </div>
             </div>
             <div className="flex flex-col gap-2 border-t border-white/[0.12] pt-5 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
-              <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-                Presidential Score
+              <p className="text-[13px] font-semibold uppercase tracking-[0.06em] text-ink-lo">
+                Historians&apos; rank
               </p>
-              {s.dimensionsAvailable === 0 ? (
-                <p className="font-display text-2xl font-extrabold text-ink-min">
-                  Not yet calculated
-                </p>
+              {legacy?.historiansRank != null ? (
+                <>
+                  <p className="font-display text-5xl font-semibold leading-none text-ink-hi">
+                    #{legacy.historiansRank}{" "}
+                    <span className="text-2xl text-ink-lo">of {legacy.historiansRated}</span>
+                  </p>
+                  <p className="text-sm leading-relaxed text-ink-lo">
+                    Their ranking, not Civitas&apos;s: C-SPAN&apos;s Presidential Historians Survey,
+                    by total points ({legacy.points} points). The two measured records, approval and
+                    the economy, are below.
+                  </p>
+                </>
               ) : (
-                <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-                  <span
-                    className={`font-display text-7xl font-extrabold leading-none ${getScoreColor(overall)}`}
-                  >
-                    {overall}
-                  </span>
-                  <div className="flex min-w-0 flex-col gap-1">
-                    <span
-                      className={`font-mono text-sm tracking-[0.1em] ${getScoreColor(overall)}`}
-                    >
-                      {getPresidentLabel(overall)}
-                    </span>
-                    {rank ? (
-                      <Link href="/leaderboard?branch=president" className={LINK}>
-                        #{rank.rank} of {rank.of} presidents
-                      </Link>
-                    ) : (
-                      president.isCurrent && (
-                        <span className="font-mono text-[13px] text-ink-lo">
-                          Ranked once the term ends
-                        </span>
-                      )
-                    )}
-                  </div>
-                </div>
+                breakdown &&
+                s.historicalLegacy == null && (
+                  <p className="text-sm leading-relaxed text-ink-lo">
+                    Not rated. C-SPAN&apos;s Presidential Historians Survey rates only completed
+                    terms, and the newest edition published does not rate this presidency.
+                  </p>
+                )
               )}
-              {s.dimensionsAvailable > 0 && s.dimensionsAvailable < 3 && (
-                <p className="text-sm leading-relaxed text-ink-lo">
-                  Built from {s.dimensionsAvailable} of 3 scores; a score with no data shares its
-                  weight among the others rather than counting as zero, and each score shows its
-                  actual share.
-                </p>
-              )}
-              <ScoreTrendSection entityId={president.id} entityType="president" />
               {/* The header names the president itself: no title strip. */}
               <div className="flex justify-end">
                 <ShareSectionButton label="Scorecard summary" withStrip={false} />
@@ -516,22 +469,13 @@ export default function PresidentScorecard({
           </header>
 
           <div className="grid grid-cols-1 items-stretch gap-5 md:grid-cols-3">
-            <MandateColumn
-              dim={breakdown?.publicMandate}
-              score={s.publicMandate}
-              weight={weights?.publicMandate}
-            />
+            <MandateColumn dim={breakdown?.publicMandate} score={s.publicMandate} />
             <EffectivenessColumn
               dim={breakdown?.effectiveness}
               score={s.effectiveness}
-              weight={weights?.effectiveness}
               isCurrent={president.isCurrent}
             />
-            <LegacyColumn
-              dim={breakdown?.historicalLegacy}
-              score={s.historicalLegacy}
-              weight={weights?.historicalLegacy}
-            />
+            <LegacyColumn dim={breakdown?.historicalLegacy} score={s.historicalLegacy} />
           </div>
 
           {/* Only the sitting president's annual report is read; a former
@@ -555,7 +499,7 @@ export default function PresidentScorecard({
                   disabled={!trades?.total}
                   className="flex min-h-24 flex-col gap-1.5 border border-white/[0.18] bg-surface px-5 py-4 text-left disabled:cursor-default"
                 >
-                  <span className="text-base font-bold text-ink-hi">Stock trades</span>
+                  <span className="text-base font-semibold text-ink-hi">Stock trades</span>
                   <span className="text-sm text-ink-lo">
                     {trades === undefined
                       ? "Loading…"
@@ -572,7 +516,7 @@ export default function PresidentScorecard({
               )}
               {president.eoCount != null && (
                 <div className="flex min-h-24 flex-col gap-1.5 border border-white/[0.18] bg-surface px-5 py-4">
-                  <span className="text-base font-bold text-ink-hi">Executive orders</span>
+                  <span className="text-base font-semibold text-ink-hi">Executive orders</span>
                   <span className="text-sm text-ink-lo">
                     {president.eoCount.toLocaleString()} signed
                   </span>

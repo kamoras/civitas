@@ -15,12 +15,12 @@ interface ScoreTrendProps {
    These mirror tailwind.config.ts — the ratios live there. Before this they
    were a set of hand-written hexes (#ff5555, #00e5ff, #888, #333, #ffaa00)
    that predate the token scales and appear nowhere else on the site. */
-const PHOS = "#00FF41";
-const SIGNAL_RED = "#FF5C5C";
-const SIGNAL_CYAN = "#4DE3E8";
-const SIGNAL_ORANGE = "#FF8A3D";
-const INK_MIN = "#7C8B7F";
-const HAIRLINE = "#2A2F2B";
+const PHOS = "var(--phos)";
+const SIGNAL_RED = "var(--signal-red)";
+const SIGNAL_CYAN = "var(--signal-cyan)";
+const SIGNAL_ORANGE = "var(--signal-orange)";
+const INK_MIN = "var(--ink-min)";
+const HAIRLINE = "var(--chart-faint)";
 
 function congressForDate(dateStr: string): number {
   const year = parseInt(dateStr.slice(0, 4), 10);

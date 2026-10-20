@@ -48,7 +48,7 @@ async function NewOnTheSite() {
     <section aria-labelledby="new-h">
       <h2
         id="new-h"
-        className="font-display text-2xl font-bold leading-tight tracking-[-0.01em] text-ink-hi"
+        className="font-display text-2xl font-semibold leading-tight tracking-[-0.01em] text-ink-hi"
       >
         New on the site
       </h2>
@@ -175,7 +175,7 @@ export default function ChangelogPage() {
               </Point>
               <Point>
                 How each score is calculated today is on the{" "}
-                <A href="/about/scores">How Congress is scored</A> and{" "}
+                <A href="/about/scores">How Congress is compared</A> and{" "}
                 <A href="/about/presidents-and-justices">Presidents &amp; justices</A> pages.
               </Point>
             </Summary>
@@ -183,7 +183,7 @@ export default function ChangelogPage() {
             <section aria-labelledby="current-h">
               <h2
                 id="current-h"
-                className="font-display text-2xl font-bold leading-tight tracking-[-0.01em] text-ink-hi"
+                className="font-display text-2xl font-semibold leading-tight tracking-[-0.01em] text-ink-hi"
               >
                 Current versions
               </h2>
@@ -216,7 +216,7 @@ export default function ChangelogPage() {
             <section aria-labelledby="history-h">
               <h2
                 id="history-h"
-                className="font-display text-2xl font-bold leading-tight tracking-[-0.01em] text-ink-hi"
+                className="font-display text-2xl font-semibold leading-tight tracking-[-0.01em] text-ink-hi"
               >
                 Every version, newest first
               </h2>

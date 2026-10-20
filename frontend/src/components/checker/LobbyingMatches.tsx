@@ -37,7 +37,7 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
               {/* The industry is the finding and its total is the industry's;
                   the largest donor is named apart from that sum, which it
                   only took part in. */}
-              <div className="mb-2 text-signal-cyan text-sm font-bold">
+              <div className="mb-2 text-signal-cyan text-sm font-semibold">
                 {match.industry.replace(/_/g, " ")}
               </div>
 

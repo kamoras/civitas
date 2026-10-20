@@ -106,7 +106,7 @@ function LedTally({ led }: { led: Record<string, number> }) {
     // As formatLed orders them: real parties, then leaders with no party given.
     .sort(([a], [b]) => Number(ledParty(a) === null) - Number(ledParty(b) === null));
   return (
-    <span className="flex flex-wrap items-baseline gap-x-4 font-display text-3xl font-extrabold tabular-nums">
+    <span className="flex flex-wrap items-baseline gap-x-4 font-display text-3xl font-semibold tabular-nums">
       <span className="text-dem-blue">D {led.DEM ?? 0}</span>
       <span className="text-rep-red">R {led.REP ?? 0}</span>
       {others.map(([p, n]) => (
@@ -414,7 +414,7 @@ export default function ResultsOverview({
           <p className="font-mono text-xs tracking-[0.12em] text-signal-amber">
             SEATS CHANGING PARTY
           </p>
-          <p className="mt-2 font-display text-3xl font-extrabold tabular-nums text-ink-hi">
+          <p className="mt-2 font-display text-3xl font-semibold tabular-nums text-ink-hi">
             {flips.length}
           </p>
           <p className="mt-1 text-sm text-ink-lo">

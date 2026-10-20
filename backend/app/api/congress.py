@@ -11,6 +11,7 @@ from app.database import get_db
 from app.models import RollCall
 from app.pipeline.congress_activity import eastern_today
 from app.bill_ids import canonical_bill_id
+from app.peer_comparison import chamber_measures
 from app.services import committee_record, congress_glance, congress_service
 from app.services.bill_record import vote_detail
 from app.state_names import STATE_NAMES
@@ -46,6 +47,16 @@ def _check_on_record(db: Session, first: date, last: date) -> None:
     span = congress_service.record_span(db)
     if span is None or last < span[0] or first > span[1]:
         raise HTTPException(status_code=404, detail="No record of Congress for this date")
+
+
+@router.get("/measures")
+def get_chamber_measures(
+    chamber: str = Query(..., pattern="^(senate|house)$"),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """The whole chamber, measure by measure (app/peer_comparison.py): the
+    measures page, which replaced the leaderboard. No rank and no score."""
+    return cached_json(chamber_measures(db, chamber), max_age=_TTL_S)
 
 
 @router.get("/latest")
