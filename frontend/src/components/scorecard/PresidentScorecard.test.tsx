@@ -11,7 +11,6 @@ vi.mock("@/lib/api", () => ({
     .mockResolvedValue({ trades: [], total: 21285, lateCount: 0, page: 1, totalPages: 1 }),
   fetchSenatorStockTrades: vi.fn(),
   fetchRepStockTrades: vi.fn(),
-  fetchPresidentHistory: vi.fn().mockResolvedValue({ snapshots: [] }),
   fetchPresidentHoldings: vi.fn().mockResolvedValue({
     available: true,
     reportLabel: "2025 annual report",

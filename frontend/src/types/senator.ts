@@ -365,23 +365,6 @@ export interface LeaderboardEntry {
   thinData?: string[];
 }
 
-/** GET /api/leaderboard/spread: how a chamber's displayed overall scores
- *  are spread. Every figure is the backend's. */
-export interface ScoreSpread {
-  chamber: "senate" | "house";
-  total: number;
-  /** Members showing each whole-number score, lowest score first. */
-  counts: { score: number; members: number }[];
-  p25: number | null;
-  median: number | null;
-  p75: number | null;
-  /** Serving members per party, for the party filter's counts. */
-  parties: { D: number; R: number; I: number };
-  /** The chamber's latest scoring run, YYYY-MM-DD; optional for an older
-   *  backend. */
-  asOf?: string | null;
-}
-
 /** One asset from a member's latest annual financial disclosure. Values are
  * the disclosed bracket: null/null when the filing stated none
  * ("Undetermined"), 0/0 when nothing was held at year end, and equal when
