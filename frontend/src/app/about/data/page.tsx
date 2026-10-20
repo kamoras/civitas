@@ -121,7 +121,8 @@ export default function DataChapter() {
               cosponsor with, since the Senate records no caucus.
             </Fact>
             <Fact label="Voteview">
-              Congress-by-congress roll-call positions (Nokken-Poole), for Constituent Alignment.
+              Congress-by-congress roll-call positions (Nokken-Poole), which tell which side of the
+              party a break falls on.
             </Fact>
             <Fact label="Cooperative Election Study">
               Approval of each member among their own constituents, by party (2024 survey, Harvard
@@ -245,12 +246,11 @@ export default function DataChapter() {
           records are kept until Congress.gov lists the bill as updated, which is checked hourly.
         </P>
         <P>
-          Every member scorecard and bill page ends in a methods, sources and citation section, one
-          link from the top of the page: for each score, the data grade behind it, every component
-          with the scorer&apos;s own sentence on how it was measured, the research it follows and
-          where its data comes from; the record itself as JSON from the{" "}
+          Every member page and bill page ends in a methods, sources and citation section, one link
+          from the top of the page: where each figure comes from, the period it covers, how much
+          record is behind it and the research it follows; the record itself as JSON from the{" "}
           <A href="/developers">public API</A> (a member&apos;s votes, a bill&apos;s roll calls);
-          and an APA-style reference with the date it was scored.
+          and an APA-style reference with the date of the run.
         </P>
       </Section>
 
@@ -406,10 +406,10 @@ export default function DataChapter() {
       <Section id="computed-lean" title="A second partisan lean, computed here">
         <P>
           Every House district&apos;s lean on the site is Cook&apos;s published PVI, and that is the
-          figure the scores use. Beside it, the race pages, the redistricting pages and each
-          scorecard&apos;s methods section show a Civitas-computed lean: the same formula, worked
-          out here from open precinct returns, so anyone can check where the number comes from. It
-          is shown for comparison and used in no score.
+          figure the scores use. Beside it, the race pages, the redistricting pages and each member
+          page&apos;s methods section show a Civitas-computed lean: the same formula, worked out
+          here from open precinct returns, so anyone can check where the number comes from. It is
+          shown for comparison and used in no score.
         </P>
         <P>
           The formula is Cook&apos;s: the district&apos;s Democratic share of the two-party

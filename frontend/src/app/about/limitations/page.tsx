@@ -9,9 +9,9 @@ import { countWord, fetchLiveStates } from "@/lib/liveStates";
 export const revalidate = 300;
 
 export const metadata = pageMetadata({
-  title: "Known Limitations of Civitas Scores",
+  title: "Known Limitations of Civitas",
   description:
-    "What Civitas's scores and pages can't tell you, stated plainly (campaign size and funding windows, partisan lean as a stand-in for opinion, ballot coverage, news sources), with the reason each gap is still open.",
+    "What Civitas's figures and pages can't tell you, stated plainly (campaign size and funding windows, partisan lean as a stand-in for opinion, ballot coverage, news sources), with the reason each gap is still open.",
   path: "/about/limitations",
 });
 
@@ -39,7 +39,7 @@ export default async function LimitationsChapter() {
       title="Known limitations"
       lede={
         <p>
-          What the scores and pages can&apos;t tell you. Where a gap can be fixed, we fix it and
+          What the figures and pages can&apos;t tell you. Where a gap can be fixed, we fix it and
           remove it from this list; where it can&apos;t yet, we say exactly why, so it can be
           revisited.
         </p>
@@ -68,28 +68,25 @@ export default async function LimitationsChapter() {
             they pass on, whatever its size, so small gifts made through them count as itemized and
             are left out. A campaign that raises small money that way shows a smaller small-donor
             share than it has, and one that itemizes every gift reports no unitemized money at all:
-            its share is marked not measured and left out of its score rather than counted as 0%.
-            The FEC&apos;s contributions-by-size tables would count them, but they total more than
-            the campaigns&apos; own reported individual contributions (in one Senate race checked,
-            $72.7 million against $62.0 million) and are empty for some candidates, so they are not
-            used.
+            its share is marked not measured rather than counted as 0%. The FEC&apos;s
+            contributions-by-size tables would count them, but they total more than the
+            campaigns&apos; own reported individual contributions (in one Senate race checked, $72.7
+            million against $62.0 million) and are empty for some candidates, so they are not used.
           </P>
         </Limitation>
         <Limitation title="Funding windows differ by chamber">
           <P>
             Funding covers a member&apos;s most recent completed election: six years of fundraising
-            for a senator, two for a representative. The PAC share, top-donor concentration and
-            industry concentration (within the member&apos;s party) are each scored against the
-            member&apos;s own chamber, but no adjustment makes six years and two years the same
-            span. Within a chamber members are measured over the same length of time, except a
-            member with no completed election yet (appointed, or seated by a special election), who
-            is measured on the campaign still in progress; across chambers the scores are best read
-            side by side, not ranked, which is why the compare page names no winner when a senator
-            and a representative are compared. Where FEC&apos;s candidate totals leave out the race
-            that won a House seat, that election is read from the campaign committee&apos;s own
-            totals for the cycle. The window itself is deliberate: a strict two-year window would
-            leave most senators with little or no fundraising to measure. FEC filings also lag
-            donations by weeks or months.
+            for a senator, two for a representative. Members are compared within their own chamber,
+            but no adjustment makes six years and two years the same span. Within a chamber members
+            are measured over the same length of time, except a member with no completed election
+            yet (appointed, or seated by a special election), who is measured on the campaign still
+            in progress; across chambers the figures are best read side by side, not ranked, which
+            is why the compare page names no winner when a senator and a representative are
+            compared. Where FEC&apos;s candidate totals leave out the race that won a House seat,
+            that election is read from the campaign committee&apos;s own totals for the cycle. The
+            window itself is deliberate: a strict two-year window would leave most senators with
+            little or no fundraising to measure. FEC filings also lag donations by weeks or months.
           </P>
         </Limitation>
       </Section>
@@ -109,39 +106,37 @@ export default async function LimitationsChapter() {
               mean building multilevel regression and poststratification over raw survey data
               in-house: a statistics pipeline, and a black box next to every other formula on these
               pages. We chose not to trade auditability for a partial fix. Issue-level opinion data
-              remains the named next step for the score itself. For the position part of the score,
-              voters&apos; own left-right self-placement by state was tested as the expectation and
-              predicted senators&apos; positions no better than partisan lean.
+              remains the named next step. For where a member&apos;s record sits, voters&apos; own
+              left-right self-placement by state was tested as the expectation and predicted
+              senators&apos; positions no better than partisan lean.
             </P>
           </More>
         </Limitation>
         <Limitation title="The seat, not the member’s own voters">
           <P>
-            Constituent Alignment compares a member with same-party members of similarly-leaning
-            seats
+            A member&apos;s break rate is set beside same-party members of similarly-leaning seats
             <Cite id="canes2002" />, which avoids expecting anyone to sit at their seat&apos;s raw
             midpoint, where no member of either party sits
             <Cite id="bafumi2010" />. But it is one-dimensional, and members answer to their primary
             voters and supporters as well as to the whole seat
             <Cite id="fenno1978" />
             <Cite id="clinton2006" />. How the member&apos;s own constituents rate them, split by
-            party, is now shown beside the score on each profile (see the next item).
+            party, is shown on each profile (see the next item).
           </P>
         </Limitation>
         <Limitation title="Heavy breaking reads the same whether it builds a coalition or burns one">
           <P>
-            The score peaks at the seat&apos;s norm, the pattern a member&apos;s own party&apos;s
-            primary voters reward. The wider electorate leans the other way: in Senate general
-            elections from 1990 to 2024, members who broke more than their seat&apos;s norm did
-            somewhat better, and some heavy breakers keep winning by appealing to both sides. A
-            roll-call record can&apos;t tell them apart from members whose breaks cost them their
-            base. That takes approval split by party: approval of the member among the Democrats,
-            Republicans and independents they represent, from the Cooperative Election Study, shown
-            on each profile. For senators the gap is closed: since v6.29 their approval among the
-            state&apos;s other-party voters and independents is part of Constituent Alignment, after
-            the 2022 and 2024 surveys gave the same senators closely agreeing figures. For House
-            members it stays open: it is shown, not scored, because a district&apos;s figure barely
-            agrees from one survey to the next.
+            Breaking with the party about as often as the seat predicts is the pattern a
+            member&apos;s own party&apos;s primary voters reward. The wider electorate leans the
+            other way: in Senate general elections from 1990 to 2024, members who broke more than
+            their seat&apos;s norm did somewhat better
+            <Cite id="carson2010" />, and some heavy breakers keep winning by appealing to both
+            sides. A roll-call record can&apos;t tell them apart from members whose breaks cost them
+            their base. That takes approval split by party: approval of the member among the
+            Democrats, Republicans and independents they represent, from the Cooperative Election
+            Study, shown on each profile. A senator&apos;s figures agree closely from the 2022
+            survey to the 2024 one; a House district&apos;s barely agree, so for House members the
+            gap stays open.
           </P>
           <More label="How sharp the approval figures can be">
             <P>
@@ -149,14 +144,15 @@ export default async function LimitationsChapter() {
               profile shows a figure only for a member still in the seat the survey asked about: one
               who has since moved to another seat or district shows none. Small groups are pulled
               toward what a typical member of the same party gets from that group, by an amount
-              estimated from how much members actually differ. The survey&apos;s size sets how sharp
-              the House figures can be: a district has about a hundred respondents with an opinion
-              (a median of 96), so most House figures come mostly from what similar members get.
-              Democrats&apos; ratings are nearly the only ones that rest mostly on the
-              district&apos;s own respondents, for about three in five Democratic members and two in
-              five Republican ones (another group&apos;s does for ten members in all), and the
-              profile marks every figure that doesn&apos;t. Senators&apos; figures mostly rest on
-              their own state&apos;s respondents (a median of 672).
+              estimated from how much members actually differ
+              <Cite id="efron1975" />. The survey&apos;s size sets how sharp the House figures can
+              be: a district has about a hundred respondents with an opinion (a median of 96), so
+              most House figures come mostly from what similar members get. Democrats&apos; ratings
+              are nearly the only ones that rest mostly on the district&apos;s own respondents, for
+              about three in five Democratic members and two in five Republican ones (another
+              group&apos;s does for ten members in all), and the profile marks every figure that
+              doesn&apos;t. Senators&apos; figures mostly rest on their own state&apos;s respondents
+              (a median of 672).
             </P>
           </More>
         </Limitation>

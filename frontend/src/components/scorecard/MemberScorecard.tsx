@@ -4,10 +4,7 @@ import { useCallback, useState, type ReactNode } from "react";
 import type { Senator } from "@/types/senator";
 import type { Committee } from "@/types/politicians";
 import type { RepresentationScoreBreakdown } from "@/types/scoreBreakdown";
-import { useConfig } from "@/hooks/useConfig";
-import { displayScore } from "@/lib/formatting";
 import { PARTY_LABELS } from "@/lib/partyStyles";
-import { getScoreColor } from "@/lib/representation";
 import { absoluteUrl } from "@/lib/site";
 import { houseSeatLabel } from "@/lib/elections";
 import type { ShareSubject } from "@/lib/shareImage";
@@ -87,19 +84,15 @@ export default function MemberScorecard({
   /** The latest scoring run, for the methods section and its citation. */
   scoredOn?: { date: string; algorithmVersion: string | null } | null;
 }) {
-  const config = useConfig();
-  const weights = config?.scoreWeights;
   const [view, setView] = useState<DrawerView | null>(null);
   const close = useCallback(() => setView(null), []);
-  const scores = member.representationScore;
   const seat =
     chamber === "house" && district != null
       ? `seats that lean like ${houseSeatLabel(member.state, district)}`
       : `states that lean like ${stateName ?? member.state}`;
 
-  // What every section's share image says it is from: the member, and the
-  // headline score beside them.
-  const overall = displayScore(scores.overall);
+  // What every section's share image says it is from: the member. No
+  // headline score: the composite is not shown (redesign 2026-10).
   const shareSubject: ShareSubject = {
     title: member.name,
     subtitle: [
@@ -109,16 +102,10 @@ export default function MemberScorecard({
         : (stateName ?? member.state),
       PARTY_LABELS[member.party] ?? member.party,
     ].join(" · "),
-    badge: {
-      label: "Representation score",
-      value: String(overall),
-      colorClass: getScoreColor(overall),
-    },
     url: absoluteUrl(`/politicians/${encodeURIComponent(member.id)}`),
     // Every part's source, as the methods section lists them (MethodsLedger).
     source: `FEC filings; roll calls as ${chamber === "senate" ? "Senate.gov" : "the House Clerk"} records them; Voteview; Cook PVI; Congress.gov bill status`,
     asOf: scoredOn?.date ?? null,
-    scaleMax: 100,
   };
 
   const drawerBody: Record<DrawerView, () => ReactNode> = {
@@ -176,7 +163,6 @@ export default function MemberScorecard({
             <FundingColumn
               funding={member.funding}
               dimension={breakdown?.fundingIndependence}
-              score={scores.fundingIndependence}
               onMore={() => setView("donors")}
               donorVoteLinks={member.lobbyingMatches?.length ?? 0}
               onDonorVotes={() => setView("donorVotes")}
@@ -189,14 +175,12 @@ export default function MemberScorecard({
               breaks={member.votingRecord.votedAgainstPartyCount}
               approval={member.constituentApproval}
               dimension={breakdown?.constituentAlignment}
-              score={scores.constituentAlignment}
               onMore={() => setView("votes")}
             />
             <EffectivenessColumn
               chamber={chamber}
               bills={member.sponsoredBills ?? []}
               dimension={breakdown?.legislativeEffectiveness}
-              score={scores.legislativeEffectiveness}
               onMore={() => setView("bills")}
             />
           </div>
@@ -209,7 +193,6 @@ export default function MemberScorecard({
             member={member}
             chamber={chamber}
             breakdown={breakdown}
-            weights={weights}
             scoredOn={scoredOn}
           />
         </div>

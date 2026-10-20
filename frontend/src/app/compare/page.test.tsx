@@ -77,7 +77,7 @@ describe("compare: citable", () => {
       "/compare?leftId=n-1&leftChamber=senate&rightId=n-2&rightChamber=senate"
     );
     render(<ComparePage />);
-    expect(await screen.findAllByText("Scored 2026-10-16 · v6.35")).toHaveLength(2);
+    expect(await screen.findAllByText("Updated 2026-10-16 · v6.35")).toHaveLength(2);
     expect(screen.getByRole("heading", { name: "Cite this comparison" })).toBeInTheDocument();
     expect(
       screen.getByText(/Member One and Member Two compared, scoring method v6\.35/)
