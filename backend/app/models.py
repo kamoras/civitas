@@ -1444,7 +1444,7 @@ class Justice(Base):
 class JusticeAppointment(Base):
     """Every Supreme Court appointment since 1789, from the Federal Judicial
     Center's directory of federal judges, refreshed by the justice pipeline
-    (store_appointments): who was appointed, to which seat, by which
+    (store_court_seats): who was appointed, to which seat, by which
     president (the president in office on the nomination date, from the
     presidents table, never typed in) and the years served. A justice
     appointed twice (an associate later made chief) has two rows. Read by

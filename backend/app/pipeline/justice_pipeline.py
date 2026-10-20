@@ -160,7 +160,7 @@ _NAME_MATCH_MARGIN = 0.05
 _APPOINTMENT_FIELDS = ("nid", "name", "seat", "last", "first", "nominated", "from")
 
 
-def store_appointments(db: Session, appointments: list[dict] | None, presidents: list[President]) -> int | None:
+def store_court_seats(db: Session, seats: list[dict] | None, presidents: list[President]) -> int | None:
     """Replace the stored Supreme Court appointments with the FJC
     directory's, each with the id of the president in office on its
     nomination date (president_on over the presidents table, so a president
@@ -168,7 +168,7 @@ def store_appointments(db: Session, appointments: list[dict] | None, presidents:
     how many were stored; None, keeping what is stored, when the directory
     couldn't be read or the presidents table is empty: an outage is never
     a Court with no appointments."""
-    rows = [a for a in appointments or [] if all(a.get(k) for k in _APPOINTMENT_FIELDS)]
+    rows = [a for a in seats or [] if all(a.get(k) for k in _APPOINTMENT_FIELDS)]
     terms = [(p.id, p.term_start, p.term_end) for p in sorted(presidents, key=lambda p: p.term_start) if p.term_start]
     if not rows or not terms:
         return None
@@ -235,7 +235,7 @@ async def run_justice_pipeline(db: Session) -> dict:
         measured, unmeasured_why = await _measure_loyalty(client, db)
         # Every appointment since 1789, for the presidents' pages; the
         # cached read _measure_loyalty just made, so no second request.
-        appointments = await fetch_fjc(client, db)
+        fjc_seats = await fetch_fjc(client, db)
         # The record's terms: the Supreme Court Database for every term its
         # release covers, Oyez only after it. Oyez had entered the votes of
         # 13 of the 2024 term's 59 decided cases by 2026-10-08, so its
@@ -253,7 +253,7 @@ async def run_justice_pipeline(db: Session) -> dict:
 
     active_ids = {j["id"] for j in justices}
     presidents = db.query(President).all()
-    stored = store_appointments(db, appointments, presidents)
+    stored = store_court_seats(db, fjc_seats, presidents)
     logger.info("Supreme Court appointments: %s", stored if stored is not None else "not read, stored ones kept")
 
     for j in justices:

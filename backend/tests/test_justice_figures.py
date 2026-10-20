@@ -6,7 +6,7 @@ from datetime import datetime
 
 from app.models import Justice, JusticeAppointment, President
 from app.pipeline.fetch.justice_records import fjc_appointments
-from app.pipeline.justice_pipeline import store_appointments
+from app.pipeline.justice_pipeline import store_court_seats
 from app.services.justice_figures import justice_figures, justices_appointed_by
 from tests.test_court import ALL, _case, _get, _seat
 
@@ -89,7 +89,7 @@ def test_appointments_are_stored_with_the_president_in_office_on_the_nomination_
         President(id="first-3", name="First President", party="R", number=3, term_start="1909-03-04"),
     ])
     db_session.commit()
-    stored = store_appointments(db_session, [
+    stored = store_court_seats(db_session, [
         _fjc("early", "A", "Ada Early", "Associate Justice", "1902-01-10", "1902-02-01", "1930-01-01", nid="1"),
         _fjc("later", "B", "Ben Later", "Chief Justice", "1910-05-01", "1910-06-01", "1921-01-01", nid="2"),
         _fjc("between", "C", "Cy Between", "Associate Justice", "1906-01-01", "1906-02-01", "1920-01-01", nid="3"),
@@ -104,8 +104,8 @@ def test_appointments_are_stored_with_the_president_in_office_on_the_nomination_
                       "dateEnd": "1930-01-01", "isActive": False, "photo": None}]
     assert [a["name"] for a in justices_appointed_by(db_session, "first-3")] == ["Ben Later"]
     # An outage, or a malformed read, keeps what is stored.
-    assert store_appointments(db_session, None, db_session.query(President).all()) is None
-    assert store_appointments(db_session, [{"last": "x"}], db_session.query(President).all()) is None
+    assert store_court_seats(db_session, None, db_session.query(President).all()) is None
+    assert store_court_seats(db_session, [{"last": "x"}], db_session.query(President).all()) is None
     assert db_session.query(JusticeAppointment).count() == 3
 
 
@@ -115,7 +115,7 @@ def test_a_president_lists_the_justices_appointed_linking_their_pages(db_session
     left = db_session.get(Justice, "left")
     left.name, left.last_name = "Lee Left, Jr.", "Left, Jr."
     # "left" (seated 2010-01-01) and a former justice the site never held.
-    store_appointments(db_session, [
+    store_court_seats(db_session, [
         _fjc("left", "L", "Lee Left", "Associate Justice", "2009-11-01", "2010-01-02", nid="1"),
         _fjc("gone", "G", "Gil Gone", "Chief Justice", "2009-06-01", "2009-08-01", "2012-01-01", nid="2"),
     ], db_session.query(President).all())
