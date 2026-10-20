@@ -20,7 +20,7 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
       aria-labelledby="method-heading"
       className="space-y-4 text-[15px] leading-relaxed text-ink-lo"
     >
-      <h2 id="method-heading" className="font-display text-2xl font-bold text-ink-hi">
+      <h2 id="method-heading" className="font-display text-2xl font-semibold text-ink-hi">
         How this is measured
       </h2>
       <div data-testid="method-summary" className="space-y-3">
@@ -48,7 +48,7 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
           <span aria-hidden="true">&nbsp;▾</span>
         </summary>
         <div className="mt-3 space-y-4">
-          <h3 className="font-display text-lg font-bold text-ink-hi">The three views</h3>
+          <h3 className="font-display text-lg font-semibold text-ink-hi">The three views</h3>
           <ul className="list-disc space-y-1 pl-5">
             <li>
               <strong className="text-ink">Usual vote</strong> is each{" "}
@@ -82,7 +82,7 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
             </li>
           </ul>
 
-          <h3 className="font-display text-lg font-bold text-ink-hi">The method</h3>
+          <h3 className="font-display text-lg font-semibold text-ink-hi">The method</h3>
           <ol className="list-decimal space-y-2 pl-5">
             <li>
               <strong className="text-ink">Structural line.</strong> A straight-line fit through
@@ -120,12 +120,13 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
               the lines that election used. Civitas rebuilt it the same way as the usual vote, from
               VEST precinct returns placed on Census blocks: for 2018 and 2020 from the 2016
               presidential vote alone, on the 116th Congress&apos;s lines (2012 has no open precinct
-              returns), and for 2022 from 2016 and 2020 on the new lines drawn after the census.
+              returns), and from 2022 on from 2016 and 2020 on the lines drawn after the census.
               North Carolina&apos;s 2020 races are left out (it voted on new lines Census publishes
-              only on older blocks). A cycle is added once the FEC publishes its compilation of that
-              election&apos;s House results (MEDSL&apos;s House file sits behind a sign-in form,
-              which Civitas does not answer), so the House checks cover {c.cycles[0]} to{" "}
-              {c.cycles[1]}.
+              only on older blocks). A cycle&apos;s results come from the FEC&apos;s compilation of
+              that election, or, until the FEC publishes it, from the official statistics the Clerk
+              of the House publishes, checked district by district against the Clerk&apos;s own
+              totals (MEDSL&apos;s House file sits behind a sign-in form, which Civitas does not
+              answer), so the House checks cover {c.cycles[0]} to {c.cycles[1]}.
             </p>
           )}
           <p>
@@ -134,7 +135,7 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
             is typed by hand.
           </p>
 
-          <h3 className="font-display text-lg font-bold text-ink-hi">
+          <h3 className="font-display text-lg font-semibold text-ink-hi">
             Is it honest? Held-out checks
           </h3>
           <p>
@@ -220,7 +221,9 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
             {c.brier.fundamentals.toFixed(3)} for the structural line alone.
           </p>
 
-          <h3 className="font-display text-lg font-bold text-ink-hi">Why there is no seat total</h3>
+          <h3 className="font-display text-lg font-semibold text-ink-hi">
+            Why there is no seat total
+          </h3>
           <p>
             Adding up races only works if their errors are independent, and they are not: when polls
             miss, they tend to miss the same way everywhere. In {c.seatTotalsOutside90} of the{" "}
@@ -229,7 +232,7 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
             checked the same way, the map shows each seat&apos;s own range and no tally by party.
           </p>
 
-          <h3 className="font-display text-lg font-bold text-ink-hi">
+          <h3 className="font-display text-lg font-semibold text-ink-hi">
             Inputs, sources and licences
           </h3>
           <ul className="list-disc space-y-1 pl-5">

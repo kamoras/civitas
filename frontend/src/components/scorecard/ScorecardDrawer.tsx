@@ -54,7 +54,7 @@ export default function ScorecardDrawer({
               id="scorecard-drawer-title"
               ref={heading}
               tabIndex={-1}
-              className="mt-1 text-2xl font-extrabold leading-tight text-ink-hi outline-none"
+              className="mt-1 text-2xl font-semibold leading-tight text-ink-hi outline-none"
             >
               {title}
             </h2>

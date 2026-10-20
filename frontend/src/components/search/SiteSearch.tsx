@@ -77,7 +77,10 @@ export default function SiteSearch({ className = "" }: { className?: string }) {
       >
         <div className="flex flex-col gap-4 p-4 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-x-4 border-b-2 border-white/15 pb-3">
-            <h2 id={titleId} className="font-pixel text-xs tracking-widest text-ink-hi">
+            <h2
+              id={titleId}
+              className="font-wordmark text-sm font-extrabold tracking-widest text-ink-hi"
+            >
               SEARCH
             </h2>
             <button

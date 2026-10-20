@@ -52,7 +52,7 @@ function TimelinessBadge({ late, daysToDisclose }: { late: boolean; daysToDisclo
     <span
       className={`text-xs px-1.5 py-0.5 border font-mono ${
         late
-          ? "text-signal-magenta border-signal-magenta/40 bg-signal-magenta/10 font-bold"
+          ? "text-signal-magenta border-signal-magenta/40 bg-signal-magenta/10 font-semibold"
           : "text-ink-lo border-white/[0.07] bg-white/[0.03]"
       }`}
       title={`Disclosed ${daysToDisclose} day${daysToDisclose !== 1 ? "s" : ""} after the transaction: the STOCK Act requires disclosure within 45 days.`}

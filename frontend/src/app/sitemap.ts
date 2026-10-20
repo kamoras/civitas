@@ -110,7 +110,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}/congress/nominations`, changeFrequency: "daily", priority: 0.7 },
     { url: `${SITE_URL}/congress/president/house`, changeFrequency: "daily", priority: 0.6 },
     { url: `${SITE_URL}/congress/president/senate`, changeFrequency: "daily", priority: 0.6 },
-    { url: `${SITE_URL}/leaderboard`, changeFrequency: "daily", priority: 0.8 },
+    { url: `${SITE_URL}/congress/members`, changeFrequency: "daily", priority: 0.8 },
     { url: `${SITE_URL}/compare`, changeFrequency: "weekly", priority: 0.6 },
     { url: `${SITE_URL}/compare/presidents`, changeFrequency: "weekly", priority: 0.6 },
     { url: `${SITE_URL}/explore`, changeFrequency: "daily", priority: 0.6 },

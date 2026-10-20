@@ -231,7 +231,7 @@ export function Section({
       <h2
         id={`${id}-h`}
         {...onThisPage(title)}
-        className="mt-1 font-display text-2xl font-bold leading-tight tracking-[-0.01em] text-ink-hi"
+        className="mt-1 font-display text-2xl font-semibold leading-tight tracking-[-0.01em] text-ink-hi"
       >
         {title}
       </h2>
@@ -324,7 +324,7 @@ export function More({
         {/* min-w-0: a flex item is otherwise as wide as its longest word, so
             a field name ("constituentAlignment") at 200% text ran past a
             phone instead of breaking (body's overflow-wrap). */}
-        <span className="min-w-0 font-medium">
+        <span className="min-w-0 font-semibold">
           {label}
           {context && <span className="sr-only"> {context}</span>}
         </span>

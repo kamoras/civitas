@@ -210,7 +210,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Param
                 >
                   Full text, in Explore
                 </h3>
-                <p className="mt-2 font-display text-base text-ink-lo">
+                <p className="mt-2 font-sans text-base text-ink-lo">
                   {exploreCount === null
                     ? "Explore searches the words inside every document, speech and opinion."
                     : exploreCount === 0

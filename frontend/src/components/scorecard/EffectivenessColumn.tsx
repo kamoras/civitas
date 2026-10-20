@@ -58,14 +58,12 @@ export default function EffectivenessColumn({
   bills,
   dimension,
   score,
-  weight,
   onMore,
 }: {
   chamber: "senate" | "house";
   bills: SponsoredBill[];
   dimension: ScoreBreakdownDimension | undefined;
   score: number;
-  weight?: number;
   onMore: () => void;
 }) {
   const config = useConfig();
@@ -87,10 +85,9 @@ export default function EffectivenessColumn({
 
   return (
     <ScoreColumn
-      title="Legislative Effectiveness"
+      title="Bills"
       shareId="legislative-effectiveness"
       tooltip={TOOLTIP}
-      weight={weight}
       score={score}
       finding={dimension?.finding}
       method={dimension && <ComponentBars components={dimension.components} />}

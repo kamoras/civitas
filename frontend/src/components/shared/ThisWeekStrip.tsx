@@ -190,7 +190,7 @@ function FullStrip({ data }: { data: ThisWeek }) {
       <div className="grid grid-cols-1 gap-8 pt-4 md:grid-cols-3 md:gap-9">
         <div className="flex flex-col gap-3">
           <p className="font-display text-ink-hi">
-            <span className="text-4xl font-extrabold leading-none tabular-nums">{line.figure}</span>{" "}
+            <span className="text-4xl font-semibold leading-none tabular-nums">{line.figure}</span>{" "}
             <span className="font-mono text-xs uppercase tracking-[0.12em] text-ink-lo">
               {line.caption}
             </span>
@@ -200,7 +200,7 @@ function FullStrip({ data }: { data: ThisWeek }) {
               stops, and the masthead's state picker already leads to a
               ballot. */}
           <details className="group">
-            <summary className="cursor-pointer list-none font-display text-base text-ink-hi underline decoration-white/30 underline-offset-4 hover:text-phos [&::-webkit-details-marker]:hidden">
+            <summary className="cursor-pointer list-none font-sans text-base text-ink-hi underline decoration-white/30 underline-offset-4 hover:text-phos [&::-webkit-details-marker]:hidden">
               {line.pick}
               <span aria-hidden="true" className="ml-1 inline-block group-open:rotate-180">
                 &#9662;
@@ -226,7 +226,7 @@ function FullStrip({ data }: { data: ThisWeek }) {
 
         <div className="flex flex-col gap-3">
           <h3 className={LABEL}>Congress</h3>
-          <p className="font-display text-base leading-relaxed text-ink">{congress.sentence}</p>
+          <p className="font-sans text-base leading-relaxed text-ink">{congress.sentence}</p>
           <ul className="flex flex-col gap-1 font-mono text-xs text-ink-lo">
             {(["senate", "house"] as const).map((c) => {
               const ch = congress.chambers[c];
@@ -269,7 +269,7 @@ function FullStrip({ data }: { data: ThisWeek }) {
         <div className="flex flex-col gap-3">
           <h3 className={LABEL}>Comment deadlines</h3>
           {commentDeadlines.length === 0 ? (
-            <p className="font-display text-base text-ink-lo">
+            <p className="font-sans text-base text-ink-lo">
               No federal rule is open for comment right now.
             </p>
           ) : (

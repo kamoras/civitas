@@ -18,10 +18,12 @@ from app.pipeline.analyze.sponsorship_analysis import (
     party_ideology_bounds,
 )
 from app.services._scorecard_common import (
+    latest_snapshot,
     pac_share_pct,
     party_line_counts,
     related_votes,
     score_breakdown,
+    score_method,
     vote_period_start,
     vote_search,
 )
@@ -240,6 +242,7 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
     # 6. Assemble the nested schema
     initials = _compute_initials(senator.name) or senator.initials
     return SenatorSchema(
+        **score_method(latest_snapshot(db, "senator", senator.id)),
         id=senator.id,
         name=senator.name,
         bioguide_id=senator.bioguide_id,

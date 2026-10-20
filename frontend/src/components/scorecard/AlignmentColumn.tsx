@@ -169,7 +169,6 @@ export default function AlignmentColumn({
   approval,
   dimension,
   score,
-  weight,
   onMore,
 }: {
   memberId: string;
@@ -186,7 +185,6 @@ export default function AlignmentColumn({
   approval?: Approval | null;
   dimension: ScoreBreakdownDimension | undefined;
   score: number;
-  weight?: number;
   onMore: () => void;
 }) {
   const facts = dimension?.facts as AlignmentFacts | undefined;
@@ -217,10 +215,9 @@ export default function AlignmentColumn({
 
   return (
     <ScoreColumn
-      title="Constituent Alignment"
+      title="Votes"
       shareId="constituent-alignment"
       tooltip={TOOLTIP}
-      weight={weight}
       score={score}
       finding={dimension?.finding}
       method={dimension && <ComponentBars components={dimension.components} />}

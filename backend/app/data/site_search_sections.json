@@ -11,9 +11,9 @@
       {"anchor": "sources", "file": "frontend/src/components/congress/BillSources.tsx", "headings": ["Sources"]}
     ],
     "member": [
-      {"anchor": "funding-independence", "file": "frontend/src/components/scorecard/FundingColumn.tsx", "headings": ["Funding Independence", "Where the money comes from", "donors"]},
-      {"anchor": "constituent-alignment", "file": "frontend/src/components/scorecard/AlignmentColumn.tsx", "headings": ["Constituent Alignment", "Votes against party"]},
-      {"anchor": "legislative-effectiveness", "file": "frontend/src/components/scorecard/EffectivenessColumn.tsx", "headings": ["Legislative Effectiveness", "Bills by furthest stage reached"]},
+      {"anchor": "funding-independence", "file": "frontend/src/components/scorecard/FundingColumn.tsx", "headings": ["Money", "Where the money comes from", "donors"]},
+      {"anchor": "constituent-alignment", "file": "frontend/src/components/scorecard/AlignmentColumn.tsx", "headings": ["Votes", "Votes against party"]},
+      {"anchor": "legislative-effectiveness", "file": "frontend/src/components/scorecard/EffectivenessColumn.tsx", "headings": ["Bills", "Bills by furthest stage reached"]},
       {"anchor": "holdings", "file": "frontend/src/components/checker/Holdings.tsx", "headings": ["Holdings", "Investments & assets"]},
       {"anchor": "methods", "file": "frontend/src/components/scorecard/MethodsLedger.tsx", "headings": ["Methods, data and citation"]}
     ]
