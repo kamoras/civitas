@@ -1976,17 +1976,15 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
               </div>
             </header>
 
-            {/* Before the ballot, in one line: the next voter deadline (a
-              reader who isn't registered by it can't vote on any of it) and
-              a jump to the steps and the full calendar, which follow the
+            {/* Before the ballot: the official sample-ballot lookup as a
+              button (#1123: a reader who couldn't find it clicked
+              registration), then in one line the next voter deadline and a
+              jump to the steps and the full calendar, which follow the
               contests. As full blocks here they put the ballot two screens
               down on a phone. Gone in the results window, when every
               deadline has passed. */}
             {!resultsMode && (
-              <VoteStepsLead
-                calendar={ballot.voterCalendar}
-                hasSteps={!!ballot.voteSteps?.length}
-              />
+              <VoteStepsLead calendar={ballot.voterCalendar} steps={ballot.voteSteps} />
             )}
 
             <StateAtAGlance

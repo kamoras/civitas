@@ -364,6 +364,17 @@ describe("the ballot page", () => {
     // The page's one register link is the step's.
     expect(screen.getAllByRole("link", { name: /^Register/ })).toHaveLength(1);
     expect(screen.queryByText(/OFFICIAL VOTER LOOKUP/)).not.toBeInTheDocument();
+    // The sample-ballot lookup is a button above the ballot (#1123), and
+    // the register link is not beside it.
+    const lookup = screen.getByTestId("ballot-lookup");
+    expect(lookup).toHaveAttribute("href", "https://my.arizona.vote/sample_ballot");
+    expect(
+      lookup.compareDocumentPosition(screen.getByTestId("ballot-index")) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      within(screen.getByTestId("vote-steps-lead")).queryByRole("link", { name: /^Register/ })
+    ).not.toBeInTheDocument();
   });
 
   it("gives a verified lookup no caveat", () => {

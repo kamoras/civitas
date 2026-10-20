@@ -30,12 +30,37 @@ function deadlineText(step: VoteStep): string | null {
   return left ? `${d.sentence} · ${left}` : d.sentence;
 }
 
+/** A step whose site turns away the nightly link check: said, with the
+ *  national fallback beside it. Never worked around (AGENTS.md section 7). */
+function Unconfirmed({ step, className }: { step: VoteStep; className: string }) {
+  const fallbackHref = step.fallback ? safeHref(step.fallback.url) : null;
+  if (!step.unconfirmed || !fallbackHref || !step.fallback) return null;
+  return (
+    <p className={`${className} wrap-anywhere`}>
+      This site blocks automated checks, so we can&apos;t confirm it&apos;s up. If it doesn&apos;t
+      open, use{" "}
+      <a
+        href={fallbackHref}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={INLINE_LINK}
+        aria-label={`${STEP_LABEL[step.task]} through ${step.fallback.sourceName} (opens in new tab)`}
+      >
+        {step.fallback.host} ↗
+      </a>
+    </p>
+  );
+}
+
+function stepAriaLabel(step: VoteStep, deadline: string | null): string {
+  return `${STEP_LABEL[step.task]}: ${destination(step)}${step.unconfirmed ? ", unconfirmed" : ""}${deadline ? `. ${deadline}` : ""} (opens in new tab)`;
+}
+
 function Step({ step, n }: { step: VoteStep; n: number }) {
   const label = STEP_LABEL[step.task];
   const href = safeHref(step.url ?? "");
   const deadline = deadlineText(step);
   const closed = step.deadline?.status === "closed";
-  const fallbackHref = step.fallback ? safeHref(step.fallback.url) : null;
   const where = destination(step);
   const body = (
     <>
@@ -67,7 +92,7 @@ function Step({ step, n }: { step: VoteStep; n: number }) {
           href={href}
           target="_blank"
           rel="noopener noreferrer"
-          aria-label={`${label}: ${where}${step.unconfirmed ? ", unconfirmed" : ""}${deadline ? `. ${deadline}` : ""} (opens in new tab)`}
+          aria-label={stepAriaLabel(step, deadline)}
           className="flex min-h-[52px] items-start gap-3 px-4 py-3 hover:bg-white/[0.04] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
         >
           {body}
@@ -76,41 +101,34 @@ function Step({ step, n }: { step: VoteStep; n: number }) {
         // A state with no voter registration: said, with no link to follow.
         <div className="flex min-h-[52px] items-start gap-3 px-4 py-3">{body}</div>
       )}
-      {step.unconfirmed && fallbackHref && step.fallback && (
-        <p className="border-t border-white/[0.09] px-4 py-2 pl-[52px] text-xs text-ink-lo wrap-anywhere">
-          This site blocks automated checks, so we can&apos;t confirm it&apos;s up. If it
-          doesn&apos;t open, use{" "}
-          <a
-            href={fallbackHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={INLINE_LINK}
-            aria-label={`${label} through ${step.fallback.sourceName} (opens in new tab)`}
-          >
-            {step.fallback.host} ↗
-          </a>
-        </p>
-      )}
+      <Unconfirmed
+        step={step}
+        className="border-t border-white/[0.09] px-4 py-2 pl-[52px] text-xs text-ink-lo"
+      />
     </li>
   );
 }
 
 /**
- * The steps and the voter deadlines in one line above the ballot: the next
- * deadline with its countdown (the backend's, on the state's own clock), or
- * that every deadline has passed, and a jump to the steps and the full
- * calendar after the contests. A reader who came for the ballot sees it in
- * the first screen of a phone; one who must still register sees when,
- * before anything else. Every date stays quoted with its rule and source in
- * the calendar below (AGENTS.md section 7).
+ * Above the ballot: the state's official sample-ballot lookup as the one
+ * button, then the next voter deadline in one line with a jump to every
+ * step and the full calendar, after the contests. The ballot lookup leads
+ * because a reader who couldn't find it clicked registration instead
+ * (#1123); registration is left out here so the two can't be confused
+ * again (it is in the steps and the deadline line). Its link, liveness
+ * wording and fallback are the steps' own. Every date stays quoted with its
+ * rule and source in the calendar below (AGENTS.md section 7).
  */
 export function VoteStepsLead({
   calendar,
-  hasSteps,
+  steps,
 }: {
   calendar: VoterCalendar | null | undefined;
-  hasSteps: boolean;
+  steps: VoteStep[] | null | undefined;
 }) {
+  const hasSteps = !!steps?.length;
+  const ballotStep = steps?.find((s) => s.task === "sample_ballot") ?? null;
+  const ballotHref = ballotStep ? safeHref(ballotStep.url ?? "") : null;
   const read = calendar && !calendar.unread ? calendar : null;
   const next = read?.next ?? null;
   const passed = !!read && !next && read.items.length > 0;
@@ -119,29 +137,49 @@ export function VoteStepsLead({
   const soon =
     next?.status === "open" && (next.countdown === "today" || next.countdown === "tomorrow");
   return (
-    <p
-      data-testid="vote-steps-lead"
-      className={`mb-4 border border-white/30 border-l-4 bg-surface px-4 py-2 text-sm ${
-        soon ? "border-l-signal-orange" : "border-l-ink-hi"
-      }`}
-    >
-      {next && (
-        <span className="text-ink-hi">
-          Next deadline: {next.sentence}
-          {left && <span className="font-semibold text-signal-amber"> · {left}</span>}.{" "}
-        </span>
+    <div data-testid="vote-steps-lead" className="mb-4">
+      {ballotStep && ballotHref && (
+        <div className="mb-2">
+          <a
+            href={ballotHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="ballot-lookup"
+            aria-label={stepAriaLabel(ballotStep, null)}
+            className="flex min-h-11 w-full items-center gap-3 bg-phos px-4 py-2 text-surface-base hover:bg-phos-mid focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 sm:w-fit"
+          >
+            <span className="min-w-0 flex-1 wrap-anywhere">
+              <span className="block font-semibold">{STEP_LABEL.sample_ballot}</span>
+              <span className="block text-sm">Opens {destination(ballotStep)}</span>
+            </span>
+            <span aria-hidden="true">↗</span>
+          </a>
+          <Unconfirmed step={ballotStep} className="mt-1 text-xs text-ink-lo" />
+        </div>
       )}
-      {passed && (
-        <span className="text-ink-hi">Every voter deadline for this election has passed. </span>
-      )}
-      <a
-        href={hasSteps ? "#vote-steps" : "#voter-deadlines"}
-        className="inline-flex min-h-6 items-center font-semibold text-ink-hi underline underline-offset-2 hover:text-phos"
+      <p
+        className={`border border-white/30 border-l-4 bg-surface px-4 py-2 text-sm ${
+          soon ? "border-l-signal-orange" : "border-l-ink-hi"
+        }`}
       >
-        {hasSteps ? "Your vote, step by step, and every deadline" : "Every voter deadline"}
-        <span aria-hidden="true">&nbsp;↓</span>
-      </a>
-    </p>
+        {next && (
+          <span className="text-ink-hi">
+            Next deadline: {next.sentence}
+            {left && <span className="font-semibold text-signal-amber"> · {left}</span>}.{" "}
+          </span>
+        )}
+        {passed && (
+          <span className="text-ink-hi">Every voter deadline for this election has passed. </span>
+        )}
+        <a
+          href={hasSteps ? "#vote-steps" : "#voter-deadlines"}
+          className="inline-flex min-h-6 items-center font-semibold text-ink-hi underline underline-offset-2 hover:text-phos"
+        >
+          {hasSteps ? "Your vote, step by step, and every deadline" : "Every voter deadline"}
+          <span aria-hidden="true">&nbsp;↓</span>
+        </a>
+      </p>
+    </div>
   );
 }
 
