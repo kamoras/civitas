@@ -2,14 +2,13 @@ import Link from "next/link";
 import { connection } from "next/server";
 import type { RegistrationClosing, ThisWeek } from "@/types/thisWeek";
 import { shortDate } from "@/lib/congress";
-import { stateBallotHref } from "@/lib/elections";
 import { CALENDAR_HREF } from "@/lib/routes";
 import StateJump from "./StateJump";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
 const BOX = "flex min-w-0 flex-col border border-white/30 bg-surface p-4 sm:p-5";
-const LABEL = "text-[13px] font-semibold uppercase tracking-[0.06em] text-ink-lo";
+const LABEL = "text-[13px] font-semibold text-ink-lo";
 const TITLE = "mt-1 font-display text-[22px] font-semibold leading-tight text-ink-hi";
 const BUTTON =
   "mt-3 inline-flex min-h-11 w-fit items-center border border-ink-hi px-3 text-sm font-semibold text-ink-hi hover:bg-white/5";
@@ -31,57 +30,27 @@ function ballotLine(e: ThisWeek["election"]): string {
   return `${e.daysUntil} day${e.daysUntil === 1 ? "" : "s"} to Election Day`;
 }
 
-function closesLabel(r: RegistrationClosing): string {
-  if (r.daysLeft === 0) return "Today";
-  if (r.daysLeft === 1) return "Tomorrow";
-  return shortDate(r.closesOn);
-}
-
-/** The states closing registration soon, by day: the next three days. */
+/** The states closing registration soon, as one line to the calendar: it
+ * matters before the election, but the day's record leads the page. */
 function Closing({ rows, days }: { rows: RegistrationClosing[]; days: number }) {
   if (rows.length === 0) return null;
-  const byDay = new Map<string, RegistrationClosing[]>();
-  for (const r of rows) byDay.set(r.closesOn, [...(byDay.get(r.closesOn) ?? []), r]);
-  const groups = [...byDay.values()].slice(0, 3);
+  const soonest = rows.reduce((a, r) => (r.closesOn < a.closesOn ? r : a));
+  const when =
+    soonest.daysLeft === 0
+      ? "today"
+      : soonest.daysLeft === 1
+        ? "tomorrow"
+        : shortDate(soonest.closesOn);
   return (
-    <section
-      aria-labelledby="closing-heading"
-      className="mt-6 border border-white/30 border-l-4 border-l-signal-orange bg-surface p-4 sm:p-5"
-    >
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id="closing-heading" className="font-display text-[20px] font-semibold text-ink-hi">
-          Registration closes in the next {days} days in {rows.length}{" "}
-          {rows.length === 1 ? "state" : "states"}
-        </h2>
-        <Link
-          href={CALENDAR_HREF}
-          className="inline-flex min-h-11 items-center text-sm font-semibold text-phos underline underline-offset-2"
-        >
-          Every state ▸
-        </Link>
-      </div>
-      <ul className="mt-1">
-        {groups.map((g) => (
-          <li
-            key={g[0].closesOn}
-            className="grid grid-cols-1 gap-x-6 border-t border-white/15 py-2 sm:grid-cols-[8rem_minmax(0,1fr)]"
-          >
-            <span className="font-semibold text-ink-hi">{closesLabel(g[0])}</span>
-            <span className="flex flex-wrap gap-x-3 gap-y-1">
-              {g.map((r) => (
-                <Link
-                  key={r.state}
-                  href={stateBallotHref(r.state)}
-                  className="inline-flex min-h-6 items-center text-ink underline decoration-white/40 underline-offset-2 hover:text-ink-hi"
-                >
-                  {r.stateName}
-                </Link>
-              ))}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </section>
+    <p className="mt-3 border border-white/30 border-l-4 border-l-signal-orange bg-surface px-4 py-2 text-sm">
+      <Link
+        href={CALENDAR_HREF}
+        className="inline-flex min-h-6 items-center font-semibold text-ink-hi underline underline-offset-2 hover:text-phos"
+      >
+        Registration closes in the next {days} days in {rows.length}{" "}
+        {rows.length === 1 ? "state" : "states"}, soonest {when} ▸
+      </Link>
+    </p>
   );
 }
 

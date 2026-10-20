@@ -109,10 +109,7 @@ function withContents(children: ReactNode): ReactNode {
 function Contents({ sections }: { sections: { id: string; title: string }[] }) {
   return (
     <nav aria-labelledby="on-this-page" className="border-l-3 border-l-signal-cyan/60 pl-5">
-      <h2
-        id="on-this-page"
-        className="font-mono text-xs uppercase tracking-[0.16em] text-signal-cyan"
-      >
+      <h2 id="on-this-page" className="font-mono text-xs text-signal-cyan">
         On this page
       </h2>
       <ol className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1 text-base sm:grid-cols-2">
@@ -147,9 +144,7 @@ function PagerLink({
       href={href}
       className={`panel block p-4 hover:border-ink-min transition-colors ${alignEnd ? "sm:text-right sm:col-start-2" : ""}`}
     >
-      <span className="block font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-        {dir}
-      </span>
+      <span className="block font-mono text-xs text-ink-min">{dir}</span>
       <span className="mt-1 block font-display text-lg font-semibold text-ink-hi">{title}</span>
     </Link>
   );
@@ -160,7 +155,7 @@ function ChapterNav({ current }: { current: string }) {
   const items = [{ href: ABOUT_OVERVIEW_HREF, title: "Overview" }, ...ABOUT_CHAPTERS];
   return (
     <nav aria-label="About this site">
-      <ul className="flex flex-wrap gap-x-1 gap-y-2 font-mono text-xs uppercase tracking-[0.08em]">
+      <ul className="flex flex-wrap gap-x-1 gap-y-2 font-mono text-xs">
         {items.map((c) => {
           const active = c.href === current;
           return (
@@ -191,10 +186,7 @@ export function Summary({ children }: { children: ReactNode }) {
       aria-labelledby="short-version"
       className="panel border-l-3 border-l-signal-amber p-5 sm:p-6"
     >
-      <h2
-        id="short-version"
-        className="font-mono text-xs uppercase tracking-[0.16em] text-signal-amber"
-      >
+      <h2 id="short-version" className="font-mono text-xs text-signal-amber">
         The short version
       </h2>
       <ul className="mt-3 space-y-2.5 text-base leading-relaxed text-ink">{children}</ul>
@@ -225,9 +217,7 @@ export function Section({
 }) {
   return (
     <section id={id} aria-labelledby={`${id}-h`}>
-      {kicker && (
-        <p className="font-mono text-xs uppercase tracking-[0.16em] text-signal-cyan">{kicker}</p>
-      )}
+      {kicker && <p className="font-mono text-xs text-signal-cyan">{kicker}</p>}
       <h2
         id={`${id}-h`}
         {...onThisPage(title)}
@@ -344,9 +334,7 @@ export function Facts({ children }: { children: ReactNode }) {
 export function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="grid grid-cols-1 gap-1 py-3 sm:grid-cols-[13rem_1fr] sm:gap-4">
-      <dt className="font-mono text-xs uppercase tracking-[0.08em] text-signal-amber sm:pt-0.5">
-        {label}
-      </dt>
+      <dt className="font-mono text-xs text-signal-amber sm:pt-0.5">{label}</dt>
       <dd className="text-sm leading-relaxed text-ink-lo">{children}</dd>
     </div>
   );

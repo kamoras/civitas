@@ -1,4 +1,5 @@
 import type { ConfirmDistribution, NominationKind, NominationStats } from "@/types/nomination";
+import { overlay } from "@/lib/chartColors";
 import { KIND_LABEL, days } from "@/lib/nominations";
 
 const KINDS: NominationKind[] = ["civilian", "judicial", "military"];
@@ -58,7 +59,7 @@ function Panel({
   return (
     <figure className="m-0">
       <figcaption className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <span className="font-mono text-xs uppercase tracking-[0.14em] text-ink-hi">{label}</span>
+        <span className="font-mono text-xs text-ink-hi">{label}</span>
         <span className="font-mono text-xs text-ink-lo">
           {dist.n === 0 ? (
             "None confirmed yet"
@@ -111,16 +112,9 @@ function Panel({
             strokeWidth={2}
           />
         )}
-        <line x1={0} x2={W} y1={H - AXIS} y2={H - AXIS} stroke="rgba(255,255,255,0.25)" />
+        <line x1={0} x2={W} y1={H - AXIS} y2={H - AXIS} stroke={overlay(0.25)} />
         {ticks.map((t) => (
-          <line
-            key={t}
-            x1={x(t)}
-            x2={x(t)}
-            y1={H - AXIS}
-            y2={H - AXIS + 4}
-            stroke="rgba(255,255,255,0.4)"
-          />
+          <line key={t} x1={x(t)} x2={x(t)} y1={H - AXIS} y2={H - AXIS + 4} stroke={overlay(0.4)} />
         ))}
       </svg>
       {/* Labels in HTML, not SVG text: the bars stretch to the width, text must not. */}

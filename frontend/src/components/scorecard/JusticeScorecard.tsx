@@ -259,7 +259,7 @@ export default function JusticeScorecard({
                 <Title className="break-words text-3xl font-semibold leading-tight text-ink-hi sm:text-4xl">
                   {j.name}
                 </Title>
-                <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-lo">
+                <p className="font-mono text-xs text-ink-lo">
                   {j.roleTitle}
                   {j.appointingPresident && (
                     <>
@@ -284,7 +284,7 @@ export default function JusticeScorecard({
               </div>
             </div>
             <div className="flex flex-col gap-2 border-t border-white/[0.12] pt-5 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
-              <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">Score</p>
+              <p className="font-mono text-xs text-ink-min">Score</p>
               <p className="font-display text-2xl font-semibold text-ink-min">Not scored</p>
               <p className="text-sm leading-relaxed text-ink-lo">
                 {NOT_SCORED_REASON}{" "}
@@ -320,7 +320,7 @@ export default function JusticeScorecard({
                 <h2 id="agreement-heading" className="text-[19px] font-semibold text-ink-hi">
                   Agreement with each justice
                 </h2>
-                <p className="mt-1 font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
+                <p className="mt-1 font-mono text-xs text-ink-min">
                   Share of the cases both decided the same way · not scored
                 </p>
               </div>

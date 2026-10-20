@@ -33,7 +33,7 @@ export default function OffSeasonLead({
     >
       <h2
         id="between-cycles"
-        className="border-b border-white/[0.07] py-2.5 font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
+        className="border-b border-white/[0.07] py-2.5 font-mono text-xs text-ink-min"
       >
         Between general elections
       </h2>
@@ -47,15 +47,13 @@ export default function OffSeasonLead({
       <div className="grid grid-cols-1 gap-x-8 lg:grid-cols-[3fr_2fr]">
         <SpecialsBoardView board={board} limit={SPECIALS_SHOWN} />
         <div>
-          <h3 className="mt-6 font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
-            Next on the calendar
-          </h3>
+          <h3 className="mt-6 font-mono text-xs text-ink-min">Next on the calendar</h3>
           {next.length ? (
             <ul className="mt-1">
               {next.map((e) => (
                 <li key={e.key} className="border-t border-white/[0.07] py-2">
-                  <p className="font-mono text-[11px] tracking-[0.12em] text-ink-min">
-                    {longDate(e.date).toUpperCase()} · {e.tag} · {e.status}
+                  <p className="font-mono text-[11px] text-ink-min">
+                    {longDate(e.date)} · {e.tag} · {e.status}
                   </p>
                   <p className="text-sm text-ink-lo">{e.text}</p>
                 </li>
@@ -70,9 +68,9 @@ export default function OffSeasonLead({
           )}
           <Link
             href={CALENDAR_HREF}
-            className="mt-3 inline-flex min-h-11 items-center font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
+            className="mt-3 inline-flex min-h-11 items-center font-mono text-xs text-signal-cyan hover:text-phos"
           >
-            [ THE FULL CALENDAR → ]
+            [ The full calendar → ]
           </Link>
         </div>
       </div>

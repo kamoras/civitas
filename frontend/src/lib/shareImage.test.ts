@@ -75,7 +75,7 @@ describe("captureImageData", () => {
   it("lets same-origin and inline images load normally", async () => {
     expect(await captureImageData(`${window.location.origin}/_next/static/a.png`)).toBe(false);
     expect(await captureImageData("/icon.svg")).toBe(false);
-    expect(await captureImageData("data:image/png;base64,AAAA")).toBe(false);
+    expect(await captureImageData("data:image/png;base64,aaaa")).toBe(false);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 

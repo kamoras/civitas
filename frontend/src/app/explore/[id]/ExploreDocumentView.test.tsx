@@ -87,10 +87,10 @@ describe("Explore document page", () => {
     withDocument();
     api.streamExploreDocumentSummary.mockReturnValue(new Promise(() => {}));
     renderPage();
-    expect(screen.getByRole("link", { name: "← EXPLORE" })).toHaveAttribute("href", "/explore");
+    expect(screen.getByRole("link", { name: "← Explore" })).toHaveAttribute("href", "/explore");
     cleanup();
     renderPage(DOC, "tariffs");
-    expect(screen.getByRole("link", { name: "← BACK TO RESULTS" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "← Back to results" })).toHaveAttribute(
       "href",
       "/explore?q=tariffs"
     );
@@ -132,6 +132,6 @@ describe("A floor speech's bill", () => {
     });
     const link = await screen.findByRole("link", { name: "S. 2" });
     expect(link.getAttribute("href")).toMatch(/^\/congress\/bills\/S\.2/);
-    expect(screen.getByText(/^BILL:/)).toBeInTheDocument();
+    expect(screen.getByText(/^Bill:/)).toBeInTheDocument();
   });
 });

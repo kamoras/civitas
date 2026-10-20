@@ -22,7 +22,7 @@ export function ActivePipelines({
       {senateIsRunning(pipelineStatus) && pipelineStatus?.lastRun && (
         <div className="mb-6">
           <PipelineProgressBar
-            title="SENATE PIPELINE ACTIVE"
+            title="Senate pipeline active"
             isRunning
             run={pipelineStatus.lastRun}
             etaConfig={{
@@ -55,7 +55,7 @@ export function ActivePipelines({
       {pipelineStatus?.houseIsRunning && pipelineStatus.houseLastRun && (
         <div className="mb-6">
           <PipelineProgressBar
-            title="HOUSE PIPELINE ACTIVE"
+            title="House pipeline active"
             isRunning={pipelineStatus.houseIsRunning}
             run={pipelineStatus.houseLastRun}
             etaConfig={{
@@ -81,7 +81,7 @@ export function ActivePipelines({
       {pipelineStatus?.stockTradesIsRunning && pipelineStatus.stockTradesLastRun && (
         <div className="mb-6">
           <PipelineProgressBar
-            title="STOCK TRADES PIPELINE ACTIVE"
+            title="Stock trades pipeline active"
             isRunning={pipelineStatus.stockTradesIsRunning}
             run={pipelineStatus.stockTradesLastRun}
             showPhaseBreadcrumb={false}
@@ -99,7 +99,7 @@ export function ActivePipelines({
       {pipelineStatus?.supplementaryIsRunning && pipelineStatus.supplementaryLastRun && (
         <div className="mb-6">
           <PipelineProgressBar
-            title="SUPPLEMENTARY PIPELINE ACTIVE"
+            title="Supplementary pipeline active"
             isRunning={pipelineStatus.supplementaryIsRunning}
             run={pipelineStatus.supplementaryLastRun}
             showPhaseBreadcrumb={false}
@@ -122,7 +122,7 @@ export function ActivePipelines({
       {pipelineStatus?.electionIsRunning && pipelineStatus.electionLastRun && (
         <div className="mb-6">
           <PipelineProgressBar
-            title="ELECTION PIPELINE ACTIVE"
+            title="Election pipeline active"
             isRunning={pipelineStatus.electionIsRunning}
             run={pipelineStatus.electionLastRun}
             showPhaseBreadcrumb={false}

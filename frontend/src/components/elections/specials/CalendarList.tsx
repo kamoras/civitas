@@ -39,8 +39,8 @@ function groupByDay(entries: Entry[]): Row[] {
     const n = codes.size - (codes.has("DC") ? 1 : 0);
     const where = `${n} state${n === 1 ? "" : "s"}${codes.has("DC") ? " and DC" : ""}`;
     row.text = `${row.kind} in ${where}`;
-    if (row.tag === "DEADLINE")
-      row.status = row.passed ? "PASSED" : `${row.group!.length} DEADLINES`;
+    if (row.tag === "Deadline")
+      row.status = row.passed ? "Passed" : `${row.group!.length} deadlines`;
     row.state = null;
   }
   return out;
@@ -98,7 +98,7 @@ export default function CalendarList({ cal }: { cal: ElectionCalendar }) {
       <span className="font-mono text-xs tabular-nums text-ink-hi">
         {longDate(e.date).replace(/, \d{4}$/, "")}
       </span>
-      <span className="font-mono text-[11px] tracking-[0.12em] text-ink-min">{e.tag}</span>
+      <span className="font-mono text-[11px] text-ink-min">{e.tag}</span>
       <span className="col-span-2 text-sm text-ink-lo sm:col-span-1">
         {e.group ? (
           <details>
@@ -139,7 +139,7 @@ export default function CalendarList({ cal }: { cal: ElectionCalendar }) {
           e.text
         )}
       </span>
-      <span className="col-span-2 font-mono text-[11px] tracking-[0.12em] text-ink-min sm:col-span-1 sm:text-right">
+      <span className="col-span-2 font-mono text-[11px] text-ink-min sm:col-span-1 sm:text-right">
         {e.status}
       </span>
     </li>
@@ -147,12 +147,12 @@ export default function CalendarList({ cal }: { cal: ElectionCalendar }) {
 
   return (
     <div>
-      <label className="flex flex-wrap items-center gap-3 font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
+      <label className="flex flex-wrap items-center gap-3 font-mono text-xs text-ink-min">
         State
         <select
           value={state}
           onChange={(ev) => setState(ev.target.value)}
-          className="min-h-11 max-w-full border border-white/15 bg-surface-base px-3 font-mono text-sm normal-case tracking-normal text-ink-hi"
+          className="min-h-11 max-w-full border border-white/15 bg-surface-base px-3 font-mono text-sm tracking-normal text-ink-hi"
         >
           <option value="">Every state</option>
           {states.map(([code, name]) => (
@@ -179,13 +179,13 @@ export default function CalendarList({ cal }: { cal: ElectionCalendar }) {
       )}
       {Array.from(months.entries()).map(([month, entries]) => (
         <section key={month} className="mt-6">
-          <h3 className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">{month}</h3>
+          <h3 className="font-mono text-xs text-ink-min">{month}</h3>
           <ul className="mt-1">{entries.map(row)}</ul>
         </section>
       ))}
       {passed.length > 0 && (
         <details className="mt-6">
-          <summary className="flex min-h-11 cursor-pointer items-center font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
+          <summary className="flex min-h-11 cursor-pointer items-center font-mono text-xs text-ink-min">
             Passed in the last month ({passed.length})
           </summary>
           <ul className="mt-1">{passed.map(row)}</ul>

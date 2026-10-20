@@ -49,7 +49,7 @@ export default function ClosestSeats({
   if (!rows.length) return null;
   return (
     <section aria-labelledby="closest-seats" className="mt-4">
-      <h3 id="closest-seats" className="font-mono text-xs uppercase tracking-[0.14em] text-ink-hi">
+      <h3 id="closest-seats" className="font-mono text-xs text-ink-hi">
         Closest seats
       </h3>
       <p className="mt-1 text-sm text-ink-lo">

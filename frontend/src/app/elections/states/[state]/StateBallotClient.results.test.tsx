@@ -182,8 +182,8 @@ describe("the state page in results mode", () => {
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Ohio results");
     const house = await screen.findByRole("region", { name: "U.S. House" });
     expect(within(house).getByText("Eric Conway")).toBeInTheDocument();
-    expect(within(house).getByText("FLIP · LEADING · NOT FINAL")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /BALLOT RESEARCH/ })).toBeInTheDocument();
+    expect(within(house).getByText("Flip · Leading · Not final")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Ballot research/ })).toBeInTheDocument();
     expect(fetchLiveResults).toHaveBeenCalledWith("OH");
   });
 
@@ -341,7 +341,7 @@ describe("the state page in results mode", () => {
     );
     render(<StateBallotClient ballot={ballot()} />);
     expect(
-      await screen.findByText(/COULDN.T BE USED · THE COUNT BELOW WAS READ AT NOV 3, 9:44 PM ET/)
+      await screen.findByText(/couldn.t be used · The count below was read at Nov 3, 9:44 PM ET/)
     ).toBeInTheDocument();
   });
 
@@ -361,13 +361,13 @@ describe("the state page in results mode", () => {
     render(<StateBallotClient ballot={ballot()} />);
     expect(
       await screen.findByText(
-        /OHIO.S FEED HASN.T BEEN CHECKED SINCE NOV 3, 10:00 PM ET · THE COUNT BELOW WAS READ AT NOV 3, 10:00 PM ET/
+        /Ohio.s feed hasn.t been checked since Nov 3, 10:00 PM ET · The count below was read at Nov 3, 10:00 PM ET/
       )
     ).toBeInTheDocument();
-    const region = screen.getByText("STALE", { selector: "[role=status]" });
+    const region = screen.getByText("Stale", { selector: "[role=status]" });
     // Not "UPDATED …": that reads as a count still being refreshed.
-    expect(region.parentElement).not.toHaveTextContent(/UPDATED/);
-    expect(region.parentElement).toHaveTextContent("STALE · THIS PAGE CHECKS EVERY MINUTE");
+    expect(region.parentElement).not.toHaveTextContent(/Updated/);
+    expect(region.parentElement).toHaveTextContent("Stale · This page checks every minute");
   });
 
   it("calls a state with no read record since its polls closed stale", async () => {
@@ -382,9 +382,9 @@ describe("the state page in results mode", () => {
     );
     render(<StateBallotClient ballot={ballot()} />);
     expect(
-      await screen.findByText(/NO RECORD OF OHIO.S FEED BEING CHECKED SINCE ITS POLLS CLOSED/)
+      await screen.findByText(/No record of Ohio.s feed being checked since its polls closed/)
     ).toBeInTheDocument();
-    expect(screen.getByText("STALE", { selector: "[role=status]" })).toBeInTheDocument();
+    expect(screen.getByText("Stale", { selector: "[role=status]" })).toBeInTheDocument();
   });
 
   it("says the feed hasn't been read lately, with no count, rather than that counting hasn't started", async () => {
@@ -423,8 +423,8 @@ describe("the state page in results mode", () => {
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
       "Everyone registered with the FEC to run in Ohio"
     );
-    expect(screen.queryByText(/^RESULTS ·/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/WHO WAS ON THE BALLOT/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Results ·/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Who was on the ballot/)).not.toBeInTheDocument();
     // …and no district drawn by the count, not even as "no votes yet".
     const index = screen.getByRole("navigation", { name: "Contests on this ballot" });
     await userEvent.click(within(index).getByRole("button", { name: /U.S. Representative/ }));
@@ -439,7 +439,7 @@ describe("the state page in results mode", () => {
     render(<StateBallotClient ballot={ballot({ phase: day })} />);
     await screen.findByText(/count hasn.t started yet/);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Ohio results");
-    expect(screen.getByText(/WHO WAS ON THE BALLOT/)).toBeInTheDocument();
+    expect(screen.getByText(/Who was on the ballot/)).toBeInTheDocument();
   });
 
   it("asks for no results during a campaign", () => {
@@ -516,14 +516,14 @@ describe("the state page in results mode", () => {
     fetchLiveResults.mockResolvedValueOnce(live()).mockRejectedValue(new Error("502"));
     render(<StateBallotClient ballot={ballot()} />);
     await screen.findByRole("region", { name: "U.S. House" });
-    const line = screen.getByText(/THIS PAGE CHECKS EVERY MINUTE/).parentElement!;
+    const line = screen.getByText(/This page checks every minute/).parentElement!;
     // The live region is the state alone: its time is beside it, so a new
     // read each pass isn't announced again.
     const region = within(line).getByRole("status");
-    expect(region).toHaveTextContent(/^LIVE$/);
+    expect(region).toHaveTextContent(/^Live$/);
     // The backend's own read time, never the page's clock.
     expect(line).toHaveTextContent(
-      "LIVE · UPDATED NOV 3, 9:44 PM ET · THIS PAGE CHECKS EVERY MINUTE"
+      "Live · Updated Nov 3, 9:44 PM ET · This page checks every minute"
     );
     // The next refresh fails: the count stays, and the line says it is old.
     await act(async () => {
@@ -531,11 +531,11 @@ describe("the state page in results mode", () => {
     });
     await waitFor(() =>
       expect(line).toHaveTextContent(
-        "REFRESH FAILED · AT NOV 3, 10:10 PM ET · SHOWING THE COUNT READ AT NOV 3, 9:44 PM ET · RETRYING EVERY MINUTE"
+        "Refresh failed · At Nov 3, 10:10 PM ET · Showing the count read at Nov 3, 9:44 PM ET · Retrying every minute"
       )
     );
-    expect(region).toHaveTextContent(/^REFRESH FAILED$/);
-    expect(line).not.toHaveTextContent(/UPDATED/);
+    expect(region).toHaveTextContent(/^Refresh failed$/);
+    expect(line).not.toHaveTextContent(/Updated/);
     expect(screen.getByText("Eric Conway")).toBeInTheDocument();
     // The district map no longer draws the old count solid, as if live.
     const counted = districtMapProps.filter((p) => p.results !== undefined);
@@ -553,12 +553,12 @@ describe("the state page in results mode", () => {
       .mockRejectedValue(new Error("502"));
     render(<StateBallotClient ballot={ballot()} />);
     await screen.findByRole("region", { name: "U.S. House" });
-    const line = screen.getByText(/THIS PAGE CHECKS EVERY MINUTE/).parentElement!;
+    const line = screen.getByText(/This page checks every minute/).parentElement!;
     vi.setSystemTime(new Date("2026-11-04T00:11:00Z"));
     await act(async () => {
       document.dispatchEvent(new Event("visibilitychange"));
     });
-    await waitFor(() => expect(line).toHaveTextContent("REFRESH FAILED · AT NOV 3, 10:11 PM ET"));
+    await waitFor(() => expect(line).toHaveTextContent("Refresh failed · At Nov 3, 10:11 PM ET"));
   });
 
   it("scrolls to the count once, not again when the page writes its own hash", async () => {
@@ -802,7 +802,7 @@ describe("the state page in results mode", () => {
     expect(rows[1]).toHaveTextContent("OH-2No count shown here");
     expect(rows[1]).not.toHaveTextContent(/no votes/i);
     // The tally counts the independent's lead too.
-    expect(house).toHaveTextContent("D 0 · R 1 · I 1 LEADING · NOT FINAL");
+    expect(house).toHaveTextContent("D 0 · R 1 · I 1 leading · Not final");
     const map = districtMapProps.find((p) => p.results?.size);
     expect(map?.feedAnswered).toBe(true);
     act(() => map!.onPick("2026-HOUSE-OH-2"));
@@ -818,7 +818,7 @@ describe("the state page in results mode", () => {
     await act(async () => {
       document.dispatchEvent(new Event("visibilitychange"));
     });
-    await screen.findByText("REFRESH FAILED");
+    await screen.findByText("Refresh failed");
     const index = screen.getByRole("navigation", { name: "Contests on this ballot" });
     await userEvent.click(within(index).getByRole("button", { name: /U.S. Representative/ }));
     within(screen.getByRole("dialog"));
@@ -872,7 +872,7 @@ describe("the state page in results mode", () => {
     const card = document.getElementById("result-2026-SEN-OH")!;
     expect(card.tagName).toBe("ARTICLE");
     expect(within(card).getByRole("heading", { level: 2 })).toHaveTextContent("U.S. Senate");
-    expect(card).toHaveTextContent("NO COUNT");
+    expect(card).toHaveTextContent("No count");
     expect(card).toHaveTextContent(/Civitas shows no count for this race/);
     expect(card).not.toHaveTextContent(/no votes/i);
   });
@@ -958,8 +958,8 @@ describe("the state page in results mode", () => {
       await userEvent.click(drawer.getByRole("button", { name: /Greg Lindqvist/ }));
       const research = within(screen.getByRole("dialog"));
       // On the candidate's row and in the race's context line above it.
-      expect(research.getAllByText("MEMBER BEFORE THIS ELECTION, OH-2")).toHaveLength(2);
-      expect(research.queryByText(/SITTING MEMBER|INCUMBENT/)).not.toBeInTheDocument();
+      expect(research.getAllByText("Member before this election, OH-2")).toHaveLength(2);
+      expect(research.queryByText(/Sitting member|incumbent/)).not.toBeInTheDocument();
     });
 
     it("is the member before this election on a single new-lines seat's ballot box", async () => {
@@ -974,8 +974,8 @@ describe("the state page in results mode", () => {
       );
       await screen.findByRole("region", { name: "U.S. House" });
       const box = screen.getByTestId("ballot-columns");
-      expect(within(box).getByText("MEMBER BEFORE THIS ELECTION, OH-2")).toBeInTheDocument();
-      expect(within(box).queryByText(/SITTING MEMBER/)).not.toBeInTheDocument();
+      expect(within(box).getByText("Member before this election, OH-2")).toBeInTheDocument();
+      expect(within(box).queryByText(/Sitting member/)).not.toBeInTheDocument();
     });
   });
 });

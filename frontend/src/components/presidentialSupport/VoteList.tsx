@@ -20,7 +20,7 @@ export default function VoteList({ votes, member }: { votes: SupportRollCall[]; 
         const bill = billPageHref(v.billId, v.congress);
         return (
           <li key={voteAnchor(v)} id={voteAnchor(v)} className="py-3">
-            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 font-mono text-xs text-ink-min">
               <span>{shortDate(v.date)}</span>
               {bill ? (
                 <Link
@@ -32,14 +32,14 @@ export default function VoteList({ votes, member }: { votes: SupportRollCall[]; 
               ) : null}
               <Link
                 href={rollCallHref({ ...v, number: v.rollCall })}
-                className="inline-flex min-h-6 items-center normal-case tracking-normal text-ink-lo underline decoration-white/20 underline-offset-2 hover:text-phos"
+                className="inline-flex min-h-6 items-center tracking-normal text-ink-lo underline decoration-white/20 underline-offset-2 hover:text-phos"
               >
                 {v.question}
               </Link>
               <span>· {v.result}</span>
             </div>
             <p className="mt-1 font-sans text-sm text-ink">{v.statement.title}</p>
-            <p className="mt-1 font-mono text-xs uppercase tracking-[0.12em] text-ink-lo">
+            <p className="mt-1 font-mono text-xs text-ink-lo">
               President&apos;s side: {v.presidentSide}
               {member && (
                 <>
@@ -54,7 +54,7 @@ export default function VoteList({ votes, member }: { votes: SupportRollCall[]; 
             <blockquote className="mt-2 border-l border-white/[0.09] pl-3 font-sans text-xs text-ink-lo">
               &ldquo;{v.statement.sentence}&rdquo;
             </blockquote>
-            <p className="mt-1 flex flex-wrap gap-x-4 font-mono text-xs uppercase tracking-[0.12em]">
+            <p className="mt-1 flex flex-wrap gap-x-4 font-mono text-xs">
               <a
                 href={v.statement.url}
                 target="_blank"

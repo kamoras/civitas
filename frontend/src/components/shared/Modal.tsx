@@ -80,17 +80,13 @@ export default function Modal({ open, onClose, title, children }: ModalProps) {
       >
         {title && (
           <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-white/[0.07] bg-surface-base pl-4">
-            <h2
-              ref={titleRef}
-              tabIndex={-1}
-              className="text-sm tracking-widest text-signal-cyan outline-none"
-            >
-              {title.toUpperCase()}
+            <h2 ref={titleRef} tabIndex={-1} className="text-sm text-signal-cyan outline-none">
+              {title}
             </h2>
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex min-h-11 shrink-0 items-center px-4 font-mono text-[13px] uppercase tracking-[0.08em] text-ink-lo transition-colors hover:text-phos"
+              className="inline-flex min-h-11 shrink-0 items-center px-4 font-mono text-[13px] text-ink-lo transition-colors hover:text-phos"
             >
               <span aria-hidden="true">[ ×&nbsp;</span>Close<span aria-hidden="true">&nbsp;]</span>
             </button>

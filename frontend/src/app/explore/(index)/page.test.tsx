@@ -155,7 +155,7 @@ describe("ExplorePage", () => {
     open("q=roads&politician_id=S000");
     await screen.findByText("Remarks");
 
-    fireEvent.click(screen.getByRole("button", { name: "SEARCH EVERYONE" }));
+    fireEvent.click(screen.getByRole("button", { name: "Search everyone" }));
 
     expect(window.location.search).toBe("?q=roads");
     expect(screen.queryByText(/Only documents from/)).not.toBeInTheDocument();
@@ -311,7 +311,7 @@ describe("ExplorePage", () => {
     });
     open("q=roads");
 
-    fireEvent.click(await screen.findByRole("button", { name: "TRY AGAIN" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Try again" }));
 
     expect(await screen.findByText("Remarks")).toBeInTheDocument();
     expect(screen.queryByText(/admin panel/)).not.toBeInTheDocument();

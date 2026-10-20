@@ -288,9 +288,9 @@ const WIN_WORDS =
 describe("election map", () => {
   it("opens in the view the link names, with the stamp inside the frame", () => {
     renderMap("polls");
-    expect(screen.getByRole("button", { name: /POLLS/ })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /Polls/ })).toHaveAttribute("aria-pressed", "true");
     const frame = document.querySelector("[data-share-section='general-map']") as HTMLElement;
-    expect(within(frame).getByText(`${VIEW_STAMP.polls} · SENATE`)).toBeInTheDocument();
+    expect(within(frame).getByText(`${VIEW_STAMP.polls} · Senate`)).toBeInTheDocument();
     // The capture carries the licence, the as-of date and "not a call".
     expect(frame.textContent).toContain("Wikipedia contributors, CC BY-SA 4.0");
     expect(frame.textContent).toContain("As of 15 Oct 2026");
@@ -299,12 +299,12 @@ describe("election map", () => {
 
   it("switches views in place, and a seat opens its range and sources", () => {
     renderMap("usual");
-    fireEvent.click(screen.getByRole("button", { name: /DIFFERENCE/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Difference/ }));
     expect(window.location.search).toContain("view=diff");
     fireEvent.click(screen.getByRole("button", { name: /^Ohio:/ }));
     const detail = screen.getByRole("complementary", { name: "Seat detail" });
     expect(detail.textContent).toContain("margin D+9 to R+5");
-    expect(detail.textContent).toContain("TOO CLOSE TO TELL");
+    expect(detail.textContent).toContain("Too close to tell");
     expect(detail.textContent).toContain("Ranges like these held the result 79% of the time");
     expect(within(detail).getByRole("link", { name: "Example Polling" })).toHaveAttribute(
       "href",
@@ -328,7 +328,7 @@ describe("election map", () => {
     } as Partial<RangedSeat>);
     renderMap("polls", "senate", { pollsInRange: false, seats: [far, data.seats[1]] });
     const frame = document.querySelector("[data-share-section='general-map']") as HTMLElement;
-    expect(frame.textContent).toContain("FUNDAMENTALS ONLY · 19 DAYS OUT.");
+    expect(frame.textContent).toContain("Fundamentals only · 19 days out.");
     expect(frame.textContent).toContain("checked only over the final 21 days before election day");
     expect(frame.textContent).toContain("Past polls the ranges are fitted on: Silver Bulletin.");
     fireEvent.click(screen.getByRole("button", { name: /^Ohio:/ }));
@@ -450,20 +450,20 @@ describe("election map", () => {
         await axe.run(document.body, { rules: { "color-contrast": { enabled: false } } })
       ).violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.html).join(" | ")}`);
     expect(await run()).toEqual([]);
-    fireEvent.click(screen.getByRole("button", { name: /POLLS/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Polls/ }));
     fireEvent.click(screen.getByRole("button", { name: /^Ohio:/ }));
-    fireEvent.click(screen.getByRole("button", { name: /TABLE/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Table/ }));
     expect(await run()).toEqual([]);
-    fireEvent.click(screen.getByRole("button", { name: /DIFFERENCE/ }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Difference" })[0]);
     expect(await run()).toEqual([]);
   });
 
   it("switches to the House: one keyboard stop per state, whose seats open as a list", async () => {
     renderMap("polls");
-    fireEvent.click(screen.getByRole("button", { name: "HOUSE" }));
+    fireEvent.click(screen.getByRole("button", { name: "House" }));
     expect(window.location.search).toContain("chamber=house");
     const frame = document.querySelector("[data-share-section='general-map']") as HTMLElement;
-    expect(within(frame).getByText(`${VIEW_STAMP.polls} · HOUSE`)).toBeInTheDocument();
+    expect(within(frame).getByText(`${VIEW_STAMP.polls} · House`)).toBeInTheDocument();
     // The tile map is one stop per state, named with its seat count.
     // The tile map (wider screens; a phone gets the state list, CSS-hidden here).
     const tiles = screen.getByRole("group", { name: "House seats, grouped by state" });
@@ -530,7 +530,7 @@ describe("election map", () => {
   it("dates a kept national figure and marks a stale map", () => {
     renderMap("polls", "senate", { stale: true, nationalStatus: "kept" });
     expect(screen.getByText(/last good reading, updated 14 Oct 2026/)).toBeInTheDocument();
-    expect(screen.getAllByText(/NOT UPDATED SINCE 15 OCT 2026/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Not updated since 15 Oct 2026/).length).toBeGreaterThan(0);
   });
 
   it("opens either race of a two-race state", () => {
@@ -639,8 +639,8 @@ describe("election map", () => {
         within(group)
           .getAllByRole("button")
           .map((b) => b.getAttribute("aria-label"))
-      ).toEqual(["USUAL VOTE", "POLLS", "DIFFERENCE"]);
-      expect(within(group).getByRole("button", { name: "DIFFERENCE" })).toBeInTheDocument();
+      ).toEqual(["Usual vote", "Polls", "Difference"]);
+      expect(within(group).getByRole("button", { name: "Difference" })).toBeInTheDocument();
     } finally {
       window.matchMedia = original;
     }
@@ -695,8 +695,8 @@ describe("election map", () => {
         </main>
       );
       expect(calls).toEqual([]);
-      fireEvent.click(screen.getByRole("button", { name: "HOUSE" }));
-      expect(await screen.findByText(`${VIEW_STAMP.polls} · HOUSE`)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "House" }));
+      expect(await screen.findByText(`${VIEW_STAMP.polls} · House`)).toBeInTheDocument();
       expect(calls).toEqual(["/api/elections/map?chamber=house"]);
     } finally {
       globalThis.fetch = original;

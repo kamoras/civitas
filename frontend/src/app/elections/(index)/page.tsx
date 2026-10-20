@@ -1,5 +1,7 @@
 "use client";
 
+import { membersHref } from "@/lib/routes";
+import { fade, overlay, partyMark } from "@/lib/chartColors";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import SectionTabs from "@/components/layout/SectionTabs";
@@ -32,6 +34,7 @@ import {
   serverTimeOf,
   showsResults,
   stateFeedBehind,
+  FAINT,
 } from "@/lib/results";
 import { useResultsNow } from "@/hooks/useResultsNow";
 import { fetchPviMap } from "@/lib/api";
@@ -54,21 +57,21 @@ import { STATE_NAMES } from "@/lib/stateCodes";
 // Flat, unchanging fill — no hover-brighten variant — so DC reads as
 // visibly non-interactive rather than inviting a click that silently
 // does nothing (see onStateClick below).
-const DC_FILL = "rgba(255, 255, 255, 0.06)";
+const DC_FILL = overlay(0.06);
 
-// Partisan fills, keyed to the party colours in the palette (#6699FF /
-// #FF5C5C) rather than the ad-hoc rgb() triples this file used before, so
-// the map agrees with every party chip elsewhere on the site.
+// Partisan fills from the map party marks (chartColors), the same as the
+// seat and results maps, so the lean map follows the theme with them. FAINT
+// is the faintest party fill that keeps 3:1 off the page in both themes.
 function pviFillColor(pvi: number | null): string {
-  if (pvi == null) return "rgba(255, 255, 255, 0.07)";
-  if (pvi === 0) return "rgba(255, 255, 255, 0.22)";
-  return pvi > 0 ? "rgba(255, 92, 92, 0.32)" : "rgba(102, 153, 255, 0.32)";
+  if (pvi == null) return overlay(0.07);
+  if (pvi === 0) return overlay(0.22);
+  return fade(partyMark(pvi > 0 ? "REP" : "DEM"), FAINT);
 }
 
 function pviHoverColor(pvi: number | null): string {
-  if (pvi == null) return "rgba(0, 255, 65, 0.30)";
-  if (pvi === 0) return "rgba(255, 255, 255, 0.42)";
-  return pvi > 0 ? "rgba(255, 92, 92, 0.55)" : "rgba(102, 153, 255, 0.55)";
+  if (pvi == null) return fade("var(--phos)", 0.3);
+  if (pvi === 0) return overlay(0.42);
+  return fade(partyMark(pvi > 0 ? "REP" : "DEM"), 0.85);
 }
 
 // DC has no voting House/Senate race (the backend's
@@ -108,13 +111,13 @@ function ElectionCountdown({
   if (days === null || days < 0) return null;
   return (
     <div className="text-right">
-      <p className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
+      <p className="font-mono text-xs text-ink-min">
         {label} · {formatUtcDate(electionDay, { month: "short", day: "numeric", year: "numeric" })}
       </p>
       <p className="mt-1 font-display text-3xl font-semibold leading-none tabular-nums text-ink-hi">
         {days === 0 ? "Today" : days}
         {days > 0 && (
-          <span className="ml-2 font-mono text-xs font-normal uppercase tracking-[0.12em] text-ink-lo">
+          <span className="ml-2 font-mono text-xs font-normal text-ink-lo">
             day{days !== 1 ? "s" : ""} away
           </span>
         )}
@@ -141,7 +144,7 @@ export default function ElectionsPage() {
   // day is near, so a page left open switches over by itself. A request
   // that keeps failing is retried on a growing backoff.
   const { data: results, error: resultsError, retryMs, failedAt } = useLiveResults();
-  const retryEvery = describeInterval(retryMs ?? 60_000).toUpperCase();
+  const retryEvery = describeInterval(retryMs ?? 60_000);
   // Until the page's own read answers, the mode the server read decides, so
   // the frame it sent is the one that stays.
   const serverMode = results ? null : (initial?.phase?.mode ?? null);
@@ -182,18 +185,18 @@ export default function ElectionsPage() {
   const range = results ? countReadRange(results) : null;
   const readAtText = range
     ? range.oldest === range.newest
-      ? `SHOWING THE COUNT READ AT ${formatEasternTime(range.newest).toUpperCase()}`
-      : `SHOWING COUNTS READ BETWEEN ${formatEasternTime(range.oldest).toUpperCase()} AND ${formatEasternTime(range.newest).toUpperCase()}`
+      ? `Showing the count read at ${formatEasternTime(range.newest)}`
+      : `Showing counts read between ${formatEasternTime(range.oldest)} and ${formatEasternTime(range.newest)}`
     : null;
   const refreshFailedDetail = [
     failedAt != null
       ? // On the server's clock, like the read times beside it: the
         // browser's can be hours off, and would date the failure before
         // the count it failed to refresh.
-        `AT ${formatEasternTime(new Date(serverTimeOf(results, failedAt)).toISOString()).toUpperCase()}`
+        `At ${formatEasternTime(new Date(serverTimeOf(results, failedAt)).toISOString())}`
       : null,
     stillVoting ? null : readAtText,
-    `RETRYING ${retryEvery}`,
+    `Retrying ${retryEvery}`,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -215,10 +218,10 @@ export default function ElectionsPage() {
   // stopped reading, or it reads and every read fails.
   const staleWhy =
     behindStates.length === closedLive.length
-      ? "NO STATE'S FEED CHECKED LATELY"
+      ? "No state's feed checked lately"
       : behindStates.length === 0
-        ? "EVERY STATE'S LATEST FEED READ FAILED"
-        : "NO STATE'S FEED READ SUCCESSFULLY LATELY";
+        ? "Every state's latest feed read failed"
+        : "No state's feed read successfully lately";
 
   // The masthead's one status line (see the masthead below): `text` is the
   // live region — what the page's state is, which changes only on a
@@ -228,33 +231,33 @@ export default function ElectionsPage() {
   const status: { text: string; detail?: string; tone: "cyan" | "amber" | "muted" } | null =
     stillVoting && results
       ? resultsError
-        ? { tone: "cyan", text: "REFRESH FAILED", detail: refreshFailedDetail }
+        ? { tone: "cyan", text: "Refresh failed", detail: refreshFailedDetail }
         : {
             tone: "cyan",
-            text: "ELECTION DAY",
+            text: "Election day",
             detail: firstCount
-              ? `FIRST STATE'S COUNT SHOWN AFTER ${formatEasternTime(firstCount).toUpperCase()}`
-              : "NO COUNT SHOWN UNTIL A STATE'S LAST POLLS CLOSE",
+              ? `First state's count shown after ${formatEasternTime(firstCount)}`
+              : "No count shown until a state's last polls close",
           }
       : resultsMode && results
         ? resultsError
-          ? { tone: "amber", text: "REFRESH FAILED", detail: refreshFailedDetail }
+          ? { tone: "amber", text: "Refresh failed", detail: refreshFailedDetail }
           : results.liveStates.length === 0
-            ? { tone: "muted", text: "NO STATE'S COUNT IS READ LIVE HERE" }
+            ? { tone: "muted", text: "No state's count is read live here" }
             : nothingLive
-              ? { tone: "amber", text: `STALE · ${staleWhy}`, detail: readAtText ?? undefined }
+              ? { tone: "amber", text: `Stale · ${staleWhy}`, detail: readAtText ?? undefined }
               : {
                   tone: "amber",
-                  text: "LIVE",
+                  text: "Live",
                   detail: results.phase.lastResultChange
-                    ? `LAST CHANGE ${formatEasternTime(results.phase.lastResultChange).toUpperCase()}`
-                    : "NO COUNT HAS COME IN YET",
+                    ? `Last change ${formatEasternTime(results.phase.lastResultChange)}`
+                    : "No count has come in yet",
                 }
         : campaignMode && resultsError && !results
           ? {
               tone: "muted",
-              text: "COULDN'T CHECK FOR LIVE RESULTS",
-              detail: `RETRYING ${retryEvery}`,
+              text: "Couldn't check for live results",
+              detail: `Retrying ${retryEvery}`,
             }
           : null;
 
@@ -368,7 +371,7 @@ export default function ElectionsPage() {
                 <p
                   className={
                     status
-                      ? `flex flex-wrap items-center gap-x-2 border px-3 py-1.5 font-mono text-xs tracking-[0.12em] ${
+                      ? `flex flex-wrap items-center gap-x-2 border px-3 py-1.5 font-mono text-xs ${
                           status.tone === "cyan"
                             ? "border-signal-cyan/40 text-signal-cyan"
                             : status.tone === "amber"
@@ -453,7 +456,7 @@ export default function ElectionsPage() {
 
           {/* The state chosen in the header, one tap from its ballot. */}
           {yours.state && (
-            <p className="mb-6 flex flex-wrap items-center gap-x-4 font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
+            <p className="mb-6 flex flex-wrap items-center gap-x-4 font-mono text-xs text-ink-min">
               <span>
                 Your state:{" "}
                 <span className="text-ink-hi">{STATE_NAMES[yours.state] ?? yours.state}</span>
@@ -462,13 +465,13 @@ export default function ElectionsPage() {
                 href={stateBallotHref(yours.state)}
                 className="inline-flex min-h-11 items-center border-b border-phos-mid/40 text-phos-mid hover:text-phos"
               >
-                {(STATE_NAMES[yours.state] ?? yours.state).toUpperCase()}&apos;S BALLOT &rarr;
+                {STATE_NAMES[yours.state] ?? yours.state}&apos;s ballot &rarr;
               </Link>
               <Link
-                href={`/politicians?state=${yours.state}`}
+                href={membersHref(yours.state)}
                 className="inline-flex min-h-11 items-center border-b border-phos-mid/40 text-phos-mid hover:text-phos"
               >
-                {(STATE_NAMES[yours.state] ?? yours.state).toUpperCase()}&apos;S MEMBERS &rarr;
+                {STATE_NAMES[yours.state] ?? yours.state}&apos;s members &rarr;
               </Link>
             </p>
           )}
@@ -522,12 +525,8 @@ export default function ElectionsPage() {
           )}
 
           {!error && (!pvi || !phaseKnown) && !resultsMode && (
-            <p
-              role="status"
-              aria-live="polite"
-              className="mt-8 font-mono text-sm tracking-[0.12em] text-ink-min"
-            >
-              READING THE LEAN MAP…
+            <p role="status" aria-live="polite" className="mt-8 font-mono text-sm text-ink-min">
+              Reading the lean map…
             </p>
           )}
 
@@ -536,33 +535,31 @@ export default function ElectionsPage() {
               {/* ── Map ── */}
               <section className="mt-6 border border-phos/20 bg-surface">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.07] px-4 py-2.5">
-                  <h2 className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
-                    Click a state for its ballot
-                  </h2>
+                  <h2 className="font-mono text-xs text-ink-min">Click a state for its ballot</h2>
                   <div className="flex flex-wrap items-center gap-4">
                     <span className="flex items-center gap-2 font-mono text-xs text-ink-lo">
                       <span
                         className="inline-block h-2.5 w-4"
-                        style={{ backgroundColor: "rgba(102, 153, 255, 0.32)" }}
+                        style={{ backgroundColor: pviFillColor(-1) }}
                         aria-hidden="true"
                       />
-                      D-LEANING <span className="text-ink-min">{dLean}</span>
+                      D-leaning <span className="text-ink-min">{dLean}</span>
                     </span>
                     <span className="flex items-center gap-2 font-mono text-xs text-ink-lo">
                       <span
                         className="inline-block h-2.5 w-4"
-                        style={{ backgroundColor: "rgba(255, 92, 92, 0.32)" }}
+                        style={{ backgroundColor: pviFillColor(1) }}
                         aria-hidden="true"
                       />
-                      R-LEANING <span className="text-ink-min">{rLean}</span>
+                      R-leaning <span className="text-ink-min">{rLean}</span>
                     </span>
                     <span className="flex items-center gap-2 font-mono text-xs text-ink-lo">
                       <span
                         className="inline-block h-2.5 w-4"
-                        style={{ backgroundColor: "rgba(255, 255, 255, 0.22)" }}
+                        style={{ backgroundColor: pviFillColor(0) }}
                         aria-hidden="true"
                       />
-                      EVEN <span className="text-ink-min">{even}</span>
+                      Even <span className="text-ink-min">{even}</span>
                     </span>
                   </div>
                 </div>
@@ -589,7 +586,7 @@ export default function ElectionsPage() {
 
               {/* ── Directory ── */}
               <section className="mt-10">
-                <h2 className="flex items-baseline justify-between border-b border-white/15 pb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
+                <h2 className="flex items-baseline justify-between border-b border-white/15 pb-2 font-mono text-xs text-ink-min">
                   <span>All states</span>
                   <span aria-hidden="true">{STATES.length} on file</span>
                 </h2>

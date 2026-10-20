@@ -26,11 +26,11 @@
 // makes no claim the evidence cannot carry. The number is unchanged and the
 // colour tier is unchanged; only the accusation is gone.
 export function getScoreLabel(score: number): string {
-  if (score >= 81) return "STRONGLY REPRESENTATIVE";
-  if (score >= 61) return "REPRESENTATIVE";
-  if (score >= 41) return "MIXED REPRESENTATION";
-  if (score >= 21) return "WEAKLY REPRESENTATIVE";
-  return "NOT REPRESENTATIVE";
+  if (score >= 81) return "Strongly representative";
+  if (score >= 61) return "Representative";
+  if (score >= 41) return "Mixed representation";
+  if (score >= 21) return "Weakly representative";
+  return "Not representative";
 }
 
 // Presidential scores measure performance in office, not constituent

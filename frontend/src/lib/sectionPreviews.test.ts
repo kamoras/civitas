@@ -6,13 +6,7 @@ import type { SectionFigures } from "@/types/sections";
 const MAP_OFF = "The election map is shown during the campaign only.";
 
 const FIGURES: SectionFigures = {
-  action: {
-    today: { issues: 3, date: "2026-10-15" },
-    ongoing: { monitors: 0 },
-    archive: { days: 40, since: "2026-07-01" },
-  },
   congress: {
-    reports: { date: "2026-10-15", recordVotes: 0 },
     week: { start: "2026-10-12", recordVotes: 12 },
     month: { month: "2026-10", recordVotes: 30 },
     recess: null,
@@ -21,19 +15,15 @@ const FIGURES: SectionFigures = {
     president: { house: { rate: 0.5612, rollCalls: 21 }, senate: null },
   },
   agencies: {
-    directory: { count: 0 },
     budget: null,
     comments: { open: 185 },
   },
-  politicians: { directory: { senators: 100, representatives: 433 } },
-  court: { court: { term: 2025, cases: 57, unanimous: 24 } },
   elections: {
-    ballots: { states: 51, date: "2026-11-03", phase: "campaign", daysUntil: 18 },
+    ballots: { date: "2026-11-03" },
     map: { available: false, reason: MAP_OFF },
     redistricting: { states: 9, cycle: "2026", upcoming: true },
     archive: null,
   },
-  explore: { search: { documents: 12000 } },
 };
 
 describe("sectionPreview", () => {
@@ -48,34 +38,24 @@ describe("sectionPreview", () => {
     );
   });
 
-  it("words the Court's latest term, and says so before any is read or from an older backend", () => {
-    expect(sectionPreview(FIGURES, "court", "court")).toEqual({
-      figure: "57",
-      caption: "cases decided in the 2025 term, 24 unanimous",
-    });
-    expect(sectionPreview({ ...FIGURES, court: { court: null } }, "court", "court")?.figure).toBe(
-      "Not yet"
-    );
-    const older = { ...FIGURES } as Partial<typeof FIGURES>;
-    delete older.court;
-    expect(sectionPreview(older as typeof FIGURES, "court", "court")).toBeNull();
-  });
-
   it("never shows a bare zero for something not read or not happening", () => {
-    expect(sectionPreview(FIGURES, "agencies", "directory")?.figure).toBe("Not yet");
-    expect(sectionPreview(FIGURES, "agencies", "budget")?.figure).toBe("Not yet");
-    expect(sectionPreview(FIGURES, "action", "ongoing")?.figure).toBe("None");
-    expect(sectionPreview(FIGURES, "congress", "reports")?.caption).toMatch(/^no record votes/);
+    expect(sectionPreview(FIGURES, "executive", "budget")?.figure).toBe("Not yet");
+    expect(
+      sectionPreview(
+        {
+          ...FIGURES,
+          congress: { ...FIGURES.congress, week: { start: "2026-10-12", recordVotes: 0 } },
+        },
+        "congress",
+        "week"
+      )?.caption
+    ).toMatch(/^no record votes/);
     // The map's own reason, out of its phase.
     expect(sectionPreview(FIGURES, "elections", "map")?.caption).toBe(MAP_OFF);
   });
 
   it("gives the last day of business, not None, in a recess", () => {
-    const recess = {
-      line: "No record votes or floor business since Wednesday, September 30",
-      lastBusinessDay: "2026-09-30",
-      week: "2026-09-28",
-    };
+    const recess = { lastBusinessDay: "2026-09-30" };
     const f = {
       ...FIGURES,
       congress: { ...FIGURES.congress, week: { start: "2026-10-12", recordVotes: 0 }, recess },
@@ -138,18 +118,17 @@ describe("sectionPreview", () => {
 
   it("is null without figures or for a page that has none", () => {
     expect(sectionPreview(null, "congress", "bills")).toBeNull();
-    expect(sectionPreview(FIGURES, "politicians", "leaderboard")).toBeNull();
+    expect(sectionPreview(FIGURES, "executive", "president")).toBeNull();
+    // The hub's own page has no card.
+    expect(sectionPreview(FIGURES, "congress", "reports")).toBeNull();
   });
 
   it("names only real section pages", () => {
     // A preview keyed to a tab SECTIONS doesn't have would never show.
     for (const [section, tabs] of Object.entries({
-      action: ["today", "ongoing", "archive"],
-      congress: ["reports", "week", "month", "bills", "committees", "president"],
-      agencies: ["directory", "budget", "comments"],
-      politicians: ["directory"],
-      elections: ["ballots", "map", "redistricting", "archive"],
-      explore: ["search"],
+      congress: ["week", "month", "bills", "committees", "president"],
+      executive: ["budget", "comments"],
+      elections: ["map", "redistricting", "archive"],
     })) {
       const keys = SECTIONS[section as keyof typeof SECTIONS].tabs.map((t) => t.key as string);
       for (const t of tabs) {
@@ -157,45 +136,6 @@ describe("sectionPreview", () => {
         expect(sectionPreview(FIGURES, section, t)).not.toBeNull();
       }
     }
-  });
-
-  it("words the ballots card by season, never a countdown two years off", () => {
-    const season = (over: Record<string, unknown>) =>
-      ({
-        ...FIGURES,
-        elections: {
-          ...FIGURES.elections,
-          ballots: { states: 51, date: "2028-11-07", phase: "campaign", daysUntil: 690 },
-          season: {
-            season: "off_season",
-            betweenCycles: true,
-            cycle: 2028,
-            electionDay: "2028-11-07",
-            heldCycle: 2026,
-            until: null,
-            firstPrimary: null,
-            lastPrimary: null,
-            lead: ["calendar", "archive", "ballots", "redistricting", "map"],
-            ...over,
-          },
-        },
-      }) as SectionFigures;
-    expect(
-      sectionPreview(season({ season: "post_certification" }), "elections", "ballots")
-    ).toEqual({
-      figure: "2026",
-      caption: "the 2026 election as recorded · next general Nov 7, 2028",
-    });
-    expect(sectionPreview(season({}), "elections", "ballots")?.caption).toMatch(
-      /primaries aren't on the FEC's calendar yet/
-    );
-    expect(
-      sectionPreview(season({ firstPrimary: "2028-01-15" }), "elections", "ballots")?.figure
-    ).toBe("Jan 15, 2028");
-    expect(
-      sectionPreview(season({ season: "ramp", betweenCycles: false }), "elections", "ballots")
-        ?.caption
-    ).toMatch(/^days to Election Day.*primaries under way$/);
   });
 });
 

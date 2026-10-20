@@ -33,7 +33,7 @@ export default function PrimariesLead({
     >
       <h2
         id="season-primaries"
-        className="border-b border-white/[0.07] py-2.5 font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
+        className="border-b border-white/[0.07] py-2.5 font-mono text-xs text-ink-min"
       >
         The {season.cycle} primaries
       </h2>
@@ -48,8 +48,8 @@ export default function PrimariesLead({
         <ul className="mt-2">
           {days.map(([day, rows]) => (
             <li key={day} className="border-t border-white/[0.07] py-2">
-              <p className="font-mono text-[11px] tracking-[0.12em] text-ink-min">
-                {longDate(day).toUpperCase()} · {dayText(rows[0].status, rows[0].daysLeft)}
+              <p className="font-mono text-[11px] text-ink-min">
+                {longDate(day)} · {dayText(rows[0].status, rows[0].daysLeft)}
               </p>
               <p className="text-sm text-ink-lo">
                 {[...new Set(rows.map((r) => `${r.stateName} (${r.label ?? r.typeCode})`))].join(
@@ -68,9 +68,9 @@ export default function PrimariesLead({
       )}
       <Link
         href={CALENDAR_HREF}
-        className="mt-2 inline-flex min-h-11 items-center font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
+        className="mt-2 inline-flex min-h-11 items-center font-mono text-xs text-signal-cyan hover:text-phos"
       >
-        [ EVERY DATE AND DEADLINE → ]
+        [ Every date and deadline → ]
       </Link>
     </section>
   );

@@ -23,7 +23,7 @@ async function spectrum(overallLean: number) {
   const { container } = render(
     <PlatformTracker partisanDepth={depth(overallLean)} senatorParty="R" />
   );
-  await userEvent.click(screen.getByRole("button", { name: /POSITIONS vs\. VOTES/ }));
+  await userEvent.click(screen.getByRole("button", { name: /Positions vs\. Votes/ }));
   const marker = container.querySelector<HTMLElement>(".w-1.bg-phos");
   const fill = container.querySelector<HTMLElement>(".bg-signal-red, .bg-dem-blue");
   return { marker: marker!.style.left, fill: fill!.style.width };
@@ -67,7 +67,7 @@ describe("PlatformTracker interpretation", () => {
         senatorParty="R"
       />
     );
-    await userEvent.click(screen.getByRole("button", { name: /POSITIONS vs\. VOTES/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Positions vs\. Votes/ }));
     expect(screen.getByText("Voting record sits at the center overall.")).toBeInTheDocument();
     expect(screen.queryByText(/voting record leans/)).not.toBeInTheDocument();
   });

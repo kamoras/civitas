@@ -100,10 +100,10 @@ export default function AccessibilityPage() {
                 <Item label="Long pages on a phone">
                   A member&apos;s scorecard, a bill, a roll call, a state ballot, the Supreme Court
                   page and the About chapters show a bar under the header once their first section
-                  scrolls up: it names the section you are reading, and SECTIONS opens every section
+                  scrolls up: it names the section you are reading, and sections opens every section
                   in a sheet from the bottom of the screen, the current one marked. Choosing one
                   moves focus to its heading. The sheet keeps focus inside, closes on Escape, its
-                  44-pixel Close button or a tap outside it, and returns focus to SECTIONS.
+                  44-pixel Close button or a tap outside it, and returns focus to sections.
                 </Item>
                 <Item label="Focus">
                   The element with keyboard focus always shows a 2px green outline, and the page
@@ -118,10 +118,11 @@ export default function AccessibilityPage() {
                   footer (kept for this tab only). Text colours come from a fixed palette in each
                   theme with no dimmer shades to reach for. The faintest text clears 4.5:1 against
                   every background any text sits on, in both themes, and stays at or above APCA Lc
-                  58. Links inside a sentence are underlined, not only coloured. Maps and the
-                  Court&apos;s agreement grid are drawn on a dark plate in both themes, the ground
-                  their tile colours were measured on; letters on map tiles sit on a dark outline,
-                  so they read on any tile colour.
+                  58. Links inside a sentence are underlined, not only coloured. Charts and maps
+                  follow the theme you are viewing: their marks clear 3:1 against the page in both
+                  themes, text on a filled cell clears 4.5:1, and letters on map tiles sit on an
+                  outline in the page&apos;s colour, so they read on any tile colour. A shared
+                  picture of a section is drawn in the theme you are viewing.
                 </Item>
                 <Item label="Screen readers">
                   Pages use landmarks (header, navigation, main) and headings in order. Tabs,
@@ -148,7 +149,7 @@ export default function AccessibilityPage() {
                 <Item label="Touch">
                   Controls are at least 24×24 pixels, WCAG 2.2&apos;s minimum target size, or spaced
                   so a 24-pixel circle around each touches no other; links inside a sentence are the
-                  exception the standard allows. On a phone the MENU button, the way to every
+                  exception the standard allows. On a phone the menu button, the way to every
                   section, is a 44×44 target around the word, every standalone action (calling or
                   writing a member, sharing, paging, a roll call&apos;s names) is 44 pixels tall,
                   and every text box and menu is 44 pixels tall with 16-pixel text, so an iPhone
@@ -167,6 +168,13 @@ export default function AccessibilityPage() {
                   for record identifiers (issue, roll-call and bill numbers), where telling 0 from O
                   and 1 from l matters. The Civitas wordmark is Archivo. All four are open-licence
                   fonts served from this site.
+                </P>
+                <P>
+                  Labels, buttons, menus and table headings are in sentence case, not capitals.
+                  Capitals are slower to read once a label runs past a word or two, and a screen
+                  reader can spell typed capitals out letter by letter. A short heading over a block
+                  may still show in small capitals, but the words underneath are ordinary text, so
+                  they are read as words.
                 </P>
               </More>
             </Section>

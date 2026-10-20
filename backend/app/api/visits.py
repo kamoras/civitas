@@ -518,6 +518,10 @@ _KNOWN_STATIC_PATHS = {
     "/", "/about", "/accessibility", "/action", "/bills", "/changelog",
     "/compare", "/developers", "/environmental", "/explore", "/feedback", "/feeds", "/leaderboard",
     "/politicians", "/elections", "/congress", "/congress/bills", "/agencies", "/court",
+    # The members directory and the measures page (2026-10), by name: the
+    # navigation change that put them there is judged by their counts.
+    "/congress/members", "/congress/members/measures",
+    "/executive", "/executive/presidents",
     # The search results page: counted as the route alone (the path is
     # read without its query string), never what was searched for.
     "/search",

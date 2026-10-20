@@ -7,6 +7,7 @@ import { fetchRecord } from "@/lib/ssrPayload";
 import { absoluteUrl, memberFeed, notFoundMetadata, pageMetadata } from "@/lib/site";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
 import { describeProfile, personJsonLd } from "@/lib/seo";
+import { recordTrail } from "@/lib/routes";
 import ThisWeekStrip from "@/components/shared/ThisWeekStrip";
 import PresidentialSupportLine from "@/components/presidentialSupport/PresidentialSupportLine";
 import PoliticianProfileClient from "./PoliticianProfileClient";
@@ -127,7 +128,10 @@ export default async function PoliticianProfilePage({
           personJsonLd(id, profile),
           breadcrumbList([
             { name: "Home", url: absoluteUrl("/") },
-            { name: "Politicians", url: absoluteUrl("/politicians") },
+            ...recordTrail(profile.branch).crumbs.map((c) => ({
+              name: c.label,
+              url: absoluteUrl(c.href),
+            })),
             {
               name: profile.identity.name,
               url: absoluteUrl(`/politicians/${encodeURIComponent(id)}`),

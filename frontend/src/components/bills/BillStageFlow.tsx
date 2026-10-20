@@ -71,7 +71,7 @@ export default function BillStageFlow({
                   COMMI…". `truncate` stays as a guard for a longer stage name
                   arriving from /config, not as the normal case. */}
               <span
-                className={`w-40 max-w-full shrink-0 truncate text-xs font-mono uppercase tracking-wider ${
+                className={`w-40 max-w-full shrink-0 truncate text-xs font-mono ${
                   isActive ? style.text : "text-ink-lo"
                 }`}
               >
@@ -108,7 +108,7 @@ export default function BillStageFlow({
           type="button"
           onClick={() => onSelectStage(activeStage === "VETOED" ? null : "VETOED")}
           aria-pressed={activeStage === "VETOED"}
-          className={`border px-2 py-1 font-mono text-xs uppercase tracking-wider transition-colors ${
+          className={`border px-2 py-1 font-mono text-xs transition-colors ${
             activeStage === "VETOED"
               ? "border-signal-red bg-signal-red/10 text-signal-red"
               : "border-signal-red/40 text-signal-red hover:border-signal-red"

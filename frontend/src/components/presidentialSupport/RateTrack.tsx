@@ -44,7 +44,7 @@ export default function RateTrack({ s, label }: { s: SupportNumbers; label: stri
           />
         )}
       </div>
-      <figcaption className="mt-1 flex justify-between font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
+      <figcaption className="mt-1 flex justify-between font-mono text-xs text-ink-min">
         <span>0%</span>
         <span>
           <span className="inline-block h-2 w-2 bg-ink-hi align-middle" /> Votes with the president{" "}

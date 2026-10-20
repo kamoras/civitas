@@ -102,10 +102,7 @@ function Group({
 }) {
   return (
     <section aria-labelledby={id} className="border border-white/15 bg-surface-raised/40 px-4 py-3">
-      <h2
-        id={id}
-        className="mb-2 flex items-baseline gap-2 font-mono text-xs uppercase tracking-[0.12em]"
-      >
+      <h2 id={id} className="mb-2 flex items-baseline gap-2 font-mono text-xs">
         <span className="text-phos">{label}</span>{" "}
         <span className="text-ink-min">
           {count} match{count === 1 ? "" : "es"}
@@ -175,7 +172,7 @@ function BillRow({ b }: { b: ExploreBillMatch }) {
           <span className="line-clamp-2 text-ink-hi">{name ?? "Open the bill's page"}</span>
           {stage && stageName && (
             <span
-              className={`mt-1 inline-block border px-1.5 font-mono text-xs uppercase tracking-wider ${stage.text} ${stage.border} ${stage.bg}`}
+              className={`mt-1 inline-block border px-1.5 font-mono text-xs ${stage.text} ${stage.border} ${stage.bg}`}
             >
               {stageName}
             </span>

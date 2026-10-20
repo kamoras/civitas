@@ -1,9 +1,10 @@
 "use client";
 
+import { EYEBROW } from "@/lib/typeStyles";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { SECTIONS, inSection, sectionSubpages, type SectionKey } from "@/lib/routes";
+import { SECTIONS, currentSection, sectionSubpages, type SectionKey } from "@/lib/routes";
 import { BSKY_PROFILE_URL } from "@/lib/site";
 import HeaderClearance from "./HeaderClearance";
 import RecordsBand, { RunStatusSquare } from "./RecordsBand";
@@ -11,9 +12,10 @@ import SiteSearch from "@/components/search/SiteSearch";
 import YourStatePicker from "./YourStatePicker";
 
 // The main navigation is the SECTIONS table (lib/routes.ts): each section's
-// hub, with its other pages one step below it. Leaderboard and Compare are
-// Politicians' pages, not two more top-level links: seven sections fit a
-// 768 px row with a menu button each, nine did not.
+// hub, with its other pages one step below it: the branches (Congress, the
+// Executive, the Supreme Court, Articles I to III) beside the two tasks
+// (Action Center, Elections). A person's record is reached from their
+// branch, never from a section of people (recordTrail).
 const NAV = Object.keys(SECTIONS) as SectionKey[];
 // The Action Center is the one section drawn in the brighter ink.
 const ACCENT: SectionKey = "action";
@@ -39,7 +41,7 @@ const ACCENT: SectionKey = "action";
  * anyone recorded.
  */
 function navLinkClass(active: boolean, accent: boolean | undefined, size: "sm" | "xs"): string {
-  const base = `font-mono ${size === "xs" ? "text-xs" : "text-sm"} uppercase whitespace-nowrap border-b-2 pb-0.5 transition-colors`;
+  const base = `font-mono ${size === "xs" ? "text-xs" : "text-sm"} whitespace-nowrap border-b-2 pb-0.5 transition-colors`;
   if (active) return `${base} border-ink-hi text-ink-hi`;
   return `${base} border-transparent ${accent ? "text-ink-hi hover:text-phos" : "text-ink-lo hover:text-ink-hi"}`;
 }
@@ -111,8 +113,7 @@ export function useRowFits(
   return fits;
 }
 
-const SUBLINK =
-  "flex min-h-11 items-center font-mono text-xs uppercase tracking-[0.12em] transition-colors";
+const SUBLINK = "flex min-h-11 items-center font-mono text-xs transition-colors";
 
 /**
  * A section in the desktop row: one trigger, the section's name, that opens
@@ -120,7 +121,7 @@ const SUBLINK =
  * button with aria-expanded and a plain list of links, no menu role, so Tab
  * walks it like any other links). Escape closes it and returns focus to the
  * button; so does focus or a pointer leaving it. A section with one page
- * (Explore) is a plain link.
+ * (Explore, the Supreme Court) is a plain link.
  *
  * It was the section's link with a separate 24 px ▾ button beside it, and
  * a narrow box floating under the label: two controls that looked like one,
@@ -179,11 +180,11 @@ function SectionItem({
     };
   }, [open, onClose]);
 
-  const labelClass = `tracking-normal xl:tracking-widest ${navLinkClass(active, section === ACCENT, "xs")}`;
+  const labelClass = `tracking-normal ${navLinkClass(active, section === ACCENT, "xs")}`;
   if (tabs.length < 2) {
     return (
       <Link href={href} aria-current={active ? "page" : undefined} className={labelClass}>
-        {label.toUpperCase()}
+        {label}
       </Link>
     );
   }
@@ -204,7 +205,7 @@ function SectionItem({
         onClick={onToggle}
         className={`inline-flex min-h-6 items-center gap-1.5 ${labelClass} aria-expanded:border-ink-hi aria-expanded:text-ink-hi`}
       >
-        {label.toUpperCase()}
+        {label}
         {active && <span className="sr-only">{", current section"}</span>}
         <span
           aria-hidden="true"
@@ -219,7 +220,7 @@ function SectionItem({
         className="absolute inset-x-0 top-[calc(100%+3px)] z-10 border-b-3 border-white/15 bg-surface-base"
       >
         <div className="mx-auto grid max-w-7xl grid-cols-[12rem_minmax(0,1fr)] gap-x-9 px-4 py-5 sm:px-6">
-          <p className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">{label}</p>
+          <p className={EYEBROW}>{label}</p>
           <ul className="max-w-3xl columns-2 gap-x-9 xl:columns-3">
             {tabs.map((t) => {
               const current = isCurrent(t.href);
@@ -307,8 +308,16 @@ export function useHideOnScroll(
   return hidden;
 }
 
-export default function Navbar() {
+export default function Navbar({
+  section: recordSection,
+}: {
+  /** The current section, for a page whose path can't say (a record shared
+   *  by several sections: lib/routes.ts recordTrail). Otherwise the path's
+   *  longest match in SECTIONS decides. */
+  section?: SectionKey;
+} = {}) {
   const pathname = usePathname();
+  const here = recordSection ?? currentSection(pathname);
   const [menuOpen, setMenuOpen] = useState(false);
   // The section whose pages are open in the phone menu: null for the
   // current section's, "" for none.
@@ -465,7 +474,7 @@ export default function Navbar() {
               <SectionItem
                 key={section}
                 section={section}
-                active={inSection(section, pathname)}
+                active={here === section}
                 open={openSection === section}
                 onToggle={() =>
                   setOpened(openSection === section ? null : { section, path: pathname })
@@ -480,7 +489,7 @@ export default function Navbar() {
               rel="noopener noreferrer"
               aria-label="Civitas on Bluesky (opens in new tab)"
               title="Follow Civitas on Bluesky"
-              className="hidden xl:inline text-ink-lo hover:text-phos font-mono text-xs tracking-widest transition-colors"
+              className="hidden xl:inline text-ink-lo hover:text-phos font-mono text-xs transition-colors"
             >
               [BSKY]
             </a>
@@ -496,7 +505,7 @@ export default function Navbar() {
             <SiteSearch className="min-h-11 min-w-11 justify-center px-2 text-sm" />
             <button
               ref={toggleRef}
-              className={`-mr-2 inline-flex min-h-11 min-w-11 items-center justify-center px-2 text-ink-lo hover:text-ink-hi font-mono text-sm tracking-widest transition-colors`}
+              className={`-mr-2 inline-flex min-h-11 min-w-11 items-center justify-center px-2 text-ink-lo hover:text-ink-hi font-mono text-sm transition-colors`}
               onClick={() => {
                 if (menuOpen) closeMenu();
                 else setMenuOpen(true);
@@ -505,7 +514,7 @@ export default function Navbar() {
               aria-expanded={menuOpen}
               aria-controls="mobile-menu"
             >
-              {menuOpen ? "CLOSE" : "MENU"}
+              {menuOpen ? "Close" : "Menu"}
             </button>
           </div>
         </div>
@@ -532,7 +541,7 @@ export default function Navbar() {
             <ul>
               {NAV.map((section) => {
                 const { label, href } = SECTIONS[section];
-                const active = inSection(section, pathname);
+                const active = here === section;
                 const subs = sectionSubpages(section);
                 const expanded = (shownPages ?? (active ? section : null)) === section;
                 const listId = `menu-pages-${section}`;
@@ -608,7 +617,7 @@ export default function Navbar() {
               rel="noopener noreferrer"
               aria-label="Civitas on Bluesky (opens in new tab)"
               onClick={closeMenu}
-              className="mt-2 inline-flex min-h-11 items-center text-ink-lo hover:text-phos font-mono text-sm tracking-widest transition-colors"
+              className="mt-2 inline-flex min-h-11 items-center text-ink-lo hover:text-phos font-mono text-sm transition-colors"
             >
               [BSKY]
             </a>

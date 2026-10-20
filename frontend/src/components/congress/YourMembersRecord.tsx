@@ -1,5 +1,6 @@
 "use client";
 
+import { membersHref } from "@/lib/routes";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { StateMemberRecord } from "@/types/congress";
@@ -39,7 +40,7 @@ function MemberCard({ m }: { m: StateMemberRecord }) {
               ({m.party})
             </span>
           </h3>
-          <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">{seat(m)}</p>
+          <p className="font-mono text-xs text-ink-min">{seat(m)}</p>
         </div>
       </div>
       <p className="text-sm text-ink">
@@ -50,9 +51,7 @@ function MemberCard({ m }: { m: StateMemberRecord }) {
       </p>
       {m.votes.length > 0 && (
         <div>
-          <h4 className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
-            Latest votes
-          </h4>
+          <h4 className="font-mono text-xs text-ink-min">Latest votes</h4>
           <ul className="mt-1 flex flex-col">
             {m.votes.map((v, i) => (
               <li key={i} className="border-t border-white/[0.07] py-1.5 text-sm text-ink">
@@ -79,9 +78,7 @@ function MemberCard({ m }: { m: StateMemberRecord }) {
       )}
       {m.bills.length > 0 && (
         <div>
-          <h4 className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
-            Latest bills
-          </h4>
+          <h4 className="font-mono text-xs text-ink-min">Latest bills</h4>
           <ul className="mt-1 flex flex-col">
             {m.bills.map((b) => (
               <li key={b.billId} className="border-t border-white/[0.07] py-1.5 text-sm text-ink">
@@ -133,14 +130,14 @@ export default function YourMembersRecord() {
     <section aria-labelledby="your-members-heading" className="mb-8">
       <h2
         id="your-members-heading"
-        className="border-b border-white/15 pb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
+        className="border-b border-white/15 pb-2 font-mono text-xs text-ink-min"
       >
         Your members this Congress · {name}
       </h2>
       {failed ? (
         <p className="mt-3 text-sm text-ink-lo">
           {name}&apos;s members couldn&apos;t be loaded just now.{" "}
-          <Link href={`/politicians?state=${state}`} className={LINK}>
+          <Link href={membersHref(state)} className={LINK}>
             Find them in the directory
           </Link>
         </p>

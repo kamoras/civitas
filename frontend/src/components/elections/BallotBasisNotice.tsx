@@ -38,9 +38,7 @@ export default function BallotBasisNotice({ basis }: { basis?: BallotBasis | nul
         className="mb-6 border border-signal-red/50 bg-signal-red/[0.06] p-4"
         data-testid="ballot-superseded"
       >
-        <p className="font-mono text-xs tracking-[0.12em] text-signal-red">
-          THESE ARE NOT BALLOT POSITIONS
-        </p>
+        <p className="font-mono text-xs text-signal-red">These are not ballot positions</p>
         <p className="mt-2 font-sans text-sm leading-relaxed text-ink-hi">
           This state&apos;s primary was held
           {typeof days === "number" ? ` ${days} days ago` : ""}, so its November ballot is already
@@ -73,7 +71,7 @@ export default function BallotBasisNotice({ basis }: { basis?: BallotBasis | nul
         className="mb-6 font-mono text-xs leading-relaxed text-ink-min"
         data-testid="ballot-primary"
       >
-        Candidates below are on this state&apos;s PRIMARY ballot. Being on it says nothing about
+        Candidates below are on this state&apos;s primary ballot. Being on it says nothing about
         surviving it.
       </p>
     );

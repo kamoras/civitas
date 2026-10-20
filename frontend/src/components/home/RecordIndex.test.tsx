@@ -72,11 +72,11 @@ function bill(o: Partial<BillInFlight> = {}): BillInFlight {
 
 describe("formatEntryDate", () => {
   it("formats in UTC so an entry does not shift a day for west-coast readers", () => {
-    expect(formatEntryDate("2026-08-18T23:30:00Z")).toBe("18 AUG");
+    expect(formatEntryDate("2026-08-18T23:30:00Z")).toBe("18 Aug");
   });
 
   it("zero-pads the day so the reference column stays aligned", () => {
-    expect(formatEntryDate("2026-01-05")).toBe("05 JAN");
+    expect(formatEntryDate("2026-01-05")).toBe("05 Jan");
   });
 
   it("returns an empty string rather than 'NaN' for a bad date", () => {
@@ -89,7 +89,7 @@ describe("formatEntryDate", () => {
     // the 18th if the string is mis-parsed as local, so a plain `new Date`
     // here reports the wrong DAY, not merely the wrong hour. Issue dates are
     // date-only and would parse as UTC either way, which is why the bug hid.
-    expect(formatEntryDate("2026-08-17T20:00:00")).toBe("17 AUG");
+    expect(formatEntryDate("2026-08-17T20:00:00")).toBe("17 Aug");
   });
 });
 

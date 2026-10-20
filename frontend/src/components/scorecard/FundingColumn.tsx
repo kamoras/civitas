@@ -4,6 +4,7 @@ import type { Senator } from "@/types/senator";
 import type { FundingFacts, ScoreBreakdownDimension } from "@/types/scoreBreakdown";
 import { useIndustries } from "@/hooks/useConfig";
 import { formatCurrency } from "@/lib/formatting";
+import { chartMark } from "@/lib/chartColors";
 import { fecCommitteeSearchUrl } from "@/lib/sources";
 import { SHARE_EXCLUDE_ATTR } from "@/lib/shareImage";
 import ComponentBars from "./ComponentBars";
@@ -103,7 +104,8 @@ export default function FundingColumn({
     .filter((d) => d.type !== "CandidateAffiliated" && d.type !== "Self-Funded")
     .slice(0, DONORS_SHOWN);
   const colorOf = (code: string) =>
-    SEGMENT_COLOR[code] ?? industryInfo[code]?.color ?? FALLBACK_COLOR;
+    SEGMENT_COLOR[code] ??
+    (industryInfo[code]?.color ? chartMark(industryInfo[code].color) : FALLBACK_COLOR);
   const nameOf = (code: string, fallback: string) =>
     industryInfo[code]?.name || fallback || code.replace(/_/g, " ");
 

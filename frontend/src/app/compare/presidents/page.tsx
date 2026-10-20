@@ -173,10 +173,7 @@ function PresidentSelect({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label
-        htmlFor={`president-${name}`}
-        className="font-mono text-xs uppercase tracking-widest text-ink-lo"
-      >
+      <label htmlFor={`president-${name}`} className="font-mono text-xs text-ink-lo">
         {label}
       </label>
       <select
@@ -312,7 +309,7 @@ export default async function ComparePresidentsPage({
             />
             <button
               type="submit"
-              className="border border-signal-cyan/40 px-4 py-2 font-mono text-xs uppercase tracking-widest text-signal-cyan transition-colors hover:bg-signal-cyan/10"
+              className="border border-signal-cyan/40 px-4 py-2 font-mono text-xs text-signal-cyan transition-colors hover:bg-signal-cyan/10"
             >
               Compare
             </button>

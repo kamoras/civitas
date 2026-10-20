@@ -445,6 +445,43 @@ export function describeElectionArchive(
   };
 }
 
+/** The find-your-members directory (`/congress/members`): what people
+ *  type is "my senator", "who represents me", a state's members. */
+export function describeMembersDirectory(): { title: string; description: string } {
+  return {
+    title: "Find Your Members of Congress by State: Senators & Representatives",
+    description:
+      "Find your two U.S. senators and your House representative by state, city, town or county, and open each one's votes, donors and record.",
+  };
+}
+
+/** The chamber measure by measure (`/congress/members/measures`). */
+export function describeMeasures(): { title: string; description: string } {
+  return {
+    title: "Congress, Measure by Measure: Small Gifts, PAC Money, Party Breaks, Bills",
+    description:
+      "Every senator and representative on four measures from FEC filings, roll calls and Congress.gov, side by side, with no rank and no score.",
+  };
+}
+
+/** The executive branch's hub (`/executive`). */
+export function describeExecutive(): { title: string; description: string } {
+  return {
+    title: "The Executive Branch: the President, Federal Agencies, Orders & Nominations",
+    description:
+      "The sitting president's latest executive orders and proclamations, the federal rules open for public comment, what the largest agencies spend, and the nominations pending in the Senate.",
+  };
+}
+
+/** Every president (`/executive/presidents`). */
+export function describePresidents(): { title: string; description: string } {
+  return {
+    title: "Every U.S. President, With the Historians' Rank",
+    description:
+      "Every president from Washington to the sitting president: party, years in office and where the C-SPAN Presidential Historians Survey ranks each presidency, with each one's record.",
+  };
+}
+
 /** The agency directory: "Federal agencies: budgets, rules and comment periods". */
 export function describeAgencyIndex(): { title: string; description: string } {
   return {

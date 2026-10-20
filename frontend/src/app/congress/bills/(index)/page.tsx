@@ -137,7 +137,7 @@ function BillsPageContent() {
                 setMode("hot");
               }}
               aria-pressed={mode === "hot"}
-              className={`font-mono text-xs px-4 py-1.5 border transition-colors uppercase tracking-widest ${
+              className={`font-mono text-xs px-4 py-1.5 border transition-colors ${
                 mode === "hot" ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
               }`}
             >
@@ -146,7 +146,7 @@ function BillsPageContent() {
             <button
               onClick={() => setMode("all")}
               aria-pressed={mode === "all"}
-              className={`font-mono text-xs px-4 py-1.5 border transition-colors uppercase tracking-widest ${
+              className={`font-mono text-xs px-4 py-1.5 border transition-colors ${
                 mode === "all" ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
               }`}
             >
@@ -165,7 +165,7 @@ function BillsPageContent() {
             <div className="flex flex-wrap gap-3 items-center mt-5 pt-4 border-t border-white/[0.07]">
               <input
                 type="text"
-                placeholder="TITLE, SPONSOR OR NUMBER"
+                placeholder="Title, sponsor or number"
                 aria-label="Search bills by title, sponsor or bill number"
                 value={search}
                 onChange={(e) => {
@@ -184,7 +184,7 @@ function BillsPageContent() {
                     key={c}
                     onClick={() => setChamber(c)}
                     aria-pressed={chamber === c}
-                    className={`font-mono text-xs px-2 py-1 border transition-colors uppercase ${
+                    className={`font-mono text-xs px-2 py-1 border transition-colors ${
                       chamber === c ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
                     }`}
                   >
@@ -207,7 +207,7 @@ function BillsPageContent() {
                       party === p ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
                     }`}
                   >
-                    {p}
+                    {p === "ALL" ? "All" : p}
                   </button>
                 ))}
               </div>
@@ -221,9 +221,9 @@ function BillsPageContent() {
                     setParty("ALL");
                     setSearch("");
                   }}
-                  className="font-mono text-xs text-ink-min hover:text-phos transition-colors tracking-widest"
+                  className="font-mono text-xs text-ink-min hover:text-phos transition-colors"
                 >
-                  CLEAR
+                  Clear
                 </button>
               )}
             </div>
@@ -445,17 +445,13 @@ function AllBillsGroups({
 
   if (stageTotals === "loading") {
     return (
-      <div className="text-center py-16 font-mono text-xs text-ink-min tracking-widest pulse-subtle">
-        LOADING...
+      <div className="text-center py-16 font-mono text-xs text-ink-min pulse-subtle">
+        Loading...
       </div>
     );
   }
   if (stageTotals !== "error" && ALL_STAGE_CODES.every((code) => !(stageTotals[code] > 0))) {
-    return (
-      <div className="text-center py-16 font-mono text-xs text-ink-min tracking-widest">
-        NO RESULTS
-      </div>
-    );
+    return <div className="text-center py-16 font-mono text-xs text-ink-min">No results</div>;
   }
 
   // A search opens every stage its matches sit at, so they are on screen
@@ -582,8 +578,8 @@ function HotBillsList({
 
   if (loading) {
     return (
-      <div className="text-center py-16 font-mono text-xs text-ink-min tracking-widest pulse-subtle">
-        LOADING...
+      <div className="text-center py-16 font-mono text-xs text-ink-min pulse-subtle">
+        Loading...
       </div>
     );
   }
@@ -594,16 +590,13 @@ function HotBillsList({
   const since = current?.movedSince ? shortDay(current.movedSince) : "a week ago";
   if (results.length === 0) {
     return (
-      <div className="text-center py-16 font-mono text-xs text-ink-min tracking-widest space-y-3">
+      <div className="text-center py-16 font-mono text-xs text-ink-min space-y-3">
         <p>
-          NO ACTION CENTER ISSUE NAMES A BILL, AND NONE MOVED PAST REFERRAL SINCE{" "}
-          {since.toUpperCase()} FOR THIS FILTER
+          No action center issue names a bill, and none moved past referral since {since} for this
+          filter
         </p>
-        <button
-          onClick={onViewAll}
-          className="font-mono text-xs text-signal-cyan hover:underline tracking-widest"
-        >
-          VIEW ALL BILLS INSTEAD
+        <button onClick={onViewAll} className="font-mono text-xs text-signal-cyan hover:underline">
+          View all bills instead
         </button>
       </div>
     );
@@ -618,9 +611,9 @@ function HotBillsList({
           ? `No Action Center issue names a bill right now, so this lists bills that moved this week: a recorded action since ${since}, past referral to committee, latest first.`
           : "Bills named in today's Action Center issues, most-named first."}
       </p>
-      <p className="font-mono text-xs text-ink-min mb-3 tracking-widest">
-        SHOWING {results.length.toLocaleString()} OF {total.toLocaleString()} BILL
-        {total !== 1 ? "S" : ""}
+      <p className="font-mono text-xs text-ink-min mb-3">
+        Showing {results.length.toLocaleString()} of {total.toLocaleString()} bill
+        {total !== 1 ? "s" : ""}
       </p>
       <div className="border border-white/[0.07] divide-y divide-white/[0.07]">
         {results.map((bill) => (
@@ -633,11 +626,11 @@ function HotBillsList({
           <button
             onClick={() => setPage((p) => p + 1)}
             disabled={loadingMore}
-            className="font-mono text-xs tracking-widest px-4 py-2 border border-white/[0.07] text-ink-lo hover:text-phos hover:border-white/15 disabled:opacity-40 disabled:cursor-wait transition-colors"
+            className="font-mono text-xs px-4 py-2 border border-white/[0.07] text-ink-lo hover:text-phos hover:border-white/15 disabled:opacity-40 disabled:cursor-wait transition-colors"
           >
             {loadingMore
-              ? "LOADING..."
-              : `LOAD MORE (${(total - results.length).toLocaleString()} REMAINING)`}
+              ? "Loading..."
+              : `Load more (${(total - results.length).toLocaleString()} remaining)`}
           </button>
         </div>
       )}

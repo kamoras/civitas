@@ -114,7 +114,7 @@ export function StatTile({
 }) {
   return (
     <div className="border border-white/[0.07] p-3 min-w-0">
-      <div className="text-xs font-mono text-ink-lo tracking-wider">{label}</div>
+      <div className="text-xs font-mono text-ink-lo">{label}</div>
       <div className={`mt-1 font-mono text-xl ${tone}`}>{value}</div>
       {note && <div className="mt-0.5 text-xs font-mono text-ink-min">{note}</div>}
     </div>
@@ -137,7 +137,7 @@ export function RankBars({
   const max = Math.max(1, ...entries.map((e) => e.count));
   return (
     <div className="min-w-0">
-      <div className="text-ink-lo text-xs font-mono tracking-wider mb-1.5">{title}</div>
+      <div className="text-ink-lo text-xs font-mono mb-1.5">{title}</div>
       <div className="space-y-1">
         {entries.map((e) => (
           <div key={e.name} className="flex items-center gap-2">
@@ -183,7 +183,7 @@ export function Segmented<T extends string | number>({
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2" role="group" aria-label={label}>
-      <span className="text-xs font-mono text-ink-min tracking-wider">{label}</span>
+      <span className="text-xs font-mono text-ink-min">{label}</span>
       <div className="flex gap-1">
         {options.map((o) => (
           <button
@@ -191,7 +191,7 @@ export function Segmented<T extends string | number>({
             type="button"
             onClick={() => onChange(o.value)}
             aria-pressed={value === o.value}
-            className={`px-2 py-1 text-xs font-mono tracking-wider border transition-colors ${
+            className={`px-2 py-1 text-xs font-mono border transition-colors ${
               value === o.value
                 ? "border-ink-lo text-ink-hi"
                 : "border-white/[0.07] text-ink-min hover:text-ink-lo"

@@ -158,8 +158,8 @@ describe("RedistrictingStateView", () => {
       },
     };
     render(<RedistrictingStateView data={withComputed} />);
-    expect(screen.getByText("CIVITAS-COMPUTED R+3.4 → R+8.8")).toBeInTheDocument();
-    expect(screen.getByText("CIVITAS-COMPUTED D+1.2 → EVEN")).toBeInTheDocument();
+    expect(screen.getByText("Civitas-computed R+3.4 → R+8.8")).toBeInTheDocument();
+    expect(screen.getByText("Civitas-computed D+1.2 → EVEN")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "How it is computed" })).toHaveAttribute(
       "href",
       "/about/data#computed-lean"
@@ -168,11 +168,11 @@ describe("RedistrictingStateView", () => {
 
   it("leads with the net seat change the strips show, and keeps the predecessor count in the method", () => {
     render(<RedistrictingStateView data={data} />);
-    const r = screen.getByText("R-LEANING SEATS").closest("div")!;
+    const r = screen.getByText("R-leaning seats").closest("div")!;
     expect(r).toHaveTextContent("1 → 2 (+1)");
-    expect(screen.getByText("D-LEANING SEATS").closest("div")).toHaveTextContent("1 → 0 (−1)");
-    expect(screen.queryByText("EVEN SEATS")).not.toBeInTheDocument();
-    expect(screen.queryByText(/CHANGED LEAN/)).not.toBeInTheDocument();
+    expect(screen.getByText("D-leaning seats").closest("div")).toHaveTextContent("1 → 0 (−1)");
+    expect(screen.queryByText("Even seats")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Changed lean/)).not.toBeInTheDocument();
     expect(
       screen.getByText(/1 of 2 new districts lean differently from their predecessor/)
     ).toBeInTheDocument();
@@ -180,8 +180,8 @@ describe("RedistrictingStateView", () => {
 
   it("lists where each old district went", async () => {
     render(<RedistrictingStateView data={data} />);
-    await userEvent.click(screen.getByRole("button", { name: /OLD DISTRICTS/ }));
-    expect(screen.getByRole("button", { name: /OLD DISTRICTS/ })).toHaveAttribute(
+    await userEvent.click(screen.getByRole("button", { name: /Old districts/ }));
+    expect(screen.getByRole("button", { name: /Old districts/ })).toHaveAttribute(
       "aria-pressed",
       "true"
     );
@@ -192,11 +192,11 @@ describe("RedistrictingStateView", () => {
 
   it("offers the matrix and the downloads, and passes axe", async () => {
     const { container } = render(<RedistrictingStateView data={data} />);
-    expect(screen.getByText("[ DOWNLOAD CSV ]")).toHaveAttribute(
+    expect(screen.getByText("[ Download CSV ]")).toHaveAttribute(
       "href",
       "/api/elections/redistricting/ZZ/overlap.csv"
     );
-    await userEvent.click(screen.getByText(/OVERLAP MATRIX/));
+    await userEvent.click(screen.getByText(/Overlap matrix/));
     expect(screen.getByRole("table")).toBeInTheDocument();
     const result = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });
     expect(result.violations.map((v) => v.id)).toEqual([]);
@@ -216,7 +216,7 @@ describe("RedrawnSeatNote", () => {
     fetchRedistrictedSeat.mockResolvedValueOnce(seat);
     render(<RedrawnSeatNote state="ZZ" district={1} />);
     await waitFor(() => expect(screen.getByText(/81% are in the new 1st/)).toBeInTheDocument());
-    expect(screen.getByRole("link", { name: /WHAT CHANGED/ })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /What changed/ })).toHaveAttribute(
       "href",
       "/elections/redistricting/ZZ#old-1"
     );

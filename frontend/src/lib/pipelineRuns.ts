@@ -1,3 +1,4 @@
+import { asLabel } from "./formatting";
 /**
  * How a pipeline run is presented in the admin run-history table.
  *
@@ -45,30 +46,30 @@ interface RunDescriptor {
 
 const DESCRIPTORS: Record<PipelineType, RunDescriptor> = {
   senate: {
-    label: "SENATE",
+    label: "Senate",
     hasLlmStats: true,
     processed: (r) => `${n(r.senatorsProcessed)}/${n(r.senatorsTotal)}`,
     failed: (r) => n(r.senatorsFailed),
   },
   house: {
-    label: "HOUSE",
+    label: "House",
     processed: (r) => `${n(r.repsProcessed)}/${n(r.repsTotal)}`,
     failed: (r) => n(r.repsFailed),
   },
   stock_trades: {
-    label: "STOCK",
+    label: "Stock",
     processed: (r) =>
       `${n(r.houseTradesIngested)}H/${n(r.senateTradesIngested)}S/${n(r.presidentTradesIngested)}P`,
   },
   supplementary: {
-    label: "SUPP",
+    label: "Supp",
     // An explicitly skipped justice phase is "—", not "0" — the two mean
     // different things and the dash is the existing convention here.
     processed: (r) =>
       `${n(r.presidentsUpdated)}P/${r.justicesSkipped ? "—" : n(r.justicesScored)}J`,
   },
   election: {
-    label: "ELECTION",
+    label: "Election",
     processed: (r) =>
       `${n(r.candidatesSynced)}C/${n(r.financialsRefreshed)}F/${n(r.coverageItemsIngested)}N`,
   },
@@ -95,7 +96,7 @@ export function describeRun(run: PipelineHistoryRun): RunDisplay {
     // rebuilt for. Show the raw type rather than a wrong one; the counters
     // for it are unknown, so claim nothing about them.
     return {
-      label: String(run.pipelineType).toUpperCase(),
+      label: asLabel(String(run.pipelineType)),
       hasLlmStats: false,
       processed: "—",
       failed: 0,

@@ -1,5 +1,5 @@
 """The record's sources, with what each has supplied and how recent it is,
-for the homepage's "Built from the public record" panel.
+for the "On record now" list on /about/data#sources.
 
 Each row is counted from the stored records themselves, never typed: how
 many records the source has supplied in the window the site scores (the
@@ -100,16 +100,16 @@ def source_ledger(db: Session) -> list[dict]:
     trades, last_trade = db.query(func.count(StockTrade.id), func.max(StockTrade.disclosure_date)).one()
 
     return [
-        _row("VOTES", "Senate.gov · Clerk.House.gov", votes, "roll calls", last_vote, scope=in_congress),
-        _row("BILLS", "Congress.gov · GovInfo", bills, "bills sponsored by members on file", last_bill,
+        _row("Votes", "Senate.gov · Clerk.House.gov", votes, "roll calls", last_vote, scope=in_congress),
+        _row("Bills", "Congress.gov · GovInfo", bills, "bills sponsored by members on file", last_bill,
              scope=in_congress),
-        _row("MONEY", "FEC", funded, "serving members with campaign filings", fec_read,
+        _row("Money", "FEC", funded, "serving members with campaign filings", fec_read,
              date_label="last read"),
-        _row("FLOOR", "Congressional Record (GovInfo)", speeches, "floor speeches", last_speech),
-        _row("RULES", "Federal Register", rules, "rules, notices and presidential documents", last_rule),
-        _row("COURT", "Supreme Court Database · Oyez · supremecourt.gov", court_votes,
+        _row("Floor", "Congressional Record (GovInfo)", speeches, "floor speeches", last_speech),
+        _row("Rules", "Federal Register", rules, "rules, notices and presidential documents", last_rule),
+        _row("Court", "Supreme Court Database · Oyez · supremecourt.gov", court_votes,
              f"justices' votes and {opinions:,} opinions", last_decided),
-        _row("TRADES", "House Clerk · Senate eFD · OGE", trades, "disclosed stock trades", last_trade),
+        _row("Trades", "House Clerk · Senate eFD · OGE", trades, "disclosed stock trades", last_trade),
     ]
 
 

@@ -17,7 +17,7 @@ from app.api.response_helpers import (
 )
 from app.services.holdings_service import HOLDING_CATEGORY_PATTERN, get_president_holdings
 from app.services.president_service import (
-    get_all_presidents,
+    get_president_list,
     get_current_president,
     get_president,
     get_president_leaderboard,
@@ -156,5 +156,4 @@ def score_breakdown(president_id: str, db: Session = Depends(get_db)):
 @router.get("")
 def list_all(db: Session = Depends(get_db)):
     """All presidents, newest first."""
-    data = get_all_presidents(db)
-    return _cached_json([p.model_dump(by_alias=True) for p in data], max_age=CACHE_TTL_LIST_S)
+    return _cached_json(get_president_list(db), max_age=CACHE_TTL_LIST_S)

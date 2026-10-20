@@ -51,7 +51,7 @@ const EXTERNAL_LINKS: readonly { href: string; label: string; aria: string }[] =
 
 // 24 px tall: WCAG 2.5.8's minimum target, in a list of links set close.
 const linkClass =
-  "inline-flex min-h-6 items-center font-mono text-xs uppercase tracking-[0.11em] text-ink-lo hover:text-ink-hi transition-colors";
+  "inline-flex min-h-6 items-center font-mono text-xs text-ink-lo hover:text-ink-hi transition-colors";
 
 export default function Footer() {
   return (
@@ -93,18 +93,18 @@ export default function Footer() {
           <div>
             {/* The colophon: the name and its line, as the header and the
                 homepage's nameplate set them, then the terms. */}
-            <p className="font-mono text-xs leading-[1.9] tracking-[0.08em] text-ink-min [overflow-wrap:anywhere]">
-              <span className="text-ink-hi">CIVITAS RESEARCH</span>
+            <p className="font-mono text-xs leading-[1.9] text-ink-min [overflow-wrap:anywhere]">
+              <span className="text-ink-hi">Civitas Research</span>
               <br />
-              {SITE_TAGLINE.toUpperCase()}
+              {SITE_TAGLINE}
               <br />
-              OPEN SOURCE · RUN BY VOLUNTEERS
+              Open source · run by volunteers
               <br />
-              NO PARTY, CANDIDATE OR PAC MONEY
+              No party, candidate or PAC money
               <br />
-              AGPL-3.0 · SELF-HOSTED · OPEN DATA
+              AGPL-3.0 · self-hosted · open data
               <br />
-              NO ACCOUNTS · NO ADS · NO TRACKERS
+              No accounts · no ads · no trackers
             </p>
           </div>
 

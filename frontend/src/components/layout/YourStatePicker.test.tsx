@@ -114,7 +114,7 @@ describe("YourStatePicker: what setting a state leads to", () => {
     expect(status).toHaveTextContent("Ohio set for this tab.");
     expect(within(status).getByRole("link", { name: "Ohio's members →" })).toHaveAttribute(
       "href",
-      "/politicians?state=OH"
+      "/congress/members?state=OH"
     );
     expect(within(status).getByRole("link", { name: "Ohio's ballot →" })).toHaveAttribute(
       "href",

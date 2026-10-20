@@ -41,7 +41,7 @@ function MonitorUpdates({ slug, title }: { slug: string; title: string }) {
 
   if (request.loading) {
     return (
-      <p role="status" className="py-3 font-mono text-xs tracking-[0.12em] text-ink-min">
+      <p role="status" className="py-3 font-mono text-xs text-ink-min">
         Reading updates…
       </p>
     );
@@ -82,7 +82,7 @@ function MonitorUpdates({ slug, title }: { slug: string; title: string }) {
         <p className="py-3 font-sans text-sm text-ink-lo">No updates recorded yet.</p>
       ) : (
         <>
-          <h4 className="mt-6 font-mono text-xs uppercase tracking-[0.12em] text-ink-lo">
+          <h4 className="mt-6 font-mono text-xs text-ink-lo">
             Updates, newest first · {Math.min(shown, updates.length)} of {updates.length}
           </h4>
           <ol ref={listRef} className="mt-2 border-l border-white/15 pl-4">
@@ -92,9 +92,7 @@ function MonitorUpdates({ slug, title }: { slug: string; title: string }) {
                 tabIndex={-1}
                 className="py-2.5 outline-none focus-visible:ring-1 focus-visible:ring-ink-lo"
               >
-                <span className="font-mono text-xs tracking-[0.08em] text-ink-min">
-                  {updateTime(u)}
-                </span>
+                <span className="font-mono text-xs text-ink-min">{updateTime(u)}</span>
                 <p className="mt-1 font-sans text-[15px] leading-relaxed text-ink">{u.summary}</p>
                 <a
                   href={safeHref(u.sourceUrl) || "#"}
@@ -111,9 +109,9 @@ function MonitorUpdates({ slug, title }: { slug: string; title: string }) {
             <button
               type="button"
               onClick={showMore}
-              className="mt-1 inline-flex min-h-[32px] items-center font-mono text-xs tracking-[0.12em] text-phos-mid hover:text-phos"
+              className="mt-1 inline-flex min-h-[32px] items-center font-mono text-xs text-phos-mid hover:text-phos"
             >
-              [ SHOW {Math.min(rest, UPDATES_PAGE)} MORE OF {rest} ]
+              [ Show {Math.min(rest, UPDATES_PAGE)} more of {rest} ]
             </button>
           )}
         </>
@@ -158,10 +156,8 @@ function MonitorRow({
           className="flex w-full items-start gap-4 py-4 text-left"
         >
           <span className="min-w-0 flex-1">
-            <span className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 font-mono text-xs tracking-[0.08em] text-ink-min">
-              <span className={`uppercase tracking-[0.1em] ${active ? "text-phos-mid" : ""}`}>
-                {statusLabel}
-              </span>
+            <span className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 font-mono text-xs text-ink-min">
+              <span className={active ? "text-phos-mid" : undefined}>{statusLabel}</span>
               {monitor.closedOn ? (
                 <span>
                   Tracked {shortDate(monitor.createdAt)} –{" "}
@@ -209,7 +205,7 @@ function MonitorRow({
               {monitor.description}
             </p>
           )}
-          <p className="mt-2 font-mono text-xs tracking-[0.08em] text-ink-min">
+          <p className="mt-2 font-mono text-xs text-ink-min">
             Tracking since {shortDate(monitor.createdAt)}
           </p>
           <FollowFeed
@@ -281,11 +277,7 @@ export default function MonitorsTab({ initialSlug }: { initialSlug?: string | nu
 
   if (request.loading) {
     return (
-      <p
-        role="status"
-        aria-live="polite"
-        className="py-10 font-mono text-sm tracking-[0.12em] text-ink-min"
-      >
+      <p role="status" aria-live="polite" className="py-10 font-mono text-sm text-ink-min">
         Reading the national monitors…
       </p>
     );

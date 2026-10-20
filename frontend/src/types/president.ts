@@ -50,6 +50,12 @@ export interface President {
   electionMargin: number | null;
   /** Raw C-SPAN 2021 Presidential Historians Survey point total. */
   historicalLegacyScore: number | null;
+  /** The historians' own ranking (C-SPAN survey points, competition rank)
+   *  among every rated presidency, and how many are rated; the list
+   *  endpoint's only (GET /api/presidents). Null where the survey hasn't
+   *  rated this presidency. */
+  historiansRank?: number | null;
+  historiansRated?: number | null;
   /** Average approval over a rolling last-90-days window rather than the
    * full term — informational, not part of any scored dimension. Null
    * once a president leaves office and no new polls populate it. */

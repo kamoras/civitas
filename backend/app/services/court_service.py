@@ -249,14 +249,3 @@ def court(db: Session, recent: int = 10) -> dict:
         "decisions": decisions(db, 1, recent),
     }
 
-
-def summary(db: Session) -> dict | None:
-    """The section card's figure: the latest term with decisions, its
-    count and how many were unanimous. None before any is stored."""
-    cases = _cases(db.query(JusticeVote).all())
-    terms = [c["term"] for c in cases.values() if c["term"].isdigit()]
-    if not terms:
-        return None
-    latest = max(terms, key=int)
-    in_term = [c for c in cases.values() if c["term"] == latest]
-    return {"term": int(latest), "cases": len(in_term), "unanimous": sum(1 for c in in_term if c["unanimous"])}

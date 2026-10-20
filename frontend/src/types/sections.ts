@@ -1,5 +1,5 @@
 /** GET /api/sections (backend/app/api/sections.py): one live figure per
- *  section page, for the hub cards and the homepage's index.
+ *  hub card on /congress, /elections and /agencies.
  *  Every count and rate is the backend's; the frontend only words it. A
  *  null is a figure the site can't give yet, never a zero. */
 
@@ -8,32 +8,23 @@ import type { Season } from "@/types/specials";
 import type { FecDeadlineEvent } from "@/types/nextCycle";
 
 export interface SectionFigures {
-  action: {
-    today: { issues: number; date: string | null };
-    ongoing: { monitors: number };
-    archive: { days: number; since: string | null };
-  };
   congress: {
-    reports: { date: string; recordVotes: number } | null;
     week: { start: string; recordVotes: number } | null;
     month: { month: string; recordVotes: number } | null;
-    /** When the latest day Congress met had no business: the backend's line
-     *  for the three report figures, and the week of the last business. */
-    recess: { line: string; lastBusinessDay: string | null; week: string } | null;
+    /** When the latest day Congress met had no business: the last day of
+     *  business, which the week and month cards show instead of "None". */
+    recess: { lastBusinessDay: string | null } | null;
     committees: { count: number; metThisWeek: number | null };
     bills: { inMotion: number };
     president: Record<"house" | "senate", { rate: number; rollCalls: number } | null>;
   };
   agencies: {
-    directory: { count: number };
     budget: { total: number; fiscalYear: number | null; reportedCount: number } | null;
     comments: { open: number };
   };
-  politicians: { directory: { senators: number; representatives: number } };
-  /** The latest term with decided cases stored; null before any. */
-  court: { court: { term: number; cases: number; unanimous: number } | null };
   elections: {
-    ballots: { states: number; date: string; phase: string; daysUntil: number };
+    /** The coming election's date, which the archive card names. */
+    ballots: { date: string };
     map:
       | { available: true; seats: number; withPolls: number; pollsDiffer: number }
       | { available: false; reason: string };
@@ -53,5 +44,4 @@ export interface SectionFigures {
      *  older backend's answer has none). */
     calendar?: { deadline: FecDeadlineEvent | null };
   };
-  explore: { search: { documents: number } };
 }

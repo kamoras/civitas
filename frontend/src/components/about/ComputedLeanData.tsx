@@ -84,9 +84,7 @@ export default async function ComputedLeanData() {
         }}
       />
       <p>
-        <span className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
-          Every district, both maps:{" "}
-        </span>
+        <span className="font-mono text-xs text-ink-min">Every district, both maps: </span>
         <a href={CSV_PATH} download className={LINK}>
           CSV
         </a>
@@ -124,7 +122,7 @@ export default async function ComputedLeanData() {
         )}
       </p>
       <div>
-        <p className="mb-1 font-mono text-xs uppercase tracking-[0.12em] text-ink-min">Cite this</p>
+        <p className="mb-1 font-mono text-xs text-ink-min">Cite this</p>
         <CiteThis title={title} date={table?.asOf} path={JSON_PATH} />
       </div>
     </div>

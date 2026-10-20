@@ -87,7 +87,7 @@ describe("bills page", () => {
     await userEvent.click(screen.getByRole("button", { name: "All Bills" }));
     for (const [group, on] of [
       ["Filter by chamber", "all"],
-      ["Filter by sponsor's party", "ALL"],
+      ["Filter by sponsor's party", "All"],
     ]) {
       for (const button of within(screen.getByRole("group", { name: group })).getAllByRole(
         "button"
@@ -97,7 +97,7 @@ describe("bills page", () => {
     const party = within(screen.getByRole("group", { name: "Filter by sponsor's party" }));
     await userEvent.click(party.getByRole("button", { name: "D" }));
     expect(party.getByRole("button", { name: "D" })).toHaveAttribute("aria-pressed", "true");
-    expect(party.getByRole("button", { name: "ALL" })).toHaveAttribute("aria-pressed", "false");
+    expect(party.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "false");
   });
 
   // A /congress pipeline row opens ?reached=<milestone>: the bills that got

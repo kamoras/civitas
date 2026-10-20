@@ -52,7 +52,7 @@ describe("admin dashboard load", () => {
     expect(alert).toHaveTextContent("The run history didn't load (History failed: 500)");
 
     const data = openTab("Data & ML");
-    expect(within(data).getByText("TOTAL RECORDS")).toBeInTheDocument();
+    expect(within(data).getByText("Total records")).toBeInTheDocument();
     expect(within(data).queryByText("Not loaded.")).not.toBeInTheDocument();
 
     const system = openTab("System");
@@ -80,7 +80,7 @@ describe("admin dashboard load", () => {
     expect(within(data).getByText("Not loaded.")).toBeInTheDocument();
 
     const system = openTab("System");
-    expect(within(system).queryByText("UNAVAILABLE")).not.toBeInTheDocument();
+    expect(within(system).queryByText("Unavailable")).not.toBeInTheDocument();
     expect(within(system).queryByText("0 B")).not.toBeInTheDocument();
   });
 

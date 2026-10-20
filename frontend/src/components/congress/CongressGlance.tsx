@@ -26,7 +26,7 @@ const SWATCH = { senate: "bg-phos", house: "bg-signal-cyan" } as const;
 function Head({ id, title, share }: { id: string; title: string; share: string }) {
   return (
     <div className="flex flex-wrap items-baseline justify-between gap-3 border-b border-white/15 pb-2">
-      <h2 id={id} className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
+      <h2 id={id} className="font-mono text-xs text-ink-min">
         {title}
       </h2>
       <ShareSectionButton label={share} />

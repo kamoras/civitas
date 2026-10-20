@@ -33,7 +33,7 @@ export default function TerminalTitlebar({
       className="flex items-center justify-between gap-3 border-b border-white/[0.07] bg-surface-raised px-4 py-2"
       aria-hidden="true"
     >
-      <span className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">{title}</span>
+      <span className="font-mono text-xs text-ink-min">{title}</span>
       {children}
     </div>
   );
