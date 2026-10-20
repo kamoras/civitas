@@ -68,7 +68,7 @@ function RecordPanel({ race }: { race: RaceWithCandidates }) {
       </ul>
       {withRecord.length === 0 && (
         <p className="mt-3 text-[13px] text-ink-lo">
-          No one in this race is linked to a Civitas scorecard.
+          No one in this race is linked to a member&apos;s record on Civitas.
         </p>
       )}
     </div>

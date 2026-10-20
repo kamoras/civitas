@@ -432,13 +432,13 @@ function ComparisonTable({
   );
 }
 
-/** "Scored 2026-10-16 · v6.35": which run and method stored the member's
+/** "Updated 2026-10-16 · v6.35": which run and method stored the member's
  *  scores, so a held or older score reads as such beside a newer one. */
 function ScoredOn({ member }: { member: Senator }) {
   if (!member.scoredOn) return null;
   return (
     <div className="mt-0.5 font-mono text-xs text-ink-min">
-      Scored {member.scoredOn}
+      Updated {member.scoredOn}
       {member.algorithmVersion ? ` · ${member.algorithmVersion}` : ""}
     </div>
   );

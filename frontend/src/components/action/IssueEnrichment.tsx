@@ -446,7 +446,7 @@ function actionRows(issue: ActionIssue, today: string): ActionRow[] {
       ),
       href: url ?? `/politicians/${m.id}`,
       internal: !url,
-      label: url ? "Contact ↗" : "Scorecard →",
+      label: url ? "Contact ↗" : "Record →",
       tap: url ? "write" : undefined,
     });
   }

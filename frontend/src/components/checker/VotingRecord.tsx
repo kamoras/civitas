@@ -355,7 +355,7 @@ export default function VotingRecord({
           {votedAgainstPartyCount.toLocaleString()}
         </div>
         <div className="[&>span]:justify-center text-ink-min text-[11px] sm:text-xs">
-          <MetricTooltip text="Party-line votes this Congress on which the member sided with the other party, each bill or nomination once: the breaks figure the profile compares with peers. Breaks from the party's own flank are listed on the scorecard but not counted.">
+          <MetricTooltip text="Party-line votes this Congress on which the member sided with the other party, each bill or nomination once: the breaks figure the profile compares with peers. Breaks from the party's own flank are listed on the member page but not counted.">
             BROKE PARTY LINE
           </MetricTooltip>
         </div>

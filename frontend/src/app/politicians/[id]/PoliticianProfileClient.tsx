@@ -336,7 +336,7 @@ export default function PoliticianProfileClient({
           )}
 
           {!scorecard && (
-            <SectionBlock title="Scorecard">
+            <SectionBlock title="Record">
               {/* No card header will render below to carry identity, so
                   show a minimal one here — otherwise a not-yet-scored
                   official's page has no name/photo/party anywhere on it. */}
@@ -363,7 +363,7 @@ export default function PoliticianProfileClient({
                 </div>
               </div>
               <p className="font-mono text-xs text-ink-min tracking-widest text-center py-4">
-                SCORECARD NOT YET GENERATED: CHECK BACK AFTER NEXT PIPELINE RUN
+                Record not yet built: check back after the next nightly run
               </p>
             </SectionBlock>
           )}

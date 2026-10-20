@@ -6,7 +6,7 @@ import { pageMetadata } from "@/lib/site";
 export const metadata = pageMetadata({
   title: "Directory of U.S. Senators, Representatives, President & Justices",
   description:
-    "Find any U.S. senator, House representative, the president, or a Supreme Court justice by name, state, or party, and open their voting record, donors, and scorecard.",
+    "Find any U.S. senator, House representative, the president, or a Supreme Court justice by name, state, or party, and open their voting record, donors and bills.",
   path: "/politicians",
 });
 
