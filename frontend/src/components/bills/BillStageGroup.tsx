@@ -1,5 +1,6 @@
 "use client";
 
+import { chartMark } from "@/lib/chartColors";
 import { useEffect, useState } from "react";
 import BillRow from "./BillRow";
 import { fetchBillsInFlight } from "@/lib/api";
@@ -35,7 +36,7 @@ export default function BillStageGroup({
 }: BillStageGroupProps) {
   const config = useConfig();
   const stageInfo = config?.billStages?.[stageCode];
-  const color = stageInfo?.color ?? "var(--phos)";
+  const color = stageInfo?.color ? chartMark(stageInfo.color) : "var(--phos)";
 
   /* Everything below hangs off one signature. Previously each of these lived
      in its own piece of state, kept in step by four effects — two of which

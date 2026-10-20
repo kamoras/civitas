@@ -2506,8 +2506,20 @@ the pending list).
   (ink on paper, white on carbon), so `border-white/15` is a hairline in both.
   Never write a hex in a component: use a token or a `var(--…)`.
   `wcagContrast.test.ts` and `inkContrast.test.ts` compute both themes from
-  globals.css. Maps and the Court's agreement grid draw on a `.night` plate in
-  both themes, the ground their tile palettes were measured on.
+  globals.css.
+- **Charts follow the theme tokens; no hard-coded dark panels** (2026-10).
+  Every chart, map and graphic draws on the page's own ground in both themes:
+  its colours are theme variables (`--map-*`, `--heat-*`, `--split-*`,
+  `--series-*`, `--chart-*` in globals.css), mixed through
+  `src/lib/chartColors.ts` (`partyMark`, `fade` for a fainter step from the
+  theme's `--map-floor` up, `overlay` for translucent rules, `chartMark` for a
+  colour the API sends). Never a dark plate in the light theme (the `.night`
+  plate that maps and the Court grid drew on was removed), never an `rgba()`
+  of a dark-only hue, never a hex suffix for alpha on a colour (`${c}99`
+  breaks on a variable). A new chart colour gets a value in each `THEME`
+  block and a check in `wcagContrast.test.ts` (marks 3:1 on both grounds,
+  text 4.5:1 on its fill). Share captures are drawn in the theme the reader
+  is viewing.
 - **Type** (2026-10, `src/app/fonts.ts`): Source Serif 4 600 for titles
   (`font-display`), Fira Sans 400/600 for everything else (`font-sans`; the
   long-standing `font-mono` class maps to Fira Sans too, so a label keeps its

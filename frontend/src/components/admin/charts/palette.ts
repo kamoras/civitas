@@ -1,3 +1,5 @@
+import { overlay } from "@/lib/chartColors";
+
 /**
  * Chart colours for the admin dashboard.
  *
@@ -8,8 +10,12 @@
  * same bright glow, and lightness stops separating them. Each value below is
  * the same hue family stepped into the dark-mode mark band (L 0.48–0.67).
  *
+ * Each value is a theme variable (globals.css, --series-*): the dark set
+ * below, and a darker set on paper that clears 3:1 there
+ * (wcagContrast.test.ts checks both).
+ *
  * The categorical order is load-bearing, not cosmetic. It was chosen by
- * running the dataviz palette validator against the panel surface (#14110E)
+ * running the dataviz palette validator against the dark panel surface
  * and keeping an ordering that clears every gate — lightness band, chroma
  * floor, ≥3:1 against the surface, and adjacent colour-vision-deficiency
  * separation (worst adjacent ΔE 9.4, target ≥ 8). Re-ordering can fail that
@@ -20,13 +26,19 @@
  * read as a verdict. Status series use STATUS below, and always ship with a
  * text label so colour never carries the meaning alone.
  */
-export const SERIES = ["#3987e5", "#c98500", "#9085e9", "#d95926", "#199e70"] as const;
+export const SERIES = [
+  "var(--series-1)", // dark #3987e5
+  "var(--series-2)", // dark #c98500
+  "var(--series-3)", // dark #9085e9
+  "var(--series-4)", // dark #d95926
+  "var(--series-5)", // dark #199e70
+] as const;
 
 /** Run outcomes. Validated as a set, all pairs (worst CVD ΔE 10.2). */
 export const STATUS = {
-  good: "#3987e5",
-  warning: "#c98500",
-  critical: "#d03b3b",
+  good: SERIES[0],
+  warning: SERIES[1],
+  critical: "var(--series-critical)",
 } as const;
 
 /** A pipeline keeps its colour on every chart, whichever others are shown. */
@@ -47,6 +59,6 @@ export const PIPELINE_LABELS: Record<string, string> = {
 };
 
 /** Hairline grid and axis rule — one step off the surface, never dashed. */
-export const GRID = "rgba(255, 255, 255, 0.09)";
+export const GRID = overlay(0.09);
 /** Surface ring around markers, so a dot stays legible where lines cross. */
-export const SURFACE = "#14110E";
+export const SURFACE = "var(--surface)";

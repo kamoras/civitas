@@ -14,7 +14,7 @@ import {
 } from "@/lib/results";
 
 /**
- * The textures that set apart the dark, count-less fills on a results map
+ * The textures that set apart the quiet, count-less fills on a results map
  * (see POLLS_OPEN_MARK in lib/results). `defs` goes inside the map's <svg>;
  * `paint` turns a fill from stateShade/resultFill into the textured one
  * where it has one. Ids are per map, so two maps on one page (a state
@@ -22,7 +22,7 @@ import {
  *
  * `staleFills` are the fills (as stateShade/resultFill give them) that some
  * shape on the map draws as a stale count: each gets a pattern of that fill
- * under the amber-and-dark stale stripe (STALE_SWATCH in lib/results), and
+ * under the amber-and-ground stale stripe (STALE_SWATCH in lib/results), and
  * `paint(fill, true)` returns it. An SVG pattern can't take its base colour
  * from the shape using it, hence one per fill.
  */
@@ -89,7 +89,7 @@ export function useMapTextures(staleFills: readonly string[] = []): {
         >
           {/* The map's own background under a translucent fill, as the
               shape would be drawn without the pattern. */}
-          <rect width="6" height="6" fill="#14110e" />
+          <rect width="6" height="6" fill="var(--surface)" />
           <rect width="6" height="6" fill={fill} />
           <rect width="1.5" height="6" fill={FEED_FAILED_MARK} />
           <rect x="1.5" width="1.5" height="6" fill={STALE_SHADOW} />

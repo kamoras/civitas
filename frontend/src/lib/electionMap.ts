@@ -9,6 +9,7 @@
  * is "projected", and shows no chance of anyone winning and no seat tally
  * by party. A range is not a call.
  */
+import { fade, overlay } from "@/lib/chartColors";
 import type {
   ElectionMapData,
   ElectionMapResponse,
@@ -162,35 +163,37 @@ export const VIEW_EXPLAINER: Record<MapView, string> = {
 };
 
 /* ── Colour ────────────────────────────────────────────────────────────
-   One diverging scale from the party tokens (dem-blue #82acff, rep-red
-   #ff8989), stepped by opacity over `surface` (#14110E). Measured
-   2026-10-15 against that surface (WCAG 2.x contrast; CIE L*; Machado
-   2009 colour-vision simulation, severity 1.0):
+   One diverging scale from the party marks (--map-dem, --map-rep), stepped
+   by strength over `surface` from the theme's floor (chartColors.fade).
+   Measured 2026-10-15 on carbon (WCAG 2.x contrast; CIE L*; Machado 2009
+   colour-vision simulation, severity 1.0):
 
      leans    D #4f6590 3.22:1 · R #935250 3.19:1   L* 42.7 / 42.4
      usually  D #6887c5 5.24:1 · R #c76c6b 5.18:1   L* 56.3 / 56.0
      strongly D #82acff 8.33:1 · R #ff8989 8.23:1   L* 70.5 / 70.1
-     close    #4c4842 2.06:1 + a 45° hatch of ink-lo (#CDC7BC, 9.9:1)
+     close    --map-close 2.06:1 + a 45° hatch of ink-lo (9.9:1)
 
+   On paper the floor is half strength, so the faintest step still clears
+   3:1 there too (wcagContrast.test.ts checks every bin in both themes).
    Every bin's tile clears 3:1 (WCAG 1.4.11) except "close", which is
    carried by its hatch. Smallest colour difference between a party bin
-   and "close": ΔE 30.3 normal vision, 9.6 protanopia, 18.0 deuteranopia,
-   24.8 tritanopia; the hatch separates "close" in every case and in
-   greyscale. Greyscale separates the steps (L* 31 / 42 / 56 / 70) but
-   not the parties, which share each step's lightness; the seat detail
-   and the table say D or R in words. No cyan or amber: on the results
-   map those mean polls open and a stale feed. */
+   and "close" on carbon: ΔE 30.3 normal vision, 9.6 protanopia, 18.0
+   deuteranopia, 24.8 tritanopia; the hatch separates "close" in every case
+   and in greyscale. Greyscale separates the steps but not the parties,
+   which share each step's lightness; the seat detail and the table say D
+   or R in words. No cyan or amber: on the results map those mean polls
+   open and a stale feed. */
 export const BIN_OPACITY = { leans: 0.54, usually: 0.76, strongly: 1 } as const;
-export const DEM_RGB = "130, 172, 255";
-export const REP_RGB = "255, 137, 137";
-export const CLOSE_FILL = "#4c4842";
-export const CLOSE_HATCH = "#CDC7BC";
-export const NO_CONTEST_FILL = "rgba(255, 255, 255, 0.05)";
+export const DEM_MARK = "var(--map-dem)";
+export const REP_MARK = "var(--map-rep)";
+export const CLOSE_FILL = "var(--map-close)";
+export const CLOSE_HATCH = "var(--ink-lo)";
+export const NO_CONTEST_FILL = overlay(0.05);
 
 export function binFill(bin: MapBin): string {
   if (bin === "close") return CLOSE_FILL;
   const [side, size] = bin.split("_") as ["D" | "R", keyof typeof BIN_OPACITY];
-  return `rgba(${side === "D" ? DEM_RGB : REP_RGB}, ${BIN_OPACITY[size]})`;
+  return fade(side === "D" ? DEM_MARK : REP_MARK, BIN_OPACITY[size]);
 }
 
 /** The bin a seat shows in a view; null where it has none (no
