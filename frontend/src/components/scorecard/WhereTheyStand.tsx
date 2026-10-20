@@ -320,12 +320,14 @@ export default function WhereTheyStand({
         >
           Where {name} stands
         </h2>
-        <fieldset className="flex flex-wrap items-center gap-2">
+        {/* min-w-0: a fieldset is min-content wide by default, and at 200% text
+            the two segments side by side were wider than a phone. */}
+        <fieldset className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
           <legend className="sr-only">Compare with</legend>
           <span aria-hidden="true" className="text-sm text-ink-lo">
             Compared with:
           </span>
-          <span className="inline-flex">
+          <span className="inline-flex max-w-full flex-wrap">
             {(
               [
                 ["caucus", caucusText],
