@@ -1982,8 +1982,31 @@ GET /api/public/v1/agencies                      Every federal agency, with its 
 GET /api/public/v1/agencies/{slug}               One agency
 GET /api/public/v1/comment-periods               Federal documents open for comment today,
                                                  soonest deadline first
+GET /api/public/v1/senators.csv                  The Senate leaderboard as CSV, with each
+                                                 member's scoring version and date
+GET /api/public/v1/representatives.csv           The House leaderboard as CSV, likewise
+GET /api/public/v1/presidents.csv                Every president's Presidential Score as CSV
+GET /api/public/v1/senators/{id}/votes.csv       Every position a member recorded, as CSV
+GET /api/public/v1/representatives/{id}/votes.csv  (the same for a representative)
+GET /api/public/v1/roll-calls/{chamber}/{congress}/{session}/{number}.csv
+                                                 Every member's position on one roll call, as CSV
 GET /api/public/v1/                              Index: every endpoint, weights, links
 ```
+
+**License.** Civitas's own data (scores, breakdowns, classifications, the
+computed lean, the API's answers and the CSVs) is CC BY 4.0; the code is
+AGPL-3.0. Outputs built on a source with terms of its own carry them: the
+Supreme Court record (the Supreme Court Database, CC BY-NC 3.0 US, and Oyez,
+CC BY-NC 4.0) is non-commercial only, and Wikipedia-derived figures (the
+election map's current polls and ranges, the district Cook PVI read from
+pinned revisions) are share-alike. The statement is one component
+(`frontend/src/components/about/DataLicense.tsx`) shown at `/about/data#license`
+and `/developers#license`; the API names that page in the index's `license`,
+the spec's `info.license` and every CSV's `Link: <...>; rel="license"` header
+(`public.LICENSE_URL`). Each CSV route's columns are one list
+(`_score_columns`, `_VOTE_COLUMNS`, `_POSITION_COLUMNS`, `_PRESIDENT_COLUMNS`)
+that writes the file and documents it (`_csv_doc`), and a CSV is not an MCP
+tool (its JSON twin is).
 
 Conventions: lists are pages (`entries`, `total`, `page`, `perPage`,
 `totalPages`); a member's `rank` is their place in the whole chamber whatever

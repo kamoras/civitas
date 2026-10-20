@@ -1,5 +1,6 @@
 import { pageMetadata } from "@/lib/site";
 import ComputedLeanData from "@/components/about/ComputedLeanData";
+import DataLicense from "@/components/about/DataLicense";
 import {
   AboutPage,
   Summary,
@@ -49,6 +50,10 @@ export default function DataChapter() {
         </Point>
         <Point>
           Every model runs on the same small computer as the site. No data is sent to an AI company.
+        </Point>
+        <Point>
+          Civitas&apos;s own data is free to reuse with credit (CC BY 4.0). The Supreme Court record
+          is for non-commercial use only, as its sources require.
         </Point>
         <Point>
           No accounts, no cookies of our own, no ad or analytics trackers. Visits are counted in a
@@ -244,6 +249,14 @@ export default function DataChapter() {
           where its data comes from; the record itself as JSON from the{" "}
           <A href="/developers">public API</A> (a member&apos;s votes, a bill&apos;s roll calls);
           and an APA-style reference with the date it was scored.
+        </P>
+      </Section>
+
+      <Section id="license" title="License: what you may do with the data">
+        <DataLicense />
+        <P>
+          The same data as JSON and CSV, with every column described:{" "}
+          <A href="/developers#downloads">the public API</A>.
         </P>
       </Section>
 

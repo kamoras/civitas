@@ -664,10 +664,12 @@ describe("MemberScorecard", () => {
     expect(
       within(section).getByText(breakdown.constituentAlignment.components[0].detail)
     ).toBeVisible();
-    expect(within(section).getByRole("link", { name: /Every vote this Congress/ })).toHaveAttribute(
-      "href",
-      "/api/public/v1/representatives/jordan-hale/votes?per_page=100"
-    );
+    expect(
+      within(section).getByRole("link", { name: /Every vote this Congress, as a spreadsheet/ })
+    ).toHaveAttribute("href", "/api/public/v1/representatives/jordan-hale/votes.csv");
+    expect(
+      within(section).getByRole("link", { name: /Every vote this Congress, with/ })
+    ).toHaveAttribute("href", "/api/public/v1/representatives/jordan-hale/votes?per_page=100");
     expect(within(section).getByRole("link", { name: "Kirkland & Slapin 2017" })).toHaveAttribute(
       "href",
       "/about/references#kirkland2017"
