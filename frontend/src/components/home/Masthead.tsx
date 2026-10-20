@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { SITE_TAGLINE } from "@/lib/site";
 import { ELECTION_MAP_HREF } from "@/lib/electionMap";
 import { REDISTRICTING_HREF } from "@/lib/redistricting";
 import type { ElectionPhase } from "@/types/election";
@@ -59,6 +58,13 @@ export default function Masthead({
             The public record of U.S. government, rebuilt every night from federal and state
             filings, with every number linked to the document it came from.
           </p>
+          {/* What the site holds itself to, as one plain line: the rotated,
+              bordered stamp that carried it was a novelty prop, removed in
+              #1061 and kept out. */}
+          <p className="mt-2 text-sm leading-relaxed text-ink-lo">
+            No party money. No PAC money. No ads, no accounts. Open source, self-hosted, run by
+            volunteers.
+          </p>
           {extra.length > 0 && (
             <p className="mt-2 flex flex-wrap gap-x-4 text-sm">
               {extra.map(({ href, label }) => (
@@ -69,10 +75,6 @@ export default function Masthead({
             </p>
           )}
         </div>
-        {/* The register's stamp, once per screen: what the site holds itself to. */}
-        <p className="-rotate-[1.5deg] border-2 border-signal-orange px-2 py-0.5 text-[13px] font-semibold uppercase tracking-[0.06em] text-signal-orange">
-          {SITE_TAGLINE}
-        </p>
       </div>
     </section>
   );

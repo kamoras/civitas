@@ -29,7 +29,7 @@
   --phos-mid: #18552f;
   --signal-cyan: #1b5e34; /* links take the ledger green */
   --signal-amber: #7a4f00; /* unconfirmed, thin data, countdowns */
-  --signal-orange: #9a3412; /* stamp: deadlines, well outside peers */
+  --signal-orange: #9a3412; /* deadlines, well outside peers */
   --signal-red: #a12a24;
   --signal-magenta: #8e2f73;
   --dem-blue: #2552a3;

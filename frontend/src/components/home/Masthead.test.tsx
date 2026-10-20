@@ -9,7 +9,7 @@ const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 
 describe("Masthead", () => {
-  it("states the promise and the stamp, and asks for nothing", () => {
+  it("states the promise and its terms as one plain line, and asks for nothing", () => {
     render(<Masthead />);
     expect(
       screen.getByRole("heading", {
@@ -17,7 +17,8 @@ describe("Masthead", () => {
         name: "Who holds power, who pays for it, how they vote.",
       })
     ).toBeInTheDocument();
-    expect(screen.getByText("No number without its source.")).toBeInTheDocument();
+    const terms = screen.getByText(/^No party money\. No PAC money\./);
+    expect(terms.className).not.toMatch(/rotate|border/);
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 

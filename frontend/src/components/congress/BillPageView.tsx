@@ -610,7 +610,8 @@ export default function BillPageView({
                                 (bill_journey), the first time it appears. */}
                             {a.term && a.meaning && explained.get(a.term) === i && (
                               <span className="text-xs leading-relaxed text-ink-lo">
-                                <span className="font-semibold text-ink">{a.term}:</span> {a.meaning}
+                                <span className="font-semibold text-ink">{a.term}:</span>{" "}
+                                {a.meaning}
                               </span>
                             )}
                           </span>
