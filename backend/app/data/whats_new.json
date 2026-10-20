@@ -2,6 +2,55 @@
   "_contract": "One entry per user-facing feature, newest first; writing it is part of shipping the feature (AGENTS.md, 'What gets posted'). The same entry is the /changelog 'New on the site' list, the What's new feed and a Bluesky post (app/whats_new.py). id: a stable slug, never reused (it is the post's subject, so changing it posts again). date: the UTC day the feature reached main (git log --date=format-local:%Y-%m-%d with TZ=UTC). title: a name, no trailing period. summary: one plain sentence that stays true: no named politicians, no pronouns, no em dashes, no emoji, no year or Congress number. url: the page's path on the site. tests/test_whats_new.py checks each entry and that the post fits.",
   "entries": [
     {
+      "id": "presidential-contest",
+      "date": "2026-10-20",
+      "title": "The presidential contest",
+      "summary": "In a presidential year the elections page shows each state's electoral votes from the House apportionment, the candidates registered with the FEC and the primaries ahead, and calls no race.",
+      "url": "/elections"
+    },
+    {
+      "id": "election-administration",
+      "date": "2026-10-20",
+      "title": "How the last election was run",
+      "summary": "Between general elections the elections page shows turnout, voting by mail and rejected mail and provisional ballots by state, from the Election Assistance Commission's survey of every election office.",
+      "url": "/elections"
+    },
+    {
+      "id": "odd-year-state-elections",
+      "date": "2026-10-20",
+      "title": "Odd-year state elections",
+      "summary": "Between general elections the elections page lists the states holding regular state elections in the coming odd year, with each state's election office, and says plainly what it does not cover.",
+      "url": "/elections"
+    },
+    {
+      "id": "redistricting-watch",
+      "date": "2026-10-20",
+      "title": "Redistricting watch",
+      "summary": "The new House maps page says whether the next general's maps are settled, and how each map in force got there: an act, a vote, a commission plan or a court order, with its official source.",
+      "url": "/elections/redistricting"
+    },
+    {
+      "id": "next-cycle-field",
+      "date": "2026-10-20",
+      "title": "The next cycle's field and filing deadlines",
+      "summary": "Between general elections the elections page counts who has registered with the FEC for each seat, never calling a filing a place on the ballot, and leads with each FEC reporting deadline.",
+      "url": "/elections"
+    },
+    {
+      "id": "new-congress-compared",
+      "date": "2026-10-20",
+      "title": "How a new Congress compares",
+      "summary": "Once a new Congress is seated, the elections page counts the members new to each chamber, those from the other chamber, and the median age, from each member's official record.",
+      "url": "/elections"
+    },
+    {
+      "id": "elections-seasons",
+      "date": "2026-10-20",
+      "title": "The elections page through the whole cycle",
+      "summary": "Between general elections the elections page leads with the election just held, then special elections and the calendar, then the primaries ahead, each from the law or the FEC's calendar.",
+      "url": "/elections"
+    },
+    {
       "id": "csv-downloads-data-license",
       "date": "2026-10-17",
       "title": "Spreadsheets of the record, and a data license",

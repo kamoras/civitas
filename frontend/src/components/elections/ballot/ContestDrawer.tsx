@@ -12,9 +12,11 @@ const COLUMN_LABEL: Record<BallotContest["column"], string> = {
   local: "MEASURES · LOCAL",
 };
 
-/** One contest's research, over the ballot: the whole screen on a phone
- * (one contest per screen, the voting-machine pattern), a panel beside
- * the ballot on desktop so the ballot stays in view. Previous/Next walk
+/** One contest's research, over the ballot: a sheet from the bottom of a
+ * phone's screen (85% of it, the ballot still showing above, one contest at
+ * a time, the voting-machine pattern), a panel beside the ballot on desktop
+ * so the ballot stays in view. A tap above the sheet closes it, as ALL
+ * CONTESTS and Escape do; nothing needs dragging (WCAG 2.5.7). Previous/Next walk
  * the ballot in order, so a reader can go through every contest without
  * returning to the index.
  *
@@ -65,13 +67,13 @@ export default function ContestDrawer({
   }, [contest.key, focusId, panel]);
 
   return (
-    <div className="fixed inset-0 z-[60] flex justify-end">
+    <div className="fixed inset-0 z-[60] flex items-end justify-end lg:items-stretch">
       <button
         type="button"
         aria-label="Close and return to the ballot"
         tabIndex={-1}
         onClick={onClose}
-        className="absolute inset-0 hidden bg-surface-base/80 lg:block"
+        className="absolute inset-0 bg-surface-base/80"
       />
       <div
         ref={panel}
@@ -81,7 +83,7 @@ export default function ContestDrawer({
         // min-w-0: as a flex item of the backdrop row it was otherwise as
         // wide as its widest line, and at 200% text the whole drawer ran past
         // the phone's edge, its Next button off screen.
-        className="relative flex h-full w-full min-w-0 flex-col border-white/25 bg-surface-base font-sans lg:w-[660px] lg:border-l"
+        className="relative flex h-[85svh] w-full min-w-0 flex-col border-t-3 border-ink-min/60 bg-surface-base font-sans lg:h-full lg:w-[660px] lg:border-l lg:border-t-0 lg:border-white/25"
       >
         <div className="flex flex-wrap items-center justify-between gap-x-3 border-b border-white/[0.14] px-4 py-2.5">
           <span className="min-w-0 font-mono text-xs tracking-[0.12em] text-ink-lo">
@@ -114,7 +116,7 @@ export default function ContestDrawer({
                   id="contest-drawer-title"
                   ref={heading}
                   tabIndex={-1}
-                  className="text-[19px] font-bold leading-tight text-ink-hi outline-none"
+                  className="text-[19px] font-semibold leading-tight text-ink-hi outline-none"
                 >
                   {contest.title}
                 </h2>
@@ -143,7 +145,7 @@ export default function ContestDrawer({
           <button
             type="button"
             onClick={() => (next ? onNavigate(next.key) : onClose())}
-            className="min-h-[48px] bg-phos px-3 text-right text-sm font-bold text-surface-base hover:bg-phos-mid"
+            className="min-h-[48px] bg-phos px-3 text-right text-sm font-semibold text-surface-base hover:bg-phos-mid"
           >
             {next ? `${next.title}\u00a0→` : "Back to the ballot"}
           </button>

@@ -46,6 +46,8 @@ import {
   contestHash,
 } from "@/lib/ballotContests";
 import {
+  ballotHeadline,
+  candidateCountLabel,
   candidateName,
   districtAreaLabel,
   formatPvi,
@@ -81,6 +83,8 @@ import type {
   TownEntry,
 } from "@/types/election";
 import { INLINE_LINK } from "@/lib/controlStyles";
+import OnThisPage from "@/components/shared/OnThisPage";
+import { onThisPage } from "@/lib/onThisPage";
 
 // ── Detail content: what the drawer shows for each kind of contest ─────
 
@@ -1064,7 +1068,7 @@ function HouseDetail({
       <div>
         <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-[15px] font-bold text-ink-hi">
+            <p className="text-[15px] font-semibold text-ink-hi">
               {picked.district === 0 ? "At-large seat" : `District ${picked.district}`}
               {!resultsMode && (
                 <span className={`ml-2 font-mono text-xs font-normal ${leanTextClass(picked)}`}>
@@ -1407,7 +1411,7 @@ function ContestOverview({
               {groupStatewideRaces(ballot.statewideRaces).map((g) =>
                 g.race ? (
                   <li key={g.key} className="border-b border-white/[0.09] px-4 py-2">
-                    <span className="block text-[13px] font-bold text-ink-hi">
+                    <span className="block text-[13px] font-semibold text-ink-hi">
                       {g.race.label}
                       {termPhrase(g.race.termYears) && (
                         <span className="font-normal text-ink-lo">
@@ -1427,7 +1431,7 @@ function ContestOverview({
                   // elected: listed flat, New Hampshire's five council
                   // districts read as five offices every voter marks.
                   <li key={g.key} className="border-b border-white/[0.09] px-4 py-2">
-                    <span className="block text-[13px] font-bold text-ink-hi">
+                    <span className="block text-[13px] font-semibold text-ink-hi">
                       {g.seats![0].officeLabel || g.seats![0].label}
                       <span className="font-normal text-ink-lo">
                         {" "}
@@ -1476,7 +1480,7 @@ function ContestOverview({
                 key={c.chamber}
                 className="border-b border-white/[0.09] px-4 py-2 text-[13px] text-ink-lo"
               >
-                <span className="font-bold text-ink-hi">{c.label}</span> · {c.districts.length}{" "}
+                <span className="font-semibold text-ink-hi">{c.label}</span> · {c.districts.length}{" "}
                 {c.districts.length === 1 ? "seat" : "seats"} contested
                 {termPhrase(c.termYears) && ` · ${termPhrase(c.termYears)}`}
               </li>
@@ -1499,7 +1503,7 @@ function ContestOverview({
                   key={c.court}
                   className="border-b border-white/[0.09] px-4 py-2 text-[13px] text-ink-lo"
                 >
-                  <span className="font-bold text-ink-hi">{c.label}</span> · {c.seats.length}{" "}
+                  <span className="font-semibold text-ink-hi">{c.label}</span> · {c.seats.length}{" "}
                   {c.seats.length === 1 ? "seat" : "seats"}
                   {termPhrase(c.termYears) && ` · ${termPhrase(c.termYears)}`}
                 </li>
@@ -1856,16 +1860,54 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
     asOf: null,
   };
 
+  // The page's caveat, the official lookup, its feed and what it shows on
+  // election night: rendered beside the title from lg up and after the
+  // contests on a phone (one of the two is display:none at any width).
+  const ballotLinks = (
+    <>
+      <span className="text-xs text-ink-lo">A research tool, not an official ballot.</span>
+      {/* The voter lookup is a step in "Your vote, step by step" below,
+          named for its task; an older API without steps keeps this one
+          link. */}
+      {!ballot.voteSteps?.length && (
+        <a
+          href={lookupHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`${officialLookup.label} (opens in new tab)`}
+          className="font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
+        >
+          {lookupIsStateSpecific
+            ? `${ballot.state} OFFICIAL VOTER LOOKUP ↗`
+            : "FIND YOUR ELECTION OFFICE ↗"}
+        </a>
+      )}
+      <FollowFeed subject={stateName} feed={stateFeed(ballot.state, stateName)} />
+      {/* Before election day nothing on the page says what it
+          will show once polls close, or what "leads" will mean. */}
+      {!resultsMode && (
+        <Link
+          href="/about/elections#election-night"
+          className="text-xs text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
+        >
+          What this page shows on election night
+        </Link>
+      )}
+    </>
+  );
+
   return (
     <ShareSubjectProvider subject={shareSubject}>
       <div className="min-h-screen bg-surface-base text-ink-hi">
         <Navbar />
         <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
+          <OnThisPage />
           <div className="mx-auto max-w-[1400px]">
             <SectionTabs section="elections" active="ballots" className="mb-4" />
+            {/* Under 640px the section row above leads back to every state. */}
             <Link
               href="/elections"
-              className="inline-block mb-4 font-mono text-xs text-ink-lo hover:text-phos transition-colors"
+              className="mb-4 hidden font-mono text-xs text-ink-lo transition-colors hover:text-phos sm:inline-block"
             >
               ← ALL STATES
             </Link>
@@ -1876,19 +1918,27 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                   {resultsFraming ? "RESULTS" : "BALLOT RESEARCH"} · {stateName.toUpperCase()} ·{" "}
                   <span>{longDate(ballot.electionDate).toUpperCase()}</span>
                 </p>
-                <h1 className="mt-1 font-display text-2xl font-extrabold text-ink-hi sm:text-[28px]">
-                  {resultsFraming ? (
-                    `${stateName} results`
-                  ) : (
-                    <>Everyone on {stateName}&apos;s ballot, and who is behind them</>
-                  )}
+                <h1 className="mt-1 font-display text-2xl font-semibold text-ink-hi sm:text-[28px]">
+                  {resultsFraming
+                    ? `${stateName} results`
+                    : ballotHeadline(stateName, ballot.ballotBasis?.basis)}
                 </h1>
                 <p className="mt-1.5 text-sm text-ink-lo">
                   {contestCount} {contestCount === 1 ? "contest" : "contests"} ·{" "}
-                  {federalCandidates.length} federal{" "}
-                  {federalCandidates.length === 1 ? "candidate" : "candidates"}
+                  {candidateCountLabel(federalCandidates.length, ballot.ballotBasis?.basis)}
                   {thirdParty > 0 && `, ${thirdParty} outside the two major parties`}
                   {withRecords > 0 && ` · ${withRecords} with a congressional voting record`}
+                  {ballot.electoralVotes != null && (
+                    <>
+                      {" · "}
+                      <Link
+                        href="/elections#president"
+                        className="inline-flex min-h-6 items-center underline decoration-white/30 hover:text-phos"
+                      >
+                        {ballot.electoralVotes} electoral votes for president
+                      </Link>
+                    </>
+                  )}
                   {ballot.statePvi !== null && !resultsMode && (
                     <>
                       {" · "}
@@ -1918,37 +1968,11 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                   </div>
                 )}
               </div>
-              <div className="flex shrink-0 flex-col gap-1 lg:items-end lg:text-right">
-                <span className="text-xs text-ink-lo">
-                  A research tool, not an official ballot.
-                </span>
-                {/* The voter lookup is a step in "Your vote, step by step"
-                  below, named for its task; an older API without steps
-                  keeps this one link. */}
-                {!ballot.voteSteps?.length && (
-                  <a
-                    href={lookupHref}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label={`${officialLookup.label} (opens in new tab)`}
-                    className="font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
-                  >
-                    {lookupIsStateSpecific
-                      ? `${ballot.state} OFFICIAL VOTER LOOKUP ↗`
-                      : "FIND YOUR ELECTION OFFICE ↗"}
-                  </a>
-                )}
-                <FollowFeed subject={stateName} feed={stateFeed(ballot.state, stateName)} />
-                {/* Before election day nothing on the page says what it
-                    will show once polls close, or what "leads" will mean. */}
-                {!resultsMode && (
-                  <Link
-                    href="/about/elections#election-night"
-                    className="text-xs text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
-                  >
-                    What this page shows on election night
-                  </Link>
-                )}
+              {/* The caveat and the official lookup: beside the title from lg
+                  up; on a phone after the contests, so the ballot itself is
+                  the first thing under the title (mobile spec #5). */}
+              <div className="hidden shrink-0 flex-col gap-1 lg:flex lg:items-end lg:text-right">
+                {ballotLinks}
               </div>
             </header>
 
@@ -2055,8 +2079,13 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
             </div>
 
             {/* Phone: the index of every contest, one line each; a contest
-              opens on its own screen with Previous/Next. */}
-            <div className="lg:hidden" data-testid="ballot-index">
+              opens in a sheet over the ballot with Previous/Next. */}
+            <div
+              className="lg:hidden"
+              data-testid="ballot-index"
+              id="contests"
+              {...onThisPage("Contests", contests.length)}
+            >
               <nav
                 aria-label="Contests on this ballot"
                 className="border border-white/25 bg-surface font-sans"
@@ -2081,7 +2110,9 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                                 {contests.indexOf(c) + 1}
                               </span>
                               <span className="flex min-w-0 flex-1 flex-col">
-                                <span className="text-[15px] font-bold text-ink-hi">{c.title}</span>
+                                <span className="text-[15px] font-semibold text-ink-hi">
+                                  {c.title}
+                                </span>
                                 <span className="text-[13px] text-ink-lo">{c.summary}</span>
                               </span>
                               <span aria-hidden="true" className="text-ink-lo">
@@ -2132,13 +2163,17 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                 <button
                   type="button"
                   onClick={() => openContest(contests[0].key)}
-                  className="mt-3 min-h-[48px] w-full bg-phos font-bold text-surface-base hover:bg-phos-mid"
+                  className="mt-3 min-h-13 w-full bg-phos font-semibold text-surface-base hover:bg-phos-mid"
                 >
                   Research contest 1 →
                 </button>
               )}
-              <details className="mt-3 border border-white/25 bg-surface p-4">
-                <summary className="cursor-pointer text-sm font-bold text-ink-hi">
+              <details
+                className="mt-3 border border-white/25 bg-surface p-4"
+                id="not-on-this-page"
+                {...onThisPage("Not on this page")}
+              >
+                <summary className="cursor-pointer text-sm font-semibold text-ink-hi">
                   Not on this page
                 </summary>
                 <ul className="mt-2 list-disc pl-5 text-[13px] text-ink-lo">
@@ -2147,6 +2182,9 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                   ))}
                 </ul>
               </details>
+              <div className="mt-4 flex flex-col gap-1 border-t border-white/[0.14] pt-3">
+                {ballotLinks}
+              </div>
             </div>
           </div>
         </main>

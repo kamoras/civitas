@@ -1,7 +1,5 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { getScoreColor } from "@/lib/representation";
-import { displayScore } from "@/lib/formatting";
 import {
   COMPUTED_LEAN_HREF,
   candidateName,
@@ -234,11 +232,10 @@ export default function RaceContext({
       className="mb-5 bg-surface-base"
       {...{ [SHARE_SECTION_ATTR]: `context-${race.id}` }}
       {...shareMetaAttrs({
-        source:
-          "Cook PVI; Civitas-computed lean from open precinct returns; Civitas representation scores",
+        source: "Cook PVI; Civitas-computed lean from open precinct returns",
         // Read when the page loads.
         asOf: null,
-        scaleMax: incumbent?.incumbentRecord ? 100 : null,
+        scaleMax: null,
       })}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 border-b border-white/[0.09] pb-1">
@@ -336,19 +333,13 @@ export default function RaceContext({
               "Incumbent"
             }
           >
-            {candidateName(incumbent)} is on the ballot. Civitas score for this member&apos;s
-            record:{" "}
-            <span
-              className={`font-mono ${getScoreColor(displayScore(incumbent.incumbentRecord.score))}`}
-            >
-              {displayScore(incumbent.incumbentRecord.score)}
-            </span>{" "}
-            of 100.{" "}
+            {candidateName(incumbent)} is on the ballot. The member&apos;s record, measure by
+            measure against colleagues in the same party:{" "}
             <Link
               href={`/politicians/${incumbent.incumbentRecord.id}`}
               className="whitespace-nowrap font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
             >
-              [ SCORECARD → ]
+              [ WHERE THEY STAND → ]
             </Link>
           </Row>
         )}

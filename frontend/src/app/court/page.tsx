@@ -16,6 +16,8 @@ import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import { absoluteUrl, pageMetadata } from "@/lib/site";
 import { fetchRecord } from "@/lib/ssrPayload";
 import type { Court, CourtDecisionPage } from "@/types/court";
+import OnThisPage from "@/components/shared/OnThisPage";
+import { onThisPage } from "@/lib/onThisPage";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 const PER_PAGE = 10;
@@ -79,6 +81,7 @@ export default async function CourtPage({ searchParams }: { searchParams: Promis
       <div className="min-h-screen bg-surface-base font-sans text-ink-hi">
         <Navbar />
         <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
+          <OnThisPage />
           <div className="mx-auto flex max-w-5xl flex-col gap-8">
             <div>
               <SectionTabs section="court" active="court" />
@@ -93,6 +96,7 @@ export default async function CourtPage({ searchParams }: { searchParams: Promis
             <section
               id="summary"
               aria-labelledby="summary-heading"
+              {...onThisPage("The record in short")}
               {...{ [SHARE_SECTION_ATTR]: "summary" }}
               className="flex flex-col gap-3 border border-white/25 border-t-[3px] border-t-ink-hi bg-surface px-4 py-5 sm:px-6"
             >
@@ -101,7 +105,7 @@ export default async function CourtPage({ searchParams }: { searchParams: Promis
               </h2>
               {lead ? (
                 <div className="flex flex-col gap-x-6 gap-y-2 sm:flex-row sm:items-center">
-                  <p className="shrink-0 font-display text-6xl font-extrabold leading-none tabular-nums text-ink-hi sm:text-7xl">
+                  <p className="shrink-0 font-display text-6xl font-semibold leading-none tabular-nums text-ink-hi sm:text-7xl">
                     {lead.figure}
                   </p>
                   <div className="flex flex-col gap-1">
@@ -133,15 +137,18 @@ export default async function CourtPage({ searchParams }: { searchParams: Promis
 
             <section
               id="decisions"
+              {...onThisPage("Decisions")}
               aria-labelledby="decisions-heading"
               className="flex flex-col gap-6 border border-white/25 bg-surface px-4 py-5 sm:px-6"
             >
-              <h2 id="decisions-heading" className="text-xl font-bold text-ink-hi">
+              <h2 id="decisions-heading" className="text-xl font-semibold text-ink-hi">
                 Decisions
               </h2>
               <DecisionLineups court={court} />
               <div className="flex flex-col gap-3">
-                <h3 className="text-lg font-bold text-ink-hi">Latest decisions and who joined</h3>
+                <h3 className="text-lg font-semibold text-ink-hi">
+                  Latest decisions and who joined
+                </h3>
                 <p
                   className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-ink-lo"
                   aria-hidden="true"
@@ -163,10 +170,11 @@ export default async function CourtPage({ searchParams }: { searchParams: Promis
 
             <section
               id="methods"
+              {...onThisPage("Methods and sources")}
               aria-labelledby="methods-heading"
               className="flex flex-col gap-3 border border-white/25 bg-surface px-4 py-5 text-base leading-relaxed text-ink sm:px-6"
             >
-              <h2 id="methods-heading" className="text-xl font-bold text-ink-hi">
+              <h2 id="methods-heading" className="text-xl font-semibold text-ink-hi">
                 Methods and sources
               </h2>
               <p>

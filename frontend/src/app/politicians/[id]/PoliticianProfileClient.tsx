@@ -19,12 +19,16 @@ import type { PresidentScoreBreakdown, RepresentationScoreBreakdown } from "@/ty
 import type { Senator } from "@/types/senator";
 import type { President } from "@/types/president";
 import type { Justice } from "@/types/justice";
+import type { PeerComparison } from "@/types/peers";
 import Photo from "@/components/Photo";
 import RedrawnSeatNote from "@/components/redistricting/RedrawnSeatNote";
 import SeatOnMap from "@/components/elections/SeatOnMap";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { fetchMapSeats } from "@/lib/api";
 import PresidentialSupportSection from "@/components/presidentialSupport/PresidentialSupportSection";
+import OnThisPage from "@/components/shared/OnThisPage";
+import { onThisPage } from "@/lib/onThisPage";
+import { LONG_LABEL } from "@/lib/controlStyles";
 
 const DOC_TYPE_LABELS: Record<string, string> = {
   "Senate Floor Speech": "FLOOR SPEECH",
@@ -71,9 +75,18 @@ function DocRow({ doc }: { doc: GovernmentDoc }) {
   );
 }
 
-function SectionBlock({ title, children }: { title: string; children: React.ReactNode }) {
+function SectionBlock({
+  title,
+  id,
+  children,
+}: {
+  title: string;
+  /** An anchor, which also lists the block in a phone's "on this page" bar. */
+  id?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="mb-6">
+    <div className="mb-6" id={id} {...(id ? onThisPage(title) : {})}>
       <TerminalTitlebar title={title} />
       <div className="border border-t-0 border-white/[0.07] bg-surface-base p-4">{children}</div>
     </div>
@@ -83,6 +96,7 @@ function SectionBlock({ title, children }: { title: string; children: React.Reac
 export default function PoliticianProfileClient({
   profile,
   breakdown = null,
+  peers = null,
   strip,
   supportLine,
 }: {
@@ -95,6 +109,8 @@ export default function PoliticianProfileClient({
   /** The score breakdown, fetched with the profile (senators,
    *  representatives and presidents). */
   breakdown?: RepresentationScoreBreakdown | null;
+  /** Where the member stands among the caucus (members only). */
+  peers?: PeerComparison | null;
 }) {
   const { identity, branch, activeIssues, governmentRecord, scorecard } = profile;
   const isMember = branch === "senate" || branch === "house";
@@ -108,24 +124,26 @@ export default function PoliticianProfileClient({
     <div className="min-h-screen bg-surface-base text-ink-hi">
       <Navbar />
       <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
+        {/* A phone's section bar: fixed under the header once the score
+            scrolls away (it lists the sections marked with onThisPage). */}
+        <OnThisPage />
         <div className="max-w-7xl mx-auto">
-          {/* Breadcrumb */}
-          <div className="mb-6 font-mono text-xs text-ink-min">
-            <Link href="/politicians" className="hover:text-phos transition-colors">
-              ← POLITICIANS
-            </Link>
-            <span className="mx-2">/</span>
-            <span className="text-ink-lo">{branchLabel(branch)}</span>
+          {/* Breadcrumb, and the member's own feed on the same row (the one
+              the <head> names first: votes, sponsored bills' actions, score
+              changes and disclosures). One row, not two lines before the
+              member's name. */}
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4">
+            <div className="flex min-h-11 items-center font-mono text-xs text-ink-min">
+              <Link href="/politicians" className="hover:text-phos transition-colors">
+                ← POLITICIANS
+              </Link>
+              <span className="mx-2">/</span>
+              <span className="text-ink-lo">{branchLabel(branch)}</span>
+            </div>
+            {isMember && (
+              <FollowFeed subject={identity.name} feed={memberFeed(profile.id, identity.name)} />
+            )}
           </div>
-          {isMember && (
-            // The member's own feed (the one the <head> names first): votes,
-            // sponsored bills' actions, score changes and disclosures.
-            <FollowFeed
-              className="-mt-4 mb-6"
-              subject={identity.name}
-              feed={memberFeed(profile.id, identity.name)}
-            />
-          )}
 
           {/* Left-office banner — wording is branch-specific, see officeStatus.ts */}
           {formerOffice && (
@@ -184,9 +202,8 @@ export default function PoliticianProfileClient({
                   stateName={identity.stateName}
                   leadershipTitle={identity.leadershipTitle}
                   committees={identity.committees}
-                  rank={profile.chamberRank}
-                  field={profile.chamberField}
                   scoredOn={profile.scoredOn}
+                  peers={peers}
                   titleAs="h1"
                   former={hasLeftOffice}
                 />
@@ -196,7 +213,6 @@ export default function PoliticianProfileClient({
                   key={(scorecard as unknown as President).id}
                   president={scorecard as unknown as President}
                   breakdown={breakdown as unknown as PresidentScoreBreakdown | null}
-                  rank={profile.chamberRank}
                   scoredOn={profile.scoredOn}
                   titleAs="h1"
                 />
@@ -221,10 +237,10 @@ export default function PoliticianProfileClient({
                 <div className="mt-3 text-center">
                   <Link
                     href={`/politicians?branch=${branch}&state=${identity.state}`}
-                    className="font-mono text-xs text-ink-min hover:text-phos transition-colors tracking-widest"
+                    className={`font-mono tracking-widest text-ink-min transition-colors hover:text-phos ${LONG_LABEL}`}
                   >
-                    COMPARE ALL {identity.stateName ?? identity.state}{" "}
-                    {branch === "senate" ? "SENATORS" : "REPRESENTATIVES"} →
+                    Compare all {identity.stateName ?? identity.state}{" "}
+                    {branch === "senate" ? "senators" : "representatives"} →
                   </Link>
                 </div>
               )}
@@ -241,10 +257,10 @@ export default function PoliticianProfileClient({
 
           {/* Active Issues */}
           {activeIssues.length > 0 && (
-            <SectionBlock title="In the Action Center">
-              <p className="font-mono text-xs text-ink-min tracking-widest mb-3">
-                CURRENTLY ACTIVE IN {activeIssues.length} ISSUE
-                {activeIssues.length !== 1 ? "S" : ""}
+            <SectionBlock title="In the Action Center" id="in-the-action-center">
+              <p className={`mb-3 font-mono tracking-widest text-ink-min ${LONG_LABEL}`}>
+                Currently active in {activeIssues.length} issue
+                {activeIssues.length !== 1 ? "s" : ""}
               </p>
               <div className="space-y-3">
                 {activeIssues.map((issue) => (
@@ -279,10 +295,10 @@ export default function PoliticianProfileClient({
 
           {/* Government Record */}
           {governmentRecord.totalDocs > 0 && (
-            <SectionBlock title="Government record">
-              <p className="font-mono text-xs text-ink-min tracking-widest mb-3">
-                {governmentRecord.totalDocs} DOCUMENT{governmentRecord.totalDocs !== 1 ? "S" : ""}{" "}
-                ON PUBLIC RECORD · VERBATIM SOURCE LINKS
+            <SectionBlock title="Government record" id="government-record">
+              <p className={`mb-3 font-mono tracking-widest text-ink-min ${LONG_LABEL}`}>
+                {governmentRecord.totalDocs} document{governmentRecord.totalDocs !== 1 ? "s" : ""}{" "}
+                on public record · verbatim source links
               </p>
               {governmentRecord.recentDocs.map((doc) => (
                 <DocRow key={doc.id} doc={doc} />
@@ -290,9 +306,9 @@ export default function PoliticianProfileClient({
               {governmentRecord.totalDocs > 5 && (
                 <Link
                   href={`/explore?politician_id=${profile.id}`}
-                  className="block mt-3 font-mono text-xs text-ink-min hover:text-phos transition-colors tracking-widest"
+                  className={`mt-3 block font-mono tracking-widest text-ink-min transition-colors hover:text-phos ${LONG_LABEL}`}
                 >
-                  VIEW ALL {governmentRecord.totalDocs} DOCUMENTS →
+                  View all {governmentRecord.totalDocs} documents →
                 </Link>
               )}
             </SectionBlock>

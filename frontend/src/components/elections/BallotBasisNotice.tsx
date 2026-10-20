@@ -41,7 +41,7 @@ export default function BallotBasisNotice({ basis }: { basis?: BallotBasis | nul
         <p className="font-mono text-xs tracking-[0.12em] text-signal-red">
           THESE ARE NOT BALLOT POSITIONS
         </p>
-        <p className="mt-2 font-display text-sm leading-relaxed text-ink-hi">
+        <p className="mt-2 font-sans text-sm leading-relaxed text-ink-hi">
           This state&apos;s primary was held
           {typeof days === "number" ? ` ${days} days ago` : ""}, so its November ballot is already
           decided, but we do not have the certified list yet.
@@ -60,9 +60,9 @@ export default function BallotBasisNotice({ basis }: { basis?: BallotBasis | nul
         className="mb-6 font-mono text-xs leading-relaxed text-ink-min"
         data-testid="ballot-filers"
       >
-        Candidates below are FEC filers, not confirmed ballot positions: this state&apos;s primary
-        has not been held yet, so nobody knows the ballot. Sorted by money raised, which is the only
-        published signal of who is running a real campaign.
+        Everyone below is registered with the FEC, not on the ballot: this state&apos;s primary has
+        not been held yet, and the state certifies its own ballot after it. Sorted by money raised,
+        which is the only published signal of who is running a real campaign.
       </p>
     );
   }

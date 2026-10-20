@@ -6,7 +6,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { SECTIONS, inSection, sectionSubpages, type SectionKey } from "@/lib/routes";
 import { BSKY_PROFILE_URL } from "@/lib/site";
 import HeaderClearance from "./HeaderClearance";
-import RecordsBand from "./RecordsBand";
+import RecordsBand, { RunStatusSquare } from "./RecordsBand";
 import SiteSearch from "@/components/search/SiteSearch";
 import YourStatePicker from "./YourStatePicker";
 
@@ -229,7 +229,7 @@ function SectionItem({
                     href={t.href}
                     aria-current={current ? "page" : undefined}
                     onClick={() => onClose()}
-                    className={`flex min-h-11 items-center border-l-2 pl-3 font-display text-sm transition-colors ${
+                    className={`flex min-h-11 items-center border-l-2 pl-3 font-sans text-sm transition-colors ${
                       current
                         ? "border-ink-hi text-ink-hi"
                         : "border-white/15 text-ink-lo hover:border-ink-lo hover:text-ink-hi"
@@ -247,9 +247,72 @@ function SectionItem({
   );
 }
 
+/**
+ * A phone's header hides while the reader scrolls down and comes back on any
+ * scroll up (mobile spec P8): at rest it was 10% of every screen. Never
+ * within the first screen, never with reduced motion asked for (it stays
+ * put), never while focus is in it (any focus there shows it, WCAG 2.4.11),
+ * and never while the menu or a sheet is open. Only in the MENU layout
+ * (under 56rem). Tells the page through `data-header-hidden` on <html>, so
+ * what sits under the header (the section bar, the Action Center's tabs)
+ * moves up to the top edge with it.
+ */
+export function useHideOnScroll(
+  header: React.RefObject<HTMLElement | null>,
+  menuOpen: boolean
+): boolean {
+  const [hidden, setHidden] = useState(false);
+  useEffect(() => {
+    const el = header.current;
+    if (!el || typeof window.matchMedia !== "function") return;
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const phone = window.matchMedia("(max-width: 55.99rem)");
+    let last = window.scrollY;
+    let frame = 0;
+    const blocked = () =>
+      menuOpen ||
+      still.matches ||
+      !phone.matches ||
+      el.contains(document.activeElement) ||
+      document.body.style.overflow === "hidden";
+    const check = () => {
+      frame = 0;
+      const y = window.scrollY;
+      if (blocked() || y < window.innerHeight) setHidden(false);
+      else if (y > last + 4) setHidden(true);
+      else if (y < last - 4) setHidden(false);
+      last = y;
+    };
+    const onScroll = () => {
+      if (!frame) frame = requestAnimationFrame(check);
+    };
+    const show = () => setHidden(false);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    el.addEventListener("focusin", show);
+    still.addEventListener?.("change", show);
+    phone.addEventListener?.("change", show);
+    if (blocked()) show();
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      el.removeEventListener("focusin", show);
+      still.removeEventListener?.("change", show);
+      phone.removeEventListener?.("change", show);
+      cancelAnimationFrame(frame);
+    };
+  }, [header, menuOpen]);
+  useEffect(() => {
+    document.documentElement.toggleAttribute("data-header-hidden", hidden);
+    return () => document.documentElement.removeAttribute("data-header-hidden");
+  }, [hidden]);
+  return hidden;
+}
+
 export default function Navbar() {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  // The section whose pages are open in the phone menu: null for the
+  // current section's, "" for none.
+  const [shownPages, setShownPages] = useState<SectionKey | "" | null>(null);
   // The desktop section whose pages are showing, and the page it was opened
   // on: a navigation by any route (a link, Back) closes it without an effect.
   const [opened, setOpened] = useState<{ section: SectionKey; path: string } | null>(null);
@@ -261,22 +324,23 @@ export default function Navbar() {
   const logoRef = useRef<HTMLAnchorElement>(null);
   const rowRef = useRef<HTMLDivElement>(null);
   const rowFits = useRowFits(barRef, logoRef, rowRef);
+  const headerRef = useRef<HTMLElement>(null);
+  const hidden = useHideOnScroll(headerRef, menuOpen);
   // MENU's breakpoint, or always MENU when the row doesn't fit.
   const menuOnly = rowFits ? "min-[56rem]:hidden" : "";
 
   const closeMenu = useCallback(() => {
     setMenuOpen(false);
+    setShownPages(null);
     toggleRef.current?.focus();
   }, []);
 
   useEffect(() => {
     if (!menuOpen || !menuRef.current) return;
     // The panel itself, named "Site menu", so Tab's first stop is the
-    // state picker at its top, then the sections. Never the picker: a phone
-    // browser opens a native select's list when it takes focus, so MENU
-    // popped the state list open on every tap. (Starting on the first link
-    // instead skipped the picker, which Tab then reached only after every
-    // link.)
+    // first section, then the rest, then the state picker after them. Never
+    // the picker: a phone browser opens a native select's list when it takes
+    // focus, so MENU popped the state list open on every tap.
     menuRef.current.focus();
   }, [menuOpen]);
 
@@ -309,9 +373,12 @@ export default function Navbar() {
 
   return (
     <header
+      ref={headerRef}
       role="banner"
       // Solid, not a translucent blur: the header is paper, not glass.
-      className="fixed top-0 left-0 right-0 z-50 bg-surface-base"
+      className={`fixed top-0 left-0 right-0 z-50 bg-surface-base transition-transform duration-200 motion-reduce:transition-none ${
+        hidden ? "-translate-y-full" : ""
+      }`}
     >
       {/*
         The band lives inside the fixed header rather than above it so every
@@ -334,8 +401,8 @@ export default function Navbar() {
           ref={barRef}
           className="@container max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-y-4 [&>:last-child]:ml-auto"
         >
-          {/* The lockup: the pixel mark, the site's one use of that face,
-              and RESEARCH beside it in the mono, after a hairline. */}
+          {/* The lockup: the Archivo mark, the site's one use of that face,
+              and RESEARCH beside it in the label face, after a hairline. */}
           {/* In a bar under 20rem wide (a 320 px phone at the default text
               size) RESEARCH would push MENU off the bar, so the mark stands
               alone there; the link's name is the full one. A container
@@ -347,23 +414,27 @@ export default function Navbar() {
               row clipped every page there (WCAG 1.4.10). The row gap is
               gap-y-4, over the buttons' -my-3: at gap-y-2 their 44 px
               targets reached 8 px up over the wordmark's. */}
-          <Link
-            ref={logoRef}
-            href="/"
-            aria-label="Civitas Research"
-            className="group inline-flex min-h-6 items-center gap-2.5 text-ink-hi"
-          >
-            <span className="font-pixel text-xs tracking-widest transition-colors group-hover:text-phos sm:text-sm min-[56rem]:text-xs xl:text-sm">
-              CIVITAS
-            </span>
-            <span
-              aria-hidden="true"
-              className="hidden h-3.5 border-l border-ink-min/60 @min-[20rem]:inline sm:h-4"
-            />
-            <span className="hidden font-mono text-xs tracking-[0.18em] text-ink-lo @min-[20rem]:inline sm:tracking-[0.3em]">
-              RESEARCH
-            </span>
-          </Link>
+          {/* Under 56rem the records band is this square, left of the mark. */}
+          <span className="flex items-center gap-1">
+            <RunStatusSquare />
+            <Link
+              ref={logoRef}
+              href="/"
+              aria-label="Civitas Research"
+              className="group inline-flex min-h-6 items-center gap-2.5 text-ink-hi"
+            >
+              <span className="font-wordmark text-base font-extrabold tracking-[0.14em] transition-colors group-hover:text-phos min-[56rem]:text-sm xl:text-base">
+                CIVITAS
+              </span>
+              <span
+                aria-hidden="true"
+                className="hidden h-3.5 border-l border-ink-min/60 @min-[20rem]:inline sm:h-4"
+              />
+              <span className="hidden font-mono text-xs tracking-[0.18em] text-ink-lo @min-[20rem]:inline sm:tracking-[0.3em]">
+                RESEARCH
+              </span>
+            </Link>
+          </span>
 
           {/*
           One row from 56rem (896 px at the default text size), compact
@@ -450,34 +521,62 @@ export default function Navbar() {
             role="region"
             aria-label="Site menu"
             tabIndex={-1}
-            className={`${menuOnly} outline-none max-h-[calc(100dvh-5.5rem)] overflow-y-auto overscroll-contain bg-surface-base/[0.98] border-t border-white/[0.07] px-6 pt-2 pb-6`}
+            className={`${menuOnly} outline-none max-h-[calc(100dvh-3.5rem)] min-[56rem]:max-h-[calc(100dvh-5.5rem)] overflow-y-auto overscroll-contain bg-surface-base/[0.98] border-t border-white/[0.07] px-6 pt-2 pb-6`}
           >
-            <div className="border-b border-white/[0.07] py-3">
-              <YourStatePicker size="lg" />
-            </div>
+            {/* Phone order (mobile spec P8): the sections first, as rows a
+                thumb can hit, each section's pages behind its own ▸ (the
+                current section's open); then the reader's state, which
+                says what it set and where to go next; then Bluesky. It was
+                25 caps links at one weight, the pages beside their
+                sections. */}
             <ul>
               {NAV.map((section) => {
                 const { label, href } = SECTIONS[section];
                 const active = inSection(section, pathname);
                 const subs = sectionSubpages(section);
+                const expanded = (shownPages ?? (active ? section : null)) === section;
+                const listId = `menu-pages-${section}`;
                 return (
-                  <li key={section} className="border-b border-white/[0.07] py-1">
-                    <Link
-                      href={href}
-                      aria-current={active ? "page" : undefined}
-                      onClick={closeMenu}
-                      className="flex min-h-11 items-center"
-                    >
-                      <span
-                        className={`tracking-widest ${navLinkClass(active, section === ACCENT, "sm")}`}
+                  <li key={section} className="border-b border-white/[0.07]">
+                    <div className="flex items-stretch">
+                      <Link
+                        href={href}
+                        aria-current={active ? "page" : undefined}
+                        onClick={closeMenu}
+                        className={`flex min-h-13 flex-1 items-center font-sans text-lg ${
+                          active
+                            ? "text-ink-hi underline decoration-2 underline-offset-[6px]"
+                            : section === ACCENT
+                              ? "text-ink-hi hover:text-phos"
+                              : "text-ink hover:text-ink-hi"
+                        }`}
                       >
-                        {label.toUpperCase()}
-                      </span>
-                    </Link>
+                        {label}
+                      </Link>
+                      {subs.length > 0 && (
+                        <button
+                          type="button"
+                          aria-expanded={expanded}
+                          aria-controls={listId}
+                          aria-label={`${label} pages`}
+                          onClick={() => setShownPages(expanded ? "" : section)}
+                          className="flex min-h-13 min-w-13 items-center justify-center text-ink-lo hover:text-ink-hi"
+                        >
+                          <span
+                            aria-hidden="true"
+                            className={`inline-block transition-transform motion-reduce:transition-none ${expanded ? "rotate-90" : ""}`}
+                          >
+                            ▸
+                          </span>
+                        </button>
+                      )}
+                    </div>
                     {subs.length > 0 && (
                       <ul
+                        id={listId}
+                        hidden={!expanded}
                         aria-label={`${label} pages`}
-                        className="mb-1 grid grid-cols-2 gap-x-4 border-l border-white/15 pl-3"
+                        className="mb-2 border-l border-white/15 pl-3"
                       >
                         {subs.map((t) => {
                           const current = currentSubpage(section, t.href, pathname);
@@ -500,6 +599,9 @@ export default function Navbar() {
                 );
               })}
             </ul>
+            <div className="border-b border-white/[0.07] py-3">
+              <YourStatePicker size="lg" onNavigate={closeMenu} />
+            </div>
             <a
               href={BSKY_PROFILE_URL}
               target="_blank"

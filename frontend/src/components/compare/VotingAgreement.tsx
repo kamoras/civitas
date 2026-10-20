@@ -63,7 +63,7 @@ export default function VotingAgreement({
         <p className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
           {data.agreementPct != null && (
             <>
-              <span className="font-display text-3xl font-extrabold leading-none text-ink-hi tabular-nums">
+              <span className="font-display text-3xl font-semibold leading-none text-ink-hi tabular-nums">
                 {data.agreementPct}%
               </span>
               <span aria-hidden="true" className="tracking-tight text-signal-cyan">
@@ -72,7 +72,7 @@ export default function VotingAgreement({
             </>
           )}
         </p>
-        <p className="mt-2 font-display text-sm leading-snug text-ink">{data.sentence}</p>
+        <p className="mt-2 font-sans text-sm leading-snug text-ink">{data.sentence}</p>
         {data.recentSplits.length > 0 && (
           <>
             <h4 className="mt-3 tracking-[0.12em] text-ink-min">LATEST VOTES THEY SPLIT ON</h4>
@@ -99,7 +99,7 @@ function Split({ vote: v, left, right }: { vote: AgreementSplit; left: string; r
     <li className="border-b border-white/[0.07] py-2 last:border-b-0">
       <Link
         href={rollCallHref(v)}
-        className="line-clamp-2 min-h-6 font-display text-sm leading-snug text-ink-hi hover:underline"
+        className="line-clamp-2 min-h-6 font-sans text-sm leading-snug text-ink-hi hover:underline"
       >
         {what}
       </Link>

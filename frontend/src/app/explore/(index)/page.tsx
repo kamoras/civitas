@@ -127,7 +127,7 @@ function ResultCard({ result, query }: { result: ExploreResult; query: string })
           )}
         </div>
 
-        <h3 className="text-sm text-ink-hi font-medium mb-2 leading-snug">{result.title}</h3>
+        <h3 className="text-sm text-ink-hi font-semibold mb-2 leading-snug">{result.title}</h3>
 
         {/* The keyword channel returns an excerpt built around the matched
             terms, which says far more about why a document came back than
@@ -258,11 +258,11 @@ function IndexCounts({ stats }: { stats: ExploreStats | null }) {
 const EXPLORE_EYEBROW = "Explore · search across every branch";
 const EXPLORE_TITLE = "Explore the record";
 const EXPLORE_LEDE = (
-  <p>
+  <>
     Search any issue to see what all branches of government and federal agencies have done about it:
     by topic, or by exact name, number, or &ldquo;quoted phrase&rdquo;. Many regulatory documents
     are open for public comment: make your voice heard.
-  </p>
+  </>
 );
 
 export default function ExplorePage() {
@@ -542,8 +542,12 @@ function ExplorePageInner() {
             eyebrow={EXPLORE_EYEBROW}
             title={EXPLORE_TITLE}
             aside={<IndexCounts stats={stats} />}
+            // A search's results page folds the standing line on a phone,
+            // where it and the form pushed the first result to 1,301px; the
+            // reader has already searched.
+            more={submitted ? EXPLORE_LEDE : undefined}
           >
-            {EXPLORE_LEDE}
+            {submitted ? null : EXPLORE_LEDE}
           </PageMasthead>
 
           {/* Search form */}

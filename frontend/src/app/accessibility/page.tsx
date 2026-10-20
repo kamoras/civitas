@@ -32,8 +32,8 @@ export default function AccessibilityPage() {
     <>
       <Navbar />
       <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
-        {/* `font-sans`: this is reading, not data. The body element is
-            `font-mono`, and prose that names no face inherits it. */}
+        {/* `font-sans`: this is reading. The body element is `font-sans`
+            too; named here so the page reads the same whatever it sits in. */}
         <div className="max-w-3xl mx-auto font-sans">
           <PageMasthead
             className="mb-6"
@@ -88,22 +88,40 @@ export default function AccessibilityPage() {
                   the navigation. In a set of tabs, the arrow keys, Home and End move between tabs
                   and Tab moves into the content. In the main navigation, the button beside each
                   section lists its pages as plain links; Escape closes the list and returns focus
-                  to the button, and moving focus away closes it too. The mobile menu, the share
-                  dialog, the map&apos;s seat sheet and the scorecard and ballot drawers keep focus
-                  inside while open (Tab and Shift+Tab both wrap), close on Escape, and return focus
-                  to what opened them. Map tiles are one keyboard stop per state, opened with Enter.
+                  to the button, and moving focus away closes it too. In the phone menu each
+                  section&apos;s pages open from a button beside it that says whether they are
+                  showing. Choosing your state says what it set, in a message a screen reader reads
+                  out, with links to that state&apos;s members and ballot. The mobile menu, the
+                  share dialog, the map&apos;s seat sheet and the scorecard and ballot drawers keep
+                  focus inside while open (Tab and Shift+Tab both wrap), close on Escape, and return
+                  focus to what opened them. Map tiles are one keyboard stop per state, opened with
+                  Enter.
+                </Item>
+                <Item label="Long pages on a phone">
+                  A member&apos;s scorecard, a bill, a roll call, a state ballot, the Supreme Court
+                  page and the About chapters show a bar under the header once their first section
+                  scrolls up: it names the section you are reading, and SECTIONS opens every section
+                  in a sheet from the bottom of the screen, the current one marked. Choosing one
+                  moves focus to its heading. The sheet keeps focus inside, closes on Escape, its
+                  44-pixel Close button or a tap outside it, and returns focus to SECTIONS.
                 </Item>
                 <Item label="Focus">
-                  The element with keyboard focus always shows a 2px cyan outline, and the page
-                  scrolls so it is never hidden under the fixed header.
+                  The element with keyboard focus always shows a 2px green outline, and the page
+                  scrolls so it is never hidden under the fixed header, or under a phone&apos;s
+                  section bar. A phone&apos;s header comes back whenever focus moves into it. Its
+                  data status is a small square beside the name, a button that reads out and shows
+                  the whole status line.
                 </Item>
                 <Item label="Contrast">
-                  Text colours come from a fixed palette with no dimmer shades to reach for. The
-                  faintest text clears 4.5:1 against the lightest background any text sits on, and
-                  stays at or above APCA Lc 58 on every background, a stricter measure of how light
-                  text on a dark page actually reads. Links inside a sentence are underlined, not
-                  only coloured. Letters drawn on map tiles sit on a dark outline, so they read on
-                  any tile colour.
+                  The site is dark text on a warm paper by default, and a warm dark theme follows
+                  your device&apos;s dark setting, or the &ldquo;Dark theme&rdquo; button in the
+                  footer (kept for this tab only). Text colours come from a fixed palette in each
+                  theme with no dimmer shades to reach for. The faintest text clears 4.5:1 against
+                  every background any text sits on, in both themes, and stays at or above APCA Lc
+                  58. Links inside a sentence are underlined, not only coloured. Maps and the
+                  Court&apos;s agreement grid are drawn on a dark plate in both themes, the ground
+                  their tile colours were measured on; letters on map tiles sit on a dark outline,
+                  so they read on any tile colour.
                 </Item>
                 <Item label="Screen readers">
                   Pages use landmarks (header, navigation, main) and headings in order. Tabs,
@@ -120,7 +138,8 @@ export default function AccessibilityPage() {
                 </Item>
                 <Item label="Motion">
                   With reduced motion turned on in your system settings, animations stop,
-                  transitions are instant and the page jumps instead of scrolling smoothly.
+                  transitions are instant and the page jumps instead of scrolling smoothly. On a
+                  phone the header, which otherwise slides away while you scroll down, stays put.
                 </Item>
                 <Item label="Windows High Contrast">
                   In forced-colours mode, decorative colour effects that would smear text are
@@ -130,7 +149,10 @@ export default function AccessibilityPage() {
                   Controls are at least 24×24 pixels, WCAG 2.2&apos;s minimum target size, or spaced
                   so a 24-pixel circle around each touches no other; links inside a sentence are the
                   exception the standard allows. On a phone the MENU button, the way to every
-                  section, is a 44×44 target around the word. Nothing needs dragging.
+                  section, is a 44×44 target around the word, every standalone action (calling or
+                  writing a member, sharing, paging, a roll call&apos;s names) is 44 pixels tall,
+                  and every text box and menu is 44 pixels tall with 16-pixel text, so an iPhone
+                  doesn&apos;t zoom the page when one is tapped. Nothing needs dragging.
                 </Item>
                 <Item label="Pop-up explanations">
                   A score&apos;s explanation opens on hover, focus or tap, stays open while the
@@ -139,9 +161,12 @@ export default function AccessibilityPage() {
               </List>
               <More label="Typefaces, and why">
                 <P>
-                  Prose is set in Archivo, a plain grotesque. Share Tech Mono is kept for data, IDs
-                  and labels, where telling 0 from O and 1 from l matters. The pixel face is used
-                  for the Civitas wordmark and nothing else.
+                  Prose, labels and figures are set in Fira Sans, a humanist sans with open letter
+                  shapes that stay readable at small sizes, with figures of equal width so columns
+                  of numbers line up. Page and section titles are in Source Serif 4. DM Mono is kept
+                  for record identifiers (issue, roll-call and bill numbers), where telling 0 from O
+                  and 1 from l matters. The Civitas wordmark is Archivo. All four are open-licence
+                  fonts served from this site.
                 </P>
               </More>
             </Section>
@@ -159,7 +184,8 @@ export default function AccessibilityPage() {
                   The same routes, on the same production build, are loaded in Chrome at 320 and
                   1280 pixels wide and checked against every axe-core rule for WCAG 2.0, 2.1 and 2.2
                   at levels A and AA, including colour contrast and target size. A page wider than a
-                  320-pixel screen fails too.
+                  320-pixel screen fails too, and so does a text box or menu under 16 pixels or 44
+                  pixels tall at that width.
                 </Item>
                 <Item label="axe-core, in the test suite">
                   The member, president and justice scorecards, the Congress report pages and the
@@ -173,8 +199,8 @@ export default function AccessibilityPage() {
                 <Item label="Palette tests">
                   Tests fail if code uses a stock Tailwind colour or a semi-transparent colour
                   outside the palette. They hold each text colour to its APCA floor on every
-                  background, and compute the WCAG ratio of every text and background pair written
-                  in the code, failing below 4.5:1 (3:1 for large text).
+                  background in both themes, and compute the WCAG ratio of every text and background
+                  pair written in the code, failing below 4.5:1 (3:1 for large text).
                 </Item>
               </List>
               <More label="What the automated checks don't cover">

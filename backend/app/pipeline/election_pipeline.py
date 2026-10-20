@@ -41,6 +41,7 @@ from app import ops_alerts
 from app.config import settings
 from app.database import SessionLocal
 from app.error_utils import record_exception
+from app.electoral_votes import is_presidential
 from app.election_calendar import (
     federal_states,
     seats_up_for_year,
@@ -207,7 +208,14 @@ async def run_ballot_sync(cycle: int | None = None) -> dict:
     }
 
 
+# The presidential contest's Race: one national race, never a state's (each
+# state certifies who is on its own ballot; the FEC's filings are national).
+PRESIDENTIAL_STATE = "US"
+
+
 def _race_id(cycle: int, office: str, state: str, district: int | None, is_special: bool = False) -> str:
+    if office == "P":
+        return f"{cycle}-PRES"
     if office == "S":
         base = f"{cycle}-SEN-{state}"
         return f"{base}-SPECIAL" if is_special else base
@@ -306,9 +314,17 @@ def _sync_roster(db: Session, cycle: int, candidates_raw: list[dict]) -> int:
             candidate_id = raw.get("candidate_id")
             state = raw.get("state")
             office = raw.get("office")
-            if not candidate_id or not state or office not in ("H", "S"):
+            if not candidate_id or not state or office not in ("H", "S", "P"):
                 continue
-            if state not in states:
+            if office == "P":
+                # Presidential filers are national; only the FEC's statutory
+                # candidates (raised or spent over its threshold) are kept,
+                # not the paper filings that outnumber them many times over.
+                if raw.get("candidate_status") != "C":
+                    skipped_off_ballot += 1
+                    continue
+                state = PRESIDENTIAL_STATE
+            elif state not in states:
                 skipped_non_state += 1
                 continue
             if not _on_ballot_in(raw, cycle):
@@ -1589,7 +1605,9 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                     raise _ElectionHeld
                 house_raw = await fetch_all_candidates(client, db, cycle, "H")
                 senate_raw = await fetch_all_candidates(client, db, cycle, "S")
-                synced = _sync_roster(db, cycle, house_raw + senate_raw)
+                # The presidential contest, in the cycles that hold one.
+                pres_raw = await fetch_all_candidates(client, db, cycle, "P") if is_presidential(cycle) else []
+                synced = _sync_roster(db, cycle, house_raw + senate_raw + pres_raw)
                 run.candidates_synced = synced
                 logger.info("Synced %d candidates", synced)
                 progress.complete("roster_sync", detail=f"{synced} candidates")

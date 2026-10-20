@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { fetchRepStockTrades, fetchSenatorStockTrades } from "@/lib/api";
 import { countLobbiedBills } from "@/lib/lobbying";
 import type { Senator } from "@/types/senator";
+import { onThisPage } from "@/lib/onThisPage";
+import { labelCase } from "@/lib/controlStyles";
 
 export type RecordView = "trades" | "donorVotes" | "positions";
 
@@ -20,7 +22,7 @@ function Tile({
 }) {
   const body = (
     <>
-      <span className="text-base font-bold text-ink-hi">{title}</span>
+      <span className="text-base font-semibold text-ink-hi">{title}</span>
       <span className="text-sm text-ink-lo">{line}</span>
       <span className="font-mono text-xs text-ink-min">{meta}</span>
     </>
@@ -41,6 +43,8 @@ function Tile({
  *  API's (the trades endpoint's total and late count, the stored
  *  donor-vote overlaps with the bills their lobbying filings name, and
  *  policy positions). */
+const ALSO = "Also on record, not part of the score";
+
 export default function AlsoOnRecord({
   member,
   chamber,
@@ -74,9 +78,10 @@ export default function AlsoOnRecord({
     <section className="flex flex-col gap-3" aria-labelledby="also-on-record">
       <h2
         id="also-on-record"
-        className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min"
+        {...onThisPage("Also on record")}
+        className={`font-mono tracking-[0.14em] text-ink-min ${labelCase(ALSO)}`}
       >
-        Also on record, not part of the score
+        {ALSO}
       </h2>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Tile

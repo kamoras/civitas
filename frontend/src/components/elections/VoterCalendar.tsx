@@ -4,6 +4,7 @@ import { shortDate } from "@/lib/congress";
 import DeadlineRibbon from "@/components/elections/DeadlineRibbon";
 import RegisterLink from "@/components/elections/RegisterLink";
 import { INLINE_LINK } from "@/lib/controlStyles";
+import { onThisPage } from "@/lib/onThisPage";
 
 /** "6 days left", "last day", "in 6 days": the backend's countdown, worded
  *  for a deadline or for a window that hasn't opened. */
@@ -70,9 +71,20 @@ function Row({ d, register }: { d: VoterDeadline; register?: Calendar["register"
  *  countdown and the register link; what follows the deadline (same-day
  *  registration, in the state's words); or that the state has no
  *  registration. Falls back to the older API's summary sentence. */
-function Registration({ calendar, showRegister }: { calendar: Calendar; showRegister: boolean }) {
+function Registration({
+  calendar,
+  showRegister,
+  part = "all",
+}: {
+  calendar: Calendar;
+  showRegister: boolean;
+  /** "lead": the sentence, its countdown and the register link (a phone's
+   *  folded calendar); "rest": what follows the deadline; "all": both. */
+  part?: "all" | "lead" | "rest";
+}) {
   const line = calendar.registration;
   if (!line) {
+    if (part === "rest") return null;
     return calendar.registrationSummary ? (
       <p className="mt-1 font-display text-lg font-semibold text-ink-hi">
         {calendar.registrationSummary}
@@ -83,13 +95,19 @@ function Registration({ calendar, showRegister }: { calendar: Calendar; showRegi
     line.status === "open" ? countdownText({ status: "open", countdown: line.countdown }) : null;
   const link = showRegister ? calendar.register : null;
   const canRegister = line.status === "open" || line.status === "same_day";
+  if (part === "rest")
+    return line.sameDay ? (
+      <p className="mt-1 text-sm text-ink">After that: {line.sameDay}</p>
+    ) : null;
   return (
     <div className="mt-1">
       <p className="font-display text-xl font-semibold text-ink-hi">
         {line.sentence}
         {left && <span className="ml-2 font-mono text-sm text-phos">{left}</span>}
       </p>
-      {line.sameDay && <p className="mt-0.5 text-sm text-ink">After that: {line.sameDay}</p>}
+      {line.sameDay && part === "all" && (
+        <p className="mt-0.5 text-sm text-ink">After that: {line.sameDay}</p>
+      )}
       {link && canRegister && (
         <p className="mt-1 text-sm">
           <RegisterLink
@@ -149,6 +167,7 @@ export default function VoterCalendar({
       <section
         id="voter-deadlines"
         aria-labelledby="voter-deadlines-heading"
+        {...onThisPage("Voter deadlines")}
         className="mb-6 border border-white/15 bg-surface px-4 py-3"
       >
         {heading}
@@ -168,19 +187,28 @@ export default function VoterCalendar({
       </section>
     );
   }
-  return (
-    <section
-      id="voter-deadlines"
-      aria-labelledby="voter-deadlines-heading"
-      className="mb-6 border border-white/15 bg-surface px-4 py-3"
-    >
-      {heading}
+  const items = (
+    <ul className="mt-2 text-sm">
+      {calendar.items.map((d) => (
+        <Row
+          key={`${d.kind}-${d.method}-${d.basis}-${d.date}`}
+          d={d}
+          register={showRegister ? calendar.register : undefined}
+        />
+      ))}
+    </ul>
+  );
+  // The calendar after its registration line: who republished it, the
+  // ribbon, the next deadline and every deadline with its rule and source.
+  // `list`: the list under its own open disclosure (the wide layout) or
+  // straight in (a phone's, already inside one).
+  const details = (list: boolean) => (
+    <>
       {calendar.republished && (
         <p className="mt-1 border-l-2 border-signal-amber/60 pl-2 text-sm text-ink">
           {calendar.republished}
         </p>
       )}
-      <Registration calendar={calendar} showRegister={showRegister} />
       {calendar.electionDay && calendar.items.length > 0 && (
         <DeadlineRibbon
           items={calendar.items}
@@ -201,23 +229,50 @@ export default function VoterCalendar({
         <p className="mt-1 text-base text-ink">Every deadline for this election has passed.</p>
       )}
       {calendar.note && <p className="mt-1 text-sm text-ink-lo">{calendar.note}</p>}
-      <details className="group mt-2" open>
-        <summary className="cursor-pointer list-none font-mono text-xs text-signal-cyan hover:text-phos [&::-webkit-details-marker]:hidden">
-          Every deadline, with its source{" "}
-          <span aria-hidden="true" className="inline-block group-open:rotate-180">
-            &#9662;
-          </span>
-        </summary>
-        <ul className="mt-2 text-sm">
-          {calendar.items.map((d) => (
-            <Row
-              key={`${d.kind}-${d.method}-${d.basis}-${d.date}`}
-              d={d}
-              register={showRegister ? calendar.register : undefined}
-            />
-          ))}
-        </ul>
-      </details>
+      {list ? (
+        <details className="group mt-2" open>
+          <summary className="cursor-pointer list-none font-mono text-xs text-signal-cyan hover:text-phos [&::-webkit-details-marker]:hidden">
+            Every deadline, with its source{" "}
+            <span aria-hidden="true" className="inline-block group-open:rotate-180">
+              &#9662;
+            </span>
+          </summary>
+          {items}
+        </details>
+      ) : (
+        items
+      )}
+    </>
+  );
+  return (
+    <section
+      id="voter-deadlines"
+      aria-labelledby="voter-deadlines-heading"
+      {...onThisPage("Voter deadlines")}
+      className="mb-6 border border-white/15 bg-surface px-4 py-3"
+    >
+      {heading}
+      {/* A phone: the next registration deadline and the register link,
+          then everything else behind one disclosure, so the contests come
+          into the first screen (mobile spec #5). Every date stays quoted with
+          its rule and source, one tap away (AGENTS.md §7). */}
+      <div className="lg:hidden" data-calendar="phone">
+        <Registration calendar={calendar} showRegister={showRegister} part="lead" />
+        <details className="group mt-1">
+          <summary className="inline-flex min-h-11 cursor-pointer list-none items-center font-mono text-xs text-signal-cyan hover:text-phos [&::-webkit-details-marker]:hidden">
+            Every deadline, with its source{" "}
+            <span aria-hidden="true" className="ml-1 inline-block group-open:rotate-180">
+              &#9662;
+            </span>
+          </summary>
+          <Registration calendar={calendar} showRegister={showRegister} part="rest" />
+          {details(false)}
+        </details>
+      </div>
+      <div className="hidden lg:block" data-calendar="wide">
+        <Registration calendar={calendar} showRegister={showRegister} />
+        {details(true)}
+      </div>
     </section>
   );
 }

@@ -20,6 +20,8 @@ import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import { absoluteUrl, billFeed } from "@/lib/site";
 import FollowFeed from "@/components/shared/FollowFeed";
+import OnThisPage from "@/components/shared/OnThisPage";
+import { onThisPage } from "@/lib/onThisPage";
 import { ordinal } from "@/components/scorecard/format";
 import { exploreHref } from "@/lib/exploreHref";
 
@@ -68,7 +70,11 @@ function SectionHead({
 }) {
   return (
     <div className="flex flex-wrap items-baseline justify-between gap-3">
-      <h2 id={id} className="font-display text-2xl font-extrabold text-ink-hi">
+      <h2
+        id={id}
+        {...onThisPage(title, count)}
+        className="font-display text-2xl font-semibold text-ink-hi"
+      >
         {title}
         {count !== undefined && (
           // The comma is for a screen reader, which ran the two together
@@ -99,7 +105,7 @@ function SummaryBody({ paragraphs }: { paragraphs: string[] }) {
   const para = (p: string, i: number) => (
     <p
       key={i}
-      className={`max-w-3xl leading-relaxed ${i === 0 ? "font-bold text-ink-hi" : "text-ink"}`}
+      className={`max-w-3xl leading-relaxed ${i === 0 ? "font-semibold text-ink-hi" : "text-ink"}`}
     >
       {p}
     </p>
@@ -192,9 +198,9 @@ export default function BillPageView({
   // The page's sections, listed under the title: a long bill's summary and
   // path put its votes many screens down.
   const jumps: [string, string, string?][] = [
-    ["summary", "Summary"],
     ...(record?.journey ? [["journey", "Its path"] as [string, string]] : []),
     ["votes", "Votes", votesCount],
+    ["summary", "Summary"],
     ["history", "History"],
     ["committee", "In committee"],
     ["text", "Text"],
@@ -221,9 +227,11 @@ export default function BillPageView({
       <div className="min-h-screen bg-surface-base font-sans text-ink-hi">
         <Navbar />
         <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
+          <OnThisPage />
           <div className="mx-auto max-w-6xl">
             <SectionTabs section="congress" active="bills" />
-            <nav aria-label="Breadcrumb" className="mb-4 text-sm text-ink-lo">
+            {/* Under 640px the section row above names where this page sits. */}
+            <nav aria-label="Breadcrumb" className="hidden sm:block mb-4 text-sm text-ink-lo">
               <Link href="/congress" className="hover:text-phos">
                 Congress
               </Link>
@@ -258,7 +266,7 @@ export default function BillPageView({
                     <ShareSectionButton label="Bill overview" withStrip={false} />
                   </span>
                 </div>
-                <h1 className="font-display text-2xl font-extrabold leading-tight text-ink-hi sm:text-4xl">
+                <h1 className="font-display text-2xl font-semibold leading-tight text-ink-hi sm:text-4xl">
                   {title}
                 </h1>
                 {shortTitle && under && (
@@ -309,16 +317,6 @@ export default function BillPageView({
                     ))}
                   </p>
                 ) : null}
-                {(record?.congress ?? detail?.congress) && (
-                  // The bill's own feed (the <head> names it first): each
-                  // action and roll call. Left out of a shared picture.
-                  <div data-share-exclude>
-                    <FollowFeed
-                      subject={label}
-                      feed={billFeed(record?.congress ?? detail!.congress, billId, label)}
-                    />
-                  </div>
-                )}
                 {lead && summary && (
                   <div className="flex flex-col gap-1.5">
                     <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
@@ -338,7 +336,7 @@ export default function BillPageView({
                   </div>
                 )}
                 {record?.journey && (
-                  <div id="journey">
+                  <div id="journey" {...onThisPage("Its path")}>
                     <BillJourney journey={record.journey} passage={record.passage} />
                   </div>
                 )}
@@ -384,11 +382,43 @@ export default function BillPageView({
                     minutes.
                   </p>
                 )}
+                {(record?.congress ?? detail?.congress) && (
+                  // The bill's own feed (the <head> names it first): each
+                  // action and roll call. Left out of a shared picture. At
+                  // the end of the header, not before what the bill does.
+                  <div data-share-exclude>
+                    <FollowFeed
+                      subject={label}
+                      feed={billFeed(record?.congress ?? detail!.congress, billId, label)}
+                    />
+                  </div>
+                )}
               </header>
+
+              {/* The votes come straight after the bill's header, and before
+                  the sponsor box on a narrower screen: on a phone they sat
+                  after the cosponsors, the "this week" strip and the summary.
+                  Left out of the overview's shared picture, which is the
+                  header; the votes have their own. */}
+              <div className="min-w-0 lg:col-start-1" data-share-exclude>
+                <section className="flex flex-col gap-3" {...shareSection("votes")}>
+                  <SectionHead id="votes" title="Votes" count={votesCount} shareable />
+                  <VotePanel
+                    votes={record?.votes ?? []}
+                    congress={record?.congress ?? detail?.congress ?? 0}
+                    unreadable={!record}
+                    coverage={record?.coverage?.votes}
+                    named={record?.actions.flatMap((a) =>
+                      a.rollCalls.map((rc) => ({ ...rc, date: a.date }))
+                    )}
+                    passage={record?.passage}
+                  />
+                </section>
+              </div>
 
               <aside
                 aria-label="Sponsor and facts"
-                className="@container flex flex-col gap-4 border border-white/15 bg-surface p-4 text-sm"
+                className="@container flex flex-col gap-4 self-start border border-white/15 bg-surface p-4 text-sm lg:col-start-2 lg:row-span-2 lg:row-start-1"
               >
                 {record?.sponsors.length ? (
                   // On a phone the sponsor is named under the title instead.
@@ -479,11 +509,6 @@ export default function BillPageView({
               </aside>
             </div>
 
-            {/* Below the bill, not above it: a reader opened this page for
-                the bill, and on a phone the strip pushed its title down by a
-                third of the screen. */}
-            {strip && <div className="mt-10">{strip}</div>}
-
             <div className="mt-8 grid grid-cols-1 gap-12 lg:grid-cols-[minmax(0,1fr)_22rem]">
               <div className="flex min-w-0 flex-col gap-12">
                 <section className="flex flex-col gap-3" {...shareSection("summary")}>
@@ -503,20 +528,6 @@ export default function BillPageView({
                         : "The Congressional Research Service has not published a summary of this bill yet."}
                     </p>
                   )}
-                </section>
-
-                <section className="flex flex-col gap-3" {...shareSection("votes")}>
-                  <SectionHead id="votes" title="Votes" count={votesCount} shareable />
-                  <VotePanel
-                    votes={record?.votes ?? []}
-                    congress={record?.congress ?? detail?.congress ?? 0}
-                    unreadable={!record}
-                    coverage={record?.coverage?.votes}
-                    named={record?.actions.flatMap((a) =>
-                      a.rollCalls.map((rc) => ({ ...rc, date: a.date }))
-                    )}
-                    passage={record?.passage}
-                  />
                 </section>
 
                 {record?.floorDebate && (
@@ -610,7 +621,8 @@ export default function BillPageView({
                                 (bill_journey), the first time it appears. */}
                             {a.term && a.meaning && explained.get(a.term) === i && (
                               <span className="text-xs leading-relaxed text-ink-lo">
-                                <span className="font-bold text-ink">{a.term}:</span> {a.meaning}
+                                <span className="font-semibold text-ink">{a.term}:</span>{" "}
+                                {a.meaning}
                               </span>
                             )}
                           </span>
@@ -773,6 +785,11 @@ export default function BillPageView({
                 )}
               </aside>
             </div>
+
+            {/* After the record, not above it: a reader opened this page for
+                the bill, and on a phone the strip pushed its votes down by a
+                screen. */}
+            {strip && <div className="mt-12">{strip}</div>}
 
             <div className="mt-12">
               <BillSources

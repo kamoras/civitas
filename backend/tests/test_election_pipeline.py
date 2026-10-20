@@ -206,7 +206,8 @@ class TestCurrentElectionCycle:
         ):
             asyncio.run(election_pipeline.run_election_pipeline())
 
-        assert seen_cycles == [2028, 2028]  # once for House, once for Senate
+        # House, Senate, and the presidency: 2028 holds a presidential general.
+        assert seen_cycles == [2028, 2028, 2028]
 
 
 @pytest.mark.parametrize("office, state, district, expected", [

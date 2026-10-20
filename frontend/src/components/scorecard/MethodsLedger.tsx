@@ -12,6 +12,7 @@ import { getScoreColor } from "@/lib/representation";
 import { currentCongressLabel } from "@/lib/sources";
 import { COMPUTED_LEAN_HREF, formatComputedLean, formatPvi } from "@/lib/elections";
 import type { AlignmentFacts } from "@/types/scoreBreakdown";
+import { onThisPage } from "@/lib/onThisPage";
 
 type Dimension =
   "fundingIndependence" | "constituentAlignment" | "legislativeEffectiveness" | "fundingDiversity";
@@ -293,10 +294,15 @@ export default function MethodsLedger({
   const version = scoredOn?.algorithmVersion ? `, scoring method ${scoredOn.algorithmVersion}` : "";
 
   return (
-    <section ref={ref} id="methods" className="border border-white/25 bg-surface font-sans">
+    <section
+      ref={ref}
+      id="methods"
+      {...onThisPage("Methods and citation")}
+      className="border border-white/25 bg-surface font-sans"
+    >
       {/* The toggle inside the heading, as CollapsibleSection does it: a
           heading inside a button drops out of the heading list. */}
-      <h2 className="text-[19px] font-bold leading-tight text-ink-hi">
+      <h2 className="text-[19px] font-semibold leading-tight text-ink-hi">
         <button
           type="button"
           onClick={() => setOpen(!open)}

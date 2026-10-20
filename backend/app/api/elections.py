@@ -23,6 +23,7 @@ from app.district_places import counties_on_lines_of, places_on_lines_of
 from app.office_terms import term_years
 from app.state_ballot_scope import on_november_ballot
 from app.voter_calendar import calendar_for_state
+from app.electoral_votes import electoral_votes, is_presidential
 from app.election_calendar import (
     federal_states,
     next_election_day,
@@ -1579,6 +1580,9 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
         # must not re-derive this from primaryDate itself.
         "ballotBasis": _ballot_basis(senate_races + house_races, primary_date(state, cycle)),
         "statePvi": state_pvi.get(state),
+        # In a presidential cycle, the state's electoral votes (from the
+        # House apportionment, electoral_votes); null otherwise.
+        "electoralVotes": electoral_votes().get(state) if is_presidential(cycle) else None,
         # The state votes this cycle on congressional lines other than the
         # ones its members were elected on — the members going into this
         # election, or the ones sitting now (redrawn_states;
@@ -1918,6 +1922,9 @@ def list_races(db: Session = Depends(get_db)):
         # Filter matches the docstring's contract — harmless while only
         # one cycle exists, load-bearing the day a second cycle syncs.
         .filter(Race.cycle_year == election.cycle)
+        # Senate and House seats: the presidential contest is national, and
+        # served by /elections/presidential.
+        .filter(Race.office.in_(("S", "H")))
         # ~470 races each lazy-loading .candidates is an N+1 of ~500
         # queries per request on a Pi — batch them.
         .options(selectinload(Race.candidates))

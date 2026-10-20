@@ -37,7 +37,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 // is not "none" (the outage-or-incomplete-is-not-none rule).
 const LINKING_TAIL = "Older documents are still being linked to the agency that issued them.";
 
-const H2 = "font-display text-xl font-extrabold text-ink-hi";
+const H2 = "font-display text-xl font-semibold text-ink-hi";
 const MORE =
   "mt-3 inline-flex min-h-6 items-center font-mono text-xs uppercase tracking-[0.12em] text-signal-cyan hover:text-phos";
 
@@ -52,9 +52,7 @@ function Figure({ label, value, note }: { label: string; value: string; note?: s
   return (
     <div className="min-w-0">
       <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">{label}</dt>
-      <dd className="mt-1 font-display text-2xl font-extrabold tabular-nums text-ink-hi">
-        {value}
-      </dd>
+      <dd className="mt-1 font-display text-2xl font-semibold tabular-nums text-ink-hi">{value}</dd>
       {note && <dd className="text-xs text-ink-lo">{note}</dd>}
     </div>
   );

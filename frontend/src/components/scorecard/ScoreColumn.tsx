@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
 import { displayScore } from "@/lib/formatting";
-import { getScoreColor } from "@/lib/representation";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import MetricTooltip from "@/components/checker/MetricTooltip";
+import { onThisPage } from "@/lib/onThisPage";
+import { LONG_LABEL, labelCase } from "@/lib/controlStyles";
 
 /** One of a member's three scored dimensions, as a column: its name, its
  *  share of the Representation Score, the score itself, and the evidence
@@ -15,7 +16,6 @@ export default function ScoreColumn({
   title,
   shareId,
   tooltip,
-  weight,
   score,
   finding,
   method,
@@ -28,13 +28,11 @@ export default function ScoreColumn({
   tooltip?: string;
   /** The column's anchor id; also what its shared image and link are named by. */
   shareId: string;
-  /** Share of the overall score, 0–1; omitted when the config hasn't loaded. */
-  weight?: number;
   score: number | null | undefined;
   /** What the score found, in one plain sentence (the breakdown API's). */
   finding?: string | null;
   /** How the score is computed (its components and their statistics),
-   *  kept behind a disclosure under the evidence, with the weight. */
+   *  kept behind a disclosure under the evidence. */
   method?: ReactNode;
   more?: { label: string; onClick: () => void };
   /** In place of the score, for a column on record but not scored. */
@@ -46,11 +44,12 @@ export default function ScoreColumn({
     <section
       id={shareId}
       {...{ [SHARE_SECTION_ATTR]: shareId }}
+      {...onThisPage(title, shown ?? undefined)}
       className="flex flex-col border border-white/25 bg-surface font-sans"
     >
       <header className="flex items-end justify-between gap-3 border-b border-white/25 bg-surface-raised px-5 py-4">
         <div className="min-w-0">
-          <h2 className="text-[19px] font-bold leading-tight text-ink-hi">
+          <h2 className="text-[19px] font-semibold leading-tight text-ink-hi">
             {tooltip ? <MetricTooltip text={tooltip}>{title}</MetricTooltip> : title}
           </h2>
         </div>
@@ -58,37 +57,30 @@ export default function ScoreColumn({
           <span className="shrink-0 font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
             {aside}
           </span>
-        ) : (
-          <span
-            className={`shrink-0 font-display text-[44px] font-extrabold leading-none ${
-              shown == null ? "text-ink-min" : getScoreColor(shown)
-            }`}
-            aria-label={shown == null ? "Not scored" : `${shown} out of 100`}
-          >
-            {shown ?? "—"}
-          </span>
-        )}
+        ) : null}
       </header>
       <div className="flex flex-1 flex-col gap-5 px-5 py-4">
         {finding && (
           <p className="font-display text-lg font-semibold leading-snug text-ink-hi">{finding}</p>
         )}
         {children}
-        {(method || weight != null) && (
+        {(method || shown != null) && (
           <details
             {...{ [SHARE_EXCLUDE_ATTR]: "" }}
             className="group border-t border-white/[0.08] pt-4"
           >
-            <summary className="flex min-h-[44px] cursor-pointer list-none items-center gap-2 font-mono text-xs uppercase tracking-[0.14em] text-ink-lo hover:text-phos [&::-webkit-details-marker]:hidden">
+            <summary
+              className={`flex min-h-[44px] cursor-pointer list-none items-center gap-2 font-mono tracking-[0.14em] text-ink-lo hover:text-phos [&::-webkit-details-marker]:hidden ${LONG_LABEL}`}
+            >
               <span aria-hidden="true" className="inline-block group-open:rotate-90">
                 &#9656;
               </span>
               How this is computed
             </summary>
             <div className="flex flex-col gap-4 pt-2">
-              {weight != null && (
+              {shown != null && (
                 <p className="text-sm text-ink-lo">
-                  {Math.round(weight * 100)}% of the overall score.
+                  The scorer&apos;s arithmetic puts this at {shown} out of 100.
                 </p>
               )}
               {method}
@@ -115,9 +107,14 @@ export default function ScoreColumn({
   );
 }
 
-/** A small uppercase label over a block inside a column. */
-export function BlockLabel({ children }: { children: ReactNode }) {
-  return <h3 className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">{children}</h3>;
+/** A small mono label over a block inside a column: caps, or sentence case
+ *  on a phone when it runs past three words (labelCase). `words` is the
+ *  label's text when the children aren't plain text (a tooltip around it). */
+export function BlockLabel({ children, words }: { children: ReactNode; words?: string }) {
+  const text = typeof children === "string" ? children : (words ?? "");
+  return (
+    <h3 className={`font-mono tracking-[0.14em] text-ink-min ${labelCase(text)}`}>{children}</h3>
+  );
 }
 
 /** A column block set off by a hairline above it. */

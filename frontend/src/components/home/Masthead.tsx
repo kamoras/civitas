@@ -1,15 +1,10 @@
-"use client";
-
 import Link from "next/link";
-import { SITE_TAGLINE } from "@/lib/site";
-import { stateBallotHref } from "@/lib/elections";
-import { useYourState } from "@/hooks/useYourState";
 import { ELECTION_MAP_HREF } from "@/lib/electionMap";
 import { REDISTRICTING_HREF } from "@/lib/redistricting";
 import type { ElectionPhase } from "@/types/election";
 
 const VOTER_LINK =
-  "inline-flex min-h-[24px] items-center border-b border-phos-mid/40 text-phos-mid hover:text-phos";
+  "inline-flex min-h-11 sm:min-h-[24px] items-center border-b border-phos-mid/40 text-phos-mid hover:text-phos";
 
 /** The election pages the "For voters" line adds, by the election's phase
  * (the backend's, as ElectionNight reads it): the seat map and the new
@@ -51,80 +46,35 @@ export default function Masthead({
 }: {
   electionPhase?: ElectionPhase | null;
 }) {
-  // With a state chosen in the header (this tab only), the two links go
-  // straight to that state's members and ballot.
-  const { state } = useYourState();
+  const extra = electionLinks(electionPhase);
   return (
     <section className="mx-auto max-w-7xl px-4 pt-8 sm:px-6">
-      <div className="min-w-0">
-        {/* The nameplate, set like a masthead: the name, a heavy rule, the
-            line it stands for. It was the pixel "CIVITAS" with two
-            off-register colour plates, an effect of its moment. The name
-            is hidden from screen readers (the header's link names the site
-            right above it); the tagline is read. */}
-        <div className="max-w-2xl">
-          <p
-            aria-hidden="true"
-            className="font-display text-xl font-bold uppercase leading-none tracking-[0.22em] text-ink-hi sm:text-2xl"
-          >
-            Civitas Research
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0 max-w-2xl">
+          <h1 className="font-display text-[30px] font-semibold leading-[1.1] text-ink-hi sm:text-[44px]">
+            Who holds power, who pays for it, how they vote.
+          </h1>
+          <p className="mt-3 text-[17px] leading-relaxed text-ink">
+            The public record of U.S. government, rebuilt every night from federal and state
+            filings, with every number linked to the document it came from.
           </p>
-          <p className="mt-3 border-t-3 border-ink-hi pt-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-lo">
-            {SITE_TAGLINE}
+          {/* What the site holds itself to, as one plain line: the rotated,
+              bordered stamp that carried it was a novelty prop, removed in
+              #1061 and kept out. */}
+          <p className="mt-2 text-sm leading-relaxed text-ink-lo">
+            No party money. No PAC money. No ads, no accounts. Open source, self-hosted, run by
+            volunteers.
           </p>
+          {extra.length > 0 && (
+            <p className="mt-2 flex flex-wrap gap-x-4 text-sm">
+              {extra.map(({ href, label }) => (
+                <Link key={label} href={href} className={VOTER_LINK}>
+                  {label.charAt(0) + label.slice(1).toLowerCase()}
+                </Link>
+              ))}
+            </p>
+          )}
         </div>
-
-        <h1 className="mt-6 max-w-2xl font-display text-[26px] font-semibold leading-[1.22] tracking-[-0.015em] text-ink-hi sm:mt-7 sm:text-[32px]">
-          A public record of U.S. power: who holds it, who wants it, who pays for it, how they vote
-          and what they pass.
-        </h1>
-
-        <p className="mt-4 max-w-xl font-display text-base leading-relaxed text-ink-lo sm:text-[17px]">
-          Rebuilt every night from federal and state filings. Every number links to the document it
-          came from. Where a figure is an estimate, like the ranges on the{" "}
-          <Link
-            href={ELECTION_MAP_HREF}
-            className="underline decoration-white/30 underline-offset-4 hover:text-phos"
-          >
-            election map
-          </Link>
-          , the page shows how it was made.
-        </p>
-
-        {/* The voter's way in, in the first screen. The state is asked once,
-            in the header (YourStatePicker); with none chosen, each link
-            leads to a page where it is. The researcher's links (methods,
-            API, changelog) are in the page's one index. */}
-        <nav
-          aria-label="For voters"
-          className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-xs tracking-[0.1em]"
-        >
-          <Link
-            href={state ? `/politicians?state=${state}` : "/politicians"}
-            className={VOTER_LINK}
-          >
-            YOUR MEMBERS
-          </Link>
-          <Link href={state ? stateBallotHref(state) : "/elections"} className={VOTER_LINK}>
-            YOUR BALLOT
-          </Link>
-          {electionLinks(electionPhase).map(({ href, label }) => (
-            <Link key={label} href={href} className={VOTER_LINK}>
-              {label}
-            </Link>
-          ))}
-          <Link href="/congress" className={VOTER_LINK}>
-            CONGRESS THIS WEEK
-          </Link>
-        </nav>
-
-        {/* Who pays for this, said once, flat out: it was a tilted rubber
-            stamp, a prop that read as a gimmick. Plain mono, the record's
-            own face. */}
-        <p className="mt-5 max-w-2xl font-mono text-xs uppercase leading-relaxed tracking-[0.1em] text-ink-lo">
-          No party money. No PAC money. No ads, no accounts. Open source, self-hosted, run by
-          volunteers.
-        </p>
       </div>
     </section>
   );

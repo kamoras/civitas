@@ -91,6 +91,17 @@ class TestGetPresidentScoreBreakdown:
     def test_missing_president_returns_none(self, db_session):
         assert get_president_score_breakdown(db_session, "nobody-0") is None
 
+    def test_historians_rank_is_the_surveys_own_order(self, db_session):
+        """Shown in place of a composite: the place of the survey's points
+        among every rated presidency, ties shared; none when unrated."""
+        for pid, pts in (("a-1", 900), ("b-2", 700), ("c-3", 700), ("d-4", None)):
+            db_session.add(_make_president(pid, historical_legacy_score=pts))
+        db_session.commit()
+        facts = lambda pid: get_president_score_breakdown(db_session, pid)["historicalLegacy"]["facts"]  # noqa: E731
+        assert (facts("a-1")["historiansRank"], facts("a-1")["historiansRated"]) == (1, 3)
+        assert facts("b-2")["historiansRank"] == facts("c-3")["historiansRank"] == 2
+        assert facts("d-4")["historiansRank"] is None
+
     def test_breakdown_has_all_four_dimensions(self, db_session):
         db_session.add(_make_president("test-3", gdp_growth_avg=3.0))
         db_session.commit()

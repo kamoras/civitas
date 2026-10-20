@@ -37,8 +37,10 @@ import type { ActionIssue, IssueMember, IssueVote } from "@/types/action";
  */
 
 // The site's bracketed command style ("[ ROLL CALL ]"), at a 32px touch target.
+// 44px on a phone, where call, write and what to say are the issue's point
+// (mobile spec P10); 32px beside the text from 640px up.
 const COMMAND =
-  "inline-flex min-h-[32px] items-center font-mono text-xs tracking-[0.12em] text-phos-mid hover:text-phos";
+  "inline-flex min-h-11 sm:min-h-[32px] items-center font-mono text-xs tracking-[0.12em] text-phos-mid hover:text-phos";
 
 const STATES_BY_NAME = [...STATE_CODES].sort((a, b) =>
   STATE_NAMES[a].localeCompare(STATE_NAMES[b])
@@ -158,9 +160,7 @@ function Script({
           ))}
         </div>
       )}
-      <p className="whitespace-pre-line font-display text-[15px] leading-relaxed text-ink">
-        {text}
-      </p>
+      <p className="whitespace-pre-line font-sans text-[15px] leading-relaxed text-ink">{text}</p>
       <div className="mt-1 flex flex-wrap items-center gap-x-4">
         <button
           type="button"
@@ -203,7 +203,7 @@ function MemberRow({
   return (
     <li className="border-t border-white/[0.07] py-2.5">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <span className="font-display text-[15px] text-ink-hi">
+        <span className="font-sans text-[15px] text-ink-hi">
           <Link href={`/politicians/${member.id}`} className="underline-offset-4 hover:underline">
             {who}
           </Link>{" "}
@@ -343,7 +343,7 @@ export default function ContactYourMembers({
 
   return (
     <div>
-      <p className="font-display text-[15px] leading-snug text-ink-hi">
+      <p className="font-sans text-[15px] leading-snug text-ink-hi">
         {afterNamed
           ? "Or contact your own senators and representative"
           : "Your senators and representative"}

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { SECTIONS, type SectionKey } from "@/lib/routes";
 import { absoluteUrl } from "@/lib/site";
-import { sectionPreview } from "@/lib/sectionPreviews";
+import { leadOrder, sectionPreview, seasonLead } from "@/lib/sectionPreviews";
 import { shareMetaAttrs } from "@/lib/shareImage";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
@@ -55,7 +55,10 @@ export default async function SectionCards({
 }) {
   const figures = await fetchSectionFigures();
   const { label, href } = SECTIONS[section];
-  const cards = SECTIONS[section].tabs.filter((t) => t.key !== current);
+  const cards = leadOrder(
+    SECTIONS[section].tabs.filter((t) => t.key !== current),
+    seasonLead(figures, section)
+  );
   const headingId = `${section}-pages-heading`;
   return (
     <ShareSubjectProvider
@@ -103,7 +106,7 @@ export default async function SectionCards({
                 </h3>
                 {p ? (
                   <p className="mt-2">
-                    <span className="block font-display text-3xl font-extrabold leading-none tabular-nums text-ink-hi">
+                    <span className="block font-display text-3xl font-semibold leading-none tabular-nums text-ink-hi">
                       {p.figure}
                     </span>
                     <span className="mt-1.5 block font-sans text-sm leading-snug text-ink-lo">

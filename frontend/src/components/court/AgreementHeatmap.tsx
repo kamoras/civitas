@@ -5,6 +5,7 @@ import type { Court } from "@/types/court";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import { heatColor, heatDomain, pairLookup, surname, termsPhrase } from "@/lib/court";
+import { onThisPage } from "@/lib/onThisPage";
 
 /**
  * How often each pair of sitting justices voted the same way: a grid in
@@ -27,10 +28,11 @@ export default function AgreementHeatmap({ court }: { court: Court }) {
     return (
       <section
         id="agreement"
+        {...onThisPage("Who votes with whom")}
         aria-labelledby="agreement-heading"
         className="border border-white/25 bg-surface px-4 py-5 sm:px-6"
       >
-        <h2 id="agreement-heading" className="text-xl font-bold text-ink-hi">
+        <h2 id="agreement-heading" className="text-xl font-semibold text-ink-hi">
           Who votes with whom
         </h2>
         <p className="mt-2 text-base text-ink">
@@ -89,12 +91,13 @@ export default function AgreementHeatmap({ court }: { court: Court }) {
   return (
     <section
       id="agreement"
+      {...onThisPage("Who votes with whom")}
       aria-labelledby="agreement-heading"
       {...{ [SHARE_SECTION_ATTR]: "agreement" }}
       className="flex flex-col gap-4 border border-white/25 bg-surface px-4 py-5 sm:px-6"
     >
       <div>
-        <h2 id="agreement-heading" className="text-xl font-bold text-ink-hi">
+        <h2 id="agreement-heading" className="text-xl font-semibold text-ink-hi">
           Who votes with whom
         </h2>
         <p className="mt-1 font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
@@ -107,7 +110,7 @@ export default function AgreementHeatmap({ court }: { court: Court }) {
         who vote alike sit in blocks.
       </p>
 
-      <div className="overflow-x-auto">
+      <div className="night overflow-x-auto p-2">
         <table
           role="grid"
           aria-labelledby="agreement-heading"

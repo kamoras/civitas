@@ -11,22 +11,37 @@ interface ModalProps {
   children: ReactNode;
 }
 
-// Generic centered-overlay dialog — first Modal/Dialog component in the
-// codebase (previously every "more detail" surface was squeezed into an
-// inline expand/collapse or MetricTooltip's small anchored popover, which
-// is fine for a one-line hint but unreadable for anything longer, like
-// score-breakdown math). Portaled to document.body so it isn't clipped by
-// an ancestor's narrow/overflow-hidden container the way an inline panel
-// nested in a `w-48` column would be.
+// Generic overlay dialog — first Modal/Dialog component in the codebase
+// (previously every "more detail" surface was squeezed into an inline
+// expand/collapse or MetricTooltip's small anchored popover, which is fine
+// for a one-line hint but unreadable for anything longer, like score-breakdown
+// math). Portaled to document.body so it isn't clipped by an ancestor's
+// narrow/overflow-hidden container the way an inline panel nested in a `w-48`
+// column would be.
+//
+// Centered from 640px up; under it, a bottom sheet (mobile spec P7): anchored
+// to the bottom edge within thumb reach, at most 85% of the screen, a square
+// top edge with the 3px ledger rule. Closing is a 44px button, Escape or a tap
+// on the backdrop; no drag handle, since dragging can't be the only way to
+// close (WCAG 2.5.7). Focus moves to the title, stays inside, and goes back to
+// whatever opened it.
 export default function Modal({ open, onClose, title, children }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  // The latest onClose, read when a key is pressed: an inline arrow from the
+  // opener is a new function every render, and re-running the effect for it
+  // sent focus back to the opener and in again on every parent render.
+  const closeRef = useRef(onClose);
+  useEffect(() => {
+    closeRef.current = onClose;
+  });
 
   useEffect(() => {
     if (!open) return;
     function handleKeyDown(e: KeyboardEvent) {
       if (inOtherDialog(e, dialogRef.current)) return;
       if (e.key === "Escape") {
-        onClose();
+        closeRef.current();
         return;
       }
       // Focus trap: keep Tab cycling within the dialog instead of
@@ -40,7 +55,7 @@ export default function Modal({ open, onClose, title, children }: ModalProps) {
     }
     document.addEventListener("keydown", handleKeyDown);
     const previouslyFocused = document.activeElement as HTMLElement | null;
-    dialogRef.current?.focus();
+    (titleRef.current ?? dialogRef.current)?.focus();
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
@@ -48,12 +63,12 @@ export default function Modal({ open, onClose, title, children }: ModalProps) {
       document.body.style.overflow = previousOverflow;
       previouslyFocused?.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[100] flex items-end justify-center sm:items-center sm:p-4">
       <div className="absolute inset-0 bg-black/80" aria-hidden="true" onMouseDown={onClose} />
       <div
         ref={dialogRef}
@@ -61,18 +76,23 @@ export default function Modal({ open, onClose, title, children }: ModalProps) {
         aria-modal="true"
         aria-label={title}
         tabIndex={-1}
-        className="relative z-10 w-full max-w-lg max-h-[85vh] overflow-y-auto border border-white/15 bg-surface-base shadow-2xl outline-none"
+        className="relative z-10 max-h-[85svh] w-full overflow-y-auto border-t-3 border-ink-min/60 bg-surface-base shadow-2xl outline-none sm:max-h-[85vh] sm:max-w-lg sm:border sm:border-white/15"
       >
         {title && (
-          <div className="sticky top-0 flex items-center justify-between gap-3 border-b border-white/[0.07] bg-surface-base px-4 py-3">
-            <h3 className="text-signal-cyan text-sm tracking-widest">{title.toUpperCase()}</h3>
+          <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-white/[0.07] bg-surface-base pl-4">
+            <h2
+              ref={titleRef}
+              tabIndex={-1}
+              className="text-sm tracking-widest text-signal-cyan outline-none"
+            >
+              {title.toUpperCase()}
+            </h2>
             <button
               type="button"
               onClick={onClose}
-              aria-label="Close"
-              className="-my-2 inline-flex h-8 w-8 shrink-0 items-center justify-center text-lg leading-none text-ink-lo transition-colors hover:text-phos"
+              className="inline-flex min-h-11 shrink-0 items-center px-4 font-mono text-[13px] uppercase tracking-[0.08em] text-ink-lo transition-colors hover:text-phos"
             >
-              ×
+              <span aria-hidden="true">[ ×&nbsp;</span>Close<span aria-hidden="true">&nbsp;]</span>
             </button>
           </div>
         )}

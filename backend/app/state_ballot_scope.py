@@ -29,3 +29,30 @@ def on_november_ballot(state: str, kind: str, year: int) -> bool:
         return True
     cycle = entry[kind]
     return cycle is not None and (year - cycle["from"]) % cycle["every"] == 0
+
+
+# Each kind as a reader would say it, for the odd-year list.
+_KIND_WORDS = {
+    "statewide_executive": "its statewide executive offices (the governor's among them)",
+    "legislature": "its legislature",
+    "judicial_contests": "its judges",
+    "judicial_retention": "whether to keep its judges",
+}
+
+
+def odd_year_elections(year: int) -> list[dict]:
+    """The states whose regular state elections fall in `year`, an odd year
+    (none in an even one: every state also votes in those), each with the
+    kinds of contest the file says are on its ballot then, by the cycle it
+    cites. Only kinds the file lists for the state: an unlisted kind means
+    "every cycle" for the gap list, which says nothing about an odd year."""
+    if year % 2 == 0:
+        return []
+    out = []
+    for state, entry in sorted(_states().items()):
+        kinds = [k for k, words in _KIND_WORDS.items()
+                 if isinstance(entry.get(k), dict) and (year - entry[k]["from"]) % entry[k]["every"] == 0]
+        if kinds:
+            out.append({"state": state, "kinds": kinds, "words": [_KIND_WORDS[k] for k in kinds],
+                        "why": entry.get("_why")})
+    return out

@@ -7,7 +7,7 @@
 // Routes come from the given Lighthouse config, so the two gates audit the
 // same pages. Each is loaded at 320px (WCAG 1.4.10's reflow width) and at
 // 1280px, and fails on any axe violation tagged WCAG 2.0, 2.1 or 2.2 A/AA, or
-// on a page wider than a 320px screen. Each route is then loaded again on
+// on a page wider than a 320px screen. COLOR_SCHEME=dark audits the dark theme. Each route is then loaded again on
 // emulated phones (Playwright device descriptors: touch, a mobile user
 // agent, isMobile, DPR 2-3), where a page wider than the screen widens the
 // layout viewport itself, so `scrollWidth - clientWidth` reads 0 and only a
@@ -38,6 +38,19 @@ const PHONES = {
   // that wrapped over the page) only did so here.
   "iPhone SE, 200% text": { ...devices["iPhone SE (3rd gen)"], fontSize: 32 },
 };
+// Controls nobody types into, so iOS never zooms for them.
+const NOT_TYPED_INTO = [
+  "checkbox",
+  "radio",
+  "range",
+  "hidden",
+  "submit",
+  "button",
+  "reset",
+  "image",
+  "color",
+  "file",
+];
 
 const configPath = process.argv[2];
 if (!configPath) {
@@ -46,6 +59,8 @@ if (!configPath) {
 }
 const urls = JSON.parse(readFileSync(configPath, "utf8")).ci.collect.url;
 const base = process.env.BASE_URL ?? "http://localhost:3000";
+// COLOR_SCHEME=dark audits the night theme (prefers-color-scheme); light is the default.
+const SCHEME = process.env.COLOR_SCHEME === "dark" ? "dark" : "light";
 
 async function up(url) {
   try {
@@ -71,7 +86,7 @@ try {
   for (const url of urls) {
     const path = new URL(url).pathname + new URL(url).search;
     for (const width of WIDTHS) {
-      const page = await browser.newPage({ viewport: { width, height: 900 } });
+      const page = await browser.newPage({ viewport: { width, height: 900 }, colorScheme: SCHEME });
       await page.goto(base + path, { waitUntil: "networkidle", timeout: 60_000 });
       await page.addScriptTag({ content: AXE });
       const violations = await page.evaluate(
@@ -95,6 +110,24 @@ try {
         );
         if (over > 0)
           failures.push(`${path} @320px  reflow: page is ${over}px wider than the screen`);
+        // iOS zooms the page on focus into a control under 16px (globals.css,
+        // "Form controls on a phone"). Size is checked on every control in
+        // the page, shown or not; height on the ones laid out.
+        const small = await page.evaluate((skip) => {
+          const out = [];
+          for (const el of document.querySelectorAll("input, select, textarea")) {
+            if (skip.includes(el.type)) continue;
+            const fs = parseFloat(getComputedStyle(el).fontSize);
+            const r = el.getBoundingClientRect();
+            const name = el.id || el.name || el.getAttribute("aria-label") || el.tagName;
+            if (fs < 16) out.push(`${name}: ${fs}px text`);
+            else if (r.width > 0 && r.height < 43.5)
+              out.push(`${name}: ${Math.round(r.height)}px tall`);
+          }
+          return out;
+        }, NOT_TYPED_INTO);
+        for (const s of small)
+          failures.push(`${path} @320px  phone control under 16px or 44px: ${s}`);
       }
       console.log(`${path} @${width}px: ${violations.length} violation(s)`);
       await page.close();

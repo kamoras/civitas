@@ -31,6 +31,7 @@ import {
   SECTION_HEADING,
   SourceList,
   SummarySource,
+  TAP_TARGET,
   TEXT_LINK,
   WhatYouCanDo,
 } from "@/components/action/IssueEnrichment";
@@ -116,7 +117,7 @@ function IssueBody({
   return (
     <>
       {!restatesTitle(issue.title, issue.summary) && (
-        <p className="mb-4 max-w-3xl font-display text-base leading-relaxed text-ink sm:text-[17px]">
+        <p className="mb-4 max-w-3xl font-sans text-base leading-relaxed text-ink sm:text-[17px]">
           {issue.summary}
           <SummarySource issue={issue} />
         </p>
@@ -136,7 +137,7 @@ function IssueBody({
       <div className="mt-8 flex flex-col gap-3 border-t border-white/[0.07] pt-4">
         <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
           <SourceList issue={issue} />
-          <a href={`/issue/${issue.publicId}`} className={TEXT_LINK}>
+          <a href={`/issue/${issue.publicId}`} className={`${TEXT_LINK} ${TAP_TARGET}`}>
             Read full story →
           </a>
         </div>
@@ -172,7 +173,7 @@ function HeroIssue({
       className="border border-white/25 border-t-3 bg-surface p-5 sm:p-8"
     >
       <IssueMeta issue={issue} lead="Top issue" />
-      <h2 className="mb-4 mt-3 text-balance font-display text-2xl font-bold leading-tight text-ink-hi sm:text-[28px]">
+      <h2 className="mb-4 mt-3 text-balance font-display text-2xl font-semibold leading-tight text-ink-hi sm:text-[28px]">
         {issue.title}
       </h2>
       <IssueImage issue={issue} priority />
@@ -237,7 +238,7 @@ function SecondaryIssue({
                 {issue.title}
               </span>
               {!expanded && !restatesTitle(issue.title, issue.summary) && (
-                <span className="mt-1 line-clamp-2 block font-display text-[15px] leading-relaxed text-ink-lo">
+                <span className="mt-1 line-clamp-2 block font-sans text-[15px] leading-relaxed text-ink-lo">
                   {issue.summary}
                 </span>
               )}
@@ -303,13 +304,13 @@ function OpenComments() {
               </span>
               <Link
                 href={exploreHref(item)}
-                className="mt-0.5 block font-display text-[15px] leading-snug text-ink-hi hover:underline"
+                className="mt-0.5 block font-sans text-[15px] leading-snug text-ink-hi hover:underline"
               >
                 {item.title}
               </Link>
               {item.firstSentence && (
                 // The abstract's opening sentence, as the Register printed it.
-                <span className="mt-1 block font-display text-sm leading-snug text-ink-lo">
+                <span className="mt-1 block font-sans text-sm leading-snug text-ink-lo">
                   {item.firstSentence}
                 </span>
               )}
@@ -320,7 +321,7 @@ function OpenComments() {
               </span>
               <Link
                 href={`${exploreHref(item)}#comment`}
-                className={`${TEXT_LINK} mt-1 inline-block`}
+                className={`${TEXT_LINK} ${TAP_TARGET} mt-1 sm:inline-block`}
               >
                 Comment →
               </Link>
@@ -368,7 +369,7 @@ function IssuesTab({
           onMonitor={onMonitor}
         />
       ) : (
-        <p className="border-l-2 border-ink-min/60 py-2 pl-4 font-display text-base text-ink-lo">
+        <p className="border-l-2 border-ink-min/60 py-2 pl-4 font-sans text-base text-ink-lo">
           {selectedDate
             ? // Issues are kept for 14 days unless they were posted
               // (action_center._cleanup_old_unposted_issues); the Archive
@@ -452,7 +453,9 @@ function DayPager({
   const checked = selectedDate ? "" : clockTime(data?.checkedAt);
   const changed = selectedDate ? "" : clockTime(data?.generatedAt);
 
-  const link = "text-ink-lo hover:text-ink-hi disabled:cursor-not-allowed disabled:text-ink-min/50";
+  // 44px on a phone (mobile spec P10).
+  const link =
+    "inline-flex min-h-11 items-center sm:min-h-0 text-ink-lo hover:text-ink-hi disabled:cursor-not-allowed disabled:text-ink-min/50";
 
   return (
     <nav
@@ -673,15 +676,18 @@ function ActionPageInner() {
               a 42px content box, so that fractional pixel is enough to raise a
               vertical scrollbar. globals.css paints every scrollbar thumb in
               full-strength phosphor, so it rendered as a bright green 4px bar
-              parked beside the tab row, reading as a deliberate accent. */}
+              parked beside the tab row, reading as a deliberate accent.
+
+              It sticks directly under the header at the header's measured
+              height (`--header-height`), and at the top edge while a phone's
+              header is hidden: it was a literal 82px against an 86px header,
+              so it tucked 4px under it, and 34px short of the phone's 52px
+              one. Solid, like the header: paper, not glass. */}
           <div
             role="tablist"
             aria-label="Action Center sections"
             data-sticky-subnav
-            // Stuck under the header's measured bottom (HeaderClearance's
-            // --header-height), 82px until it is measured: a fixed 82px left
-            // the tabs hidden behind a header wrapped at 200% text.
-            className="sticky top-[var(--header-height,82px)] z-30 -mx-4 mb-8 mt-6 flex gap-0 overflow-x-auto overflow-y-hidden border-b border-white/15 bg-surface-base/95 px-4 backdrop-blur-sm sm:mx-0 sm:px-0"
+            className="sticky top-[var(--header-shown-h,var(--header-height))] z-30 -mx-4 mb-8 mt-6 flex gap-0 overflow-x-auto overflow-y-hidden border-b border-white/15 bg-surface-base px-4 sm:mx-0 sm:px-0"
             onKeyDown={(e) => {
               const tabs = TABS.map((t) => t.id);
               const idx = tabs.indexOf(activeTab);

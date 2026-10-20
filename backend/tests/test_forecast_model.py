@@ -512,7 +512,7 @@ def test_build_stops_on_election_day(db_session, freeze_utcnow):
 def _client(monkeypatch, data, phase=CAMPAIGN):
     monkeypatch.setattr(api, "_load", lambda: data)
     day = date.fromisoformat(data["electionDay"])
-    monkeypatch.setattr(api, "active_election", lambda: ActiveElection(day, phase, None, None))
+    monkeypatch.setattr(api, "active_election", lambda db=None: ActiveElection(day, phase, None, None))
     app = FastAPI()
     app.include_router(api.router, prefix="/api")
     return TestClient(app)
