@@ -21,7 +21,7 @@ import SignalOverlapReading from "@/components/about/SignalOverlapReading";
 export const metadata = pageMetadata({
   title: "How Senators and Representatives Are Compared",
   description:
-    "How each member of Congress is set beside colleagues in the same party on small gifts, PAC money, breaks with the party and bills moved, and the methods behind each measure.",
+    "How each member of Congress is set beside colleagues in the same party on votes against the party, money from PACs and small donors, and bills past committee, why each matters, and the methods behind each measure.",
   path: "/about/scores",
 });
 
@@ -43,13 +43,13 @@ export default function ScoresChapter() {
         {/* Each line reads at a Flesch-Kincaid grade of 8 or below. The
             detail is in each linked section. */}
         <Point>
-          <A href="#peers">Where they stand</A>: each member page shows four figures beside the same
-          figures for colleagues in the same party. A word says if the member is above, near or
-          below them.
+          <A href="#peers">Where they stand</A>: each member page answers three questions with four
+          figures. How does the member vote? Who funds the campaign? Do the member&apos;s bills
+          move? Each figure sits beside the same figure for colleagues in the same party.
         </Point>
         <Point>
-          <A href="#funding">Money</A>: how much came in small gifts of $200 or less, and how much
-          from PACs.
+          <A href="#funding">Money</A>: how much came from PACs, and how much from small donors
+          (people who gave $200 or less in all).
         </Point>
         <Point>
           <A href="#alignment">Votes</A>: how often the member broke with the party, next to the
@@ -78,14 +78,83 @@ export default function ScoresChapter() {
 
       <Section id="peers" title="How a member is compared with peers">
         <P>
-          A member page leads with four figures: the share of the money given in gifts of $200 or
-          less, the share given by PACs, how often the member broke with the party on party-line
-          votes, and how many of the member&apos;s bills got past committee. Each is drawn as one
-          dot among every peer&apos;s dot, with a tick at the figure the seat predicts (for small
-          gifts, the share typical for a state that size; for breaks, the rate for the same party in
-          seats that lean the same way) or, where no seat figure exists, the peers&apos; middle
-          value.
+          A member page leads with four figures, each answering a question a voter might ask, in
+          this order: votes first, because every roll call binds the whole state or district; then
+          money, the main way outside interests reach a member; then the member&apos;s own bills,
+          one part of lawmaking. Each figure carries one fixed line saying what it is and why it
+          might matter, and a &ldquo;How this is measured&rdquo; note with the detail below. Each is
+          drawn as one dot among every peer&apos;s dot, with a tick at the figure the seat predicts
+          (for small donors, the share typical for a state that size; for breaks, the rate for the
+          same party in seats that lean the same way) or, where no seat figure exists, the
+          peers&apos; middle value.
         </P>
+        <Sub title="Why these four">
+          <P>
+            <strong>Votes against the party</strong> (how does this member vote?): the share of
+            party-line votes, roll calls where most Democrats and most Republicans voted on opposite
+            sides, on which the member sided with most of the other party. Members from seats that
+            lean toward the other party tend to vote apart from their party more often, and voters
+            hold them to it <Cite id="canes2002" />, so the tick is what the seat predicts, not
+            zero.
+          </P>
+          <P>
+            <strong>Money from PACs</strong> (who funds the campaign?): the share of contributions
+            from political action committees, which pool money for companies, unions, trade groups
+            and causes (
+            <a
+              href="https://www.fec.gov/press/resources-journalists/political-action-committees-pacs/"
+              className="text-phos underline underline-offset-2"
+            >
+              FEC: political action committees
+            </a>
+            ). PAC contributions track roll-call votes more closely than individual gifts do{" "}
+            <Cite id="stratmann2005" />, though that alone does not show money changed a vote, so
+            the figure says who pays, not what was bought.
+          </P>
+          <P>
+            <strong>Money from small donors</strong> (who funds the campaign?): the share of
+            contributions from people whose gifts to the campaign add up to $200 or less in the
+            election cycle. That is the line above which a campaign must report each donor by name (
+            <a
+              href="https://www.ecfr.gov/current/title-11/chapter-I/subchapter-A/part-104/section-104.3"
+              className="text-phos underline underline-offset-2"
+            >
+              11 CFR 104.3
+            </a>
+            , under 52 U.S.C. 30104(b)(3)(A)); below it, gifts are filed as one unnamed total. It is
+            read as a rough sign of grassroots versus big-money funding: small donors widen who
+            takes part, but the incumbents who raise the most from them tend to be the most
+            ideological <Cite id="culberson2019" />. So the line says more small donors <em>can</em>{" "}
+            mean broader support, and stops there. Gifts made through ActBlue or WinRed are named
+            whatever their size, so the share undercounts small donors (see{" "}
+            <Link
+              href="/about/limitations#money"
+              className="text-phos underline underline-offset-2"
+            >
+              limitations
+            </Link>
+            ).
+          </P>
+          <P>
+            <strong>Bills past committee</strong> (do this member&apos;s bills move?): how many of
+            the bills the member sponsored this Congress were reported by a committee, passed a
+            chamber or became law. Committee is where most bills stop, and members of the majority
+            party, and committee chairs, move far more of theirs <Cite id="volden2014" />, so it is
+            compared with the member&apos;s own caucus by default.
+          </P>
+          <P>
+            Two figures were left off the strips: the top-donor and industry concentration parts of
+            the funding score. Both are ranks within the chamber rather than plain figures a reader
+            can check against a filing, and both sit under the full method below.
+          </P>
+          <P>
+            The &ldquo;Stands out&rdquo; line above the strips names the one figure furthest from
+            the middle of the group, when it is in the top or bottom tenth and more than one
+            standard deviation from what is expected, and says that rule and that figure&apos;s own
+            line under it. When no figure clears the rule, it says the member is close to peers on
+            every measure.
+          </P>
+        </Sub>
         <P>
           Peers are the other members of the same chamber who caucus with the same party (an
           independent counts with the party they caucus with). A switch on the page compares with

@@ -69,6 +69,11 @@ function Strip({ m, name }: { m: PeerMeasure; name: string }) {
   const max = axisMax(m);
   const at = (v: number) => `${Math.min(100, (v / max) * 100)}%`;
   const muted = m.thin;
+  // The tick's label sits under the tick, but near either end it is pinned
+  // to that end and takes the end label's place, so it never runs off the
+  // strip or over the 0 (a 1.5% expected break rate did both).
+  const tick = m.expected == null ? null : Math.min(100, (m.expected / max) * 100);
+  const edge = tick == null ? null : tick < 15 ? "start" : tick > 85 ? "end" : null;
   return (
     <div className="min-w-0">
       {/* The table below is the accessible form of this strip. */}
@@ -104,18 +109,24 @@ function Strip({ m, name }: { m: PeerMeasure; name: string }) {
         )}
       </div>
       <div className="relative flex h-5 justify-between text-xs text-ink-min" aria-hidden="true">
-        <span>{fmt(m, 0)}</span>
+        <span className={edge === "start" ? "invisible" : ""}>{fmt(m, 0)}</span>
         {m.expected != null && (
           <span
-            className="absolute -translate-x-1/2 font-semibold whitespace-nowrap text-ink-lo"
-            style={{ left: at(m.expected) }}
+            className={`absolute font-semibold whitespace-nowrap text-ink-lo ${edge ? "" : "-translate-x-1/2"}`}
+            style={
+              edge === "start"
+                ? { left: 0 }
+                : edge === "end"
+                  ? { right: 0 }
+                  : { left: at(m.expected) }
+            }
           >
             {m.expectedBasis === "seat"
               ? `${fmt(m, m.expected)} expected`
               : `median ${fmt(m, m.expected)}`}
           </span>
         )}
-        <span>{fmt(m, max)}</span>
+        <span className={edge === "end" ? "invisible" : ""}>{fmt(m, max)}</span>
       </div>
     </div>
   );
@@ -178,7 +189,7 @@ function Row({
   return (
     <figure
       aria-labelledby={captionId}
-      className="grid grid-cols-1 gap-x-6 gap-y-2 border-t border-white/25 px-4 py-4 first:border-t-0 sm:px-6 md:grid-cols-[10rem_minmax(0,1fr)_9rem]"
+      className="grid grid-cols-1 gap-x-6 gap-y-2 border-t border-white/25 px-4 py-4 [h3+&]:border-t-0 sm:px-6 md:grid-cols-[10rem_minmax(0,1fr)_9rem]"
     >
       <div className="flex items-baseline justify-between gap-3 md:block">
         <div>
@@ -196,7 +207,7 @@ function Row({
         </p>
       </div>
       <div className="min-w-0">
-        <p className="mb-1 text-sm text-ink-lo">{m.direction}</p>
+        <p className="mb-1 text-sm text-ink">{m.why}</p>
         <Strip m={m} name={name} />
       </div>
       <p
@@ -222,6 +233,20 @@ function Row({
       <div className="md:col-span-3">
         <OverTime m={m} snapshots={snapshots} />
       </div>
+      <details className="group text-sm text-ink-lo md:col-span-3">
+        <summary className="inline-flex min-h-6 cursor-pointer items-center gap-1 font-semibold text-ink-hi underline-offset-2 hover:underline">
+          How this is measured
+          <span aria-hidden="true" className="inline-block group-open:rotate-90">
+            ▸
+          </span>
+        </summary>
+        <p className="mt-1 max-w-prose">
+          {m.measured}{" "}
+          <Link href="/about/scores#peers" className="text-phos underline underline-offset-2">
+            Methods and sources
+          </Link>
+        </p>
+      </details>
       <div className={showTable ? "md:col-span-3" : "sr-only"}>
         <table className="w-full max-w-md text-sm">
           <caption className="text-left text-xs text-ink-min">
@@ -363,16 +388,26 @@ export default function WhereTheyStand({
             <p className="font-display text-lg font-semibold leading-snug text-ink-hi">
               {data.standsOut}
             </p>
+            <p className="mt-1 text-sm text-ink-lo">{data.standsOutWhy}</p>
           </div>
           <div className="mt-3 border border-white/25 bg-surface">
-            {data.measures.map((m) => (
-              <Row
-                key={m.key}
-                m={m}
-                name={name}
-                showTable={showTable}
-                snapshots={history?.snapshots ?? null}
-              />
+            {/* Rows that answer the same question sit under it, once. */}
+            {data.measures.map((m, i) => (
+              <div key={m.key}>
+                {m.question !== data.measures[i - 1]?.question && (
+                  <h3
+                    className={`px-4 pt-4 font-display text-lg font-semibold text-ink-hi sm:px-6 ${i ? "border-t-2 border-ink-hi/60" : ""}`}
+                  >
+                    {m.question}
+                  </h3>
+                )}
+                <Row
+                  m={m}
+                  name={name}
+                  showTable={showTable}
+                  snapshots={history?.snapshots ?? null}
+                />
+              </div>
             ))}
           </div>
           <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-lo" aria-hidden="true">

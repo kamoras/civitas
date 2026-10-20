@@ -5,6 +5,12 @@ export type PeerGroupKey = "caucus" | "chamber";
 export interface PeerMeasure {
   key: "smallGifts" | "pacMoney" | "breaks" | "billsMoved";
   label: string;
+  /** The voter question the measure answers; rows sharing one are grouped. */
+  question: string;
+  /** What the figure is and why a voter might care: one fixed, neutral line. */
+  why: string;
+  /** How it is measured, for researchers. */
+  measured: string;
   /** Which way is higher, in words; the word is neutral about which is better. */
   direction: string;
   unit: "share" | "rate" | "count";
@@ -32,6 +38,8 @@ export interface PeerComparison {
   rule: { wellOutside: number[]; outside: number[]; wellGapSd: number; minRecord: number };
   measures: PeerMeasure[];
   standsOut: string;
+  /** Why that line was picked: the rule, then the measure's why line. */
+  standsOutWhy: string;
 }
 
 /** One member's figure on a whole-chamber strip (GET /api/congress/measures). */
@@ -50,6 +58,8 @@ export interface ChamberPoint {
 export interface ChamberMeasure {
   key: PeerMeasure["key"];
   label: string;
+  question: string;
+  why: string;
   direction: string;
   unit: PeerMeasure["unit"];
   median: number | null;

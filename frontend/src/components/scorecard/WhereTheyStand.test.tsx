@@ -33,7 +33,10 @@ vi.mock("@/lib/api", () => ({
 function measure(over: Partial<PeerMeasure>): PeerMeasure {
   return {
     key: "smallGifts",
-    label: "Small gifts",
+    label: "Money from small donors",
+    question: "Who funds the campaign?",
+    why: "Share of contributions from people who gave the campaign $200 or less in total.",
+    measured: "The FEC's unitemized individual contributions over all contributions.",
     direction: "higher means more of the money came in gifts of $200 or less",
     unit: "share",
     value: 0.13,
@@ -63,7 +66,9 @@ const DATA: PeerComparison = {
     measure({}),
     measure({
       key: "breaks",
-      label: "Breaks with party",
+      label: "Votes against the party",
+      question: "How does this member vote?",
+      why: "Share of party-line votes where this member sided with most of the other party.",
       unit: "rate",
       shown: "0 of 6",
       thin: true,
@@ -71,7 +76,9 @@ const DATA: PeerComparison = {
       record: 6,
     }),
   ],
-  standsOut: "Small gifts: Gifts of $200 or less were 13% of the money.",
+  standsOut: "Money from small donors: Donors who gave $200 or less gave 13% of the money.",
+  standsOutWhy:
+    "Picked by rule: of the four figures, this one is furthest from the middle of the group.",
 };
 
 describe("WhereTheyStand", () => {
@@ -83,6 +90,16 @@ describe("WhereTheyStand", () => {
     );
     expect(screen.getByRole("heading", { name: "Where Pat Lee stands" })).toBeInTheDocument();
     expect(screen.getByText(DATA.standsOut)).toBeInTheDocument();
+    expect(screen.getByText(DATA.standsOutWhy)).toBeInTheDocument();
+    // Each question heads its rows once; each row says why it is there.
+    expect(
+      screen.getByRole("heading", { level: 3, name: "Who funds the campaign?" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 3, name: "How does this member vote?" })
+    ).toBeInTheDocument();
+    expect(screen.getByText(DATA.measures[0].why)).toBeInTheDocument();
+    expect(screen.getAllByText("How this is measured")).toHaveLength(2);
     const caption = screen.getByText(/Gifts of \$200 or less were 13% of the money\. 2 of/);
     expect(caption.closest("figure")).toHaveAttribute(
       "aria-labelledby",
