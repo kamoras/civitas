@@ -10,14 +10,17 @@
 # pandas (+ openpyxl, which its read_excel loads for .xlsx), statsmodels,
 # rdata and pyreadr (the R-format replication datasets), onnxruntime
 # (evaluate_embedding_models.py's ONNX comparison), time-machine
-# (frozen_clock_plugin.py, the test suite run on another date), websockets
+# (frozen_clock_plugin.py, the test suite run on another date), fonttools
+# and brotli (fetch_site_fonts.py's Open Graph TrueType files), websockets
 # (fetch_bluesky_activity.py's Jetstream sampling; its pin is requirements.txt's,
 # where uvicorn already brings it), pyproj (build_district_lean.py puts Census
 # block points into each VEST shapefile's own projection; its one dependency,
 # certifi, is requirements.txt's). The rest is what those pull in beyond
 # requirements.txt.
+brotli==1.2.0
 et-xmlfile==2.0.0
 flatbuffers==25.12.19
+fonttools==4.63.0
 formulaic==1.2.2
 interface-meta==2.0.1
 onnxruntime==1.31.0
