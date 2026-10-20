@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session
 
 from app.models import President
 from app.pipeline.analyze.president_scorer import peer_comparable
+from app.pipeline.fetch.electoral_college import stored_elections
 from app.pipeline.fetch.historical_gdp import stored_real_gdp
 from app.pipeline.fetch.macro_series import PAYROLLS, stored_annual_series
 from app.pipeline.fetch.presidential_approval import dated_approvals, stored_approval_history
@@ -211,6 +212,58 @@ def _growth_chart(p: President, everyone: list[President], db: Session) -> dict 
     }
 
 
+def _elections_chart(p: President, db: Session) -> dict | None:
+    rows = stored_elections(db)
+    if not rows:
+        return None
+    mine = [r for r in rows if r["presidentId"] == p.id]
+    shares = [r["evShare"] for r in rows]
+    margins = [r["popularMargin"] for r in rows if r["popularMargin"] is not None]
+    mid_share = statistics.median(shares)
+    mid_margin = statistics.median(margins) if margins else None
+    first_popular = min((r["year"] for r in rows if r["popularMargin"] is not None), default=None)
+
+    def won(r: dict) -> str:
+        margin = ("no national popular vote tabulated" if r["popularMargin"] is None
+                  else f"a popular margin of {r['popularMargin']:+.1f} points")
+        house = ", decided by the House of Representatives" if r["decidedByHouse"] else ""
+        return f"{r['year']}: {r['ev']} of {r['electors']} electoral votes ({r['evShare']:.1f}%), {margin}{house}"
+
+    if mine:
+        caption = (f"Won {len(mine)} presidential election{'s' if len(mine) > 1 else ''}. "
+                   + "; ".join(won(r) for r in mine) + ".")
+    else:
+        caption = ("Never won a presidential election: came to office by succession, so no election of "
+                   "this presidency is drawn.")
+    caption += (f" Across all {len(rows)} elections since {rows[0]['year']}, the median winner took "
+                f"{mid_share:.1f}% of electoral votes")
+    caption += f" and won the popular vote by {mid_margin:+.1f} points." if mid_margin is not None else "."
+    return {
+        "key": "elections", "kind": "elections", "title": "Elections won",
+        "why": "How decisively the country chose the president: electoral votes and the popular vote, beside "
+               "every other election.",
+        "xLabel": "Election", "yLabel": "Popular margin",
+        "window": (f"Every presidential election since {rows[0]['year']}, each credited to the presidency it put "
+                   "in office. Electoral share is votes won of all electors appointed (before 1804 each elector "
+                   "cast two votes)."
+                   + (f" A national popular vote is tabulated from {first_popular}." if first_popular else "")),
+        "source": {"name": "National Archives (electoral votes)",
+                   "url": "https://www.archives.gov/electoral-college/results"},
+        "source2": {"name": "American Presidency Project (popular margins)",
+                    "url": "https://www.presidency.ucsb.edu/statistics/data/presidential-election-mandates"},
+        "caption": caption,
+        "rows": [{"year": r["year"], "president": r["president"], "presidentId": r["presidentId"],
+                  "evShare": r["evShare"], "evShown": f"{r['ev']} of {r['electors']} ({r['evShare']:.1f}%)",
+                  "popularMargin": r["popularMargin"],
+                  "marginShown": "not tabulated" if r["popularMargin"] is None else f"{r['popularMargin']:+.1f}",
+                  "mine": r["presidentId"] == p.id, "decidedByHouse": r["decidedByHouse"]} for r in rows],
+        "medianShare": mid_share, "medianMargin": mid_margin,
+        "yMin": min(margins + [0]), "yMax": max(margins + [0]),
+        "yTop": f"{max(margins + [0]):+.0f}", "yBottom": f"{min(margins + [0]):+.0f}",
+        "n": len(rows) - len(mine),
+    }
+
+
 def president_charts(db: Session, president_id: str) -> dict | None:
     """The charts a presidency has the series for, in page order; None for
     no such president."""
@@ -218,6 +271,6 @@ def president_charts(db: Session, president_id: str) -> dict | None:
     if p is None:
         return None
     everyone = db.query(President).all()
-    charts = [c for c in (_approval_chart(p, everyone, db), _jobs_chart(p, everyone, db),
+    charts = [c for c in (_elections_chart(p, db), _approval_chart(p, everyone, db), _jobs_chart(p, everyone, db),
                           _growth_chart(p, everyone, db)) if c]
     return {"charts": charts, "minBand": MIN_BAND}

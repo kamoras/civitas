@@ -94,6 +94,78 @@ describe("PresidentChartsSection", () => {
     expect(result.violations.map((v) => v.id)).toEqual([]);
   });
 
+  it("draws every election, this presidency's marked, with both sources", () => {
+    render(
+      <PresidentChartsSection
+        data={{
+          minBand: 5,
+          charts: [
+            {
+              key: "elections",
+              kind: "elections",
+              title: "Elections won",
+              why: "How decisively the country chose the president.",
+              xLabel: "Election",
+              yLabel: "Popular margin",
+              window: "Every presidential election since 1789.",
+              source: {
+                name: "National Archives (electoral votes)",
+                url: "https://www.archives.gov/",
+              },
+              source2: {
+                name: "American Presidency Project (popular margins)",
+                url: "https://x.org/",
+              },
+              caption: "Won 1 presidential election. 1840: 234 of 294 electoral votes (79.6%).",
+              yMin: -3,
+              yMax: 6.1,
+              yTop: "+6",
+              yBottom: "-3",
+              n: 1,
+              medianShare: 68.6,
+              medianMargin: 1.6,
+              rows: [
+                {
+                  year: 1824,
+                  president: "John Roe",
+                  presidentId: "roe-6",
+                  evShare: 32.2,
+                  evShown: "84 of 261 (32.2%)",
+                  popularMargin: null,
+                  marginShown: "not tabulated",
+                  mine: false,
+                  decidedByHouse: true,
+                },
+                {
+                  year: 1840,
+                  president: "Jane Doe",
+                  presidentId: "doe-9",
+                  evShare: 79.6,
+                  evShown: "234 of 294 (79.6%)",
+                  popularMargin: 6.1,
+                  marginShown: "+6.1",
+                  mine: true,
+                  decidedByHouse: false,
+                },
+              ],
+            },
+          ],
+        }}
+      />
+    );
+    const fig = screen.getByRole("figure", { name: /Won 1 presidential election/ });
+    expect(
+      within(fig).getByRole("rowheader", { name: "1840 (this presidency)" })
+    ).toBeInTheDocument();
+    expect(
+      within(fig).getByRole("cell", { name: "84 of 261 (32.2%), decided by the House" })
+    ).toBeInTheDocument();
+    expect(within(fig).getByRole("link", { name: /National Archives/ })).toBeInTheDocument();
+    expect(
+      within(fig).getByRole("link", { name: /American Presidency Project/ })
+    ).toBeInTheDocument();
+  });
+
   it("draws nothing without a chart", () => {
     const { container } = render(<PresidentChartsSection data={{ minBand: 5, charts: [] }} />);
     expect(container).toBeEmptyDOMElement();

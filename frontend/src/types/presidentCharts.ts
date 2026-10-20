@@ -44,7 +44,27 @@ export interface BarsChart extends ChartBase {
   bandShown: string | null;
 }
 
-export type PresidentChart = LineChart | BarsChart;
+export interface ElectionsChart extends ChartBase {
+  kind: "elections";
+  /** The popular-margin source, beside `source` (electoral votes). */
+  source2: { name: string; url: string };
+  /** Every election, oldest first; `mine` for this presidency's. */
+  rows: {
+    year: number;
+    president: string;
+    presidentId: string;
+    evShare: number;
+    evShown: string;
+    popularMargin: number | null;
+    marginShown: string;
+    mine: boolean;
+    decidedByHouse: boolean;
+  }[];
+  medianShare: number;
+  medianMargin: number | null;
+}
+
+export type PresidentChart = LineChart | BarsChart | ElectionsChart;
 
 export interface PresidentCharts {
   charts: PresidentChart[];

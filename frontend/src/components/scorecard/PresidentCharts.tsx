@@ -2,6 +2,7 @@
 
 import type {
   BarsChart,
+  ElectionsChart,
   LineChart,
   PresidentChart,
   PresidentCharts,
@@ -240,6 +241,116 @@ function Bars({ c }: { c: BarsChart }) {
   );
 }
 
+/** Every election as a column: the winner's electoral share above (0 to
+ *  100%), the popular margin below (around zero), this presidency's
+ *  elections solid and every other election faint. */
+function Elections({ c }: { c: ElectionsChart }) {
+  const y = scale(c.yMin, c.yMax);
+  const pct = (v: number) => `${(y(v) / H) * 100}%`;
+  const mark = (mine: boolean) => (mine ? "bg-ink-hi" : "bg-[var(--chart-muted)]");
+  const first = c.rows[0]?.year;
+  const last = c.rows[c.rows.length - 1]?.year;
+  return (
+    <>
+      <div aria-hidden="true" className="flex flex-col gap-1">
+        <p className="text-xs text-ink-lo">Electoral votes won, share</p>
+        <div className="relative h-24 border-b border-ink-lo">
+          <div
+            className="absolute inset-x-0 border-t-2 border-dashed border-[var(--chart-muted)]"
+            style={{ bottom: `${c.medianShare}%` }}
+          />
+          <div className="absolute inset-0 flex items-end gap-px">
+            {c.rows.map((r) => (
+              <div
+                key={r.year}
+                className={`min-w-0 flex-1 ${mark(r.mine)}`}
+                style={{ height: `${r.evShare}%` }}
+              />
+            ))}
+          </div>
+        </div>
+        <p className="mt-2 text-xs text-ink-lo">Popular vote margin, points</p>
+        <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2">
+          <div className="flex h-24 flex-col justify-between text-right text-xs text-ink-min">
+            <span>{c.yTop}</span>
+            <span>{c.yBottom}</span>
+          </div>
+          <div className="relative h-24">
+            <div className="absolute inset-x-0 h-px bg-ink-lo" style={{ top: pct(0) }} />
+            <div className="absolute inset-0 flex gap-px">
+              {c.rows.map((r) => {
+                if (r.popularMargin == null) return <div key={r.year} className="min-w-0 flex-1" />;
+                const top = Math.min(y(r.popularMargin), y(0));
+                const h = Math.abs(y(r.popularMargin) - y(0));
+                return (
+                  <div key={r.year} className="relative min-w-0 flex-1">
+                    <div
+                      className={`absolute inset-x-0 ${mark(r.mine)}`}
+                      style={{
+                        top: `${(top / H) * 100}%`,
+                        height: `${Math.max((h / H) * 100, 1)}%`,
+                      }}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+        <div className="flex justify-between text-xs text-ink-min">
+          <span>{first}</span>
+          <span>{last}</span>
+        </div>
+        <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-lo">
+          {c.rows.some((r) => r.mine) && (
+            <span>
+              <span className="mr-1 inline-block h-2.5 w-3 bg-ink-hi align-middle" />
+              this presidency&apos;s elections
+            </span>
+          )}
+          <span>
+            <span className="mr-1 inline-block h-2.5 w-3 bg-[var(--chart-muted)] align-middle" />
+            every other election
+          </span>
+          <span>
+            <span className="mr-1 inline-block w-5 border-t-2 border-dashed border-[var(--chart-muted)] align-middle" />
+            median winner, {c.medianShare.toFixed(1)}%
+          </span>
+        </p>
+      </div>
+      <div className="sr-only">
+        <table>
+          <caption>{c.title}: every presidential election</caption>
+          <thead>
+            <tr>
+              <th scope="col">Election</th>
+              <th scope="col">President</th>
+              <th scope="col">Electoral votes</th>
+              <th scope="col">Popular margin, points</th>
+            </tr>
+          </thead>
+          <tbody>
+            {c.rows.map((r) => (
+              <tr key={r.year}>
+                <th scope="row">
+                  {r.year}
+                  {r.mine ? " (this presidency)" : ""}
+                </th>
+                <td>{r.president}</td>
+                <td>
+                  {r.evShown}
+                  {r.decidedByHouse ? ", decided by the House" : ""}
+                </td>
+                <td>{r.marginShown}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
 function Chart({ c }: { c: PresidentChart }) {
   const id = `chart-${c.key}`;
   return (
@@ -256,7 +367,13 @@ function Chart({ c }: { c: PresidentChart }) {
         </div>
         <ShareSectionButton label={c.title} />
       </div>
-      {c.kind === "line" ? <Lines c={c} /> : <Bars c={c} />}
+      {c.kind === "line" ? (
+        <Lines c={c} />
+      ) : c.kind === "bars" ? (
+        <Bars c={c} />
+      ) : (
+        <Elections c={c} />
+      )}
       <figcaption id={`${id}-caption`} className="text-sm text-ink">
         {c.caption}
       </figcaption>
@@ -266,6 +383,14 @@ function Chart({ c }: { c: PresidentChart }) {
         <a href={c.source.url} className="text-phos underline underline-offset-2">
           {c.source.name}
         </a>
+        {c.kind === "elections" && (
+          <>
+            ;{" "}
+            <a href={c.source2.url} className="text-phos underline underline-offset-2">
+              {c.source2.name}
+            </a>
+          </>
+        )}
         .
       </p>
     </figure>
