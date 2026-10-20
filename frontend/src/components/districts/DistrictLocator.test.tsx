@@ -83,6 +83,8 @@ function geolocation(ok: boolean) {
   return getCurrentPosition;
 }
 
+const status = () => document.querySelector("[data-locator-status]") as HTMLElement;
+
 let fetchMock: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   sessionStorage.clear();
@@ -140,10 +142,10 @@ describe("DistrictLocator", () => {
     geolocation(true);
     render(<Directory />);
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Use my location" }));
+      fireEvent.click(screen.getByRole("button", { name: "Find my district from my location" }));
     });
     await waitFor(() =>
-      expect(screen.getByRole("status")).toHaveTextContent(
+      expect(status()).toHaveTextContent(
         "Your location is in district 1, on the lines today's members were elected on."
       )
     );
@@ -159,7 +161,7 @@ describe("DistrictLocator", () => {
     geolocation(true);
     render(<Directory />);
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Use my location" }));
+      fireEvent.click(screen.getByRole("button", { name: "Find my district from my location" }));
     });
     await waitFor(() => expect(sessionStorage.getItem(YOUR_DISTRICT_KEY)).not.toBeNull());
     expect(Object.keys(sessionStorage).sort()).toEqual([YOUR_DISTRICT_KEY, YOUR_STATE_KEY]);
@@ -178,10 +180,8 @@ describe("DistrictLocator", () => {
   it("falls back to the town filter when the location is refused", async () => {
     geolocation(false);
     render(<Directory />);
-    fireEvent.click(screen.getByRole("button", { name: "Use my location" }));
-    await waitFor(() =>
-      expect(screen.getByRole("status")).toHaveTextContent("Location not available.")
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Find my district from my location" }));
+    await waitFor(() => expect(status()).toHaveTextContent("Location not available."));
     expect(sessionStorage.length).toBe(0);
   });
 
@@ -204,10 +204,10 @@ describe("DistrictLocator", () => {
       />
     );
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Use my location" }));
+      fireEvent.click(screen.getByRole("button", { name: "Find my district from my location" }));
     });
     await waitFor(() =>
-      expect(screen.getByRole("status")).toHaveTextContent(
+      expect(status()).toHaveTextContent(
         "Your location is in state senate district 7 and state house district 12"
       )
     );
@@ -255,9 +255,7 @@ describe("a split town", () => {
     fireEvent.click(second);
     expect(screen.getByTestId("kept")).toHaveTextContent("2");
     expect(second).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "You picked district 2 for your part of Rivertown."
-    );
+    expect(status()).toHaveTextContent("You picked district 2 for your part of Rivertown.");
     // The only requests are the state's own files, no query, no body.
     expect(fetchMock.mock.calls.map(([u]) => u)).toEqual([
       "/data/lookup/congress-119/RI.json",

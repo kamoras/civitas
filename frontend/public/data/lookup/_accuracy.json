@@ -1,0 +1,2240 @@
+{
+ "_source": "Share of 2020 residents whose census block's internal point (P.L. 94-171 header) falls, in these simplified shapes, in the district the Census block equivalency file assigns the block. Simplified at 3m, quantized to 1000000 steps. Generated 2026-10-20 by backend/scripts/build_district_lookup.py.",
+ "congress-119": {
+  "AK": {
+   "house": {
+    "blocks": 11765,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 733391,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 0,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "AL": {
+   "house": {
+    "blocks": 128366,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 5024279,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 17433,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "AR": {
+   "house": {
+    "blocks": 88121,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 3011524,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 1037,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "AZ": {
+   "house": {
+    "blocks": 107938,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 7151502,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 47500,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "CA": {
+   "house": {
+    "blocks": 377591,
+    "nearLinePlacedRight": 0.999542,
+    "placedRight": 0.999993,
+    "residents": 39538223,
+    "residentsMisplaced": 283,
+    "residentsNearLine": 617713,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999786,
+     "placedRight": 0.999997
+    }
+   }
+  },
+  "CO": {
+   "house": {
+    "blocks": 99899,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 0.999999,
+    "residents": 5773714,
+    "residentsMisplaced": 4,
+    "residentsNearLine": 61721,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 0.999999
+    }
+   }
+  },
+  "CT": {
+   "house": {
+    "blocks": 42008,
+    "nearLinePlacedRight": 0.999059,
+    "placedRight": 0.999996,
+    "residents": 3605944,
+    "residentsMisplaced": 16,
+    "residentsNearLine": 17009,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999054,
+     "placedRight": 0.999996
+    }
+   }
+  },
+  "DE": {
+   "house": {
+    "blocks": 15317,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 989948,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 0,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "FL": {
+   "house": {
+    "blocks": 289652,
+    "nearLinePlacedRight": 0.999752,
+    "placedRight": 0.999999,
+    "residents": 21538187,
+    "residentsMisplaced": 26,
+    "residentsNearLine": 105049,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999754,
+     "placedRight": 0.999999
+    }
+   }
+  },
+  "GA": {
+   "house": {
+    "blocks": 165333,
+    "nearLinePlacedRight": 0.998802,
+    "placedRight": 0.999995,
+    "residents": 10711908,
+    "residentsMisplaced": 51,
+    "residentsNearLine": 42585,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.998817,
+     "placedRight": 0.999995
+    }
+   }
+  },
+  "HI": {
+   "house": {
+    "blocks": 10169,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 1455271,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 2006,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "IA": {
+   "house": {
+    "blocks": 124175,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 3190369,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 1010,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "ID": {
+   "house": {
+    "blocks": 46134,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 1839106,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 1416,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "IL": {
+   "house": {
+    "blocks": 278166,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 12812508,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 305938,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "IN": {
+   "house": {
+    "blocks": 162739,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 6785528,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 9078,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "KS": {
+   "house": {
+    "blocks": 109149,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 2937880,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 2360,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "KY": {
+   "house": {
+    "blocks": 91572,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 4505836,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 6211,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "LA": {
+   "house": {
+    "blocks": 92180,
+    "nearLinePlacedRight": 0.997536,
+    "placedRight": 0.999973,
+    "residents": 4657757,
+    "residentsMisplaced": 126,
+    "residentsNearLine": 51128,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "MA": {
+   "house": {
+    "blocks": 88207,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 7029917,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 109409,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "MD": {
+   "house": {
+    "blocks": 65274,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 6177224,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 35509,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "ME": {
+   "house": {
+    "blocks": 30548,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 0.999993,
+    "residents": 1362359,
+    "residentsMisplaced": 9,
+    "residentsNearLine": 650,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 0.999993
+    }
+   }
+  },
+  "MI": {
+   "house": {
+    "blocks": 198244,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 10077331,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 35255,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "MN": {
+   "house": {
+    "blocks": 137689,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 5706494,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 23237,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "MO": {
+   "house": {
+    "blocks": 169004,
+    "nearLinePlacedRight": 0.989984,
+    "placedRight": 0.99996,
+    "residents": 6154913,
+    "residentsMisplaced": 244,
+    "residentsNearLine": 24360,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.990272,
+     "placedRight": 0.99996
+    }
+   }
+  },
+  "MS": {
+   "house": {
+    "blocks": 77426,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 2961279,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 3589,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "MT": {
+   "house": {
+    "blocks": 43717,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 1084225,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 23,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "NC": {
+   "house": {
+    "blocks": 174988,
+    "nearLinePlacedRight": 0.999138,
+    "placedRight": 0.999997,
+    "residents": 10439388,
+    "residentsMisplaced": 34,
+    "residentsNearLine": 39447,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999133,
+     "placedRight": 0.999997
+    }
+   }
+  },
+  "ND": {
+   "house": {
+    "blocks": 40198,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 779094,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 0,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "NE": {
+   "house": {
+    "blocks": 79779,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 1961504,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 5686,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "NH": {
+   "house": {
+    "blocks": 25317,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 1377529,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 2289,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "NJ": {
+   "house": {
+    "blocks": 113212,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 9288994,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 181111,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "NM": {
+   "house": {
+    "blocks": 56605,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 0.999992,
+    "residents": 2117522,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 13605,
+    "residentsUnplaced": 17,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 0.999992
+    }
+   }
+  },
+  "NV": {
+   "house": {
+    "blocks": 35249,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 3104614,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 23848,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "NY": {
+   "house": {
+    "blocks": 230339,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 20201249,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 543680,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "OH": {
+   "house": {
+    "blocks": 219669,
+    "nearLinePlacedRight": 0.999197,
+    "placedRight": 0.999995,
+    "residents": 11799448,
+    "residentsMisplaced": 58,
+    "residentsNearLine": 58514,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999205,
+     "placedRight": 0.999995
+    }
+   }
+  },
+  "OK": {
+   "house": {
+    "blocks": 121826,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 3959353,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 8697,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "OR": {
+   "house": {
+    "blocks": 79081,
+    "nearLinePlacedRight": 0.999149,
+    "placedRight": 0.999994,
+    "residents": 4237256,
+    "residentsMisplaced": 24,
+    "residentsNearLine": 28218,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999144,
+     "placedRight": 0.999994
+    }
+   }
+  },
+  "PA": {
+   "house": {
+    "blocks": 275023,
+    "nearLinePlacedRight": 0.999883,
+    "placedRight": 0.999999,
+    "residents": 13002700,
+    "residentsMisplaced": 15,
+    "residentsNearLine": 128253,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999883,
+     "placedRight": 0.999999
+    }
+   }
+  },
+  "RI": {
+   "house": {
+    "blocks": 21382,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 1097379,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 18392,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "SC": {
+   "house": {
+    "blocks": 105469,
+    "nearLinePlacedRight": 0.991861,
+    "placedRight": 0.999978,
+    "residents": 5118425,
+    "residentsMisplaced": 113,
+    "residentsNearLine": 13884,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.991853,
+     "placedRight": 0.999978
+    }
+   }
+  },
+  "SD": {
+   "house": {
+    "blocks": 40766,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 886667,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 0,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "TN": {
+   "house": {
+    "blocks": 133846,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 6910840,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 17757,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "TX": {
+   "house": {
+    "blocks": 449085,
+    "nearLinePlacedRight": 0.999666,
+    "placedRight": 0.999996,
+    "residents": 29145505,
+    "residentsMisplaced": 108,
+    "residentsNearLine": 323362,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999666,
+     "placedRight": 0.999996
+    }
+   }
+  },
+  "UT": {
+   "house": {
+    "blocks": 46792,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 3271616,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 20876,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "VA": {
+   "house": {
+    "blocks": 117361,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 8631393,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 26368,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "VT": {
+   "house": {
+    "blocks": 17976,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 643077,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 0,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "WA": {
+   "house": {
+    "blocks": 111441,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 7705281,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 47945,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "WI": {
+   "house": {
+    "blocks": 144948,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 5893718,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 28915,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "WV": {
+   "house": {
+    "blocks": 51850,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 1793716,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 188,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "WY": {
+   "house": {
+    "blocks": 22857,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 576851,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 0,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  }
+ },
+ "congress-120": {
+  "AL": {
+   "house": {
+    "blocks": 128366,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 5024279,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 16801,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "CA": {
+   "house": {
+    "blocks": 377591,
+    "nearLinePlacedRight": 0.999467,
+    "placedRight": 0.999991,
+    "residents": 39538223,
+    "residentsMisplaced": 365,
+    "residentsNearLine": 684899,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999688,
+     "placedRight": 0.999995
+    }
+   }
+  },
+  "FL": {
+   "house": {
+    "blocks": 289652,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 21538187,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 115053,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "LA": {
+   "house": {
+    "blocks": 92180,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 4657757,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 34939,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "NC": {
+   "house": {
+    "blocks": 174988,
+    "nearLinePlacedRight": 0.998464,
+    "placedRight": 0.999994,
+    "residents": 10439388,
+    "residentsMisplaced": 61,
+    "residentsNearLine": 39712,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.998455,
+     "placedRight": 0.999994
+    }
+   }
+  },
+  "OH": {
+   "house": {
+    "blocks": 219669,
+    "nearLinePlacedRight": 0.995842,
+    "placedRight": 0.999976,
+    "residents": 11799448,
+    "residentsMisplaced": 286,
+    "residentsNearLine": 68791,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.995871,
+     "placedRight": 0.999976
+    }
+   }
+  },
+  "TN": {
+   "house": {
+    "blocks": 133846,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 6910840,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 28840,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "TX": {
+   "house": {
+    "blocks": 449085,
+    "nearLinePlacedRight": 0.997429,
+    "placedRight": 0.999979,
+    "residents": 29145505,
+    "residentsMisplaced": 601,
+    "residentsNearLine": 233761,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.997654,
+     "placedRight": 0.999981
+    }
+   }
+  },
+  "UT": {
+   "house": {
+    "blocks": 46792,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 3271616,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 11032,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  }
+ },
+ "election-2026": {
+  "AK": {
+   "sldl": {
+    "blocks": 11765,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 0.999913,
+    "residents": 733391,
+    "residentsMisplaced": 64,
+    "residentsNearLine": 21452,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 0.999913
+    }
+   },
+   "sldu": {
+    "blocks": 11765,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 0.999913,
+    "residents": 733391,
+    "residentsMisplaced": 64,
+    "residentsNearLine": 14518,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 0.999913
+    }
+   }
+  },
+  "AL": {
+   "sldl": {
+    "blocks": 128366,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 5024279,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 99931,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   },
+   "sldu": {
+    "blocks": 128366,
+    "nearLinePlacedRight": 0.993408,
+    "placedRight": 0.999941,
+    "residents": 5024279,
+    "residentsMisplaced": 297,
+    "residentsNearLine": 45058,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.993367,
+     "placedRight": 0.999941
+    }
+   }
+  },
+  "AR": {
+   "sldl": {
+    "blocks": 88121,
+    "nearLinePlacedRight": 0.999956,
+    "placedRight": 0.999999,
+    "residents": 3011524,
+    "residentsMisplaced": 2,
+    "residentsNearLine": 45452,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999955,
+     "placedRight": 0.999999
+    }
+   },
+   "sldu": {
+    "blocks": 88121,
+    "nearLinePlacedRight": 0.999466,
+    "placedRight": 0.999997,
+    "residents": 3011524,
+    "residentsMisplaced": 9,
+    "residentsNearLine": 16867,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999472,
+     "placedRight": 0.999997
+    }
+   }
+  },
+  "AZ": {
+   "sldl": {
+    "blocks": 107938,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 7151502,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 82957,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   },
+   "sldu": {
+    "blocks": 107938,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 7151502,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 82957,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "CA": {
+   "sldl": {
+    "blocks": 377591,
+    "nearLinePlacedRight": 0.998917,
+    "placedRight": 0.999977,
+    "residents": 39538223,
+    "residentsMisplaced": 914,
+    "residentsNearLine": 738378,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.99956,
+     "placedRight": 0.999989
+    }
+   },
+   "sldu": {
+    "blocks": 377591,
+    "nearLinePlacedRight": 0.999977,
+    "placedRight": 1.0,
+    "residents": 39538223,
+    "residentsMisplaced": 12,
+    "residentsNearLine": 532487,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999977,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "CO": {
+   "sldl": {
+    "blocks": 99899,
+    "nearLinePlacedRight": 0.99992,
+    "placedRight": 0.999997,
+    "residents": 5773714,
+    "residentsMisplaced": 15,
+    "residentsNearLine": 188343,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.99992,
+     "placedRight": 0.999997
+    }
+   },
+   "sldu": {
+    "blocks": 99899,
+    "nearLinePlacedRight": 0.999937,
+    "placedRight": 0.999998,
+    "residents": 5773714,
+    "residentsMisplaced": 12,
+    "residentsNearLine": 127782,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999937,
+     "placedRight": 0.999998
+    }
+   }
+  },
+  "CT": {
+   "sldl": {
+    "blocks": 42008,
+    "nearLinePlacedRight": 0.999876,
+    "placedRight": 0.999993,
+    "residents": 3605944,
+    "residentsMisplaced": 27,
+    "residentsNearLine": 217659,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999876,
+     "placedRight": 0.999993
+    }
+   },
+   "sldu": {
+    "blocks": 42008,
+    "nearLinePlacedRight": 0.999673,
+    "placedRight": 0.999993,
+    "residents": 3605944,
+    "residentsMisplaced": 27,
+    "residentsNearLine": 82516,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999671,
+     "placedRight": 0.999993
+    }
+   }
+  },
+  "DE": {
+   "sldl": {
+    "blocks": 15317,
+    "nearLinePlacedRight": 0.998783,
+    "placedRight": 0.999958,
+    "residents": 989948,
+    "residentsMisplaced": 42,
+    "residentsNearLine": 34523,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   },
+   "sldu": {
+    "blocks": 15317,
+    "nearLinePlacedRight": 0.983436,
+    "placedRight": 0.999585,
+    "residents": 989948,
+    "residentsMisplaced": 411,
+    "residentsNearLine": 24813,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.983042,
+     "placedRight": 0.999585
+    }
+   }
+  },
+  "FL": {
+   "sldl": {
+    "blocks": 289652,
+    "nearLinePlacedRight": 0.999581,
+    "placedRight": 0.999994,
+    "residents": 21538187,
+    "residentsMisplaced": 134,
+    "residentsNearLine": 288634,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999582,
+     "placedRight": 0.999994
+    }
+   },
+   "sldu": {
+    "blocks": 289652,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 21538187,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 111100,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "GA": {
+   "sldl": {
+    "blocks": 165333,
+    "nearLinePlacedRight": 0.99854,
+    "placedRight": 0.999967,
+    "residents": 10711908,
+    "residentsMisplaced": 356,
+    "residentsNearLine": 214395,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.998351,
+     "placedRight": 0.999963
+    }
+   },
+   "sldu": {
+    "blocks": 165333,
+    "nearLinePlacedRight": 0.998594,
+    "placedRight": 0.999982,
+    "residents": 10711908,
+    "residentsMisplaced": 194,
+    "residentsNearLine": 107383,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.998607,
+     "placedRight": 0.999982
+    }
+   }
+  },
+  "HI": {
+   "sldl": {
+    "blocks": 10169,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 1455271,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 90595,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   },
+   "sldu": {
+    "blocks": 10169,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 1455271,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 43598,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "IA": {
+   "sldl": {
+    "blocks": 124175,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 3190369,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 87131,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   },
+   "sldu": {
+    "blocks": 124175,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 3190369,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 43044,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "ID": {
+   "sldl": {
+    "blocks": 46134,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 1839106,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 24129,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   },
+   "sldu": {
+    "blocks": 46134,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 1839106,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 24129,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "IL": {
+   "sldl": {
+    "blocks": 278166,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 12812508,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 686134,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   },
+   "sldu": {
+    "blocks": 278166,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 12812508,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 485682,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "IN": {
+   "sldl": {
+    "blocks": 162739,
+    "nearLinePlacedRight": 0.999892,
+    "placedRight": 0.999998,
+    "residents": 6785528,
+    "residentsMisplaced": 12,
+    "residentsNearLine": 111197,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999892,
+     "placedRight": 0.999998
+    }
+   },
+   "sldu": {
+    "blocks": 162739,
+    "nearLinePlacedRight": 0.996866,
+    "placedRight": 0.999974,
+    "residents": 6785528,
+    "residentsMisplaced": 178,
+    "residentsNearLine": 56792,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.996858,
+     "placedRight": 0.999974
+    }
+   }
+  },
+  "KS": {
+   "sldl": {
+    "blocks": 109149,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 2937880,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 90184,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   },
+   "sldu": {
+    "blocks": 109149,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 2937880,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 41001,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "KY": {
+   "sldl": {
+    "blocks": 91572,
+    "nearLinePlacedRight": 0.999213,
+    "placedRight": 0.999978,
+    "residents": 4505836,
+    "residentsMisplaced": 98,
+    "residentsNearLine": 124537,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999823,
+     "placedRight": 0.999995
+    }
+   },
+   "sldu": {
+    "blocks": 91572,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 4505836,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 61679,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "LA": {
+   "sldl": {
+    "blocks": 92180,
+    "nearLinePlacedRight": 0.996562,
+    "placedRight": 0.999903,
+    "residents": 4657757,
+    "residentsMisplaced": 452,
+    "residentsNearLine": 131478,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.997526,
+     "placedRight": 0.99993
+    }
+   },
+   "sldu": {
+    "blocks": 92180,
+    "nearLinePlacedRight": 0.997178,
+    "placedRight": 0.999894,
+    "residents": 4657757,
+    "residentsMisplaced": 493,
+    "residentsNearLine": 108443,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.998281,
+     "placedRight": 0.999921
+    }
+   }
+  },
+  "MA": {
+   "sldl": {
+    "blocks": 88207,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 7029917,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 509198,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "MD": {
+   "sldl": {
+    "blocks": 65274,
+    "nearLinePlacedRight": 0.999962,
+    "placedRight": 0.999999,
+    "residents": 6177224,
+    "residentsMisplaced": 8,
+    "residentsNearLine": 210719,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999962,
+     "placedRight": 0.999999
+    }
+   },
+   "sldu": {
+    "blocks": 65274,
+    "nearLinePlacedRight": 0.999958,
+    "placedRight": 0.999999,
+    "residents": 6177224,
+    "residentsMisplaced": 8,
+    "residentsNearLine": 190441,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999958,
+     "placedRight": 0.999999
+    }
+   }
+  },
+  "ME": {
+   "sldl": {
+    "blocks": 30548,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 0.999993,
+    "residents": 1362359,
+    "residentsMisplaced": 9,
+    "residentsNearLine": 39575,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 0.999993
+    }
+   },
+   "sldu": {
+    "blocks": 30548,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 0.999993,
+    "residents": 1362359,
+    "residentsMisplaced": 9,
+    "residentsNearLine": 8760,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 0.999993
+    }
+   }
+  },
+  "MI": {
+   "sldl": {
+    "blocks": 198244,
+    "nearLinePlacedRight": 0.998601,
+    "placedRight": 0.999975,
+    "residents": 10077331,
+    "residentsMisplaced": 254,
+    "residentsNearLine": 181606,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   },
+   "sldu": {
+    "blocks": 198244,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 10077331,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 79792,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "MN": {
+   "sldl": {
+    "blocks": 137689,
+    "nearLinePlacedRight": 0.999802,
+    "placedRight": 0.99998,
+    "residents": 5706494,
+    "residentsMisplaced": 116,
+    "residentsNearLine": 171726,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999804,
+     "placedRight": 0.99998
+    }
+   },
+   "sldu": {
+    "blocks": 137689,
+    "nearLinePlacedRight": 0.999851,
+    "placedRight": 0.999983,
+    "residents": 5706494,
+    "residentsMisplaced": 99,
+    "residentsNearLine": 114116,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999852,
+     "placedRight": 0.999983
+    }
+   }
+  },
+  "MO": {
+   "sldl": {
+    "blocks": 169004,
+    "nearLinePlacedRight": 0.998802,
+    "placedRight": 0.999957,
+    "residents": 6154913,
+    "residentsMisplaced": 267,
+    "residentsNearLine": 203665,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.998808,
+     "placedRight": 0.999957
+    }
+   },
+   "sldu": {
+    "blocks": 169004,
+    "nearLinePlacedRight": 0.996501,
+    "placedRight": 0.999955,
+    "residents": 6154913,
+    "residentsMisplaced": 274,
+    "residentsNearLine": 69741,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.996481,
+     "placedRight": 0.999955
+    }
+   }
+  },
+  "MS": {
+   "sldl": {
+    "blocks": 77426,
+    "nearLinePlacedRight": 0.999137,
+    "placedRight": 0.999983,
+    "residents": 2961279,
+    "residentsMisplaced": 51,
+    "residentsNearLine": 59064,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999219,
+     "placedRight": 0.999984
+    }
+   },
+   "sldu": {
+    "blocks": 77426,
+    "nearLinePlacedRight": 0.999878,
+    "placedRight": 0.999998,
+    "residents": 2961279,
+    "residentsMisplaced": 5,
+    "residentsNearLine": 41096,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "MT": {
+   "sldl": {
+    "blocks": 43717,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 1084225,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 59301,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   },
+   "sldu": {
+    "blocks": 43717,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 1084225,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 42024,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "NC": {
+   "sldl": {
+    "blocks": 174988,
+    "nearLinePlacedRight": 0.998102,
+    "placedRight": 0.999972,
+    "residents": 10439388,
+    "residentsMisplaced": 290,
+    "residentsNearLine": 119610,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.998448,
+     "placedRight": 0.999972
+    }
+   },
+   "sldu": {
+    "blocks": 174988,
+    "nearLinePlacedRight": 0.998452,
+    "placedRight": 0.999983,
+    "residents": 10439388,
+    "residentsMisplaced": 181,
+    "residentsNearLine": 84642,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.998939,
+     "placedRight": 0.999983
+    }
+   }
+  },
+  "ND": {
+   "sldl": {
+    "blocks": 40198,
+    "nearLinePlacedRight": 0.999756,
+    "placedRight": 0.999992,
+    "residents": 779094,
+    "residentsMisplaced": 6,
+    "residentsNearLine": 24564,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999754,
+     "placedRight": 0.999992
+    }
+   },
+   "sldu": {
+    "blocks": 40198,
+    "nearLinePlacedRight": 0.999756,
+    "placedRight": 0.999992,
+    "residents": 779094,
+    "residentsMisplaced": 6,
+    "residentsNearLine": 24561,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999754,
+     "placedRight": 0.999992
+    }
+   }
+  },
+  "NE": {
+   "sldu": {
+    "blocks": 79779,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 1961504,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 51871,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "NH": {
+   "sldl": {
+    "blocks": 25317,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 1377529,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 61522,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   },
+   "sldu": {
+    "blocks": 25317,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 1377529,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 17784,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "NJ": {
+   "sldl": {
+    "blocks": 113212,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 9288994,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 234840,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   },
+   "sldu": {
+    "blocks": 113212,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 9288994,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 234840,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "NM": {
+   "sldl": {
+    "blocks": 56605,
+    "nearLinePlacedRight": 0.999274,
+    "placedRight": 0.999962,
+    "residents": 2117522,
+    "residentsMisplaced": 63,
+    "residentsNearLine": 86750,
+    "residentsUnplaced": 17,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 0.999992
+    }
+   },
+   "sldu": {
+    "blocks": 56605,
+    "nearLinePlacedRight": 0.999852,
+    "placedRight": 0.999987,
+    "residents": 2117522,
+    "residentsMisplaced": 10,
+    "residentsNearLine": 67669,
+    "residentsUnplaced": 17,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999852,
+     "placedRight": 0.999987
+    }
+   }
+  },
+  "NV": {
+   "sldl": {
+    "blocks": 35249,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 3104614,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 98700,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   },
+   "sldu": {
+    "blocks": 35249,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 3104614,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 69342,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "NY": {
+   "sldl": {
+    "blocks": 230339,
+    "nearLinePlacedRight": 0.999964,
+    "placedRight": 0.999997,
+    "residents": 20201249,
+    "residentsMisplaced": 61,
+    "residentsNearLine": 1696217,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   },
+   "sldu": {
+    "blocks": 230339,
+    "nearLinePlacedRight": 0.999944,
+    "placedRight": 0.999997,
+    "residents": 20201249,
+    "residentsMisplaced": 54,
+    "residentsNearLine": 969318,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999964,
+     "placedRight": 0.999998
+    }
+   }
+  },
+  "OH": {
+   "sldl": {
+    "blocks": 219669,
+    "nearLinePlacedRight": 0.998262,
+    "placedRight": 0.999958,
+    "residents": 11799448,
+    "residentsMisplaced": 494,
+    "residentsNearLine": 273805,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.995534,
+     "placedRight": 0.999896
+    }
+   },
+   "sldu": {
+    "blocks": 219669,
+    "nearLinePlacedRight": 0.997391,
+    "placedRight": 0.999967,
+    "residents": 11799448,
+    "residentsMisplaced": 392,
+    "residentsNearLine": 146009,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.997348,
+     "placedRight": 0.999967
+    }
+   }
+  },
+  "OK": {
+   "sldl": {
+    "blocks": 121826,
+    "nearLinePlacedRight": 0.997652,
+    "placedRight": 0.999953,
+    "residents": 3959353,
+    "residentsMisplaced": 185,
+    "residentsNearLine": 78786,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.997645,
+     "placedRight": 0.999953
+    }
+   },
+   "sldu": {
+    "blocks": 121826,
+    "nearLinePlacedRight": 0.998863,
+    "placedRight": 0.99999,
+    "residents": 3959353,
+    "residentsMisplaced": 38,
+    "residentsNearLine": 33410,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.998848,
+     "placedRight": 0.99999
+    }
+   }
+  },
+  "OR": {
+   "sldl": {
+    "blocks": 79081,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 4237256,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 122558,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   },
+   "sldu": {
+    "blocks": 79081,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 4237256,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 79363,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "PA": {
+   "sldl": {
+    "blocks": 275023,
+    "nearLinePlacedRight": 0.999847,
+    "placedRight": 0.999993,
+    "residents": 13002700,
+    "residentsMisplaced": 87,
+    "residentsNearLine": 569935,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999875,
+     "placedRight": 0.999995
+    }
+   },
+   "sldu": {
+    "blocks": 275023,
+    "nearLinePlacedRight": 0.998747,
+    "placedRight": 0.999979,
+    "residents": 13002700,
+    "residentsMisplaced": 274,
+    "residentsNearLine": 218762,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.998745,
+     "placedRight": 0.999979
+    }
+   }
+  },
+  "RI": {
+   "sldl": {
+    "blocks": 21382,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 1097379,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 130352,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   },
+   "sldu": {
+    "blocks": 21382,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 1097379,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 91315,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "SC": {
+   "sldl": {
+    "blocks": 105469,
+    "nearLinePlacedRight": 0.998289,
+    "placedRight": 0.999966,
+    "residents": 5118425,
+    "residentsMisplaced": 176,
+    "residentsNearLine": 102849,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.998304,
+     "placedRight": 0.999966
+    }
+   },
+   "sldu": {
+    "blocks": 105469,
+    "nearLinePlacedRight": 0.999803,
+    "placedRight": 0.999998,
+    "residents": 5118425,
+    "residentsMisplaced": 11,
+    "residentsNearLine": 55862,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999803,
+     "placedRight": 0.999998
+    }
+   }
+  },
+  "SD": {
+   "sldl": {
+    "blocks": 40766,
+    "nearLinePlacedRight": 0.994466,
+    "placedRight": 0.999902,
+    "residents": 886667,
+    "residentsMisplaced": 87,
+    "residentsNearLine": 15721,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.994492,
+     "placedRight": 0.999902
+    }
+   },
+   "sldu": {
+    "blocks": 40766,
+    "nearLinePlacedRight": 0.994456,
+    "placedRight": 0.999902,
+    "residents": 886667,
+    "residentsMisplaced": 87,
+    "residentsNearLine": 15692,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.994482,
+     "placedRight": 0.999902
+    }
+   }
+  },
+  "TN": {
+   "sldl": {
+    "blocks": 133846,
+    "nearLinePlacedRight": 0.998663,
+    "placedRight": 0.999952,
+    "residents": 6910840,
+    "residentsMisplaced": 329,
+    "residentsNearLine": 139149,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.998629,
+     "placedRight": 0.999952
+    }
+   },
+   "sldu": {
+    "blocks": 133846,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 0.999979,
+    "residents": 6910840,
+    "residentsMisplaced": 143,
+    "residentsNearLine": 67048,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 0.999979
+    }
+   }
+  },
+  "TX": {
+   "sldl": {
+    "blocks": 449085,
+    "nearLinePlacedRight": 0.999107,
+    "placedRight": 0.999985,
+    "residents": 29145505,
+    "residentsMisplaced": 423,
+    "residentsNearLine": 473927,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999083,
+     "placedRight": 0.999985
+    }
+   },
+   "sldu": {
+    "blocks": 449085,
+    "nearLinePlacedRight": 0.998985,
+    "placedRight": 0.999992,
+    "residents": 29145505,
+    "residentsMisplaced": 241,
+    "residentsNearLine": 237514,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.998984,
+     "placedRight": 0.999992
+    }
+   }
+  },
+  "UT": {
+   "sldl": {
+    "blocks": 46792,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 3271616,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 117458,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   },
+   "sldu": {
+    "blocks": 46792,
+    "nearLinePlacedRight": 1.0,
+    "placedRight": 1.0,
+    "residents": 3271616,
+    "residentsMisplaced": 0,
+    "residentsNearLine": 79648,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "VA": {
+   "sldl": {
+    "blocks": 117361,
+    "nearLinePlacedRight": 0.999173,
+    "placedRight": 0.999985,
+    "residents": 8631393,
+    "residentsMisplaced": 133,
+    "residentsNearLine": 160832,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999069,
+     "placedRight": 0.999983
+    }
+   },
+   "sldu": {
+    "blocks": 117361,
+    "nearLinePlacedRight": 0.999962,
+    "placedRight": 0.999997,
+    "residents": 8631393,
+    "residentsMisplaced": 24,
+    "residentsNearLine": 78671,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999962,
+     "placedRight": 0.999997
+    }
+   }
+  },
+  "WA": {
+   "sldl": {
+    "blocks": 111441,
+    "nearLinePlacedRight": 0.999482,
+    "placedRight": 0.99999,
+    "residents": 7705281,
+    "residentsMisplaced": 80,
+    "residentsNearLine": 154397,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999477,
+     "placedRight": 0.99999
+    }
+   },
+   "sldu": {
+    "blocks": 111441,
+    "nearLinePlacedRight": 0.999482,
+    "placedRight": 0.99999,
+    "residents": 7705281,
+    "residentsMisplaced": 80,
+    "residentsNearLine": 154397,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999477,
+     "placedRight": 0.99999
+    }
+   }
+  },
+  "WI": {
+   "sldl": {
+    "blocks": 144948,
+    "nearLinePlacedRight": 0.999616,
+    "placedRight": 0.999987,
+    "residents": 5893718,
+    "residentsMisplaced": 67,
+    "residentsNearLine": 174413,
+    "residentsUnplaced": 9,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999617,
+     "placedRight": 0.999989
+    }
+   },
+   "sldu": {
+    "blocks": 144948,
+    "nearLinePlacedRight": 0.999217,
+    "placedRight": 0.999987,
+    "residents": 5893718,
+    "residentsMisplaced": 65,
+    "residentsNearLine": 83014,
+    "residentsUnplaced": 9,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.99921,
+     "placedRight": 0.999989
+    }
+   }
+  },
+  "WV": {
+   "sldl": {
+    "blocks": 51850,
+    "nearLinePlacedRight": 0.996747,
+    "placedRight": 0.9999,
+    "residents": 1793716,
+    "residentsMisplaced": 180,
+    "residentsNearLine": 52566,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.996732,
+     "placedRight": 0.9999
+    }
+   },
+   "sldu": {
+    "blocks": 51850,
+    "nearLinePlacedRight": 0.997715,
+    "placedRight": 0.999987,
+    "residents": 1793716,
+    "residentsMisplaced": 24,
+    "residentsNearLine": 10502,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 1.0,
+     "placedRight": 1.0
+    }
+   }
+  },
+  "WY": {
+   "sldl": {
+    "blocks": 22857,
+    "nearLinePlacedRight": 0.996892,
+    "placedRight": 0.999795,
+    "residents": 576851,
+    "residentsMisplaced": 118,
+    "residentsNearLine": 33780,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.996874,
+     "placedRight": 0.999795
+    }
+   },
+   "sldu": {
+    "blocks": 22857,
+    "nearLinePlacedRight": 0.999265,
+    "placedRight": 0.999951,
+    "residents": 576851,
+    "residentsMisplaced": 28,
+    "residentsNearLine": 20404,
+    "residentsUnplaced": 0,
+    "unsimplified": {
+     "nearLinePlacedRight": 0.999258,
+     "placedRight": 0.999951
+    }
+   }
+  }
+ }
+}

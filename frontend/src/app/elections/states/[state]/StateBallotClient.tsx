@@ -1311,6 +1311,7 @@ function HouseDetail({
         <DistrictLocator
           state={ballot.state}
           lines={ballotHouseLines(ballot.cycleYear, newLines)}
+          houseGov={!newLines}
           linesLabel={`the ${ballot.cycleYear} election's lines`}
           districts={houseRaces.map((r) => ({ district: r.district ?? 0, places: r.places }))}
           query={filter}

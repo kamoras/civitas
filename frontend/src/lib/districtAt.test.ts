@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ballotHouseLines, districtsAt, featureAt, type Topology } from "./districtAt";
-import { NEAR_LINE_POINTS } from "./districtAt.fixture";
+import fixture from "./districtAt.fixture.json";
 
 // Two districts side by side, sharing the edge x = 1, the second with a
 // hole (a third district inside it) — quantized like the real files.
@@ -85,9 +85,14 @@ describe("districtsAt", () => {
 // Real shapes: census blocks whose internal point lies within 100m of a
 // district line, with the district the Census block equivalency file
 // assigns each and where the build's own measurement placed it
-// (districtAt.fixture.ts, written with the files). The browser must place
+// (districtAt.fixture.json, written with the files). The browser must place
 // every one exactly where the build did, and the build's gate holds the
 // whole state to its accuracy floor; here, near the lines, at least 95%.
+const NEAR_LINE_POINTS = fixture.files as {
+  file: string;
+  points: [number, number, string, string, string | null][];
+}[];
+
 describe("the shipped district files near their lines", () => {
   it("has points to check", () => expect(NEAR_LINE_POINTS.length).toBeGreaterThan(0));
   for (const { file, points } of NEAR_LINE_POINTS) {

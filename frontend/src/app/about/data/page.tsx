@@ -599,15 +599,15 @@ export default function DataChapter() {
           us, logged or stored.
         </P>
         <P>
-          The member directory and the ballot pages have their own &ldquo;Use my location&rdquo; for
-          a town split between districts. It works the same way, one step finer: the page downloads
-          your state&apos;s district outlines from this site (the whole state&apos;s file, the same
-          for everyone) and works out your districts on your device. Tapping your part of a split
-          town on its map is worked out the same way. Neither the position nor the tap is sent,
-          logged or stored; the directory keeps your House district number for this tab only, and
-          the ballot page keeps nothing. For an exact answer from your street address, the pages
-          link house.gov and your state&apos;s own lookup: those sites would then have your address,
-          Civitas never does.
+          The member directory and the ballot pages have &ldquo;Find my district from my
+          location&rdquo; for a town split between districts. It works the same way, one step finer:
+          the page downloads your state&apos;s district outlines from this site (the whole
+          state&apos;s file, the same for everyone) and works out your districts on your device.
+          Tapping your part of a split town on its map is worked out the same way. Neither the
+          position nor the tap is sent, logged or stored; the directory keeps your House district
+          number for this tab only, and the ballot page keeps nothing. For an exact answer from your
+          street address, the pages link house.gov and your state&apos;s own lookup: those sites
+          would then have your address, Civitas never does.
         </P>
         <P>
           Your browser asks nothing of any other host. Every picture comes from this server: the

@@ -67,7 +67,7 @@ function districtWord(d: number): string {
 
 /**
  * The two private ways to settle a district a town name can't (AGENTS.md
- * §8): "Use my location", placed on this device against the site's own
+ * §8): "Find my district from my location", placed on this device against the site's own
  * district shapes, and, for a town split between districts, a map of just
  * that town where the reader taps their part. Plus the official lookup,
  * worded so the reader knows that site would get their address.
@@ -93,6 +93,7 @@ export default function DistrictLocator({
   onOtherState,
   officialLookup,
   legislature = false,
+  houseGov = true,
 }: {
   state: string;
   lines: string;
@@ -109,6 +110,9 @@ export default function DistrictLocator({
   officialLookup?: { href: string; label: string } | null;
   /** Report the state legislative districts, not the House one. */
   legislature?: boolean;
+  /** Link house.gov's lookup. Not on a ballot on new lines: it answers by
+   * the sitting member, on the old map. */
+  houseGov?: boolean;
 }) {
   const [status, setStatus] = useState<ReactNode>("");
   const [locating, setLocating] = useState(false);
@@ -199,7 +203,7 @@ export default function DistrictLocator({
       )}
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" onClick={locate} disabled={locating} className={BUTTON}>
-          Use my location
+          Find my district from my location
         </button>
         {split.map((p) => (
           <button
@@ -213,7 +217,7 @@ export default function DistrictLocator({
           </button>
         ))}
       </div>
-      <p role="status" aria-live="polite" className="mt-2 text-sm text-ink-lo">
+      <p aria-live="polite" data-locator-status className="mt-2 text-sm text-ink-lo">
         {status}
       </p>
       {split
@@ -233,10 +237,10 @@ export default function DistrictLocator({
             }}
           />
         ))}
-      {(!legislature || officialLookup) && (
+      {((houseGov && !legislature) || officialLookup) && (
         <p className="mt-2 text-xs text-ink-min">
           For an exact answer from your street address,{" "}
-          {!legislature && (
+          {houseGov && !legislature && (
             <a
               href="https://www.house.gov/representatives/find-your-representative"
               target="_blank"
@@ -248,7 +252,7 @@ export default function DistrictLocator({
           )}
           {officialLookup ? (
             <>
-              {legislature ? "" : " or "}
+              {houseGov && !legislature ? " or " : ""}
               <a
                 href={officialLookup.href}
                 target="_blank"
@@ -277,6 +281,8 @@ const VIEW_W = 320;
 // which roads cross it.
 const LABEL_GRID = 40;
 const MAX_ROAD_LABELS = 6;
+// Viewbox units (the map is VIEW_W wide) between two road labels.
+const LABEL_GAP = 40;
 
 interface Part {
   district: number;
@@ -389,13 +395,23 @@ function TownMap({
           ];
           if (inTown(p) && inPolygons(p, polygons)) inside.push(p);
         }
-      // The inside grid point nearest the part's middle.
-      const cx = inside.reduce((a, p) => a + p[0], 0) / (inside.length || 1);
-      const cy = inside.reduce((a, p) => a + p[1], 0) / (inside.length || 1);
+      // The inside grid point furthest from the part's edge (from any
+      // grid point outside it), so the number sits in the part's body.
+      const outside: Point[] = [];
+      for (let i = 0; i < LABEL_GRID; i++)
+        for (let j = 0; j < LABEL_GRID; j++) {
+          const p: Point = [
+            x0 + ((i + 0.5) * (x1 - x0)) / LABEL_GRID,
+            y0 + ((j + 0.5) * (y1 - y0)) / LABEL_GRID,
+          ];
+          if (!inside.some((q) => q[0] === p[0] && q[1] === p[1])) outside.push(p);
+        }
+      const room = (p: Point) =>
+        Math.min(...outside.map((q) => Math.hypot((p[0] - q[0]) * k, p[1] - q[1])));
       const labelAt = inside.length
-        ? inside.reduce((best, p) =>
-            Math.hypot(p[0] - cx, p[1] - cy) < Math.hypot(best[0] - cx, best[1] - cy) ? p : best
-          )
+        ? inside
+            .map((p) => [p, room(p)] as const)
+            .reduce((best, c) => (c[1] > best[1] ? c : best))[0]
         : null;
       const roadNames = [
         ...new Set(
@@ -430,12 +446,18 @@ function TownMap({
       })),
       // The longest few only: a city's dozens of names would bury the map.
       roadLabels: [...longest]
+        .filter(([, line]) => inTown(line[Math.floor(line.length / 2)]))
         .sort((a, b) => b[1].length - a[1].length)
-        .slice(0, MAX_ROAD_LABELS)
-        .map(([name, line]) => ({
-          name,
-          at: project(line[Math.floor(line.length / 2)]),
-        })),
+        .map(([name, line]) => ({ name, at: project(line[Math.floor(line.length / 2)]) }))
+        // No label on top of another.
+        .reduce<{ name: string; at: Point }[]>(
+          (kept, l) =>
+            kept.length < MAX_ROAD_LABELS &&
+            kept.every((o) => Math.hypot(o.at[0] - l.at[0], o.at[1] - l.at[1]) > LABEL_GAP)
+              ? [...kept, l]
+              : kept,
+          []
+        ),
     };
   }, [topo, town, splitDistricts]);
 
@@ -484,17 +506,17 @@ function TownMap({
               fillRule="evenodd"
             />
           ))}
+          {view.roads.map((r, i) => (
+            <path
+              key={i}
+              d={r.d}
+              fill="none"
+              stroke="var(--ink-lo)"
+              strokeWidth={1}
+              pointerEvents="none"
+            />
+          ))}
         </g>
-        {view.roads.map((r, i) => (
-          <path
-            key={i}
-            d={r.d}
-            fill="none"
-            stroke="var(--ink-lo)"
-            strokeWidth={1}
-            pointerEvents="none"
-          />
-        ))}
         <path
           d={view.townPath}
           fill="none"

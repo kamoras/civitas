@@ -639,7 +639,7 @@ describe("U.S. Representative", () => {
   it("offers house.gov and a candidate's name where the lines are unchanged", async () => {
     render(<StateBallotClient ballot={fourDistricts()} />);
     const drawer = await openContest(/U\.S\. Representative/);
-    expect(drawer.getByRole("link", { name: /house\.gov/ })).toBeInTheDocument();
+    expect(drawer.getAllByRole("link", { name: /house\.gov/ }).length).toBeGreaterThan(0);
     expect(
       drawer.getByLabelText("Filter districts by city, town, county, candidate or district number")
     ).toBeInTheDocument();

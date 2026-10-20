@@ -1,6 +1,6 @@
-"""Build frontend/public/data/lookup/<lines>/<ST>.json, the district shapes
-the browser places a reader in, on the device, when they press "Use my
-location" or tap their part of a split town (AGENTS.md §8).
+"""Build frontend/public/data/lookup/, the district shapes the browser
+places a reader in, on the device, when they press "Use my location" or
+tap their part of a split town (AGENTS.md §8).
 
 Civitas never asks for an address, and a town name stops short where a
 town is split between districts. These files answer the rest without
@@ -8,31 +8,26 @@ anything leaving the browser: the page fetches its state's file from this
 site and runs the point-in-polygon itself (frontend/src/lib/districtAt.ts).
 The coordinates are never sent.
 
-TWO MAPS, each named by what it describes, so a file can never answer for
-lines it doesn't hold:
+NAMED BY THE LINES THEY HOLD, so a file can never answer for other lines:
 
-  * lookup/congress-119/<ST>.json: the 119th Congress's House lines, the
-    districts the members now serving were elected on. The member
-    directory reads the file of the Congress the API says is in office
-    (`congress` on /api/politicians/house-districts), so when the 120th is
-    seated the page finds no file until this is rerun with
-    --sitting-congress 120, and the button says it can't place you.
-  * lookup/election-<cycle>/<ST>.json: the lines the state votes on in that
-    cycle's November election: the House map build_county_district_crosswalk
-    chooses (`map_for_state`, the 120th Congress's lines in the states that
-    redrew, Missouri's stayed map aside), and the 2026 state senate and house
-    districts. The ballot page reads the file of its own election year.
-
-Objects in each file (TopoJSON, one shared arc table):
-  house   the U.S. House districts, `d` = district number (0 = at large)
-  sldu    state senate districts, `d` = the key the ballot pages use
-          (fetch_state_leg_crosswalk.district_key); election files only
-  sldl    state house districts, likewise (none in Nebraska)
-  towns   every city, town and community the place crosswalk lists under
-          more than one House district on this map (`n` = its name as the
-          crosswalk writes it), for the split-town map
-  roads   primary and secondary roads (TIGER PRISECROADS) inside those
-          towns, `n` = the road's name, so a reader can find their part
+  * congress-<N>/<ST>.json (`house`: district number `d`, 0 at large) and
+    <ST>.towns.json (`towns`: every city, town and community the place
+    crosswalk lists under more than one of those districts, `n` its name
+    as the crosswalk writes it; `roads`: TIGER's primary and secondary
+    roads inside them, `n` the road's name), for the split-town map.
+    congress-119 for every state: the districts the members now serving
+    were elected on. The member directory reads the Congress the API says
+    is in office, so when the 120th is seated it finds no file for a state
+    until this is rerun with --sitting-congress 120, and says it can't
+    place the reader. congress-120 for the states voting on new lines this
+    cycle (`map_for_state`, as build_county_district_crosswalk chooses
+    them; Missouri's stayed map is not one), which the ballot reads there;
+    a state voting on its sitting lines reads congress-119.
+  * election-<cycle>/<ST>.legislature.json: `sldu` and `sldl`, the state
+    senate and house districts the cycle's election is on, `d` the key the
+    ballot pages use (fetch_state_leg_crosswalk.district_key; a district
+    the ballots don't number, as in Vermont, has none). Nebraska has no
+    lower house.
 
 SOURCES. Public domain, U.S. Census Bureau: TIGER/Line (the full-resolution
 lines the block equivalency files are drawn from; 2025 for the 119th
@@ -116,6 +111,9 @@ SLD_BEF = {kind: sl._BEF.format(chamber=kind) for kind in ("sldu", "sldl")}
 # at 10m and none at 3m beyond what the unsimplified lines do; the state
 # legislative districts too (at 10m Delaware's lost a 42-resident block).
 INTERVAL_M = 3
+# The split towns' outlines and roads are only drawn: 20m is under a pixel
+# on a town-sized map, and a third of the bytes.
+TOWNS_INTERVAL_M = 20
 # "Near a line": the residents a simplified line is most likely to put on
 # the wrong side, reported on their own so the overall share (most blocks
 # are nowhere near a line) can't hide them.
@@ -138,12 +136,12 @@ MAX_NEAR_LINE_DROP = 0.005
 QUANTIZATION = 1_000_000
 CYCLE = cw.CYCLE
 # Near-line points written to the frontend's test fixture
-# (frontend/src/lib/districtAt.fixture.ts), so the browser's decoder is
+# (frontend/src/lib/districtAt.fixture.json), so the browser's decoder is
 # checked against this measurement on the hardest points: a small state, a
 # town-based one, and one on its redrawn 2026 map.
 FIXTURE_STATES = ("RI", "MA", "UT")
 FIXTURE_POINTS = 25
-FIXTURE = REPO / "frontend" / "src" / "lib" / "districtAt.fixture.ts"
+FIXTURE = REPO / "frontend" / "src" / "lib" / "districtAt.fixture.json"
 
 _NODE_ENV = {**os.environ, "NODE_OPTIONS": "--max-old-space-size=8000"}
 
@@ -372,11 +370,16 @@ def build(
         if layers:
             outs["legislature"] = layers
     paths = {kind: work / f"{state}.{kind}.json" for kind in outs}
-    every = [layer for targets in outs.values() for layer in targets]
+    lookup = [layer for kind, targets in outs.items() if kind != "towns" for layer in targets]
+    simplify = [("-simplify", "dp", f"interval={interval}", "keep-shapes", "target=" + ",".join(lookup))]
+    if "towns" in outs:
+        # Drawn, never used to place anyone (a tap is placed in the House
+        # shapes), so coarser.
+        simplify.append(("-simplify", "dp", f"interval={TOWNS_INTERVAL_M}", "keep-shapes", "target=towns,roads"))
     _mapshaper(
         [
             *args,
-            *(["-simplify", "dp", f"interval={interval}", "keep-shapes", "target=" + ",".join(every)] if interval else []),
+            *(arg for step in (simplify if interval else []) for arg in step),
             *[
                 arg
                 for kind, targets in outs.items()
@@ -512,15 +515,18 @@ def main(argv: list[str] | None = None) -> int:
         path.write_bytes(blob)
     if fixture:
         FIXTURE.write_text(
-            "// Written by backend/scripts/build_district_lookup.py: census blocks whose internal\n"
-            f"// point is within {NEAR_LINE_M}m of a district line, as [lon, lat, layer, the block's\n"
-            "// district (block equivalency file), where the build's measurement placed it].\n"
-            "export const NEAR_LINE_POINTS: {\n"
-            "  file: string;\n"
-            "  points: [number, number, string, string, string | null][];\n"
-            "}[] = "
-            + json.dumps([{"file": f, "points": p} for f, p in sorted(fixture.items())])
-            + ";\n"
+            json.dumps(
+                {
+                    "_source": (
+                        f"Census blocks whose internal point is within {NEAR_LINE_M}m of a district line, as "
+                        "[lon, lat, layer, the block's district (block equivalency file), where the build's "
+                        "measurement placed it]. Written by backend/scripts/build_district_lookup.py."
+                    ),
+                    "files": [{"file": f, "points": p} for f, p in sorted(fixture.items())],
+                },
+                indent=1,
+            )
+            + "\n"
         )
     accuracy_path = OUT_DIR / "_accuracy.json"
     existing = json.loads(accuracy_path.read_text()) if accuracy_path.exists() else {}
