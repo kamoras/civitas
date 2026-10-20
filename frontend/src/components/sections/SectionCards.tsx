@@ -13,7 +13,7 @@ const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 const REVALIDATE_S = 300;
 
 /** GET /api/sections, or null when the backend can't answer: the cards
- * and the band then show their links without figures. */
+ * then show their links without figures. */
 export async function fetchSectionFigures(): Promise<SectionFigures | null> {
   try {
     const res = await fetch(`${BACKEND}/api/sections`, { next: { revalidate: REVALIDATE_S } });
@@ -28,7 +28,7 @@ const SOURCES: Partial<Record<SectionKey, string>> = {
   congress: "Congressional Record; Senate and House roll calls; OMB statements of policy",
   elections:
     "State election offices (official counts for the archive's map check); Civitas election map; enacted House maps",
-  agencies: "Federal Register; USAspending.gov",
+  executive: "Federal Register; USAspending.gov; Congress.gov nominations",
   court: "Supreme Court Database; Oyez; Martin-Quinn scores",
 };
 
@@ -74,10 +74,10 @@ export default async function SectionCards({
         aria-labelledby={headingId}
         data-share-section={`${section}-pages`}
         {...shareMetaAttrs({ source: SOURCES[section] ?? "Civitas", asOf: null })}
-        className={`${className} `}
+        className={`${className}`}
       >
         <div className="flex flex-wrap items-baseline justify-between gap-x-3 border-b border-white/15 pb-2">
-          <h2 id={headingId} className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
+          <h2 id={headingId} className="font-mono text-xs text-ink-min">
             More in {label}
           </h2>
           <ShareSectionButton label={`${label} pages`} />
@@ -93,7 +93,7 @@ export default async function SectionCards({
                 key={t.key}
                 className="group relative flex flex-col border border-white/[0.07] border-t-white/15 bg-surface px-4 py-3 transition-colors focus-within:border-phos/40 hover:border-phos/40"
               >
-                <h3 className="font-mono text-xs uppercase tracking-[0.14em] text-ink-hi">
+                <h3 className="font-mono text-xs text-ink-hi">
                   <Link
                     href={t.href}
                     className="after:absolute after:inset-0 group-hover:text-phos"

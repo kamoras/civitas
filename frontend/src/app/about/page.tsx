@@ -4,7 +4,7 @@ import { pageMetadata, GITHUB_REPO_URL } from "@/lib/site";
 import { aboutPageJsonLd } from "@/lib/seo";
 import JsonLd from "@/components/seo/JsonLd";
 import { ABOUT_CHAPTERS } from "@/lib/aboutPages";
-import { ACTION_CENTER_HREF } from "@/lib/routes";
+import { ACTION_CENTER_HREF, MEMBERS_HREF, PRESIDENTS_HREF } from "@/lib/routes";
 import { AboutPage, Section, P, A } from "@/components/about/AboutPage";
 import LegacyAboutAnchor from "@/components/about/LegacyAboutAnchor";
 
@@ -55,13 +55,13 @@ const PRINCIPLES: readonly { title: string; body: string }[] = [
 const COVERAGE: readonly { what: string; detail: string; href: string }[] = [
   {
     what: "Senate & House",
-    detail: "Every sitting member, measure by measure",
-    href: "/politicians",
+    detail: "Every sitting member, found by state, town or county",
+    href: MEMBERS_HREF,
   },
   {
     what: "Presidents",
     detail: "Every president, on economic, public and historical records",
-    href: "/politicians?branch=president",
+    href: PRESIDENTS_HREF,
   },
   {
     what: "Supreme Court",
@@ -208,11 +208,12 @@ export default function AboutOverview() {
 
       <Section id="who" title="Who runs it">
         <P>
-          One developer, as a hobby, on a Raspberry Pi at home. There is no company, no cloud
-          service, no advertising and no outside money: Civitas takes nothing from parties,
-          candidates or PACs and sells nothing. It exists partly to show that a civic accountability
-          tool doesn&apos;t need venture capital or a data center: the whole thing uses about as
-          much electricity in a year as a refrigerator does in six weeks.
+          One developer, as a hobby, on a Raspberry Pi at home. Civitas is not a company, a charity
+          or any kind of registered group. There is no cloud service, no advertising and no outside
+          money: it takes nothing from parties, candidates or PACs and sells nothing. It exists
+          partly to show that a civic accountability tool doesn&apos;t need venture capital or a
+          data center: the whole thing uses about as much electricity in a year as a refrigerator
+          does in six weeks.
         </P>
         <P>
           Civitas Research (civitas-research.org) is an independent, open-source political
@@ -250,7 +251,7 @@ function PillLink({
   children: ReactNode;
 }) {
   const cls =
-    "inline-block border border-white/[0.09] px-3 py-2 font-mono text-xs uppercase tracking-[0.08em] text-ink-lo transition-colors hover:border-ink-min hover:text-ink-hi";
+    "inline-block border border-white/[0.09] px-3 py-2 font-mono text-xs text-ink-lo transition-colors hover:border-ink-min hover:text-ink-hi";
   return external ? (
     <a href={href} target="_blank" rel="noopener noreferrer" className={cls}>
       {children}

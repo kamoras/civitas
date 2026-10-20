@@ -41,7 +41,7 @@ export default function Pagination({
         aria-label="Previous page"
         className={step}
       >
-        &lt; PREV
+        &lt; prev
       </button>
       {numbered ? (
         pages.map((p, i) =>
@@ -77,7 +77,7 @@ export default function Pagination({
         aria-label="Next page"
         className={step}
       >
-        NEXT &gt;
+        Next &gt;
       </button>
     </div>
   );

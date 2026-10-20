@@ -47,6 +47,48 @@
   --map-close: #d8cfbd;
   --map-awaiting: #e3dac8;
   --map-unknown: #cfc5b1;
+  /* Party marks on the maps and charts, and the strength scale's floor: a
+     fainter fill is the party colour mixed toward transparent, from
+     --map-floor up (0 to 1). On paper the seat map's faintest bin (54%)
+     fades below 3:1, so the light theme starts a third of the way up;
+     carbon starts at nothing. */
+  --map-dem: #2552a3;
+  --map-rep: #a12a24;
+  --map-ind: #6b4699;
+  --map-floor: 0.35;
+  /* The results maps' count-less fills and the marks that texture them
+     (lib/results.ts): a feed not read (amber), polls open (teal), no votes
+     yet (dots), a tie, no count shown (hatch), a stale count's stripe. */
+  --map-feed-failed: rgba(122, 79, 0, 0.2);
+  --map-feed-failed-mark: rgba(122, 79, 0, 0.85);
+  --map-polls-open: rgba(14, 111, 122, 0.14);
+  --map-polls-open-mark: rgba(14, 111, 122, 0.85);
+  --map-awaiting-mark: rgba(30, 26, 21, 0.6);
+  --map-tied: rgba(54, 47, 39, 0.3);
+  --map-no-count-stripe: rgba(54, 47, 39, 0.8);
+  --map-stale-shadow: rgba(251, 248, 241, 0.9);
+  /* The Court's agreement grid: least to most agreement, each end under
+     the heading ink at 4.5:1 or more. */
+  --heat-low: #efe7d6;
+  --heat-high: #5fa3a0;
+  /* The Court's splits, lopsided to close (DecisionLineups). */
+  --split-1: #ddd3c0;
+  --split-2: #c4b9a4;
+  --split-3: #a69b86;
+  --split-4: #5e564a;
+  --split-5: #463f37;
+  --split-6: #2e2924;
+  /* Categorical series (admin charts, race money bars) and run status. */
+  --series-1: #2a6cc4;
+  --series-2: #8f5d00;
+  --series-3: #6a5fc9;
+  --series-4: #b5441a;
+  --series-5: #127a56;
+  --series-critical: #b32d2d;
+  /* A colour from the API (industries, holdings, bill stages) is tuned for
+     neither theme: marks mix it this far toward this tint (chartMark). */
+  --mark-tint: #1e1a15;
+  --mark-tint-amount: 50%;
   /* THEME end */
   --hairline: color-mix(in srgb, var(--overlay) 9%, transparent);
 
@@ -120,15 +162,38 @@ html[data-header-hidden] {
     --map-close: #4c4842;
     --map-awaiting: #2a2520;
     --map-unknown: #3a352f;
+    --map-dem: #82acff;
+    --map-rep: #ff8989;
+    --map-ind: #c995ff;
+    --map-floor: 0;
+    --map-feed-failed: rgba(255, 216, 77, 0.28);
+    --map-feed-failed-mark: rgba(255, 216, 77, 0.8);
+    --map-polls-open: rgba(77, 227, 232, 0.16);
+    --map-polls-open-mark: rgba(77, 227, 232, 0.8);
+    --map-awaiting-mark: rgba(232, 228, 220, 0.7);
+    --map-tied: rgba(205, 199, 188, 0.45);
+    --map-no-count-stripe: rgba(205, 199, 188, 0.8);
+    --map-stale-shadow: rgba(20, 17, 14, 0.9);
+    --heat-low: #191512;
+    --heat-high: #1f5e60;
+    --split-1: #f2eee7;
+    --split-2: #cdc7bc;
+    --split-3: #a39d93;
+    --split-4: #5e5a54;
+    --split-5: #45423d;
+    --split-6: #33302c;
+    --series-1: #3987e5;
+    --series-2: #c98500;
+    --series-3: #9085e9;
+    --series-4: #d95926;
+    --series-5: #199e70;
+    --series-critical: #d03b3b;
+    --mark-tint: #ffffff;
+    --mark-tint-amount: 20%;
     /* THEME end */
   }
 }
-/* `.night` is a map plate: the election maps' tile palettes and their
-   textures were measured against the carbon ground (results.test.ts,
-   electionMap.ts), so each map draws on a night plate in either theme, its
-   legend and labels with it. */
-:root[data-theme="dark"],
-.night {
+:root[data-theme="dark"] {
   color-scheme: dark;
   --surface-base: #14120f; /* carbon */
   --surface: #1d1a16;
@@ -154,11 +219,34 @@ html[data-header-hidden] {
   --map-close: #4c4842;
   --map-awaiting: #2a2520;
   --map-unknown: #3a352f;
-}
-
-.night {
-  background: var(--surface);
-  color: var(--ink);
+  --map-dem: #82acff;
+  --map-rep: #ff8989;
+  --map-ind: #c995ff;
+  --map-floor: 0;
+  --map-feed-failed: rgba(255, 216, 77, 0.28);
+  --map-feed-failed-mark: rgba(255, 216, 77, 0.8);
+  --map-polls-open: rgba(77, 227, 232, 0.16);
+  --map-polls-open-mark: rgba(77, 227, 232, 0.8);
+  --map-awaiting-mark: rgba(232, 228, 220, 0.7);
+  --map-tied: rgba(205, 199, 188, 0.45);
+  --map-no-count-stripe: rgba(205, 199, 188, 0.8);
+  --map-stale-shadow: rgba(20, 17, 14, 0.9);
+  --heat-low: #191512;
+  --heat-high: #1f5e60;
+  --split-1: #f2eee7;
+  --split-2: #cdc7bc;
+  --split-3: #a39d93;
+  --split-4: #5e5a54;
+  --split-5: #45423d;
+  --split-6: #33302c;
+  --series-1: #3987e5;
+  --series-2: #c98500;
+  --series-3: #9085e9;
+  --series-4: #d95926;
+  --series-5: #199e70;
+  --series-critical: #d03b3b;
+  --mark-tint: #ffffff;
+  --mark-tint-amount: 20%;
 }
 
 /* ===== BASE STYLES ===== */
@@ -476,22 +564,21 @@ input:focus-visible {
   outline-offset: 2px;
 }
 
-/* ===== A PHONE'S TYPE SCALE (mobile spec P1, P2) =====
+/* ===== A PHONE'S TYPE SCALE (mobile spec P1) =====
    On a phone nothing a reader must read is under 13px. The site's data and
    labels were 12px mono caps at 0.12-0.16em tracking: 72% of the
-   directory's text and half of a member page (2026-10-16), and at that
-   tracking 13px caps take the width of 17px text and break mid-phrase.
-   Under 640px `text-xs` is 13px, the 9-12px one-offs are too, and wide
-   tracking drops to 0.08em (text boxes and menus excepted: they take 16px,
-   "Form controls on a phone" below). Tokens, so every label follows; unlayered, so
-   they beat the utilities. SVG text keeps its size: a chart's labels are
-   laid out for it (P6 takes those one by one). Labels of four words or more
-   also go to sentence case on a phone, where they are written
+   directory's text and half of a member page (2026-10-16). Labels are now
+   sentence case with no tracking (2026-10, "Letter case" in AGENTS.md).
+   Under 640px `text-xs` is 13px and the 9-12px one-offs are too (text
+   boxes and menus excepted: they take 16px, "Form controls on a phone"
+   below). Unlayered, so they beat the utilities. SVG text keeps its size: a
+   chart's labels are laid out for it. The tracked capitals left (the shared
+   eyebrow and the logotype) tighten to 0.08em, where wider would take the
+   width of 17px text. Labels of four words or more also go to 14px
    (`labelCase` in lib/controlStyles.ts). */
 @media (max-width: 639.98px) {
   :root {
     --text-xs: 0.8125rem;
-    --tracking-widest: 0.08em;
   }
   :is(.text-\[9px\], .text-\[10px\], .text-\[11px\], .text-\[12px\]):not(
     svg *,
@@ -501,16 +588,7 @@ input:focus-visible {
   ) {
     font-size: 0.8125rem;
   }
-  :is(
-    .tracking-\[0\.1em\],
-    .tracking-\[0\.11em\],
-    .tracking-\[0\.12em\],
-    .tracking-\[0\.14em\],
-    .tracking-\[0\.16em\],
-    .tracking-\[0\.18em\],
-    .tracking-\[0\.22em\],
-    .tracking-\[0\.3em\]
-  ) {
+  :is(.tracking-\[0\.12em\], .tracking-\[0\.14em\], .tracking-\[0\.18em\]) {
     letter-spacing: 0.08em;
   }
 }

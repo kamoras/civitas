@@ -79,7 +79,7 @@ export default function AlsoOnRecord({
       <h2
         id="also-on-record"
         {...onThisPage("Also on record")}
-        className={`font-mono tracking-[0.14em] text-ink-min ${labelCase(ALSO)}`}
+        className={`font-mono text-ink-min ${labelCase(ALSO)}`}
       >
         {ALSO}
       </h2>

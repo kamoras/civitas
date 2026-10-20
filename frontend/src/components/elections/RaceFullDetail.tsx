@@ -103,10 +103,10 @@ export default function RaceFullDetail({
                 ? SUPERSEDED_NOTE
                 : SOURCE_NOTE[race.candidateSource]}
               {hasUnconfirmed &&
-                " Candidates marked UNCONFIRMED drew no primary opponent, so this state held no primary for them and its results file doesn't list them: they're shown from their FEC filing."}
+                " Candidates marked unconfirmed drew no primary opponent, so this state held no primary for them and its results file doesn't list them: they're shown from their FEC filing."}
             </p>
             {tiered && (
-              <span className="shrink-0 border border-white/15 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.1em] text-ink-min">
+              <span className="shrink-0 border border-white/15 px-1.5 py-0.5 font-mono text-[10px] text-ink-min">
                 FEC-filed field
               </span>
             )}
@@ -154,7 +154,7 @@ export default function RaceFullDetail({
 
       {otherFilers.length > 0 && (
         <details className="mt-3 border border-white/[0.09] bg-surface p-4">
-          <summary className="cursor-pointer font-mono text-xs uppercase tracking-[0.14em] text-ink-lo hover:text-ink-hi">
+          <summary className="cursor-pointer font-mono text-xs text-ink-lo hover:text-ink-hi">
             Other FEC filers ({otherFilers.length})
           </summary>
           <p className="mt-2 font-mono text-xs leading-relaxed text-ink-min">

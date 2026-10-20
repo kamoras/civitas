@@ -36,7 +36,7 @@ function Row({ d, register }: { d: VoterDeadline; register?: Calendar["register"
   return (
     <li className="border-t border-white/[0.09] py-2 first:border-t-0">
       <p className={closed ? "text-ink-lo" : "text-ink-hi"}>
-        {closed && <span className="mr-2 font-mono text-xs text-ink-min">CLOSED</span>}
+        {closed && <span className="mr-2 font-mono text-xs text-ink-min">Closed</span>}
         {d.sentence}
         {left && <span className="ml-2 font-mono text-xs text-phos">{left}</span>}
         {register && d.kind === "registration" && !closed && (
@@ -153,8 +153,8 @@ export default function VoterCalendar({
   const { next } = calendar;
   const left = next ? countdownText(next) : null;
   const heading = (
-    <h2 id="voter-deadlines-heading" className="font-mono text-xs tracking-[0.16em] text-ink-min">
-      VOTER DEADLINES · {stateName.toUpperCase()}
+    <h2 id="voter-deadlines-heading" className="font-mono text-xs text-ink-min">
+      Voter deadlines · {stateName}
     </h2>
   );
   if (calendar.unread) {

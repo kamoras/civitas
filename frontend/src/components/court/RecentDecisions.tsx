@@ -3,7 +3,7 @@ import type { CaseLinks, CourtDecisionPage, CourtJustice } from "@/types/court";
 import { splitLabel, surname } from "@/lib/court";
 
 const LINK =
-  "inline-flex min-h-6 items-center font-mono text-xs uppercase tracking-[0.1em] text-ink-lo underline decoration-white/25 underline-offset-4 hover:text-phos";
+  "inline-flex min-h-6 items-center font-mono text-xs text-ink-lo underline decoration-white/25 underline-offset-4 hover:text-phos";
 
 function longDate(iso: string | null): string | null {
   if (!iso) return null;
@@ -94,7 +94,12 @@ export default function RecentDecisions({
                 {justices.map((j) => {
                   const side = majority.has(j.id) ? "maj" : minority.has(j.id) ? "min" : "none";
                   return (
-                    <span key={j.id} className="flex w-8 flex-col items-center gap-0.5 sm:w-10">
+                    // Cells share the row and shrink with it (to the
+                    // screen at 200% text), up to the old 2.5rem each.
+                    <span
+                      key={j.id}
+                      className="flex min-w-0 max-w-10 flex-1 basis-0 flex-col items-center gap-0.5"
+                    >
                       <span
                         className={`h-4 w-full ${
                           side === "maj"

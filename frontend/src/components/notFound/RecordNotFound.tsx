@@ -51,9 +51,7 @@ export default function RecordNotFound({
         />
 
         <div className="panel mb-8 w-full max-w-md p-6">
-          <p className="mb-2 font-mono text-xs uppercase tracking-[0.16em] text-signal-cyan">
-            {label}
-          </p>
+          <p className="mb-2 font-mono text-xs text-signal-cyan">{label}</p>
           <p className="font-sans text-base leading-relaxed text-ink-lo">{message}</p>
           {children}
           {steps.length > 0 && (
@@ -77,7 +75,7 @@ export default function RecordNotFound({
 
         <Link
           href="/"
-          className="border border-phos/40 px-6 py-2.5 font-mono text-sm uppercase tracking-[0.14em] text-phos-mid transition-colors hover:border-phos hover:text-phos"
+          className="border border-phos/40 px-6 py-2.5 font-mono text-sm text-phos-mid transition-colors hover:border-phos hover:text-phos"
         >
           Back to the record
         </Link>

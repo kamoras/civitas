@@ -27,17 +27,17 @@ export const RANGE_OPTIONS = [
 const METRIC_OPTIONS: { value: LoadTimeMetric; label: string; blurb: string }[] = [
   {
     value: "load",
-    label: "PAGE LOAD",
+    label: "Page load",
     blurb: "Navigation start to the end of the load event: the whole cold visit.",
   },
   {
     value: "fcp",
-    label: "FIRST PAINT",
+    label: "First paint",
     blurb: "Until the browser first painted text or an image (first contentful paint).",
   },
   {
     value: "ttfb",
-    label: "SERVER RESPONSE",
+    label: "Server response",
     blurb: "Until the first byte of the page arrived (TTFB): the part this host controls.",
   },
 ];
@@ -108,7 +108,7 @@ export function TrafficDashboard({ token }: { token: string }) {
 
   return (
     <div className="space-y-6">
-      <Segmented label="RANGE" options={RANGE_OPTIONS} value={range} onChange={setRange} />
+      <Segmented label="Range" options={RANGE_OPTIONS} value={range} onChange={setRange} />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile
@@ -142,7 +142,7 @@ export function TrafficDashboard({ token }: { token: string }) {
           {/* Page views on their own chart: they run well above the two
               human measures, which would flatten against a shared axis. */}
           <LineChart
-            title="PEOPLE PER DAY"
+            title="People per day"
             subtitle="confirmed visitors: one per address per UTC day, counted once the browser ran the page; first-paint loads: cold loads painted in view (driven browsers excluded)"
             xLabels={labels}
             series={[
@@ -174,7 +174,7 @@ export function TrafficDashboard({ token }: { token: string }) {
             )}
           />
           <LineChart
-            title="PAGE VIEWS PER DAY"
+            title="Page views per day"
             subtitle="every page load, not deduped by visitor"
             xLabels={labels}
             series={[
@@ -204,11 +204,11 @@ export function TrafficDashboard({ token }: { token: string }) {
 
       <Panel title="Load times">
         <div className="mb-4">
-          <Segmented label="METRIC" options={METRIC_OPTIONS} value={metric} onChange={setMetric} />
+          <Segmented label="Metric" options={METRIC_OPTIONS} value={metric} onChange={setMetric} />
           <p className="mt-2 text-xs font-mono text-ink-min">{metricInfo.blurb}</p>
         </div>
         <LineChart
-          title={`${metricInfo.label}: P50 / P75 / P95 PER DAY`}
+          title={`${metricInfo.label}: P50 / P75 / P95 per day`}
           subtitle={`${ltSamples.toLocaleString()} cold page loads measured in ${range}d; days with none are gaps`}
           xLabels={ltDays.map((d) => formatDay(d.date))}
           series={[
@@ -249,8 +249,8 @@ export function TrafficDashboard({ token }: { token: string }) {
         />
         {lt && lt.byPath.length > 0 && (
           <div className="mt-6">
-            <div className="text-ink-lo text-xs font-mono tracking-wider mb-1.5">
-              SLOWEST ROUTES: PAGE LOAD, LAST {range} DAYS
+            <div className="text-ink-lo text-xs font-mono mb-1.5">
+              Slowest routes: page load, last {range} days
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-xs font-mono">
@@ -260,7 +260,7 @@ export function TrafficDashboard({ token }: { token: string }) {
                 <thead>
                   <tr className="text-ink-lo border-b border-white/[0.07]">
                     <th scope="col" className="text-left py-1 pr-3 font-normal">
-                      ROUTE
+                      Route
                     </th>
                     <th scope="col" className="text-right py-1 pr-3 font-normal">
                       P50
@@ -269,7 +269,7 @@ export function TrafficDashboard({ token }: { token: string }) {
                       P95
                     </th>
                     <th scope="col" className="text-right py-1 font-normal">
-                      LOADS
+                      Loads
                     </th>
                   </tr>
                 </thead>
@@ -305,7 +305,7 @@ export function TrafficDashboard({ token }: { token: string }) {
             </p>
           ) : (
             <RankBars
-              title={`MOST VIEWED: LAST ${range} DAYS`}
+              title={`Most viewed: last ${range} days`}
               entries={(data?.topPages ?? []).map((p) => ({ name: p.path, count: p.views }))}
               unit="views"
               labelWidth="w-36"
@@ -316,7 +316,7 @@ export function TrafficDashboard({ token }: { token: string }) {
           {lt && Object.values(lt.deviceTotals).some((n) => n > 0) && (
             <div className="mb-4">
               <RankBars
-                title={`FIRST-PAINT LOADS BY DEVICE: LAST ${range} DAYS`}
+                title={`First-paint loads by device: last ${range} days`}
                 entries={(["mobile", "tablet", "desktop", "unrecorded"] as const)
                   .map((k) => ({ name: k, count: lt.deviceTotals[k] }))
                   .filter((e) => e.count > 0)}
@@ -334,13 +334,13 @@ export function TrafficDashboard({ token }: { token: string }) {
             data.breakdown.os.length > 0 ||
             data.breakdown.devices.length > 0) ? (
             <>
-              <div className="text-ink-lo text-xs font-mono tracking-wider mb-1.5">
-                CONFIRMED VISITORS TODAY, FROM THE USER-AGENT
+              <div className="text-ink-lo text-xs font-mono mb-1.5">
+                Confirmed visitors today, from the user-agent
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
-                <RankBars title="BROWSER" entries={data.breakdown.browsers} unit="visitors" />
+                <RankBars title="Browser" entries={data.breakdown.browsers} unit="visitors" />
                 <RankBars title="OS" entries={data.breakdown.os} unit="visitors" />
-                <RankBars title="DEVICE" entries={data.breakdown.devices} unit="visitors" />
+                <RankBars title="Device" entries={data.breakdown.devices} unit="visitors" />
               </div>
             </>
           ) : (

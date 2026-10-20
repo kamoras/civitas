@@ -185,6 +185,16 @@ export const REFERENCES = {
       </>
     ),
   },
+  culberson2019: {
+    short: "Culberson et al. 2019",
+    entry: (
+      <>
+        Culberson, T., McDonald, M. P., &amp; Robbins, S. M. (2019). Small Donors in Congressional
+        Elections. <J>American Politics Research</J>, 47(5), 970–999. doi:10.1177/1532673X18755921
+      </>
+    ),
+  },
+
   dawes1979: {
     short: "Dawes 1979",
     entry: (

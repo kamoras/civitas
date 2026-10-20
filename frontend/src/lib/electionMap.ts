@@ -9,6 +9,7 @@
  * is "projected", and shows no chance of anyone winning and no seat tally
  * by party. A range is not a call.
  */
+import { fade, overlay } from "@/lib/chartColors";
 import type {
   ElectionMapData,
   ElectionMapResponse,
@@ -23,7 +24,7 @@ export type MapView = (typeof MAP_VIEWS)[number];
 export const MAP_CHAMBERS = ["senate", "house"] as const;
 export type MapChamber = MapChamberKey;
 
-export const CHAMBER_LABEL: Record<MapChamber, string> = { senate: "SENATE", house: "HOUSE" };
+export const CHAMBER_LABEL: Record<MapChamber, string> = { senate: "Senate", house: "House" };
 const CHAMBER_WORD: Record<MapChamber, string> = { senate: "Senate", house: "House" };
 
 /** "2028 House map": the map's name, from the API's cycle. */
@@ -142,15 +143,15 @@ export function parseChamber(value: string | string[] | undefined | null): MapCh
 }
 
 export const VIEW_LABEL: Record<MapView, string> = {
-  usual: "USUAL VOTE",
-  polls: "POLLS",
-  diff: "DIFFERENCE",
+  usual: "Usual vote",
+  polls: "Polls",
+  diff: "Difference",
 };
 
 export const VIEW_STAMP: Record<MapView, string> = {
-  usual: "HOW EACH SEAT USUALLY VOTES",
-  polls: "MARGIN RANGES, FROM POLLS WHERE A SEAT HAS ANY",
-  diff: "WHERE POLLS DISAGREE WITH THE USUAL VOTE",
+  usual: "How each seat usually votes",
+  polls: "Margin ranges, from polls where a seat has any",
+  diff: "Where polls disagree with the usual vote",
 };
 
 export const VIEW_EXPLAINER: Record<MapView, string> = {
@@ -162,35 +163,37 @@ export const VIEW_EXPLAINER: Record<MapView, string> = {
 };
 
 /* ── Colour ────────────────────────────────────────────────────────────
-   One diverging scale from the party tokens (dem-blue #82acff, rep-red
-   #ff8989), stepped by opacity over `surface` (#14110E). Measured
-   2026-10-15 against that surface (WCAG 2.x contrast; CIE L*; Machado
-   2009 colour-vision simulation, severity 1.0):
+   One diverging scale from the party marks (--map-dem, --map-rep), stepped
+   by strength over `surface` from the theme's floor (chartColors.fade).
+   Measured 2026-10-15 on carbon (WCAG 2.x contrast; CIE L*; Machado 2009
+   colour-vision simulation, severity 1.0):
 
      leans    D #4f6590 3.22:1 · R #935250 3.19:1   L* 42.7 / 42.4
      usually  D #6887c5 5.24:1 · R #c76c6b 5.18:1   L* 56.3 / 56.0
      strongly D #82acff 8.33:1 · R #ff8989 8.23:1   L* 70.5 / 70.1
-     close    #4c4842 2.06:1 + a 45° hatch of ink-lo (#CDC7BC, 9.9:1)
+     close    --map-close 2.06:1 + a 45° hatch of ink-lo (9.9:1)
 
+   On paper the floor is half strength, so the faintest step still clears
+   3:1 there too (wcagContrast.test.ts checks every bin in both themes).
    Every bin's tile clears 3:1 (WCAG 1.4.11) except "close", which is
    carried by its hatch. Smallest colour difference between a party bin
-   and "close": ΔE 30.3 normal vision, 9.6 protanopia, 18.0 deuteranopia,
-   24.8 tritanopia; the hatch separates "close" in every case and in
-   greyscale. Greyscale separates the steps (L* 31 / 42 / 56 / 70) but
-   not the parties, which share each step's lightness; the seat detail
-   and the table say D or R in words. No cyan or amber: on the results
-   map those mean polls open and a stale feed. */
+   and "close" on carbon: ΔE 30.3 normal vision, 9.6 protanopia, 18.0
+   deuteranopia, 24.8 tritanopia; the hatch separates "close" in every case
+   and in greyscale. Greyscale separates the steps but not the parties,
+   which share each step's lightness; the seat detail and the table say D
+   or R in words. No cyan or amber: on the results map those mean polls
+   open and a stale feed. */
 export const BIN_OPACITY = { leans: 0.54, usually: 0.76, strongly: 1 } as const;
-export const DEM_RGB = "130, 172, 255";
-export const REP_RGB = "255, 137, 137";
-export const CLOSE_FILL = "#4c4842";
-export const CLOSE_HATCH = "#CDC7BC";
-export const NO_CONTEST_FILL = "rgba(255, 255, 255, 0.05)";
+export const DEM_MARK = "var(--map-dem)";
+export const REP_MARK = "var(--map-rep)";
+export const CLOSE_FILL = "var(--map-close)";
+export const CLOSE_HATCH = "var(--ink-lo)";
+export const NO_CONTEST_FILL = overlay(0.05);
 
 export function binFill(bin: MapBin): string {
   if (bin === "close") return CLOSE_FILL;
   const [side, size] = bin.split("_") as ["D" | "R", keyof typeof BIN_OPACITY];
-  return `rgba(${side === "D" ? DEM_RGB : REP_RGB}, ${BIN_OPACITY[size]})`;
+  return fade(side === "D" ? DEM_MARK : REP_MARK, BIN_OPACITY[size]);
 }
 
 /** The bin a seat shows in a view; null where it has none (no
@@ -212,7 +215,7 @@ export function legendCells(
     { bin: "D_strongly", label: `D ${hi}+` },
     { bin: "D_usually", label: `D ${lo}–${hi}` },
     { bin: "D_leans", label: `D <${lo}` },
-    { bin: "close", label: view === "polls" ? "TOO CLOSE TO TELL" : "EVEN" },
+    { bin: "close", label: view === "polls" ? "Too close to tell" : "EVEN" },
     { bin: "R_leans", label: `R <${lo}` },
     { bin: "R_usually", label: `R ${lo}–${hi}` },
     { bin: "R_strongly", label: `R ${hi}+` },
@@ -345,7 +348,7 @@ export function footerText(data: ElectionMapData): string {
     ? ` Past polls the ranges are fitted on: ${data.sources.trainingPolls.attribution}.`
     : "";
   const fundamentals = data.pollsInRange ? "" : " Fundamentals only, no poll in the ranges.";
-  return `${data.stale ? "NOT UPDATED SINCE " + formatAsOf(data.asOf) + ". " : ""}Usual vote: ${usual}. Polls: ${data.sources.polls.attribution}, ${data.sources.polls.license}.${training}${fundamentals} As of ${formatAsOf(data.asOf)}. Ranges, not results. Not a race call.`;
+  return `${data.stale ? "Not updated since " + formatAsOf(data.asOf) + ". " : ""}Usual vote: ${usual}. Polls: ${data.sources.polls.attribution}, ${data.sources.polls.license}.${training}${fundamentals} As of ${formatAsOf(data.asOf)}. Ranges, not results. Not a race call.`;
 }
 
 /** The Difference view's glyph for a seat: « ‹ toward D, › » toward R. */

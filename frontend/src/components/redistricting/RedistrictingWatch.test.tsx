@@ -47,8 +47,8 @@ describe("RedistrictingWatch", () => {
     expect(screen.getByText(/The 2028 House maps aren't confirmed yet/)).toBeTruthy();
     expect(screen.getByText(/lines in force for 2026/)).toBeTruthy();
     expect(screen.getByText(/recorded since September 25, 2026/)).toBeTruthy();
-    expect(screen.getByText(/MISSOURI · SET OR HELD BY A COURT · SEPTEMBER 25, 2026/)).toBeTruthy();
-    expect(screen.getByText(/CALIFORNIA · APPROVED BY VOTERS/)).toBeTruthy();
+    expect(screen.getByText(/Missouri · Set or held by a Court · September 25, 2026/)).toBeTruthy();
+    expect(screen.getByText(/California · Approved by voters/)).toBeTruthy();
     expect(
       screen.getByRole("link", { name: "[ Supreme Court of the United States ↗ ]" })
     ).toHaveAttribute("href", "https://www.supremecourt.gov/x");

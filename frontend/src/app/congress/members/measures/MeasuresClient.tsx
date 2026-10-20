@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
+import { MEASURES_HREF } from "@/lib/routes";
 import Footer from "@/components/layout/Footer";
 import { axisMax, fmt } from "@/components/scorecard/WhereTheyStand";
 import { STATE_NAMES } from "@/lib/stateCodes";
@@ -50,7 +51,7 @@ function Callout({
   if (points.length === 0) return null;
   return (
     <div>
-      <p className="text-[13px] font-semibold uppercase tracking-[0.06em] text-ink-lo">{title}</p>
+      <p className="text-[13px] font-semibold text-ink-lo">{title}</p>
       <ul className="mt-1 text-sm">
         {points.map((p) => (
           <li key={p.id}>
@@ -100,7 +101,7 @@ function ChamberStrip({ m, house }: { m: ChamberMeasure; house: boolean }) {
           </a>
         </p>
       </div>
-      <p className="text-sm text-ink-lo">{m.direction}</p>
+      <p className="max-w-prose text-sm text-ink">{m.why}</p>
       <div aria-hidden="true" className="relative mt-2 h-14">
         <div className="absolute inset-x-0 top-[30px] h-px bg-white/40" />
         {m.points.map((p, i) => (
@@ -138,9 +139,9 @@ type SortKey =
 const COLUMNS: { key: SortKey; label: string; numeric: boolean }[] = [
   { key: "name", label: "Member", numeric: false },
   { key: "state", label: "Seat", numeric: false },
-  { key: "smallGifts", label: "Small gifts", numeric: true },
-  { key: "pacMoney", label: "PAC money", numeric: true },
-  { key: "breaks", label: "Breaks / party votes", numeric: true },
+  { key: "breaks", label: "Votes against party / party-line votes", numeric: true },
+  { key: "pacMoney", label: "From PACs", numeric: true },
+  { key: "smallGifts", label: "From small donors", numeric: true },
   { key: "billsPastCommittee", label: "Bills past committee", numeric: true },
   { key: "passed", label: "Passed", numeric: true },
   { key: "law", label: "Law", numeric: true },
@@ -287,11 +288,11 @@ function FactTable({ members, house }: { members: ChamberMember[]; house: boolea
                 <td className="px-3 py-1.5 text-ink-lo">
                   {m.party}-{seatName(m, house)}
                 </td>
-                <td className="px-3 py-1.5 text-right">{pct(m.smallGifts)}</td>
-                <td className="px-3 py-1.5 text-right">{pct(m.pacMoney)}</td>
                 <td className="px-3 py-1.5 text-right">
                   {m.partyVotes == null ? "—" : `${m.breaks ?? 0} / ${m.partyVotes}`}
                 </td>
+                <td className="px-3 py-1.5 text-right">{pct(m.pacMoney)}</td>
+                <td className="px-3 py-1.5 text-right">{pct(m.smallGifts)}</td>
                 <td className="px-3 py-1.5 text-right">{m.billsPastCommittee ?? "—"}</td>
                 <td className="px-3 py-1.5 text-right">{m.passed ?? "—"}</td>
                 <td className="px-3 py-1.5 text-right">{m.law ?? "—"}</td>
@@ -344,7 +345,7 @@ export default function MeasuresClient({
             {(["senate", "house"] as const).map((c) => (
               <Link
                 key={c}
-                href={`/congress/members?chamber=${c}`}
+                href={`${MEASURES_HREF}?chamber=${c}`}
                 aria-current={c === chamber ? "page" : undefined}
                 className={`-ml-px inline-flex min-h-11 items-center border px-4 text-sm font-semibold first:ml-0 ${c === chamber ? TAB_ON : TAB_OFF}`}
               >

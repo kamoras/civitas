@@ -46,11 +46,7 @@ import { scrollBehavior } from "@/lib/motion";
 /** Plain status line, the loading state the records pages use: no pulse. */
 function Status({ children }: { children: React.ReactNode }) {
   return (
-    <p
-      role="status"
-      aria-live="polite"
-      className="py-10 font-mono text-sm tracking-[0.12em] text-ink-min"
-    >
+    <p role="status" aria-live="polite" className="py-10 font-mono text-sm text-ink-min">
       {children}
     </p>
   );
@@ -230,7 +226,7 @@ function SecondaryIssue({
             <span className="min-w-0 flex-1">
               <IssueMeta issue={issue} as="span" />
               {(issue.policyAreas ?? []).length > 0 && (
-                <span className="mt-1 block font-mono text-xs tracking-[0.08em] text-ink-lo">
+                <span className="mt-1 block font-mono text-xs text-ink-lo">
                   {issue.policyAreas.map(policyAreaLabel).join(" · ")}
                 </span>
               )}
@@ -283,10 +279,7 @@ function OpenComments() {
     <section aria-labelledby="open-comments-heading" className="mt-12">
       <h2 id="open-comments-heading" className={SECTION_HEADING}>
         <span>Open for public comment</span>
-        <Link
-          href="/explore?comment=open"
-          className="normal-case tracking-[0.08em] text-ink-lo hover:text-ink-hi"
-        >
+        <Link href="/explore?comment=open" className="text-ink-lo hover:text-ink-hi">
           Every open comment period →
         </Link>
       </h2>
@@ -297,7 +290,7 @@ function OpenComments() {
             className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 border-b border-white/[0.07] py-3"
           >
             <span className="min-w-0">
-              <span className="block font-mono text-xs uppercase tracking-[0.08em] text-ink-min">
+              <span className="block font-mono text-xs text-ink-min">
                 <AgencyLink name={item.agencyName} slug={item.agencySlug} />
                 {item.agencyName && item.docType ? " · " : ""}
                 {item.docType?.replace(/_/g, " ")}
@@ -316,7 +309,7 @@ function OpenComments() {
               )}
             </span>
             <span className="text-right">
-              <span className="block whitespace-nowrap font-mono text-xs tracking-[0.06em] text-signal-amber">
+              <span className="block whitespace-nowrap font-mono text-xs text-signal-amber">
                 {describeDaysLeft(item.commentsCloseOn, loaded.asOf)}
               </span>
               <Link
@@ -458,10 +451,7 @@ function DayPager({
     "inline-flex min-h-11 items-center sm:min-h-0 text-ink-lo hover:text-ink-hi disabled:cursor-not-allowed disabled:text-ink-min/50";
 
   return (
-    <nav
-      aria-label="Day"
-      className="grid justify-items-end gap-1.5 font-mono text-xs tracking-[0.12em]"
-    >
+    <nav aria-label="Day" className="grid justify-items-end gap-1.5 font-mono text-xs">
       <div className="flex items-baseline gap-4">
         <button
           onClick={() => prev && onSelect(prev)}
@@ -471,7 +461,7 @@ function DayPager({
         >
           ← {prev ? short(prev) : "Earlier"}
         </button>
-        <span className="uppercase text-ink-hi">
+        <span className="text-ink-hi">
           {currentDate
             ? formatUtcDate(currentDate, { month: "short", day: "numeric", year: "numeric" })
             : "—"}
@@ -486,14 +476,14 @@ function DayPager({
         </button>
       </div>
       {(checked || changed) && (
-        <span className="tracking-[0.04em] text-ink-min">
+        <span className="text-ink-min">
           {checked && `Checked ${checked}`}
           {checked && changed && changed !== checked && " · "}
           {changed && changed !== checked && `stories updated ${changed}`}
         </span>
       )}
       {selectedDate && (
-        <button onClick={() => onSelect(null)} className={`${link} tracking-[0.04em]`}>
+        <button onClick={() => onSelect(null)} className={`${link}`}>
           Back to the latest
         </button>
       )}
@@ -717,7 +707,7 @@ function ActionPageInner() {
                 aria-controls={activeTab === tab.id ? `tabpanel-${tab.id}` : undefined}
                 tabIndex={activeTab === tab.id ? 0 : -1}
                 onClick={() => setActiveTab(tab.id)}
-                className={`-mb-px whitespace-nowrap border-b-3 px-3 py-3 font-mono text-xs uppercase tracking-[0.14em] transition-colors sm:px-5 ${tabControl(
+                className={`-mb-px whitespace-nowrap border-b-3 px-3 py-3 font-mono text-xs transition-colors sm:px-5 ${tabControl(
                   activeTab === tab.id
                 )}`}
               >

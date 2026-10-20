@@ -65,9 +65,9 @@ const LEAN_WORD: Record<LeanCategory, string> = {
 
 /** The headline seat figures: the same counts the strips draw. */
 const SEAT_TILES: [LeanCategory, string][] = [
-  ["R", "R-LEANING SEATS"],
-  ["D", "D-LEANING SEATS"],
-  ["EVEN", "EVEN SEATS"],
+  ["R", "R-leaning seats"],
+  ["D", "D-leaning seats"],
+  ["EVEN", "Even seats"],
 ];
 
 /** One block per seat, coloured by its lean: the state's whole delegation
@@ -87,7 +87,7 @@ export function SeatStrip({
     .join(", ");
   return (
     <div className="grid grid-cols-[52px_1fr] items-baseline gap-2">
-      <span className="font-mono text-[11px] tracking-[0.14em] text-ink-min">{label}</span>
+      <span className="font-mono text-[11px] text-ink-min">{label}</span>
       <span className="min-w-0">
         <span aria-hidden="true" className="flex flex-wrap gap-[2px]">
           {order.flatMap((k) =>
@@ -176,22 +176,22 @@ function NewRow({ d, filter }: { d: NewDistrict; filter: string }) {
         <p className="text-sm leading-relaxed text-ink">{newDistrictSentence(d)}</p>
         {!d.unchanged && <ShareBar rows={d.sources} prefix="old" />}
         <p className="mt-1 font-mono text-[11px] text-ink-min">
-          LEAN <span className={pviColor(d.pviBefore)}>{formatPvi(d.pviBefore)}</span> →{" "}
+          Lean <span className={pviColor(d.pviBefore)}>{formatPvi(d.pviBefore)}</span> →{" "}
           <span className={pviColor(d.pviAfter)}>{formatPvi(d.pviAfter)}</span>
           {d.pviShift != null && d.pviShift !== 0 && (
             <span>
               {" "}
-              · {Math.abs(d.pviShift)} {Math.abs(d.pviShift) === 1 ? "POINT" : "POINTS"}{" "}
-              {d.pviShift > 0 ? "TOWARD R" : "TOWARD D"}
+              · {Math.abs(d.pviShift)} {Math.abs(d.pviShift) === 1 ? "Point" : "Points"}{" "}
+              {d.pviShift > 0 ? "Toward R" : "Toward D"}
             </span>
           )}
           {d.pviBeforeWeighted != null && !d.unchanged && (
-            <span> · RESIDENTS&apos; OLD DISTRICTS AVERAGED {formatPvi(d.pviBeforeWeighted)}</span>
+            <span> · Residents&apos; old districts averaged {formatPvi(d.pviBeforeWeighted)}</span>
           )}
         </p>
         {(d.computedLeanBefore != null || d.computedLeanAfter != null) && (
           <p className="font-mono text-[11px] text-ink-min">
-            CIVITAS-COMPUTED {formatComputedLean(d.computedLeanBefore)} →{" "}
+            Civitas-computed {formatComputedLean(d.computedLeanBefore)} →{" "}
             {formatComputedLean(d.computedLeanAfter)}
           </p>
         )}
@@ -213,9 +213,9 @@ function OldRow({ d, filter }: { d: OldDistrict; filter: string }) {
         <p className="text-sm leading-relaxed text-ink">{oldDistrictSentence(d)}</p>
         <ShareBar rows={d.destinations} prefix="new" />
         <p className="mt-1 font-mono text-[11px] text-ink-min">
-          OLD LEAN <span className={pviColor(d.pvi)}>{formatPvi(d.pvi)}</span>
+          Old lean <span className={pviColor(d.pvi)}>{formatPvi(d.pvi)}</span>
           {d.computedLean != null && (
-            <span> · CIVITAS-COMPUTED {formatComputedLean(d.computedLean)}</span>
+            <span> · Civitas-computed {formatComputedLean(d.computedLean)}</span>
           )}
         </p>
       </div>
@@ -246,7 +246,7 @@ function OverlapMatrix({ data }: { data: StateRedistricting }) {
               scope="col"
               className="sticky left-0 bg-surface-base px-1.5 py-1 text-left text-ink-min"
             >
-              OLD ↓ NEW →
+              Old ↓ new →
             </th>
             {data.newDistricts.map((n) => (
               <th key={n.district} scope="col" className="px-1.5 py-1 text-right text-ink-hi">
@@ -254,7 +254,7 @@ function OverlapMatrix({ data }: { data: StateRedistricting }) {
               </th>
             ))}
             <th scope="col" className="px-1.5 py-1 text-right text-ink-min">
-              TOTAL
+              Total
             </th>
           </tr>
         </thead>
@@ -296,7 +296,7 @@ function OverlapMatrix({ data }: { data: StateRedistricting }) {
               scope="row"
               className="sticky left-0 bg-surface-base px-1.5 py-1 text-left text-ink-min"
             >
-              TOTAL
+              Total
             </th>
             {data.newDistricts.map((n) => (
               <td key={n.district} className="px-1.5 py-1 text-right tabular-nums text-ink-min">
@@ -337,7 +337,7 @@ function PviSourceLine({
             rel="noopener noreferrer"
             className="text-signal-cyan underline decoration-signal-cyan/40 underline-offset-4 hover:text-phos"
           >
-            [ REVISION {rev.revid} ↗ ]
+            [ Revision {rev.revid} ↗ ]
           </a>
         </>
       )}
@@ -359,7 +359,7 @@ function MethodAndData({ data }: { data: StateRedistricting }) {
       aria-labelledby="method"
       className="mt-10 border-t-3 border-ink-min/60 pt-5"
     >
-      <h2 id="method" className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
+      <h2 id="method" className="font-mono text-xs text-ink-min">
         Method &amp; data
       </h2>
       <div className="mt-3 max-w-3xl space-y-3 text-[13px] leading-relaxed text-ink-lo">
@@ -384,14 +384,14 @@ function MethodAndData({ data }: { data: StateRedistricting }) {
         </p>
         <p>
           <span className="text-ink-hi">Seats by lean</span> (the figures at the top) count each
-          map&apos;s districts by the sign of their lean: R, D or EVEN. A different count:{" "}
+          map&apos;s districts by the sign of their lean: R, D or even. A different count:{" "}
           <span className="text-ink-hi">
             {data.summary.districtsLeaningDifferentlyFromPredecessor} of {data.summary.seats} new
             districts lean differently from their predecessor
           </span>
           . The two need not match: a new district built from several old ones is compared with its
           largest source only, an old district split up with no successor (
-          {data.summary.oldWithoutSuccessor} here) is compared with nothing, and an EVEN seat is a
+          {data.summary.oldWithoutSuccessor} here) is compared with nothing, and an even seat is a
           category of its own. Average district lean: {formatPvi(data.summary.meanPviBefore)}{" "}
           before, {formatPvi(data.summary.meanPviAfter)} after; a redraw moves residents between
           districts, not out of the state, so the average barely moves while single seats can move a
@@ -414,7 +414,7 @@ function MethodAndData({ data }: { data: StateRedistricting }) {
                   rel="noopener noreferrer"
                   className="whitespace-nowrap text-signal-cyan underline decoration-signal-cyan/40 underline-offset-4 hover:text-phos"
                 >
-                  [ OFFICIAL SOURCE ↗ ]
+                  [ Official source ↗ ]
                 </a>
               </>
             )}
@@ -444,13 +444,13 @@ function MethodAndData({ data }: { data: StateRedistricting }) {
             </li>
           )}
         </ul>
-        <p className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs tracking-[0.1em]">
+        <p className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs">
           <a
             href={downloads.csv}
             download
             className="inline-flex min-h-6 items-center text-signal-cyan hover:text-phos"
           >
-            [ DOWNLOAD CSV ]
+            [ Download CSV ]
           </a>
           <a
             href={downloads.json}
@@ -463,8 +463,8 @@ function MethodAndData({ data }: { data: StateRedistricting }) {
         </p>
       </div>
       <details className="mt-4" onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
-        <summary className="min-h-[44px] cursor-pointer py-2 font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos">
-          [ OVERLAP MATRIX · {data.cells.length} CELLS ]
+        <summary className="min-h-[44px] cursor-pointer py-2 font-mono text-xs text-signal-cyan hover:text-phos">
+          [ Overlap matrix · {data.cells.length} cells ]
         </summary>
         {open && <OverlapMatrix data={data} />}
       </details>
@@ -512,12 +512,12 @@ export default function RedistrictingStateView({ data }: { data: StateRedistrict
         Unchanged districts: {s.unchangedSeats} of {s.seats}.
       </p>
       {data.map && (
-        <p className="mt-2 max-w-2xl font-mono text-[11px] leading-relaxed tracking-[0.06em] text-ink-min">
-          THE MAP: {data.map.title ?? data.map.reason}
+        <p className="mt-2 max-w-2xl font-mono text-[11px] leading-relaxed text-ink-min">
+          The map: {data.map.title ?? data.map.reason}
           {data.map.issuedBy && <> · {data.map.issuedBy}</>}
         </p>
       )}
-      <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs tracking-[0.1em]">
+      <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs">
         {actUrl && (
           <a
             href={actUrl}
@@ -525,11 +525,11 @@ export default function RedistrictingStateView({ data }: { data: StateRedistrict
             rel="noopener noreferrer"
             className="min-h-[24px] text-signal-cyan hover:text-phos"
           >
-            [ OFFICIAL SOURCE ↗ ]
+            [ Official source ↗ ]
           </a>
         )}
         <a href="#method-and-data" className="min-h-[24px] text-signal-cyan hover:text-phos">
-          [ METHOD &amp; DATA ↓ ]
+          [ Method &amp; data ↓ ]
         </a>
       </p>
 
@@ -550,24 +550,21 @@ export default function RedistrictingStateView({ data }: { data: StateRedistrict
           {...{ [SHARE_SECTION_ATTR]: "at-a-glance" }}
         >
           <div className="flex flex-wrap items-baseline justify-between gap-3">
-            <h2
-              id="at-a-glance"
-              className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
-            >
+            <h2 id="at-a-glance" className="font-mono text-xs text-ink-min">
               The delegation, by lean
             </h2>
             <ShareSectionButton label="The delegation, by lean" />
           </div>
           <div className="mt-3 space-y-3">
-            <SeatStrip label="BEFORE" counts={s.seatsByLeanBefore} />
-            <SeatStrip label="AFTER" counts={s.seatsByLeanAfter} />
+            <SeatStrip label="Before" counts={s.seatsByLeanBefore} />
+            <SeatStrip label="After" counts={s.seatsByLeanAfter} />
           </div>
           <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-white/[0.07] pt-3 sm:grid-cols-4">
             {SEAT_TILES.filter(
               ([k]) => k !== "EVEN" || s.seatsByLeanBefore.EVEN > 0 || s.seatsByLeanAfter.EVEN > 0
             ).map(([k, label]) => (
               <div key={k}>
-                <dt className="font-mono text-[11px] tracking-[0.1em] text-ink-min">{label}</dt>
+                <dt className="font-mono text-[11px] text-ink-min">{label}</dt>
                 <dd className="font-mono text-lg text-ink-hi">
                   {s.seatsByLeanBefore[k]} → {s.seatsByLeanAfter[k]}
                   <span className="text-xs text-ink-min"> {netWord(s.netSeatChangeByLean[k])}</span>
@@ -575,19 +572,17 @@ export default function RedistrictingStateView({ data }: { data: StateRedistrict
               </div>
             ))}
             <div>
-              <dt className="font-mono text-[11px] tracking-[0.1em] text-ink-min">
-                AVG. RESIDENT&apos;S SHIFT
-              </dt>
+              <dt className="font-mono text-[11px] text-ink-min">Avg. Resident&apos;s shift</dt>
               <dd className="font-mono text-lg text-ink-hi">
                 {s.meanResidentShift ?? "N/A"}
-                <span className="text-xs text-ink-min"> PTS</span>
+                <span className="text-xs text-ink-min"> Pts</span>
               </dd>
             </div>
             <div>
-              <dt className="font-mono text-[11px] tracking-[0.1em] text-ink-min">UNCHANGED</dt>
+              <dt className="font-mono text-[11px] text-ink-min">Unchanged</dt>
               <dd className="font-mono text-lg text-ink-hi">
                 {s.unchangedSeats}
-                <span className="text-xs text-ink-min"> OF {s.seats}</span>
+                <span className="text-xs text-ink-min"> of {s.seats}</span>
               </dd>
             </div>
           </dl>
@@ -595,14 +590,14 @@ export default function RedistrictingStateView({ data }: { data: StateRedistrict
       </ShareSubjectProvider>
 
       <section aria-labelledby="districts" className="mt-8">
-        <h2 id="districts" className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
+        <h2 id="districts" className="font-mono text-xs text-ink-min">
           Find your district
         </h2>
         <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Which map to list">
           {(
             [
-              ["new", "NEW DISTRICTS"],
-              ["old", "OLD DISTRICTS"],
+              ["new", "New districts"],
+              ["old", "Old districts"],
             ] as const
           ).map(([key, label]) => (
             <button
@@ -610,7 +605,7 @@ export default function RedistrictingStateView({ data }: { data: StateRedistrict
               type="button"
               aria-pressed={view === key}
               onClick={() => setView(key)}
-              className={`min-h-[44px] border px-3 font-mono text-xs tracking-[0.1em] ${
+              className={`min-h-[44px] border px-3 font-mono text-xs ${
                 view === key
                   ? "border-signal-cyan text-signal-cyan"
                   : "border-white/[0.09] text-ink-lo hover:text-ink-hi"
@@ -662,26 +657,26 @@ export default function RedistrictingStateView({ data }: { data: StateRedistrict
             or a district number.
           </p>
         )}
-        <p className="mt-4 flex flex-wrap gap-x-6 font-mono text-xs tracking-[0.1em]">
+        <p className="mt-4 flex flex-wrap gap-x-6 font-mono text-xs">
           <Link
             href={stateBallotHref(data.state)}
             className="inline-flex min-h-6 items-center text-signal-cyan hover:text-phos"
           >
-            [ WHO IS ON {data.stateName.toUpperCase()}&apos;S BALLOT → ]
+            [ Who is on {data.stateName}&apos;s ballot → ]
           </Link>{" "}
           <Link
             href={REDISTRICTING_HREF}
             className="inline-flex min-h-6 items-center text-ink-lo hover:text-ink-hi"
           >
-            [ EVERY REDRAWN STATE ]
+            [ Every redrawn state ]
           </Link>
         </p>
-        <p className="mt-2 font-mono text-xs tracking-[0.1em]">
+        <p className="mt-2 font-mono text-xs">
           <Link
             href={mapHref("usual", "house")}
             className="inline-flex min-h-6 items-center text-signal-cyan hover:text-phos"
           >
-            [ EVERY HOUSE SEAT ON THE SEAT MAP → ]
+            [ Every House seat on the seat map → ]
           </Link>
         </p>
       </section>

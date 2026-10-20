@@ -30,7 +30,7 @@ export default function TownContestCard({ item }: { item: TownBallotItem }) {
                       aria-label={`${c.name}'s campaign site (opens in new tab)`}
                       className="text-signal-cyan hover:text-phos text-[10px]"
                     >
-                      SITE ↗
+                      Site ↗
                     </a>
                   )}
                 </li>
@@ -61,7 +61,7 @@ export default function TownContestCard({ item }: { item: TownBallotItem }) {
           aria-label={`Read the full text of ${item.title} at the source (opens in new tab)`}
           className="text-[10px] font-mono text-signal-cyan hover:text-phos"
         >
-          FULL TEXT AT SOURCE ↗
+          Full text at source ↗
         </a>
       )}
     </article>

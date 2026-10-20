@@ -137,9 +137,9 @@ describe("RaceContext", () => {
         })}
       />
     );
-    expect(screen.getByText("INCUMBENT")).toBeInTheDocument();
+    expect(screen.getByText("Incumbent")).toBeInTheDocument();
     expect(screen.getByText(/One Example is on the ballot/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /WHERE THEY STAND/ })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /Where they stand/ })).toHaveAttribute(
       "href",
       "/politicians/member-a"
     );

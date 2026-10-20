@@ -32,9 +32,7 @@ export default function MemberSuggestions() {
   if (!found?.length) return null;
   return (
     <div className="mt-5 text-left">
-      <h2 className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-        Closest names on the record
-      </h2>
+      <h2 className="font-mono text-xs text-ink-min">Closest names on the record</h2>
       <ul className="mt-2 flex flex-col gap-2">
         {found.map((p) => (
           <li key={p.id}>

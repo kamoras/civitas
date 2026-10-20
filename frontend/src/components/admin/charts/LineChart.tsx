@@ -196,7 +196,7 @@ export default function LineChart({
     <figure className="min-w-0">
       <figcaption className="mb-2 flex items-baseline justify-between gap-3">
         <span className="min-w-0">
-          <span className="block text-xs font-mono tracking-wider text-ink-lo">{title}</span>
+          <span className="block text-xs font-mono text-ink-lo">{title}</span>
           {subtitle && <span className="block text-xs font-mono text-ink-min">{subtitle}</span>}
         </span>
         {headline && <span className="shrink-0 text-right font-mono text-ink-hi">{headline}</span>}

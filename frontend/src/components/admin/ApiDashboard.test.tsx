@@ -48,7 +48,7 @@ describe("ApiDashboard", () => {
     const table = await screen.findByRole("table", { name: /requests by endpoint/i });
     const rows = within(table).getAllByRole("row");
     expect(rows.map((r) => r.textContent)).toEqual([
-      "ENDPOINTHTTPMCP429REJECTED5XX",
+      "EndpointHTTPMCP429Rejected5XX",
       "list_senators3010200",
       "get_senator132041",
     ]);
@@ -61,7 +61,7 @@ describe("ApiDashboard", () => {
       within(reasons)
         .getAllByRole("row")
         .map((r) => r.textContent)
-    ).toEqual(["ENDPOINTPARAMETERRULE BROKENCOUNT", "search_documentsdoc_typeliteral_error4"]);
+    ).toEqual(["EndpointParameterRule brokenCount", "search_documentsdoc_typeliteral_error4"]);
     const results = await axe.run(document.body);
     expect(results.violations).toEqual([]);
   });

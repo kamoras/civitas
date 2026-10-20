@@ -48,10 +48,11 @@ describe("fitMercator", () => {
 
 describe("leanFill", () => {
   it("follows pviColor's direction and fades toward even", () => {
-    expect(leanFill(-12).fill).toBe(leanFill(-2).fill);
-    expect(leanFill(12).fill).not.toBe(leanFill(-12).fill);
-    expect(leanFill(2).opacity).toBeLessThan(leanFill(20).opacity);
-    expect(leanFill(40).opacity).toBe(leanFill(25).opacity);
+    expect(leanFill(-12)).toContain("var(--map-dem)");
+    expect(leanFill(12)).toContain("var(--map-rep)");
+    const strength = (f: string) => Number(f.match(/\+ ([\d.]+) \*/)?.[1] ?? 1);
+    expect(strength(leanFill(2))).toBeLessThan(strength(leanFill(20)));
+    expect(leanFill(40)).toBe(leanFill(25));
   });
 });
 
@@ -147,7 +148,7 @@ describe("DistrictMap", () => {
     expect(screen.queryByText(/paler/)).not.toBeInTheDocument();
     shape.focus();
     expect(await screen.findByText("tied · not called")).toBeInTheDocument();
-    expect(screen.getByText("TIED")).toBeInTheDocument();
+    expect(screen.getByText("Tied")).toBeInTheDocument();
     expect(screen.getByText(/Ann Rep/)).not.toHaveClass("text-rep-red");
   });
 
@@ -235,7 +236,7 @@ describe("DistrictMap", () => {
     // Its leader's colour under the stale stripe.
     expect(container.querySelector("pattern[id$='-stale-0'] rect:nth-child(2)")).toHaveAttribute(
       "fill",
-      "rgba(255,137,137, 1)"
+      "var(--map-rep)"
     );
     shape.focus();
     // Never a bare "official" beside the names, and the flip kept.
@@ -379,11 +380,11 @@ describe("DistrictMap", () => {
     expect(screen.queryByText(/redder = safer R/)).not.toBeInTheDocument();
     const style = shape.getAttribute("style") ?? "";
     // Every seat the same neutral, never the state's R+6 red.
-    expect(leanFill(6).fill.toLowerCase()).toBe("#ff8989");
-    expect(style).not.toContain("rgb(255, 137, 137)");
+    expect(leanFill(6)).toContain("var(--map-rep)");
+    expect(style).not.toContain("--map-rep");
     expect(style).toBe(screen.getByRole("button", { name: "CT-4" }).getAttribute("style"));
     // Borders drawn light so thirty-eight same-coloured districts still read.
-    expect(style).toContain("stroke: rgb(217, 211, 199)");
+    expect(style).toContain("stroke: var(--ink-lo)");
 
     shape.focus();
     expect(await screen.findByText("R+6 (statewide)")).toBeInTheDocument();

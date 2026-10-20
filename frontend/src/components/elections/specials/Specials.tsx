@@ -47,8 +47,8 @@ function SpecialCountLines({ s }: { s: SpecialElection }) {
   const source = safeHref(c.sourceUrl);
   return (
     <div className="mt-2">
-      <p className="font-mono text-[11px] tracking-[0.12em] text-signal-amber">
-        {c.official ? "LEADS · OFFICIAL COUNT" : `LEADING · ${NOT_FINAL}`}
+      <p className="font-mono text-[11px] text-signal-amber">
+        {c.official ? "Leads · Official count" : `Leading · ${NOT_FINAL}`}
       </p>
       <ul className="mt-1 space-y-0.5">
         {c.tallies.slice(0, 3).map((t) => (
@@ -84,8 +84,8 @@ export function SpecialItem({ s }: { s: SpecialElection }) {
     <li id={`special-${s.id}`} className="border-t border-white/[0.07] py-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <p className="font-display text-base font-semibold text-ink-hi">{s.seat}</p>
-        <p className="font-mono text-[11px] tracking-[0.12em] text-ink-min">
-          {longDate(s.date).toUpperCase()} · {dayText(s.status, s.daysLeft)}
+        <p className="font-mono text-[11px] text-ink-min">
+          {longDate(s.date)} · {dayText(s.status, s.daysLeft)}
         </p>
       </div>
       <p className="mt-0.5 text-sm text-ink-lo">
@@ -106,9 +106,7 @@ function VacancyItem({ v }: { v: SeatVacancy }) {
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <p className="font-display text-base font-semibold text-ink-hi">{v.seat}</p>
         {v.vacatedOn && (
-          <p className="font-mono text-[11px] tracking-[0.12em] text-ink-min">
-            VACANT SINCE {longDate(v.vacatedOn).toUpperCase()}
-          </p>
+          <p className="font-mono text-[11px] text-ink-min">Vacant since {longDate(v.vacatedOn)}</p>
         )}
       </div>
       <p className="mt-0.5 text-sm text-ink-lo">
@@ -137,9 +135,7 @@ function VacancyItem({ v }: { v: SeatVacancy }) {
 const RECENT_OPEN = 5;
 
 function H3({ children }: { children: React.ReactNode }) {
-  return (
-    <h3 className="mt-6 font-mono text-xs uppercase tracking-[0.16em] text-ink-min">{children}</h3>
-  );
+  return <h3 className="mt-6 font-mono text-xs text-ink-min">{children}</h3>;
 }
 
 /** The board: vacancies, specials ahead, the year's held specials with the
@@ -200,7 +196,7 @@ export default function SpecialsBoardView({
           </ul>
           {cap(board.recent).length > RECENT_OPEN && (
             <details>
-              <summary className="flex min-h-11 cursor-pointer items-center font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
+              <summary className="flex min-h-11 cursor-pointer items-center font-mono text-xs text-ink-min">
                 {cap(board.recent).length - RECENT_OPEN} more held in the last year
               </summary>
               <ul>
@@ -224,9 +220,9 @@ export default function SpecialsBoardView({
       {limit && (
         <Link
           href={`${CALENDAR_HREF}#specials-board`}
-          className="mt-3 inline-flex min-h-11 items-center font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
+          className="mt-3 inline-flex min-h-11 items-center font-mono text-xs text-signal-cyan hover:text-phos"
         >
-          [ EVERY SPECIAL ELECTION → ]
+          [ Every special election → ]
         </Link>
       )}
     </div>

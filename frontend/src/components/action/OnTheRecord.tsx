@@ -91,7 +91,7 @@ function ChamberRow({
   }.`;
   return (
     <div className="mt-3">
-      <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-lo">
+      <p className="font-mono text-xs text-ink-lo">
         {CHAMBER_NAME[chamber]} · {votes.length}
       </p>
       <div
@@ -209,13 +209,13 @@ export default function OnTheRecord({
           Source: Senate.gov and the Clerk of the House roll-call records.
         </p>
         <details className="mt-2" data-share-exclude>
-          <summary className="inline-flex min-h-[32px] cursor-pointer items-center font-mono text-xs tracking-[0.12em] text-phos-mid hover:text-phos">
-            [ EVERY VOTE AS A TABLE ]
+          <summary className="inline-flex min-h-[32px] cursor-pointer items-center font-mono text-xs text-phos-mid hover:text-phos">
+            [ Every vote as a table ]
           </summary>
           <div className="overflow-x-auto">
             <table className="mt-2 w-full text-left text-[13px] text-ink">
               <caption className="sr-only">Related votes in Congress, oldest first</caption>
-              <thead className="font-mono text-xs uppercase tracking-[0.08em] text-ink-min">
+              <thead className="font-mono text-xs text-ink-min">
                 <tr>
                   <th scope="col" className="py-1 pr-3 font-normal">
                     Date

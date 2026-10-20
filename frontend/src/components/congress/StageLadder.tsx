@@ -13,9 +13,7 @@ import type { StageMilestones } from "@/types/bill";
 export default function StageLadder({ data }: { data: StageMilestones }) {
   return (
     <div className="flex flex-col gap-2">
-      <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-        How far it has got
-      </p>
+      <p className="font-mono text-xs text-ink-min">How far it has got</p>
       <ol className="flex flex-col">
         {data.milestones.map((m, i) => {
           const reached = i <= data.reached;
@@ -29,7 +27,7 @@ export default function StageLadder({ data }: { data: StageMilestones }) {
               <span className={reached ? "text-ink-hi" : "text-ink-lo"}>
                 {m.label}
                 {here && (
-                  <span className="ml-2 whitespace-nowrap border border-signal-cyan/50 px-1 font-mono text-[11px] uppercase tracking-[0.12em] text-signal-cyan">
+                  <span className="ml-2 whitespace-nowrap border border-signal-cyan/50 px-1 font-mono text-[11px] text-signal-cyan">
                     This bill
                   </span>
                 )}

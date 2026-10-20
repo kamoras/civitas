@@ -39,7 +39,7 @@ describe("CandidateCard", () => {
 
   it("shows an em dash rather than $0 for a never-synced figure", () => {
     render(<CandidateCard candidate={candidate({ cashOnHand: null, lastFinancialsSync: null })} />);
-    expect(screen.getByText("AWAITING FEC SYNC")).toBeInTheDocument();
+    expect(screen.getByText("Awaiting FEC sync")).toBeInTheDocument();
   });
 });
 
@@ -54,7 +54,7 @@ describe("what the figures are as of", () => {
       />
     );
     expect(
-      screen.getByText("FEC REPORTS THROUGH 2026-06-30 · CHECKED 2026-10-08")
+      screen.getByText("FEC reports through 2026-06-30 · Checked 2026-10-08")
     ).toBeInTheDocument();
     expect(screen.queryByText(/AS OF/)).not.toBeInTheDocument();
   });
@@ -66,7 +66,7 @@ describe("what the figures are as of", () => {
       />
     );
     expect(
-      screen.getByText("NO FEC REPORT FOR THIS ELECTION · CHECKED 2026-08-25")
+      screen.getByText("No FEC report for this election · Checked 2026-08-25")
     ).toBeInTheDocument();
   });
 });
@@ -74,35 +74,35 @@ describe("what the figures are as of", () => {
 describe("unconfirmed badge", () => {
   it("marks a candidate the state's primary file never listed", () => {
     render(<CandidateCard candidate={candidate({ confirmed: false })} showUnconfirmed />);
-    expect(screen.getByText("UNCONFIRMED")).toBeInTheDocument();
+    expect(screen.getByText("Unconfirmed")).toBeInTheDocument();
   });
 
   it("stays off for a confirmed nominee", () => {
     render(<CandidateCard candidate={candidate({ confirmed: true })} showUnconfirmed />);
-    expect(screen.queryByText("UNCONFIRMED")).not.toBeInTheDocument();
+    expect(screen.queryByText("Unconfirmed")).not.toBeInTheDocument();
   });
 
   it("stays off when the whole race is unconfirmed, where it would be noise", () => {
     render(<CandidateCard candidate={candidate({ confirmed: false })} />);
-    expect(screen.queryByText("UNCONFIRMED")).not.toBeInTheDocument();
+    expect(screen.queryByText("Unconfirmed")).not.toBeInTheDocument();
   });
 });
 
 describe("incumbency badge", () => {
   it("names FEC's incumbency code on a seat whose lines did not change", () => {
     render(<CandidateCard candidate={candidate({ incumbentChallenge: "I" })} />);
-    expect(screen.getByText("INCUMBENT")).toBeInTheDocument();
+    expect(screen.getByText("Incumbent")).toBeInTheDocument();
   });
 
   it("calls a sitting member on a redrawn seat a sitting member, and drops the old seat's other codes", () => {
     const { unmount } = render(
       <CandidateCard candidate={candidate({ incumbentChallenge: "I" })} redrawnSeat />
     );
-    expect(screen.getByText("SITTING MEMBER")).toBeInTheDocument();
-    expect(screen.queryByText("INCUMBENT")).not.toBeInTheDocument();
+    expect(screen.getByText("Sitting member")).toBeInTheDocument();
+    expect(screen.queryByText("Incumbent")).not.toBeInTheDocument();
     unmount();
     render(<CandidateCard candidate={candidate({ incumbentChallenge: "C" })} redrawnSeat />);
-    expect(screen.queryByText("CHALLENGER")).not.toBeInTheDocument();
+    expect(screen.queryByText("Challenger")).not.toBeInTheDocument();
   });
 
   it("calls them the member before this election from election day on, with the seat they held", () => {
@@ -116,7 +116,7 @@ describe("incumbency badge", () => {
         resultsMode
       />
     );
-    expect(screen.getByText("MEMBER BEFORE THIS ELECTION, TX-35")).toBeInTheDocument();
-    expect(screen.queryByText(/SITTING MEMBER/)).not.toBeInTheDocument();
+    expect(screen.getByText("Member before this election, TX-35")).toBeInTheDocument();
+    expect(screen.queryByText(/Sitting member/)).not.toBeInTheDocument();
   });
 });

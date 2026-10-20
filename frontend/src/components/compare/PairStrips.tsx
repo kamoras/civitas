@@ -25,9 +25,7 @@ function PairStrip({ m, left, right }: { m: ChamberMeasure; left: Side; right: S
   return (
     <figure className="border-t border-white/25 px-4 py-4 first:border-t-0">
       <figcaption className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="text-[13px] font-semibold uppercase tracking-[0.06em] text-ink-lo">
-          {m.label}
-        </span>
+        <span className="text-[13px] font-semibold text-ink-lo">{m.label}</span>
         <span className="text-sm text-ink">
           {left.name}: <strong className="font-semibold">{l?.shown ?? "no record"}</strong> ·{" "}
           {right.name}: <strong className="font-semibold">{r?.shown ?? "no record"}</strong>

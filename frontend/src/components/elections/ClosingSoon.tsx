@@ -39,10 +39,7 @@ export default function ClosingSoon({
   for (const r of rows) byDay.set(r.closesOn, [...(byDay.get(r.closesOn) ?? []), r]);
   return (
     <section aria-labelledby="closing-soon-heading" className={className}>
-      <H
-        id="closing-soon-heading"
-        className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
-      >
+      <H id="closing-soon-heading" className="font-mono text-xs text-ink-min">
         Registration closes soon
       </H>
       {rows.length === 0 ? (
@@ -65,9 +62,7 @@ export default function ClosingSoon({
           <ol className="mt-2 flex flex-col gap-2">
             {Array.from(byDay.entries()).map(([day, states]) => (
               <li key={day} className="border-t border-white/[0.09] pt-2 first:border-t-0">
-                <p className="font-mono text-xs uppercase tracking-[0.12em] text-phos">
-                  {when(states[0])}
-                </p>
+                <p className="font-mono text-xs text-phos">{when(states[0])}</p>
                 <ul
                   className={
                     compact ? "mt-1 flex flex-wrap gap-x-4 gap-y-1" : "mt-1 flex flex-col gap-1"

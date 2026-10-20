@@ -55,12 +55,26 @@ describe("Navbar search", () => {
 });
 
 describe("Navbar", () => {
+  it("marks the section a record names over the one its path would", () => {
+    // A record's URL is shared by several sections (recordTrail): the
+    // profile passes its branch's.
+    render(<Navbar section="court" />);
+    const row = screen.getByTestId("nav-row");
+    expect(within(row).getByRole("link", { name: /^Supreme Court/ })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
+    expect(within(row).getByRole("button", { name: /^Elections/ })).not.toHaveTextContent(
+      "current section"
+    );
+  });
+
   it("opens a section's pages from one trigger, not a menu, and Escape closes it", () => {
     render(<Navbar />);
     const row = screen.getByTestId("nav-row");
     // One control per section: the name is the trigger, no separate link.
-    const button = within(row).getByRole("button", { name: /^ELECTIONS/ });
-    expect(within(row).queryByRole("link", { name: "ELECTIONS" })).toBeNull();
+    const button = within(row).getByRole("button", { name: /^Elections/ });
+    expect(within(row).queryByRole("link", { name: "Elections" })).toBeNull();
     expect(button).toHaveAttribute("aria-expanded", "false");
     const panel = document.getElementById(button.getAttribute("aria-controls")!)!;
     expect(panel).not.toBeVisible();
@@ -90,9 +104,9 @@ describe("Navbar", () => {
   it("opens one section at a time", () => {
     render(<Navbar />);
     const row = screen.getByTestId("nav-row");
-    fireEvent.click(within(row).getByRole("button", { name: /^CONGRESS/ }));
-    fireEvent.click(within(row).getByRole("button", { name: /^ELECTIONS/ }));
-    expect(within(row).getByRole("button", { name: /^CONGRESS/ })).toHaveAttribute(
+    fireEvent.click(within(row).getByRole("button", { name: /^Congress/ }));
+    fireEvent.click(within(row).getByRole("button", { name: /^Elections/ }));
+    expect(within(row).getByRole("button", { name: /^Congress/ })).toHaveAttribute(
       "aria-expanded",
       "false"
     );
@@ -102,10 +116,10 @@ describe("Navbar", () => {
     render(<Navbar />);
     const row = screen.getByTestId("nav-row");
     expect(
-      within(row).getByRole("button", { name: /^ELECTIONS,? ?current section$/ })
+      within(row).getByRole("button", { name: /^Elections,? ?current section$/ })
     ).toBeInTheDocument();
-    expect(within(row).getByRole("link", { name: "EXPLORE" })).toHaveAttribute("href", "/explore");
-    expect(within(row).queryByRole("button", { name: /^EXPLORE/ })).toBeNull();
+    expect(within(row).getByRole("link", { name: "Explore" })).toHaveAttribute("href", "/explore");
+    expect(within(row).queryByRole("button", { name: /^Explore/ })).toBeNull();
   });
 
   it("lists the sections first, each one's pages behind its own disclosure, then the state", () => {
@@ -117,7 +131,7 @@ describe("Navbar", () => {
     // opens a native select's list when it takes focus.
     expect(menu).toHaveFocus();
     expect(menu).toHaveAccessibleName("Site menu");
-    expect(document.activeElement?.tagName).not.toBe("SELECT");
+    expect(document.activeElement?.tagName).not.toBe("Select");
     // Shift+Tab from the panel stays in it, on its last control.
     fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
     expect(within(menu).getAllByRole("link").at(-1)).toHaveFocus();

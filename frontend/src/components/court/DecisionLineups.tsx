@@ -2,13 +2,15 @@ import type { Court } from "@/types/court";
 import { splitLabel, termsPhrase } from "@/lib/court";
 
 // Lopsided splits light, close ones dark, in the order the API gives
-// them; a split past the end takes the darkest. Text on the first three is
-// the page's darkest ink, on the rest its heading ink: both clear 4.5:1 on
-// their shade (court.test.ts).
-export const SPLIT_SHADES = ["#F2EEE7", "#CDC7BC", "#A39D93", "#5E5A54", "#45423D", "#33302C"];
+// them; a split past the end takes the darkest. Each shade is a theme
+// variable (globals.css --split-1..6: on paper the lightest steps sit a
+// little darker, so the lopsided bars still show against the page). Text on
+// the first three is a fixed near-black, on the rest a fixed near-white:
+// both clear 4.5:1 on their shade in both themes (court.test.ts).
+export const SPLIT_SHADES = [1, 2, 3, 4, 5, 6].map((k) => `var(--split-${k})`);
 export const DARK_TEXT_SHADES = 3;
-const DARK_TEXT = "#0E0C0A";
-const LIGHT_TEXT = "#F2EEE7";
+export const DARK_TEXT = "#0E0C0A";
+export const LIGHT_TEXT = "#F2EEE7";
 // A segment narrower than this leaves its label to the table.
 const MIN_LABEL_SHARE = 0.12;
 
@@ -76,7 +78,7 @@ export default function DecisionLineups({ court }: { court: Court }) {
             justice sat out.
           </caption>
           <thead>
-            <tr className="border-b border-white/15 font-mono text-xs uppercase text-ink-min">
+            <tr className="border-b border-white/15 font-mono text-xs text-ink-min">
               <th scope="col" className="py-1.5 pr-3 text-left font-normal">
                 Term
               </th>

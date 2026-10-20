@@ -123,9 +123,9 @@ export function districtName(district: number): string {
  * "HOUSE-AL" — for badges inside a page already scoped to one state (e.g. the state ballot's aggregated coverage feed), where
  * repeating the state on every item would be redundant. */
 export function raceBadgeLabel(race: { office: string; district: number | null }): string {
-  if (race.office === "S") return "SENATE";
-  if (race.district == null) return "HOUSE";
-  return `HOUSE-${districtToken(race.district)}`;
+  if (race.office === "S") return "Senate";
+  if (race.district == null) return "House";
+  return `House-${districtToken(race.district)}`;
 }
 
 /** "Rockdale, Newton, DeKalb (part) & 2 more" — a short, scannable hint
@@ -375,13 +375,13 @@ export function stateBallotHref(state: string): string {
 export function measureStatusLabel(status: string): string {
   switch (status) {
     case "removed":
-      return "REMOVED FROM BALLOT";
+      return "Removed from ballot";
     case "withdrawn":
-      return "WITHDRAWN";
+      return "Withdrawn";
     case "under_appeal":
-      return "UNDER APPEAL";
+      return "Under appeal";
     default:
-      return "ON THE BALLOT";
+      return "On the ballot";
   }
 }
 
@@ -409,9 +409,9 @@ export function memberRecordLabel(r: { chamber: "house" | "senate"; seat: string
 
 /** FEC's incumbency codes, in words. */
 const FEC_INCUMBENCY: Record<string, string> = {
-  I: "INCUMBENT",
-  C: "CHALLENGER",
-  O: "OPEN SEAT",
+  I: "Incumbent",
+  C: "Challenger",
+  O: "Open seat",
 };
 
 /** Whether `race` is a House seat on lines other than the ones its
@@ -450,7 +450,7 @@ export function isRedrawnSeat(
  * step from calling the race. redrawnMemberWords is that wording alone, for a page that
  * sets it in its own case. */
 export function redrawnMemberWords(resultsMode: boolean): string {
-  return resultsMode ? "MEMBER BEFORE THIS ELECTION" : "SITTING MEMBER";
+  return resultsMode ? "Member before this election" : "Sitting member";
 }
 
 export function incumbencyLabel(

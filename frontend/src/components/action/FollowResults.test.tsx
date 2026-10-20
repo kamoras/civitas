@@ -67,7 +67,7 @@ describe("a count issue's actions and facts", () => {
     render(
       <Coverage issue={{ ...count, countAsOf: "2026-11-04T01:15:00Z", countOfficial: false }} />
     );
-    expect(document.body.textContent).toMatch(/NOT FINAL/);
+    expect(document.body.textContent).toMatch(/Not final/);
     expect(document.body.textContent).toMatch(
       /the count as of Nov 3, 8:15 PM ET, when Civitas read it/
     );
@@ -75,7 +75,7 @@ describe("a count issue's actions and facts", () => {
 
   it("names no time it doesn't have", () => {
     render(<Coverage issue={count} />);
-    expect(document.body.textContent).toMatch(/NOT FINAL · The state's own results site/);
+    expect(document.body.textContent).toMatch(/Not final · The state's own results site/);
     expect(document.body.textContent).not.toMatch(/count as of/);
   });
 });

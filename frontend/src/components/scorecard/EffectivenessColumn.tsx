@@ -144,7 +144,7 @@ export default function EffectivenessColumn({
                 >
                   {b.title}
                 </Link>
-                <span className="shrink-0 font-mono text-xs uppercase text-ink-min">
+                <span className="shrink-0 font-mono text-xs text-ink-min">
                   {(b.stage && config?.billStages[b.stage]?.name) || b.stage}
                 </span>
               </li>

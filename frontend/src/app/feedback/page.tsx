@@ -110,18 +110,15 @@ export default function FeedbackPage() {
                     setMessage("");
                     setIssueUrl(null);
                   }}
-                  className="font-mono text-xs text-signal-cyan hover:underline tracking-widest"
+                  className="font-mono text-xs text-signal-cyan hover:underline"
                 >
-                  SUBMIT MORE FEEDBACK
+                  Submit more feedback
                 </button>
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-5">
                 <div>
-                  <label
-                    htmlFor="category"
-                    className="block font-mono text-xs uppercase tracking-widest text-ink-lo mb-1.5"
-                  >
+                  <label htmlFor="category" className="block font-mono text-xs text-ink-lo mb-1.5">
                     Category
                   </label>
                   <select
@@ -139,10 +136,7 @@ export default function FeedbackPage() {
                 </div>
 
                 <div>
-                  <label
-                    htmlFor="message"
-                    className="block font-mono text-xs uppercase tracking-widest text-ink-lo mb-1.5"
-                  >
+                  <label htmlFor="message" className="block font-mono text-xs text-ink-lo mb-1.5">
                     What&apos;s on your mind?
                   </label>
                   <textarea
@@ -187,9 +181,9 @@ export default function FeedbackPage() {
                 <button
                   type="submit"
                   disabled={!canSubmit}
-                  className="w-full font-mono text-xs tracking-widest px-4 py-2.5 border border-signal-cyan/40 text-signal-cyan hover:bg-signal-cyan/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors uppercase"
+                  className="w-full font-mono text-xs px-4 py-2.5 border border-signal-cyan/40 text-signal-cyan hover:bg-signal-cyan/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
-                  {status === "submitting" ? "SUBMITTING..." : "SUBMIT FEEDBACK"}
+                  {status === "submitting" ? "Submitting..." : "Submit feedback"}
                 </button>
 
                 <p className="font-mono text-xs text-ink-min text-center">

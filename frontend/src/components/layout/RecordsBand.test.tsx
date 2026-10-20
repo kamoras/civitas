@@ -94,14 +94,14 @@ describe("formatRunTimestamp", () => {
 
 describe("describeRunState", () => {
   it("reports COMPLETE only when every link's latest run finished", () => {
-    expect(describeRunState(status()).label).toBe("COMPLETE");
+    expect(describeRunState(status()).label).toBe("Complete");
     expect(describeRunState(status()).complete).toBe(true);
   });
 
   it("names the one link that failed, and when, instead of the whole site", () => {
     const s = describeRunState(status({ links: links({ Senate: "failed" }) }));
-    expect(s.label).toBe("SENATE DATA RUN FAILED");
-    expect(s.short).toBe("SENATE DATA FAILED");
+    expect(s.label).toBe("Senate data run failed");
+    expect(s.short).toBe("Senate data failed");
     expect(s.at).toBe("2026-08-18T03:26:00");
     expect(s.tone).toBe("text-signal-red");
   });
@@ -110,26 +110,26 @@ describe("describeRunState", () => {
     const s = describeRunState(
       status({ links: links({ Senate: "failed", House: "failed", "Stock trades": "failed" }) })
     );
-    expect(s.label).toBe("SENATE + 2 MORE DATA RUNS FAILED");
-    expect(s.short).toBe("3 DATA RUNS FAILED");
+    expect(s.label).toBe("Senate + 2 more data runs failed");
+    expect(s.short).toBe("3 data runs failed");
     expect(s.everyName).toBe("Senate, House, Stock trades");
     expect(s.at).toBeNull();
   });
 
   it("ranks a failure over a partial run over a run in progress", () => {
     const all = links({ Senate: "running", House: "partial", Election: "failed" });
-    expect(describeRunState(status({ links: all })).label).toBe("ELECTION DATA RUN FAILED");
+    expect(describeRunState(status({ links: all })).label).toBe("Election data run failed");
     expect(
       describeRunState(status({ links: links({ Senate: "running", House: "partial" }) })).label
-    ).toBe("HOUSE DATA RUN PARTIAL");
+    ).toBe("House data run partial");
     const running = describeRunState(status({ links: links({ House: "running" }) }));
-    expect(running.label).toBe("HOUSE DATA RUN IN PROGRESS");
+    expect(running.label).toBe("House data run in progress");
     expect(running.at).toBeNull();
   });
 
   it("handles an unreachable endpoint and an empty history separately", () => {
-    expect(describeRunState(null).label).toBe("STATUS UNAVAILABLE");
-    expect(describeRunState(status({ links: [] })).label).toBe("NO RUN RECORDED");
+    expect(describeRunState(null).label).toBe("Status unavailable");
+    expect(describeRunState(status({ links: [] })).label).toBe("No run recorded");
   });
 
   it("never colours a non-complete state with the phosphor accent", () => {
@@ -155,21 +155,21 @@ describe("RecordsBand rendering", () => {
     // jsdom applies no CSS, so the phone and desktop wordings both show here.
     const link = await screen.findByRole("link");
     expect(link).toHaveAttribute("href", "/about/data#nightly-runs");
-    expect(link).toHaveTextContent("SENATE DATA RUN FAILED");
+    expect(link).toHaveTextContent("Senate data run failed");
     expect(link).toHaveTextContent("2026-08-18 03:26 UTC");
-    expect(screen.getByText(/4 OF 5 FILED/)).toBeInTheDocument();
-    expect(screen.getByText("4/5 FILED")).toBeInTheDocument(); // the phone line
+    expect(screen.getByText(/4 of 5 filed/)).toBeInTheDocument();
+    expect(screen.getByText("4/5 filed")).toBeInTheDocument(); // the phone line
     // The filed stamp is the newest completion among the four that completed.
     expect(screen.getByText(/2026-08-18 07:26 UTC/)).toBeInTheDocument();
-    expect(screen.queryByText(/COMPLETE/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Complete/)).not.toBeInTheDocument();
   });
 
   it("prints the FILED stamp and COMPLETE when every link completed", async () => {
     fetchPipelineStatus.mockResolvedValue(status());
     render(<RecordsBand />);
 
-    expect(await screen.findByText(/FILED 2026-08-18 07:26 UTC/)).toBeInTheDocument();
-    expect(screen.getByText("COMPLETE")).toBeInTheDocument();
+    expect(await screen.findByText(/Filed 2026-08-18 07:26 UTC/)).toBeInTheDocument();
+    expect(screen.getByText("Complete")).toBeInTheDocument();
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
@@ -179,7 +179,7 @@ describe("RecordsBand rendering", () => {
     );
     render(<RecordsBand />);
 
-    expect(await screen.findByText(/0 OF 1 FILED/)).toBeInTheDocument();
+    expect(await screen.findByText(/0 of 1 filed/)).toBeInTheDocument();
     expect(screen.queryByText(/UTC.*UTC/)).not.toBeInTheDocument();
   });
 
@@ -190,10 +190,10 @@ describe("RecordsBand rendering", () => {
     fetchPipelineStatus.mockResolvedValue(status());
 
     const first = render(<RecordsBand />);
-    await screen.findByText(/FILED/);
+    await screen.findByText(/Filed/);
     first.unmount();
     render(<RecordsBand />);
-    await screen.findByText(/FILED/);
+    await screen.findByText(/Filed/);
 
     expect(fetchPipelineStatus).toHaveBeenCalledTimes(1);
   });
@@ -206,7 +206,7 @@ describe("RecordsBand rendering", () => {
         <RecordsBand />
       </>
     );
-    await screen.findAllByText(/FILED/);
+    await screen.findAllByText(/Filed/);
 
     expect(fetchPipelineStatus).toHaveBeenCalledTimes(1);
   });
@@ -215,7 +215,7 @@ describe("RecordsBand rendering", () => {
     fetchPipelineStatus.mockResolvedValue(null);
     render(<RecordsBand />);
 
-    expect(await screen.findByText(/STATUS UNAVAILABLE/)).toBeInTheDocument();
+    expect(await screen.findByText(/Status unavailable/)).toBeInTheDocument();
   });
 });
 
@@ -250,7 +250,7 @@ describe("RunStatusSquare (the band on a phone)", () => {
     fireEvent.click(button);
     expect(button).toHaveAttribute("aria-expanded", "true");
     expect(line.hidden).toBe(false);
-    expect(line).toHaveTextContent("FILED 2026-08-18 07:26 UTC");
+    expect(line).toHaveTextContent("Filed 2026-08-18 07:26 UTC");
     fireEvent.keyDown(document, { key: "Escape" });
     expect(line.hidden).toBe(true);
   });

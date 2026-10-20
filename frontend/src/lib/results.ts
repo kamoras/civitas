@@ -15,38 +15,40 @@ import type {
   ResultEvent,
   ResultEventPerson,
 } from "@/types/election";
+import { fade, overlay, partyMark } from "@/lib/chartColors";
 
-const DEM = "130,172,255"; // dem-blue #82acff
-const REP = "255,137,137"; // rep-red #ff8989
-const OTHER = "201,149,255"; // ind-purple #c995ff
+/* Every fill and mark below is a theme variable (globals.css, "The results
+   maps' count-less fills"), so a results map draws on paper in the light
+   theme and on carbon in the dark; wcagContrast.test.ts and results.test.ts
+   hold both themes' values to the ratios stated here. */
 
 /** Fill for a state or district with no count yet, in a state read live. */
-export const AWAITING_FILL = "#2a2520";
+export const AWAITING_FILL = "var(--map-awaiting)";
 /** Fill for a place this page has no live count for at all. */
-export const UNCOVERED_FILL = "rgba(255, 255, 255, 0.05)";
+export const UNCOVERED_FILL = overlay(0.05);
 /** Fill for a state read live whose latest feed read failed and which has
  * no count to show: not "no votes yet" — a feed that's down says nothing
  * about whether counting has begun. Amber, the colour of every
  * couldn't-read notice on these pages. */
-export const FEED_FAILED_FILL = "rgba(255, 216, 77, 0.28)";
+export const FEED_FAILED_FILL = "var(--map-feed-failed)";
 /** Votes counted, nobody ahead: an exact tie, or a House delegation split
  * evenly. Not "no votes yet", which is AWAITING_FILL. */
-export const TIED_FILL = "rgba(205, 199, 188, 0.45)";
+export const TIED_FILL = "var(--map-tied)";
 /** Fill for a state read live whose last polls are still open: nothing of
  * its count is read or said until they close, so not "no votes yet" — a
  * statement about the count — but voting under way. Faint cyan. */
-export const POLLS_OPEN_FILL = "rgba(77, 227, 232, 0.16)";
+export const POLLS_OPEN_FILL = "var(--map-polls-open)";
 
 /** A House district in a state whose feed has answered but which has no
  * count of its own from it — a contest the feed doesn't list or that
  * couldn't be matched to the race, an uncontested seat. Neither "no votes
  * yet" (the state is counting) nor uncovered (the state is read live):
  * drawn hatched, over AWAITING_FILL (DistrictMap's pattern). The stripe
- * colour; NO_COUNT_SWATCH is the legend key. At 0.7 the stripe, as drawn,
- * stands at least 3:1 against its own base and every other count-less fill
- * and the page (WCAG 1.4.11; results.test.ts) — at 0.4 it was 2.66:1
- * against its base. */
-export const NO_COUNT_STRIPE = "rgba(205, 199, 188, 0.7)";
+ * colour; NO_COUNT_SWATCH is the legend key. As drawn, the stripe stands
+ * at least 3:1 against its own base and every other count-less fill and
+ * the page, in both themes (WCAG 1.4.11; results.test.ts) — at 0.4
+ * opacity on carbon it was 2.66:1 against its base. */
+export const NO_COUNT_STRIPE = "var(--map-no-count-stripe)";
 /** The same absence for a whole chamber on the national map: a state with
  * a count shown for its other chamber's races but none for this one's —
  * the feed listed none, or Civitas set aside what it listed (both Senate
@@ -54,7 +56,7 @@ export const NO_COUNT_STRIPE = "rgba(205, 199, 188, 0.7)";
  * or not matched to its race). AWAITING_FILL's colour, spelt
  * differently so the map's textures (useMapTextures) can tell the two
  * apart: this one is hatched with NO_COUNT_STRIPE, that one dotted. */
-export const NO_COUNT_FILL = "rgb(42, 37, 32)";
+export const NO_COUNT_FILL = "color-mix(in srgb, var(--map-awaiting) 100%, transparent)";
 /** How every surface words that absence, for a district or a chamber.
  * About Civitas's page, not the state's feed: the feed may well have
  * reported the contest and Civitas set it aside (sync.py skips both Senate
@@ -65,18 +67,19 @@ export const NO_COUNT_SWATCH = `repeating-linear-gradient(45deg, ${NO_COUNT_STRI
 
 /*
  * The fills that say "no count to colour" — polls open, no votes yet, feed
- * not read — are all dark and within about 1.2:1 of each other and of a
- * state with no live feed, so on the maps each also carries a texture whose
+ * not read — are all quiet (dark on carbon, pale on paper), close to each
+ * other and to a state with no live feed, so on the maps each also carries
+ * a texture whose
  * marks stand at least 3:1 against every one of those fills and the page
  * (WCAG 1.4.11): polls open is striped cyan one way, a feed not read
  * striped amber the other, no votes yet dotted. A state with no live feed
- * is the only plain dark one. The map's legend draws the same textures
+ * is the only plain one. The map's legend draws the same textures
  * (the *_SWATCH values), and every state's accessible name says its status
  * in words (stateShade), so neither colour nor texture is the only cue.
  */
-export const POLLS_OPEN_MARK = "rgba(77, 227, 232, 0.8)";
-export const AWAITING_MARK = "rgba(232, 228, 220, 0.6)";
-export const FEED_FAILED_MARK = "rgba(255, 216, 77, 0.8)";
+export const POLLS_OPEN_MARK = "var(--map-polls-open-mark)";
+export const AWAITING_MARK = "var(--map-awaiting-mark)";
+export const FEED_FAILED_MARK = "var(--map-feed-failed-mark)";
 export const POLLS_OPEN_SWATCH = `repeating-linear-gradient(45deg, ${POLLS_OPEN_MARK} 0 1.5px, transparent 1.5px 5px)`;
 export const FEED_FAILED_SWATCH = `repeating-linear-gradient(-45deg, ${FEED_FAILED_MARK} 0 1.5px, transparent 1.5px 5px)`;
 export const AWAITING_SWATCH = `radial-gradient(circle, ${AWAITING_MARK} 0 0.9px, transparent 1.1px) 0 0 / 4px 4px`;
@@ -86,12 +89,12 @@ export const AWAITING_SWATCH = `radial-gradient(circle, ${AWAITING_MARK} 0 0.9px
  * failed, or the backend has stopped reading it (stateFeedBehind) — keeps
  * its leader's colour (it is still who led when last read) with the same
  * amber stripe as a feed not read laid over it, so it never passes for a
- * live count. Each amber stripe runs beside a dark one: over the lighter
- * party fills the dark stripe is the one that stands out, over the fainter
- * ones the amber (results.test.ts checks at least one is 3:1 against every
+ * live count. Each amber stripe runs beside one in the ground's own colour
+ * (carbon in dark, paper in light): over the party fills furthest from the
+ * ground that stripe is the one that stands out, over the faintest the amber (results.test.ts checks at least one is 3:1 against every
  * fill a count can have). The state's accessible name says "not live" too.
  */
-export const STALE_SHADOW = "rgba(20, 17, 14, 0.9)";
+export const STALE_SHADOW = "var(--map-stale-shadow)";
 export const STALE_SWATCH = `repeating-linear-gradient(-45deg, ${FEED_FAILED_MARK} 0 1.5px, ${STALE_SHADOW} 1.5px 3px, transparent 3px 6px)`;
 
 /** Whether the page should lead with results rather than research: only
@@ -386,11 +389,11 @@ export function flipNotShownTag(r: {
   candidates: { votes: number }[];
 }): string | null {
   if (!flipNotShownText(r)) return null;
-  if (!(r.votesCounted > 0)) return "NO VOTES IN THIS COUNT";
-  if (isTied(r)) return "TIED";
-  if (r.leaderParty && r.leaderParty === r.heldBy) return "HOLDER'S PARTY LEADS";
-  if (!r.leaderParty) return "LEADER'S PARTY NOT GIVEN";
-  return "NOT IN THIS COUNT";
+  if (!(r.votesCounted > 0)) return "No votes in this count";
+  if (isTied(r)) return "Tied";
+  if (r.leaderParty && r.leaderParty === r.heldBy) return "Holder's party leads";
+  if (!r.leaderParty) return "Leader's party not given";
+  return "Not in this count";
 }
 
 /** Share of reporting units in, 0..1, or null when the state gives none. */
@@ -402,24 +405,26 @@ export function reportingShare(r: {
   return Math.min(1, r.reportingUnits / r.totalUnits);
 }
 
-function rgb(party: string | null): string {
-  if (party === "DEM") return DEM;
-  if (party === "REP") return REP;
-  return OTHER;
-}
+/** The strength of a lead with under half the units in, and of one whose
+ * state gives no reporting figure: below every partial count's (0.675 and
+ * up, by share). 0.6 is the faintest that keeps the fill 3:1 off the
+ * ground in both themes (wcagContrast.test.ts); 0.3 fell to 1.8:1 on
+ * carbon. */
+export const FAINT = 0.6;
+export const UNKNOWN_SHARE = 0.65;
 
 /** A race's map fill: its leader's party (purple for one the feed gives no
- * party the vocabulary knows), fainter (lower opacity, so dimmer over the
- * dark map — never lighter) while fewer than half the
+ * party the vocabulary knows), fainter (closer to the ground, from the
+ * theme's floor up: chartColors.fade) while fewer than half the
  * units are in, solid once the state lists its count as official. */
 export function resultFill(result: LiveRaceResult | undefined, covered: boolean): string {
   if (!result) return covered ? AWAITING_FILL : UNCOVERED_FILL;
   if (!(result.votesCounted > 0)) return AWAITING_FILL;
   if (isTied(result)) return TIED_FILL;
-  if (result.official) return `rgba(${rgb(result.leaderParty)}, 1)`;
+  if (result.official) return partyMark(result.leaderParty);
   const share = reportingShare(result);
-  const opacity = share == null ? 0.55 : share < 0.5 ? 0.3 : 0.45 + 0.45 * share;
-  return `rgba(${rgb(result.leaderParty)}, ${opacity.toFixed(2)})`;
+  const opacity = share == null ? UNKNOWN_SHARE : share < 0.5 ? FAINT : 0.45 + 0.45 * share;
+  return fade(partyMark(result.leaderParty), opacity);
 }
 
 /** Tailwind text colour for a party. */
@@ -431,10 +436,8 @@ export function partyTextClass(party: string | null | undefined): string {
 }
 
 export function partyBarColor(party: string | null | undefined): string {
-  if (party === "DEM") return "#82acff";
-  if (party === "REP") return "#ff8989";
-  if (party === "IND") return "#c995ff";
-  return "#8f8980";
+  if (party === "DEM" || party === "REP" || party === "IND") return partyMark(party);
+  return "var(--chart-muted)";
 }
 
 const LETTER: Record<string, string> = {
@@ -615,13 +618,13 @@ export function describeUpdate(event: ResultEvent): UpdateText {
   switch (event.kind) {
     case "first_returns":
       return {
-        tag: "FIRST",
+        tag: "First",
         tone: "neutral",
         text: sentence("First returns", reporting, shares, notFinal),
       };
     case "lead_change":
       return {
-        tag: "LEAD",
+        tag: "Lead",
         tone: "lead",
         text: sentence(
           d.previousLeader
@@ -634,7 +637,7 @@ export function describeUpdate(event: ResultEvent): UpdateText {
       };
     case "all_reporting":
       return {
-        tag: "ALL IN",
+        tag: "All in",
         tone: "neutral",
         text: sentence(
           // A state that gives no unit count still says every unit is in:
@@ -646,7 +649,7 @@ export function describeUpdate(event: ResultEvent): UpdateText {
       };
     case "official":
       return {
-        tag: "OFFICIAL COUNT",
+        tag: "Official count",
         tone: "official",
         text: sentence("The state lists its count as official", shares, "Not called"),
       };
@@ -656,7 +659,7 @@ export function describeUpdate(event: ResultEvent): UpdateText {
       // goes to a runoff), and Civitas never calls a race — the backend's
       // templates (live_results/bluesky.py) say the same.
       return {
-        tag: "FLIP",
+        tag: "Flip",
         tone: "flip",
         // "Leads" even in a count the state lists as official: that is not
         // a result (a Georgia general short of a majority goes to a
@@ -677,7 +680,7 @@ export function describeUpdate(event: ResultEvent): UpdateText {
       // The holder's party ahead again — or nobody: an exact tie has no
       // leader to name.
       return {
-        tag: "UPDATE",
+        tag: "Update",
         tone: "lead",
         text: sentence(
           d.leader && d.leader.party === d.heldBy
@@ -690,7 +693,7 @@ export function describeUpdate(event: ResultEvent): UpdateText {
         ),
       };
     default:
-      return { tag: "UPDATE", tone: "neutral", text: sentence(shares, reporting) };
+      return { tag: "Update", tone: "neutral", text: sentence(shares, reporting) };
   }
 }
 
@@ -715,7 +718,7 @@ export function formatEasternTime(iso: string): string {
  * below the candidate list, more than a screen under the tag on a phone
  * (1.16 viewport heights for a seven-candidate Senate race, measured on a
  * simulated election night, 2026-10-14), so a reader saw LEADING alone. */
-export const NOT_FINAL = "NOT FINAL";
+export const NOT_FINAL = "Not final";
 
 /** Some race among these has votes in a count the state doesn't list as
  * official: a tally of leads over them is not final either. */
@@ -843,7 +846,7 @@ export function raceStatusText(r: LiveRaceResult): string {
 }
 
 /** The opacity for a set of races led by one party, on resultFill's scale:
- * solid only when every one is official; faint (0.3) when any has fewer
+ * solid only when every one is official; faint (FAINT) when any has fewer
  * than half its units in (one with nothing counted has none in); the
  * middle, unknown-progress value when a race gives no reporting figure;
  * otherwise by the least-counted race's share. For one race it is exactly
@@ -858,8 +861,8 @@ function aggregateOpacity(races: LiveRaceResult[]): number {
     if (share == null) unknown = true;
     else min = Math.min(min, share);
   }
-  if (min < 0.5) return 0.3;
-  if (unknown) return 0.55;
+  if (min < 0.5) return FAINT;
+  if (unknown) return UNKNOWN_SHARE;
   return 0.45 + 0.45 * min;
 }
 
@@ -967,7 +970,7 @@ export function stateShade(
   }
   const { party, tied } = pluralityLeader(mine);
   let fill: string;
-  if (party) fill = `rgba(${rgb(ledParty(party))}, ${aggregateOpacity(mine).toFixed(2)})`;
+  if (party) fill = fade(partyMark(ledParty(party)), aggregateOpacity(mine));
   else fill = tied ? TIED_FILL : AWAITING_FILL;
   let label: string;
   if (chamber === "S") {
@@ -993,7 +996,7 @@ export function stateShade(
       ? ""
       : mine.every((r) => r.official && r.votesCounted > 0)
         ? "every count official"
-        : aggregateOpacity(mine) === 0.3
+        : aggregateOpacity(mine) === FAINT
           ? "under half in for some seats"
           : "";
     const flips = mine.filter(flipShown).length;
@@ -1026,10 +1029,10 @@ export function stateFill(
 }
 
 /**
- * A dark halo under a label drawn on a map tile, so the label reads on any
+ * A halo in the page's colour under a label drawn on a map tile, so the label reads on any
  * fill. State letters in ink-hi sat straight on the party fills at 1.98:1 on
  * a solid Republican tile and about 3.3:1 on the mid shades (WCAG 1.4.3); the
- * halo puts page-dark behind every letter, whatever the tile. `em` keeps it in
+ * halo puts the page behind every letter, whatever the tile. `em` keeps it in
  * proportion at every label size.
  */
 export const MAP_LABEL_HALO =

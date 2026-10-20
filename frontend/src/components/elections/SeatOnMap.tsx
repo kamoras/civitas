@@ -6,10 +6,8 @@ import type { MapSeatLine } from "@/types/electionMap";
  * re-derived; just the usual vote for a seat with no range, or where
  * `usualOnly` asks for it. */
 export function seatFigures(seat: MapSeatLine, usualOnly = false): string {
-  const usual = seat.leanLabel ? `USUAL VOTE ${seat.leanLabel}` : "NO USUAL-VOTE FIGURE";
-  return seat.range80Label && !usualOnly
-    ? `${usual} · POLLS ${seat.range80Label.toUpperCase()}`
-    : usual;
+  const usual = seat.leanLabel ? `Usual vote ${seat.leanLabel}` : "No usual-vote figure";
+  return seat.range80Label && !usualOnly ? `${usual} · Polls ${seat.range80Label}` : usual;
 }
 
 /** One seat's line, linking its place on the seat map (the polls view when
@@ -37,7 +35,7 @@ export default function SeatOnMap({
     >
       <span className="text-ink-lo">{label}</span>
       <span>{seatFigures(seat, usualOnly)}</span>
-      <span>· SEAT MAP →</span>
+      <span>· Seat map →</span>
     </Link>
   );
 }

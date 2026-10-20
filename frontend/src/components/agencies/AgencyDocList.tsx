@@ -24,7 +24,7 @@ export default function AgencyDocList({
     <ul className="divide-y divide-white/[0.07]">
       {docs.map((d) => (
         <li key={d.id} className="py-3">
-          <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
+          <p className="font-mono text-xs text-ink-min">
             {d.docType} · {day(d.date)}
           </p>
           <Link
@@ -51,7 +51,7 @@ export default function AgencyDocList({
                   href={safeHref(d.commentUrl) || "#"}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex min-h-6 items-center font-mono uppercase tracking-[0.12em] text-signal-cyan underline underline-offset-2 hover:text-phos"
+                  className="inline-flex min-h-6 items-center font-mono text-signal-cyan underline underline-offset-2 hover:text-phos"
                 >
                   Comment at regulations.gov
                 </a>

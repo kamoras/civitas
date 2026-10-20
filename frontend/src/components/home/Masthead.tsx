@@ -13,13 +13,13 @@ const VOTER_LINK =
 export function electionLinks(phase: ElectionPhase | null): { href: string; label: string }[] {
   if (phase === "campaign")
     return [
-      { href: ELECTION_MAP_HREF, label: "SEAT MAP" },
-      { href: REDISTRICTING_HREF, label: "NEW HOUSE MAPS" },
+      { href: ELECTION_MAP_HREF, label: "Seat map" },
+      { href: REDISTRICTING_HREF, label: "New House maps" },
     ];
   if (phase === "election_day" || phase === "results")
     return [
-      { href: "/elections", label: "RESULTS" },
-      { href: REDISTRICTING_HREF, label: "NEW HOUSE MAPS" },
+      { href: "/elections", label: "Results" },
+      { href: REDISTRICTING_HREF, label: "New House maps" },
     ];
   return [];
 }
@@ -54,14 +54,11 @@ export default function Masthead({
           <h1 className="font-display text-[30px] font-semibold leading-[1.1] text-ink-hi sm:text-[44px]">
             Who holds power, who pays for it, how they vote.
           </h1>
-          <p className="mt-3 text-[17px] leading-relaxed text-ink">
-            The public record of U.S. government, rebuilt every night from federal and state
-            filings, with every number linked to the document it came from.
-          </p>
           {/* What the site holds itself to, as one plain line: the rotated,
               bordered stamp that carried it was a novelty prop, removed in
-              #1061 and kept out. */}
-          <p className="mt-2 text-sm leading-relaxed text-ink-lo">
+              #1061 and kept out. What the record is and how it is built is
+              on About: the first screen is for the record itself. */}
+          <p className="mt-3 text-sm leading-relaxed text-ink-lo">
             No party money. No PAC money. No ads, no accounts. Open source, self-hosted, run by
             volunteers.
           </p>

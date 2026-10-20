@@ -142,7 +142,7 @@ export default function VoteMembers({
           aria-label={`Your state: ${STATE_NAMES[yours] ?? yours}`}
           className="border border-white/15 bg-surface px-3 py-2"
         >
-          <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
+          <p className="font-mono text-xs text-ink-min">
             Your state: <span className="text-ink-hi">{STATE_NAMES[yours] ?? yours}</span>
           </p>
           <ul className="mt-1 flex flex-col text-sm">
@@ -164,9 +164,7 @@ export default function VoteMembers({
                         {m.district != null ? `-${houseSeatLabel(m.state, m.district)}` : ""}
                       </span>
                     </span>
-                    <span
-                      className={`shrink-0 font-mono text-xs uppercase ${g?.tone ?? "text-ink-lo"}`}
-                    >
+                    <span className={`shrink-0 font-mono text-xs ${g?.tone ?? "text-ink-lo"}`}>
                       {g?.label ?? m.position}
                     </span>
                   </li>
@@ -176,12 +174,12 @@ export default function VoteMembers({
         </section>
       )}
       {states.length > 1 && (
-        <label className="flex w-fit max-w-full flex-col gap-1 font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
+        <label className="flex w-fit max-w-full flex-col gap-1 font-mono text-xs text-ink-min">
           State
           <select
             value={state}
             onChange={(e) => setState(e.target.value)}
-            className="min-h-11 min-w-40 border border-white/20 bg-surface-base px-2 font-sans text-sm normal-case tracking-normal text-ink"
+            className="min-h-11 min-w-40 border border-white/20 bg-surface-base px-2 font-sans text-sm tracking-normal text-ink"
           >
             <option value="">All states</option>
             {states.map((s) => (
@@ -198,7 +196,7 @@ export default function VoteMembers({
           aria-expanded={showAll}
           aria-controls={listId}
           onClick={() => setShowAll((v) => !v)}
-          className="min-h-11 w-fit font-mono text-xs uppercase tracking-[0.12em] text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
+          className="min-h-11 w-fit font-mono text-xs text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
         >
           {showAll ? "Hide the names" : `Show all ${members.length} members' votes`}
         </button>
@@ -209,7 +207,7 @@ export default function VoteMembers({
           if (!group.length) return null;
           return (
             <div key={key} className="flex flex-col gap-2">
-              <span className={`font-mono text-xs uppercase tracking-[0.12em] ${tone}`}>
+              <span className={`font-mono text-xs ${tone}`}>
                 <span aria-hidden="true">
                   {label} · {group.length}
                 </span>

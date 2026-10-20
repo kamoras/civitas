@@ -213,9 +213,9 @@ describe("SpecialsBoardView", () => {
     render(<SpecialsBoardView board={board()} />);
     expect(screen.getByText(/Vacancy due to the resignation of A Member/)).toBeTruthy();
     expect(screen.getByText(/Next: Special election general, March 2, 2027/)).toBeTruthy();
-    expect(screen.getByText("IN 29 DAYS", { exact: false })).toBeTruthy();
+    expect(screen.getByText("In 29 days", { exact: false })).toBeTruthy();
     // Never a call: the count leads, not final until the source says so.
-    expect(screen.getByText("LEADING · NOT FINAL")).toBeTruthy();
+    expect(screen.getByText("Leading · Not final")).toBeTruthy();
     expect(screen.getByText(/11 points toward Democrats, on the count as it stands/)).toBeTruthy();
     expect(screen.getByText(/Average swing against the seats' usual vote/)).toBeTruthy();
   });
@@ -252,12 +252,12 @@ describe("SpecialsBoardView", () => {
 describe("the calendar", () => {
   it("puts every kind of date in one order", () => {
     expect(calendarEntries(CAL).map((e) => e.tag)).toEqual([
-      "FEC REPORT",
-      "SPECIAL",
-      "FEC REPORT",
-      "DEADLINE",
-      "DEADLINE",
-      "ELECTION",
+      "FEC report",
+      "Special",
+      "FEC report",
+      "Deadline",
+      "Deadline",
+      "Election",
     ]);
   });
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { asLabel } from "@/lib/formatting";
 import { useEffect, useState } from "react";
 import {
   fetchAdminLoadTimes,
@@ -78,7 +79,7 @@ export function OpsAlerts({ alerts }: { alerts: OpsAlert[] | undefined }) {
   return (
     <div className="space-y-4 text-xs font-mono">
       <section aria-label="Active alerts">
-        <h3 className="mb-1 tracking-wider text-ink-lo">ACTIVE ({active.length})</h3>
+        <h3 className="mb-1 text-ink-lo">Active ({active.length})</h3>
         {active.length === 0 ? (
           <p className="text-ink-min">Nothing is wrong right now.</p>
         ) : (
@@ -91,7 +92,7 @@ export function OpsAlerts({ alerts }: { alerts: OpsAlert[] | undefined }) {
       </section>
       {earlier.length > 0 && (
         <section aria-label="Earlier alerts">
-          <h3 className="mb-1 tracking-wider text-ink-lo">EARLIER</h3>
+          <h3 className="mb-1 text-ink-lo">Earlier</h3>
           <ul className="divide-y divide-white/[0.04]">
             {earlier.map((a) => (
               <OpsAlertItem key={key(a)} a={a} />
@@ -242,7 +243,7 @@ export function OverviewDashboard({
           actions={<MoreLink onClick={() => goTo("traffic")}>Traffic</MoreLink>}
         >
           <LineChart
-            title="CONFIRMED VISITORS AND FIRST-PAINT LOADS PER DAY"
+            title="Confirmed visitors and first-paint loads per day"
             xLabels={(visits ?? []).map((v) => formatDay(v.date))}
             series={[
               {
@@ -274,16 +275,16 @@ export function OverviewDashboard({
             <thead>
               <tr className="text-ink-lo border-b border-white/[0.07]">
                 <th scope="col" className="text-left py-1 pr-3 font-normal">
-                  PIPELINE
+                  Pipeline
                 </th>
                 <th scope="col" className="text-left py-1 pr-3 font-normal">
-                  LAST RUN
+                  Last run
                 </th>
                 <th scope="col" className="text-left py-1 pr-3 font-normal">
-                  STATUS
+                  Status
                 </th>
                 <th scope="col" className="text-right py-1 font-normal">
-                  TOOK
+                  Took
                 </th>
               </tr>
             </thead>
@@ -298,13 +299,13 @@ export function OverviewDashboard({
                     <td className="py-1.5 pr-3 text-ink-lo">{formatTime(run?.startedAt)}</td>
                     <td className="py-1.5 pr-3">
                       {running ? (
-                        <span className="text-signal-cyan pulse-subtle">RUNNING</span>
+                        <span className="text-signal-cyan pulse-subtle">Running</span>
                       ) : run ? (
                         <span className={statusClass(run.status, stuck)}>
-                          {stuck ? "STUCK" : run.status.toUpperCase()}
+                          {stuck ? "Stuck" : asLabel(run.status)}
                         </span>
                       ) : (
-                        <span className="text-ink-min">NEVER RUN</span>
+                        <span className="text-ink-min">Never run</span>
                       )}
                     </td>
                     <td className="py-1.5 text-right tabular-nums text-ink-lo">
@@ -340,14 +341,14 @@ export function OverviewDashboard({
                   crit: 90,
                 },
                 {
-                  label: "MEMORY",
+                  label: "Memory",
                   pct: host.memUsedPct,
                   text: `${host.memUsedPct}%`,
                   warn: 75,
                   crit: 90,
                 },
                 {
-                  label: "DISK",
+                  label: "Disk",
                   pct: host.diskUsedPct,
                   text: `${host.diskUsedPct}%`,
                   warn: 80,
@@ -356,7 +357,7 @@ export function OverviewDashboard({
               ].map((m) => (
                 <div key={m.label}>
                   <div className="mb-1 flex justify-between">
-                    <span className="text-ink-lo tracking-wider">{m.label}</span>
+                    <span className="text-ink-lo">{m.label}</span>
                     <span className="text-ink-hi tabular-nums">{m.text}</span>
                   </div>
                   <UsageBar
@@ -370,7 +371,7 @@ export function OverviewDashboard({
               ))}
               {host.cpuTempC != null && (
                 <div className="flex justify-between">
-                  <span className="text-ink-lo tracking-wider">CPU TEMP</span>
+                  <span className="text-ink-lo">CPU temp</span>
                   <span className="text-ink-hi tabular-nums">{host.cpuTempC}°C</span>
                 </div>
               )}

@@ -58,9 +58,7 @@ function DayStrip({ days }: { days: PeriodDay[] }) {
                   met ? "border-white/20 bg-surface" : "border-white/[0.09]"
                 }`}
               >
-                <span className="font-mono text-xs uppercase tracking-[0.1em] text-ink-lo">
-                  {shortDate(d.date)}
-                </span>
+                <span className="font-mono text-xs text-ink-lo">{shortDate(d.date)}</span>
                 <span className="flex flex-col">
                   <span className="text-xs text-ink-min">Senate</span>
                   {chamberCell(d, "senate")}
@@ -171,9 +169,7 @@ export default function PeriodReportView({
             {lead ? (
               <>
                 {lead.body}
-                <h2 className="mt-4 font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
-                  {title}
-                </h2>
+                <h2 className="mt-4 font-mono text-xs text-ink-min">{title}</h2>
                 <p className="mt-1">{report.sentence}</p>
               </>
             ) : (

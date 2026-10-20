@@ -278,6 +278,11 @@ export async function captureSection(
   const { domToCanvas } = await import("modern-screenshot");
   await document.fonts.ready;
 
+  // A capture is drawn in the theme the reader is viewing: the frame from
+  // these variables, the section from its computed styles, and every chart
+  // and map in it follows the theme too (lib/chartColors), so a light page
+  // never shares a picture with a dark plate in it, nor the reverse. The
+  // source line is ink-lo, which clears 4.5:1 on either ground.
   const surfaceBase = cssVar("--surface-base", "#0e0c0a");
   const inkHi = cssVar("--ink-hi", "#f2eee7");
   const inkLo = cssVar("--ink-lo", "#cdc7bc");
@@ -330,7 +335,7 @@ export async function captureSection(
     ctx.font = badgeValueFont;
     const valueW = ctx.measureText(badgeValue).width;
     ctx.font = smallMono(11);
-    badgeW = Math.max(valueW, ctx.measureText(subject.badge.label.toUpperCase()).width);
+    badgeW = Math.max(valueW, ctx.measureText(subject.badge.label).width);
   }
   const titleMax = innerW - (badgeW ? badgeW + 24 * scale : 0);
   ctx.font = titleFont;
@@ -344,9 +349,7 @@ export async function captureSection(
   const subtitleLineH = 18 * scale;
   ctx.font = smallMono(12);
   const subtitleLines =
-    withStrip && subject.subtitle
-      ? wrapWords(ctx, subject.subtitle.toUpperCase(), subtitleMax, 2)
-      : [];
+    withStrip && subject.subtitle ? wrapWords(ctx, subject.subtitle, subtitleMax, 2) : [];
   const stripBottom = subtitleLines.length
     ? subtitleBaseline + (subtitleLines.length - 1) * subtitleLineH
     : subtitleBaseline - 22 * scale;
@@ -380,7 +383,7 @@ export async function captureSection(
       ctx.textAlign = "right";
       ctx.font = smallMono(11);
       ctx.fillStyle = inkMin;
-      ctx.fillText(subject.badge.label.toUpperCase(), right, y + 14 * scale);
+      ctx.fillText(subject.badge.label, right, y + 14 * scale);
       ctx.font = badgeValueFont;
       ctx.fillStyle = resolveClassStyle(subject.badge.colorClass, "color", inkHi);
       ctx.fillText(badgeValue, right, y + 50 * scale);

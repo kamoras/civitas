@@ -1,5 +1,6 @@
 "use client";
 
+import { overlay } from "@/lib/chartColors";
 import type { KeyboardEvent, ReactNode } from "react";
 import { useState } from "react";
 import { FIPS_TO_STATE } from "@/lib/stateCodes";
@@ -72,7 +73,6 @@ export default function RaceMap({
 
   return (
     <ComposableMap
-      className="night"
       projection="geoAlbersUsa"
       projectionConfig={{ scale: 1000 }}
       width={980}
@@ -111,7 +111,7 @@ export default function RaceMap({
                     : isHovered
                       ? getHoverFillColor(stateCode, isSelected)
                       : getFillColor(stateCode, isSelected),
-                  stroke: isHovered ? "var(--phos)" : "#0a1a0a",
+                  stroke: isHovered ? "var(--phos)" : "var(--surface-base)",
                   strokeWidth: isFocused ? 2.5 : isHovered ? 1 : 0.5,
                   outline: "none",
                   cursor: "pointer",
@@ -203,7 +203,7 @@ function SmallStateCallouts({
               y1={cy}
               x2={CALLOUT_X}
               y2={y}
-              stroke={isHovered ? "var(--phos)" : "rgba(255,255,255,0.25)"}
+              stroke={isHovered ? "var(--phos)" : overlay(0.25)}
               strokeWidth={0.75}
             />
             <rect
@@ -218,7 +218,7 @@ function SmallStateCallouts({
                     ? getHoverFillColor(stateCode, isSelected)
                     : getFillColor(stateCode, isSelected)
               }
-              stroke={isHovered ? "var(--phos)" : "rgba(255,255,255,0.35)"}
+              stroke={isHovered ? "var(--phos)" : overlay(0.35)}
               strokeWidth={isFocused ? 2.5 : 1}
             />
             <text
@@ -227,7 +227,7 @@ function SmallStateCallouts({
               textAnchor="middle"
               fontFamily="ui-monospace, monospace"
               fontSize={14}
-              fill="#e8e4dc"
+              fill="var(--ink-hi)"
               className={MAP_LABEL_HALO}
             >
               {stateCode}

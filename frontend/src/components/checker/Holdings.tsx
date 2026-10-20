@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Holding, HoldingCategory, Holdings as HoldingsData } from "@/types/senator";
 import { fetchPresidentHoldings, fetchRepHoldings, fetchSenatorHoldings } from "@/lib/api";
 import { formatCurrency } from "@/lib/formatting";
+import { chartMark } from "@/lib/chartColors";
 import CollapsibleSection from "../shared/CollapsibleSection";
 import Pagination from "../shared/Pagination";
 import MetricTooltip from "./MetricTooltip";
@@ -117,7 +118,7 @@ function HoldingsDonut({
             cy={CENTER}
             r={(OUTER_R + INNER_R) / 2}
             fill="none"
-            stroke={slices[0].color}
+            stroke={chartMark(slices[0].color)}
             strokeWidth={OUTER_R - INNER_R}
             onMouseEnter={() => onHover(slices[0].category)}
             onClick={() => onSelect(slices[0].category)}
@@ -135,7 +136,7 @@ function HoldingsDonut({
               <path
                 key={c.category}
                 d={arcPath(start, cursor)}
-                fill={c.color}
+                fill={chartMark(c.color)}
                 // A 2px surface-coloured seam separates adjacent slices so
                 // identity never rests on hue alone at the boundary.
                 stroke="var(--surface)"
@@ -225,7 +226,11 @@ function CategoryLegend({
                   : "border-transparent hover:bg-white/[0.03]"
               }`}
             >
-              <span className="w-3 h-3" style={{ backgroundColor: c.color }} aria-hidden="true" />
+              <span
+                className="w-3 h-3"
+                style={{ backgroundColor: chartMark(c.color) }}
+                aria-hidden="true"
+              />
               <span className="min-w-0">
                 <span className="text-ink text-sm">{c.label}</span>
                 {/* Its own line, never truncated: the disclosed range is the
@@ -345,11 +350,11 @@ export default function Holdings({
       rel="noopener noreferrer"
       className="text-ink-lo hover:text-phos transition-colors"
     >
-      VIEW FILING ↗
+      View filing ↗
     </a>
   );
 
-  const about = <MetricTooltip text={ABOUT_TEXT[filer]}>ABOUT THIS DATA</MetricTooltip>;
+  const about = <MetricTooltip text={ABOUT_TEXT[filer]}>About this data</MetricTooltip>;
   // Inside the panel the panel is the box; a section draws its own.
   const box = variant === "panel" ? "" : "panel p-4";
   const hasSlices = data.categories.some((c) => c.weight > 0);
@@ -431,7 +436,7 @@ export default function Holdings({
             rel="noopener noreferrer"
             className="hover:text-phos transition-colors"
           >
-            VIEW THAT FILING ↗
+            View that filing ↗
           </a>
         </p>
       )}
@@ -502,7 +507,7 @@ export default function Holdings({
         <header className="flex flex-wrap items-end justify-between gap-3 border-b border-white/25 bg-surface-raised px-5 py-4">
           <div className="min-w-0">
             <h2 className="text-[19px] font-semibold leading-tight text-ink-hi">Holdings</h2>
-            <p className="mt-1 font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
+            <p className="mt-1 font-mono text-xs text-ink-min">
               {reportLabel}
               {data.filedDate && data.asOfDate && ` · filed ${data.filedDate}`} · not part of the
               score
@@ -533,7 +538,7 @@ export default function Holdings({
 
   return (
     <CollapsibleSection
-      title="INVESTMENTS & ASSETS"
+      title="Investments & assets"
       titleColor="text-signal-amber"
       summary={
         data.parsed

@@ -1,5 +1,6 @@
 import { ABOUT_CHAPTERS, ABOUT_OVERVIEW_HREF } from "./aboutPages";
 import { COURT_HREF } from "./court";
+import type { PoliticianBranch } from "@/types/politicians";
 
 /**
  * Shared hrefs for in-app navigation targets that need a specific URL shape.
@@ -87,9 +88,49 @@ export function archivedRaceHref(cycle: number, raceId: string): string {
 }
 
 /**
+ * Congress's members: the directory, where a reader finds their senators
+ * and representative by state, town or county (`?branch=senate|house`,
+ * `?state=`, `?county=`). The page a member's breadcrumb leads back to.
+ * `/politicians` redirects here (next.config.mjs). It never reads
+ * `?chamber=`: that was the measures page's parameter when it lived at
+ * this address, and a `/congress/members?chamber=` link redirects to
+ * MEASURES_HREF.
+ */
+export const MEMBERS_HREF = "/congress/members";
+
+/** The executive branch's hub: the president, agencies, actions, comment
+ *  periods and nominations, each from stored records. */
+export const EXECUTIVE_HREF = "/executive";
+
+/** Every president, the sitting one first, with the historians' rank. */
+export const PRESIDENTS_HREF = "/executive/presidents";
+
+/** The sitting president's record. A server redirect to their
+ *  `/politicians/[id]`, resolved from the API on each request
+ *  (app/executive/president), so no name or id is written here. */
+export const PRESIDENT_HREF = "/executive/president";
+
+/** The sitting president's documents in Explore (executive orders,
+ *  proclamations, memoranda), newest first: a redirect resolved like
+ *  PRESIDENT_HREF (app/executive/orders). */
+export const EXECUTIVE_ORDERS_HREF = "/executive/orders";
+
+/** Every member of a chamber on four plain measures, side by side
+ *  (`?chamber=senate|house`). */
+export const MEASURES_HREF = "/congress/members/measures";
+
+/** The directory filtered to a state (and a chamber). */
+export function membersHref(state?: string | null, branch?: "senate" | "house"): string {
+  const params = new URLSearchParams();
+  if (branch) params.set("branch", branch);
+  if (state) params.set("state", state);
+  const q = params.toString();
+  return q ? `${MEMBERS_HREF}?${q}` : MEMBERS_HREF;
+}
+
+/**
  * The site's sections and each one's pages, in the order the main
- * navigation, the homepage's index and each section's
- * tab bar list them: one table, so a page added here appears in all of
+ * navigation, each section's tab bar and its hub's cards list them: one table, so a page added here appears in all of
  * them. `href` is the section's hub; `match` is the paths that count as
  * being in the section (the main navigation's current-section mark).
  *
@@ -117,13 +158,20 @@ export const SECTIONS = {
   congress: {
     label: "Congress",
     href: "/congress",
-    match: ["/congress"],
+    // `/politicians` is every member's, president's and justice's record:
+    // most are members, and a president's or justice's page passes its own
+    // section to the Navbar (recordTrail).
+    match: ["/congress", "/compare", "/politicians"],
     tabs: [
       { key: "reports", label: "Reports", href: "/congress" },
       { key: "week", label: "Latest week", href: "/congress/week" },
       { key: "month", label: "Latest month", href: "/congress/month" },
+      // Members first of the people pages: it is where a reader finds their
+      // own (the directory), and the measures and the pair compare it.
+      { key: "members", label: "Members", href: MEMBERS_HREF },
+      { key: "measures", label: "Measure by measure", href: MEASURES_HREF },
+      { key: "compare", label: "Compare members", href: "/compare" },
       { key: "bills", label: "Bills", href: "/congress/bills" },
-      { key: "members", label: "Members", href: "/congress/members" },
       { key: "committees", label: "Committees", href: "/congress/committees" },
       { key: "nominations", label: "Nominations", href: "/congress/nominations" },
       // "Votes with the president", not "With the president": the page is
@@ -131,32 +179,32 @@ export const SECTIONS = {
       { key: "president", label: "Votes with the president", href: "/congress/president/house" },
     ],
   },
-  agencies: {
-    label: "Agencies",
-    href: "/agencies",
-    match: ["/agencies"],
+  // Article II: the president, every president, and the agencies that
+  // carry out the law. Nominations are also Congress's page (the Senate
+  // confirms them, and the URL and section mark stay there), listed here
+  // because "who did the president nominate" is looked for here.
+  executive: {
+    label: "Executive",
+    href: EXECUTIVE_HREF,
+    match: [EXECUTIVE_HREF, "/agencies", "/compare/presidents"],
     tabs: [
-      { key: "directory", label: "Every agency", href: "/agencies" },
+      { key: "overview", label: "Overview", href: EXECUTIVE_HREF },
+      { key: "president", label: "The President", href: PRESIDENT_HREF },
+      { key: "presidents", label: "Every president", href: PRESIDENTS_HREF },
+      { key: "compare", label: "Compare presidents", href: "/compare/presidents" },
+      { key: "agencies", label: "Every agency", href: "/agencies" },
       { key: "budget", label: "Budgets", href: "/agencies#budget" },
       { key: "comments", label: "Open comment periods", href: "/explore?comment=open" },
+      { key: "orders", label: "Executive orders", href: EXECUTIVE_ORDERS_HREF },
+      { key: "nominations", label: "Nominations", href: "/congress/nominations" },
     ],
   },
+  // Article III. Only the Supreme Court is covered, so the label says so.
   court: {
-    label: "Court",
+    label: "Supreme Court",
     href: COURT_HREF,
     match: [COURT_HREF],
     tabs: [{ key: "court", label: "Justices and decisions", href: COURT_HREF }],
-  },
-  politicians: {
-    label: "Politicians",
-    href: "/politicians",
-    match: ["/politicians", "/compare"],
-    tabs: [
-      { key: "directory", label: "Every member", href: "/politicians" },
-      { key: "measures", label: "Measure by measure", href: "/congress/members" },
-      { key: "compare", label: "Compare members", href: "/compare" },
-      { key: "presidents", label: "Compare presidents", href: "/compare/presidents" },
-    ],
   },
   elections: {
     label: "Elections",
@@ -197,8 +245,66 @@ export function sectionSubpages(section: SectionKey) {
   return tabs.filter((t) => t.href !== href);
 }
 
-/** Whether `pathname` (no query string, as usePathname gives it) is in the
- * section. */
-export function inSection(section: SectionKey, pathname: string): boolean {
-  return SECTIONS[section].match.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+/**
+ * The section `pathname` (no query string, as usePathname gives it) is in:
+ * the one whose `match` names the longest prefix of it, by whole path
+ * segments, so `/compare/presidents` belongs to the section that lists it
+ * even when another lists `/compare`. Null for a page that is no section's
+ * (the footer's pages, the homepage). A record shared by several sections
+ * (`/politicians/[id]`) passes its own to the Navbar instead: see
+ * recordTrail.
+ */
+export function currentSection(pathname: string): SectionKey | null {
+  let best: SectionKey | null = null;
+  let bestLength = -1;
+  for (const key of Object.keys(SECTIONS) as SectionKey[]) {
+    for (const p of SECTIONS[key].match) {
+      if ((pathname === p || pathname.startsWith(`${p}/`)) && p.length > bestLength) {
+        best = key;
+        bestLength = p.length;
+      }
+    }
+  }
+  return best;
+}
+
+/** One step of a breadcrumb: a page's name and address. */
+export interface Crumb {
+  label: string;
+  href: string;
+}
+
+/**
+ * Where a member's, president's or justice's record sits in the site: the
+ * section of the branch they serve in (the Navbar's current-section mark)
+ * and the breadcrumb down to the record. The record keeps one URL,
+ * `/politicians/[id]`, whatever the branch (a member who moves from the
+ * House to the Senate keeps it, and the public API and feeds link it), so
+ * its path can't say which section it is in; the branch does.
+ */
+export function recordTrail(branch: PoliticianBranch): { section: SectionKey; crumbs: Crumb[] } {
+  switch (branch) {
+    case "senate":
+    case "house":
+      return {
+        section: "congress",
+        crumbs: [
+          { label: SECTIONS.congress.label, href: SECTIONS.congress.href },
+          { label: "Members", href: MEMBERS_HREF },
+        ],
+      };
+    case "president":
+      return {
+        section: "executive",
+        crumbs: [
+          { label: SECTIONS.executive.label, href: SECTIONS.executive.href },
+          { label: "Every president", href: PRESIDENTS_HREF },
+        ],
+      };
+    case "scotus":
+      return {
+        section: "court",
+        crumbs: [{ label: SECTIONS.court.label, href: SECTIONS.court.href }],
+      };
+  }
 }

@@ -1,3 +1,5 @@
+import { fade, partyMark } from "@/lib/chartColors";
+import { over, ratio, resolve } from "./themePalette.testutil";
 import { describe, expect, it } from "vitest";
 import {
   AWAITING_FILL,
@@ -43,6 +45,8 @@ import {
   flipShown,
   flipNotShownTag,
   flipNotShownText,
+  FAINT,
+  UNKNOWN_SHARE,
 } from "./results";
 import type { ElectionPhaseInfo, LiveRaceResult, ResultEvent } from "@/types/election";
 
@@ -203,14 +207,14 @@ describe("resultFill", () => {
         { name: "Dana Smith", party: "DEM", votes: 900, pct: 47.4, candidateId: null },
       ],
     });
-    expect(resultFill(unknown, true)).toMatch(/^rgba\(201,149,255/);
+    expect(resultFill(unknown, true)).toContain("var(--map-ind)");
   });
 
   it("is fainter (lower opacity) with under half in and solid only when official", () => {
-    expect(resultFill(race({ reportingUnits: 10 }), true)).toBe("rgba(255,137,137, 0.30)");
-    expect(resultFill(race({ official: true }), true)).toBe("rgba(255,137,137, 1)");
+    expect(resultFill(race({ reportingUnits: 10 }), true)).toBe(fade(partyMark("REP"), FAINT));
+    expect(resultFill(race({ official: true }), true)).toBe(partyMark("REP"));
     expect(resultFill(race({ leaderParty: "DEM", reportingUnits: 100 }), true)).toBe(
-      "rgba(130,172,255, 0.90)"
+      fade(partyMark("DEM"), 0.9)
     );
   });
 });
@@ -224,7 +228,7 @@ describe("stateFill", () => {
     // One seat: drawn exactly as resultFill draws that race (80% in).
     const one = race({ office: "H", district: 1, leaderParty: "IND" });
     expect(stateFill([one], "H", true, true)).toBe(resultFill(one, true));
-    expect(stateFill([one], "H", true, true)).toMatch(/^rgba\(201,149,255, /);
+    expect(stateFill([one], "H", true, true)).toMatch(/var\(--map-ind\)/);
   });
 
   it("compares every party, not just the two majors", () => {
@@ -233,11 +237,11 @@ describe("stateFill", () => {
     // D 1, R 0, independents 3: the independents' state, not a blue one.
     expect(
       stateFill([h(1, "DEM"), h(2, "IND"), h(3, "IND"), h(4, "IND")], "H", true, true)
-    ).toMatch(/^rgba\(201,149,255, /);
+    ).toMatch(/var\(--map-ind\)/);
     // D 1, R 1, independents 2: the independents lead the most — not "tied".
     expect(
       stateFill([h(1, "DEM"), h(2, "REP"), h(3, "IND"), h(4, "IND")], "H", true, true)
-    ).toMatch(/^rgba\(201,149,255, /);
+    ).toMatch(/var\(--map-ind\)/);
     // D 2, independents 2: a split at the top is tied/split, whoever they are.
     expect(stateFill([h(1, "DEM"), h(2, "DEM"), h(3, "IND"), h(4, "IND")], "H", true, true)).toBe(
       TIED_FILL
@@ -255,18 +259,18 @@ describe("stateFill", () => {
         true,
         true
       )
-    ).toBe("rgba(255,137,137, 0.30)");
+    ).toBe(fade(partyMark("REP"), FAINT));
     // Every seat at 90%: the single-race scale at 90%.
     expect(
       stateFill([h(1, { reportingUnits: 90 }), h(2, { reportingUnits: 90 })], "H", true, true)
-    ).toBe("rgba(255,137,137, 0.85)");
+    ).toBe(fade(partyMark("REP"), 0.85));
     // Official in one seat only: not solid.
     expect(
       stateFill([h(1, { official: true }), h(2, { reportingUnits: 90 })], "H", true, true)
-    ).not.toBe("rgba(255,137,137, 1.00)");
+    ).not.toBe(partyMark("REP"));
     // Every seat official: solid.
     expect(stateFill([h(1, { official: true }), h(2, { official: true })], "H", true, true)).toBe(
-      "rgba(255,137,137, 1.00)"
+      partyMark("REP")
     );
     // A seat with nothing counted yet has nothing in: faint.
     expect(
@@ -279,7 +283,7 @@ describe("stateFill", () => {
         true,
         true
       )
-    ).toBe("rgba(255,137,137, 0.30)");
+    ).toBe(fade(partyMark("REP"), FAINT));
   });
 
   it("draws a state electing both its senators from both races", () => {
@@ -310,7 +314,7 @@ describe("stateFill", () => {
         true,
         true
       ).fill
-    ).toMatch(/^rgba\(255,137,137, /);
+    ).toMatch(/var\(--map-rep\)/);
   });
 
   it("names a listed Senate race with no count shown beside the one with a count", () => {
@@ -376,12 +380,9 @@ describe("stateFill", () => {
   });
 
   it("keeps the no-count fill AWAITING_FILL's colour, spelt apart for its own texture", () => {
-    const rgb = (c: string) =>
-      c.startsWith("#")
-        ? [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16))
-        : c.match(/\d+/g)!.map(Number).slice(0, 3);
     expect(NO_COUNT_FILL).not.toBe(AWAITING_FILL);
-    expect(rgb(NO_COUNT_FILL)).toEqual(rgb(AWAITING_FILL));
+    for (const theme of ["light", "dark"] as const)
+      expect(resolve(NO_COUNT_FILL, theme)).toEqual(resolve(AWAITING_FILL, theme));
   });
 
   it("says each state's status in its accessible name, not in colour alone", () => {
@@ -441,7 +442,7 @@ describe("stateFill", () => {
     expect(stateFill([], "S", false, true, true)).toBe(UNCOVERED_FILL);
     // An older count still shown keeps its colour — marked stale, so it
     // never passes for a live one.
-    expect(stateFill([race()], "S", true, true, true)).toMatch(/^rgba\(255,137,137/);
+    expect(stateFill([race()], "S", true, true, true)).toMatch(/var\(--map-rep\)/);
     expect(stateShade("GA", [race()], "S", true, true, true).stale).toBe(true);
     expect(stateShade("GA", [race(), race({ isSpecial: true })], "S", true, true, true).stale).toBe(
       true
@@ -458,7 +459,7 @@ describe("stateFill", () => {
       race({ office: "H", district: 2, leaderParty: "REP" }),
       race({ office: "H", district: 3, leaderParty: "REP" }),
     ];
-    expect(stateFill(house, "H", true, true)).toMatch(/^rgba\(255,137,137/);
+    expect(stateFill(house, "H", true, true)).toMatch(/var\(--map-rep\)/);
   });
 });
 
@@ -547,7 +548,7 @@ describe("labels", () => {
 describe("describeUpdate", () => {
   it("words a flip as a lead until the state calls it", () => {
     expect(describeUpdate(event("flip"))).toEqual({
-      tag: "FLIP",
+      tag: "Flip",
       tone: "flip",
       text:
         "Ray Jones (R) leads in a seat Democrats hold. Ray Jones (R) 52.6%, Dana Smith (D) 47.4%. " +
@@ -616,7 +617,7 @@ describe("describeUpdate", () => {
       describeUpdate(event("all_reporting", { totalUnits: null, reportingUnits: null })).text
     ).toMatch(/^Every reporting unit is in\./);
     // Never a bare OFFICIAL beside the shares: that reads as a result.
-    expect(describeUpdate(event("official")).tag).toBe("OFFICIAL COUNT");
+    expect(describeUpdate(event("official")).tag).toBe("Official count");
     expect(describeUpdate(event("official")).text).toMatch(/Not called\.$/);
     expect(
       describeUpdate(
@@ -718,12 +719,12 @@ describe("flipShown / flipNotShownText", () => {
     });
     expect(flipShown(tied)).toBe(false);
     expect(flipNotShownText(tied)).toBe("tied in the latest count");
-    expect(flipNotShownTag(tied)).toBe("TIED");
+    expect(flipNotShownTag(tied)).toBe("Tied");
     // Zero votes in a held poll: announced, not shown — never "seat changing party".
     const empty = heldFlip({ votesCounted: 0, leaderParty: "REP" });
     expect(flipShown(empty)).toBe(false);
     expect(flipNotShownText(empty)).toBe("no votes in the latest count");
-    expect(flipNotShownTag(empty)).toBe("NO VOTES IN THIS COUNT");
+    expect(flipNotShownTag(empty)).toBe("No votes in this count");
     // A leader with no party given: what is unknown, not "another party".
     const noParty = heldFlip({
       leaderParty: null,
@@ -733,8 +734,8 @@ describe("flipShown / flipNotShownText", () => {
       ],
     });
     expect(flipNotShownText(noParty)).toBe("leader's party not given in the latest count");
-    expect(flipNotShownTag(noParty)).toBe("LEADER'S PARTY NOT GIVEN");
-    expect(flipNotShownTag(heldFlip())).toBe("HOLDER'S PARTY LEADS");
+    expect(flipNotShownTag(noParty)).toBe("Leader's party not given");
+    expect(flipNotShownTag(heldFlip())).toBe("Holder's party leads");
     expect(flipNotShownTag(race())).toBeNull();
     // No flip announced: neither.
     expect(flipShown(race({ flip: false }))).toBe(false);
@@ -829,39 +830,13 @@ describe("seatsLed", () => {
   });
 });
 
-describe("the count-less fills' textures", () => {
-  // WCAG 2.x contrast of two sRGB colours, each an rgba composited over `bg`.
-  const parse = (c: string) => {
-    if (c.startsWith("#"))
-      return [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16)).concat(1) as number[];
-    return c
-      .match(/[\d.]+/g)!
-      .map(Number)
-      .concat(1)
-      .slice(0, 4);
-  };
-  const over = (c: string, bg: number[]) => {
-    const [r, g, b, a] = parse(c);
-    return [r, g, b].map((v, i) => a * v + (1 - a) * bg[i]);
-  };
-  const lum = ([r, g, b]: number[]) => {
-    const ch = (v: number) => {
-      const s = v / 255;
-      return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-    };
-    return 0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(b);
-  };
-  const ratio = (a: number[], b: number[]) => {
-    const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
-    return (hi + 0.05) / (lo + 0.05);
-  };
-  const SURFACE = parse("#14110e"); // --surface, the map panel
+describe.each(["light", "dark"] as const)("the count-less fills' textures (%s)", (theme) => {
+  const SURFACE = resolve("var(--surface)", theme); // the map's ground
+  const base = (f: string) => over(resolve(f, theme), SURFACE);
 
-  it("puts marks at least 3:1 against every dark fill and the page (WCAG 1.4.11)", () => {
-    const fills = [AWAITING_FILL, UNCOVERED_FILL, POLLS_OPEN_FILL, FEED_FAILED_FILL].map((f) =>
-      over(f, SURFACE)
-    );
-    for (const [mark, base] of [
+  it("puts marks at least 3:1 against every count-less fill and the page (WCAG 1.4.11)", () => {
+    const fills = [AWAITING_FILL, UNCOVERED_FILL, POLLS_OPEN_FILL, FEED_FAILED_FILL].map(base);
+    for (const [mark, fill] of [
       [POLLS_OPEN_MARK, POLLS_OPEN_FILL],
       [FEED_FAILED_MARK, FEED_FAILED_FILL],
       [AWAITING_MARK, AWAITING_FILL],
@@ -869,51 +844,24 @@ describe("the count-less fills' textures", () => {
       // AWAITING_FILL beside every other count-less fill.
       [NO_COUNT_STRIPE, AWAITING_FILL],
     ]) {
-      // The mark as drawn: over its own fill, over the panel.
-      const drawn = over(mark, over(base, SURFACE));
-      for (const f of [...fills, SURFACE]) expect(ratio(drawn, f)).toBeGreaterThanOrEqual(3);
+      // The mark as drawn: over its own fill, over the ground.
+      const drawn = over(resolve(mark, theme), base(fill));
+      for (const f of [...fills, SURFACE])
+        expect(ratio(drawn, f), `${theme}: ${mark} on ${fill}`).toBeGreaterThanOrEqual(3);
     }
   });
-});
 
-describe("the stale stripe", () => {
-  // As in the count-less fills' test above.
-  const parse = (c: string) =>
-    c.startsWith("#")
-      ? ([1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16)).concat(1) as number[])
-      : c
-          .match(/[\d.]+/g)!
-          .map(Number)
-          .concat(1)
-          .slice(0, 4);
-  const over = (c: string, bg: number[]) => {
-    const [r, g, b, a] = parse(c);
-    return [r, g, b].map((v, i) => a * v + (1 - a) * bg[i]);
-  };
-  const lum = ([r, g, b]: number[]) => {
-    const ch = (v: number) => {
-      const x = v / 255;
-      return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
-    };
-    return 0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(b);
-  };
-  const ratio = (a: number[], b: number[]) => {
-    const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
-    return (hi + 0.05) / (lo + 0.05);
-  };
-  const SURFACE = parse("#14110e");
-
-  it("has a mark at least 3:1 against every fill a count can have (WCAG 1.4.11)", () => {
+  it("has a stale-stripe mark at least 3:1 against every fill a count can have (WCAG 1.4.11)", () => {
     const fills = [TIED_FILL, AWAITING_FILL];
-    for (const rgb of ["130,172,255", "255,137,137", "201,149,255"])
-      for (const a of [0.3, 0.45, 0.55, 0.9, 1]) fills.push(`rgba(${rgb}, ${a})`);
+    for (const party of ["DEM", "REP", "IND"])
+      for (const a of [FAINT, UNKNOWN_SHARE, 0.675, 0.9, 1]) fills.push(fade(partyMark(party), a));
     for (const f of fills) {
-      const base = over(f, SURFACE);
+      const b = base(f);
       const best = Math.max(
-        ratio(over(FEED_FAILED_MARK, base), base),
-        ratio(over(STALE_SHADOW, base), base)
+        ratio(over(resolve(FEED_FAILED_MARK, theme), b), b),
+        ratio(over(resolve(STALE_SHADOW, theme), b), b)
       );
-      expect(best, f).toBeGreaterThanOrEqual(3);
+      expect(best, `${theme}: ${f}`).toBeGreaterThanOrEqual(3);
     }
   });
 });
@@ -1118,9 +1066,9 @@ describe("a state electing both its senators, on the national map", () => {
     // One race led, the other with nothing counted: that party leads more.
     expect(
       stateFill([regular(rep), special({ votesCounted: 0, candidates: [] })], "S", true, true)
-    ).toMatch(/^rgba\(255,137,137,/);
+    ).toMatch(/var\(--map-rep\)/);
     // Both led by one party.
-    expect(stateFill([regular(rep), special(rep)], "S", true, true)).toMatch(/^rgba\(255,137,137,/);
+    expect(stateFill([regular(rep), special(rep)], "S", true, true)).toMatch(/var\(--map-rep\)/);
   });
 
   it("is grey when two parties lead equally many", () => {

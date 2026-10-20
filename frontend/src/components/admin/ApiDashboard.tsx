@@ -44,7 +44,7 @@ export function ApiDashboard({ token }: { token: string }) {
 
   return (
     <div className="space-y-6">
-      <Segmented label="RANGE" options={RANGE_OPTIONS} value={range} onChange={setRange} />
+      <Segmented label="Range" options={RANGE_OPTIONS} value={range} onChange={setRange} />
 
       {failed && (
         <p role="alert" className="text-xs font-mono text-signal-red">
@@ -88,7 +88,7 @@ export function ApiDashboard({ token }: { token: string }) {
 
       <Panel title="Requests">
         <LineChart
-          title="REQUESTS PER DAY"
+          title="Requests per day"
           subtitle="plain HTTP and MCP tool calls; the spec and CORS preflights aren't counted"
           xLabels={days.map((d) => formatDay(d.date))}
           series={[
@@ -119,7 +119,7 @@ export function ApiDashboard({ token }: { token: string }) {
               <thead>
                 <tr className="text-ink-lo border-b border-white/[0.07]">
                   <th scope="col" className="text-left py-1 pr-3 font-normal">
-                    ENDPOINT
+                    Endpoint
                   </th>
                   <th scope="col" className="text-right py-1 pr-3 font-normal">
                     HTTP
@@ -131,7 +131,7 @@ export function ApiDashboard({ token }: { token: string }) {
                     429
                   </th>
                   <th scope="col" className="text-right py-1 pr-3 font-normal">
-                    REJECTED
+                    Rejected
                   </th>
                   <th scope="col" className="text-right py-1 font-normal">
                     5XX
@@ -179,16 +179,16 @@ export function ApiDashboard({ token }: { token: string }) {
               <thead>
                 <tr className="text-ink-lo border-b border-white/[0.07]">
                   <th scope="col" className="text-left py-1 pr-3 font-normal">
-                    ENDPOINT
+                    Endpoint
                   </th>
                   <th scope="col" className="text-left py-1 pr-3 font-normal">
-                    PARAMETER
+                    Parameter
                   </th>
                   <th scope="col" className="text-left py-1 pr-3 font-normal">
-                    RULE BROKEN
+                    Rule broken
                   </th>
                   <th scope="col" className="text-right py-1 font-normal">
-                    COUNT
+                    Count
                   </th>
                 </tr>
               </thead>

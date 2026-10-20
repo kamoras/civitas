@@ -139,7 +139,7 @@ function BreakRow({ vote }: { vote: ListedBreak }) {
           )}
         </span>
         <span className="shrink-0 border border-signal-red/45 px-1.5 py-px font-mono text-xs text-signal-red">
-          VOTED {vote.vote.toUpperCase()}
+          Voted {vote.vote.toLowerCase()}
         </span>
       </div>
       <span className="font-mono text-xs leading-relaxed text-ink-min">
@@ -227,7 +227,7 @@ export default function AlignmentColumn({
         {total === 0 && <p className="text-sm text-ink-lo">None on record this Congress.</p>}
         {total > 0 && failed && <p className="text-sm text-ink-lo">Could not load the votes.</p>}
         {total > 0 && !failed && votes === null && (
-          <p className="pulse-subtle font-mono text-xs text-ink-min">LOADING VOTES...</p>
+          <p className="pulse-subtle font-mono text-xs text-ink-min">Loading votes...</p>
         )}
         {votes && votes.length > 0 && (
           <>

@@ -29,7 +29,7 @@ export default function CopyText({ text, label }: { text: string; label: string 
         // change to the focused button's own name usually isn't.
         aria-label={`Copy the ${label}`}
       >
-        {copied ? "[ COPIED! ]" : "[ COPY ]"}
+        {copied ? "[ Copied! ]" : "[ Copy ]"}
       </button>
       <CopyStatus feedback={feedback} />
     </div>

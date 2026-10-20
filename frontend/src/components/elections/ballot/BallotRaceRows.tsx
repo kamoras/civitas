@@ -58,14 +58,12 @@ export default function BallotRaceRows({
                 <span className="break-words text-[15px] font-semibold text-ink-hi">
                   {candidateName(c)}
                   {c.incumbentChallenge === "I" && (
-                    <span className="ml-2 whitespace-nowrap align-middle font-mono text-[10px] font-normal tracking-[0.08em] text-ink-lo">
+                    <span className="ml-2 whitespace-nowrap align-middle font-mono text-[10px] font-normal text-ink-lo">
                       {incumbencyLabel("I", redrawn, c.incumbentRecord?.seat, resultsMode)}
                     </span>
                   )}
                 </span>
-                <span className={`font-mono text-[11px] tracking-[0.08em] ${party.color}`}>
-                  {party.label}
-                </span>
+                <span className={`font-mono text-[11px] ${party.color}`}>{party.label}</span>
               </span>
               <span className="shrink-0 font-mono text-xs tabular-nums text-ink-lo">
                 {raisedLabel(c)}

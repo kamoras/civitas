@@ -1,6 +1,7 @@
 import { pageMetadata } from "@/lib/site";
 import ComputedLeanData from "@/components/about/ComputedLeanData";
 import DataLicense from "@/components/about/DataLicense";
+import SourceLedger from "@/components/about/SourceLedger";
 import {
   AboutPage,
   Summary,
@@ -62,6 +63,7 @@ export default function DataChapter() {
       </Summary>
 
       <Section id="sources" title="Where the data comes from">
+        <SourceLedger />
         <Sub title="Congress">
           <Facts>
             <Fact label="Congress.gov">
