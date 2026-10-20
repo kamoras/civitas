@@ -35,7 +35,7 @@ export default function BillStageGroup({
 }: BillStageGroupProps) {
   const config = useConfig();
   const stageInfo = config?.billStages?.[stageCode];
-  const color = stageInfo?.color ?? "#00ff41";
+  const color = stageInfo?.color ?? "var(--phos)";
 
   /* Everything below hangs off one signature. Previously each of these lived
      in its own piece of state, kept in step by four effects — two of which

@@ -3,8 +3,9 @@ The files are unmodified, as Google Fonts serves them (one woff2 per script subs
 fetched by backend/scripts/fetch_site_fonts.py. Copyright notices, from each font's name table:
 
 Copyright 2020 The Archivo Project Authors (https://github.com/Omnibus-Type/Archivo)
-Copyright 2012 The Press Start 2P Project Authors (cody@zone38.net), with Reserved Font Name "Press Start 2P"
-Copyright (c) 2012, Carrois Type Design, Ralph du Carrois (post@carrois.com www.carrois.com), with Reserved Font Name 'Share'
+© 2014 - 2021 Adobe Systems Incorporated (http://www.adobe.com/), with Reserved Font Name 'Source'. (Source Serif 4)
+Digitized data copyright 2012-2016, The Mozilla Foundation and Telefonica S.A. (Fira Sans)
+Copyright 2020 The DM Mono Project Authors (https://www.github.com/googlefonts/dm-mono)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:

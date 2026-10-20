@@ -127,7 +127,7 @@ function ResultCard({ result, query }: { result: ExploreResult; query: string })
           )}
         </div>
 
-        <h3 className="text-sm text-ink-hi font-medium mb-2 leading-snug">{result.title}</h3>
+        <h3 className="text-sm text-ink-hi font-semibold mb-2 leading-snug">{result.title}</h3>
 
         {/* The keyword channel returns an excerpt built around the matched
             terms, which says far more about why a document came back than

@@ -38,7 +38,7 @@ export default function StateFromAddress() {
   return (
     <Link
       href={stateBallotHref(code)}
-      className="mt-5 flex min-h-11 items-center justify-between gap-3 border border-white/15 px-3 py-2 text-left font-display text-[15px] text-ink-hi transition-colors hover:border-phos/60 hover:text-phos"
+      className="mt-5 flex min-h-11 items-center justify-between gap-3 border border-white/15 px-3 py-2 text-left font-sans text-[15px] text-ink-hi transition-colors hover:border-phos/60 hover:text-phos"
     >
       {STATE_NAMES[code] ?? code}&apos;s ballot: its federal races and ballot measures
       <span aria-hidden="true" className="font-mono text-ink-min">

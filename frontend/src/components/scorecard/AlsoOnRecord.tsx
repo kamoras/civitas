@@ -21,7 +21,7 @@ function Tile({
 }) {
   const body = (
     <>
-      <span className="text-base font-bold text-ink-hi">{title}</span>
+      <span className="text-base font-semibold text-ink-hi">{title}</span>
       <span className="text-sm text-ink-lo">{line}</span>
       <span className="font-mono text-xs text-ink-min">{meta}</span>
     </>

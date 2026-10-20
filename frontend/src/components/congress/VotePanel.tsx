@@ -148,7 +148,7 @@ export default function VotePanel({
           <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-lo">
             {CHAMBER_NAME[vote.chamber]} vote {vote.number} · {shortDate(vote.date)}
           </p>
-          <p className="mt-1 text-lg font-bold text-ink-hi">
+          <p className="mt-1 text-lg font-semibold text-ink-hi">
             {vote.question}: {voteResult(vote).toLowerCase()}, <TallyText vote={vote} />
           </p>
         </div>

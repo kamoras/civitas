@@ -202,7 +202,7 @@ export default async function AgenciesPage({
                   <div className="flex items-baseline justify-between gap-3">
                     <h2
                       id="budget-heading"
-                      className="font-display text-xl font-extrabold text-ink-hi"
+                      className="font-display text-xl font-semibold text-ink-hi"
                     >
                       Where the money goes
                     </h2>
@@ -253,7 +253,7 @@ export default async function AgenciesPage({
             )}
 
             <section aria-labelledby="agency-directory">
-              <h2 id="agency-directory" className="font-display text-xl font-extrabold text-ink-hi">
+              <h2 id="agency-directory" className="font-display text-xl font-semibold text-ink-hi">
                 Every agency
               </h2>
               <p className="mt-3 font-mono text-xs uppercase tracking-[0.14em] text-ink-min">

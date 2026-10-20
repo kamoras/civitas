@@ -26,9 +26,9 @@ export const ABOUT_OVERVIEW_HREF = "/about";
 export const ABOUT_CHAPTERS: readonly AboutChapter[] = [
   {
     href: "/about/scores",
-    title: "How Congress is scored",
+    title: "How Congress is compared",
     blurb:
-      "The three parts of every senator's and representative's score, what moves each one, and how we checked them.",
+      "How each senator and representative is set beside colleagues in the same party on four measures, and the methods behind each.",
   },
   {
     href: "/about/presidents-and-justices",

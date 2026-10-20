@@ -8,7 +8,7 @@ location and its api-misses rate limit, like every other uncached read.
 """
 
 from fastapi import APIRouter, Depends, Query
-from fastapi.responses import JSONResponse
+from app.api.response_helpers import JSONResponse
 from sqlalchemy.orm import Session
 
 from app import site_search
