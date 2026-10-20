@@ -305,7 +305,8 @@ export default async function DevelopersPage() {
                 measures carries a judgment its weights decide, and a rank turns a measurement into
                 a verdict. Member pages then stopped showing the 0 to 100 part scores too, in favour
                 of the figures behind them. These fields stay in version 1 for one deprecation cycle
-                and are removed in version 2, after <strong className="font-semibold">January 4, 2027</strong>:
+                and are removed in version 2, after{" "}
+                <strong className="font-semibold">January 4, 2027</strong>:
               </p>
               <ul className="list-disc pl-6">
                 <li>
