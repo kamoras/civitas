@@ -23,12 +23,12 @@ import urllib.request
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-from app.contact import CONTACT_EMAIL  # noqa: E402
+from app.contact import CONTACT_NOTE  # noqa: E402
 from app.pipeline.analyze.signal_overlap import measure  # noqa: E402
 from app.time_utils import utcnow  # noqa: E402
 
 API_BASE = "https://civitas-research.org/api"
-UA = {"User-Agent": f"CivitasCivicPlatform/1.0 (signal-correlation audit; contact: {CONTACT_EMAIL})"}
+UA = {"User-Agent": f"CivitasCivicPlatform/1.0 (signal-correlation audit{CONTACT_NOTE})"}
 OUT = pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "signal_overlap.json"
 
 

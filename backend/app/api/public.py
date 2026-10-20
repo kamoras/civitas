@@ -19,8 +19,11 @@ Conventions every route keeps, so a caller learns them once:
 - `siteUrl` links each record to its page on Civitas.
 """
 
+import csv
+import io
 import re
 import typing
+from datetime import date
 from typing import Literal
 from urllib.parse import parse_qsl, urlencode
 
@@ -28,8 +31,11 @@ from collections.abc import Awaitable, Callable
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Path, Query, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import Response
+
+from app.api.response_helpers import JSONResponse
 from fastapi.routing import APIRoute
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.rate_limit import PUBLIC_READ_LIMIT, PublicReadLimit
@@ -51,7 +57,7 @@ from app.database import get_db, off_loop
 from app import district_lean
 from app.district_lean import lean_for as computed_lean_for
 from app.member_ids import resolve_member_id
-from app.models import Justice, President, Representative, ScoreSnapshot, Senator
+from app.models import Agency, ExploreDocument, Justice, Nomination, President, Representative, RollCall, RollCallPosition, ScoreSnapshot, Senator
 from app.pipeline.analyze.population_reference import CONSTITUENT_REFERENCE, FUNDING_REFERENCE, LES_REFERENCE
 from app.pipeline.analyze.score_calculator import (
     ALGORITHM_VERSION,
@@ -64,8 +70,20 @@ from app.pipeline.fetch.district_pvi import lines_congress, lines_of
 from app.pipeline.lexical_index import HIGHLIGHT_END, HIGHLIGHT_START
 from app.score_display import displayed_rank
 from app.schemas import (
+    PublicAgencyDetailSchema,
+    PublicAgencyListSchema,
     PublicApiIndexSchema,
     PublicBillVotesSchema,
+    PublicCommentPeriodPageSchema,
+    PublicJusticeCasesSchema,
+    PublicJusticeListSchema,
+    PublicJusticeSchema,
+    PublicNominationDetailSchema,
+    PublicNominationPageSchema,
+    PublicPresidentListSchema,
+    PublicPresidentSchema,
+    PublicRollCallDetailSchema,
+    PublicRollCallPageSchema,
     PublicDistrictLeanSchema,
     PublicHistorySchema,
     PublicMemberVotesSchema,
@@ -83,7 +101,16 @@ from app.services.presidential_support_service import chamber_view
 from app.state_names import STATE_NAMES
 from app.time_utils import comment_period_today
 from app.services.pagination import paginate_bounds
-from app.services.bill_record import bill_votes, canonical_bill_id
+from app.services._scorecard_common import latest_snapshot, score_method
+from app.api.agencies import children_of, descendants, document_counts
+from app.ordinals import ordinal
+from app.services import court_service, nomination_service
+from app.services.bill_record import bill_votes, canonical_bill_id, party_breakdown, vote_detail
+from app.services.explore_keys import public_key
+from app.services.nomination_links import nominee_names
+from app.services.justice_service import get_all_justices, get_justice, get_justice_leaderboard
+from app.services.president_service import get_all_presidents, get_president
+from app.services.roll_call_shape import shapes
 from app.services.congress_service import roll_call_congresses
 from app.services.member_positions import member_positions
 from app.services.representative_service import (
@@ -255,6 +282,58 @@ def _pub_json(data, request: Request, max_age: int = CACHE_TTL_LIST_S) -> JSONRe
     )
 
 
+# The license of Civitas's own data. Some outputs inherit a source's
+# restrictions (the Supreme Court record's non-commercial terms, Wikipedia's
+# share-alike); the page at LICENSE_URL names each.
+DATA_LICENSE = "CC BY 4.0, except where a source's terms carry over"
+
+# Where Civitas states the license of its data and what inherits a
+# source's restrictions (the /about/data page's license section).
+LICENSE_URL = f"{SITE_URL}/about/data#license"
+
+
+class CsvResponse(Response):
+    media_type = "text/csv"
+
+
+# How a CSV route documents its answer in the spec: no JSON schema, the
+# columns are in its description (_csv_doc).
+_CSV_RESPONSES = {200: {"description": "CSV with one header row; columns as described",
+                        "content": {"text/csv": {"schema": {"type": "string"}}}}}
+
+Columns = list[tuple[str, str]]
+
+
+def _csv_doc(intro: str, columns: Columns) -> str:
+    """A CSV route's description: what it is, its license, then every column
+    from the same list the file is written from, so the two can't drift."""
+    listed = "; ".join(f"`{name}`: {what}" for name, what in columns)
+    return (f"{intro}\n\nUTF-8, one header row. Licensed as {LICENSE_URL} states (the response's Link "
+            f"header, rel=license). Columns: {listed}.")
+
+
+def _csv(rows: list[dict], columns: Columns, filename: str, request: Request,
+         max_age: int = CACHE_TTL_LIST_S) -> Response:
+    """rows as CSV, one column per `columns` entry, read from the row's key
+    of the same name. A None is an empty cell; a bool is true or false; a
+    list is joined with semicolons."""
+    out = io.StringIO()
+    writer = csv.writer(out, lineterminator="\n")
+    writer.writerow([name for name, _ in columns])
+    for row in rows:
+        writer.writerow([
+            "" if (v := row.get(name)) is None else ("true" if v is True else "false" if v is False
+                                                     else ";".join(map(str, v)) if isinstance(v, list) else v)
+            for name, _ in columns
+        ])
+    return CsvResponse(content=out.getvalue(), headers={
+        "Cache-Control": f"private, max-age={max_age}",
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "Link": f'<{LICENSE_URL}>; rel="license"',
+        **_CORS_HEADERS, **_rl_headers(request),
+    })
+
+
 def _member_url(member_id: str) -> str:
     return f"{SITE_URL}/politicians/{member_id}"
 
@@ -284,24 +363,11 @@ _RENAMED_ID = (" An id the member had before a rename still works: the record co
                " current id (`id`, `siteUrl`).")
 
 
-def _latest_snapshot(db: Session, entity_type: str, member_id: str) -> ScoreSnapshot | None:
-    """The member's newest score snapshot: the run that stored the scores
-    a profile and a breakdown publish."""
-    return (
-        db.query(ScoreSnapshot)
-        .filter(ScoreSnapshot.entity_type == entity_type, ScoreSnapshot.entity_id == member_id)
-        .order_by(ScoreSnapshot.date.desc())
-        .first()
-    )
-
-
 def _method(snapshot: ScoreSnapshot | None) -> dict:
-    """Which scoring version stored the scores, and when: what a citation
-    of a score needs (the same two fields as the breakdown's)."""
-    return {
-        "algorithmVersion": snapshot.algorithm_version if snapshot else None,
-        "scoredOn": snapshot.date if snapshot else None,
-    }
+    """The scoring version and date, in the API's camelCase (the same two
+    fields as the breakdown's)."""
+    m = score_method(snapshot)
+    return {"algorithmVersion": m["algorithm_version"], "scoredOn": m["scored_on"]}
 
 
 def _history(db: Session, entity_type: str, model, member_id: str, request: Request) -> JSONResponse:
@@ -369,7 +435,7 @@ def _breakdown(db: Session, model, entity_type: str, member_id: str, request: Re
     house = entity_type == "representative"
     chamber = "house" if house else "senate"
     explained = (get_representative_score_breakdown if house else get_senator_score_breakdown)(db, member_id)
-    snapshot = _latest_snapshot(db, entity_type, member_id)
+    snapshot = latest_snapshot(db, entity_type, member_id)
     district = member.district if house else None
     with lines_of(member.district_lines_congress if house else None):
         cook_pvi = _seat_pvi(member.state, district)
@@ -525,12 +591,18 @@ def openapi_spec_dict() -> dict:
                 {"name": "Senators", "description": "The 100 serving senators: rankings, full records, score history and votes."},
                 {"name": "Representatives", "description": "The serving House members: rankings, full records, score history and votes."},
                 {"name": "Bills", "description": "The roll calls on a bill, with each party's split."},
+                {"name": "Roll calls", "description": "Each chamber's roll calls, and every member's position on one."},
+                {"name": "Presidents", "description": "Every president, with the Presidential Score and its parts."},
+                {"name": "Justices", "description": "The sitting Supreme Court justices' voting records, case by case. Not scored."},
+                {"name": "Nominations", "description": "Presidential nominations sent to the Senate, their actions and the votes on them."},
+                {"name": "Agencies", "description": "Federal agencies, the documents Civitas holds from them, and every comment period open today."},
                 {"name": "Votes with the president", "description": "How often each member voted with the president's stated position (OMB Statements of Administration Policy), beside what members of the same party in similar seats do. Informational: not part of any score."},
                 {"name": "Search", "description": "The government documents behind the records, searched the way the site's Explore page does."},
                 {"name": "Districts", "description": "Every House district's partisan lean as Civitas computes it from open precinct returns, on both maps, with Cook's beside it. Shown for comparison: no score uses it."},
                 {"name": "Reference", "description": "What the API offers, and the states it covers."},
             ],
-            summary="Open, read-only access to Civitas's scores, member records and document search.",
+            summary="Open, read-only access to Civitas's scores, records of Congress, presidents, the Supreme Court, "
+                    "nominations and agencies, and document search.",
             description=(
                 f"No key or account. {PUBLIC_READ_LIMIT} requests per minute per IP, reported in the "
                 "X-RateLimit-Limit, X-RateLimit-Remaining and X-RateLimit-Reset headers (Reset is a Unix time: "
@@ -544,6 +616,7 @@ def openapi_spec_dict() -> dict:
         )
         spec_app.include_router(router, prefix=PREFIX)
         _spec = spec_app.openapi()
+        _spec["info"]["license"] = {"name": DATA_LICENSE, "url": LICENSE_URL}
         # Machine-readable, for /developers to state rather than repeat.
         _spec["info"]["x-rate-limit-per-minute"] = PUBLIC_READ_LIMIT
     return _spec
@@ -580,6 +653,7 @@ def api_index(_rl: PublicReadLimit, request: Request) -> JSONResponse:
             "openapi": f"{SITE_URL}{PREFIX}/openapi.json",
             "mcp": f"{SITE_URL}{PREFIX}/mcp",
             "source": "https://github.com/kamoras/civitas",
+            "license": {"name": DATA_LICENSE, "url": LICENSE_URL},
         },
         request, max_age=CACHE_TTL_CONFIG_S,
     )
@@ -687,7 +761,7 @@ def get_senator(
         {
             **senator.model_dump(by_alias=True),
             "siteUrl": _member_url(senator.id),
-            **_method(_latest_snapshot(db, "senator", senator.id)),
+            **_method(latest_snapshot(db, "senator", senator.id)),
         },
         request, max_age=CACHE_TTL_DETAIL_S,
     )
@@ -718,17 +792,117 @@ def get_senator_breakdown(
 
 
 # ---------------------------------------------------------------------------
+# Scores as CSV (the leaderboards)
+# ---------------------------------------------------------------------------
+
+_DIMENSIONS = (("fundingIndependence", "funding_independence"), ("constituentAlignment", "constituent_alignment"),
+               ("legislativeEffectiveness", "legislative_effectiveness"), ("fundingDiversity", "funding_diversity"))
+
+
+def _score_columns(house: bool) -> Columns:
+    return [
+        ("rank", "place in the whole chamber by overall score, as the site shows it (equal displayed scores "
+                 "share a rank)"),
+        ("id", "the member's Civitas id"), ("name", "the member's name"), ("party", "D, R or I"),
+        ("state", "two-letter state code"),
+        *([("district", "congressional district; 0 for an at-large seat")] if house else []),
+        ("overall", "the representation score, 0-100 (the weighted sum of the three weighted parts)"),
+        *[(col, f"the {col.replace('_', ' ')} score, 0-100") for _, col in _DIMENSIONS],
+        *[(f"{col}_data", f"how much data backs {col.replace('_', ' ')}: high, medium or low")
+          for _, col in _DIMENSIONS],
+        ("thin_data", "weighted parts with low data, semicolon-separated"),
+        ("held_scored_on", "when the member's scores were last computed, if a later run could not score the "
+                           "member (YYYY-MM-DD); empty otherwise"),
+        ("held_source", "what that later run could not read; empty otherwise"),
+        ("algorithm_version", "the scoring version that stored the scores"),
+        ("scored_on", "the date of the run that stored them, YYYY-MM-DD"),
+        ("site_url", "the member's page on Civitas"),
+    ]
+
+
+def _latest_versions(db: Session, entity_type: str) -> dict[str, tuple[str | None, str]]:
+    """Each member's newest snapshot: (scoring version, date)."""
+    newest = (db.query(ScoreSnapshot.entity_id, func.max(ScoreSnapshot.date).label("d"))
+              .filter(ScoreSnapshot.entity_type == entity_type).group_by(ScoreSnapshot.entity_id).subquery())
+    rows = db.query(ScoreSnapshot.entity_id, ScoreSnapshot.algorithm_version, ScoreSnapshot.date).join(
+        newest, (ScoreSnapshot.entity_id == newest.c.entity_id) & (ScoreSnapshot.date == newest.c.d),
+    ).filter(ScoreSnapshot.entity_type == entity_type)
+    return {i: (v, d) for i, v, d in rows}
+
+
+def _score_rows(db: Session, rows: list[dict], entity_type: str) -> list[dict]:
+    versions = _latest_versions(db, entity_type)
+    out = []
+    for r in rows:
+        score = r["representationScore"]
+        confidence = score.get("confidence") or {}
+        held = score.get("held") or {}
+        version, scored_on = versions.get(r["id"], (None, None))
+        out.append({
+            **{k: r.get(k) for k in ("rank", "id", "name", "party", "state", "district")},
+            "overall": score["overall"],
+            **{col: score[key] for key, col in _DIMENSIONS},
+            **{f"{col}_data": confidence.get(key) for key, col in _DIMENSIONS},
+            "thin_data": [dict(_DIMENSIONS).get(k, k) for k in score.get("thinData") or []],
+            "held_scored_on": held.get("scoredOn"), "held_source": held.get("source"),
+            "algorithm_version": version, "scored_on": scored_on, "site_url": _member_url(r["id"]),
+        })
+    return out
+
+
+@router.get("/senators.csv", response_class=CsvResponse, responses=_CSV_RESPONSES, tags=["Senators"],
+            summary="Every serving senator's scores, as CSV",
+            description=_csv_doc("The Senate leaderboard: every serving senator, best overall score first.",
+                                 _score_columns(False)))
+def senators_csv(_rl: PublicReadLimit, request: Request, db: Session = Depends(get_db)) -> Response:
+    return _csv(_score_rows(db, _senate_rows(db), "senator"), _score_columns(False), "civitas-senators.csv",
+                request)
+
+
+@router.get("/representatives.csv", response_class=CsvResponse, responses=_CSV_RESPONSES,
+            tags=["Representatives"], summary="Every serving representative's scores, as CSV",
+            description=_csv_doc("The House leaderboard: every serving representative, best overall score "
+                                 "first.", _score_columns(True)))
+def representatives_csv(_rl: PublicReadLimit, request: Request, db: Session = Depends(get_db)) -> Response:
+    rows = _ranked(get_rep_leaderboard(db, page=1, per_page=_WHOLE_CHAMBER)["entries"])
+    return _csv(_score_rows(db, rows, "representative"), _score_columns(True), "civitas-representatives.csv",
+                request)
+
+
+# ---------------------------------------------------------------------------
 # Votes
 # ---------------------------------------------------------------------------
+
+def _roll_call_url(chamber: str, congress: int, session: int, number: int) -> str:
+    return f"{SITE_URL}/congress/votes/{chamber}/{congress}/{session}/{number}"
+
+
+def _snake(key: str) -> str:
+    """camelCase as snake_case, for CSV column names."""
+    return re.sub(r"(?<!^)(?=[A-Z])", "_", key).lower()
+
+
+def _absolute(path: str | None) -> str | None:
+    """A site path as an absolute URL (a public client has no page to resolve
+    it against); None stays None."""
+    return f"{SITE_URL}{path}" if path and path.startswith("/") else path
+
+
+def _paged(total: int, page: int, per_page: int) -> tuple[int, int]:
+    """(total pages, the page answered): a page past the last is the last."""
+    return paginate_bounds(total, page, per_page)
+
 
 def _roll_call(rc: dict | None, chamber: str | None = None, congress: int | None = None) -> dict | None:
     """A stored roll call, in the public shape (what the bill page's vote
     panel and a member's vote rows hold, without the site's own extras)."""
     if not rc:
         return None
+    chamber, congress = rc.get("chamber") or chamber, rc.get("congress") or congress
     return {
-        "chamber": rc.get("chamber") or chamber, "congress": rc.get("congress") or congress,
+        "chamber": chamber, "congress": congress,
         "session": rc["session"], "number": rc["number"], "date": rc["date"],
+        "siteUrl": _roll_call_url(chamber, congress, rc["session"], rc["number"]),
         "kind": rc.get("kind") or "question",
         "question": rc.get("question") or "", "result": rc.get("result") or "",
         "tieBreaker": rc.get("tieBreaker"), "candidates": rc.get("candidates") or [],
@@ -772,6 +946,71 @@ def get_senator_votes(
 
 
 
+_VOTE_COLUMNS: Columns = [
+    ("date", "YYYY-MM-DD"), ("chamber", "senate or house"), ("congress", "the Congress"),
+    ("session", "its session"), ("number", "the roll call's number in its chamber and session"),
+    ("bill_id", "the measure voted on (e.g. HR.1234); empty for a roll call on no bill"),
+    ("bill_name", "the measure's short title, else the chamber's title of the vote, else its question"),
+    ("question", "the question, as the chamber recorded it"), ("result", "the result, as the chamber recorded it"),
+    ("vote", "the member's vote: Yea, Nay, Present, Not Voting, or another word as recorded"),
+    ("voted_with_party", "true or false on a roll call the parties split on; empty when it carries no party signal"),
+    ("party_leaning", "R, D or bipartisan, from the roll call's own positions; empty for a housekeeping question"),
+    ("counted_as_break", "true where Constituent Alignment counted the vote as a break with the party"),
+    ("policy_area", "Civitas's policy area for the vote, where the scoring run stored one"),
+    ("roll_call_url", "the roll call's page on Civitas, with every member's position"),
+    ("source_url", "the roll call at its official source (Senate.gov or the House Clerk)"),
+]
+
+
+def _member_votes_csv(db: Session, chamber: str, member_id: str, request: Request) -> Response:
+    found = member_positions(db, chamber, member_id, 1, _WHOLE_CHAMBER)
+    if found is None:
+        raise HTTPException(status_code=404, detail=_NOT_FOUND[404]["description"])
+    rows = []
+    for v in found["votes"]:
+        rc = _roll_call(v["rollCall"]) or {}
+        rows.append({
+            "date": v["date"], "chamber": rc.get("chamber"), "congress": rc.get("congress"),
+            "session": rc.get("session"), "number": rc.get("number"),
+            # The one spelling the JSON gives (a Senate roll call stores "H.R. 1").
+            "bill_id": canonical_bill_id(v["billId"]) or v["billId"],
+            "bill_name": v["billName"], "question": rc.get("question"), "result": rc.get("result"),
+            "vote": v["vote"], "voted_with_party": v["votedWithParty"], "party_leaning": v["partyLeaning"],
+            "counted_as_break": v["countedAsBreak"], "policy_area": v["policyArea"],
+            "roll_call_url": rc.get("siteUrl"), "source_url": rc.get("sourceUrl"),
+        })
+    return _csv(rows, _VOTE_COLUMNS, f"civitas-{member_id}-votes-{found['congress']}.csv", request,
+                max_age=CACHE_TTL_DETAIL_S)
+
+
+_VOTES_CSV_DOC = _csv_doc("Every position the member recorded on the chamber's roll calls this Congress, newest "
+                          "first: the same record as the JSON votes endpoint, every page at once.", _VOTE_COLUMNS)
+
+
+@router.get("/senators/{senator_id}/votes.csv", response_class=CsvResponse,
+            responses={**_CSV_RESPONSES, **_NOT_FOUND}, tags=["Senators"],
+            summary="A senator's votes, as CSV", description=_VOTES_CSV_DOC)
+def senator_votes_csv(
+    _rl: PublicReadLimit,
+    request: Request,
+    senator_id: str = Path(description="The senator's id." + _RENAMED_ID),
+    db: Session = Depends(get_db),
+) -> Response:
+    return _member_votes_csv(db, "senate", resolve_member_id(db, senator_id), request)
+
+
+@router.get("/representatives/{rep_id}/votes.csv", response_class=CsvResponse,
+            responses={**_CSV_RESPONSES, **_NOT_FOUND}, tags=["Representatives"],
+            summary="A representative's votes, as CSV", description=_VOTES_CSV_DOC)
+def representative_votes_csv(
+    _rl: PublicReadLimit,
+    request: Request,
+    rep_id: str = Path(description="The representative's id." + _RENAMED_ID),
+    db: Session = Depends(get_db),
+) -> Response:
+    return _member_votes_csv(db, "house", resolve_member_id(db, rep_id), request)
+
+
 # ---------------------------------------------------------------------------
 # Representatives
 # ---------------------------------------------------------------------------
@@ -813,7 +1052,7 @@ def get_representative(
         {
             **rep.model_dump(by_alias=True),
             "siteUrl": _member_url(rep.id),
-            **_method(_latest_snapshot(db, "representative", rep.id)),
+            **_method(latest_snapshot(db, "representative", rep.id)),
         },
         request, max_age=CACHE_TTL_DETAIL_S,
     )
@@ -896,6 +1135,477 @@ def get_bill_votes(
             "" if congress == settings.CURRENT_CONGRESS else f"?congress={congress}"),
         "entries": [{**_roll_call(v, congress=congress), "yeas": v["yeas"], "nays": v["nays"],
                      "present": v["present"], "notVoting": v["notVoting"]} for v in votes],
+    }, request, max_age=CACHE_TTL_DETAIL_S)
+
+
+# ---------------------------------------------------------------------------
+# Roll calls
+# ---------------------------------------------------------------------------
+
+_NO_ROLL_CALL = "No roll call recorded with that chamber, Congress, session and number"
+_ROLL_CALL_404 = {404: {"description": "No roll call recorded with that number in a Congress Civitas holds; or, for "
+                                       "a Congress it doesn't hold, a detail saying so and which Congresses it "
+                                       "holds (not held, which is not none)"}}
+
+
+def _roll_call_or_404(db: Session, chamber: str, congress: int, session: int, number: int) -> RollCall:
+    """The stored roll call, or a 404 that says which absence it is: a
+    Congress Civitas doesn't hold is "not held" with the window it does
+    hold (the rule congress_service.bill_coverage states for pages), never
+    "no roll call recorded"."""
+    held = roll_call_congresses(db)
+    if congress not in held:
+        window = (f"Civitas holds roll calls from the {ordinal(held[0])} Congress on" if held
+                  else "Civitas holds no roll calls yet")
+        raise HTTPException(status_code=404, detail=(
+            f"Not held: {window}, so this {ordinal(congress)} Congress roll call isn't held here. The chamber's "
+            "own record has it (Senate.gov or the House Clerk)."))
+    rc = db.query(RollCall).filter_by(chamber=chamber, congress=congress, session=session,
+                                      number=number).one_or_none()
+    if rc is None:
+        raise HTTPException(status_code=404, detail=_NO_ROLL_CALL)
+    return rc
+_RollCallChamber = Literal["senate", "house"]
+
+
+def _tallied(rc: dict, congress: int | None = None) -> dict:
+    """A roll call in the public shape, with its totals."""
+    return {**_roll_call(rc, congress=congress), "yeas": rc["yeas"], "nays": rc["nays"],
+            "present": rc["present"], "notVoting": rc["notVoting"]}
+
+
+_POSITION_COLUMNS: Columns = [
+    ("last_name", "the surname as the chamber's record prints it"),
+    ("first_name", "as the Senate's record prints it; empty on a House roll call"),
+    ("name", "a representative's full name where Civitas has a page for them; empty for a senator (first_name "
+             "and last_name give it) and a former representative"),
+    ("party", "the party the record gives"), ("state", "two-letter state code"),
+    ("district", "a representative's district (0 at-large) where known"),
+    ("position", "as the chamber recorded it"),
+    ("bucket", "how the tally counts it: yea, nay, present, notVoting or candidate"),
+    ("chamber_member_id", "the id the chamber's record gives the member (House: bioguide; Senate: LIS)"),
+    ("member_id", "the member's Civitas id, where there is a page"),
+    ("site_url", "the member's page on Civitas"),
+]
+
+
+def _positions_of(db: Session, chamber: str, congress: int, session: int, number: int) -> dict:
+    d = vote_detail(db, _roll_call_or_404(db, chamber, congress, session, number))
+    d["publicPositions"] = [{
+        "lastName": m["lastName"], "firstName": m["firstName"], "name": m["name"], "party": m["party"],
+        "state": m["state"], "district": m["district"], "position": m["position"], "bucket": m["bucket"],
+        "chamberMemberId": m["chamberMemberId"],
+        "memberId": m["page"].rsplit("/", 1)[-1] if m["page"] else None, "siteUrl": _absolute(m["page"]),
+    } for m in d["members"]]
+    return d
+
+
+# Before the JSON route, whose {number} would otherwise take "5.csv".
+@router.get("/roll-calls/{chamber}/{congress}/{session}/{number}.csv", response_class=CsvResponse,
+            responses={**_CSV_RESPONSES, **_ROLL_CALL_404}, tags=["Roll calls"],
+            summary="Every member's position on one roll call, as CSV",
+            description=_csv_doc("One row per member, by surname: the positions of the JSON roll-call endpoint.",
+                                 _POSITION_COLUMNS))
+def roll_call_csv(
+    _rl: PublicReadLimit,
+    request: Request,
+    chamber: _RollCallChamber = Path(description="senate or house"),
+    congress: int = Path(ge=93, le=200, description="The Congress"),
+    session: int = Path(ge=1, le=3, description="The session of that Congress"),
+    number: int = Path(ge=1, le=5000, description="The roll call's number in its chamber and session"),
+    db: Session = Depends(get_db),
+) -> Response:
+    d = _positions_of(db, chamber, congress, session, number)
+    rows = [{_snake(k): v for k, v in p.items()} for p in d["publicPositions"]]
+    return _csv(rows, _POSITION_COLUMNS, f"civitas-{chamber}-{congress}-{session}-{number}.csv", request,
+                max_age=CACHE_TTL_DETAIL_S)
+
+
+@router.get("/roll-calls/{chamber}/{congress}/{session}/{number}", response_model=PublicRollCallDetailSchema,
+            responses=_ROLL_CALL_404, tags=["Roll calls"],
+            summary="One roll call, with every member's position")
+def get_roll_call(
+    _rl: PublicReadLimit,
+    request: Request,
+    chamber: _RollCallChamber = Path(description="senate or house"),
+    congress: int = Path(ge=93, le=200, description="The Congress"),
+    session: int = Path(ge=1, le=3, description="The session of that Congress"),
+    number: int = Path(ge=1, le=5000, description="The roll call's number in its chamber and session"),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """The roll call as the chamber recorded it, the tally and each party's
+    split, and every member's position with the id the chamber's record
+    gives them and their Civitas id where Civitas has a page for them. A
+    member's votes across roll calls: /senators/{id}/votes and
+    /representatives/{id}/votes."""
+    d = _positions_of(db, chamber, congress, session, number)
+    return _pub_json({**_tallied(d), "billId": d["billId"], "title": d["title"] or "",
+                      "positions": d["publicPositions"]},
+                     request, max_age=CACHE_TTL_DETAIL_S)
+
+
+@router.get("/roll-calls", response_model=PublicRollCallPageSchema, tags=["Roll calls"],
+            summary="A chamber's roll calls in a Congress")
+def list_roll_calls(
+    _rl: PublicReadLimit,
+    request: Request,
+    chamber: _RollCallChamber = Query(description="senate or house"),
+    congress: int | None = Query(None, ge=93, le=200, description="The Congress (default: the current one)"),
+    page: int = _PAGE,
+    per_page: int = _PER_PAGE,
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """Every roll call Civitas holds for the chamber in that Congress, newest
+    first, with the tally and each party's split; each one's positions at
+    its own endpoint (siteUrl names its page). Outside heldCongresses,
+    covered is false: the votes aren't held here, which is not none."""
+    congress = congress or settings.CURRENT_CONGRESS
+    query = db.query(RollCall).filter(RollCall.chamber == chamber, RollCall.congress == congress)
+    total = query.count()
+    total_pages, page = _paged(total, page, per_page)
+    rows = (query.order_by(RollCall.date.desc(), RollCall.session.desc(), RollCall.number.desc())
+            .offset((page - 1) * per_page).limit(per_page).all())
+    positions: dict[int, list[RollCallPosition]] = {}
+    for p in db.query(RollCallPosition).filter(RollCallPosition.roll_call_id.in_([r.id for r in rows])):
+        positions.setdefault(p.roll_call_id, []).append(p)
+    shaped = shapes(db, rows, positions)
+    entries = [_tallied({
+        "chamber": r.chamber, "congress": r.congress, "session": r.session, "number": r.number, "date": r.date,
+        "question": r.question, "result": r.result, "sourceUrl": r.source_url, "yeas": r.yeas, "nays": r.nays,
+        "present": r.present, **shaped[r.id], "parties": party_breakdown(positions.get(r.id, [])),
+    }) for r in rows]
+    held = roll_call_congresses(db)
+    return _pub_json({
+        "chamber": chamber, "congress": congress, "covered": congress in held, "heldCongresses": held,
+        "total": total, "page": page, "perPage": per_page, "totalPages": total_pages, "entries": entries,
+    }, request, max_age=CACHE_TTL_DETAIL_S)
+
+
+# ---------------------------------------------------------------------------
+# Presidents
+# ---------------------------------------------------------------------------
+
+_NO_PRESIDENT = "No president with that id"
+
+
+def _presidents(db: Session) -> list[dict]:
+    """Every president, ranked among the former ones as the site ranks them
+    (displayed score, ties shared), best first; a sitting president after,
+    unranked."""
+    rows = [p.model_dump(by_alias=True) for p in get_all_presidents(db)]
+    former = [r["score"]["overall"] for r in rows if not r["isCurrent"]]
+    for r in rows:
+        r["rank"] = None if r["isCurrent"] else displayed_rank(r["score"]["overall"], former)
+        r["siteUrl"] = _member_url(r["id"])
+    return sorted(rows, key=lambda r: (r["rank"] is None, -r["score"]["overall"], r["number"]))
+
+
+@router.get("/presidents", response_model=PublicPresidentListSchema, tags=["Presidents"],
+            summary="Every president, ranked by Presidential Score")
+def list_presidents(_rl: PublicReadLimit, request: Request, db: Session = Depends(get_db)) -> JSONResponse:
+    """Every president Civitas scores, with the Presidential Score and its
+    three parts (Public Mandate, Effectiveness, Historical Legacy; a part
+    that doesn't apply is null and the others are reweighted, as
+    effectiveWeights shows). How it is computed: the site's /about/scores.
+    A sitting president is listed unranked: the term isn't complete."""
+    rows = _presidents(db)
+    return _pub_json({"total": len(rows), "entries": rows}, request, max_age=CACHE_TTL_DETAIL_S)
+
+
+_PRESIDENT_COLUMNS: Columns = [
+    ("rank", "place among former presidents by Presidential Score as the site shows it; empty for a sitting "
+             "president"),
+    ("id", "the president's Civitas id"), ("name", "the president's name"), ("party", "the party"),
+    ("number", "which president (1 for the first)"), ("term_start", "YYYY-MM-DD"),
+    ("term_end", "YYYY-MM-DD; empty while serving"), ("is_current", "true for a sitting president"),
+    ("overall", "the Presidential Score, 0-100"),
+    ("public_mandate", "Public Mandate, 0-100; empty where it doesn't apply"),
+    ("effectiveness", "Effectiveness, 0-100; empty where it doesn't apply"),
+    ("historical_legacy", "Historical Legacy, 0-100; empty where it doesn't apply"),
+    ("dimensions_available", "how many of the three parts are scored"),
+    ("site_url", "the president's page on Civitas"),
+]
+
+
+@router.get("/presidents.csv", response_class=CsvResponse, responses=_CSV_RESPONSES, tags=["Presidents"],
+            summary="Every president's Presidential Score, as CSV",
+            description=_csv_doc("The presidents' leaderboard, in /presidents order.", _PRESIDENT_COLUMNS))
+def presidents_csv(_rl: PublicReadLimit, request: Request, db: Session = Depends(get_db)) -> Response:
+    rows = [{
+        "rank": r["rank"], "id": r["id"], "name": r["name"], "party": r["party"], "number": r["number"],
+        "term_start": r["termStart"], "term_end": r["termEnd"], "is_current": r["isCurrent"],
+        "overall": r["score"]["overall"], "public_mandate": r["score"]["publicMandate"],
+        "effectiveness": r["score"]["effectiveness"], "historical_legacy": r["score"]["historicalLegacy"],
+        "dimensions_available": r["score"]["dimensionsAvailable"], "site_url": r["siteUrl"],
+    } for r in _presidents(db)]
+    return _csv(rows, _PRESIDENT_COLUMNS, "civitas-presidents.csv", request, max_age=CACHE_TTL_DETAIL_S)
+
+
+@router.get("/presidents/{president_id}", response_model=PublicPresidentSchema,
+            responses={404: {"description": _NO_PRESIDENT}}, tags=["Presidents"], summary="One president's record")
+def get_president_record(
+    _rl: PublicReadLimit,
+    request: Request,
+    president_id: str = Path(description="The president's id, as in their Civitas URL (surname and number, as "
+                                         "/presidents lists it, e.g. doe-52)"),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """The president's scores, term, approval, economic figures and executive
+    order count, with the rank /presidents gives."""
+    row = next((r for r in _presidents(db) if r["id"] == president_id), None)
+    if row is None or get_president(db, president_id) is None:
+        raise HTTPException(status_code=404, detail=_NO_PRESIDENT)
+    return _pub_json(row, request, max_age=CACHE_TTL_DETAIL_S)
+
+
+# ---------------------------------------------------------------------------
+# Justices
+# ---------------------------------------------------------------------------
+
+_NO_JUSTICE = "No justice with that id"
+_JUSTICE_ID = Path(description="The justice's id, as in their Civitas URL (e.g. jane_q_doe)")
+_COURT_LICENSE = (" The voting record is from the Supreme Court Database (CC BY-NC 3.0 US) and Oyez "
+                  "(CC BY-NC 4.0): reuse it for non-commercial purposes only, crediting them.")
+
+
+def _justice(row: dict) -> dict:
+    return {**row, "thumbnailUrl": _absolute(row.get("thumbnailUrl")), "siteUrl": _member_url(row["id"])}
+
+
+@router.get("/justices", response_model=PublicJusticeListSchema, tags=["Justices"],
+            summary="The sitting justices")
+def list_justices(_rl: PublicReadLimit, request: Request, db: Session = Depends(get_db)) -> JSONResponse:
+    """The sitting justices by seniority, each with the count of cases
+    decided and shares in the majority and in dissent. Justices are not
+    scored or ranked: score is always null (why: the site's
+    /about/scores)."""
+    order = {j.id: (j.date_start or "", j.name) for j in get_all_justices(db)}
+    rows = sorted((_justice(e.model_dump(by_alias=True)) for e in get_justice_leaderboard(db)),
+                  key=lambda r: order.get(r["id"], ("", r["name"])))
+    return _pub_json({"total": len(rows), "entries": rows}, request, max_age=CACHE_TTL_DETAIL_S)
+
+
+@router.get("/justices/{justice_id}", response_model=PublicJusticeSchema,
+            responses={404: {"description": _NO_JUSTICE}}, tags=["Justices"], summary="One justice's record",
+            description="The justice's voting record in aggregate: cases decided, shares in the majority, in "
+                        "dissent and in unanimous cases, opinions written, agreement with each sitting justice, "
+                        "the appointing president's estimated effect (shown, not scored) and the Martin-Quinn "
+                        "position per term. Case by case: /justices/{id}/cases." + _COURT_LICENSE)
+def get_justice_record(
+    _rl: PublicReadLimit,
+    request: Request,
+    justice_id: str = _JUSTICE_ID,
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    found = get_justice(db, justice_id)
+    if found is None:
+        raise HTTPException(status_code=404, detail=_NO_JUSTICE)
+    return _pub_json(_justice(found.model_dump(by_alias=True)), request, max_age=CACHE_TTL_DETAIL_S)
+
+
+@router.get("/justices/{justice_id}/cases", response_model=PublicJusticeCasesSchema,
+            responses={404: {"description": _NO_JUSTICE}}, tags=["Justices"], summary="A justice's vote in each case",
+            description="Every orally argued case the record holds for the justice, newest first: the side, the "
+                        "opinion, the Court's split and where to read the case." + _COURT_LICENSE)
+def get_justice_cases(
+    _rl: PublicReadLimit,
+    request: Request,
+    justice_id: str = _JUSTICE_ID,
+    page: int = _PAGE,
+    per_page: int = Query(20, ge=1, le=court_service.MAX_PER_PAGE, description="Results per page"),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    found = court_service.justice_cases(db, justice_id, page, per_page)
+    if found is None:
+        raise HTTPException(status_code=404, detail=_NO_JUSTICE)
+    total_pages, page = _paged(found["total"], page, per_page)
+    if page != found["page"]:
+        found = court_service.justice_cases(db, justice_id, page, per_page)
+    return _pub_json({
+        "id": justice_id, "total": found["total"], "page": page, "perPage": per_page, "totalPages": total_pages,
+        "terms": found["terms"],
+        "entries": [{**c, "links": {**c["links"], "explore": _absolute(c["links"]["explore"])}}
+                    for c in found["cases"]],
+    }, request, max_age=CACHE_TTL_DETAIL_S)
+
+
+# ---------------------------------------------------------------------------
+# Nominations
+# ---------------------------------------------------------------------------
+
+_NO_NOMINATION = "No nomination recorded with that citation in that Congress"
+
+
+def _nomination(row: dict) -> dict:
+    return {**row, "siteUrl": f"{SITE_URL}/congress/nominations/{row['congress']}/{row['citation']}"}
+
+
+@router.get("/nominations", response_model=PublicNominationPageSchema, tags=["Nominations"],
+            summary="Presidential nominations sent to the Senate")
+def list_nominations(
+    _rl: PublicReadLimit,
+    request: Request,
+    congress: int | None = Query(None, ge=93, le=200, description="The Congress (default: the current one)"),
+    status: Literal["pending", "confirmed", "returned", "withdrawn"] | None = Query(None, description="Only this status"),
+    kind: Literal["civilian", "judicial", "military"] | None = Query(None, description="Only this kind"),
+    page: int = _PAGE,
+    per_page: int = _PER_PAGE,
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """The Congress's nominations as Congress.gov records them, newest action
+    first, with each one's status and days from receipt to confirmation.
+    Read daily; until the first full read of a Congress, the list is the
+    part read so far, and `backfill.complete` is false."""
+    congress = congress or settings.CURRENT_CONGRESS
+    first = nomination_service.list_nominations(db, congress, status=status, kind=kind, page=1, per_page=per_page)
+    total_pages, page = _paged(first["total"], page, per_page)
+    found = first if page == 1 else nomination_service.list_nominations(
+        db, congress, status=status, kind=kind, page=page, per_page=per_page)
+    return _pub_json({
+        "congress": congress,
+        # Until the daily read has reached every nomination, the list is a
+        # sample: say so, so partial data never reads as the whole Congress.
+        "backfill": nomination_service.backfill(
+            db, congress, db.query(Nomination).filter(Nomination.congress == congress).count()),
+        "total": found["total"], "page": page, "perPage": per_page, "totalPages": total_pages,
+        "entries": [_nomination(i) for i in found["items"]],
+    }, request, max_age=CACHE_TTL_DETAIL_S)
+
+
+@router.get("/nominations/{congress}/{citation}", response_model=PublicNominationDetailSchema,
+            responses={404: {"description": _NO_NOMINATION}}, tags=["Nominations"], summary="One nomination")
+def get_nomination(
+    _rl: PublicReadLimit,
+    request: Request,
+    congress: int = Path(ge=93, le=200, description="The Congress it was sent to"),
+    citation: str = Path(pattern=r"^PN[1-9]\d{0,4}(-[1-9]\d{0,2})?$", description="The citation, e.g. PN12 or PN12-3"),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """The nomination's record and the Senate's actions on it, the committee
+    it went to, and the Senate roll calls that name it (each with its tally;
+    every senator's position at /roll-calls)."""
+    found = nomination_service.detail(db, congress, citation)
+    if found is None:
+        raise HTTPException(status_code=404, detail=_NO_NOMINATION)
+    row = db.query(Nomination).filter_by(congress=congress, citation=citation).one()
+    body = {k: found[k] for k in (
+        "congress", "citation", "description", "organization", "agencySlug", "positionTitle", "kind",
+        "nomineeCount", "receivedDate", "status", "statusDate", "latestAction", "daysToConfirm",
+        "congressGovUrl", "actions", "hearingHeld", "committee")}
+    body["nominees"] = nominee_names(row, limit=None)
+    body["rollCalls"] = [_tallied({**rc, "parties": rc["parties"] or []}) for rc in found["rollCalls"]]
+    return _pub_json(_nomination(body), request, max_age=CACHE_TTL_DETAIL_S)
+
+
+# ---------------------------------------------------------------------------
+# Agencies and comment periods
+# ---------------------------------------------------------------------------
+
+_NO_AGENCY = "No agency with that id"
+
+
+def _agency_url(slug: str) -> str:
+    return f"{SITE_URL}/agencies/{slug}"
+
+
+def _agency(a: Agency, documents: int) -> dict:
+    return {"slug": a.slug, "name": a.name, "shortName": a.short_name, "parentSlug": a.parent_slug,
+            "documents": documents, "siteUrl": _agency_url(a.slug)}
+
+
+def _open_comments(db: Session, today: str):
+    return db.query(ExploreDocument).filter(
+        ExploreDocument.comment_url.isnot(None), ExploreDocument.comment_url != "",
+        ExploreDocument.comments_close_on >= today,
+    )
+
+
+@router.get("/agencies", response_model=PublicAgencyListSchema, tags=["Agencies"],
+            summary="Every federal agency, with the documents Civitas holds from it")
+def list_agencies(_rl: PublicReadLimit, request: Request, db: Session = Depends(get_db)) -> JSONResponse:
+    """Every agency the Federal Register lists, by name, with where it sits
+    and how many of its Register documents Civitas holds (its sub-agencies'
+    included). Read weekly from the Federal Register."""
+    agencies = db.query(Agency).order_by(Agency.name).all()
+    counts = document_counts(db)
+    children = children_of(agencies)
+    entries = [_agency(a, sum(counts.get(s, 0) for s in descendants(children, a.slug))) for a in agencies]
+    synced = max((a.synced_at for a in agencies if a.synced_at), default=None)
+    return _pub_json({"total": len(entries), "entries": entries,
+                      "asOf": synced.date().isoformat() if synced else None},
+                     request, max_age=CACHE_TTL_DETAIL_S)
+
+
+@router.get("/agencies/{slug}", response_model=PublicAgencyDetailSchema,
+            responses={404: {"description": _NO_AGENCY}}, tags=["Agencies"], summary="One agency")
+def get_agency(
+    _rl: PublicReadLimit,
+    request: Request,
+    slug: str = Path(description="The agency's id, the Federal Register's (e.g. internal-revenue-service)"),
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """Who the agency is and where it sits, its documents Civitas holds by
+    type, and how many are open for comment today (each one at
+    /comment-periods?agency=)."""
+    agencies = db.query(Agency).all()
+    by_slug = {a.slug: a for a in agencies}
+    agency = by_slug.get(slug)
+    if agency is None:
+        raise HTTPException(status_code=404, detail=_NO_AGENCY)
+    tree = descendants(children_of(agencies), slug)
+    counts = document_counts(db)
+    by_type = dict(db.query(ExploreDocument.doc_type, func.count(ExploreDocument.id))
+                   .filter(ExploreDocument.agency_slug.in_(tree)).group_by(ExploreDocument.doc_type))
+    parent = by_slug.get(agency.parent_slug) if agency.parent_slug else None
+    return _pub_json({
+        **_agency(agency, sum(counts.get(s, 0) for s in tree)),
+        "description": agency.description, "website": agency.website, "frUrl": agency.fr_url,
+        "parent": {"slug": parent.slug, "name": parent.name} if parent else None,
+        "children": [{"slug": a.slug, "name": a.name}
+                     for a in sorted((a for a in agencies if a.parent_slug == slug), key=lambda a: a.name)],
+        "documentsByType": by_type,
+        "openCommentPeriods": _open_comments(db, comment_period_today())
+        .filter(ExploreDocument.agency_slug.in_(tree)).count(),
+    }, request, max_age=CACHE_TTL_DETAIL_S)
+
+
+@router.get("/comment-periods", response_model=PublicCommentPeriodPageSchema, tags=["Agencies"],
+            responses={404: {"description": _NO_AGENCY}}, summary="Federal documents open for comment today")
+def list_comment_periods(
+    _rl: PublicReadLimit,
+    request: Request,
+    agency: str | None = Query(None, description="Only this agency's documents, its sub-agencies' included "
+                                                 "(an id from /agencies)"),
+    page: int = _PAGE,
+    per_page: int = _PER_PAGE,
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    """Every Federal Register document Civitas holds whose comment period is
+    open today, soonest deadline first, with where to comment. Today and
+    each deadline are on the deadline's own clock (Eastern): a period
+    closing today is listed with 0 days left."""
+    today = comment_period_today()
+    query = _open_comments(db, today)
+    if agency:
+        agencies = db.query(Agency).all()
+        if agency not in {a.slug for a in agencies}:
+            raise HTTPException(status_code=404, detail=_NO_AGENCY)
+        query = query.filter(ExploreDocument.agency_slug.in_(descendants(children_of(agencies), agency)))
+    total = query.count()
+    total_pages, page = _paged(total, page, per_page)
+    rows = (query.order_by(ExploreDocument.comments_close_on, ExploreDocument.id)
+            .offset((page - 1) * per_page).limit(per_page).all())
+    day = date.fromisoformat(today)
+    return _pub_json({
+        "today": today, "total": total, "page": page, "perPage": per_page, "totalPages": total_pages,
+        "entries": [{
+            "key": (key := public_key(d.external_id, d.id)), "title": d.title, "docType": d.doc_type,
+            "published": d.date, "agencyName": d.agency_name or "", "agencySlug": d.agency_slug or "",
+            "commentsCloseOn": d.comments_close_on,
+            "daysLeft": (date.fromisoformat(d.comments_close_on) - day).days,
+            "commentUrl": d.comment_url.replace("http://", "https://", 1), "url": d.url or "",
+            "siteUrl": f"{SITE_URL}/explore/{key}",
+        } for d in rows],
     }, request, max_age=CACHE_TTL_DETAIL_S)
 
 

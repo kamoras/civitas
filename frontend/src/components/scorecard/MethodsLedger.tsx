@@ -375,7 +375,7 @@ export default function MethodsLedger({
                   {dim?.note ?? "No breakdown is available for this score."}
                 </p>
               )}
-              <dl className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[7rem_minmax(0,1fr)]">
+              <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-[7rem_minmax(0,1fr)]">
                 <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
                   Method
                 </dt>
@@ -405,7 +405,7 @@ export default function MethodsLedger({
           );
         })}
 
-        <div className="grid gap-8 border-t border-white/[0.09] pt-5 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-8 border-t border-white/[0.09] pt-5 lg:grid-cols-2">
           <div className="flex flex-col gap-2">
             <h3 className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
               The record as data
@@ -421,6 +421,7 @@ export default function MethodsLedger({
                   `${api}/votes?per_page=100`,
                   "Every vote this Congress, with its roll call (JSON)",
                 ],
+                [`${api}/votes.csv`, "Every vote this Congress, as a spreadsheet (CSV)"],
                 [`${api}/history`, "Scores after every scoring run (JSON)"],
               ].map(([href, label]) => (
                 <li key={href} className="border-b border-white/[0.07] py-1.5">

@@ -49,34 +49,43 @@ export default function MethodNotes({
       </p>
       <p>{method.neutral}</p>
       {fits.length > 0 && (
-        <table className="w-full border-collapse font-mono text-xs text-ink-lo">
-          <caption className="mb-1 text-left uppercase tracking-[0.12em] text-ink-min">
-            This Congress&apos;s fit: logit(rate) = a + b·alignment + b<sub>opp</sub>·min(alignment,
-            0)
-          </caption>
-          <thead>
-            <tr className="border-b border-white/[0.09] text-left uppercase tracking-[0.12em] text-ink-min">
-              <th className="py-1 font-normal">Party</th>
-              <th className="py-1 font-normal">a</th>
-              <th className="py-1 font-normal">b</th>
-              <th className="py-1 font-normal">b opp</th>
-              <th className="py-1 font-normal">Members</th>
-              <th className="py-1 font-normal">Votes</th>
-            </tr>
-          </thead>
-          <tbody>
-            {fits.map(([party, f]) => (
-              <tr key={party} className="border-b border-white/[0.07]">
-                <td className="py-1">{party}</td>
-                <td className="py-1">{f.a}</td>
-                <td className="py-1">{f.b}</td>
-                <td className="py-1">{f.bOpposed}</td>
-                <td className="py-1">{f.members}</td>
-                <td className="py-1">{f.votes}</td>
+        // Scrolls on its own at a narrow width or a large text size, not the
+        // page: six number columns don't fit a phone at 200% text.
+        <div
+          className="overflow-x-auto"
+          tabIndex={0}
+          role="region"
+          aria-label="This Congress's fit, by party"
+        >
+          <table className="w-full border-collapse font-mono text-xs text-ink-lo">
+            <caption className="mb-1 text-left uppercase tracking-[0.12em] text-ink-min">
+              This Congress&apos;s fit: logit(rate) = a + b·alignment + b<sub>opp</sub>
+              ·min(alignment, 0)
+            </caption>
+            <thead>
+              <tr className="border-b border-white/[0.09] text-left uppercase tracking-[0.12em] text-ink-min">
+                <th className="py-1 font-normal">Party</th>
+                <th className="py-1 font-normal">a</th>
+                <th className="py-1 font-normal">b</th>
+                <th className="py-1 font-normal">b opp</th>
+                <th className="py-1 font-normal">Members</th>
+                <th className="py-1 font-normal">Votes</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {fits.map(([party, f]) => (
+                <tr key={party} className="border-b border-white/[0.07]">
+                  <td className="py-1">{party}</td>
+                  <td className="py-1">{f.a}</td>
+                  <td className="py-1">{f.b}</td>
+                  <td className="py-1">{f.bOpposed}</td>
+                  <td className="py-1">{f.members}</td>
+                  <td className="py-1">{f.votes}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
       <p className="font-mono text-xs uppercase tracking-[0.12em]">
         <a

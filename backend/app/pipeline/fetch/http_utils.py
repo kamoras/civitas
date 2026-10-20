@@ -33,7 +33,7 @@ import logging
 import httpx
 import requests
 
-from app.contact import CONTACT_EMAIL
+from app.contact import CONTACT_COMMENT
 from app.error_utils import redact_sensitive_params
 from app.http_client import DEFAULT_FETCH_TIMEOUT_S, bounded, is_bot_challenge
 from app.pipeline.rate_limiter import RateLimiter
@@ -84,7 +84,7 @@ redact_url = redact_sensitive_params
 # request; the readers here fetch the documents a source publishes for
 # exactly this use, at addresses written into their config. This is standards-compliance, not disguise: a site that
 # wants to refuse Civitas can still refuse Civitas.
-CIVIC_CONTACT = f"Civitas/1.0 (+{CONTACT_EMAIL})"
+CIVIC_CONTACT = f"Civitas/1.0{CONTACT_COMMENT}"
 BROWSER_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -237,9 +237,11 @@ async def fetch_with_retry(
                 # The exception's own message can embed the request URL,
                 # including request_url if one was given (e.g.
                 # httpx.ConnectError/ReadTimeout do) — redact it too.
+                # The type too: a timeout's message is often empty, which
+                # logged "unavailable: " with no cause (2026-10-18).
                 logger.error(
-                    "%s failed after %d attempts: %s — %s",
-                    label, retries, url, redact_url(str(e)),
+                    "%s failed after %d attempts: %s — %s: %s",
+                    label, retries, url, type(e).__name__, redact_url(str(e)),
                 )
                 return None
             await asyncio.sleep(backoff_s * attempt)
@@ -403,9 +405,11 @@ async def fetch_with_retry_requests(
             return resp
         except Exception as e:
             if attempt == retries:
+                # The type too: a timeout's message is often empty, which
+                # logged "unavailable: " with no cause (2026-10-18).
                 logger.error(
-                    "%s failed after %d attempts: %s — %s",
-                    label, retries, url, redact_url(str(e)),
+                    "%s failed after %d attempts: %s — %s: %s",
+                    label, retries, url, type(e).__name__, redact_url(str(e)),
                 )
                 return None
             await asyncio.sleep(backoff_s * attempt)

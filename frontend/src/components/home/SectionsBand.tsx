@@ -6,9 +6,8 @@ import { fetchSectionFigures } from "@/components/sections/SectionCards";
 import type { SectionFigures } from "@/types/sections";
 
 /** Every section, About's chapters (the methods) included: the homepage
- * index is the one list of the site's pages, and the footer on `/` leaves
- * its section columns out (`Footer omit`). */
-export const BAND: SectionKey[] = [
+ * index is the one list of the site's pages outside the header. */
+const BAND: SectionKey[] = [
   "congress",
   "elections",
   "agencies",
@@ -64,10 +63,6 @@ const PAGE_LINK =
  * On a phone each page shows its figure without its caption (kept for
  * screen readers): the list reads in one screen and a half rather than
  * two, and the captions return from 640 px up.
- *
- * The homepage's footer leaves out its section columns (`Footer omit`):
- * the two lists were the same links a screen apart. The API and the
- * changelog stay in the footer's own row of site pages.
  */
 export default async function SectionsBand() {
   // Per request, never prerendered: `next build` can't reach the backend.

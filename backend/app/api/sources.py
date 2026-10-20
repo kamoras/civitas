@@ -13,7 +13,7 @@ something a researcher should see.
 from datetime import datetime
 
 from fastapi import APIRouter, Depends
-from fastapi.responses import JSONResponse
+from app.api.response_helpers import JSONResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 

@@ -17,13 +17,23 @@ const plural = (x: number, one: string, many = `${one}s`) => (x === 1 ? one : ma
 /** A record-vote figure for a report: the count, or, on a day or period
  * with none, what that means (the report still lists what each chamber
  * did), never a bare 0. */
-function votes(count: number, when: string): Preview {
-  return count > 0
-    ? { figure: n(count), caption: `${plural(count, "record vote")} ${when}` }
-    : {
-        figure: "None",
-        caption: `no record votes ${when}; the report lists what each chamber did`,
-      };
+function votes(
+  count: number,
+  when: string,
+  recess: SectionFigures["congress"]["recess"] = null
+): Preview {
+  if (count > 0) return { figure: n(count), caption: `${plural(count, "record vote")} ${when}` };
+  // In a recess, when the last business was (the backend's): a date says
+  // more than "None".
+  if (recess?.lastBusinessDay)
+    return {
+      figure: shortDate(recess.lastBusinessDay).slice(5),
+      caption: "the last day either chamber voted, passed or confirmed anything",
+    };
+  return {
+    figure: "None",
+    caption: `no record votes ${when}; the report lists what each chamber did`,
+  };
 }
 
 function president(f: SectionFigures["congress"]["president"]): Preview {
@@ -76,20 +86,21 @@ const PREVIEWS: Record<string, Record<string, (f: SectionFigures) => Preview | n
         : { figure: "Not yet", caption: "each day's top issue is kept here once one is published" },
   },
   congress: {
-    reports: ({ congress: { reports } }) =>
+    reports: ({ congress: { reports, recess } }) =>
       reports
         ? votes(
             reports.recordVotes,
-            `on ${shortDate(reports.date)}, the last day either chamber met`
+            `on ${shortDate(reports.date)}, the last day either chamber met`,
+            recess
           )
         : { figure: "Not yet", caption: "no day of Congress recorded yet" },
-    week: ({ congress: { week } }) =>
+    week: ({ congress: { week, recess } }) =>
       week
-        ? votes(week.recordVotes, `in the week of ${shortDate(week.start)}`)
+        ? votes(week.recordVotes, `in the week of ${shortDate(week.start)}`, recess)
         : { figure: "Not yet", caption: "no week of Congress recorded yet" },
-    month: ({ congress: { month } }) =>
+    month: ({ congress: { month, recess } }) =>
       month
-        ? votes(month.recordVotes, `in ${monthLabel(month.month)}`)
+        ? votes(month.recordVotes, `in ${monthLabel(month.month)}`, recess)
         : { figure: "Not yet", caption: "no month of Congress recorded yet" },
     bills: ({ congress: { bills } }) =>
       bills.inMotion > 0

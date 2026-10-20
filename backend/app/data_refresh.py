@@ -95,8 +95,11 @@ class Context:
     doc: dict  # the copy in use
     today: date
     last_tried: datetime | None
+    last_failed: bool = False  # the last try kept the copy in use
 
     def tried_within(self, days: int) -> bool:
+        if self.last_failed:
+            days = min(days, RETRY_FAILED_AFTER_DAYS)
         return self.last_tried is not None and utcnow() - self.last_tried < timedelta(days=days)
 
 
@@ -134,13 +137,23 @@ def content_sha256(doc: dict) -> str:
     return hashlib.sha256(json.dumps(body, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
-def _last_tried(name: str) -> datetime | None:
+# A try that kept the copy in use (refresh_one's "kept: ..." outcome) is
+# tried again within a week, whatever the file's cadence: a yearly file
+# (name_casing.json) otherwise kept its alert open, and its fix untried, for
+# a year, and a monthly one for a month. Weekly rather than daily, since the
+# heavy generators take hours.
+RETRY_FAILED_AFTER_DAYS = 7
+
+
+def _last_try(name: str) -> tuple[datetime | None, bool]:
+    """When `name` was last tried, and whether that try kept the copy in use."""
     db = SessionLocal()
     try:
         state = api_cache_get(db, _STATE_TIER, name, max_age_hours=24 * 365 * 5) or {}
     finally:
         db.close()
-    return datetime.fromisoformat(state["triedAt"]) if state.get("triedAt") else None
+    tried = datetime.fromisoformat(state["triedAt"]) if state.get("triedAt") else None
+    return tried, str(state.get("outcome") or "").startswith("kept")
 
 
 def _record_try(name: str, outcome: str) -> None:
@@ -263,7 +276,7 @@ def run_refreshes(files: list[DataFile] | None = None, *, pipeline_busy: bool = 
     outcomes: dict[str, str] = {}
     for spec in files if files is not None else DATA_FILES:
         try:
-            ctx = Context(spec.name, read(spec.name), utcnow().date(), _last_tried(spec.name))
+            ctx = Context(spec.name, read(spec.name), utcnow().date(), *_last_try(spec.name))
             if spec.command and spec.due(ctx):
                 if spec.heavy and pipeline_busy:
                     outcomes[spec.name] = "waiting for the pipeline"
@@ -450,6 +463,10 @@ def _coverage_gate(new: dict, old: dict) -> list[str]:
     return failures
 
 
+# More than a year's weekdays: build_name_casing.py stops at the year's end.
+NAME_CASING_ISSUES = 366
+
+
 def _casing_gate(new: dict, old: dict) -> list[str]:
     forms = new.get("forms") or {}
     failures = [] if len(forms) >= 0.7 * len(old.get("forms") or {}) else [f"{len(forms)} forms"]
@@ -551,15 +568,30 @@ def _training_polls_command(ctx: Context) -> list[str]:
 
 # The map's fits (scripts/fit_forecast_model.py): refit whenever the
 # training polls in use change, and monthly besides, which picks up a new
-# MEDSL version or a newly published FEC House compilation. Display only:
-# nothing in scoring reads them.
+# MEDSL version or a newly published FEC House compilation or Clerk's
+# Statistics; weekly while a fit lacks the last certified general, so a
+# newly published one is read within a week. Display only: nothing in
+# scoring reads them.
 FORECAST_OUTPUTS = ("forecast_training.json", "forecast_house_training.json", "forecast_house_model.json")
+FORECAST_TRAINING = ("forecast_training.json", "forecast_house_training.json")
+
+
+def _fits_behind(today: date) -> bool:
+    due = last_certified_general(today)
+    return due is not None and any(
+        max((r["year"] for r in read(name).get("races") or []), default=0) < due for name in FORECAST_TRAINING)
 
 
 def _forecast_due(ctx: Context) -> bool:
     polls = (read(training_polls.FILE_NAME).get("file") or {}).get("sha256")
     fitted = (ctx.doc.get("_polls") or {}).get("sha256")
-    return (polls is not None and polls != fitted and not ctx.tried_within(1)) or not ctx.tried_within(30)
+    # A fit whose calibration table predates the code's bins is refitted
+    # the next day, not at the month's end: the map hides that table.
+    outdated = any(not model.calibration_current(ev.get("calibration"))
+                   for ev in (ctx.doc.get("evaluation") or {}).values())
+    return ((((polls is not None and polls != fitted) or outdated) and not ctx.tried_within(1))
+            or not ctx.tried_within(30)
+            or (not ctx.tried_within(7) and _fits_behind(ctx.today)))
 
 
 def _forecast_command(ctx: Context) -> list[str]:
@@ -660,9 +692,13 @@ DATA_FILES: list[DataFile] = [
     DataFile("reference_coverage.json",
              command=lambda ctx: [PY, _script("calibrate_reference_coverage.py"), "--out", "{out}"],
              due=_every(30), gate=_coverage_gate, heavy=True, moves_scores=True, timeout_s=3 * 3600),
+    # The whole of last year's issues, as the bundled table was built (its
+    # _source: "the first 247 issues of 2025"); the script's own default of
+    # 120 issues read half the prose and lost a third of the forms, which the
+    # gate refused (2026-10-18: 8,832 forms against 13,395).
     DataFile("name_casing.json",
              command=lambda ctx: [PY, _script("build_name_casing.py"), "--year", str(ctx.today.year - 1),
-                                  "--output", "{out}", "--cache", "{tmp}"],
+                                  "--days", str(NAME_CASING_ISSUES), "--output", "{out}", "--cache", "{tmp}"],
              due=lambda ctx: not ctx.tried_within(365) and ctx.today >= date(ctx.today.year, 2, 1),
              gate=_casing_gate, heavy=True, timeout_s=4 * 3600),
     DataFile(training_polls.FILE_NAME, command=_training_polls_command, due=_training_polls_due,

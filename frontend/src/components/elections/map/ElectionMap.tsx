@@ -5,6 +5,7 @@ import Link from "next/link";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import ElectionMapMethod from "./ElectionMapMethod";
+import ClosestSeats from "./ClosestSeats";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR, shareMetaAttrs } from "@/lib/shareImage";
 import { trapTab } from "@/lib/focusedDialog";
 import { MAP_LABEL_HALO } from "@/lib/results";
@@ -57,7 +58,7 @@ import type {
 } from "@/types/electionMap";
 
 const SHARE_SOURCE =
-  "Civitas, from official returns (MEDSL, FEC, VEST, Census); polls: Wikipedia contributors, CC BY-SA 4.0; past polls: Silver Bulletin";
+  "Civitas, from official returns (MEDSL, FEC, House Clerk, VEST, Census); polls: Wikipedia contributors, CC BY-SA 4.0; past polls: Silver Bulletin";
 
 const TILE = 10;
 const GAP = 1;
@@ -182,9 +183,10 @@ function SenateTileMap({
               {!mini && (
                 <text
                   x={x + TILE / 2}
-                  y={y + TILE / 2 + 1.2}
+                  y={y + TILE / 2}
                   textAnchor="middle"
-                  className={`fill-ink-min/75 font-mono ${MAP_LABEL_HALO}`}
+                  dominantBaseline="central"
+                  className={`map-tile-label fill-ink-min/75 font-mono ${MAP_LABEL_HALO}`}
                   fontSize="3"
                 >
                   {state}
@@ -260,9 +262,12 @@ function SenateTileMap({
             {!mini && (
               <text
                 x={x + TILE / 2}
-                y={y + (view === "diff" ? 3.6 : TILE / 2 + 1.2)}
+                y={y + (view === "diff" ? 3.6 : TILE / 2)}
                 textAnchor="middle"
-                className={`pointer-events-none fill-ink-hi font-mono ${MAP_LABEL_HALO}`}
+                dominantBaseline={view === "diff" ? undefined : "central"}
+                className={`pointer-events-none fill-ink-hi font-mono ${MAP_LABEL_HALO} ${
+                  view === "diff" ? "map-tile-label-diff" : "map-tile-label"
+                }`}
                 fontSize="3"
               >
                 {state}
@@ -1148,7 +1153,7 @@ export default function ElectionMap({
           <div
             role="group"
             aria-label="Chamber"
-            className="flex font-mono text-xs tracking-[0.12em]"
+            className="flex flex-wrap font-mono text-xs tracking-[0.12em]"
           >
             {MAP_CHAMBERS.map((c, i) => (
               <button
@@ -1177,7 +1182,7 @@ export default function ElectionMap({
           <div
             role="group"
             aria-label="Map view"
-            className="flex font-mono text-xs tracking-[0.12em]"
+            className="flex flex-wrap font-mono text-xs tracking-[0.12em]"
           >
             {MAP_VIEWS.map((v, i) => {
               const disabled = v !== "usual" && !hasPolls;
@@ -1230,11 +1235,13 @@ export default function ElectionMap({
           </p>
         </div>
 
-        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
           <section
             id="general-map"
             aria-labelledby="general-map-stamp"
-            className="relative min-w-0 border border-phos/20 bg-surface p-3 sm:p-4"
+            // On a phone a full-width band, the map to the page's 16px
+            // gutters: tiles 28 -> 30px at 390px (mobile spec P6).
+            className="relative -mx-4 min-w-0 border-y border-phos/20 bg-surface px-4 py-3 sm:mx-0 sm:border-x sm:p-4"
             {...{ [SHARE_SECTION_ATTR]: "general-map" }}
             // A share image is drawn at a fixed layout width with the tile
             // map, whatever the screen: a phone's House state list made a
@@ -1336,6 +1343,11 @@ export default function ElectionMap({
                   {nationalSentence(data.national)}
                 </p>
               )}
+            </div>
+            {/* The phone's way in: the closest seats as rows, each opening
+                the same sheet as a tile. Not in the shared picture. */}
+            <div className="lg:hidden" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
+              <ClosestSeats seats={data.seats} view={view} onSelect={select} />
             </div>
             <p className="mt-3 border-t border-white/[0.07] pt-2 font-mono text-[11px] leading-relaxed text-ink-min">
               {footerText(data)}

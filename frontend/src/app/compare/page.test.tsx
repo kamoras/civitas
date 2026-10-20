@@ -27,7 +27,10 @@ function member(id: string, name: string, state: string, party: "D" | "R"): Sena
       fundingIndependence: 50,
       constituentAlignment: 70,
       legislativeEffectiveness: 40,
+      fundingDiversity: 55,
     },
+    scoredOn: "2026-10-16",
+    algorithmVersion: "v6.35",
     funding: { pacSharePct: 10, totalFromPacs: 1000, totalRaised: 10000 },
   } as unknown as Senator;
 }
@@ -63,6 +66,26 @@ beforeEach(() => window.history.replaceState(null, "", "/compare"));
 afterEach(() => {
   cleanup();
   routerReplace.mockReset();
+});
+
+describe("compare: citable", () => {
+  it("names each score's run and method, shows Funding Diversity apart, and cites the pair", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/compare?leftId=n-1&leftChamber=senate&rightId=n-2&rightChamber=senate"
+    );
+    render(<ComparePage />);
+    expect(await screen.findAllByText("Scored 2026-10-16 · v6.35")).toHaveLength(2);
+    expect(screen.getByText("FUNDING DIVERSITY")).toBeInTheDocument();
+    expect(screen.getByText("not in the score")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Cite this comparison" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Member One and Member Two: Representation scores compared, scoring method v6\.35/
+      )
+    ).toBeInTheDocument();
+  });
 });
 
 describe("compare presets", () => {

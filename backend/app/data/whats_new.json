@@ -3,52 +3,94 @@
   "entries": [
     {
       "id": "presidential-contest",
-      "date": "2026-10-17",
+      "date": "2026-10-20",
       "title": "The presidential contest",
       "summary": "In a presidential year the elections page shows each state's electoral votes from the House apportionment, the candidates registered with the FEC and the primaries ahead, and calls no race.",
       "url": "/elections"
     },
     {
       "id": "election-administration",
-      "date": "2026-10-17",
+      "date": "2026-10-20",
       "title": "How the last election was run",
       "summary": "Between general elections the elections page shows turnout, voting by mail and rejected mail and provisional ballots by state, from the Election Assistance Commission's survey of every election office.",
       "url": "/elections"
     },
     {
       "id": "odd-year-state-elections",
-      "date": "2026-10-17",
+      "date": "2026-10-20",
       "title": "Odd-year state elections",
       "summary": "Between general elections the elections page lists the states holding regular state elections in the coming odd year, with each state's election office, and says plainly what it does not cover.",
       "url": "/elections"
     },
     {
       "id": "redistricting-watch",
-      "date": "2026-10-17",
+      "date": "2026-10-20",
       "title": "Redistricting watch",
       "summary": "The new House maps page says whether the next general's maps are settled, and how each map in force got there: an act, a vote, a commission plan or a court order, with its official source.",
       "url": "/elections/redistricting"
     },
     {
       "id": "next-cycle-field",
-      "date": "2026-10-17",
+      "date": "2026-10-20",
       "title": "The next cycle's field and filing deadlines",
       "summary": "Between general elections the elections page counts who has registered with the FEC for each seat, never calling a filing a place on the ballot, and leads with each FEC reporting deadline.",
       "url": "/elections"
     },
     {
       "id": "new-congress-compared",
-      "date": "2026-10-17",
+      "date": "2026-10-20",
       "title": "How a new Congress compares",
       "summary": "Once a new Congress is seated, the elections page counts the members new to each chamber, those from the other chamber, and the median age, from each member's official record.",
       "url": "/elections"
     },
     {
       "id": "elections-seasons",
-      "date": "2026-10-17",
+      "date": "2026-10-20",
       "title": "The elections page through the whole cycle",
       "summary": "Between general elections the elections page leads with the election just held, then special elections and the calendar, then the primaries ahead, each from the law or the FEC's calendar.",
       "url": "/elections"
+    },
+    {
+      "id": "csv-downloads-data-license",
+      "date": "2026-10-17",
+      "title": "Spreadsheets of the record, and a data license",
+      "summary": "The leaderboards, each member's votes and every position on a roll call download as CSV, and the site states what may be reused and on what terms.",
+      "url": "/developers#downloads"
+    },
+    {
+      "id": "compare-citable",
+      "date": "2026-10-17",
+      "title": "Comparisons you can cite",
+      "summary": "A side-by-side comparison names the run and scoring version behind each score, shows funding diversity apart from the score, and gives a reference to cite.",
+      "url": "/compare"
+    },
+    {
+      "id": "bill-page-sections",
+      "date": "2026-10-17",
+      "title": "Bill pages that get to the votes",
+      "summary": "A bill page lists its sections under the title and keeps a long summary to its first paragraph, with the full text a tap away.",
+      "url": "/congress/bills"
+    },
+    {
+      "id": "public-api-records",
+      "date": "2026-10-17",
+      "title": "More of the record in the public API",
+      "summary": "The open API and its MCP server now give every member's position on each roll call, presidents, the Supreme Court's votes case by case, nominations, agencies and the comment periods open today.",
+      "url": "/developers"
+    },
+    {
+      "id": "issue-ballot-links",
+      "date": "2026-10-17",
+      "title": "Election stories link the ballot",
+      "summary": "An Action Center issue that names a race or one of its nominees now links the race, the state's next voter deadline and its official registration lookup.",
+      "url": "/action"
+    },
+    {
+      "id": "congress-at-a-glance",
+      "date": "2026-10-17",
+      "title": "Congress at a glance, and your members' record",
+      "summary": "The Congress page opens with a calendar of every day each chamber sat and how far bills got, and with a state picked, that state's members' latest votes and bills.",
+      "url": "/congress"
     },
     {
       "id": "site-search",

@@ -386,6 +386,45 @@ def test_calibration_shown_is_the_fitted_evaluation(db_session, freeze_utcnow, c
     assert data["horizon"] == 14  # 19 days out: the 14-day fit
 
 
+def test_the_calibration_table_is_party_blind():
+    """Binned by how far a range leaned, whichever way: swapping the
+    parties (each chance p -> 1 - p, each result flipped) gives the same
+    table, and nothing in it names a party."""
+    p = [0.02, 0.1, 0.3, 0.45, 0.55, 0.62, 0.8, 0.97, 0.99, 0.5]
+    dem_won = [0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0]
+    years = [2000 + 2 * i for i in range(len(p))]
+    table = model.calibration_table(p, dem_won, years)
+    swapped = model.calibration_table([1 - x for x in p], [1 - w for w in dem_won], years)
+    assert table == swapped
+    assert [(r["low"], r["high"]) for r in table] == list(zip(model.CALIBRATION_EDGES, model.CALIBRATION_EDGES[1:]))
+    near = table[0]  # 0.45, 0.55, 0.62 lean; the exact 0.5 leans neither way and is left out
+    assert (near["n"], near["leanCarried"], near["label"]) == (3, 1, "50–65% (near even)")
+    assert sum(r["n"] for r in table) == len(p) - 1
+    text = json.dumps(table).lower()
+    for word in ("dem", "rep", "democrat", "republican"):
+        assert word not in text, word
+    for written in (FITTED, HOUSE_FITTED):
+        for ev in written["evaluation"].values():
+            assert model.calibration_current(ev["calibration"])
+            assert "dem" not in json.dumps(ev["calibration"]).lower()
+
+
+def test_a_fit_with_old_calibration_bins_is_hidden_and_refitted(monkeypatch):
+    old = json.loads(json.dumps(FITTED))
+    for ev in old["evaluation"].values():
+        ev["calibration"] = [{"low": 0.0, "high": 0.5, "n": 1, "demShare": 1.0, "demCarried": 1}]
+    assert not model.calibration_current(old["evaluation"]["14"]["calibration"])
+    assert build._calibration(old["evaluation"]["14"])["table"] is None
+    # Tried two days ago with the same polls: a current fit waits out its
+    # month, an outdated one is refitted now.
+    tried = build.data_refresh.utcnow() - timedelta(days=2)
+    ctx = build.data_refresh.Context("forecast_model.json", old, tried.date(), tried)
+    monkeypatch.setattr(build.data_refresh, "read", lambda name: {"file": {"sha256": old["_polls"]["sha256"]}})
+    assert build.data_refresh._forecast_due(ctx)
+    ctx.doc = FITTED
+    assert not build.data_refresh._forecast_due(ctx)
+
+
 def test_labels_and_colours_are_decided_together_on_the_written_value():
     # 4.6 is written R+5, so it takes the 5-15 colour, never the "<5" one.
     assert build.lean_label(4.6) == "R+5" and build.bin_of(4.6) == "R_usually"
@@ -717,9 +756,11 @@ def test_the_staleness_alert_names_each_missing_input(freeze_utcnow, monkeypatch
     assert "The 2028 general election's certified results are official" in body
     assert "Senate (fit stops at 2026): MEDSL's U.S. Senate file (doi:10.7910/DVN/PEJ5QU) has no 2028 results yet" \
         in body
-    assert ("House (fit stops at 2022): the FEC has not published its Federal Elections 2028 compilation (US House "
-            "Results by State); MEDSL's U.S. House file is behind a sign-in form Civitas does not answer; "
-            "app/data/forecast_house_lean.json has no 2028 district lean") in body
+    assert ("House (fit stops at 2022): no refit has read 2028 House results: neither the FEC's Federal Elections "
+            "2028 compilation (US House Results by State) nor the Clerk of the House's 2028 Statistics of the "
+            "Presidential and Congressional Election was there to read") in body
+    assert "app/data/forecast_house_lean.json has no 2028 district lean" in body
+    assert "sign-in" not in body
     assert "Silver Bulletin" not in body  # both chambers' polls reach 2028
     assert "fit_forecast_model.py and refit" not in body
 

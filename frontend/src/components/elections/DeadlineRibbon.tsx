@@ -39,12 +39,12 @@ export default function DeadlineRibbon({
   const start = Math.min(day(today), ...items.map((d) => day(d.date)));
   const span = Math.max(end - start, 1);
   const at = (iso: string) => `${(Math.min(Math.max(day(iso) - start, 0), span) / span) * 100}%`;
-  // Clipped to the track at both ends: a window that runs past election day
-  // (mail ballots received after it) used to push the page sideways.
+  // A window that runs past election day (mail ballots received for days
+  // after it) ends at the track's end: unclamped, it ran up to 310 px past
+  // a phone's screen and widened the whole page.
   const width = (from: string, to: string) => {
-    const left = Math.min(Math.max(day(from) - start, 0), span);
-    const w = Math.max(Math.min(day(to), end) - Math.max(day(from), start), 0.6);
-    return `${(Math.min(w, span - left) / span) * 100}%`;
+    const left = Math.min(Math.max(day(from), start), end);
+    return `${(Math.min(Math.max(Math.min(day(to), end) - left, 0.6), end - left) / span) * 100}%`;
   };
   const now = day(today);
   const pct = (iso: string) => (Math.min(Math.max(day(iso) - start, 0), span) / span) * 100;

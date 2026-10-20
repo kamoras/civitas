@@ -4,8 +4,10 @@ Runs at 03:00 UTC by default (`PIPELINE_CRON_SCHEDULE`) as a chain of five
 pipelines, one after another (`scheduler._nightly_pipeline`): **Senate →
 Supplementary → House → Stock trades → Election.** None waits on the one
 before it succeeding (`app/pipeline_chain.py`): a link that is skipped, fails
-or crashes is alerted and the next runs anyway. A killed process still ends
-its chain; `ops_alerts.check_pipeline_staleness` is what notices.
+or crashes is alerted and the next runs anyway. A chain a killed process cut
+short is resumed from the link it was on when the pipeline process restarts,
+once and within a day (`scheduler.resume_interrupted_chain`); past that,
+`ops_alerts.check_pipeline_staleness` is what notices.
 
 The opposite case — a step that fails inside a run that carries on and ends
 "completed" — alerts from `ProgressTracker.fail`. Supplementary's weekly justice

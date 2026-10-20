@@ -22,6 +22,9 @@ from collections.abc import Awaitable, Callable
 import httpx
 from sqlalchemy.orm import Session
 
+from app.bill_ids import BILL_TYPES
+# Re-exported: callers (the pipeline's trend evidence among them) import it from here.
+from app.bill_ids import canonical_bill_id as canonical_bill_id
 from app.models import ExploreDocument, RepSponsoredBill, RollCall, RollCallPosition, Representative, Senator, SponsoredBill
 from app.config import settings
 from app.database import off_loop
@@ -39,11 +42,8 @@ from app.services.explore_keys import public_key
 from app.services.nomination_links import nomination_votes
 from app.services.roll_call_shape import candidate_of, shape
 
-# Congress.gov type path segment for each site bill-id prefix.
-_TYPE_PATH = {
-    "HR": "hr", "S": "s", "HRES": "hres", "SRES": "sres", "HJRES": "hjres",
-    "SJRES": "sjres", "HCONRES": "hconres", "SCONRES": "sconres",
-}
+# Congress.gov bill types (app/bill_ids.py, the one definition).
+_TYPE_PATH = BILL_TYPES
 _CACHE_TIER = "congress"
 # A bill's record changes a few times a day at most while it moves.
 _CACHE_HOURS = 6
@@ -68,22 +68,6 @@ def parse_bill_id(bill_id: str) -> tuple[str, int] | None:
     if prefix not in _TYPE_PATH or not number.isdigit():
         return None
     return _TYPE_PATH[prefix], int(number)
-
-
-def canonical_bill_id(raw: str | None) -> str | None:
-    """"H.R. 997", "hr997", "S 2398", "S.2398" -> "HR.997" / "S.2398": the
-    site's own spelling of a bill id, from any of the spellings people and
-    the site itself print (the hub shows "S. 2398"); None for anything that
-    is not a bill id. Spaces and dots carry nothing in a bill number, which
-    is how frontend/src/lib/congress.ts billPageHref reads one too."""
-    if not raw or len(raw) > 24:
-        return None
-    compact = raw.replace(".", "").replace(" ", "").upper()
-    prefix = compact.rstrip("0123456789")
-    number = compact[len(prefix):]
-    if prefix not in _TYPE_PATH or not number:
-        return None
-    return f"{prefix}.{number}"
 
 
 def typed_bill_number(query: str) -> str | None:
@@ -445,6 +429,9 @@ def vote_detail(db: Session, rc: RollCall, links: MemberLinks | None = None) -> 
         return {
             "lastName": p.last_name, "firstName": p.first_name, "party": p.party, "state": p.state,
             "position": p.position, "bucket": _bucket(p.position), "candidate": candidate_of(p.position),
+            # The id the chamber's record gives the member (House: bioguide;
+            # Senate: LIS), for the public API's positions.
+            "chamberMemberId": p.member_id,
             "page": (links.page(bioguide=p.member_id) if house
                      else links.page(last_name=p.last_name, state=p.state, lis_id=p.member_id)),
             # The member's own name and district where the site knows them;
