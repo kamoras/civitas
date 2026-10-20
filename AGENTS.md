@@ -2536,11 +2536,12 @@ the pending list).
   more), so a part wrapped in a fragment or another component drops out of
   it. A new score gets a plain line in `/about/scores`' short version,
   held to a Flesch-Kincaid grade of 8 or below.
-- A scored dimension leads with its `finding` (one template sentence from the
-  breakdown API, `services/score_findings.py`, outside `pipeline/` so its
-  wording never moves the analysis-code fingerprint); components, weights and
-  statistics go under the column's "How this is computed" disclosure. Keep a
-  finding subjectless and at about a Flesch-Kincaid grade 8 or lower.
+- A member page's money, votes and bills columns each lead with its `finding`
+  (one template sentence from the breakdown API, `services/score_findings.py`,
+  outside `pipeline/` so its wording never moves the analysis-code
+  fingerprint). No 0-100 score, component or weight reaches a member page,
+  post or feed (2026-10): the scores stay in the public API, deprecated. Keep
+  a finding subjectless and at about a Flesch-Kincaid grade 8 or lower.
 - The "this week" strip (`components/shared/ThisWeekStrip.tsx`) is an async
   server component; a client page gets it as a `strip` prop from its server
   `page.tsx`, never by fetching it on the client.

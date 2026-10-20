@@ -37,50 +37,23 @@ def _representative(id, score=50.0, district=1, **overrides):
 
 class TestPickPolitician:
     """The daily pick is drawn from senators AND representatives combined
-    (one cycle, one pool) — confirmed with the user rather than assumed —
-    but rank/total must stay per-chamber, matching the site's own
-    leaderboard (separate Senate/House tabs), or the post would state a
-    number the reader can't find anywhere else on the site."""
+    (one cycle, one pool) — confirmed with the user rather than assumed."""
 
     def test_no_candidates_returns_none(self, db_session):
-        entity, rank, total, chamber = _pick_politician(db_session)
-        assert (entity, rank, total, chamber) == (None, 0, 0, "")
+        assert _pick_politician(db_session) == (None, "")
 
-    def test_rank_is_computed_within_the_picked_entitys_own_chamber(self, db_session):
-        # The combined pool can pick a representative. Two senators (the
-        # rep's raw score would rank #1 among all three combined) — the
-        # rep's reported rank must still be "#1 of 1", not
-        # "#1 of 3", since House and Senate are ranked separately on the
-        # site's own leaderboard.
+    def test_a_representative_can_be_picked_from_the_combined_pool(self, db_session):
         db_session.add(_senator("senator-a", score=90.0))
-        db_session.add(_senator("senator-b", score=80.0))
-        rep = _representative("rep-a", score=95.0)
-        db_session.add(rep)
+        db_session.add(_representative("rep-a", score=95.0))
         db_session.flush()
 
         with patch(
             "app.pipeline.analyze.bluesky_spotlight.random.choice",
             side_effect=lambda pool: next(p for p in pool if p[1] == "house"),
         ):
-            entity, rank, total, chamber = _pick_politician(db_session)
+            entity, chamber = _pick_politician(db_session)
 
-        assert (entity.id, rank, total, chamber) == ("rep-a", 1, 1, "house")
-
-    def test_rank_is_the_leaderboards_with_ties_sharing(self, db_session):
-        # 70.4 and 69.6 both show as 70: the leaderboard ranks them 1 and
-        # 1, and 60 third. A position in the sorted list numbered the tie
-        # apart.
-        db_session.add_all([
-            _senator("sen-a", score=70.4), _senator("sen-b", score=69.6), _senator("sen-c", score=60.0),
-        ])
-        db_session.commit()
-        ranks = {}
-        for pick in ("sen-a", "sen-b", "sen-c"):
-            with patch("app.pipeline.analyze.bluesky_spotlight.random.choice",
-                       side_effect=lambda pool, p=pick: next(x for x in pool if x[0].id == p)):
-                entity, rank, total, _ = _pick_politician(db_session)
-            ranks[entity.id] = (rank, total)
-        assert ranks == {"sen-a": (1, 3), "sen-b": (1, 3), "sen-c": (3, 3)}
+        assert (entity.id, chamber) == ("rep-a", "house")
 
     def test_cycle_resets_once_the_combined_pool_is_exhausted(self, db_session):
         db_session.add(_senator("senator-a"))
@@ -89,7 +62,7 @@ class TestPickPolitician:
         db_session.add(BskySenatorSpotlight(senator_id="rep-a", chamber="house"))
         db_session.commit()
 
-        entity, rank, total, chamber = _pick_politician(db_session)
+        entity, chamber = _pick_politician(db_session)
 
         assert entity is not None
         assert db_session.query(BskySenatorSpotlight).count() == 0
@@ -107,38 +80,22 @@ class TestPickPolitician:
             "app.pipeline.analyze.bluesky_spotlight.random.choice",
             side_effect=lambda pool: pool[0],
         ):
-            entity, rank, total, chamber = _pick_politician(db_session)
+            entity, chamber = _pick_politician(db_session)
 
         assert chamber == "house"
 
 
 class TestComposeSpotlight:
-    def test_a_senator_is_their_scores_and_rank_as_numbers(self):
+    def test_no_score_or_rank_is_posted(self):
         s = _senator("Chuck Grantham", score_funding_independence=43.0,
                      score_constituent_alignment=71.25, score_legislative_effectiveness=94.0)
-        text = compose_spotlight(s, 12, 100, "senate")
-        assert text.startswith("Chuck Grantham (R-IA): Representation Score ")
-        assert ", #12 of 100 senators. " in text
-        # Whole numbers, as the scorecard shows them: one decimal posted
-        # 59.5 for a member whose scorecard read 60.
-        assert text.endswith(
-            "Funding Independence 43, Constituent Alignment 71, Legislative Effectiveness 94.")
-
-    def test_the_overall_is_the_scorecards_whole_number(self):
-        # 0.33*80 + 0.33*67 + 0.34*41 = 62.45: the scorecard shows 62.
-        s = _senator("Chuck Grantham", score_funding_independence=80.0,
-                     score_constituent_alignment=67.0, score_legislative_effectiveness=41.0)
-        assert "Representation Score 62, " in compose_spotlight(s, 1, 100, "senate")
+        text = compose_spotlight(s, "senate", "Sponsored no bills this Congress.")
+        assert text == "Chuck Grantham (R-IA): Sponsored no bills this Congress."
+        assert not re.search(r"Score|#\d|\b43\b|\b71\b|\b94\b", text)
 
     def test_a_representative_names_their_district(self):
-        text = compose_spotlight(_representative("Jane Doe", district=12), 3, 435, "house")
+        text = compose_spotlight(_representative("Jane Doe", district=12), "house")
         assert text.startswith("Jane Doe (D-CA-12): ")
-        assert "#3 of 435 representatives." in text
-
-    def test_it_fits_a_post_with_its_link(self):
-        s = _senator("Elena Ruiz Ortega", state="NV", party="D", score=33.333)
-        text = compose_spotlight(s, 100, 100, "senate")
-        assert len(text) + 1 + len("https://civitas-research.org/politicians/elena-ruiz-ortega") <= 300
 
 
 class TestPublishSpotlight:
@@ -218,8 +175,8 @@ class TestComposeWithFinding:
 
     def test_it_leads_with_the_finding_by_name(self):
         s = _senator("Jane Roe", state="NV", party="D", score=60.0)
-        text = compose_spotlight(s, 4, 100, "senate", self.FINDING)
-        assert text.startswith(f"Jane Roe (D-NV): {self.FINDING} Representation Score 60, #4 of 100 senators.")
+        text = compose_spotlight(s, "senate", self.FINDING)
+        assert text == f"Jane Roe (D-NV): {self.FINDING}"
         assert not re.search(r"\b(he|she|they|his|her|their)\b", text, re.IGNORECASE)
 
     def test_the_longest_post_fits_with_its_link(self):
@@ -228,21 +185,20 @@ class TestComposeWithFinding:
         # The longest finding template, with a two-digit rate.
         finding = ("Never broke with the party on a party-line vote, though Republicans in districts "
                    "that lean the same way break on 12%.")
-        text = compose_spotlight(rep, 435, 435, "house", finding)
+        text = compose_spotlight(rep, "house", finding)
         assert len(text) + 1 + len(profile_url(rep)) <= 300
-        assert finding in text and text.endswith(".")
+        assert finding in text
 
-    def test_parts_that_do_not_fit_are_left_out_whole(self):
+    def test_a_finding_that_does_not_fit_gives_way_whole(self):
         s = _senator("Jane Roe", state="NV", party="D", score=60.0)
-        s.id = "x" * 70  # a long link leaves room for less
-        text = compose_spotlight(s, 4, 100, "senate", self.FINDING)
-        assert len(text) + 1 + len(profile_url(s)) <= 300
-        assert "Funding Independence" not in text
-        assert text.endswith("#4 of 100 senators.")
+        s.id = "x" * 250  # a long link leaves no room for the finding
+        text = compose_spotlight(s, "senate", self.FINDING)
+        assert self.FINDING not in text
+        assert text == "Jane Roe (D-NV): money, votes and bills beside colleagues in the same party."
 
-    def test_without_a_finding_it_is_the_numbers(self):
+    def test_without_a_finding_it_says_what_the_page_holds(self):
         s = _senator("Jane Roe", state="NV", party="D", score=60.0)
-        assert compose_spotlight(s, 4, 100, "senate").endswith("Legislative Effectiveness 60.")
+        assert compose_spotlight(s, "senate").endswith("beside colleagues in the same party.")
 
     def test_the_daily_post_carries_the_finding(self, db_session, bluesky_configured):
         db_session.add(_senator("jane-roe", name="Jane Roe", state="NV", party="D"))

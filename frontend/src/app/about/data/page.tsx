@@ -119,7 +119,8 @@ export default function DataChapter() {
               cosponsor with, since the Senate records no caucus.
             </Fact>
             <Fact label="Voteview">
-              Congress-by-congress roll-call positions (Nokken-Poole), for Constituent Alignment.
+              Congress-by-congress roll-call positions (Nokken-Poole), which tell which side of the
+              party a break falls on.
             </Fact>
             <Fact label="Cooperative Election Study">
               Approval of each member among their own constituents, by party (2024 survey, Harvard

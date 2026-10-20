@@ -269,7 +269,7 @@ def feed_index():
 FOLLOWED = [
     {"kind": "member", "title": "A member of Congress",
      "description": "Each roll-call vote this Congress with the member's position, the latest action on each bill "
-                    "the member sponsored, each change in the representation score between runs, and each new stock "
+                    "the member sponsored, and each new stock "
                     "trade report or annual financial disclosure.",
      "pattern": "/feed/members/<member id>.xml", "where": "Linked from each member's profile."},
     {"kind": "bill", "title": "A bill",

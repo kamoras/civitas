@@ -6,7 +6,6 @@ import { useIndustries } from "@/hooks/useConfig";
 import { formatCurrency } from "@/lib/formatting";
 import { fecCommitteeSearchUrl } from "@/lib/sources";
 import { SHARE_EXCLUDE_ATTR } from "@/lib/shareImage";
-import ComponentBars from "./ComponentBars";
 import ScoreColumn, { Block } from "./ScoreColumn";
 import { percent } from "./format";
 
@@ -35,7 +34,7 @@ const INDUSTRIES_NAMED = 6;
 const DONORS_SHOWN = 5;
 
 const TOOLTIP =
-  "Where the money for the member's most recent completed election came from: many small donors, or PACs, a few big donors or one industry. Four parts, weighted 20 : 10 : 10 : 13. The PAC share of contributions and the share from donors giving $200 or less, each against what is typical (for a senator, a state that size; for a representative, the House median); how much of the outside money came from the top ten donors, against the chamber; and how concentrated the money is across industries, against the member's own party. A part that can't be measured is left out and the others are weighed without it.";
+  "Where the money for the member's most recent completed election came from, from FEC filings: the share given by PACs and the share given in gifts of $200 or less, against what is typical (for a senator, a state that size; for a representative, the House median), then the industries behind the money and the top donors. Shares are of contributions, not total receipts.";
 
 /** The figures behind the finding. After the finding (which states the
  *  small-gift share, or the PAC share when the filings can't say), only
@@ -77,14 +76,12 @@ function Lede({ facts, afterFinding }: { facts: FundingFacts; afterFinding: bool
 export default function FundingColumn({
   funding,
   dimension,
-  score,
   onMore,
   donorVoteLinks = 0,
   onDonorVotes,
 }: {
   funding: Senator["funding"];
   dimension: ScoreBreakdownDimension | undefined;
-  score: number;
   onMore: () => void;
   /** Stored donor-vote overlaps; with `onDonorVotes`, a link to them here,
    *  beside the money, rather than only in the tiles at the foot of the
@@ -112,9 +109,7 @@ export default function FundingColumn({
       title="Money"
       shareId="funding-independence"
       tooltip={TOOLTIP}
-      score={score}
       finding={dimension?.finding}
-      method={dimension && <ComponentBars components={dimension.components} />}
       more={{ label: "All donors and industries", onClick: onMore }}
     >
       {facts ? (

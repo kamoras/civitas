@@ -112,7 +112,7 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
           <FilterTile
             count={advancedCount}
             label="ADVANCING"
-            help="Bills (S./H.R./joint resolutions) that have been reported out of committee or gone further (to the floor, through a chamber, to the President) and haven't yet become law. Being referred to committee doesn't count: nearly every bill is, automatically. Simple/concurrent resolutions (e.g. designating an awareness month) are left out: they're routinely agreed to without debate, and Legislative Effectiveness weights them a fifth as much as a bill. Click to filter the list below to just these."
+            help="Bills (S./H.R./joint resolutions) that have been reported out of committee or gone further (to the floor, through a chamber, to the President) and haven't yet become law. Being referred to committee doesn't count: nearly every bill is, automatically. Simple/concurrent resolutions (e.g. designating an awareness month) are left out: they're routinely agreed to without debate. Click to filter the list below to just these."
             pressed={filter === "advancing"}
             onSelect={() => toggleFilter("advancing")}
             activeClass="border-signal-amber/40 bg-signal-amber/10"
@@ -163,7 +163,7 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
                       )}
                       {bill.commemorative && (
                         <span className="text-xs px-1.5 py-0.5 border border-white/15 text-ink-lo font-mono">
-                          <MetricTooltip text="Reads as commemorative: naming a post office or building, awarding a medal, recognising a person or event. Legislative Effectiveness weights it 1× instead of a bill's 5×, as Volden & Wiseman's scores do. Detected from the title by a classifier calibrated against their coding.">
+                          <MetricTooltip text="Reads as commemorative: naming a post office or building, awarding a medal, recognising a person or event. Detected from the title by a classifier calibrated against their coding.">
                             COMMEMORATIVE · 1×
                           </MetricTooltip>
                         </span>

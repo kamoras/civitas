@@ -31,7 +31,7 @@ const FALLBACK_SOURCES: readonly { label: string; detail: string }[] = [
 const TERMS: readonly { label: string; detail: string }[] = [
   { label: "CODE", detail: "Open source · AGPL-3.0 · re-runnable" },
   { label: "MODELS", detail: "Run locally, no third-party AI services" },
-  { label: "SCORES", detail: "Fixed formulas, no AI · missing data scores a neutral 50" },
+  { label: "FIGURES", detail: "Fixed formulas, no AI · missing data is marked, never zero" },
 ];
 
 const ROW =

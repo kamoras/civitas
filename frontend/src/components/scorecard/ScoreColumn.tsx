@@ -6,9 +6,9 @@ import MetricTooltip from "@/components/checker/MetricTooltip";
 import { onThisPage } from "@/lib/onThisPage";
 import { LONG_LABEL, labelCase } from "@/lib/controlStyles";
 
-/** One of a member's three scored dimensions, as a column: its name, its
- *  share of the Representation Score, the score itself, and the evidence
- *  behind it — laid out the way the ballot page lays out a contest (a
+/** One column of a record: a member's money, votes or bills, or a
+ *  president's scored dimension (with its score), and the evidence behind
+ *  it, laid out the way the ballot page lays out a contest (a
  *  shaded header over a hairline-ruled box). The body grows so columns in
  *  a row share one height, and the "all of it" link sits on the bottom
  *  edge, level across the row. */
@@ -28,8 +28,8 @@ export default function ScoreColumn({
   tooltip?: string;
   /** The column's anchor id; also what its shared image and link are named by. */
   shareId: string;
-  score: number | null | undefined;
-  /** What the score found, in one plain sentence (the breakdown API's). */
+  score?: number | null;
+  /** What the record shows, in one plain sentence (the breakdown API's). */
   finding?: string | null;
   /** How the score is computed (its components and their statistics),
    *  kept behind a disclosure under the evidence. */

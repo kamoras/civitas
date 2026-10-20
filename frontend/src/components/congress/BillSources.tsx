@@ -72,9 +72,9 @@ export default function BillSources({
       <>
         Civitas&apos;s reading of the action history, the stages{" "}
         <Link href="/about/scores#effectiveness" className={LINK}>
-          Legislative Effectiveness
+          a member&apos;s bills moved
         </Link>{" "}
-        scores, counted over the bills sitting members sponsored.
+        are counted on, over the bills sitting members sponsored.
       </>,
     ]);
   }

@@ -86,7 +86,6 @@ export default function MemberScorecard({
 }) {
   const [view, setView] = useState<DrawerView | null>(null);
   const close = useCallback(() => setView(null), []);
-  const scores = member.representationScore;
   const seat =
     chamber === "house" && district != null
       ? `seats that lean like ${houseSeatLabel(member.state, district)}`
@@ -164,7 +163,6 @@ export default function MemberScorecard({
             <FundingColumn
               funding={member.funding}
               dimension={breakdown?.fundingIndependence}
-              score={scores.fundingIndependence}
               onMore={() => setView("donors")}
               donorVoteLinks={member.lobbyingMatches?.length ?? 0}
               onDonorVotes={() => setView("donorVotes")}
@@ -177,14 +175,12 @@ export default function MemberScorecard({
               breaks={member.votingRecord.votedAgainstPartyCount}
               approval={member.constituentApproval}
               dimension={breakdown?.constituentAlignment}
-              score={scores.constituentAlignment}
               onMore={() => setView("votes")}
             />
             <EffectivenessColumn
               chamber={chamber}
               bills={member.sponsoredBills ?? []}
               dimension={breakdown?.legislativeEffectiveness}
-              score={scores.legislativeEffectiveness}
               onMore={() => setView("bills")}
             />
           </div>

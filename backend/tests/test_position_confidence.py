@@ -452,15 +452,15 @@ def test_the_frontend_quotes_the_shipped_figures():
     assert split in agents and split in readme
     # A position published with no count: "about a fifth" in the entry.
     assert round(data["uncounted_weight"] * 5) == 1 and "about a fifth" in entry
-    # Both texts describe one curve over every Congress; a rerun choosing
+    # AGENTS.md and the changelog describe one curve over every Congress; a rerun choosing
     # another structure must rewrite them (and README and AGENTS.md), so
     # this fails until it does.
     assert data["structure"] == "pooled", "rewrite the prose that describes one curve"
     first = 1789 + 2 * (_script().FIRST_CONGRESS - 1)
-    assert f"every Congress since {first}" in page and f"every Congress since {first}" in agents
+    assert f"every Congress since {first}" in agents
     assert f"the years the data cover ({first} to today)" in entry
     year = 1789 + 2 * (data["era_split"] - 1)
-    assert f"since {year}" in page and f"since {year}" in entry
+    assert f"since {year}" in entry
 
 
 def test_the_switch_tests_take_the_pairs_their_names_say(monkeypatch):

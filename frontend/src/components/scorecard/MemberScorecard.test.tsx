@@ -325,50 +325,16 @@ describe("MemberScorecard", () => {
     );
     expect(screen.getByText("Votes against party (1)")).toBeInTheDocument();
     expect(screen.getByText("From the right flank, not counted (1)")).toBeInTheDocument();
-    // The fixture scores no position part: the flank note says it comes later.
-    expect(screen.getByText(/which isn't scored for this Congress yet/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/so they are not counted as breaks toward the other party/)
+    ).toBeInTheDocument();
     expect(screen.getByText(/Each bill or nomination counts once/)).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "H.R. 8800" })).toHaveLength(2);
     // Served with the score: nothing to fetch.
     expect(fetchRepVotes).not.toHaveBeenCalled();
   });
 
-  it("points the flank note at the position part when it is scored", async () => {
-    const scored = {
-      ...breakdown,
-      constituentAlignment: {
-        ...breakdown.constituentAlignment,
-        components: [
-          ...breakdown.constituentAlignment.components,
-          { label: "Position congruence", weight: 0.3, score: 40, detail: "" },
-        ],
-        facts: {
-          party: "R",
-          partyVotes: 292,
-          breaks: 0,
-          breakRate: 0,
-          expectedBreakRate: 0.004,
-          flankBreaks: 1,
-          breakVotes: [],
-          flankBreakVotes: [{ vote: "Yea", rollCall: recommit.rollCall! }],
-        },
-      },
-    };
-    render(
-      <MemberScorecard
-        member={member}
-        chamber="house"
-        breakdown={scored}
-        district={2}
-        stateName="Tennessee"
-
-        committees={[]}
-      />
-    );
-    expect(screen.getByText(/measured by position congruence, scored below\./)).toBeInTheDocument();
-  });
-
-  it("shows constituents' approval by party in the alignment column, marked not scored", async () => {
+  it("shows constituents' approval by party in the alignment column", async () => {
     // Illustrative figures, not the fixture member's.
     const surveyed = {
       ...member,
@@ -405,9 +371,7 @@ describe("MemberScorecard", () => {
       expect.stringMatching(/Democrats21% approve40 with an opinion · mostly based on similar/),
       expect.stringMatching(/Republicans74% approve90 with an opinion$/),
     ]);
-    expect(within(column).getByText(/Informational, not scored\./)).toBeInTheDocument();
-    // The House isn't scored on approval: no [?] claims it is.
-    expect(within(column).queryByText(/part of the score/)).not.toBeInTheDocument();
+    expect(within(column).queryByText(/score/)).not.toBeInTheDocument();
     const violations = (
       await axe.run(document.body, { rules: { "color-contrast": { enabled: false } } })
     ).violations.map((v) => v.id);
@@ -511,53 +475,6 @@ describe("MemberScorecard", () => {
     );
   });
 
-  it("says which approval figures the score reads", async () => {
-    // Driven by the breakdown's facts.approval (served for senators, v6.29).
-    const rated = {
-      ...member,
-      constituentApproval: {
-        survey: "CES 2024 Common Content (pre-election wave, Oct-Nov 2024)",
-        fielded: "2024-10/2024-11",
-        surveyedAs: "Jordan Hale",
-        byParty: [
-          { party: "D" as const, approve: 0.2, ownWeight: 0.6, respondents: 300 },
-          { party: "R" as const, approve: 0.9, ownWeight: 0.7, respondents: 500 },
-          { party: "I" as const, approve: 0.5, ownWeight: 0.6, respondents: 400 },
-        ],
-      },
-    };
-    const approval = {
-      groups: [
-        { group: "D" as const, approve: 0.2, typical: 0.13 },
-        { group: "I" as const, approve: 0.5, typical: 0.44 },
-      ],
-      z: 0.4,
-      survey: "CES 2024",
-    };
-    const ca = breakdown.constituentAlignment;
-    render(
-      <main>
-        <MemberScorecard
-          member={rated}
-          chamber="house"
-          breakdown={{
-            ...breakdown,
-            constituentAlignment: { ...ca, facts: { ...ca.facts, approval } },
-          }}
-          stateName="Tennessee"
-          committees={[]}
-        />
-      </main>
-    );
-    const column = document.getElementById("constituent-alignment")!;
-    expect(
-      within(column).getByText(
-        /The Democrats' and independents' figures are part of the score \(constituent approval, below\); the rest is shown, not scored\./
-      )
-    ).toBeInTheDocument();
-    expect(within(column).queryByText(/Informational, not scored/)).not.toBeInTheDocument();
-  });
-
   it("lists only bills as furthest along, not resolutions the chamber agreed to", async () => {
     const config = {
       industries: {},
@@ -603,7 +520,7 @@ describe("MemberScorecard", () => {
     expect(within(column).queryByText(/Electing a Member/)).not.toBeInTheDocument();
   });
 
-  it("leads each column with the API's finding, and keeps the method behind a disclosure", async () => {
+  it("leads each column with the API's finding, with no 0 to 100 score behind it", async () => {
     const withFindings = {
       fundingIndependence: {
         ...breakdown.fundingIndependence,
@@ -630,12 +547,12 @@ describe("MemberScorecard", () => {
       const finding = within(column).getByText(withFindings[dimension].finding!);
       // First in the column's body, before the evidence.
       expect(finding.parentElement!.firstElementChild).toBe(finding);
-      // The components and their statistics sit in a closed disclosure.
-      const details = within(column).getByText("How this is computed").closest("details")!;
-      expect(details.open).toBe(false);
+      // No score disclosure and no component bars (redesign 2026-10).
+      expect(within(column).queryByText("How this is computed")).not.toBeInTheDocument();
       expect(
-        within(details).getByText(withFindings[dimension].components[0].label)
-      ).toBeInTheDocument();
+        within(column).queryByText(withFindings[dimension].components[0].label)
+      ).not.toBeInTheDocument();
+      expect(within(column).queryByText(/out of 100/)).not.toBeInTheDocument();
     }
     // The figures the findings leave out are still on the page.
     expect(
@@ -659,10 +576,11 @@ describe("MemberScorecard", () => {
     await user.click(screen.getByRole("link", { name: "Methods, data & citation" }));
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     const section = document.getElementById("methods")!;
-    // Every component with the scorer's own sentence, not behind a tooltip.
+    // Sources and periods, not component scores.
+    expect(within(section).getAllByText("Source")[0]).toBeVisible();
     expect(
-      within(section).getByText(breakdown.constituentAlignment.components[0].detail)
-    ).toBeVisible();
+      within(section).queryByText(breakdown.constituentAlignment.components[0].detail)
+    ).not.toBeInTheDocument();
     expect(
       within(section).getByRole("link", { name: /Every vote this Congress, as a spreadsheet/ })
     ).toHaveAttribute("href", "/api/public/v1/representatives/jordan-hale/votes.csv");

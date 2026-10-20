@@ -11,8 +11,9 @@ page never makes a reader's feed show an entry twice.
 
 What each feed holds:
 - a member: each roll-call vote this Congress, the latest action on each
-  bill the member sponsored, each change in the representation score
-  between runs, and each new trade report or annual disclosure;
+  bill the member sponsored, and each new trade report or annual
+  disclosure (no score changes: member pages show no score, redesign
+  2026-10);
 - a bill: each action Congress.gov lists (as last read by a pipeline run
   or a reader's visit) and each stored roll call on it;
 - an agency (with its sub-agencies): each proposed and final rule, each
@@ -41,7 +42,6 @@ from app.models import (
     RepStockTrade,
     RollCall,
     RollCallPosition,
-    ScoreSnapshot,
     Senator,
     SponsoredBill,
     StockTrade,
@@ -192,33 +192,6 @@ def _member_bills(db: Session, chamber: str, member) -> list[Entry]:
     return out
 
 
-def _score_changes(db: Session, chamber: str, member, bio: str, page: str) -> list[Entry]:
-    entity = "senator" if chamber == "senate" else "representative"
-    rows = (db.query(ScoreSnapshot).filter(ScoreSnapshot.entity_type == entity, ScoreSnapshot.entity_id == member.id)
-            .order_by(ScoreSnapshot.date.asc(), ScoreSnapshot.id.asc()).all())
-    # A day's last snapshot stands for the day: one entry per day at most,
-    # so the entry id (on the date) is never shared.
-    snaps = list({s.date: s for s in rows}.values())
-    out = []
-    for before, after in zip(snaps, snaps[1:]):
-        old, new = round(before.overall_score), round(after.overall_score)
-        when = _day(after.date)
-        if old == new or when is None:
-            continue
-        method = (f" The scoring method changed from {before.algorithm_version} to {after.algorithm_version} "
-                  "between the two runs, so part or all of the change may be the method's."
-                  if before.algorithm_version and after.algorithm_version
-                  and before.algorithm_version != after.algorithm_version else "")
-        out.append(Entry(
-            id=f"{_TAG}score/{entity}/{bio}/{after.date}",
-            title=f"{member.name}'s representation score went from {old} to {new}",
-            url=page, when=when, category="score", label="Score change",
-            paragraphs=(f"Representation score {old} on {before.date}, {new} on {after.date}.{method}",),
-            source_url=f"{SITE_URL}/about/scores",
-        ))
-    return out[-LENGTH:]
-
-
 def _money(value: float) -> str:
     return f"${value:,.0f}"
 
@@ -288,7 +261,7 @@ def member_feed(db: Session, member_id: str) -> EntityFeed | None:
     bio = m.bioguide_id or m.id
     page = f"/politicians/{m.id}"
     entries = (_member_votes(db, chamber, m, bio) + _member_bills(db, chamber, m)
-               + _score_changes(db, chamber, m, bio, page) + _member_trades(db, chamber, m)
+               + _member_trades(db, chamber, m)
                + _member_disclosures(db, chamber, m))
     office = "Senator" if chamber == "senate" else "Representative"
     return EntityFeed(

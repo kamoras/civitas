@@ -21,6 +21,11 @@ def to_camel(string: str) -> str:
 API_V1_SUNSET = "2027-01-04"
 _DEPRECATED = f"Deprecated: the composite is no longer shown on the site (2026-10); removed in API v2, sunset {API_V1_SUNSET}. "
 _DEPRECATED_FIELD = {"deprecated": True}
+# A member's 0-100 part scores and how they are built: member pages stopped
+# showing them too (2026-10), so they go with the composite in v2. A
+# president's scores are not deprecated.
+_DEPRECATED_PART = (f"Deprecated: member pages no longer show 0-100 scores (2026-10); removed in API v2, sunset "
+                    f"{API_V1_SUNSET}. Read the breakdown's peerComparison and each dimension's facts instead. ")
 
 class CamelModel(BaseModel):
     model_config = ConfigDict(
@@ -68,16 +73,20 @@ class HeldScoreSchema(CamelModel):
 
 class RepresentationScoreSchema(CamelModel):
     funding_independence: float = Field(
-        description="0-100: how free the member is from PAC and large-donor dependence. Weighted into overall")
+        description=_DEPRECATED_PART + "0-100: how free the member is from PAC and large-donor dependence. "
+                                       "Weighted into overall", json_schema_extra=_DEPRECATED_FIELD)
     promise_persistence: float | None = Field(
         None,
         description="Always null. It measured campaign promises kept, and campaign-promise tracking was removed in 2026-07 (its LLM evaluations were unreliable); the stored value since then was a constant, not a measurement. Kept so existing clients still find the field")
     constituent_alignment: float = Field(
-        description="0-100: how the member's votes compare with what the seat's partisan lean predicts. Weighted into overall")
+        description=_DEPRECATED_PART + "0-100: how the member's votes compare with what the seat's partisan lean "
+                                       "predicts. Weighted into overall", json_schema_extra=_DEPRECATED_FIELD)
     funding_diversity: float = Field(
-        description="0-100, informational: how widely funding spreads across industries and donor kinds")
+        description=_DEPRECATED_PART + "0-100, informational: how widely funding spreads across industries and "
+                                       "donor kinds", json_schema_extra=_DEPRECATED_FIELD)
     legislative_effectiveness: float = Field(
-        0.0, description="0-100: how far the member's bills advance, and the coalitions they draw. Weighted into overall")
+        0.0, description=_DEPRECATED_PART + "0-100: how far the member's bills advance, and the coalitions they "
+                                            "draw. Weighted into overall", json_schema_extra=_DEPRECATED_FIELD)
     # Backend-computed overall (score_calculator.compute_overall_score) — the
     # frontend must never recompute this from the sub-scores itself (see
     # lib/representation.ts's removed weightedScore).
@@ -1020,11 +1029,12 @@ class PublicScoreSnapshotSchema(_PublicModel):
     date: str = Field(description="When the scores were computed, YYYY-MM-DD")
     overall: float = Field(description=_DEPRECATED + "0-100, like the sub-scores here; read `facts` instead",
                            json_schema_extra=_DEPRECATED_FIELD)
-    funding_independence: float
+    funding_independence: float = Field(description=_DEPRECATED_PART + "0-100", json_schema_extra=_DEPRECATED_FIELD)
     promise_persistence: float | None = Field(None, description="Always null: see representationScore")
-    constituent_alignment: float
-    funding_diversity: float
-    legislative_effectiveness: float
+    constituent_alignment: float = Field(description=_DEPRECATED_PART + "0-100", json_schema_extra=_DEPRECATED_FIELD)
+    funding_diversity: float = Field(description=_DEPRECATED_PART + "0-100", json_schema_extra=_DEPRECATED_FIELD)
+    legislative_effectiveness: float = Field(description=_DEPRECATED_PART + "0-100",
+                                             json_schema_extra=_DEPRECATED_FIELD)
     algorithm_version: str | None = Field(description="The scoring version that computed this snapshot; a "
                                                       "change between two snapshots is a method change, not "
                                                       "only a change in the record. Null for snapshots taken "
@@ -1119,27 +1129,30 @@ class PublicSinceScoredSchema(_PublicModel):
 
 
 class PublicScoreDimensionSchema(_PublicModel):
-    stored_score: float = Field(description="The dimension's score on the record (representationScore), "
+    stored_score: float = Field(json_schema_extra=_DEPRECATED_FIELD, description=_DEPRECATED_PART + "The dimension's score on the record (representationScore), "
                                             "from the last scoring run")
-    score: int = Field(description="The score the components below give, by: " + _BREAKDOWN_RULE
+    score: int = Field(json_schema_extra=_DEPRECATED_FIELD, description=_DEPRECATED_PART + "The score the components below give, by: " + _BREAKDOWN_RULE
                                    + ". With basis \"scored\" they are the components the run that stored the "
                                    "score worked out, so this equals storedScore")
-    sum: float | None = Field(description="The components combined by that rule before rounding and the 0-100 "
+    sum: float | None = Field(json_schema_extra=_DEPRECATED_FIELD, description=_DEPRECATED_PART + "The components combined by that rule before rounding and the 0-100 "
                                           "clamp, from the components as published (one decimal); null when none "
                                           "was measured")
-    clamped: bool = Field(description="True when sum fell outside 0-100 and the score was held at the bound")
+    clamped: bool = Field(json_schema_extra=_DEPRECATED_FIELD, description=_DEPRECATED_PART + "True when sum fell outside 0-100 and the score was held at the bound")
     basis: Literal["scored", "recomputed"] = Field(
         description="scored: the components the run that stored the score worked out, kept with it. recomputed: "
                     "worked out now from the stored inputs with recomputedWith's code, for a score stored before "
                     "its run's components were kept; it can then differ from storedScore")
     since_scored: PublicSinceScoredSchema | None = Field(
-        description="Set when the score, recomputed now on today's records, would differ: records changed after "
+        json_schema_extra=_DEPRECATED_FIELD,
+        description=_DEPRECATED_PART + "Set when the score, recomputed now on today's records, would differ: records changed after "
                     "the run (a bill's stage, say), which the next nightly run scores. Null when it would not, or "
                     "basis is recomputed")
     weight_in_overall: float | None = Field(
-        description="Its weight in representationScore.overall; null for an informational dimension")
+        json_schema_extra=_DEPRECATED_FIELD,
+        description=_DEPRECATED_PART + "Its weight in representationScore.overall; null for an informational dimension")
     components: list[PublicScoreComponentSchema] = Field(
-        description="Component scores are rounded to one decimal; the score is worked out from unrounded ones, "
+        json_schema_extra=_DEPRECATED_FIELD,
+        description=_DEPRECATED_PART + "Component scores are rounded to one decimal; the score is worked out from unrounded ones, "
                     "so recomputing from these lands within 0.1 of a value that rounds to score")
     note: str | None = Field(description="Why the dimension is a neutral 50, when no component could be measured")
     finding: str | None = Field(description="The one-sentence finding the profile states")
@@ -1264,7 +1277,9 @@ class PublicScoreBreakdownSchema(_PublicModel):
                                              "dimension whose basis is recomputed)")
     overall: float = Field(json_schema_extra=_DEPRECATED_FIELD, description=_DEPRECATED + "representationScore.overall: sum(weights[k] x dimensions[k].storedScore), "
                                        "rounded to 2 decimals")
-    weights: dict[str, float] = Field(description="Each weighted dimension's weight in overall (they sum to 1)")
+    weights: dict[str, float] = Field(json_schema_extra=_DEPRECATED_FIELD,
+                                      description=_DEPRECATED_PART + "Each weighted dimension's weight in overall "
+                                                                     "(they sum to 1)")
     dimensions: PublicScoreDimensionsSchema
     references: PublicScoreReferencesSchema = Field(
         description="The population and seat reference values the components were compared against, as the "

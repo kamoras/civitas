@@ -342,7 +342,7 @@ export default function VotingRecord({
           {Math.round(partyLoyaltyPct)}%
         </div>
         <div className="[&>span]:justify-center text-ink-min text-[11px] sm:text-xs">
-          <MetricTooltip text="The share of this Congress's party-line votes (at least 65% of one party voting yes and at most 35% of the other) on which the member voted with most of their own party. Each bill or nomination counts once, however many times it came to a vote, and a vote against the party from its own flank isn't counted against it: the same count Constituent Alignment scores.">
+          <MetricTooltip text="The share of this Congress's party-line votes (at least 65% of one party voting yes and at most 35% of the other) on which the member voted with most of their own party. Each bill or nomination counts once, however many times it came to a vote, and a vote against the party from its own flank isn't counted against it: the same count the profile's breaks figure uses.">
             PARTY LOYALTY
           </MetricTooltip>
         </div>
@@ -355,7 +355,7 @@ export default function VotingRecord({
           {votedAgainstPartyCount.toLocaleString()}
         </div>
         <div className="[&>span]:justify-center text-ink-min text-[11px] sm:text-xs">
-          <MetricTooltip text="Party-line votes this Congress on which the member sided with the other party, each bill or nomination once: the breaks Constituent Alignment counts. Breaks from the party's own flank are listed on the scorecard but not counted.">
+          <MetricTooltip text="Party-line votes this Congress on which the member sided with the other party, each bill or nomination once: the breaks figure the profile compares with peers. Breaks from the party's own flank are listed on the scorecard but not counted.">
             BROKE PARTY LINE
           </MetricTooltip>
         </div>

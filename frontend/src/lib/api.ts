@@ -2025,8 +2025,8 @@ export interface ScoreSnapshot {
   /** Dimension name -> score. Keys differ by entity type (senator/rep:
    * fundingIndependence/constituentAlignment/
    * fundingDiversity/legislativeEffectiveness; president: publicMandate/
-   * effectiveness/historicalLegacy) — untyped here since
-   * ScoreTrend (the only consumer) only ever reads date/overallScore. */
+   * effectiveness/historicalLegacy). Not shown for members; the profile
+   * reads only date and facts. */
   scores: Record<string, number>;
   /** The peer-comparison measures that day (backend app/measures.py), keyed
    *  like PeerMeasure.key; null before they were kept (2026-10-19). */
