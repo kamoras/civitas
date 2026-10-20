@@ -21,7 +21,7 @@ describe("BallotBasisNotice", () => {
       />
     );
     expect(screen.getByTestId("ballot-superseded")).toBeInTheDocument();
-    expect(screen.getByText(/NOT BALLOT POSITIONS/i)).toBeInTheDocument();
+    expect(screen.getByText(/Not ballot positions/i)).toBeInTheDocument();
     expect(screen.getByText(/95 days ago/)).toBeInTheDocument();
   });
 

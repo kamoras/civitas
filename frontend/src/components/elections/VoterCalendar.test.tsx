@@ -83,14 +83,14 @@ describe("VoterCalendar", () => {
       </main>
     );
     expect(
-      screen.getByRole("heading", { name: "VOTER DEADLINES · WASHINGTON" })
+      screen.getByRole("heading", { name: "Voter deadlines · Washington" })
     ).toBeInTheDocument();
     expect(wide().getByText(/^Registration by mail closed Oct 5\. Still open/)).toBeInTheDocument();
     // The next deadline is registration, already said: no second line.
     expect(wide().queryByText(/^Next deadline:/)).not.toBeInTheDocument();
     const list = wide().getByText("Every deadline, with its source").closest("details")!;
     const rows = within(list).getAllByRole("listitem", { hidden: true });
-    expect(rows[0]).toHaveTextContent("CLOSEDRegistration by mail closed Oct 5");
+    expect(rows[0]).toHaveTextContent("ClosedRegistration by mail closed Oct 5");
     expect(rows[1]).toHaveTextContent("6 days left");
     expect(rows[1]).toHaveTextContent("Register online up to 8 days before Election Day.");
     expect(
@@ -143,7 +143,7 @@ describe("VoterCalendar", () => {
         />
       </main>
     );
-    const section = screen.getByRole("region", { name: "VOTER DEADLINES · NEW YORK" });
+    const section = screen.getByRole("region", { name: "Voter deadlines · New York" });
     expect(section).toHaveTextContent(
       "We couldn't read New York's voter deadlines from its election board, so we don't list any. Check your deadlines with your county board of elections"
     );
@@ -216,7 +216,7 @@ describe("VoterCalendar: registering", () => {
       "open"
     );
     expect(document.querySelector('[data-calendar="wide"] [aria-hidden="true"]')).toHaveTextContent(
-      "REGISTER BY MON, OCT 26"
+      "Register by Mon, Oct 26"
     );
     const r = await axe.run(document.body, { rules: { "color-contrast": { enabled: false } } });
     expect(r.violations.map((v) => v.id)).toEqual([]);

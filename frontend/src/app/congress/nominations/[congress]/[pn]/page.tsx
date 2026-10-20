@@ -184,9 +184,7 @@ export default async function NominationPage({ params }: PageProps) {
             >
               <header className="flex flex-col gap-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-lo">
-                    {eyebrow}
-                  </p>
+                  <p className="font-mono text-xs text-ink-lo">{eyebrow}</p>
                   <ShareSectionButton label="This nomination" withStrip={false} />
                 </div>
                 <h1
@@ -212,9 +210,7 @@ export default async function NominationPage({ params }: PageProps) {
               <dl className="grid grid-cols-1 gap-px border border-white/15 bg-white/15 sm:grid-cols-2 lg:grid-cols-3">
                 {facts.map(([label, value]) => (
                   <div key={label} className="flex flex-col gap-1 bg-surface p-3">
-                    <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
-                      {label}
-                    </dt>
+                    <dt className="font-mono text-xs text-ink-min">{label}</dt>
                     <dd className="text-base text-ink">{value}</dd>
                   </div>
                 ))}
@@ -222,7 +218,7 @@ export default async function NominationPage({ params }: PageProps) {
 
               {final && (
                 <div className="border border-white/15 bg-surface p-4 sm:p-5">
-                  <h2 className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
+                  <h2 className="font-mono text-xs text-ink-min">
                     The vote to confirm · roll call {final.number}, {shortDate(final.date)}
                   </h2>
                   <p className="mt-2 flex flex-col gap-1">
@@ -293,7 +289,7 @@ export default async function NominationPage({ params }: PageProps) {
                 <NameList names={names.slice(0, SHOWN_NAMES)} />
                 {names.length > SHOWN_NAMES && (
                   <details>
-                    <summary className="cursor-pointer font-mono text-xs uppercase tracking-[0.12em] text-ink-lo hover:text-phos">
+                    <summary className="cursor-pointer font-mono text-xs text-ink-lo hover:text-phos">
                       [The other {(names.length - SHOWN_NAMES).toLocaleString()}]
                     </summary>
                     <NameList names={names.slice(SHOWN_NAMES)} />

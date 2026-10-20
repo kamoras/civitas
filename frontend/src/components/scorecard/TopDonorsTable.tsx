@@ -34,25 +34,25 @@ export default function TopDonorsTable({ donors }: { donors: Donor[] }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
-        <caption className="mb-2 text-left font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
+        <caption className="mb-2 text-left font-mono text-xs text-ink-min">
           Top donors · fec.gov
         </caption>
         <thead>
           <tr className="border-b border-white/[0.07] text-xs text-ink-min">
             <th scope="col" className="py-2 pr-2 sm:pr-4 text-left">
-              RANK
+              Rank
             </th>
             <th scope="col" className="py-2 pr-2 sm:pr-4 text-left">
-              DONOR
+              Donor
             </th>
             <th scope="col" className="py-2 pr-2 sm:pr-4 text-right">
-              AMOUNT
+              Amount
             </th>
             {/* Below sm the type moves under the donor's name: as a fourth
                 column its longest word (MANUFACTURING) left DONOR about
                 65px at 320px, and names wrapped mid-word. */}
             <th scope="col" className="hidden py-2 text-right sm:table-cell">
-              TYPE
+              Type
             </th>
           </tr>
         </thead>
@@ -85,7 +85,7 @@ export default function TopDonorsTable({ donors }: { donors: Donor[] }) {
                   !NO_SPONSOR.has(donor.pacSponsor.toLowerCase().trim()) &&
                   donor.pacSponsor.length > 2 && (
                     <div className="mt-0.5 text-xs text-ink-lo [overflow-wrap:anywhere]">
-                      BEHIND THE PAC: {donor.pacSponsor}
+                      Behind the PAC: {donor.pacSponsor}
                     </div>
                   )}
                 {donor.pacAnalysis && !EMPTY_ANALYSIS.test(donor.pacAnalysis) && (

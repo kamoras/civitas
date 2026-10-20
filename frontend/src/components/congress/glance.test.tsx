@@ -24,8 +24,8 @@ const GLANCE: Glance = {
   pipeline: {
     total: 19195,
     milestones: [
-      { label: "Introduced", bills: 19195, share: 1, shareText: "100%" },
-      { label: "Became law", bills: 122, share: 0.0064, shareText: "0.6%" },
+      { label: "Introduced", stage: "INTRODUCED", bills: 19195, share: 1, shareText: "100%" },
+      { label: "Became law", stage: "ENACTED", bills: 122, share: 0.0064, shareText: "0.6%" },
     ],
   },
 };
@@ -96,7 +96,16 @@ describe("CongressGlance", () => {
       "/congress/month/2025-01"
     );
     const pipe = screen.getByRole("table", { name: /log scale/ });
-    expect(within(pipe).getByRole("rowheader", { name: "Became law" })).toBeInTheDocument();
+    // Each step opens the very bills it counts (?reached=, not ?stage=).
+    expect(within(pipe).getByRole("rowheader", { name: /^Became law/ })).toBeInTheDocument();
+    expect(within(pipe).getByRole("link", { name: "Became law: 122 bills" })).toHaveAttribute(
+      "href",
+      "/congress/bills?reached=ENACTED"
+    );
+    expect(within(pipe).getByRole("link", { name: "Introduced: 19,195 bills" })).toHaveAttribute(
+      "href",
+      "/congress/bills?reached=INTRODUCED"
+    );
     expect(within(pipe).getByText("122")).toBeInTheDocument();
     expect(container.querySelectorAll("[data-share-section]")).toHaveLength(2);
     const r = await axe.run(document.body, { rules: { "color-contrast": { enabled: false } } });

@@ -106,7 +106,7 @@ function ResultCard({ result, query }: { result: ExploreResult; query: string })
       <Link href={detailHref} className="block p-4 hover:brightness-125">
         <div className="flex flex-wrap items-start justify-between gap-x-3 mb-2">
           <div className="flex min-w-0 items-center gap-2 flex-wrap">
-            <span className={`text-xs font-mono tracking-wider ${chamberColor(result.chamber)}`}>
+            <span className={`text-xs font-mono ${chamberColor(result.chamber)}`}>
               {result.chamber === "Regulatory" && result.agencyName
                 ? result.agencyName
                 : chamberLabel(result.chamber)}
@@ -117,8 +117,8 @@ function ResultCard({ result, query }: { result: ExploreResult; query: string })
               // No pulse: the fading text dropped below 4.5:1 contrast for
               // part of every cycle (axe, WCAG 1.4.3), and an endless blink
               // on every open-comment result is motion nobody can pause.
-              <span className="text-xs font-mono tracking-wide px-1.5 py-0.5 bg-phos/20 text-phos border border-phos/30">
-                OPEN FOR COMMENT
+              <span className="text-xs font-mono px-1.5 py-0.5 bg-phos/20 text-phos border border-phos/30">
+                Open for comment
               </span>
             )}
           </div>
@@ -145,23 +145,23 @@ function ResultCard({ result, query }: { result: ExploreResult; query: string })
             )}
             {(result.citedByCount ?? 0) > 0 && (
               <span
-                className="text-xs font-mono tracking-wide text-ink-min"
+                className="text-xs font-mono text-ink-min"
                 title="Other federal documents in this index that cite this one"
               >
-                CITED BY {result.citedByCount}
+                Cited by {result.citedByCount}
               </span>
             )}
             {(result.duplicateCount ?? 0) > 0 && (
               <span
-                className="text-xs font-mono tracking-wide text-ink-min"
+                className="text-xs font-mono text-ink-min"
                 title="Near-identical copies of this document collapsed into this result"
               >
-                +{result.duplicateCount} DUPLICATE
-                {result.duplicateCount !== 1 ? "S" : ""}
+                +{result.duplicateCount} duplicate
+                {result.duplicateCount !== 1 ? "s" : ""}
               </span>
             )}
           </div>
-          <span className="text-xs font-mono tracking-wide text-ink-lo">VIEW DETAILS →</span>
+          <span className="text-xs font-mono text-ink-lo">View details →</span>
         </div>
       </Link>
 
@@ -171,10 +171,10 @@ function ResultCard({ result, query }: { result: ExploreResult; query: string })
           onClick={(e) => e.stopPropagation()}
           className="flex items-center justify-center gap-2 mx-3 mb-3 px-4 py-2 border border-signal-cyan/40 text-signal-cyan hover:text-phos
                      hover:border-signal-cyan/40 hover:bg-signal-cyan/10
-                     text-xs font-mono tracking-wide transition-colors"
+                     text-xs font-mono transition-colors"
         >
           <span aria-hidden="true">✎</span>
-          SUBMIT YOUR COMMENT ·{" "}
+          Submit your comment ·{" "}
           {remaining === 0 ? "closes today" : `${remaining} day${remaining !== 1 ? "s" : ""} left`}
         </Link>
       )}
@@ -551,7 +551,7 @@ function ExplorePageInner() {
           </PageMasthead>
 
           {/* Search form */}
-          <form ref={formRef} onSubmit={handleSubmit} className="mb-6 ">
+          <form ref={formRef} onSubmit={handleSubmit} className="mb-6">
             <div className="panel">
               <TerminalTitlebar title="Query" />
               <div className="p-4">
@@ -578,11 +578,11 @@ function ExplorePageInner() {
                     disabled={loading || (!query.trim() && !politicianId && !agency)}
                     aria-busy={loading}
                     aria-label={loading ? "Searching" : "Search"}
-                    className="min-w-[7.5rem] text-xs font-mono tracking-widest text-signal-cyan hover:text-phos disabled:text-ink-min transition-colors shrink-0 px-2 py-1
+                    className="min-w-[7.5rem] text-xs font-mono text-signal-cyan hover:text-phos disabled:text-ink-min transition-colors shrink-0 px-2 py-1
                                border border-white/15 hover:border-signal-cyan/40 disabled:border-white/[0.07]
                                "
                   >
-                    {loading ? "SEARCHING..." : "SEARCH"}
+                    {loading ? "Searching..." : "Search"}
                   </button>
                 </div>
               </div>
@@ -704,9 +704,9 @@ function ExplorePageInner() {
               <button
                 type="button"
                 onClick={clearPolitician}
-                className="font-mono tracking-widest text-signal-cyan hover:text-phos transition-colors"
+                className="font-mono text-signal-cyan hover:text-phos transition-colors"
               >
-                SEARCH EVERYONE
+                Search everyone
               </button>
             </div>
           )}
@@ -747,9 +747,9 @@ function ExplorePageInner() {
                       inputRef.current?.focus({ preventScroll: true });
                       request.retry();
                     }}
-                    className="font-mono text-xs tracking-widest text-signal-cyan underline underline-offset-2 hover:text-phos transition-colors"
+                    className="font-mono text-xs text-signal-cyan underline underline-offset-2 hover:text-phos transition-colors"
                   >
-                    TRY AGAIN
+                    Try again
                   </button>
                 </p>
               )}
@@ -803,7 +803,8 @@ function ExplorePageInner() {
               href={billHref}
               className="mb-4 block border border-phos/40 bg-phos/5 px-4 py-3 text-sm text-ink-hi hover:border-phos"
             >
-              <span className="font-mono text-xs uppercase tracking-[0.12em] text-phos">Bill</span>{" "}
+              <span className="font-mono text-xs text-phos">Bill</span>
+              {""}
               Open the page for {resultsFor.trim()}: where it stands, who sponsored it, and how each
               member voted →
             </Link>
@@ -814,12 +815,9 @@ function ExplorePageInner() {
               href={`/congress/committees?q=${encodeURIComponent(committeeQuery)}#committee-results`}
               className="mb-4 block border border-white/15 px-4 py-3 text-sm text-ink-hi hover:border-phos/40"
             >
-              <span className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
-                Committees
-              </span>{" "}
-              {committee.data} committee{" "}
-              {committee.data === 1 ? "meeting or report" : "meetings and reports"} in the Daily
-              Digest match &ldquo;{committeeQuery}&rdquo; →
+              <span className="font-mono text-xs text-ink-min">Committees</span> {committee.data}{" "}
+              committee {committee.data === 1 ? "meeting or report" : "meetings and reports"} in the
+              Daily Digest match &ldquo;{committeeQuery}&rdquo; →
             </Link>
           )}
 

@@ -39,7 +39,7 @@ describe("sectionPreview", () => {
   });
 
   it("never shows a bare zero for something not read or not happening", () => {
-    expect(sectionPreview(FIGURES, "agencies", "budget")?.figure).toBe("Not yet");
+    expect(sectionPreview(FIGURES, "executive", "budget")?.figure).toBe("Not yet");
     expect(
       sectionPreview(
         {
@@ -118,6 +118,7 @@ describe("sectionPreview", () => {
 
   it("is null without figures or for a page that has none", () => {
     expect(sectionPreview(null, "congress", "bills")).toBeNull();
+    expect(sectionPreview(FIGURES, "executive", "president")).toBeNull();
     // The hub's own page has no card.
     expect(sectionPreview(FIGURES, "congress", "reports")).toBeNull();
   });
@@ -126,7 +127,7 @@ describe("sectionPreview", () => {
     // A preview keyed to a tab SECTIONS doesn't have would never show.
     for (const [section, tabs] of Object.entries({
       congress: ["week", "month", "bills", "committees", "president"],
-      agencies: ["budget", "comments"],
+      executive: ["budget", "comments"],
       elections: ["map", "redistricting", "archive"],
     })) {
       const keys = SECTIONS[section as keyof typeof SECTIONS].tabs.map((t) => t.key as string);

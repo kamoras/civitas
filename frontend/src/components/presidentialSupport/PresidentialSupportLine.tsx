@@ -41,7 +41,7 @@ export default async function PresidentialSupportLine({ memberId }: { memberId: 
     // Written in sentence case with the count set bright: on a phone it reads
     // as a sentence (it was three lines of 12px caps), and caps from 640px up.
     <p
-      className={`mb-3 border border-white/15 bg-surface px-3 py-2 font-mono tracking-[0.08em] text-ink-lo ${labelCase(LEAD)}`}
+      className={`mb-3 border border-white/15 bg-surface px-3 py-2 font-mono text-ink-lo ${labelCase(LEAD)}`}
     >
       {LEAD}:{" "}
       <span className="text-ink-hi">

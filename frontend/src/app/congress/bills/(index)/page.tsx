@@ -34,6 +34,11 @@ function BillsPageContent() {
   // in "all" mode since "hot" only shows bills with a live Action Center
   // mention, which most individual bills don't have.
   const initialQ = searchParams.get("q") || "";
+  // From /congress's pipeline rows (?reached=<milestone stage>): this
+  // Congress's bills that got at least that far. Latched at mount, like
+  // ?q=: the page writes the URL itself (replaceState) when it is cleared,
+  // and that write must not feed back in as a new deep link.
+  const [reached, setReached] = useState<string | null>(() => searchParams.get("reached"));
 
   // The overview the server read, when it could (congress/bills/layout.tsx).
   const initial = useBillsInitial();
@@ -42,7 +47,7 @@ function BillsPageContent() {
   );
   const [inMotion, setInMotion] = useState(() => initial?.inMotion ?? 0);
 
-  const [mode, setMode] = useState<ViewMode>(initialQ ? "all" : "hot");
+  const [mode, setMode] = useState<ViewMode>(initialQ || reached ? "all" : "hot");
   const [stage, setStage] = useState<string | null>(null);
   const [chamber, setChamber] = useState<ChamberFilter>("all");
   const [party, setParty] = useState<PartyFilter>("ALL");
@@ -78,6 +83,24 @@ function BillsPageContent() {
     };
   }, [haveOverview]);
 
+  // window.history, never router.replace: on this route the router's
+  // replace can leave the address bar unchanged (AGENTS.md, "Client-side URL
+  // state"), and a reload would bring the cleared filter back.
+  const clearReached = () => {
+    if (!reached) return;
+    setReached(null);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("reached");
+    window.history.replaceState(null, "", url);
+  };
+  // A milestone counts bills that got at least that far, a stage pick bills
+  // at exactly that stage: picking one drops the other rather than showing
+  // their overlap under either's name.
+  const selectStage = (next: string | null) => {
+    if (next) clearReached();
+    setStage(next);
+  };
+
   const chamberParam = chamber === "all" ? undefined : chamber;
   const partyParam = party === "ALL" ? undefined : party;
   const qParam = debouncedSearch || undefined;
@@ -109,9 +132,12 @@ function BillsPageContent() {
 
           <div className="flex justify-center gap-2 mb-4">
             <button
-              onClick={() => setMode("hot")}
+              onClick={() => {
+                clearReached();
+                setMode("hot");
+              }}
               aria-pressed={mode === "hot"}
-              className={`font-mono text-xs px-4 py-1.5 border transition-colors uppercase tracking-widest ${
+              className={`font-mono text-xs px-4 py-1.5 border transition-colors ${
                 mode === "hot" ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
               }`}
             >
@@ -120,7 +146,7 @@ function BillsPageContent() {
             <button
               onClick={() => setMode("all")}
               aria-pressed={mode === "all"}
-              className={`font-mono text-xs px-4 py-1.5 border transition-colors uppercase tracking-widest ${
+              className={`font-mono text-xs px-4 py-1.5 border transition-colors ${
                 mode === "all" ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
               }`}
             >
@@ -130,12 +156,16 @@ function BillsPageContent() {
 
           <TerminalTitlebar title="Pipeline" />
           <div className="border border-t-0 border-white/[0.07] bg-surface-base p-4 mb-6">
-            <BillStageFlow stageCounts={stageCounts} activeStage={stage} onSelectStage={setStage} />
+            <BillStageFlow
+              stageCounts={stageCounts}
+              activeStage={stage}
+              onSelectStage={selectStage}
+            />
 
             <div className="flex flex-wrap gap-3 items-center mt-5 pt-4 border-t border-white/[0.07]">
               <input
                 type="text"
-                placeholder="TITLE, SPONSOR OR NUMBER"
+                placeholder="Title, sponsor or number"
                 aria-label="Search bills by title, sponsor or bill number"
                 value={search}
                 onChange={(e) => {
@@ -154,7 +184,7 @@ function BillsPageContent() {
                     key={c}
                     onClick={() => setChamber(c)}
                     aria-pressed={chamber === c}
-                    className={`font-mono text-xs px-2 py-1 border transition-colors uppercase ${
+                    className={`font-mono text-xs px-2 py-1 border transition-colors ${
                       chamber === c ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
                     }`}
                   >
@@ -177,28 +207,37 @@ function BillsPageContent() {
                       party === p ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
                     }`}
                   >
-                    {p}
+                    {p === "ALL" ? "All" : p}
                   </button>
                 ))}
               </div>
 
-              {(stage || chamber !== "all" || party !== "ALL" || search) && (
+              {(stage || reached || chamber !== "all" || party !== "ALL" || search) && (
                 <button
                   onClick={() => {
+                    clearReached();
                     setStage(null);
                     setChamber("all");
                     setParty("ALL");
                     setSearch("");
                   }}
-                  className="font-mono text-xs text-ink-min hover:text-phos transition-colors tracking-widest"
+                  className="font-mono text-xs text-ink-min hover:text-phos transition-colors"
                 >
-                  CLEAR
+                  Clear
                 </button>
               )}
             </div>
           </div>
 
-          {mode === "hot" ? (
+          {reached ? (
+            <ReachedBillsList
+              reached={reached}
+              chamber={chamberParam}
+              party={partyParam}
+              q={qParam}
+              onClear={clearReached}
+            />
+          ) : mode === "hot" ? (
             <HotBillsList
               stage={stage}
               chamber={chamberParam}
@@ -237,6 +276,152 @@ export default function BillsPage() {
   );
 }
 
+/** This Congress's bills that got at least as far as a milestone, the very
+ * bills its row on /congress counts (GET /api/bills?reached=), newest
+ * action first. The chamber, party and search filters narrow it, and the
+ * heading then says the count is filtered, so it never passes for the
+ * row's. */
+function ReachedBillsList({
+  reached,
+  chamber,
+  party,
+  q,
+  onClear,
+}: {
+  reached: string;
+  chamber?: "senate" | "house";
+  party?: "D" | "R" | "I";
+  q?: string;
+  onClear: () => void;
+}) {
+  const sig = `${reached}:${chamber}:${party}:${q}`;
+  const [loaded, setLoaded] = useState<{
+    sig: string;
+    page: number;
+    bills: BillInFlight[];
+    total: number;
+    totalPages: number;
+    label: string | null;
+    error: boolean;
+  } | null>(null);
+  const [want, setWant] = useState({ sig, page: 1 });
+  const page = want.sig === sig ? want.page : 1;
+  const current = loaded?.sig === sig ? loaded : null;
+
+  useEffect(() => {
+    if (loaded?.sig === sig && loaded.page >= page) return;
+    let cancelled = false;
+    fetchBillsInFlight({ reached, chamber, party, q, sort: "recent", page, perPage: PER_PAGE })
+      .then((res) => {
+        if (cancelled) return;
+        setLoaded((prev) => ({
+          sig,
+          page,
+          bills: page > 1 && prev?.sig === sig ? [...prev.bills, ...res.bills] : res.bills,
+          total: res.total,
+          totalPages: res.totalPages,
+          label: res.reachedLabel ?? null,
+          error: false,
+        }));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        if (page > 1 && loaded?.sig === sig) {
+          // A failed "load more" keeps what is shown and offers the page again.
+          setLoaded({ ...loaded, error: true });
+          setWant({ sig, page: loaded.page });
+          return;
+        }
+        setLoaded({ sig, page, bills: [], total: 0, totalPages: 0, label: null, error: true });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reached, chamber, party, q, page, sig, loaded]);
+
+  // The list sits below the funnel and the filters, a screen and a half
+  // down on a phone: a reader who picked a row on /congress is brought to
+  // it once, when it first arrives, and never moved again after that.
+  const sectionRef = useRef<HTMLElement>(null);
+  const arrived = useRef(false);
+  const ready = current !== null;
+  useEffect(() => {
+    if (!ready || arrived.current) return;
+    arrived.current = true;
+    sectionRef.current?.scrollIntoView?.({ block: "start" });
+  }, [ready]);
+
+  const filtered = Boolean(chamber || party || q);
+  const bills = current?.bills ?? EMPTY_BILLS;
+  const total = current?.total ?? 0;
+
+  return (
+    <section ref={sectionRef} aria-labelledby="reached-heading">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+        <h2 id="reached-heading" className="text-lg text-ink-hi">
+          {current?.label ?? "Bills this Congress"}
+          {current && !current.error && (
+            <>
+              {" "}
+              <span className="font-mono tabular-nums text-ink-lo">
+                {`(${total.toLocaleString()}${filtered ? " matching the filters above" : ""})`}
+              </span>
+            </>
+          )}
+        </h2>
+        <button
+          type="button"
+          onClick={onClear}
+          className="min-h-6 font-mono text-xs text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
+        >
+          Show every bill in motion instead
+        </button>
+      </div>
+      {current === null ? (
+        <p className="py-16 text-center font-mono text-xs text-ink-min pulse-subtle">Loading…</p>
+      ) : current.error && bills.length === 0 ? (
+        <p className="py-16 text-center font-mono text-xs text-signal-red">
+          These bills could not be loaded. Try again in a moment.
+        </p>
+      ) : bills.length === 0 ? (
+        <p className="py-16 text-center font-mono text-xs text-ink-min">
+          No bills match these filters.
+        </p>
+      ) : (
+        <>
+          <p className="mb-3 font-mono text-xs text-ink-min">
+            Showing {bills.length.toLocaleString()} of {total.toLocaleString()}, latest action first
+          </p>
+          <div className="border border-white/[0.07] divide-y divide-white/[0.07]">
+            {bills.map((bill) => (
+              <BillRow key={`${bill.chamber}-${bill.billId}-${bill.sponsorId}`} bill={bill} />
+            ))}
+          </div>
+          {current.error && (
+            <p role="status" className="mt-4 text-center font-mono text-xs text-signal-red">
+              More bills could not be loaded. Try again in a moment.
+            </p>
+          )}
+          {current.page < current.totalPages && (
+            <div className="mt-6 flex justify-center">
+              <button
+                type="button"
+                onClick={() => setWant({ sig, page: current.page + 1 })}
+                disabled={page > current.page}
+                className="min-h-6 border border-white/[0.07] px-4 py-2 font-mono text-xs text-ink-lo transition-colors hover:border-white/15 hover:text-phos disabled:cursor-wait disabled:opacity-40"
+              >
+                {page > current.page
+                  ? "Loading…"
+                  : `Load more (${(total - bills.length).toLocaleString()} remaining)`}
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
 function AllBillsGroups({
   chamber,
   party,
@@ -260,17 +445,13 @@ function AllBillsGroups({
 
   if (stageTotals === "loading") {
     return (
-      <div className="text-center py-16 font-mono text-xs text-ink-min tracking-widest pulse-subtle">
-        LOADING...
+      <div className="text-center py-16 font-mono text-xs text-ink-min pulse-subtle">
+        Loading...
       </div>
     );
   }
   if (stageTotals !== "error" && ALL_STAGE_CODES.every((code) => !(stageTotals[code] > 0))) {
-    return (
-      <div className="text-center py-16 font-mono text-xs text-ink-min tracking-widest">
-        NO RESULTS
-      </div>
-    );
+    return <div className="text-center py-16 font-mono text-xs text-ink-min">No results</div>;
   }
 
   // A search opens every stage its matches sit at, so they are on screen
@@ -397,8 +578,8 @@ function HotBillsList({
 
   if (loading) {
     return (
-      <div className="text-center py-16 font-mono text-xs text-ink-min tracking-widest pulse-subtle">
-        LOADING...
+      <div className="text-center py-16 font-mono text-xs text-ink-min pulse-subtle">
+        Loading...
       </div>
     );
   }
@@ -409,16 +590,13 @@ function HotBillsList({
   const since = current?.movedSince ? shortDay(current.movedSince) : "a week ago";
   if (results.length === 0) {
     return (
-      <div className="text-center py-16 font-mono text-xs text-ink-min tracking-widest space-y-3">
+      <div className="text-center py-16 font-mono text-xs text-ink-min space-y-3">
         <p>
-          NO ACTION CENTER ISSUE NAMES A BILL, AND NONE MOVED PAST REFERRAL SINCE{" "}
-          {since.toUpperCase()} FOR THIS FILTER
+          No action center issue names a bill, and none moved past referral since {since} for this
+          filter
         </p>
-        <button
-          onClick={onViewAll}
-          className="font-mono text-xs text-signal-cyan hover:underline tracking-widest"
-        >
-          VIEW ALL BILLS INSTEAD
+        <button onClick={onViewAll} className="font-mono text-xs text-signal-cyan hover:underline">
+          View all bills instead
         </button>
       </div>
     );
@@ -433,9 +611,9 @@ function HotBillsList({
           ? `No Action Center issue names a bill right now, so this lists bills that moved this week: a recorded action since ${since}, past referral to committee, latest first.`
           : "Bills named in today's Action Center issues, most-named first."}
       </p>
-      <p className="font-mono text-xs text-ink-min mb-3 tracking-widest">
-        SHOWING {results.length.toLocaleString()} OF {total.toLocaleString()} BILL
-        {total !== 1 ? "S" : ""}
+      <p className="font-mono text-xs text-ink-min mb-3">
+        Showing {results.length.toLocaleString()} of {total.toLocaleString()} bill
+        {total !== 1 ? "s" : ""}
       </p>
       <div className="border border-white/[0.07] divide-y divide-white/[0.07]">
         {results.map((bill) => (
@@ -448,11 +626,11 @@ function HotBillsList({
           <button
             onClick={() => setPage((p) => p + 1)}
             disabled={loadingMore}
-            className="font-mono text-xs tracking-widest px-4 py-2 border border-white/[0.07] text-ink-lo hover:text-phos hover:border-white/15 disabled:opacity-40 disabled:cursor-wait transition-colors"
+            className="font-mono text-xs px-4 py-2 border border-white/[0.07] text-ink-lo hover:text-phos hover:border-white/15 disabled:opacity-40 disabled:cursor-wait transition-colors"
           >
             {loadingMore
-              ? "LOADING..."
-              : `LOAD MORE (${(total - results.length).toLocaleString()} REMAINING)`}
+              ? "Loading..."
+              : `Load more (${(total - results.length).toLocaleString()} remaining)`}
           </button>
         </div>
       )}

@@ -67,8 +67,7 @@ const GRADE_TEXT = {
   low: "Low",
 } as const;
 
-const TH =
-  "py-2 pr-3 text-left font-mono text-xs font-normal uppercase tracking-[0.12em] text-ink-min";
+const TH = "py-2 pr-3 text-left font-mono text-xs font-normal text-ink-min";
 
 /** A signed number as the ledger prints it: one decimal, a true minus sign. */
 function signed(n: number): string {
@@ -177,11 +176,9 @@ function SinceScoredNote({ dim, shown }: { dim: ScoreBreakdownDimension; shown: 
         : "Records changed";
     return (
       <p className="border-l-2 border-signal-amber/60 pl-3 text-sm leading-relaxed text-ink-lo">
-        <span className="font-mono text-xs uppercase tracking-[0.12em] text-signal-amber">
-          Updated since this score
-        </span>{" "}
-        {what} after {when ? `the run of ${when}` : "the run"}. On today&apos;s records this part
-        would be {since.score}; the next nightly run includes them.
+        <span className="font-mono text-xs text-signal-amber">Updated since this score</span> {what}{" "}
+        after {when ? `the run of ${when}` : "the run"}. On today&apos;s records this part would be{" "}
+        {since.score}; the next nightly run includes them.
       </p>
     );
   }
@@ -211,7 +208,7 @@ export function SeatLean({
   if (!lean) return null;
   return (
     <>
-      <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">Seat lean</dt>
+      <dt className="font-mono text-xs text-ink-min">Seat lean</dt>
       <dd className="text-ink-lo">
         {chamber === "senate" ? "State lean " : "Cook PVI "}
         <span className="font-mono text-ink">{formatPvi(lean.cookPvi)}</span>
@@ -316,7 +313,7 @@ export default function MethodsLedger({
             </span>
             Methods, data and citation
           </span>
-          <span className="font-mono text-xs font-normal uppercase tracking-[0.12em] text-ink-min">
+          <span className="font-mono text-xs font-normal text-ink-min">
             {scoredOn ? `Scored ${scoredOn.date}` : "Not yet scored"}
             {scoredOn?.algorithmVersion ? ` · method ${scoredOn.algorithmVersion}` : ""} ·{" "}
             {currentCongressLabel()}
@@ -352,7 +349,7 @@ export default function MethodsLedger({
             >
               <div className="flex flex-wrap items-baseline justify-between gap-3">
                 <h3 className="font-display text-lg font-semibold text-ink-hi">{m.name}</h3>
-                <p className="flex flex-wrap items-baseline gap-x-4 gap-y-1 font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
+                <p className="flex flex-wrap items-baseline gap-x-4 gap-y-1 font-mono text-xs text-ink-min">
                   <span>
                     Score{" "}
                     <span className={`text-sm ${shown == null ? "" : getScoreColor(shown)}`}>
@@ -382,9 +379,7 @@ export default function MethodsLedger({
                 </p>
               )}
               <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-[7rem_minmax(0,1fr)]">
-                <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
-                  Method
-                </dt>
+                <dt className="font-mono text-xs text-ink-min">Method</dt>
                 <dd className="text-ink-lo">
                   <Link
                     href={`/about/scores#${m.anchor}`}
@@ -396,9 +391,7 @@ export default function MethodsLedger({
                     <Cite key={id} id={id} />
                   ))}
                 </dd>
-                <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
-                  Source
-                </dt>
+                <dt className="font-mono text-xs text-ink-min">Source</dt>
                 <dd className="text-ink-lo">{m.source(chamber)}</dd>
                 {m.key === "constituentAlignment" && (
                   <SeatLean
@@ -413,9 +406,7 @@ export default function MethodsLedger({
 
         <div className="grid grid-cols-1 gap-8 border-t border-white/[0.09] pt-5 lg:grid-cols-2">
           <div className="flex flex-col gap-2">
-            <h3 className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-              The record as data
-            </h3>
+            <h3 className="font-mono text-xs text-ink-min">The record as data</h3>
             <ul className="flex flex-col text-sm">
               {[
                 [api, "Full record: scores, data grades, funding, voting totals (JSON)"],
@@ -455,9 +446,7 @@ export default function MethodsLedger({
             </ul>
           </div>
           <div className="flex flex-col gap-2">
-            <h3 className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-              Cite this scorecard
-            </h3>
+            <h3 className="font-mono text-xs text-ink-min">Cite this scorecard</h3>
             <CiteThis
               title={`${member.name}, ${office}: Representation scorecard, ${currentCongressLabel()}${version}`}
               date={scoredOn?.date}

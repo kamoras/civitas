@@ -19,7 +19,7 @@ export default function NextField({ field }: { field: Field | null }) {
     >
       <h2
         id="next-field"
-        className="border-b border-white/[0.07] py-2.5 font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
+        className="border-b border-white/[0.07] py-2.5 font-mono text-xs text-ink-min"
       >
         Registered with the FEC{field ? ` for ${field.cycle}` : ""}
       </h2>
@@ -49,7 +49,7 @@ export default function NextField({ field }: { field: Field | null }) {
           </dl>
           {field.filedForOtherOffice.length > 0 && (
             <>
-              <h3 className="mt-4 font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
+              <h3 className="mt-4 font-mono text-xs text-ink-min">
                 Members registered for another office
               </h3>
               <ul className="mt-1">

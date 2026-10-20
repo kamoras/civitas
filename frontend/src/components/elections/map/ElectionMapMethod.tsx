@@ -43,8 +43,8 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
       </div>
 
       <details className="border-t border-white/10 pt-2">
-        <summary className="inline-flex min-h-11 cursor-pointer items-center font-mono text-xs tracking-[0.12em] text-ink-lo hover:text-ink-hi">
-          FULL METHOD · MODEL, INPUTS, CHECKS, SOURCES
+        <summary className="inline-flex min-h-11 cursor-pointer items-center font-mono text-xs text-ink-lo hover:text-ink-hi">
+          Full method · Model, inputs, checks, sources
           <span aria-hidden="true">&nbsp;▾</span>
         </summary>
         <div className="mt-3 space-y-4">
@@ -176,7 +176,7 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
                   <caption className="sr-only">
                     Held-out calibration of the implied chances, either party alike, {c.races} races
                   </caption>
-                  <thead className="border-b border-white/20 text-left text-xs uppercase tracking-[0.12em] text-ink-min">
+                  <thead className="border-b border-white/20 text-left text-xs text-ink-min">
                     <tr>
                       <th scope="col" className="px-2 py-1">
                         Lean of the range

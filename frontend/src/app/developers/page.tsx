@@ -183,7 +183,7 @@ function EndpointBlock({ endpoint, spec }: { endpoint: Endpoint; spec: Spec }) {
       )}
       {params.length > 0 && (
         <div className="space-y-1">
-          <h5 className="font-mono text-xs uppercase tracking-wider text-ink-lo">Parameters</h5>
+          <h5 className="font-mono text-xs text-ink-lo">Parameters</h5>
           <Params params={params} />
         </div>
       )}
@@ -415,10 +415,7 @@ export default async function DevelopersPage() {
                   {groups.map(({ tag, description, endpoints }) => (
                     <section key={tag} aria-labelledby={tagId(tag)} className="space-y-8">
                       <div className="space-y-1 border-b border-white/[0.07] pb-2">
-                        <h3
-                          id={tagId(tag)}
-                          className="font-mono text-xs uppercase tracking-wider text-ink-lo"
-                        >
+                        <h3 id={tagId(tag)} className="font-mono text-xs text-ink-lo">
                           {tag}
                         </h3>
                         {description && <p className="text-sm text-ink-mid">{description}</p>}

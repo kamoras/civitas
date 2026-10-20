@@ -1,3 +1,4 @@
+import { asLabel } from "@/lib/formatting";
 import {
   NOT_FINAL,
   flipNotShownTag,
@@ -38,33 +39,33 @@ export function statusTag(r: LiveRaceResult): { text: string; className: string 
   // The state's latest read didn't list this race: what's shown is the
   // last count read, and no other tag may pass it off as live.
   if (r.inLatestRead === false)
-    return { text: "NOT IN LATEST READ", className: "border-signal-amber/40 text-ink-hi" };
+    return { text: "Not in latest read", className: "border-signal-amber/40 text-ink-hi" };
   const notShown = flipNotShownTag(r);
   if (notShown)
     return {
       // Short, as a tag must be; the card's sentence and the maps' names
       // say it in full ("holder's party ahead in the latest count").
-      text: `FLIP ANNOUNCED · ${notShown}${
-        r.official ? " · OFFICIAL COUNT" : r.votesCounted ? ` · ${NOT_FINAL}` : ""
+      text: `Flip announced · ${notShown}${
+        r.official ? " · Official count" : r.votesCounted ? ` · ${NOT_FINAL}` : ""
       }`,
       className: "border-signal-amber/40 text-ink-hi",
     };
-  if (!r.votesCounted) return { text: "NO VOTES YET", className: "border-white/20 text-ink-min" };
+  if (!r.votesCounted) return { text: "No votes yet", className: "border-white/20 text-ink-min" };
   if (isTied(r))
     return {
-      text: r.official ? "TIED · OFFICIAL COUNT" : `TIED · ${NOT_FINAL}`,
+      text: r.official ? "Tied · Official count" : `Tied · ${NOT_FINAL}`,
       className: "border-white/40 text-ink-hi",
     };
   if (flipShown(r))
     return {
-      text: r.official ? "FLIP · OFFICIAL COUNT" : `FLIP · LEADING · ${NOT_FINAL}`,
+      text: r.official ? "Flip · Official count" : `Flip · Leading · ${NOT_FINAL}`,
       className: "border-signal-amber/60 text-signal-amber",
     };
-  if (r.official) return { text: "LEADS · OFFICIAL COUNT", className: "border-phos/60 text-phos" };
+  if (r.official) return { text: "Leads · Official count", className: "border-phos/60 text-phos" };
   const share = reportingShare(r);
   if (share != null && share < 0.5)
-    return { text: `EARLY · ${NOT_FINAL}`, className: "border-white/20 text-ink-lo" };
-  return { text: `LEADING · ${NOT_FINAL}`, className: "border-white/25 text-ink-lo" };
+    return { text: `Early · ${NOT_FINAL}`, className: "border-white/20 text-ink-lo" };
+  return { text: `Leading · ${NOT_FINAL}`, className: "border-white/25 text-ink-lo" };
 }
 
 /** A race's full count: every candidate, a bar each, the reporting line and
@@ -108,9 +109,7 @@ export function RaceResultCard({
             : raceLabel(result)}
         </Heading>
         <span className="flex items-center gap-2">
-          <span
-            className={`border px-2 py-0.5 font-mono text-xs tracking-[0.1em] ${tag.className}`}
-          >
+          <span className={`border px-2 py-0.5 font-mono text-xs ${tag.className}`}>
             {tag.text}
           </span>
           <ShareSectionButton
@@ -118,7 +117,7 @@ export function RaceResultCard({
           />
         </span>
       </div>
-      <p className="mt-1 font-mono text-xs tracking-[0.06em] text-ink-min">
+      <p className="mt-1 font-mono text-xs text-ink-min">
         {[
           reporting,
           `${result.votesCounted.toLocaleString("en-US")} votes`,
@@ -143,8 +142,8 @@ export function RaceResultCard({
               <span className="block break-words font-display text-base font-semibold text-ink-hi">
                 {c.name}
               </span>
-              <span className={`font-mono text-xs tracking-[0.1em] ${partyTextClass(c.party)}`}>
-                {c.party ?? PARTY_NOT_GIVEN.toUpperCase()}
+              <span className={`font-mono text-xs ${partyTextClass(c.party)}`}>
+                {c.party ?? asLabel(PARTY_NOT_GIVEN)}
               </span>
             </span>
             <span
@@ -301,7 +300,7 @@ export function HouseResultRow({ result }: { result: LiveRaceResult }) {
         {reportingText(result) || "—"}
       </span>
       <span
-        className={`${HOUSE_ROW_TAG} border px-2 py-0.5 font-mono text-[11px] tracking-[0.08em] ${tag.className}`}
+        className={`${HOUSE_ROW_TAG} border px-2 py-0.5 font-mono text-[11px] ${tag.className}`}
       >
         {tag.text}
       </span>
@@ -334,9 +333,9 @@ export function HouseNoCountRow({
       <span className="min-w-0 text-sm text-ink-min">No count shown here</span>
       <span className="hidden font-mono text-xs text-ink-min sm:block">—</span>
       <span
-        className={`${HOUSE_ROW_TAG} border border-dashed border-white/25 px-2 py-0.5 font-mono text-[11px] tracking-[0.08em] text-ink-min`}
+        className={`${HOUSE_ROW_TAG} border border-dashed border-white/25 px-2 py-0.5 font-mono text-[11px] text-ink-min`}
       >
-        NO COUNT
+        No count
       </span>
     </li>
   );
@@ -372,8 +371,8 @@ export function SenateNoCountCard({
         >
           {`U.S. Senate${isSpecial ? " (special)" : ""}`}
         </Heading>
-        <span className="border border-dashed border-white/25 px-2 py-0.5 font-mono text-xs tracking-[0.1em] text-ink-min">
-          NO COUNT
+        <span className="border border-dashed border-white/25 px-2 py-0.5 font-mono text-xs text-ink-min">
+          No count
         </span>
       </div>
       <p className="mt-2 text-sm text-ink-min">

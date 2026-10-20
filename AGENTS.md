@@ -66,9 +66,9 @@ locally on a single self-hosted device with zero cloud AI calls.
   process when its sources move; the header's autocomplete and `/search`
   read it with no model — see `app/site_search.py`
 - **Deployment**: Docker Swarm (single-node), `docker stack deploy` for zero-downtime rolling updates, nginx (in-stack) reverse proxy with caching
-- **Branches covered**: Senate (100 senators), House (435 representatives), Presidents (historical + modern), Supreme Court (9 justices)
+- **Branches covered**: Senate (100 senators), House (435 representatives), Presidents (historical + modern), Supreme Court (9 justices). The main navigation is by branch, in Article order: Action Center, Congress, Executive, Supreme Court, Elections, About (`SECTIONS` in `frontend/src/lib/routes.ts`), with search in the header; a person's record (`/politicians/[id]`) sits under its branch
 - **News Feeds**: RSS parsing (NPR, PBS, BBC, The Hill, Politico, Roll Call) + Google Trends + Bluesky trending for Action Center; 41 per-state newsrooms for election races
-- **Action Center**: Three tabs — Today (the day's issues, what a reader can do about each, open comment periods), Ongoing (national monitors: auto-detected ongoing concerns, and those closed in the last 60 days), Archive (year-in-review timeline). Elections live on `/elections`, find-your-members on `/politicians`
+- **Action Center**: Three tabs — Today (the day's issues, what a reader can do about each, open comment periods), Ongoing (national monitors: auto-detected ongoing concerns, and those closed in the last 60 days), Archive (year-in-review timeline). Elections live on `/elections`, find-your-members on `/congress/members` (Congress › Members)
 - **Nominations**: every presidential nomination this Congress from Congress.gov (daily, `fetch/nominations.py`), with status, committee, hearings, time to confirm and each roll call that names it (`/congress/nominations`)
 - **Elections**: State index → per-state ballot page (federal contests + statewide ballot measures, quoted verbatim) → race/candidate detail with FEC financials
 
@@ -112,7 +112,9 @@ civitas/
 │   ├── src/
 │   │   ├── app/                 # Next.js App Router pages (action [issues/monitors/timeline tabs, labelled Today/Ongoing/Archive],
 │   │   │                        #   elections [state index, states/[ST] ballot, [raceId] detail],
-│   │   │                        #   politicians [directory + per-member profile], bills, compare, explore, leaderboard,
+│   │   │                        #   congress [reports, bills, members (find yours) + members/measures, committees,
+│   │   │                        #   nominations], executive [hub, presidents, president + orders redirects], agencies,
+│   │   │                        #   court, politicians/[id] (every member's, president's and justice's record), compare, explore,
 │   │   │                        #   about, changelog, accessibility, environmental, feedback, admin)
 │   │   ├── components/          # React components (action, elections, checker, president, justice, explore, home, effects)
 │   │   ├── hooks/               # Custom React hooks
@@ -993,7 +995,7 @@ What this rules in and out:
   `congressional_district_places.json`, the coming election's lines, for
   the ballot pages; `county_district_crosswalk_sitting.json` and the "119"
   map, the lines the sitting members were elected on, for "who represents
-  me" on `/politicians` — in a redrawn state the same number is a
+  me" on `/congress/members` — in a redrawn state the same number is a
   different district, so each surface names its map and never borrows the
   other's; places by `scripts/build_district_place_crosswalk.py`), towns, communities
   (incorporated places and Census Designated Places) and counties for a
@@ -2338,7 +2340,8 @@ the pending list).
 | Publishing: every post stored, then sent to Bluesky; the Atom feeds | `backend/app/broadcast.py` (`publish`, `FEEDS`), `backend/app/api/feed.py`, `frontend/src/app/feeds/page.tsx`; the posting modules (`bluesky_poster.py`, `bluesky_spotlight.py`, `congress_bluesky.py`, `election_bluesky.py`, `trend_poster.py`) decide what and when; a post may carry its own image (`image_url`/`alt_text`, sent as an image embed with the link card as fallback); the hours a non-news post reaches Bluesky are `app/data/bluesky_post_windows.json` (`scripts/fetch_bluesky_activity.py`, `broadcast.SCHEDULED_KINDS`) |
 | Representative API routes | `backend/app/api/representatives.py` |
 | API routes | `backend/app/api/` (senators, representatives, presidents, justices, admin, explore, action, health) |
-| Frontend pages | `frontend/src/app/` (action [issues/monitors/timeline tabs], elections [state index, states/[ST] ballot, [raceId] detail], scorecard, leaderboard, explore, about, admin) |
+| Frontend pages | `frontend/src/app/` (action [issues/monitors/timeline tabs], congress [members directory, members/measures], executive [hub, presidents], elections [state index, states/[ST] ballot, [raceId] detail], politicians/[id], explore, about, admin) |
+| The executive branch's pages (hub led by stored records, every president with the historians' rank, "The President" and "Executive orders" as per-request redirects to the sitting president's record and documents) | `frontend/src/app/executive/`, `frontend/src/lib/presidentServer.ts`, `GET /api/presidents` (`historiansRank`, `president_service.historians_rank`) |
 | Frontend API client (incl. paginated vote fetching) | `frontend/src/lib/api.ts` |
 | Per-client rate limits + once-per-period rules shared by every API worker | `backend/app/api/throttle.py` |
 | Process roles (read-only API vs pipeline) | `backend/app/config.py` (`PROCESS_ROLE`), `backend/app/main.py` (lifespan), `backend/app/background.py`, `docker-compose.swarm.yml`, `nginx/civitas.conf` |
@@ -2353,7 +2356,8 @@ the pending list).
 | Detail pages' two layers: where a member stands among peers, methods ledger, bill stage ladder and sources, "cite this", held and thin-data marks | `frontend/src/components/scorecard/WhereTheyStand.tsx`, `MethodsLedger.tsx`, `HeldScore.tsx`, `frontend/src/components/congress/StageLadder.tsx`, `BillSources.tsx`, `frontend/src/components/shared/CiteThis.tsx` (a government document or record cites its issuer: `frontend/src/lib/citedSources.ts`); data from `api/politicians.py` (`_chamber_field`, `_scored_on`) and `bill_service.stage_milestones` |
 | Action Center issue parts (shared with `/issue/[id]`: meta, tags, "What you can do", coverage, sources) | `frontend/src/components/action/IssueEnrichment.tsx` |
 | Where a member stands among peers (per-measure figure, expected, percentile, word by a fixed rule, template sentence) | `backend/app/peer_comparison.py`, `GET /api/{senators,representatives}/{id}/peers`, public breakdown `peerComparison` |
-| The chamber measure by measure (replaced the leaderboard page; `/leaderboard` redirects), compare's pair strips; the leaderboard API stays for the deprecated composite | `frontend/src/app/congress/members/`, `frontend/src/components/compare/PairStrips.tsx`, `GET /api/congress/measures` (`peer_comparison.chamber_measures`); `backend/app/api/leaderboard.py`, `backend/app/score_display.py` (`score_spread`, `thin_dimensions`) |
+| Find your members (Congress › Members: Senate and House by state, town or county; `/politicians` redirects here) | `frontend/src/app/congress/members/MembersDirectory.tsx`, `GET /api/politicians`, `GET /api/politicians/house-districts` |
+| The chamber measure by measure (`/congress/members/measures`; replaced the leaderboard page, and `/leaderboard` redirects), compare's pair strips; the leaderboard API stays for the deprecated composite | `frontend/src/app/congress/members/measures/`, `frontend/src/components/compare/PairStrips.tsx`, `GET /api/congress/measures` (`peer_comparison.chamber_measures`); `backend/app/api/leaderboard.py`, `backend/app/score_display.py` (`score_spread`, `thin_dimensions`) |
 | Site navigation: sections, main menu, footer (site pages only), section tabs and hub cards | `frontend/src/lib/routes.ts` (`SECTIONS`), `frontend/src/components/layout/Navbar.tsx`, `Footer.tsx`, `SectionTabs.tsx`, `frontend/src/components/sections/SectionCards.tsx`, `frontend/src/lib/sectionPreviews.ts`, `backend/app/api/sections.py` |
 
 | Homepage (masthead, task boxes and registration closing, on-the-record entries, record index) | `frontend/src/components/home/Masthead.tsx`, `HomeTasks.tsx`, `StateJump.tsx`, `OnTheRecord.tsx` (from `backend/app/api/notable.py`), `RecordIndex.tsx`; the source ledger is on `/about/data#sources` (`frontend/src/components/about/SourceLedger.tsx`, `backend/app/api/sources.py`) |
@@ -2535,10 +2539,28 @@ the pending list).
   an em dash in any string there that isn't a docstring or a log message.
 - **On a phone nothing a reader must read is under 13px** (`globals.css`, "A
   phone's type scale", 2026-10): `text-xs` and the 9-12px one-offs are 13px
-  under 640px and wide tracking is 0.08em. A mono caps label of four words or
-  more is written in sentence case and styled with `labelCase` /
-  `LONG_LABEL` (`lib/controlStyles.ts`), caps only from 640px up; three words
-  or fewer stay caps everywhere.
+  under 640px. A label of four words or more is 14px there (`labelCase` /
+  `LONG_LABEL`, `lib/controlStyles.ts`).
+- **Letter case: sentence case, not capitals** (2026-10). A reader said the
+  site's capitals felt intimidating, and the evidence agrees for anything
+  longer than a word or two: capitals slow reading as text gets longer
+  (Tinker 1955; Perea, Rosa & Marcet 2017 measured about 4-5% on sentences
+  with the width held equal), dyslexia guidance (BDA) asks for no block
+  capitals, and a screen reader may spell typed capitals out letter by
+  letter. So labels, kickers, buttons, links, nav items, tabs, tags and table
+  headers are sentence case, with no wide letter-spacing; emphasis comes from
+  weight, size or the accent colour. The one narrow use the evidence leaves
+  open is a one-to-three-word section eyebrow that is not a control (on a
+  single short word the cost is close to nil, Perea et al.; small capitals
+  stay legible, Arditi & Cho 2007): it uses `EYEBROW` (`lib/typeStyles.ts`),
+  with the text written in sentence case so CSS raises it. The logotype
+  (CIVITAS | RESEARCH in the header and on the OG cards) keeps its capitals.
+  Acronyms and official identifiers keep their own (H.R. 1, FEC, S.Res. 852,
+  state codes, party letters, Cook's "EVEN"), and so does a record quoted as
+  printed ("HONEYWELL INTL INC", an official ballot title). Never
+  `.toUpperCase()` a label for display. `src/lib/noAllCaps.test.ts` fails on
+  an `uppercase` class outside `typeStyles.ts` and on a word typed in
+  capitals that isn't on its acronym list.
 - Every metric shown on scorecards has a `MetricTooltip` component providing
   plain-English explanation (hover on desktop, tap on mobile). When adding new
   metrics, always add a corresponding tooltip so users can understand what they
@@ -2607,6 +2629,13 @@ the pending list).
   aside). A hub card with a live figure gets it from `GET /api/sections`
   (`app/api/sections.py`), worded in `lib/sectionPreviews.ts`; a figure not
   read yet says so, never a bare zero.
+- **The main navigation's current section is the longest match** in
+  `SECTIONS[*].match` (`currentSection` in `src/lib/routes.ts`), so a nested
+  page belongs to the section that names it, and no prefix may be claimed by
+  two sections (`routes.test.ts`). A record whose one URL serves several
+  sections, `/politicians/[id]`, passes its branch's section to the Navbar
+  (`<Navbar section>`) and draws its breadcrumb from the same place
+  (`recordTrail`), which the JSON-LD breadcrumb also reads.
 - Tabbed UIs follow the WAI-ARIA tabs pattern with a roving `tabindex`.
   Activating a tab must focus **the incoming tab**, not its panel — the
   Arrow/Home/End handler lives on the `role="tablist"` container, so moving
@@ -2641,8 +2670,7 @@ the pending list).
   route's `notFound()` discards its page's metadata; the head comes from
   the layouts above), so a section whose index page is a client component
   keeps that page's metadata in a layout inside an `(index)` route group
-  (`politicians/(index)`, `congress/bills/(index)`, `elections/(index)`,
-  `explore/(index)`), and each record route has a layout setting only its
+  (`congress/bills/(index)`, `elections/(index)`, `explore/(index)`), and each record route has a layout setting only its
   404's title; a not-found head has no canonical (`notFoundMetadata`).
   `app/sectionMetadata.test.ts` fails on a layout with a canonical above a
   record route.

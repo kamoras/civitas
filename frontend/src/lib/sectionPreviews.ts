@@ -87,7 +87,9 @@ const PREVIEWS: Record<string, Record<string, (f: SectionFigures) => Preview | n
         : { figure: "Not yet", caption: "no committee meeting recorded yet" },
     president: ({ congress }) => president(congress.president),
   },
-  agencies: {
+  // The executive branch's agency pages (the figures are under `agencies`
+  // in GET /api/sections).
+  executive: {
     budget: ({ agencies: { budget } }) =>
       budget
         ? {

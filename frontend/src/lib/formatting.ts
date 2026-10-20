@@ -275,13 +275,12 @@ export function asLabel(phrase: string): string {
 }
 
 /**
- * A policy-area code as a reader sees it ("FOREIGN_POLICY" -> "FOREIGN
- * POLICY"). The codes come from config_definitions.POLICY_AREAS; every
- * surface that prints one sets it in uppercase mono, so only the
- * underscore needs to go.
+ * A policy-area code as a reader sees it, in sentence case
+ * ("FOREIGN_POLICY" -> "Foreign policy"). The codes come from
+ * config_definitions.POLICY_AREAS.
  */
 export function policyAreaLabel(code: string): string {
-  return code.replace(/_/g, " ");
+  return asLabel(code.replace(/_/g, " ").toLowerCase());
 }
 
 /**

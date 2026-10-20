@@ -20,13 +20,13 @@ export default function BackToTop() {
     <button
       onClick={() => window.scrollTo({ top: 0, behavior: scrollBehavior() })}
       aria-label="Back to top"
-      className="fixed bottom-20 right-4 z-40 font-mono text-xs tracking-widest
+      className="fixed bottom-20 right-4 z-40 font-mono text-xs
                  text-signal-cyan hover:text-phos
                  border border-white/15 hover:border-signal-cyan/40
                  bg-surface-base px-3 py-1.5
                  transition-colors backdrop-blur-sm"
     >
-      ↑ TOP
+      ↑ Top
     </button>
   );
 }

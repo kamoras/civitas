@@ -1,5 +1,6 @@
 "use client";
 
+import { membersHref } from "@/lib/routes";
 import { useEffect, useId, useRef, useState } from "react";
 import { useYourState } from "@/hooks/useYourState";
 import { stateFromPoint } from "@/lib/stateFromPoint";
@@ -22,7 +23,7 @@ const STATES_BY_NAME = [...STATE_CODES].sort((a, b) =>
 const STATUS_SHOWN_MS = 8000;
 
 const BUTTON =
-  "inline-flex min-h-6 items-center font-mono text-xs uppercase tracking-[0.12em] text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-ink-hi disabled:no-underline disabled:opacity-80";
+  "inline-flex min-h-6 items-center font-mono text-xs text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-ink-hi disabled:no-underline disabled:opacity-80";
 
 /**
  * The reader's state, asked once, in the header, and used by every page
@@ -118,7 +119,7 @@ export default function YourStatePicker({
       ref={boxRef}
       className={`flex flex-wrap items-center gap-x-3 gap-y-1 ${tall ? "" : "relative"}`}
     >
-      <label htmlFor={id} className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
+      <label htmlFor={id} className="font-mono text-xs text-ink-min">
         Your state
       </label>
       <select
@@ -166,7 +167,7 @@ export default function YourStatePicker({
             {STATE_NAMES[confirmed] ?? confirmed} set for this tab.{" "}
             <span className="flex flex-wrap gap-x-4">
               <Link
-                href={`/politicians?state=${confirmed}`}
+                href={membersHref(confirmed)}
                 onClick={onNavigate}
                 className="inline-flex min-h-11 items-center text-signal-cyan underline underline-offset-2 hover:text-phos"
               >

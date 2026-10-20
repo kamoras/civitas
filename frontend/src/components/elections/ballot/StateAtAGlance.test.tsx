@@ -52,7 +52,7 @@ describe("StateAtAGlance", () => {
     fetchMapSeats.mockResolvedValue(SEATS);
     render(<StateAtAGlance state="ZZ" stateName="Zedland" redrawn />);
     const seat = await screen.findByRole("link", {
-      name: /SENATE.*USUAL VOTE R\+6.*POLLS D\+9 TO R\+4/,
+      name: /Senate.*usual vote R\+6.*polls D\+9 TO R\+4/i,
     });
     expect(seat).toHaveAttribute(
       "href",
@@ -60,7 +60,7 @@ describe("StateAtAGlance", () => {
     );
     // House seats are the district drawers' business, not this strip's.
     expect(screen.queryByText(/R\+10 TO R\+30/)).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /NEW HOUSE MAP: WHAT CHANGED/ })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /New House map: what changed/ })).toHaveAttribute(
       "href",
       "/elections/redistricting/ZZ"
     );
@@ -76,8 +76,8 @@ describe("StateAtAGlance", () => {
   it("keeps the new-map link when the map isn't shown, and is absent with neither", async () => {
     fetchMapSeats.mockResolvedValue(null);
     const { rerender } = render(<StateAtAGlance state="ZZ" stateName="Zedland" redrawn />);
-    expect(await screen.findByRole("link", { name: /NEW HOUSE MAP/ })).toBeInTheDocument();
-    expect(screen.queryByText(/USUAL VOTE/)).not.toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: /New House map/ })).toBeInTheDocument();
+    expect(screen.queryByText(/Usual vote/)).not.toBeInTheDocument();
     rerender(<StateAtAGlance state="ZZ" stateName="Zedland" redrawn={false} />);
     expect(screen.queryByRole("region")).not.toBeInTheDocument();
   });

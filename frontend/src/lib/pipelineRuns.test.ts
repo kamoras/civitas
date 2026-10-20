@@ -22,18 +22,18 @@ describe("describeRun — labels", () => {
   // the regression itself: Election runs rendered as SENATE because the old
   // code defined "senate" as "none of the other four".
   it.each([
-    ["senate", "SENATE"],
-    ["house", "HOUSE"],
-    ["stock_trades", "STOCK"],
-    ["supplementary", "SUPP"],
-    ["election", "ELECTION"],
+    ["senate", "Senate"],
+    ["house", "House"],
+    ["stock_trades", "Stock"],
+    ["supplementary", "Supp"],
+    ["election", "Election"],
   ] as const)("labels a %s run as %s", (pipelineType, label) => {
     expect(describeRun(run({ pipelineType })).label).toBe(label);
   });
 
   it("treats a row with no pipelineType as senate", () => {
     // Rows written before the field existed are Senate runs.
-    expect(describeRun(run()).label).toBe("SENATE");
+    expect(describeRun(run()).label).toBe("Senate");
     expect(pipelineTypeOf(run())).toBe("senate");
   });
 
@@ -42,7 +42,7 @@ describe("describeRun — labels", () => {
     // it must not be silently mislabeled — that is the whole bug.
     const unknown = run({ pipelineType: "judicial" as PipelineType });
     expect(pipelineTypeOf(unknown)).toBeNull();
-    expect(describeRun(unknown).label).toBe("JUDICIAL");
+    expect(describeRun(unknown).label).toBe("Judicial");
     expect(describeRun(unknown).processed).toBe("—");
     expect(describeRun(unknown).hasLlmStats).toBe(false);
   });

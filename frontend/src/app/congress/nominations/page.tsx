@@ -127,9 +127,7 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
                 role="status"
                 className="border border-signal-amber/40 bg-signal-amber/10 p-3 text-base text-ink sm:p-4"
               >
-                <span className="font-mono text-xs uppercase tracking-[0.14em] text-signal-amber">
-                  Still reading
-                </span>
+                <span className="font-mono text-xs text-signal-amber">Still reading</span>
                 <br />
                 {expected != null
                   ? `${read.toLocaleString()} of about ${expected.toLocaleString()} nominations read so far.`
@@ -183,9 +181,7 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
                         href={href({ status: s })}
                         className="flex h-full min-h-11 flex-col gap-1 p-3 hover:bg-surface-raised sm:p-4"
                       >
-                        <span className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-                          {STATUS_LABEL[s]}
-                        </span>
+                        <span className="font-mono text-xs text-ink-min">{STATUS_LABEL[s]}</span>
                         <span className="font-mono text-3xl tabular-nums leading-none text-ink-hi sm:text-4xl">
                           {stats.counts[s].toLocaleString()}
                         </span>
@@ -196,9 +192,7 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
                 <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
                   {STATUSES.map((s) => (
                     <div key={s}>
-                      <dt className="inline font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
-                        {STATUS_LABEL[s]}:
-                      </dt>{" "}
+                      <dt className="inline font-mono text-xs text-ink-min">{STATUS_LABEL[s]}:</dt>{" "}
                       <dd className="inline text-ink-lo">{STATUS_NOTE[s]}</dd>
                     </div>
                   ))}
@@ -206,7 +200,7 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
 
                 {complete ? (
                   <div className="border border-white/15 bg-surface p-4 sm:p-5">
-                    <h3 className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
+                    <h3 className="font-mono text-xs text-ink-min">
                       Days from nomination to confirmation
                     </h3>
                     <p className="mt-1 text-sm text-ink-lo">
@@ -242,10 +236,7 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
                 className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto]"
               >
                 <div className="flex min-w-0 flex-col gap-1">
-                  <label
-                    htmlFor="nom-q"
-                    className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min"
-                  >
+                  <label htmlFor="nom-q" className="font-mono text-xs text-ink-min">
                     Name, office or state
                   </label>
                   <input
@@ -258,10 +249,7 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
                   />
                 </div>
                 <div className="flex min-w-0 flex-col gap-1">
-                  <label
-                    htmlFor="nom-kind"
-                    className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min"
-                  >
+                  <label htmlFor="nom-kind" className="font-mono text-xs text-ink-min">
                     Kind
                   </label>
                   <select
@@ -279,10 +267,7 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
                   </select>
                 </div>
                 <div className="flex min-w-0 flex-col gap-1">
-                  <label
-                    htmlFor="nom-agency"
-                    className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min"
-                  >
+                  <label htmlFor="nom-agency" className="font-mono text-xs text-ink-min">
                     Agency or body
                   </label>
                   <select
@@ -302,7 +287,7 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
                 {f.status && <input type="hidden" name="status" value={f.status} />}
                 <button
                   type="submit"
-                  className={`min-h-11 self-end border px-4 font-mono text-sm uppercase tracking-[0.12em] ${BOXED_CONTROL.unselected}`}
+                  className={`min-h-11 self-end border px-4 font-mono text-sm ${BOXED_CONTROL.unselected}`}
                 >
                   Show
                 </button>
@@ -312,7 +297,7 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
                 <Link
                   href={href({ ...f, status: undefined, page: 1 })}
                   aria-current={!f.status ? "page" : undefined}
-                  className={`flex min-h-11 items-center border px-3 font-mono text-xs uppercase tracking-[0.12em] ${
+                  className={`flex min-h-11 items-center border px-3 font-mono text-xs ${
                     !f.status ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
                   }`}
                 >
@@ -323,7 +308,7 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
                     key={s}
                     href={href({ ...f, status: s, page: 1 })}
                     aria-current={f.status === s ? "page" : undefined}
-                    className={`flex min-h-11 items-center border px-3 font-mono text-xs uppercase tracking-[0.12em] ${
+                    className={`flex min-h-11 items-center border px-3 font-mono text-xs ${
                       f.status === s ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
                     }`}
                   >

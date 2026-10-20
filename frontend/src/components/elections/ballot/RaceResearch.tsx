@@ -1,5 +1,6 @@
 "use client";
 
+import { MEMBERS_HREF } from "@/lib/routes";
 import { useId, useRef, useState, type KeyboardEvent } from "react";
 import Link from "next/link";
 import RaceFullDetail from "@/components/elections/RaceFullDetail";
@@ -29,8 +30,8 @@ function RecordPanel({ race }: { race: RaceWithCandidates }) {
         A member of Congress in this race is linked to their Representation Score and full scorecard
         when the match to their record is certain: one running for re-election, or one who serves in
         the other chamber now. Anyone not linked here may still be under{" "}
-        <Link href="/politicians" className="underline hover:text-phos">
-          Politicians
+        <Link href={MEMBERS_HREF} className="underline hover:text-phos">
+          Members of Congress
         </Link>
         .
       </p>
@@ -42,7 +43,7 @@ function RecordPanel({ race }: { race: RaceWithCandidates }) {
           >
             <span className="flex min-w-0 flex-col">
               <span className="text-[15px] font-semibold text-ink-hi">{candidateName(c)}</span>
-              <span className={`font-mono text-[11px] tracking-[0.08em] ${getPartyMeta(c).color}`}>
+              <span className={`font-mono text-[11px] ${getPartyMeta(c).color}`}>
                 {getPartyMeta(c).label}
               </span>
             </span>

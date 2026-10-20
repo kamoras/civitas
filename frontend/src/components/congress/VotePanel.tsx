@@ -145,7 +145,7 @@ export default function VotePanel({
     <div className="flex flex-col gap-4 border border-white/15 bg-surface p-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-lo">
+          <p className="font-mono text-xs text-ink-lo">
             {CHAMBER_NAME[vote.chamber]} vote {vote.number} · {shortDate(vote.date)}
           </p>
           <p className="mt-1 text-lg font-semibold text-ink-hi">
@@ -154,7 +154,7 @@ export default function VotePanel({
         </div>
         <Link
           href={rollCallHref({ ...vote, congress })}
-          className="font-mono text-xs uppercase tracking-[0.12em] text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
+          className="font-mono text-xs text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
         >
           Open the roll call &rarr;
         </Link>
@@ -193,7 +193,7 @@ export default function VotePanel({
             on ? "bg-white/[0.04]" : "hover:bg-white/[0.02]"
           }`}
         >
-          <span className="flex flex-col gap-1 pl-2 font-mono text-xs uppercase tracking-[0.1em] text-ink-lo">
+          <span className="flex flex-col gap-1 pl-2 font-mono text-xs text-ink-lo">
             <span>
               {CHAMBER_NAME[v.chamber]} <span className="sr-only">roll call </span>
               {v.number}
@@ -205,12 +205,10 @@ export default function VotePanel({
             <AmendmentPurpose vote={v} chamber={v.chamber} compact />
           </span>
           {/* wrap-anywhere, as in ReportParts' VoteRow: a result of long
-              uppercase words is wider than this column on a phone at
+               words is wider than this column on a phone at
               200% text, and breaks only where it would overflow. */}
           <span className="col-start-2 flex min-w-0 flex-col items-start gap-1 pr-2 wrap-anywhere sm:col-start-auto sm:items-end">
-            <span
-              className={`font-mono text-xs uppercase tracking-[0.1em] ${TONE[resultTone(v.rejected)]}`}
-            >
+            <span className={`font-mono text-xs ${TONE[resultTone(v.rejected)]}`}>
               {voteResult(v)}
             </span>
             <VoteCount vote={v} />
@@ -232,7 +230,7 @@ export default function VotePanel({
         // A native disclosure, open when a link to one of these votes
         // ("#vote-senate-2-243") selected it.
         <details open={linkedIndex >= VOTES_SHOWN || undefined} className="group">
-          <summary className="inline-flex min-h-11 w-fit cursor-pointer list-none items-center font-mono text-xs uppercase tracking-[0.12em] text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos [&::-webkit-details-marker]:hidden">
+          <summary className="inline-flex min-h-11 w-fit cursor-pointer list-none items-center font-mono text-xs text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos [&::-webkit-details-marker]:hidden">
             <span className="group-open:hidden">All {votes.length} votes</span>
             <span className="hidden group-open:inline">Show the latest {VOTES_SHOWN} only</span>
           </summary>

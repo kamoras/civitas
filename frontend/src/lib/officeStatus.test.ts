@@ -63,13 +63,13 @@ describe("formerOfficeNotice", () => {
 describe("formerOfficeBadge", () => {
   it("appends the vacancy reason for congressional seats", () => {
     expect(formerOfficeBadge({ branch: "senate", name: "Jane Doe", vacancyReason: "died" })).toBe(
-      "FORMER SENATOR · DIED"
+      "Former Senator · Died"
     );
   });
 
   it("does not append a reason for presidents", () => {
     expect(formerOfficeBadge({ branch: "president", name: "Barack Obama", number: 44 })).toBe(
-      "FORMER PRESIDENT"
+      "Former President"
     );
   });
 });

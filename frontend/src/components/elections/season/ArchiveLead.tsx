@@ -4,8 +4,7 @@ import type { Season } from "@/types/specials";
 import { electionArchiveHref } from "@/lib/routes";
 import { longDate } from "@/lib/specials";
 
-const LINK =
-  "inline-flex min-h-11 items-center font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos";
+const LINK = "inline-flex min-h-11 items-center font-mono text-xs text-signal-cyan hover:text-phos";
 
 /** The day after the season's last, as an ISO date: post-certification ends
  * the day before the new Congress is seated. */
@@ -37,7 +36,7 @@ export default function ArchiveLead({
     >
       <h2
         id="season-archive"
-        className="border-b border-white/[0.07] py-2.5 font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
+        className="border-b border-white/[0.07] py-2.5 font-mono text-xs text-ink-min"
       >
         The {held} election, on the record
       </h2>
@@ -76,7 +75,7 @@ export default function ArchiveLead({
       <div className="mt-2 flex flex-wrap gap-x-6">
         {kept && (
           <Link href={electionArchiveHref(held)} className={LINK}>
-            [ THE {held} RECORD → ]
+            [ The {held} record → ]
           </Link>
         )}
       </div>

@@ -78,7 +78,7 @@ export default function DecisionLineups({ court }: { court: Court }) {
             justice sat out.
           </caption>
           <thead>
-            <tr className="border-b border-white/15 font-mono text-xs uppercase text-ink-min">
+            <tr className="border-b border-white/15 font-mono text-xs text-ink-min">
               <th scope="col" className="py-1.5 pr-3 text-left font-normal">
                 Term
               </th>

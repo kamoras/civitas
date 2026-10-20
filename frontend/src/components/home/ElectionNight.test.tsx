@@ -37,9 +37,9 @@ describe("ElectionNightList", () => {
     const data: ResultsSummary = { phase, states: [state("CO", "Colorado")] };
     render(<ElectionNightList data={data} />);
     expect(screen.getByText(data.states[0].lines[0])).toBeTruthy();
-    expect(screen.getByText("LEADING · NOT FINAL")).toBeTruthy();
+    expect(screen.getByText("Leading · Not final")).toBeTruthy();
     expect(screen.getByText(/1 state counting/)).toBeTruthy();
-    expect(screen.getByRole("link", { name: "[ COLORADO RESULTS ]" }).getAttribute("href")).toBe(
+    expect(screen.getByRole("link", { name: "[ Colorado results ]" }).getAttribute("href")).toBe(
       "/elections/states/CO"
     );
   });
@@ -50,8 +50,8 @@ describe("ElectionNightList", () => {
         data={{ phase, states: [state("WY", "Wyoming", { status: "official", official: 2 })] }}
       />
     );
-    expect(screen.getByText("LEADS · OFFICIAL COUNT")).toBeTruthy();
-    expect(screen.queryByText(/NOT FINAL/)).toBeNull();
+    expect(screen.getByText("Leads · Official count")).toBeTruthy();
+    expect(screen.queryByText(/Not final/)).toBeNull();
   });
 
   it("keeps every counting state one tap away", () => {

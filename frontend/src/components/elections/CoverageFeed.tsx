@@ -83,19 +83,19 @@ export default function CoverageFeed({ items }: { items: RaceCoverageItem[] }) {
               <span
                 className={
                   isBluesky
-                    ? "border border-signal-magenta/40 px-1.5 py-0.5 tracking-[0.1em] text-signal-magenta"
-                    : "border border-signal-cyan/40 px-1.5 py-0.5 tracking-[0.1em] text-signal-cyan"
+                    ? "border border-signal-magenta/40 px-1.5 py-0.5 text-signal-magenta"
+                    : "border border-signal-cyan/40 px-1.5 py-0.5 text-signal-cyan"
                 }
               >
-                {isBluesky ? "BLUESKY" : "NEWS"}
+                {isBluesky ? "Bluesky" : "News"}
               </span>
               <span className="text-ink-min">via {item.sourceName}</span>
               {item.race && (
-                <span className="border border-white/15 px-1.5 py-0.5 tracking-[0.1em] text-ink-lo">
+                <span className="border border-white/15 px-1.5 py-0.5 text-ink-lo">
                   {raceBadgeLabel(item.race)}
                 </span>
               )}
-              {isRecent && <span className="tracking-[0.1em] text-phos-mid">LAST 24H</span>}
+              {isRecent && <span className="text-phos-mid">Last 24H</span>}
             </div>
 
             <p className="mt-2 font-sans text-base leading-relaxed text-ink">{item.summary}</p>

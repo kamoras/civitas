@@ -26,7 +26,7 @@ describe("CopyText", () => {
     // The button keeps its name, so focus doesn't land on a renamed control.
     expect(
       screen.getByRole("button", { name: "Copy the Elections feed address" })
-    ).toHaveTextContent("[ COPIED! ]");
+    ).toHaveTextContent("[ Copied! ]");
     expect(screen.getByRole("status")).toHaveClass("sr-only");
   });
 

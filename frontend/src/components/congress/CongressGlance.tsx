@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { CongressGlance as Glance } from "@/types/congress";
-import { monthHref, monthLabel, shortDate } from "@/lib/congress";
+import { monthHref, monthLabel, reachedHref, shortDate } from "@/lib/congress";
 import { shareMetaAttrs, SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import { absoluteUrl } from "@/lib/site";
 import { ordinal } from "@/components/scorecard/format";
@@ -26,7 +26,7 @@ const SWATCH = { senate: "bg-phos", house: "bg-signal-cyan" } as const;
 function Head({ id, title, share }: { id: string; title: string; share: string }) {
   return (
     <div className="flex flex-wrap items-baseline justify-between gap-3 border-b border-white/15 pb-2">
-      <h2 id={id} className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
+      <h2 id={id} className="font-mono text-xs text-ink-min">
         {title}
       </h2>
       <ShareSectionButton label={share} />
@@ -216,18 +216,27 @@ function BillPipeline({ pipe, asOf }: { pipe: NonNullable<Glance["pipeline"]>; a
         <tbody>
           {pipe.milestones.map((m) => (
             <tr key={m.label} className="border-t border-white/[0.07] align-middle">
-              <th scope="row" className="w-[42%] py-2 pr-3 text-left font-normal text-ink">
-                {m.label}
-                <span
-                  aria-hidden="true"
-                  className="mt-1 block h-2.5 bg-white/[0.07]"
-                  style={{ width: "100%" }}
+              <th scope="row" className="w-[42%] py-1 pr-3 text-left font-normal text-ink">
+                {/* The label and its bar are one link to the very bills the
+                    row counts (GET /api/bills?reached=, the same rule as
+                    these counts), so the target is the row's height. */}
+                <Link
+                  href={reachedHref(m.stage)}
+                  aria-label={`${m.label}: ${n(m.bills)} ${m.bills === 1 ? "bill" : "bills"}`}
+                  className="group block min-h-6 py-1 underline decoration-white/30 underline-offset-4 hover:text-phos"
                 >
+                  {m.label}
                   <span
-                    className="block h-full bg-signal-cyan"
-                    style={{ width: `${(Math.log10(m.bills + 1) / top) * 100}%` }}
-                  />
-                </span>
+                    aria-hidden="true"
+                    className="mt-1 block h-2.5 bg-white/[0.07]"
+                    style={{ width: "100%" }}
+                  >
+                    <span
+                      className="block h-full bg-signal-cyan group-hover:bg-phos"
+                      style={{ width: `${(Math.log10(m.bills + 1) / top) * 100}%` }}
+                    />
+                  </span>
+                </Link>
               </th>
               <td className="py-2 pr-2 text-right font-mono text-base tabular-nums text-ink-hi">
                 {n(m.bills)}
@@ -241,7 +250,7 @@ function BillPipeline({ pipe, asOf }: { pipe: NonNullable<Glance["pipeline"]>; a
       </table>
       <p className="mt-2 text-xs leading-relaxed text-ink-min">
         Bars on a log scale, so the few bills near the end still show. Each share is of every bill
-        introduced.{" "}
+        introduced. Pick a step to list its bills.{" "}
         <Link
           href="/congress/bills"
           className="underline decoration-white/30 underline-offset-4 hover:text-phos"

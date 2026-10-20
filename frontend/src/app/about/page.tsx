@@ -4,7 +4,7 @@ import { pageMetadata, GITHUB_REPO_URL } from "@/lib/site";
 import { aboutPageJsonLd } from "@/lib/seo";
 import JsonLd from "@/components/seo/JsonLd";
 import { ABOUT_CHAPTERS } from "@/lib/aboutPages";
-import { ACTION_CENTER_HREF } from "@/lib/routes";
+import { ACTION_CENTER_HREF, MEMBERS_HREF, PRESIDENTS_HREF } from "@/lib/routes";
 import { AboutPage, Section, P, A } from "@/components/about/AboutPage";
 import ScoreWeightBar from "@/components/about/ScoreWeightBar";
 import LegacyAboutAnchor from "@/components/about/LegacyAboutAnchor";
@@ -86,13 +86,13 @@ const SCORE_PARTS: readonly {
 const COVERAGE: readonly { what: string; detail: string; href: string }[] = [
   {
     what: "Senate & House",
-    detail: "Every sitting member, measure by measure",
-    href: "/politicians",
+    detail: "Every sitting member, found by state, town or county",
+    href: MEMBERS_HREF,
   },
   {
     what: "Presidents",
     detail: "Every president, on economic, public and historical records",
-    href: "/politicians?branch=president",
+    href: PRESIDENTS_HREF,
   },
   {
     what: "Supreme Court",
@@ -108,7 +108,7 @@ const COVERAGE: readonly { what: string; detail: string; href: string }[] = [
   {
     what: "Congress, day by day",
     detail:
-      "What each chamber did, from the Congressional Record, under a calendar of the days each chamber sat and how far this Congress's bills got; during a recess, the last week of business. With your state picked, your members' latest votes and bills. Each bill's page gives how often bills at its stage became law this Congress",
+      "What each chamber did, from the Congressional Record, under a calendar of the days each chamber sat and how far this Congress's bills got (each step lists its bills); during a recess, the last week of business. With your state picked, your members' latest votes and bills. Each bill's page gives how often bills at its stage became law this Congress",
     href: "/congress",
   },
   {
@@ -169,16 +169,10 @@ export default function AboutOverview() {
               <span className="font-display text-base font-semibold text-ink-hi">{s.name}</span>
               <span className="mt-1 text-sm text-ink">{s.question}</span>
               <span className="mt-3 text-sm text-ink-lo">
-                <span className="font-mono text-xs uppercase tracking-[0.1em] text-phos-mid">
-                  Higher
-                </span>{" "}
-                {s.high}
+                <span className="font-mono text-xs text-phos-mid">Higher</span> {s.high}
               </span>
               <span className="mt-1.5 text-sm text-ink-lo">
-                <span className="font-mono text-xs uppercase tracking-[0.1em] text-signal-red">
-                  Lower
-                </span>{" "}
-                {s.low}
+                <span className="font-mono text-xs text-signal-red">Lower</span> {s.low}
               </span>
               <span className="mt-auto pt-3 font-mono text-xs text-signal-cyan">
                 How it works →
@@ -312,7 +306,7 @@ function PillLink({
   children: ReactNode;
 }) {
   const cls =
-    "inline-block border border-white/[0.09] px-3 py-2 font-mono text-xs uppercase tracking-[0.08em] text-ink-lo transition-colors hover:border-ink-min hover:text-ink-hi";
+    "inline-block border border-white/[0.09] px-3 py-2 font-mono text-xs text-ink-lo transition-colors hover:border-ink-min hover:text-ink-hi";
   return external ? (
     <a href={href} target="_blank" rel="noopener noreferrer" className={cls}>
       {children}

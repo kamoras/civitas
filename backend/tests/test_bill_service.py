@@ -8,8 +8,11 @@ import json
 from datetime import datetime
 
 import pytest
+from fastapi.testclient import TestClient
 
 from app.config import settings
+from app.database import get_db
+from app.main import app
 from app.models import ActionIssue, Representative, RepSponsoredBill, Senator, SponsoredBill
 from app.services.bill_service import (
     clear_bill_collection_cache, get_bill_detail, get_bills_in_flight, short_title_index, stage_base_rate,
@@ -444,6 +447,34 @@ class TestStageMilestones:
         assert stage_milestones(congress, "ENACTED", CURRENT)["reached"] == 4
         assert stage_milestones(congress, "REFERRED", CURRENT)["reached"] == 0
         assert stage_milestones(congress, "REPORTED", CURRENT - 1) is None
+
+    def test_each_milestone_opens_a_list_of_exactly_its_bills(self, congress):
+        # Another Congress's bill and a departed member's are in neither.
+        _make_sponsored_bill(congress, "s1", "S.900", "ENACTED", congress=CURRENT - 1)
+        gone = _make_senator(congress, id="s2", is_current=False)
+        _make_sponsored_bill(congress, gone.id, "S.901", "ENACTED")
+        congress.commit()
+        for m in stage_milestones(congress, "REFERRED", CURRENT)["milestones"]:
+            listed = get_bills_in_flight(congress, reached=m["stage"], per_page=100)
+            assert listed.total == m["bills"], m["label"]
+            assert listed.reached_label.endswith("this Congress")
+        # The vetoed bill passed both chambers and did not become law.
+        both = {b.bill_id for b in get_bills_in_flight(congress, reached="PASSED_BOTH").bills}
+        law = {b.bill_id for b in get_bills_in_flight(congress, reached="ENACTED").bills}
+        assert "S.98" in both and "S.98" not in law
+
+    def test_the_route_takes_only_a_milestone_for_reached(self, congress):
+        app.dependency_overrides[get_db] = lambda: congress
+        try:
+            client = TestClient(app)
+            body = client.get("/api/bills?reached=PASSED_BOTH").json()
+            assert body["total"] == 3
+            assert body["reachedLabel"] == "Bills that passed both chambers this Congress"
+            # A stage that is not a milestone is refused, not read as no filter.
+            assert client.get("/api/bills?reached=VETOED").status_code == 422
+            assert client.get("/api/bills?reached=nonsense").status_code == 422
+        finally:
+            app.dependency_overrides.clear()
 
 
 class TestStaleSort:

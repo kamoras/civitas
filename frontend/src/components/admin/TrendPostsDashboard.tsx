@@ -47,7 +47,7 @@ function AuditBlock({ title, audit }: { title: string; audit: TrendPartyAudit })
   const status = auditStatus(audit);
   return (
     <div className="space-y-3">
-      <h3 className="text-xs font-mono text-ink-lo tracking-wider">{title}</h3>
+      <h3 className="text-xs font-mono text-ink-lo">{title}</h3>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile label="Status" value={status.label} tone={status.tone} />
         <StatTile
@@ -111,8 +111,8 @@ export function TrendPostsDashboard({ token }: { token: string }) {
     <div className="space-y-6">
       <Panel title="Party balance">
         <div className="space-y-6 p-4">
-          <AuditBlock title={`LAST ${DAYS} DAYS`} audit={audit.partyAudit} />
-          <AuditBlock title="ALL TIME" audit={audit.partyAuditAllTime} />
+          <AuditBlock title={`Last ${DAYS} days`} audit={audit.partyAudit} />
+          <AuditBlock title="All time" audit={audit.partyAuditAllTime} />
           <p className="text-xs font-mono text-ink-min">
             Each candidate counts once, by the lean of its named members and sponsors. Selection is
             party-blind; the test is the posted Democratic count against the pool&apos;s share.
@@ -147,22 +147,22 @@ export function TrendPostsDashboard({ token }: { token: string }) {
             <thead>
               <tr className="text-ink-lo border-b border-white/[0.07]">
                 <th scope="col" className={`text-left ${th}`}>
-                  CARRIED
+                  Carried
                 </th>
                 <th scope="col" className={`text-right ${th}`}>
-                  POSTS
+                  Posts
                 </th>
                 <th scope="col" className={`text-right ${th}`}>
-                  COUNTS READ
+                  Counts read
                 </th>
                 <th scope="col" className={`text-right ${th}`}>
-                  MEAN LIKES
+                  Mean likes
                 </th>
                 <th scope="col" className={`text-right ${th}`}>
-                  MEDIAN LIKES
+                  Median likes
                 </th>
                 <th scope="col" className="text-right py-1 font-normal">
-                  MEAN REPOSTS
+                  Mean reposts
                 </th>
               </tr>
             </thead>
@@ -198,7 +198,7 @@ export function TrendPostsDashboard({ token }: { token: string }) {
             <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">
               {decisions.map(([decision, n]) => (
                 <div key={decision} className="border border-white/[0.07] p-3 min-w-0">
-                  <dt className="text-xs font-mono text-ink-lo tracking-wider">{decision}</dt>
+                  <dt className="text-xs font-mono text-ink-lo">{decision}</dt>
                   <dd className="mt-1 font-mono text-xl text-ink-hi">{n.toLocaleString()}</dd>
                 </div>
               ))}
@@ -219,34 +219,34 @@ export function TrendPostsDashboard({ token }: { token: string }) {
               <thead>
                 <tr className="text-ink-lo border-b border-white/[0.07] align-bottom">
                   <th scope="col" className={`text-left ${th}`}>
-                    TREND
+                    Trend
                   </th>
                   <th scope="col" className={`text-right ${th}`}>
-                    RANK
+                    Rank
                   </th>
                   <th scope="col" className={`text-left ${th}`}>
-                    DECISION
+                    Decision
                   </th>
                   <th scope="col" className={`text-left ${th}`}>
-                    REASON
+                    Reason
                   </th>
                   <th scope="col" className={`text-left ${th}`}>
-                    MATCH
+                    Match
                   </th>
                   <th scope="col" className={`text-left ${th}`}>
-                    RECORD
+                    Record
                   </th>
                   <th scope="col" className={`text-left ${th}`}>
-                    PARTIES
+                    Parties
                   </th>
                   <th scope="col" className={`text-right ${th}`}>
-                    CATEGORY
+                    Category
                   </th>
                   <th scope="col" className={`text-right ${th}`}>
-                    TRAGEDY
+                    Tragedy
                   </th>
                   <th scope="col" className="text-right py-1 font-normal">
-                    LOADED
+                    Loaded
                   </th>
                 </tr>
               </thead>

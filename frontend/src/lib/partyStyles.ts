@@ -27,9 +27,9 @@ export const PARTY_BORDER: Record<string, string> = {
 };
 
 export const PARTY_LABELS: Record<string, string> = {
-  D: "DEMOCRAT",
-  R: "REPUBLICAN",
-  I: "INDEPENDENT",
+  D: "Democrat",
+  R: "Republican",
+  I: "Independent",
 };
 
 // Combined text+border+bg badge/pill className, keyed by party code (plus

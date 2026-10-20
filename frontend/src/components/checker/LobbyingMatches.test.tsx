@@ -42,8 +42,8 @@ describe("LobbyingMatches", () => {
 
   it("gives the industry's total to the industry, not to its largest donor", () => {
     render(<LobbyingMatches matches={[match([])]} />);
-    expect(screen.getByText(/^INDUSTRY CONTRIBUTIONS: \$5/)).toBeTruthy();
-    expect(screen.getByText("LARGEST DONOR IN THIS INDUSTRY: Pfizer Inc PAC")).toBeTruthy();
+    expect(screen.getByText(/^Industry contributions: \$5/)).toBeTruthy();
+    expect(screen.getByText("Largest donor in this industry: Pfizer Inc PAC")).toBeTruthy();
   });
 
   it("shows no motion label for a passage vote and a label for anything else", () => {
@@ -109,7 +109,7 @@ describe("LobbyingMatches", () => {
 
   it("lists topically related bills only when there are any", () => {
     render(<LobbyingMatches matches={[match([lobbied({})])]} />);
-    expect(screen.queryByText(/TOPICALLY RELATED BILLS/)).toBeNull();
+    expect(screen.queryByText(/Topically related bills/)).toBeNull();
   });
 
   it("lists the member's own vote on each related bill, linked to its roll call", () => {
@@ -146,7 +146,7 @@ describe("LobbyingMatches", () => {
         ]}
       />
     );
-    expect(screen.getByText("NAY")).toBeTruthy();
+    expect(screen.getByText("Nay")).toBeTruthy();
     expect(
       screen.getByRole("link", { name: "Ratepayer Protection Act" }).getAttribute("href")
     ).toMatch(/^\/congress\/bills\/HR\.9340/);
@@ -154,11 +154,11 @@ describe("LobbyingMatches", () => {
       "/congress/votes/house/119/2/312"
     );
     // The bare id list is what the votes replace.
-    expect(screen.queryByText("TOPICALLY RELATED BILLS:")).toBeNull();
+    expect(screen.queryByText("Topically related bills:")).toBeNull();
   });
 
   it("falls back to the bare related-bill list for a response without votes", () => {
     render(<LobbyingMatches matches={[match([], ["S.1"])]} />);
-    expect(screen.getByText("TOPICALLY RELATED BILLS:")).toBeTruthy();
+    expect(screen.getByText("Topically related bills:")).toBeTruthy();
   });
 });

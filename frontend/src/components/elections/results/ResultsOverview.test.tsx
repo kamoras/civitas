@@ -71,7 +71,7 @@ function results(overrides: Partial<LiveResults> = {}): LiveResults {
 }
 
 function flipsCard() {
-  return screen.getByText("SEATS CHANGING PARTY").parentElement as HTMLElement;
+  return screen.getByText("Seats changing party").parentElement as HTMLElement;
 }
 
 describe("the seats-changing-party card", () => {
@@ -250,7 +250,7 @@ describe("a held Senate flip that the counter lists as not counted", () => {
 describe("the national results map's key", () => {
   it("calls a count under half in fainter, not paler: the fill is opacity over a dark map", () => {
     render(<ResultsOverview now={NOW} results={results()} states={["GA"]} />);
-    expect(screen.getByText(/FAINTER: UNDER HALF IN/)).toBeInTheDocument();
+    expect(screen.getByText(/Fainter: under half in/)).toBeInTheDocument();
     expect(screen.getByText(/Fainter means fewer than half/)).toBeInTheDocument();
     expect(screen.queryByText(/paler/i)).not.toBeInTheDocument();
   });
@@ -373,30 +373,30 @@ describe("when this page's own refresh has failed", () => {
   it("no row says LIVE, and none blames the state's feed", () => {
     render(<ResultsOverview now={NOW} results={withFeeds()} states={["GA", "TX"]} refreshFailed />);
     for (const st of ["GA", "TX"]) {
-      expect(row(st)).toHaveTextContent("NOT REFRESHED");
-      expect(row(st)).not.toHaveTextContent(/LIVE|STALE|FEED NOT READ|couldn't read/);
+      expect(row(st)).toHaveTextContent("Not refreshed");
+      expect(row(st)).not.toHaveTextContent(/Live|stale|feed not read|couldn't read/);
     }
-    expect(row("GA")).toHaveTextContent(/COUNT FROM/);
+    expect(row("GA")).toHaveTextContent(/Count from/);
   });
 
   it("draws every count striped and names it not live, for the page's failure", () => {
     render(<ResultsOverview now={NOW} results={withFeeds()} states={["GA", "TX"]} refreshFailed />);
-    fireEvent.click(screen.getByRole("button", { name: "HOUSE" }));
+    fireEvent.click(screen.getByRole("button", { name: "House" }));
     const map = mapProps.current!;
     expect(map.getFillColor("GA")).toMatch(/^url\(#/);
     expect(map.getStateLabel("GA")).toMatch(/not live, this page couldn't refresh it, count from/);
     expect(map.getStateLabel("TX")).not.toMatch(/feed/);
-    expect(screen.getByText(/NOT LIVE: THIS PAGE COULDN'T REFRESH/)).toBeInTheDocument();
+    expect(screen.getByText(/Not live: this page couldn't refresh/)).toBeInTheDocument();
     expect(screen.getByText(/This page couldn.t refresh the count/)).toBeInTheDocument();
     expect(screen.queryByText(/Amber stripes mean Civitas couldn/)).not.toBeInTheDocument();
   });
 
   it("is drawn live and solid again once a refresh answers", () => {
     render(<ResultsOverview now={NOW} results={withFeeds()} states={["GA", "TX"]} />);
-    fireEvent.click(screen.getByRole("button", { name: "HOUSE" }));
-    expect(row("GA")).toHaveTextContent("LIVE");
+    fireEvent.click(screen.getByRole("button", { name: "House" }));
+    expect(row("GA")).toHaveTextContent("Live");
     expect(mapProps.current!.getFillColor("GA")).not.toMatch(/^url\(#/);
-    expect(row("TX")).toHaveTextContent("FEED NOT READ");
+    expect(row("TX")).toHaveTextContent("Feed not read");
   });
 });
 
@@ -418,7 +418,7 @@ describe("a chamber with no count shown while the other has one", () => {
     expect(map.getFillColor("GA")).toMatch(/-nocount\)$/);
     expect(row("GA")).toHaveTextContent("Senate: no count shown here");
     expect(row("GA")).not.toHaveTextContent(/no votes/i);
-    expect(screen.getByText(/NO COUNT SHOWN HERE/)).toBeInTheDocument();
+    expect(screen.getByText(/No count shown here/)).toBeInTheDocument();
   });
 
   it("says the House has no count shown when only the Senate race has one", () => {
@@ -430,11 +430,11 @@ describe("a chamber with no count shown while the other has one", () => {
         states={["GA"]}
       />
     );
-    fireEvent.click(screen.getByRole("button", { name: "HOUSE" }));
+    fireEvent.click(screen.getByRole("button", { name: "House" }));
     const map = mapProps.current!;
     expect(map.getStateLabel("GA")).toBe("GA House: no count shown here");
     expect(map.getFillColor("GA")).toMatch(/-nocount\)$/);
-    expect(row("GA")).toHaveTextContent("HOUSE: NO COUNT SHOWN HERE");
+    expect(row("GA")).toHaveTextContent("House: no count shown here");
   });
 
   it("keeps 'no votes yet' for a state whose feed has given no count at all", () => {
@@ -447,7 +447,7 @@ describe("a chamber with no count shown while the other has one", () => {
     );
     expect(mapProps.current!.getStateLabel("GA")).toBe("GA Senate: no votes yet");
     expect(row("GA")).toHaveTextContent("Senate: no votes yet");
-    expect(row("GA")).not.toHaveTextContent(/HOUSE:/);
+    expect(row("GA")).not.toHaveTextContent(/House:/);
   });
 });
 
