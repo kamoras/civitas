@@ -1,0 +1,34 @@
+import type { Metadata } from "next";
+import { pageMetadata } from "@/lib/site";
+import type { ChamberMeasures } from "@/types/peers";
+import MeasuresClient from "./MeasuresClient";
+
+const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
+
+export const metadata: Metadata = pageMetadata({
+  title: "Congress, Measure by Measure: Small Gifts, PAC Money, Party Breaks, Bills",
+  description:
+    "Every senator and representative on four measures from FEC filings, roll calls and Congress.gov, side by side, with no rank and no score.",
+  path: "/congress/members",
+});
+
+async function fetchMeasures(chamber: "senate" | "house"): Promise<ChamberMeasures | null> {
+  try {
+    const res = await fetch(`${BACKEND}/api/congress/measures?chamber=${chamber}`, {
+      next: { revalidate: 300 },
+    });
+    return res.ok ? ((await res.json()) as ChamberMeasures) : null;
+  } catch {
+    return null;
+  }
+}
+
+export default async function MembersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ chamber?: string }>;
+}) {
+  const chamber = (await searchParams).chamber === "house" ? "house" : "senate";
+  const data = await fetchMeasures(chamber);
+  return <MeasuresClient chamber={chamber} data={data} />;
+}

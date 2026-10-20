@@ -1,18 +1,11 @@
-import type { ReactNode } from "react";
-import Link from "next/link";
 import type { Senator } from "@/types/senator";
 import type { Committee } from "@/types/politicians";
-import { asLabel, displayScore, safeHref } from "@/lib/formatting";
-import { getScoreColor, getScoreLabel } from "@/lib/representation";
-import { currentCongressLabel } from "@/lib/sources";
+import { asLabel, safeHref } from "@/lib/formatting";
 import { districtName } from "@/lib/elections";
 import { PARTY_BORDER, PARTY_COLORS, PARTY_LABELS } from "@/lib/partyStyles";
 import MetricTooltip from "@/components/checker/MetricTooltip";
-import ScoreTrendSection from "@/components/checker/ScoreTrendSection";
-import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import Photo from "@/components/Photo";
-import { HeldScoreNote, ThinDataNote } from "@/components/scorecard/HeldScore";
 import { onThisPage } from "@/lib/onThisPage";
 import { LONG_LABEL } from "@/lib/controlStyles";
 
@@ -24,9 +17,21 @@ import { LONG_LABEL } from "@/lib/controlStyles";
 const LINK =
   "inline-flex min-h-6 items-center font-mono text-[13px] text-ink-lo underline underline-offset-2 hover:text-phos";
 
-/** Who the member is, how to reach them, and the verdict: the
- *  Representation Score, the chamber rank the leaderboard gives it, and how
- *  it has moved (scoring-method changes marked on the trend). */
+const BUTTON =
+  "inline-flex min-h-11 items-center border border-ink-hi px-3 text-sm font-semibold text-ink-hi wrap-anywhere hover:bg-white/5";
+
+/** A contact form's host, printed on its button ("wyden.senate.gov"). */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host.replace(/^www\./, "");
+  } catch {
+    return "contact form";
+  }
+}
+
+/** Who the member is and how to reach them. No verdict: the composite
+ *  score and its rank are no longer shown (redesign 2026-10); where the
+ *  member stands is WhereTheyStand, measure by measure, against peers. */
 export default function ScorecardHeader({
   member,
   chamber,
@@ -35,11 +40,8 @@ export default function ScorecardHeader({
   district,
   leadershipTitle,
   committees,
-  rank,
   titleAs: Title,
   former = false,
-  standing,
-  glance,
 }: {
   member: Senator;
   chamber: "senate" | "house";
@@ -48,15 +50,9 @@ export default function ScorecardHeader({
   district?: number | null;
   leadershipTitle?: string | null;
   committees?: Committee[];
-  rank?: { rank: number; of: number } | null;
   titleAs: "h1" | "h2";
   former?: boolean;
-  /** Where the member sits in the chamber (ChamberStrip), under the score. */
-  standing?: ReactNode;
-  /** The scorecard in short (AtAGlance), for a phone's first screen. */
-  glance?: ReactNode;
 }) {
-  const overall = displayScore(member.representationScore.overall);
   const office = chamber === "senate" ? "Senator" : "Representative";
   const place = [stateName ?? member.state, district != null ? districtName(district) : null]
     .filter(Boolean)
@@ -73,7 +69,7 @@ export default function ScorecardHeader({
 
   const initials = (
     <div
-      className={`flex h-14 w-12 shrink-0 items-center justify-center border-2 text-lg font-bold sm:h-28 sm:w-24 sm:text-2xl ${PARTY_BORDER[member.party]} ${PARTY_COLORS[member.party]}`}
+      className={`flex h-14 w-12 shrink-0 items-center justify-center border-2 text-lg font-semibold sm:h-28 sm:w-24 sm:text-2xl ${PARTY_BORDER[member.party]} ${PARTY_COLORS[member.party]}`}
       aria-hidden="true"
     >
       {member.initials}
@@ -84,8 +80,8 @@ export default function ScorecardHeader({
     <header
       id="overview"
       {...{ [SHARE_SECTION_ATTR]: "overview" }}
-      {...onThisPage("Score")}
-      className={`grid grid-cols-[minmax(0,1fr)] gap-6 border border-white/25 border-t-[3px] bg-surface px-5 py-6 font-sans sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:grid-rows-[auto_1fr] ${PARTY_BORDER[member.party]}`}
+      {...onThisPage("Overview")}
+      className={`grid grid-cols-[minmax(0,1fr)] gap-4 border border-white/25 border-t-[3px] bg-surface px-5 py-6 font-sans sm:px-8 ${PARTY_BORDER[member.party]}`}
     >
       {/* Three blocks in reading order for a phone — who, the score, then
           how to reach them; on a desktop the score takes the right column
@@ -94,7 +90,7 @@ export default function ScorecardHeader({
           surname that still doesn't fit hyphenates at a syllable rather than
           splitting anywhere (it once had 146px at 320px beside a full-size
           photo, and split mid-word). */}
-      <div className="flex min-w-0 flex-row flex-wrap gap-3 sm:gap-5 lg:col-start-1 lg:row-start-1">
+      <div className="flex min-w-0 flex-row flex-wrap gap-3 sm:gap-5">
         {thumbnailUrl ? (
           <Photo
             src={thumbnailUrl}
@@ -112,7 +108,7 @@ export default function ScorecardHeader({
         <div className="flex min-w-0 flex-1 basis-48 flex-col gap-2">
           <Title
             lang="en"
-            className="break-words text-2xl font-extrabold leading-tight text-ink-hi [hyphens:auto] sm:text-4xl"
+            className="break-words text-2xl font-semibold leading-tight text-ink-hi [hyphens:auto] sm:text-4xl"
           >
             {member.name}
           </Title>
@@ -138,75 +134,26 @@ export default function ScorecardHeader({
         </div>
       </div>
 
-      <div className="flex flex-col gap-2 border-t border-white/[0.12] pt-5 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
-        <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-          <MetricTooltip text="The weighted average of the three scores below. 100 means full representation of the constituents by these measures. 50 is not the middle member: see where this score sits in the chamber just below.">
-            Representation Score
-          </MetricTooltip>
-        </p>
-        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2">
-          <span
-            className={`font-display text-6xl font-extrabold leading-none sm:text-7xl ${getScoreColor(overall)}`}
-          >
-            {overall}
-          </span>
-          <div className="flex min-w-0 flex-col gap-1 [overflow-wrap:anywhere]">
-            <span className={`font-mono text-sm tracking-[0.1em] ${getScoreColor(overall)}`}>
-              {getScoreLabel(overall)}
-            </span>
-            {rank && (
-              <Link
-                href={`/leaderboard?branch=${chamber}`}
-                className="inline-flex min-h-6 w-fit items-center font-mono text-[13px] text-ink-lo underline underline-offset-2 hover:text-phos"
-              >
-                #{rank.rank} of {rank.of} {chamber === "senate" ? "senators" : "representatives"}
-              </Link>
-            )}
-          </div>
-        </div>
-        <HeldScoreNote held={member.representationScore.held} />
-        <ThinDataNote dims={member.representationScore.thinData} />
-        {glance}
-        {standing}
-        <ScoreTrendSection entityId={member.id} entityType={chamber} />
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="font-mono text-xs text-ink-min">
-            Reflects the {currentCongressLabel()} ·{" "}
-            <a href="#methods" className="underline underline-offset-2 hover:text-phos">
-              methods, data &amp; citation
-            </a>{" "}
-            ·{" "}
-            <Link href="/changelog" className="underline underline-offset-2 hover:text-phos">
-              scoring changelog
-            </Link>
-          </p>
-          {/* The header names the member itself, so its image needs no
-              title strip above it. */}
-          <ShareSectionButton label="Scorecard summary" withStrip={false} />
-        </div>
-      </div>
-
-      <div className="flex min-w-0 flex-col gap-2 lg:col-start-1 lg:row-start-2 lg:pl-[calc(6rem+1.25rem)]">
+      <div className="flex min-w-0 flex-col gap-3 sm:pl-[calc(6rem+1.25rem)]">
         {committees && committees.length > 0 && (
-          <p className="text-sm text-ink-lo">
-            Committees:{" "}
-            {committees.map((c, i) => (
-              <span key={c.committeeName}>
-                {i > 0 && " · "}
+          <ul aria-label="Committees" className="flex flex-wrap gap-1.5 text-sm text-ink">
+            {committees.map((c) => (
+              <li key={c.committeeName} className="border border-white/30 px-2 py-0.5">
                 {c.committeeName.replace(/^(House|Senate) Committee on /, "")}
-                {c.title && (
-                  <span className="font-mono text-xs uppercase text-ink-min"> ({c.title})</span>
-                )}
-              </span>
+                {c.title && <span className="font-semibold"> · {c.title}</span>}
+              </li>
             ))}
-          </p>
+          </ul>
         )}
         {/* Phone, message and source links are only useful clicked; a
             picture of them is noise. */}
-        <p className="flex flex-wrap gap-x-4 gap-y-1" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
+        <div className="flex flex-wrap gap-2" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
           {phone && (
-            <a href={`tel:${phone.replace(/[^0-9+]/g, "")}`} className={LINK}>
-              {phone}
+            <a
+              href={`tel:${phone.replace(/[^0-9+]/g, "")}`}
+              className={`${BUTTON} bg-phos text-surface-base`}
+            >
+              Call {phone}
             </a>
           )}
           {!former && member.contactFormUrl && (
@@ -214,9 +161,9 @@ export default function ScorecardHeader({
               href={safeHref(member.contactFormUrl) || "#"}
               target="_blank"
               rel="noopener noreferrer"
-              className={LINK}
+              className={BUTTON}
             >
-              Send a message ↗
+              Write · {hostOf(member.contactFormUrl)} ↗
             </a>
           )}
           {!former && member.websiteUrl && (
@@ -224,11 +171,13 @@ export default function ScorecardHeader({
               href={safeHref(member.websiteUrl) || "#"}
               target="_blank"
               rel="noopener noreferrer"
-              className={LINK}
+              className={BUTTON}
             >
-              Official site ↗
+              Website ↗
             </a>
           )}
+        </div>
+        <p className="flex flex-wrap gap-x-4 gap-y-1" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
           {/* Congress.gov's member pages are keyed by Bioguide id; the name
               part of the path is decoration (it redirects to its own
               spelling). A name alone is a "Page Not Found". */}
@@ -250,9 +199,9 @@ export default function ScorecardHeader({
           >
             FEC filings ↗
           </a>
-          <Link href={`/compare?leftId=${member.id}&leftChamber=${chamber}`} className={LINK}>
-            Compare with another member
-          </Link>
+          <a href="#methods" className={LINK}>
+            Methods, data &amp; citation
+          </a>
         </p>
         {!former && member.officeAddress && (
           <p className="text-xs text-ink-min">DC office: {member.officeAddress}</p>

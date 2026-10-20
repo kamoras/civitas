@@ -1,8 +1,7 @@
 import Link from "next/link";
 import type { BallotCandidate } from "@/types/election";
 import { DEM_AFFILIATE_PARTIES, candidateName, incumbencyLabel } from "@/lib/elections";
-import { cashOnHandDisplay, displayScore, formatCurrency } from "@/lib/formatting";
-import { getScoreColor } from "@/lib/representation";
+import { cashOnHandDisplay, formatCurrency } from "@/lib/formatting";
 
 // FEC's party codes ("DEM"/"REP"/"IND"/...) don't match lib/partyStyles.ts's
 // D/R/I keys (those back President/Justice's own party codes), so this
@@ -133,10 +132,9 @@ export default function CandidateCard({
           {candidate.incumbentRecord && (
             <Link
               href={`/politicians/${candidate.incumbentRecord.id}`}
-              className={`font-mono text-xs hover:underline ${getScoreColor(displayScore(candidate.incumbentRecord.score))}`}
-              title="View this member's full Representation Scorecard"
+              className="font-mono text-xs text-ink-lo hover:underline"
             >
-              SCORE: {displayScore(candidate.incumbentRecord.score)} →
+              WHERE THIS MEMBER STANDS →
             </Link>
           )}
         </div>

@@ -1,4 +1,4 @@
-import { displayScore, restatesTitle } from "@/lib/formatting";
+import { restatesTitle } from "@/lib/formatting";
 import { ImageResponse } from "next/og";
 import { NextRequest } from "next/server";
 import { loadArchivoBold } from "@/lib/ogFonts";
@@ -52,13 +52,6 @@ const PARTY_ACCENT: Record<string, string> = {
 // Keep these two in sync: the whole point of a single shared scoring
 // function elsewhere in the app was stopping the same score from
 // rendering a different tier depending on which page shows it.
-function scoreColorHex(score: number): string {
-  if (score >= 81) return "#00FF41"; // phos
-  if (score >= 61) return "#4DE3E8"; // signal.cyan
-  if (score >= 41) return "#FFD84D"; // signal.amber
-  if (score >= 21) return "#FF8A3D"; // signal.orange
-  return "#FF8989"; // signal.red
-}
 
 async function fetchIssue(id: string) {
   try {
@@ -327,15 +320,15 @@ export function formatStanding(identity: OgPoliticianIdentity | undefined): stri
 // uses. Justices are not scored (justice v3): their card says so rather
 // than naming a score it doesn't show.
 export function scoreFooterLabel(branch: string | undefined): string {
-  if (branch === "senate" || branch === "house") return "REPRESENTATION SCORE";
-  return branch === "scotus" ? "NOT SCORED" : "CIVITAS SCORE";
+  // No composite score on any card (redesign 2026-10): what the page holds.
+  if (branch === "senate" || branch === "house") return "WHERE THEY STAND AMONG PEERS";
+  return branch === "scotus" ? "VOTES AND DECISIONS" : "THE PUBLIC RECORD";
 }
 
 async function politicianImage(
   profile: {
     branch?: string;
     identity?: OgPoliticianIdentity;
-    overallScore?: number | null;
   } | null
 ) {
   const identity = profile?.identity;
@@ -343,9 +336,6 @@ async function politicianImage(
   const party = identity?.party ?? "";
   const accent = PARTY_ACCENT[party] ?? "#F2EEE7";
   const standing = formatStanding(identity);
-  const overallScore = profile?.overallScore ?? null;
-  const overall = overallScore != null ? String(displayScore(overallScore)) : null;
-  const scoreLine = overall ? `Civitas score: ${overall}/100` : "";
   const section = identity?.role?.toUpperCase() ?? "PUBLIC RECORD";
   const footerLabel = scoreFooterLabel(profile?.branch);
 
@@ -359,7 +349,7 @@ async function politicianImage(
   let archivoBold: ArrayBuffer | null = null;
   try {
     archivoBold = await loadArchivoBold(
-      `CIVITAS${section}${name}${standing}${scoreLine}${DOMAIN}${footerLabel}|`
+      `CIVITAS${section}${name}${standing}${DOMAIN}${footerLabel}|`
     );
   } catch {
     // fall through with archivoBold still null — degrade to Satori's
@@ -404,18 +394,6 @@ async function politicianImage(
           {standing && (
             <div style={{ color: accent, fontSize: 28, marginTop: 12, letterSpacing: 2 }}>
               {standing}
-            </div>
-          )}
-          {scoreLine && overallScore != null && (
-            <div
-              style={{
-                display: "flex",
-                color: scoreColorHex(displayScore(overallScore)),
-                fontSize: 24,
-                marginTop: 24,
-              }}
-            >
-              {scoreLine}
             </div>
           )}
         </div>

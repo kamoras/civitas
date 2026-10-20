@@ -256,7 +256,7 @@ export default function JusticeScorecard({
                 />
               )}
               <div className="flex min-w-0 flex-col gap-2">
-                <Title className="break-words text-3xl font-extrabold leading-tight text-ink-hi sm:text-4xl">
+                <Title className="break-words text-3xl font-semibold leading-tight text-ink-hi sm:text-4xl">
                   {j.name}
                 </Title>
                 <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-lo">
@@ -285,7 +285,7 @@ export default function JusticeScorecard({
             </div>
             <div className="flex flex-col gap-2 border-t border-white/[0.12] pt-5 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
               <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">Score</p>
-              <p className="font-display text-2xl font-extrabold text-ink-min">Not scored</p>
+              <p className="font-display text-2xl font-semibold text-ink-min">Not scored</p>
               <p className="text-sm leading-relaxed text-ink-lo">
                 {NOT_SCORED_REASON}{" "}
                 <a href={JUSTICE_RESEARCH_URL} className={LINK}>
@@ -317,7 +317,7 @@ export default function JusticeScorecard({
               aria-labelledby="agreement-heading"
             >
               <div>
-                <h2 id="agreement-heading" className="text-[19px] font-bold text-ink-hi">
+                <h2 id="agreement-heading" className="text-[19px] font-semibold text-ink-hi">
                   Agreement with each justice
                 </h2>
                 <p className="mt-1 font-mono text-xs uppercase tracking-[0.14em] text-ink-min">

@@ -72,6 +72,7 @@ export default function RaceMap({
 
   return (
     <ComposableMap
+      className="night"
       projection="geoAlbersUsa"
       projectionConfig={{ scale: 1000 }}
       width={980}
@@ -106,11 +107,11 @@ export default function RaceMap({
                 onKeyDown={(e: KeyboardEvent) => activate(e, stateCode)}
                 style={{
                   fill: isSelected
-                    ? "#00ffff"
+                    ? "var(--signal-cyan)"
                     : isHovered
                       ? getHoverFillColor(stateCode, isSelected)
                       : getFillColor(stateCode, isSelected),
-                  stroke: isHovered ? "#00ff41" : "#0a1a0a",
+                  stroke: isHovered ? "var(--phos)" : "#0a1a0a",
                   strokeWidth: isFocused ? 2.5 : isHovered ? 1 : 0.5,
                   outline: "none",
                   cursor: "pointer",
@@ -202,7 +203,7 @@ function SmallStateCallouts({
               y1={cy}
               x2={CALLOUT_X}
               y2={y}
-              stroke={isHovered ? "#00ff41" : "rgba(255,255,255,0.25)"}
+              stroke={isHovered ? "var(--phos)" : "rgba(255,255,255,0.25)"}
               strokeWidth={0.75}
             />
             <rect
@@ -212,12 +213,12 @@ function SmallStateCallouts({
               height={24}
               fill={
                 isSelected
-                  ? "#00ffff"
+                  ? "var(--signal-cyan)"
                   : isHovered
                     ? getHoverFillColor(stateCode, isSelected)
                     : getFillColor(stateCode, isSelected)
               }
-              stroke={isHovered ? "#00ff41" : "rgba(255,255,255,0.35)"}
+              stroke={isHovered ? "var(--phos)" : "rgba(255,255,255,0.35)"}
               strokeWidth={isFocused ? 2.5 : 1}
             />
             <text

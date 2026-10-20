@@ -94,7 +94,7 @@ function ElectionCountdown({ electionDay, asOf }: { electionDay: string; asOf: n
         Election Day ·{" "}
         {formatUtcDate(electionDay, { month: "short", day: "numeric", year: "numeric" })}
       </p>
-      <p className="mt-1 font-display text-3xl font-extrabold leading-none tabular-nums text-ink-hi">
+      <p className="mt-1 font-display text-3xl font-semibold leading-none tabular-nums text-ink-hi">
         {days === 0 ? "Today" : days}
         {days > 0 && (
           <span className="ml-2 font-mono text-xs font-normal uppercase tracking-[0.12em] text-ink-lo">

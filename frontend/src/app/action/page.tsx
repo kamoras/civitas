@@ -117,7 +117,7 @@ function IssueBody({
   return (
     <>
       {!restatesTitle(issue.title, issue.summary) && (
-        <p className="mb-4 max-w-3xl font-display text-base leading-relaxed text-ink sm:text-[17px]">
+        <p className="mb-4 max-w-3xl font-sans text-base leading-relaxed text-ink sm:text-[17px]">
           {issue.summary}
           <SummarySource issue={issue} />
         </p>
@@ -173,7 +173,7 @@ function HeroIssue({
       className="border border-white/25 border-t-3 bg-surface p-5 sm:p-8"
     >
       <IssueMeta issue={issue} lead="Top issue" />
-      <h2 className="mb-4 mt-3 text-balance font-display text-2xl font-bold leading-tight text-ink-hi sm:text-[28px]">
+      <h2 className="mb-4 mt-3 text-balance font-display text-2xl font-semibold leading-tight text-ink-hi sm:text-[28px]">
         {issue.title}
       </h2>
       <IssueImage issue={issue} priority />
@@ -238,7 +238,7 @@ function SecondaryIssue({
                 {issue.title}
               </span>
               {!expanded && !restatesTitle(issue.title, issue.summary) && (
-                <span className="mt-1 line-clamp-2 block font-display text-[15px] leading-relaxed text-ink-lo">
+                <span className="mt-1 line-clamp-2 block font-sans text-[15px] leading-relaxed text-ink-lo">
                   {issue.summary}
                 </span>
               )}
@@ -304,13 +304,13 @@ function OpenComments() {
               </span>
               <Link
                 href={exploreHref(item)}
-                className="mt-0.5 block font-display text-[15px] leading-snug text-ink-hi hover:underline"
+                className="mt-0.5 block font-sans text-[15px] leading-snug text-ink-hi hover:underline"
               >
                 {item.title}
               </Link>
               {item.firstSentence && (
                 // The abstract's opening sentence, as the Register printed it.
-                <span className="mt-1 block font-display text-sm leading-snug text-ink-lo">
+                <span className="mt-1 block font-sans text-sm leading-snug text-ink-lo">
                   {item.firstSentence}
                 </span>
               )}
@@ -369,7 +369,7 @@ function IssuesTab({
           onMonitor={onMonitor}
         />
       ) : (
-        <p className="border-l-2 border-ink-min/60 py-2 pl-4 font-display text-base text-ink-lo">
+        <p className="border-l-2 border-ink-min/60 py-2 pl-4 font-sans text-base text-ink-lo">
           {selectedDate
             ? // Issues are kept for 14 days unless they were posted
               // (action_center._cleanup_old_unposted_issues); the Archive

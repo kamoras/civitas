@@ -51,7 +51,7 @@ export default function PageMasthead({
           {/* Caps from 640px up; a phone's title is set as written, in
               sentence case, where caps at 30px wrapped "TODAY ON THE
               RECORD" to two lines (mobile spec P1). */}
-          <h1 className="mt-3 font-display text-3xl font-extrabold leading-[1.1] tracking-[-0.02em] text-ink-hi sm:text-4xl sm:uppercase sm:leading-none">
+          <h1 className="mt-3 font-display text-3xl font-semibold leading-[1.1] tracking-[-0.02em] text-ink-hi sm:text-4xl sm:uppercase sm:leading-none">
             {title}
           </h1>
         </div>
@@ -59,7 +59,7 @@ export default function PageMasthead({
       </div>
       {(children || more) && (
         <div
-          className={`mt-3 max-w-2xl font-display text-base leading-relaxed text-ink-lo ${children ? "" : "hidden sm:block"}`}
+          className={`mt-3 max-w-2xl font-sans text-base leading-relaxed text-ink-lo ${children ? "" : "hidden sm:block"}`}
         >
           {children}
           {more && (
@@ -75,7 +75,7 @@ export default function PageMasthead({
           <summary className="inline-flex min-h-11 cursor-pointer items-center font-mono text-[0.8125rem] uppercase tracking-[0.08em] text-ink-lo hover:text-phos">
             More about this page
           </summary>
-          <p className="max-w-2xl font-display text-base leading-relaxed text-ink-lo">{more}</p>
+          <p className="max-w-2xl font-sans text-base leading-relaxed text-ink-lo">{more}</p>
         </details>
       )}
     </header>

@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.action import router as action_router
+from app.api.response_helpers import JSONResponse
 from app.api.agencies import router as agencies_router
 from app.api.admin import router as admin_router
 from app.api.bills import router as bills_router
@@ -36,7 +37,7 @@ from app.api.sources import router as sources_router
 from app.api.this_week import router as this_week_router
 from app.api.visits import router as visits_router
 
-api_router = APIRouter(prefix="/api")
+api_router = APIRouter(prefix="/api", default_response_class=JSONResponse)
 
 api_router.include_router(health_router, tags=["health"])
 api_router.include_router(politicians_router, tags=["politicians"])

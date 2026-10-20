@@ -10,6 +10,7 @@ import type { RepresentationScoreBreakdown } from "@/types/scoreBreakdown";
 
 const fetchRepVotes = vi.fn();
 vi.mock("@/lib/api", () => ({
+  fetchPeerComparison: vi.fn().mockReturnValue(new Promise(() => {})),
   fetchRepVotes: (...args: unknown[]) => fetchRepVotes(...args),
   fetchSenatorVotes: vi.fn(),
   fetchRepStockTrades: vi
@@ -22,7 +23,6 @@ vi.mock("@/lib/api", () => ({
   fetchSenatorHoldings: vi.fn(),
   fetchRepresentativeHistory: vi.fn().mockResolvedValue({ snapshots: [] }),
   fetchSenatorHistory: vi.fn(),
-  fetchPresidentHistory: vi.fn(),
 }));
 
 // A House member as the API served one on 2026-09-28, trimmed and renamed.
@@ -212,7 +212,7 @@ function renderCard(cardBreakdown: RepresentationScoreBreakdown = breakdown) {
         breakdown={cardBreakdown}
         district={2}
         stateName="Tennessee"
-        rank={{ rank: 412, of: 433 }}
+
         committees={[
           { committeeName: "House Committee on Foreign Affairs", chamber: "house", title: null },
         ]}
@@ -239,7 +239,8 @@ describe("MemberScorecard", () => {
   it("states each score's evidence without anything to expand", async () => {
     renderCard();
     expect(screen.getByRole("heading", { level: 1, name: "Jordan Hale" })).toBeInTheDocument();
-    expect(screen.getByText("#412 of 433 representatives")).toBeInTheDocument();
+    // No composite or rank on the page (redesign 2026-10).
+    expect(screen.queryByText(/of 433 representatives/)).not.toBeInTheDocument();
     expect(
       screen.getByText(
         /11% of \$1\.2M in contributions came from PACs\. 24% came from donors giving \$200 or less; the House median is 6%\./
@@ -318,7 +319,7 @@ describe("MemberScorecard", () => {
         breakdown={counted}
         district={2}
         stateName="Tennessee"
-        rank={{ rank: 412, of: 433 }}
+
         committees={[]}
       />
     );
@@ -360,7 +361,7 @@ describe("MemberScorecard", () => {
         breakdown={scored}
         district={2}
         stateName="Tennessee"
-        rank={{ rank: 412, of: 433 }}
+
         committees={[]}
       />
     );
@@ -649,79 +650,25 @@ describe("MemberScorecard", () => {
     expect(screen.queryByText(/came from donors giving \$200 or less/)).not.toBeInTheDocument();
   });
 
-  it("places the member among the chamber and links the members ranked next to them", async () => {
-    const field = {
-      party: "R",
-      scores: [
-        { score: 30, party: "D" },
-        { score: 41, party: "R" },
-        { score: 41, party: "R" },
-        { score: 60, party: "D" },
-      ],
-      partyMedian: 41,
-      chamberMedian: 41,
-      above: {
-        id: "avery-north",
-        name: "Avery North",
-        party: "D",
-        state: "OH",
-        district: 9,
-        score: 60,
-        rank: 1,
-      },
-      below: null,
-    };
-    render(
-      <main>
-        <MemberScorecard
-          member={member}
-          chamber="house"
-          breakdown={breakdown}
-          district={2}
-          stateName="Tennessee"
-          rank={{ rank: 2, of: 4 }}
-          field={field}
-          scoredOn={{ date: "2026-10-13", algorithmVersion: "v6.34" }}
-        />
-      </main>
-    );
-    const strip = screen.getByRole("img", { name: /Representation Scores of all 4 serving/ });
-    expect(strip.getAttribute("aria-label")).toMatch(
-      /Jordan Hale scores 41, ranked 2 of 4\. Median among Republicans: 41\./
-    );
-    // One square per member, plus the member's marker.
-    expect(strip.querySelectorAll("rect")).toHaveLength(4 + 2);
-    const nav = screen.getByRole("navigation", { name: "Ranked next to this member" });
-    expect(within(nav).getByRole("link", { name: "Avery North" })).toHaveAttribute(
-      "href",
-      "/politicians/avery-north"
-    );
-    expect(
-      within(nav).getByRole("link", { name: "Compare Jordan Hale with Avery North" })
-    ).toHaveAttribute(
-      "href",
-      "/compare?leftId=jordan-hale&leftChamber=house&rightId=avery-north&rightChamber=house"
-    );
-    expect(within(nav).queryByText("Ranked below")).not.toBeInTheDocument();
-  });
-
   it("keeps the methods, data and citation one step away, opened by its link", async () => {
     const user = userEvent.setup();
     renderCard();
     const toggle = screen.getByRole("button", { name: /Methods, data and citation/ });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     // The header's link is the one step.
-    await user.click(screen.getByRole("link", { name: "methods, data & citation" }));
+    await user.click(screen.getByRole("link", { name: "Methods, data & citation" }));
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     const section = document.getElementById("methods")!;
     // Every component with the scorer's own sentence, not behind a tooltip.
     expect(
       within(section).getByText(breakdown.constituentAlignment.components[0].detail)
     ).toBeVisible();
-    expect(within(section).getByRole("link", { name: /Every vote this Congress/ })).toHaveAttribute(
-      "href",
-      "/api/public/v1/representatives/jordan-hale/votes?per_page=100"
-    );
+    expect(
+      within(section).getByRole("link", { name: /Every vote this Congress, as a spreadsheet/ })
+    ).toHaveAttribute("href", "/api/public/v1/representatives/jordan-hale/votes.csv");
+    expect(
+      within(section).getByRole("link", { name: /Every vote this Congress, with/ })
+    ).toHaveAttribute("href", "/api/public/v1/representatives/jordan-hale/votes?per_page=100");
     expect(within(section).getByRole("link", { name: "Kirkland & Slapin 2017" })).toHaveAttribute(
       "href",
       "/about/references#kirkland2017"
@@ -742,20 +689,5 @@ describe("MemberScorecard", () => {
     } finally {
       window.history.replaceState(null, "", "/");
     }
-  });
-
-  it("puts each finding in the scorecard-in-short, linked to its column", () => {
-    const withFinding = {
-      ...breakdown,
-      constituentAlignment: {
-        ...breakdown.constituentAlignment,
-        finding:
-          "Breaks with the party about 7 times as often as Republicans in districts that lean the same way.",
-      },
-    } as RepresentationScoreBreakdown;
-    renderCard(withFinding);
-    const glance = screen.getByRole("list", { name: "The scorecard in short" });
-    const link = within(glance).getByRole("link", { name: /Votes 8 Breaks with the party/ });
-    expect(link).toHaveAttribute("href", "#constituent-alignment");
   });
 });

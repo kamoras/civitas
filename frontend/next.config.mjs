@@ -19,6 +19,28 @@ const nextConfig = {
       { source: "/bills", destination: "/congress/bills", permanent: true },
       { source: "/bills/:id", destination: "/congress/bills/:id", permanent: true },
       { source: "/scorecard", destination: "/politicians", permanent: true },
+      // The leaderboard ranked members by the composite score, which the
+      // site no longer shows (redesign 2026-10). Each chamber's view is now
+      // its measures page; presidents and justices go to their own lists.
+      {
+        source: "/leaderboard",
+        has: [{ type: "query", key: "branch", value: "house" }],
+        destination: "/congress/members?chamber=house",
+        permanent: true,
+      },
+      {
+        source: "/leaderboard",
+        has: [{ type: "query", key: "branch", value: "president" }],
+        destination: "/politicians?branch=president",
+        permanent: true,
+      },
+      {
+        source: "/leaderboard",
+        has: [{ type: "query", key: "branch", value: "scotus" }],
+        destination: "/court",
+        permanent: true,
+      },
+      { source: "/leaderboard", destination: "/congress/members", permanent: true },
       // No feed is at /feed itself; the page listing them is (nginx sends
       // /feed/ there too, before Next sees it).
       { source: "/feed", destination: "/feeds", permanent: true },

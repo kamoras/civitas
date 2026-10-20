@@ -72,7 +72,7 @@ export default function ChamberView({ view }: { view: ChamberSupport }) {
 
   return (
     <div className="space-y-8">
-      <p className="max-w-3xl font-display text-lg leading-relaxed text-ink">{summary}</p>
+      <p className="max-w-3xl font-sans text-lg leading-relaxed text-ink">{summary}</p>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <div className="min-w-0">

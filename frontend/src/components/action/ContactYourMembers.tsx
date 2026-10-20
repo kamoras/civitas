@@ -160,9 +160,7 @@ function Script({
           ))}
         </div>
       )}
-      <p className="whitespace-pre-line font-display text-[15px] leading-relaxed text-ink">
-        {text}
-      </p>
+      <p className="whitespace-pre-line font-sans text-[15px] leading-relaxed text-ink">{text}</p>
       <div className="mt-1 flex flex-wrap items-center gap-x-4">
         <button
           type="button"
@@ -205,7 +203,7 @@ function MemberRow({
   return (
     <li className="border-t border-white/[0.07] py-2.5">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <span className="font-display text-[15px] text-ink-hi">
+        <span className="font-sans text-[15px] text-ink-hi">
           <Link href={`/politicians/${member.id}`} className="underline-offset-4 hover:underline">
             {who}
           </Link>{" "}
@@ -345,7 +343,7 @@ export default function ContactYourMembers({
 
   return (
     <div>
-      <p className="font-display text-[15px] leading-snug text-ink-hi">
+      <p className="font-sans text-[15px] leading-snug text-ink-hi">
         {afterNamed
           ? "Or contact your own senators and representative"
           : "Your senators and representative"}

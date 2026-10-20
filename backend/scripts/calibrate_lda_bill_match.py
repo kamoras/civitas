@@ -235,7 +235,6 @@ def main() -> None:
         table = build_df(titles)
         args.output.write_text(json.dumps(table, indent=0, sort_keys=False) + "\n")
         print(f"Wrote {args.output} ({table['documents']} titles, {len(table['df'])} words)", file=sys.stderr)
-        lr._document_frequencies.cache_clear()
     if not args.skip_calibration:
         first_year = congress_first_year(args.congress)
         calibrate(titles[args.congress], fetched[args.congress][1], titles[args.congress - 1], first_year)

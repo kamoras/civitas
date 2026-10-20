@@ -33,6 +33,11 @@ export interface HeldScore {
 export interface Senator {
   id: string;
   name: string;
+  /** The scoring version that stored the scores, and when (the newest
+   *  history snapshot's); null when none is recorded, absent from an
+   *  older API. What a citation of the score names. */
+  algorithmVersion?: string | null;
+  scoredOn?: string | null;
   /** Biographical Directory id, which Congress.gov's member pages are keyed by. */
   bioguideId?: string | null;
   state: string;
@@ -358,23 +363,6 @@ export interface LeaderboardEntry {
   /** Weighted dimensions whose data-sufficiency grade is "low" (backend
    *  score_display.thin_dimensions): the score there is mostly a pull to 50. */
   thinData?: string[];
-}
-
-/** GET /api/leaderboard/spread: how a chamber's displayed overall scores
- *  are spread. Every figure is the backend's. */
-export interface ScoreSpread {
-  chamber: "senate" | "house";
-  total: number;
-  /** Members showing each whole-number score, lowest score first. */
-  counts: { score: number; members: number }[];
-  p25: number | null;
-  median: number | null;
-  p75: number | null;
-  /** Serving members per party, for the party filter's counts. */
-  parties: { D: number; R: number; I: number };
-  /** The chamber's latest scoring run, YYYY-MM-DD; optional for an older
-   *  backend. */
-  asOf?: string | null;
 }
 
 /** One asset from a member's latest annual financial disclosure. Values are

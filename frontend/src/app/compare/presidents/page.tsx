@@ -66,12 +66,17 @@ function scored(n: number | null) {
   return n == null ? "Not scored" : String(displayScore(n));
 }
 
+// No composite row (redesign 2026-10): the historians' rank, attributed,
+// then each measured part on its own.
 const SCORE_ROWS: Row[] = [
   {
-    label: "Presidential Score",
-    value: ({ president: p }) =>
-      p.score.dimensionsAvailable === 0 ? "Not scored" : String(displayScore(p.score.overall)),
-    score: ({ president: p }) => (p.score.dimensionsAvailable === 0 ? null : p.score.overall),
+    label: "Historians' rank (C-SPAN survey, their ranking)",
+    value: ({ breakdown: b }) => {
+      const f = b?.historicalLegacy.facts as HistoricalLegacyFacts | undefined;
+      return f?.historiansRank != null
+        ? `#${f.historiansRank} of ${f.historiansRated}`
+        : "Not rated";
+    },
   },
   ...(
     [
@@ -194,7 +199,7 @@ function PresidentSelect({
 
 function PresidentHeading({ side: { president: p } }: { side: Side }) {
   return (
-    <th scope="col" className="w-[38%] px-3 py-3 font-display text-base">
+    <th scope="col" className="w-[38%] px-3 py-3 font-sans text-base">
       <Link
         href={`/politicians/${p.id}`}
         className="underline-offset-4 hover:text-phos hover:underline"

@@ -86,7 +86,7 @@ export default function BillSources({
       <h2
         id="sources"
         {...onThisPage("Data and citation")}
-        className="font-display text-2xl font-extrabold text-ink-hi"
+        className="font-display text-2xl font-semibold text-ink-hi"
       >
         Sources, data and citation
       </h2>

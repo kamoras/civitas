@@ -17,6 +17,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base, VisitsBase
+from app.measures import snapshot_facts_json
 from app.time_utils import utcnow
 
 
@@ -1737,6 +1738,23 @@ class ActionIssue(Base):
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
 
 
+_MEMBER_TABLES = {"senator": "senators", "representative": "representatives"}
+
+
+def _snapshot_facts(ctx) -> str | None:
+    """The inserting snapshot's facts, read from its member's stored
+    breakdown on the same connection (so a breakdown written earlier in the
+    same transaction counts)."""
+    params = ctx.get_current_parameters()
+    table = _MEMBER_TABLES.get(params.get("entity_type"))
+    if table is None:
+        return None
+    stored = ctx.connection.execute(
+        text(f"SELECT score_breakdown FROM {table} WHERE id = :id"), {"id": params.get("entity_id")}
+    ).scalar()
+    return snapshot_facts_json(stored)
+
+
 class ScoreSnapshot(Base):
     """Daily score snapshot for tracking leaderboard trends over time."""
     __tablename__ = "score_snapshots"
@@ -1755,6 +1773,13 @@ class ScoreSnapshot(Base):
     # Lets trend charts annotate methodology changes so a score shift from
     # an algorithm update isn't read as a behavior change.
     algorithm_version: Mapped[str | None] = mapped_column(String(16), nullable=True, default=None)
+    # The four measures' figures on the day (app/measures.snapshot_facts),
+    # as JSON: what "this measure over time" draws. Filled from the member's
+    # stored breakdown when the snapshot is inserted (_snapshot_facts), so
+    # the recorders in app/pipeline/ need no change and the analysis-code
+    # fingerprint doesn't move. NULL for presidents, for a member whose run
+    # kept no breakdown, and for snapshots from before the column.
+    facts: Mapped[str | None] = mapped_column(Text, nullable=True, default=_snapshot_facts)
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
 
 
