@@ -80,7 +80,7 @@ describe("describeProfile", () => {
   it("gives presidents their own title", () => {
     expect(
       describeProfile(profile("president", { role: "President (16th)", party: "R" })).title
-    ).toBe("Jane Doe: Presidential Record & Scorecard");
+    ).toBe("Jane Doe: Presidential Record, Approval & Economy");
   });
 });
 

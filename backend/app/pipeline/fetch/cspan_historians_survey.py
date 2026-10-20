@@ -129,6 +129,20 @@ def rated_terms(name: str, edition: int, terms: list[tuple[str, str, str | None]
     return [pid for pid, end in mine if end and int(end[:4]) <= edition]
 
 
+def stored_edition(db: Session) -> int | None:
+    """The edition the stored points were read from: the last read cached,
+    whatever its age, since the points stay until a newer edition replaces
+    them. None when no read is on record (a fresh or reset database), so
+    a page names no year rather than a guessed one."""
+    cached = api_cache_get(db, _CACHE_TIER, _CACHE_KEY, max_age_hours=_NO_EXPIRY_HOURS)
+    edition = (cached or {}).get("edition")
+    return int(edition) if edition else None
+
+
+# Long enough that a cached read never counts as expired for stored_edition.
+_NO_EXPIRY_HOURS = 24 * 365 * 100
+
+
 async def fetch_cspan_historians_survey(client: httpx.AsyncClient, db: Session) -> dict[str, int]:
     """Fetch + parse the newest C-SPAN Presidential Historians Survey.
 

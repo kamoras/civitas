@@ -9,6 +9,13 @@
       "url": "/court"
     },
     {
+      "id": "presidents-record-not-scores",
+      "date": "2026-10-20",
+      "title": "Presidents by the record",
+      "summary": "A president's page now draws approval, the economy and the historians' points among every other presidency with the same figure, with no 0 to 100 score.",
+      "url": "/politicians?branch=president"
+    },
+    {
       "id": "member-pages-figures-not-scores",
       "date": "2026-10-20",
       "title": "Member pages show figures, not scores",

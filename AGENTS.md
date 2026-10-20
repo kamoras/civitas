@@ -1395,8 +1395,13 @@ weekly refresh (`court_roster_changed`). Relatedly,
 the leaderboard API (no longer a page since 2026-10, §3; kept for public API
 v1's deprecated rank) ranks only currently-serving members, and for
 presidents the *historical* field without the sitting president
-(`president_service.get_president_leaderboard`). A president's page shows
-the historians' own rank, attributed, instead of a blend.
+(`president_service.get_president_leaderboard`). No page shows a
+president's 0-100 score or part scores (2026-10): a president's page shows
+the historians' own rank, attributed and dated, then each figure as a strip
+among the other presidencies with it, with n and the members' word rule
+(`app/president_peers.py`, `GET /api/presidents/{id}/peers`, outside
+`pipeline/`). Public API v1 serves the score
+deprecated, as it does the members' composite.
 
 **Trend posts ("On the record", `analyze/trend_poster.py`)** run after each
 hourly Action Center refresh (`scheduler._post_trends`, under the same lease).
@@ -2322,6 +2327,7 @@ the pending list).
 | Claim composer (verbatim spans, actor check: capitalised rule + prototype margin, threshold refit daily) | `backend/app/pipeline/analyze/post_composer.py`, `backend/app/data/claim_actor_threshold.json`, `backend/scripts/calibrate_claim_actor.py` |
 | Committee routing for issues (rules' jurisdictions + labelled issues) | `backend/app/committee_routing.py`, `backend/app/data/committee_*.json`, `backend/scripts/fetch_committee_jurisdictions.py`, `backend/scripts/calibrate_committee_routing.py` |
 | Issue principal actor + weekly actor concentration (admin) | `backend/app/pipeline/analyze/story_actor.py`, `GET /api/admin/actor-concentration`, `frontend/src/components/admin/ActionCenterDashboard.tsx` |
+| A president among the other presidencies (strips, words; no score) | `backend/app/president_peers.py`, `frontend/src/components/scorecard/PresidentStanding.tsx` |
 | Justice record and appointer estimate (not scored, justice v3) | `backend/app/pipeline/justice_pipeline.py`, `backend/app/pipeline/analyze/justice_loyalty.py` |
 | The Court page (`/court`: Martin-Quinn line, agreement grid, splits by term, decision lineups) and each justice's case list | `backend/app/services/court_service.py`, `backend/app/api/court.py`, `frontend/src/app/court/page.tsx`, `frontend/src/components/court/`, `frontend/src/components/scorecard/JusticeCases.tsx` |
 | A justice's page (no score: each figure beside every sitting justice's, the appointing president linked, the appointer estimate as every justice's interval) and a president's "Justices appointed" | `backend/app/services/justice_figures.py`, `frontend/src/components/justice/`, `GET /api/justices/appointed-by/{president_id}` (every appointment since 1789: `JusticeAppointment`, stored from the FJC directory by `justice_pipeline.store_court_seats`) |

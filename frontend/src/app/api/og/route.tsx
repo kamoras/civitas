@@ -284,7 +284,9 @@ export function formatStanding(identity: OgPoliticianIdentity | undefined): stri
   return "";
 }
 
-// What each card's footer names: what the page holds, never a score.
+// What each page holds, since no card carries a score: members of Congress
+// against their peers, a president's public record (approval, the economy,
+// the historians' rank; no 0-100 score since 2026-10), a justice's votes.
 export function scoreFooterLabel(branch: string | undefined): string {
   // No composite score on any card (redesign 2026-10): what the page holds.
   if (branch === "senate" || branch === "house") return "WHERE THEY STAND AMONG PEERS";

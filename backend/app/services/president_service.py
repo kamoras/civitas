@@ -63,6 +63,7 @@ import logging
 from sqlalchemy.orm import Session
 
 from app.models import President, PresidentTrade
+from app.pipeline.fetch.cspan_historians_survey import edition_url, stored_edition
 from app.pipeline.analyze.president_scorer import (
     compute_president_overall_score,
     dimensions_available,
@@ -183,7 +184,7 @@ def get_president_score_breakdown(db: Session, president_id: str) -> dict | None
     # sitting president's is unrated until the term ends).
     breakdown["publicMandate"]["facts"]["recentApproval"] = p.recent_avg_approval
     breakdown["historicalLegacy"]["facts"]["otherTerms"] = [
-        {"id": o.id, "number": o.number, "points": o.historical_legacy_score, "score": o.score_historical_legacy}
+        {"id": o.id, "number": o.number, "points": o.historical_legacy_score}
         for o in db.query(President).filter(President.name == p.name, President.id != p.id).order_by(President.number)
         if o.historical_legacy_score is not None
     ]
@@ -194,6 +195,10 @@ def get_president_score_breakdown(db: Session, president_id: str) -> dict | None
     legacy_facts = breakdown["historicalLegacy"]["facts"]
     legacy_facts["historiansRank"] = historians_rank(p.historical_legacy_score, rated)
     legacy_facts["historiansRated"] = len(rated)
+    # Which edition the rank is from, so the page can name it: "C-SPAN, 2021".
+    edition = stored_edition(db)
+    legacy_facts["surveyYear"] = edition
+    legacy_facts["surveyUrl"] = edition_url(edition).split("?")[0] if edition else None
     return breakdown
 
 

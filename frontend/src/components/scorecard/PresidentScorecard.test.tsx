@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import axe from "axe-core";
 import PresidentScorecard from "./PresidentScorecard";
 import type { President } from "@/types/president";
-import type { PresidentScoreBreakdown } from "@/types/scoreBreakdown";
+import type { PresidentPeerMeasure, PresidentPeers } from "@/types/presidentPeers";
 
 vi.mock("@/lib/api", () => ({
   fetchPresidentStockTrades: vi
@@ -44,7 +44,7 @@ vi.mock("@/lib/api", () => ({
     categoryFilter: null,
     holdings: [
       {
-        assetName: "40 Wall Street LLC",
+        assetName: "Example Tower LLC",
         account: null,
         ticker: null,
         assetType: "Commercial real estate",
@@ -68,25 +68,15 @@ vi.mock("@/lib/api", () => ({
   fetchRepresentativeHistory: vi.fn(),
 }));
 
-// Donald J. Trump's second term as the API served it on 2026-09-28.
+// A sitting president, shaped as the API serves one.
 const president = {
-  id: "trump-47",
-  name: "Donald J. Trump",
+  id: "doe-47",
+  name: "Jane Doe",
   party: "R",
   number: 47,
   termStart: "2025-01-20",
   termEnd: null,
   isCurrent: true,
-  score: {
-    publicMandate: 29,
-    effectiveness: 33,
-    historicalLegacy: null,
-    overall: 31,
-    dimensionsAvailable: 2,
-    // A sitting president has no Historical Legacy: the two scored parts
-    // share the whole, and the card says so.
-    effectiveWeights: { publicMandate: 0.5, effectiveness: 0.5 },
-  },
   avgApproval: 37.3,
   gdpGrowthAvg: null,
   jobsCreatedMillions: 0.5,
@@ -96,199 +86,123 @@ const president = {
   recentAvgApproval: 35.4,
 } as President;
 
-const breakdown: PresidentScoreBreakdown = {
-  publicMandate: {
-    score: 29,
-    components: [{ label: "Average approval", weight: 0.7, score: 12.7, detail: "…" }],
-    facts: {
-      approval: 37.27,
-      approvalMean: 50.93,
-      approvalTrend: -5.6,
-      trendMean: -13.6,
-      approvalStart: 41.0,
-      trendExpected: 4.8,
-      comparedOverDays: 598,
-      electionMargin: null,
-      marginMean: 8.39,
-      recentApproval: 35.42,
-    },
+const approval: PresidentPeerMeasure = {
+  key: "approval",
+  label: "Average approval",
+  question: "How did the public rate the term?",
+  why: "How much of the public approved of the job the president was doing, on average.",
+  measured: "The average of every approval poll over the term.",
+  source: { name: "American Presidency Project", url: "https://www.presidency.ucsb.edu/" },
+  value: 37.3,
+  shown: "37.3%",
+  expected: 57.5,
+  expectedBasis: "same stretch",
+  expectedShown: "57.5% over the same stretch",
+  peerGroup: { label: "presidencies with approval polls (from 1945)", n: 3 },
+  distribution: [45.1, 49.2, 60.3],
+  distributionShown: ["45.1%", "49.2%", "60.3%"],
+  distributionIds: ["roe-40", "poe-41", "moe-42"],
+  distributionNames: ["John Roe", "Ann Poe", "Max Moe"],
+  percentile: 12.5,
+  word: "well below other presidencies",
+  sentence:
+    "Approval averaged 37.3% during the term. 3 of the other 3 presidencies averaged higher.",
+  thin: false,
+};
+
+const peers: PresidentPeers = {
+  rule: { wellOutside: [10, 90], outside: [25, 75], wellGapSd: 1, minPeers: 10 },
+  measures: [approval],
+  standsOut: `Average approval: ${approval.sentence}`,
+  standsOutWhy: "Picked by rule.",
+  missing: [
+    "Not rated by historians: C-SPAN's survey rates only completed terms, and the newest edition published does not rate this presidency.",
+  ],
+  historians: {
+    rank: null,
+    rated: 45,
+    points: null,
+    surveyYear: 2021,
+    surveyUrl: "https://www.c-span.org/presidentsurvey2021/",
   },
-  effectiveness: {
-    score: 33,
-    components: [{ label: "Jobs created", weight: 1, score: 32.6, detail: "…" }],
-    facts: {
-      jobsMillions: 0.5,
-      jobsPerYear: 0.73,
-      jobsMean: 1.44,
-      gdpGrowth: null,
-      gdpMean: null,
-      gdpSince: null,
-      gdpPerPerson: null,
-      gdpPeers: null,
-      gdpCatchUp: null,
-      gdpRelative: null,
-      gdpRelativeMean: null,
-    },
-  },
-  historicalLegacy: {
-    score: null as unknown as number,
-    components: [],
-    facts: {
-      points: null,
-      pointsMean: 549,
-      otherTerms: [{ id: "trump-45", number: 45, points: 312, score: 12 }],
-    },
-  },
+  recentApproval: 35.4,
+  otherTerms: [{ id: "doe-45", number: 45, points: 312 }],
 };
 
 describe("PresidentScorecard", () => {
-  it("states each score's figures beside the averages they are scored against", async () => {
+  it("sets each figure among the other presidencies, with no score", async () => {
     render(
       <main>
-        <PresidentScorecard president={president} breakdown={breakdown} />
+        <PresidentScorecard president={president} peers={peers} />
       </main>
     );
-    expect(screen.getByRole("heading", { level: 1, name: "Donald J. Trump" })).toBeInTheDocument();
-    // No composite or rank of Civitas's own; the historians' rank waits for the term's end.
-    expect(screen.getAllByText(/Not rated\. C-SPAN/)[0]).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Jane Doe" })).toBeInTheDocument();
     expect(
-      screen.getByText(
-        /Approval has averaged 37\.3% so far, below the 50\.9% past presidents averaged over their first 20 months\. Averaged over the first quarter of its polls and then the last, it fell 5\.6 points from 41\.0%\. Presidents who started there typically rose 4\.8 points, so this is worse than usual\./
-      )
+      screen.getByRole("heading", { name: "Where Jane Doe stands among presidents" })
     ).toBeInTheDocument();
-    // Each score shows its actual share of this president's overall, not
-    // the nominal weight (Historical Legacy is unscored for a sitting one).
-    expect(screen.queryByText(/of the overall score/)).not.toBeInTheDocument();
+    // No composite, part score, breakdown or rank of Civitas's own.
     expect(
-      screen.getByText(
-        /Growth is counted from the term's second full year, so there's no figure yet\./
-      )
+      screen.queryByText(/out of 100|\/100|scored \d|How this is computed|scorecard/i)
+    ).not.toBeInTheDocument();
+    const figure = screen.getByRole("figure", { name: /Approval averaged 37\.3%/ });
+    expect(within(figure).getAllByText("well below other presidencies")[0]).toBeInTheDocument();
+    expect(
+      within(figure).getByText(/Compared with 3 presidencies with approval polls \(from 1945\)/)
     ).toBeInTheDocument();
-    // The other presidency's historians' rating, linked.
-    expect(screen.getByRole("link", { name: /312 points, scored 12/ })).toHaveAttribute(
+    // The strip's accessible form: every other presidency, linked.
+    expect(within(figure).getByRole("link", { name: "Max Moe" })).toHaveAttribute(
       "href",
-      "/politicians/trump-45"
+      "/politicians/moe-42"
+    );
+    expect(screen.getAllByText(/Not rated by historians/)[0]).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /45th-president term/ })).toHaveAttribute(
+      "href",
+      "/politicians/doe-45"
+    );
+    expect(screen.getByRole("link", { name: "C-SPAN survey" })).toHaveAttribute(
+      "href",
+      "https://www.c-span.org/presidentsurvey2021/"
     );
     expect(await screen.findByText("21,285 disclosed this term")).toBeInTheDocument();
-    // The sitting president's annual-report holdings, in the members' panel.
     expect(await screen.findByRole("heading", { name: "Holdings" })).toBeInTheDocument();
-    expect(screen.getByText("40 Wall Street LLC")).toBeInTheDocument();
+    expect(screen.getByText("Example Tower LLC")).toBeInTheDocument();
     expect(screen.getByText("285 signed")).toBeInTheDocument();
+    expect(screen.getByText("35.4%")).toBeInTheDocument();
   });
 
-  it("states postwar growth against the peer economies, catch-up allowed for", async () => {
-    const peers = {
-      ...breakdown,
-      effectiveness: {
-        ...breakdown.effectiveness,
-        facts: {
-          ...breakdown.effectiveness.facts,
-          gdpGrowth: 2.3,
-          gdpMean: 2.8,
-          gdpSince: true,
-          gdpPerPerson: 1.4,
-          gdpPeers: 1.12,
-          gdpCatchUp: -1.58,
-          gdpRelative: 1.86,
-          gdpRelativeMean: 2.23,
-        },
-      },
+  it("names the historians' rank as theirs, with the survey's year", () => {
+    const former = { ...president, id: "doe-45", isCurrent: false, termEnd: "2021-01-20" };
+    const rated = {
+      ...peers,
+      historians: { ...peers.historians, rank: 41, points: 312 },
+      otherTerms: [],
     };
-    render(<PresidentScorecard president={president} breakdown={peers} />);
+    render(<PresidentScorecard president={former as President} peers={rated} />);
+    expect(screen.getByText("#41")).toBeInTheDocument();
     expect(
       screen.getByText(
-        /Growth: 1\.4% a year per person, against 1\.1% in 13 other wealthy countries over the same years, which shared the same oil shocks, recessions and pandemic\. Those countries were poorer and still catching up with US incomes, which alone would have had them growing 1\.6 points a year faster\. Allowing for that, the US came out 1\.9 points a year ahead; under the typical president since 1947 it came out 2\.2 points a year ahead\./
+        /Their ranking, not Civitas's: the C-SPAN Presidential Historians Survey, 2021, by total points \(312 points\)\./
       )
     ).toBeInTheDocument();
-    expect(await screen.findByText("21,285 disclosed this term")).toBeInTheDocument();
   });
 
-  it("states approval by party against the era's polarization", async () => {
-    const era = {
-      ...breakdown,
-      publicMandate: {
-        ...breakdown.publicMandate,
-        facts: {
-          ...breakdown.publicMandate.facts,
-          approvalGroups: { own: 87.2, opp: 3.9, ind: 30.4 },
-          approvalExpected: { own: 86.6, opp: 6.1, ind: 36.0 },
-          approvalVsEra: -2.7,
-          approvalVsEraMean: 0.1,
-        },
-      },
-    };
-    render(<PresidentScorecard president={president} breakdown={era} />);
-    expect(
-      screen.getByText(
-        /Approval has averaged 37\.3% so far: 87% in the president's party, 4% in the other party and 30% among independents\. Under the same polarization, presidents typically got 87%, 6% and 36% over their first 20 months\. That puts this term 2\.7 points below the era; the typical president comes out 0\.1 points above\./
-      )
-    ).toBeInTheDocument();
-    expect(await screen.findByText("21,285 disclosed this term")).toBeInTheDocument();
-  });
-
-  it("states unemployment and inflation against where the term started", async () => {
-    const economy = {
-      ...breakdown,
-      effectiveness: {
-        ...breakdown.effectiveness,
-        facts: {
-          ...breakdown.effectiveness.facts,
-          unemploymentStart: 9.3,
-          unemploymentChange: -4.9,
-          unemploymentExpected: -4.5,
-          inflationStart: 4.7,
-          inflationAverage: 5.0,
-          inflationExpected: 4.4,
-          economyYears: 4,
-        },
-      },
-    };
-    render(<PresidentScorecard president={president} breakdown={economy} />);
-    expect(
-      screen.getByText(
-        /Unemployment: fell 4\.9 points from 9\.3% over the credited years; for presidents starting at that rate it typically fell 4\.5 points, so this is better than usual\./
-      )
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        /Inflation: prices rose 5\.0% a year, from 4\.7% the year the term began; presidents starting there averaged 4\.4%, so this is worse than usual\./
-      )
-    ).toBeInTheDocument();
-    expect(await screen.findByText("21,285 disclosed this term")).toBeInTheDocument();
-  });
-
-  it("never calls a scored dimension unrated when the breakdown is missing", async () => {
-    // A breakdown that failed to load, or one cached from before the API
-    // served facts, must not put "not rated" beside a score (2026-09-28:
-    // the 45th-president term read "Not rated" over its historians' 12).
-    const former = {
-      ...president,
-      id: "trump-45",
-      number: 45,
-      termEnd: "2021-01-20",
-      isCurrent: false,
-      score: { ...president.score, historicalLegacy: 12, dimensionsAvailable: 4 },
-    } as President;
-    render(
-      <main>
-        <PresidentScorecard president={former} breakdown={null} />
-      </main>
-    );
-    expect(screen.queryByText(/not rated|not scored|No GDP figure/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/at 12 out of 100/)).toBeInTheDocument();
+  it("says the comparison is missing when it failed to load, and claims nothing", () => {
+    const former = { ...president, id: "doe-45", termEnd: "2021-01-20", isCurrent: false };
+    render(<PresidentScorecard president={former as President} peers={null} />);
+    expect(screen.getByText(/could not be loaded/)).toBeInTheDocument();
+    expect(screen.queryByText(/not rated/i)).not.toBeInTheDocument();
   });
 
   it("has no structural accessibility violations", async () => {
     render(
       <main>
-        <PresidentScorecard president={president} breakdown={breakdown} />
+        <PresidentScorecard president={president} peers={peers} />
       </main>
     );
     await screen.findByText("21,285 disclosed this term");
-    await screen.findByText("40 Wall Street LLC");
-    // The share buttons are part of what axe checks here: the summary, the
-    // four score columns and the holdings.
-    expect(screen.getAllByRole("button", { name: /as an image$/ })).toHaveLength(5);
+    await screen.findByText("Example Tower LLC");
+    // Share buttons: the summary, the standing among presidents, the holdings.
+    expect(screen.getAllByRole("button", { name: /as an image$/ })).toHaveLength(3);
     const result = await axe.run(document.body, {
       rules: { "color-contrast": { enabled: false } },
     });
