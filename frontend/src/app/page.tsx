@@ -2,7 +2,6 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import Masthead from "@/components/home/Masthead";
 import RecordIndex from "@/components/home/RecordIndex";
-import Holdings from "@/components/home/Holdings";
 import OnTheRecord from "@/components/home/OnTheRecord";
 import ElectionNight from "@/components/home/ElectionNight";
 import HomeTasks from "@/components/home/HomeTasks";
@@ -44,18 +43,13 @@ export default async function Home() {
         <Masthead electionPhase={summary?.phase.phase ?? null} />
         {/* Ordered by how often each block changes: the day's record (its
             first row the day's top issue), this week, the week's notable
-            votes; then the sources it is all built from. The header menu
+            votes. Where it comes from is on /about/data; the header menu
             is the one list of the site's pages. */}
         {/* The three tasks a visitor comes for, and registration closing
             soon, in the first screen; then the day's record. */}
         <HomeTasks />
         <RecordIndex />
         <OnTheRecord />
-        <div className="mx-auto mt-10 max-w-7xl px-4 sm:px-6">
-          <div className="max-w-2xl">
-            <Holdings />
-          </div>
-        </div>
       </main>
       <Footer />
     </>
