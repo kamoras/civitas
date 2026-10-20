@@ -28,7 +28,6 @@ from urllib.parse import quote
 
 from sqlalchemy.orm import Session
 
-from app.broadcast import SITE_URL
 from app.config import settings
 from app.models import (
     Agency,
