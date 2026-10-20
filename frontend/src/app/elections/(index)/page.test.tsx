@@ -612,7 +612,7 @@ describe("ElectionsPage", () => {
     expect(
       screen.getByText(/OTHER OR UNSTATED PARTY LEADS$/, { selector: "li" })
     ).toBeInTheDocument();
-    expect(mapFill.current?.("GA")).toMatch(/^rgba\(201,149,255/);
+    expect(mapFill.current?.("GA")).toContain("var(--map-ind)");
     // Districts with a count so far — not every district "read live".
     const totals = screen.getByRole("region", { name: "Totals" });
     expect(totals).toHaveTextContent(

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { IndustryDonation, Donor } from "@/types/senator";
 import { useIndustries } from "@/hooks/useConfig";
 import { formatCurrency } from "@/lib/formatting";
+import { chartMark } from "@/lib/chartColors";
 
 interface IndustryBreakdownProps {
   industries: IndustryDonation[];
@@ -30,7 +31,7 @@ export default function IndustryBreakdown({ industries, donors }: IndustryBreakd
         {sorted.map((ind) => {
           const info = industryMap[ind.industry];
           const displayName = info?.name || ind.name || ind.industry.replace(/_/g, " ");
-          const color = info?.color || "var(--chart-muted)";
+          const color = info?.color ? chartMark(info.color) : "var(--chart-muted)";
           const barWidth = Math.round((ind.total / maxTotal) * 100);
           const isExpanded = expandedIndustry === ind.industry;
           const industryDonors = getDonorsForIndustry(ind.industry);
@@ -69,7 +70,6 @@ export default function IndustryBreakdown({ industries, donors }: IndustryBreakd
                   style={{
                     width: `${barWidth}%`,
                     backgroundColor: color,
-                    boxShadow: `0 0 8px ${color}40`,
                   }}
                 />
               </div>

@@ -13,20 +13,8 @@ import {
   termsPhrase,
 } from "./court";
 import { DARK_TEXT_SHADES, shade, SPLIT_SHADES } from "@/components/court/DecisionLineups";
+import { contrastOn, resolve, ratio as themeRatio } from "./themePalette.testutil";
 import type { Court, CourtJustice, CourtPair } from "@/types/court";
-
-function luminance(rgb: readonly number[]): number {
-  const [r, g, b] = rgb.map((v) => {
-    const c = v / 255;
-    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-  });
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
-const hex = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
-const ratio = (a: readonly number[], b: readonly number[]) => {
-  const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p);
-  return (x + 0.05) / (y + 0.05);
-};
 
 const record = (over: Partial<Court["record"]> = {}): Court["record"] => ({
   cases: 176,
@@ -93,21 +81,30 @@ describe("scales", () => {
   it("runs the heat scale from the lowest share's ten to 100", () => {
     expect(heatDomain(pairs)).toEqual([50, 100]);
     expect(heatDomain([])).toEqual([0, 100]);
-    expect(heatColor(50, [50, 100])).toBe(`rgb(${HEAT_LOW.join(", ")})`);
-    expect(heatColor(100, [50, 100])).toBe(`rgb(${HEAT_HIGH.join(", ")})`);
+    expect(heatColor(50, [50, 100])).toBe(`color-mix(in srgb, ${HEAT_HIGH} 0%, ${HEAT_LOW})`);
+    expect(heatColor(100, [50, 100])).toBe(`color-mix(in srgb, ${HEAT_HIGH} 100%, ${HEAT_LOW})`);
   });
 
-  it("keeps every heatmap value label at WCAG AA on its cell, darkest to lightest", () => {
-    const ink = hex("#F2EEE7");
-    expect(ratio(ink, HEAT_LOW)).toBeGreaterThanOrEqual(4.5);
-    expect(ratio(ink, HEAT_HIGH)).toBeGreaterThanOrEqual(4.5);
-  });
-
-  it("keeps every split label at WCAG AA on its shade", () => {
-    SPLIT_SHADES.forEach((bg, i) => {
-      const { color } = shade(i);
-      expect(ratio(hex(color), hex(bg)), `${bg}`).toBeGreaterThanOrEqual(4.5);
+  for (const theme of ["light", "dark"] as const) {
+    it(`keeps every heatmap value label at WCAG AA on its cell, darkest to lightest (${theme})`, () => {
+      for (const t of [0, 50, 100]) {
+        const cell = heatColor(50 + t / 2, [50, 100]);
+        expect(contrastOn("var(--ink-hi)", cell, theme), `${t}%`).toBeGreaterThanOrEqual(4.5);
+      }
     });
+
+    it(`keeps every split label at WCAG AA on its shade (${theme})`, () => {
+      SPLIT_SHADES.forEach((_, i) => {
+        const { background, color } = shade(i);
+        expect(
+          themeRatio(resolve(color, theme), resolve(background, theme)),
+          background
+        ).toBeGreaterThanOrEqual(4.5);
+      });
+    });
+  }
+
+  it("takes the darkest shade past the end", () => {
     expect(shade(99)).toEqual(shade(SPLIT_SHADES.length - 1));
     expect(DARK_TEXT_SHADES).toBeLessThan(SPLIT_SHADES.length);
   });
