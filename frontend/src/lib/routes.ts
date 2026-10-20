@@ -98,6 +98,23 @@ export function archivedRaceHref(cycle: number, raceId: string): string {
  */
 export const MEMBERS_HREF = "/congress/members";
 
+/** The executive branch's hub: the president, agencies, actions, comment
+ *  periods and nominations, each from stored records. */
+export const EXECUTIVE_HREF = "/executive";
+
+/** Every president, the sitting one first, with the historians' rank. */
+export const PRESIDENTS_HREF = "/executive/presidents";
+
+/** The sitting president's record. A server redirect to their
+ *  `/politicians/[id]`, resolved from the API on each request
+ *  (app/executive/president), so no name or id is written here. */
+export const PRESIDENT_HREF = "/executive/president";
+
+/** The sitting president's documents in Explore (executive orders,
+ *  proclamations, memoranda), newest first: a redirect resolved like
+ *  PRESIDENT_HREF (app/executive/orders). */
+export const EXECUTIVE_ORDERS_HREF = "/executive/orders";
+
 /** Every member of a chamber on four plain measures, side by side
  *  (`?chamber=senate|house`). */
 export const MEASURES_HREF = "/congress/members/measures";
@@ -142,7 +159,10 @@ export const SECTIONS = {
   congress: {
     label: "Congress",
     href: "/congress",
-    match: ["/congress"],
+    // `/politicians` is every member's, president's and justice's record:
+    // most are members, and a president's or justice's page passes its own
+    // section to the Navbar (recordTrail).
+    match: ["/congress", "/compare", "/politicians"],
     tabs: [
       { key: "reports", label: "Reports", href: "/congress" },
       { key: "week", label: "Latest week", href: "/congress/week" },
@@ -160,31 +180,32 @@ export const SECTIONS = {
       { key: "president", label: "Votes with the president", href: "/congress/president/house" },
     ],
   },
-  agencies: {
-    label: "Agencies",
-    href: "/agencies",
-    match: ["/agencies"],
+  // Article II: the president, every president, and the agencies that
+  // carry out the law. Nominations are also Congress's page (the Senate
+  // confirms them, and the URL and section mark stay there), listed here
+  // because "who did the president nominate" is looked for here.
+  executive: {
+    label: "Executive",
+    href: EXECUTIVE_HREF,
+    match: [EXECUTIVE_HREF, "/agencies", "/compare/presidents"],
     tabs: [
-      { key: "directory", label: "Every agency", href: "/agencies" },
+      { key: "overview", label: "Overview", href: EXECUTIVE_HREF },
+      { key: "president", label: "The President", href: PRESIDENT_HREF },
+      { key: "presidents", label: "Every president", href: PRESIDENTS_HREF },
+      { key: "compare", label: "Compare presidents", href: "/compare/presidents" },
+      { key: "agencies", label: "Every agency", href: "/agencies" },
       { key: "budget", label: "Budgets", href: "/agencies#budget" },
       { key: "comments", label: "Open comment periods", href: "/explore?comment=open" },
+      { key: "orders", label: "Executive orders", href: EXECUTIVE_ORDERS_HREF },
+      { key: "nominations", label: "Nominations", href: "/congress/nominations" },
     ],
   },
+  // Article III. Only the Supreme Court is covered, so the label says so.
   court: {
-    label: "Court",
+    label: "Supreme Court",
     href: COURT_HREF,
     match: [COURT_HREF],
     tabs: [{ key: "court", label: "Justices and decisions", href: COURT_HREF }],
-  },
-  politicians: {
-    label: "Politicians",
-    href: MEMBERS_HREF,
-    match: ["/politicians", "/compare"],
-    tabs: [
-      { key: "directory", label: "Every member", href: MEMBERS_HREF },
-      { key: "compare", label: "Compare members", href: "/compare" },
-      { key: "presidents", label: "Compare presidents", href: "/compare/presidents" },
-    ],
   },
   elections: {
     label: "Elections",
@@ -275,8 +296,11 @@ export function recordTrail(branch: PoliticianBranch): { section: SectionKey; cr
       };
     case "president":
       return {
-        section: "politicians",
-        crumbs: [{ label: "Presidents", href: "/politicians?branch=president" }],
+        section: "executive",
+        crumbs: [
+          { label: SECTIONS.executive.label, href: SECTIONS.executive.href },
+          { label: "Every president", href: PRESIDENTS_HREF },
+        ],
       };
     case "scotus":
       return {

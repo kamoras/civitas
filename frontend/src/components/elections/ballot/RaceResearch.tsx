@@ -31,7 +31,7 @@ function RecordPanel({ race }: { race: RaceWithCandidates }) {
         when the match to their record is certain: one running for re-election, or one who serves in
         the other chamber now. Anyone not linked here may still be under{" "}
         <Link href={MEMBERS_HREF} className="underline hover:text-phos">
-          Politicians
+          Members of Congress
         </Link>
         .
       </p>

@@ -2060,6 +2060,8 @@ export async function fetchRepresentativeHistory(repId: string): Promise<ScoreHi
 
 export interface OpenCommentItem {
   id: number;
+  /** The document's permanent Explore key (exploreHref). */
+  key?: string;
   title: string;
   /** The abstract's opening sentence, verbatim; null when none is whole. */
   firstSentence?: string | null;

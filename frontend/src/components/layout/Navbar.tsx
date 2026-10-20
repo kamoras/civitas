@@ -11,9 +11,10 @@ import SiteSearch from "@/components/search/SiteSearch";
 import YourStatePicker from "./YourStatePicker";
 
 // The main navigation is the SECTIONS table (lib/routes.ts): each section's
-// hub, with its other pages one step below it. Leaderboard and Compare are
-// Politicians' pages, not two more top-level links: seven sections fit a
-// 768 px row with a menu button each, nine did not.
+// hub, with its other pages one step below it: the branches (Congress, the
+// Executive, the Supreme Court, Articles I to III) beside the two tasks
+// (Action Center, Elections). A person's record is reached from their
+// branch, never from a section of people (recordTrail).
 const NAV = Object.keys(SECTIONS) as SectionKey[];
 // The Action Center is the one section drawn in the brighter ink.
 const ACCENT: SectionKey = "action";
@@ -120,7 +121,7 @@ const SUBLINK =
  * button with aria-expanded and a plain list of links, no menu role, so Tab
  * walks it like any other links). Escape closes it and returns focus to the
  * button; so does focus or a pointer leaving it. A section with one page
- * (Explore) is a plain link.
+ * (Explore, the Supreme Court) is a plain link.
  *
  * It was the section's link with a separate 24 px ▾ button beside it, and
  * a narrow box floating under the label: two controls that looked like one,

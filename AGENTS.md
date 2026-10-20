@@ -66,7 +66,7 @@ locally on a single self-hosted device with zero cloud AI calls.
   process when its sources move; the header's autocomplete and `/search`
   read it with no model — see `app/site_search.py`
 - **Deployment**: Docker Swarm (single-node), `docker stack deploy` for zero-downtime rolling updates, nginx (in-stack) reverse proxy with caching
-- **Branches covered**: Senate (100 senators), House (435 representatives), Presidents (historical + modern), Supreme Court (9 justices)
+- **Branches covered**: Senate (100 senators), House (435 representatives), Presidents (historical + modern), Supreme Court (9 justices). The main navigation is by branch, in Article order: Action Center, Congress, Executive, Supreme Court, Elections, About (`SECTIONS` in `frontend/src/lib/routes.ts`), with search in the header; a person's record (`/politicians/[id]`) sits under its branch
 - **News Feeds**: RSS parsing (NPR, PBS, BBC, The Hill, Politico, Roll Call) + Google Trends + Bluesky trending for Action Center; 41 per-state newsrooms for election races
 - **Action Center**: Three tabs — Today (the day's issues, what a reader can do about each, open comment periods), Ongoing (national monitors: auto-detected ongoing concerns, and those closed in the last 60 days), Archive (year-in-review timeline). Elections live on `/elections`, find-your-members on `/congress/members` (Congress › Members)
 - **Nominations**: every presidential nomination this Congress from Congress.gov (daily, `fetch/nominations.py`), with status, committee, hearings, time to confirm and each roll call that names it (`/congress/nominations`)
@@ -112,7 +112,9 @@ civitas/
 │   ├── src/
 │   │   ├── app/                 # Next.js App Router pages (action [issues/monitors/timeline tabs, labelled Today/Ongoing/Archive],
 │   │   │                        #   elections [state index, states/[ST] ballot, [raceId] detail],
-│   │   │                        #   politicians [directory + per-member profile], bills, compare, explore, leaderboard,
+│   │   │                        #   congress [reports, bills, members (find yours) + members/measures, committees,
+│   │   │                        #   nominations], executive [hub, presidents, president + orders redirects], agencies,
+│   │   │                        #   court, politicians/[id] (every member's, president's and justice's record), compare, explore,
 │   │   │                        #   about, changelog, accessibility, environmental, feedback, admin)
 │   │   ├── components/          # React components (action, elections, checker, president, justice, explore, home, effects)
 │   │   ├── hooks/               # Custom React hooks
@@ -2334,7 +2336,8 @@ the pending list).
 | Publishing: every post stored, then sent to Bluesky; the Atom feeds | `backend/app/broadcast.py` (`publish`, `FEEDS`), `backend/app/api/feed.py`, `frontend/src/app/feeds/page.tsx`; the posting modules (`bluesky_poster.py`, `bluesky_spotlight.py`, `congress_bluesky.py`, `election_bluesky.py`, `trend_poster.py`) decide what and when; a post may carry its own image (`image_url`/`alt_text`, sent as an image embed with the link card as fallback); the hours a non-news post reaches Bluesky are `app/data/bluesky_post_windows.json` (`scripts/fetch_bluesky_activity.py`, `broadcast.SCHEDULED_KINDS`) |
 | Representative API routes | `backend/app/api/representatives.py` |
 | API routes | `backend/app/api/` (senators, representatives, presidents, justices, admin, explore, action, health) |
-| Frontend pages | `frontend/src/app/` (action [issues/monitors/timeline tabs], elections [state index, states/[ST] ballot, [raceId] detail], scorecard, leaderboard, explore, about, admin) |
+| Frontend pages | `frontend/src/app/` (action [issues/monitors/timeline tabs], congress [members directory, members/measures], executive [hub, presidents], elections [state index, states/[ST] ballot, [raceId] detail], politicians/[id], explore, about, admin) |
+| The executive branch's pages (hub led by stored records, every president with the historians' rank, "The President" and "Executive orders" as per-request redirects to the sitting president's record and documents) | `frontend/src/app/executive/`, `frontend/src/lib/presidentServer.ts`, `GET /api/presidents` (`historiansRank`, `president_service.historians_rank`) |
 | Frontend API client (incl. paginated vote fetching) | `frontend/src/lib/api.ts` |
 | Per-client rate limits + once-per-period rules shared by every API worker | `backend/app/api/throttle.py` |
 | Process roles (read-only API vs pipeline) | `backend/app/config.py` (`PROCESS_ROLE`), `backend/app/main.py` (lifespan), `backend/app/background.py`, `docker-compose.swarm.yml`, `nginx/civitas.conf` |

@@ -10,10 +10,9 @@ import type { SectionFigures } from "@/types/sections";
 const BAND: SectionKey[] = [
   "congress",
   "elections",
-  "agencies",
+  "executive",
   "court",
   "action",
-  "politicians",
   "explore",
   "about",
 ];

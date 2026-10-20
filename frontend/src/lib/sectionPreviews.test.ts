@@ -62,8 +62,8 @@ describe("sectionPreview", () => {
   });
 
   it("never shows a bare zero for something not read or not happening", () => {
-    expect(sectionPreview(FIGURES, "agencies", "directory")?.figure).toBe("Not yet");
-    expect(sectionPreview(FIGURES, "agencies", "budget")?.figure).toBe("Not yet");
+    expect(sectionPreview(FIGURES, "executive", "agencies")?.figure).toBe("Not yet");
+    expect(sectionPreview(FIGURES, "executive", "budget")?.figure).toBe("Not yet");
     expect(sectionPreview(FIGURES, "action", "ongoing")?.figure).toBe("None");
     expect(sectionPreview(FIGURES, "congress", "reports")?.caption).toMatch(/^no record votes/);
     // The map's own reason, out of its phase.
@@ -138,16 +138,15 @@ describe("sectionPreview", () => {
 
   it("is null without figures or for a page that has none", () => {
     expect(sectionPreview(null, "congress", "bills")).toBeNull();
-    expect(sectionPreview(FIGURES, "politicians", "leaderboard")).toBeNull();
+    expect(sectionPreview(FIGURES, "executive", "president")).toBeNull();
   });
 
   it("names only real section pages", () => {
     // A preview keyed to a tab SECTIONS doesn't have would never show.
     for (const [section, tabs] of Object.entries({
       action: ["today", "ongoing", "archive"],
-      congress: ["reports", "week", "month", "bills", "committees", "president"],
-      agencies: ["directory", "budget", "comments"],
-      politicians: ["directory"],
+      congress: ["reports", "week", "month", "members", "bills", "committees", "president"],
+      executive: ["agencies", "budget", "comments"],
       elections: ["ballots", "map", "redistricting", "archive"],
       explore: ["search"],
     })) {

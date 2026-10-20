@@ -464,6 +464,24 @@ export function describeMeasures(): { title: string; description: string } {
   };
 }
 
+/** The executive branch's hub (`/executive`). */
+export function describeExecutive(): { title: string; description: string } {
+  return {
+    title: "The Executive Branch: the President, Federal Agencies, Orders & Nominations",
+    description:
+      "The sitting president's latest executive orders and proclamations, the federal rules open for public comment, what the largest agencies spend, and the nominations pending in the Senate.",
+  };
+}
+
+/** Every president (`/executive/presidents`). */
+export function describePresidents(): { title: string; description: string } {
+  return {
+    title: "Every U.S. President, With the Historians' Rank",
+    description:
+      "Every president from Washington to the sitting president: party, years in office and where the C-SPAN Presidential Historians Survey ranks each presidency, with each one's record.",
+  };
+}
+
 /** The agency directory: "Federal agencies: budgets, rules and comment periods". */
 export function describeAgencyIndex(): { title: string; description: string } {
   return {

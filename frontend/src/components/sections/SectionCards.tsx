@@ -28,7 +28,7 @@ const SOURCES: Partial<Record<SectionKey, string>> = {
   congress: "Congressional Record; Senate and House roll calls; OMB statements of policy",
   elections:
     "State election offices (official counts for the archive's map check); Civitas election map; enacted House maps",
-  agencies: "Federal Register; USAspending.gov",
+  executive: "Federal Register; USAspending.gov; Congress.gov nominations",
   court: "Supreme Court Database; Oyez; Martin-Quinn scores",
 };
 

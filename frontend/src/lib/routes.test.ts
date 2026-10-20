@@ -117,8 +117,9 @@ describe("SECTIONS covers the site", () => {
   });
 
   it("counts a page as in its section by path, not by prefix text", () => {
-    expect(currentSection("/compare/presidents")).toBe("politicians");
-    expect(currentSection("/compare")).toBe("politicians");
+    expect(currentSection("/compare/presidents")).toBe("executive");
+    expect(currentSection("/compare")).toBe("congress");
+    expect(currentSection("/agencies/epa")).toBe("executive");
     expect(currentSection("/congressional")).toBe(null);
     expect(currentSection("/explore")).toBe("explore");
   });
@@ -149,6 +150,10 @@ describe("recordTrail", () => {
     expect(recordTrail("senate").section).toBe("congress");
     expect(recordTrail("house").crumbs.map((c) => c.label)).toEqual(["Congress", "Members"]);
     expect(recordTrail("scotus").section).toBe("court");
+    expect(recordTrail("president").crumbs.map((c) => c.label)).toEqual([
+      "Executive",
+      "Every president",
+    ]);
   });
 
   it("leads every crumb to a page in the record's own section", () => {

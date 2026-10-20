@@ -25,15 +25,14 @@ const nextConfig = {
       // /congress/members/measures. /scorecard was the directory before
       // /politicians was. The leaderboard ranked members by the composite
       // score, which the site no longer shows (redesign 2026-10).
-      // Presidents have no page of their own yet: their old addresses go
-      // to compare presidents with a temporary redirect, so no browser
-      // keeps it once they do.
+      // Presidents went to /executive/presidents and justices to /court
+      // when Politicians was retired as a section (2026-10).
       ...["/politicians", "/scorecard"].flatMap((source) => [
         {
           source,
           has: [{ type: "query", key: "branch", value: "president" }],
-          destination: "/compare/presidents",
-          permanent: false,
+          destination: "/executive/presidents",
+          permanent: true,
         },
         {
           source,
@@ -58,8 +57,8 @@ const nextConfig = {
       {
         source: "/leaderboard",
         has: [{ type: "query", key: "branch", value: "president" }],
-        destination: "/compare/presidents",
-        permanent: false,
+        destination: "/executive/presidents",
+        permanent: true,
       },
       {
         source: "/leaderboard",
