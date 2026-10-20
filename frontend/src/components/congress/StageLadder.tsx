@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { reachedHref } from "@/lib/congress";
 import type { StageMilestones } from "@/types/bill";
 
 /**
@@ -25,7 +27,17 @@ export default function StageLadder({ data }: { data: StageMilestones }) {
               className="grid grid-cols-[minmax(0,10.5rem)_minmax(0,1fr)_3.25rem] items-center gap-3 border-t border-white/[0.07] py-1.5 text-sm"
             >
               <span className={reached ? "text-ink-hi" : "text-ink-lo"}>
-                {m.label}
+                {/* The label opens the bills that got at least this far, the
+                    same list /congress's pipeline row opens. The "This bill"
+                    mark stays outside the link: it is this bill's status,
+                    not part of where the link goes. */}
+                <Link
+                  href={reachedHref(m.stage)}
+                  aria-label={`${m.label}: ${m.bills.toLocaleString("en-US")} ${m.bills === 1 ? "bill" : "bills"}`}
+                  className="inline-block min-h-6 py-0.5 underline decoration-white/30 underline-offset-4 hover:text-phos"
+                >
+                  {m.label}
+                </Link>
                 {here && (
                   <span className="ml-2 whitespace-nowrap border border-signal-cyan/50 px-1 font-mono text-[11px] text-signal-cyan">
                     This bill
@@ -47,7 +59,7 @@ export default function StageLadder({ data }: { data: StageMilestones }) {
       </ol>
       <p className="text-xs leading-relaxed text-ink-min">
         Share of the {data.total.toLocaleString("en-US")} bills sitting members have sponsored this
-        Congress that got at least that far.
+        Congress that got at least that far. Pick a step to list its bills.
       </p>
     </div>
   );

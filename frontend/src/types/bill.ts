@@ -40,6 +40,9 @@ export interface PaginatedBills {
    * issue names one, bills that moved since `movedSince`. */
   shown: "mentioned" | "moved" | null;
   movedSince: string | null;
+  /** reached= only: the heading of that milestone's list
+   * ("Bills that became law this Congress"). */
+  reachedLabel?: string | null;
 }
 
 export interface RelatedIssue {
@@ -70,11 +73,20 @@ export interface BillDetail extends BillInFlight {
   stageMilestones?: StageMilestones | null;
 }
 
+export interface StageMilestone {
+  label: string;
+  /** Its stage code: /congress/bills?reached=<stage> lists exactly `bills`. */
+  stage: string;
+  bills: number;
+  share: number;
+  shareText: string;
+}
+
 export interface StageMilestones {
   /** The bills sitting members sponsored this Congress. */
   total: number;
   /** In order; each counts the bills that got at least that far. */
-  milestones: { label: string; bills: number; share: number; shareText: string }[];
+  milestones: StageMilestone[];
   /** The furthest milestone this bill has reached: an index into `milestones`. */
   reached: number;
 }
