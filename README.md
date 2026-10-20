@@ -1060,6 +1060,42 @@ unless every state's district numbers match
 `county_district_crosswalk.json` and none was lost to simplification.
 At-large states get no map — one shape is nothing to choose between.
 
+**A town split between districts** can't be settled by its name, and
+Civitas won't ask for the street (AGENTS.md §8). So the House finders (the
+member directory, an issue's contact list and the state ballot page) and
+the ballot's state legislature section offer **"Find my district from my location"**, and a
+typed town that is split offers a **map of just that town**: its outline,
+each district's part of it, its main roads, and a list of the parts
+(described by the roads that cross them and the district's other places)
+as the keyboard and screen-reader path. Both are worked out in the browser
+(`frontend/src/lib/districtAt.ts`) against the site's own district shapes
+in `frontend/public/data/lookup/`, named by the lines they hold:
+`congress-<N>/<ST>.json`, the House districts that Congress's members are
+elected in (`congress-119` for who represents the reader now, from the
+Congress the API says is in office; the ballot reads the lines its election
+is on, `congress-120` in the nine states that redrew), with
+`<ST>.towns.json` beside it for the town map, and
+`election-2026/<ST>.legislature.json`, the state senate and house districts.
+A state's file is fetched only on a click, whole and with no query. The
+position and the tap never leave the page; only a House district number is
+kept, for the tab. Beside them is always the official lookup, worded so the
+reader knows that site would get their address (house.gov is left off a
+ballot on new lines, where it answers by the sitting member's old district).
+
+The shapes are TIGER/Line, simplified by Douglas-Peucker at 3m (the towns'
+drawn outlines and roads at 20m) and quantized to a million steps, built by
+`backend/scripts/build_district_lookup.py`. It places every populated 2020
+census block's internal point in the simplified shapes and in the same
+lines unsimplified, against the district the block equivalency file gives
+the block, and refuses to write if simplifying costs more than 0.01% of a
+layer's residents or 0.5% of those within 100m of a line
+(`lookup/_accuracy.json`). Measured: 99.9997% of residents placed in their
+block's House district (99.96% of the 3.1 million within 100m of a line,
+against 99.97% for the unsimplified lines), and 99.998% for the state
+legislative districts. A state's House file is at most 920KB (290KB
+gzipped, Texas); its town map file at most 1.4MB (420KB gzipped); its
+legislative file at most 1.6MB (520KB gzipped); 47MB in all.
+
 **The 2026 lines are not the 2024 lines.** Nine states redrew between the
 two elections (AL, CA, FL, LA, NC, OH, TN, TX, UT); until 2026-09 every page
 drew and listed those states' districts on the old lines under the new

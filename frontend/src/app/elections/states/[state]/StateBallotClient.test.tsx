@@ -658,7 +658,7 @@ describe("U.S. Representative", () => {
   it("offers house.gov and a candidate's name where the lines are unchanged", async () => {
     render(<StateBallotClient ballot={fourDistricts()} />);
     const drawer = await openContest(/U\.S\. Representative/);
-    expect(drawer.getByRole("link", { name: /house\.gov/ })).toBeInTheDocument();
+    expect(drawer.getAllByRole("link", { name: /house\.gov/ }).length).toBeGreaterThan(0);
     expect(
       drawer.getByLabelText("Filter districts by city, town, county, candidate or district number")
     ).toBeInTheDocument();
@@ -735,10 +735,10 @@ describe("U.S. Representative", () => {
     const input = drawer.getByRole("searchbox");
     await userEvent.type(input, "rivertown");
     expect(document.querySelector("[data-place-summary]")).toHaveTextContent(
-      /^Rivertown is in districts 2 and 4: it is split/
+      /^Rivertown is split between districts 2 and 4/
     );
     expect(drawer.getByRole("status")).toHaveTextContent(
-      /2 of 4 districts match rivertown\. Rivertown is in districts 2 and 4/
+      /2 of 4 districts match rivertown\. Rivertown is split between districts 2 and 4/
     );
     // The row says it matched the city, ahead of its counties.
     expect(drawer.getAllByText(/^Rivertown city, County/)).toHaveLength(2);

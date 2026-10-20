@@ -26,6 +26,8 @@ import Photo from "@/components/Photo";
 import { STATE_CODES, STATE_NAMES } from "@/lib/stateCodes";
 import SectionTabs from "@/components/layout/SectionTabs";
 import { useYourState } from "@/hooks/useYourState";
+import { useYourDistrict } from "@/hooks/useYourDistrict";
+import DistrictLocator from "@/components/districts/DistrictLocator";
 
 type BranchFilter = "all" | "senate" | "house";
 type PartyFilter = "ALL" | "D" | "R" | "I";
@@ -152,12 +154,19 @@ function CountyFinder({
   query,
   onQuery,
   matches,
+  picked,
+  onPick,
+  onOtherState,
 }: {
   stateCode: string;
   lines: HouseDistrictsByCounty;
   query: string;
   onQuery: (q: string) => void;
   matches: { district: number; counties: string[] }[];
+  /** The district settled by location or the town's map, if any. */
+  picked: number | null;
+  onPick: (state: string, district: number | null) => void;
+  onOtherState: (state: string) => void;
 }) {
   const id = useId();
   const names = countyNames(lines);
@@ -196,6 +205,27 @@ function CountyFinder({
           {status}
         </p>
       )}
+      {picked != null && (
+        <p className="mt-2 text-sm text-ink-hi">
+          Showing {districtName(picked)}.{" "}
+          <button
+            type="button"
+            onClick={() => onPick(stateCode, null)}
+            className="min-h-6 underline underline-offset-2 hover:text-phos"
+          >
+            Show every district
+          </button>
+        </p>
+      )}
+      <DistrictLocator
+        state={stateCode}
+        lines={`congress-${lines.congress}`}
+        linesLabel="the lines today's members were elected on"
+        districts={lines.districts}
+        query={query}
+        onFound={(found) => onPick(found.state, found.house)}
+        onOtherState={onOtherState}
+      />
       <p className="mt-2 text-xs text-ink-min">
         {/* No cycle year: it would go stale when the ballot page moves on. */}
         Voting in the coming election?{" "}
@@ -278,6 +308,9 @@ function MembersDirectoryContent() {
     writeParams({ state: next, county: "" });
     if (next) yours.setState(next);
   };
+  // The district found by location or a town's map, kept for this tab
+  // (useYourDistrict); it applies only to its own state and map.
+  const yourDistrict = useYourDistrict();
   const [search, setSearch] = useState<string>("");
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -314,6 +347,13 @@ function MembersDirectoryContent() {
         : [],
     [linesReady, houseLines, county]
   );
+  const linesName = houseLines ? `congress-${houseLines.congress}` : "";
+  const picked =
+    linesReady &&
+    yourDistrict.district?.state === state &&
+    yourDistrict.district.lines === linesName
+      ? yourDistrict.district.house
+      : null;
   const loading = directory.loading;
   const error = directory.error ? "Failed to load the members." : null;
 
@@ -321,8 +361,11 @@ function MembersDirectoryContent() {
     let list = all;
     if (party !== "ALL") list = list.filter((p) => p.party === party);
     if (state) list = delegationOrder(list.filter((p) => p.state === state));
-    // A county narrows the House members; senators represent all of it.
-    if (linesReady && county.trim()) {
+    // A district found by location or a town's map settles the House
+    // member; a county narrows them; senators represent all of it.
+    if (picked != null) {
+      list = list.filter((p) => p.branch !== "house" || p.district === picked);
+    } else if (linesReady && county.trim()) {
       const districts = new Set(countyMatches.map((d) => d.district));
       list = list.filter((p) => p.branch !== "house" || districts.has(p.district ?? -1));
     }
@@ -331,7 +374,7 @@ function MembersDirectoryContent() {
       list = list.filter((p) => p.name.toLowerCase().includes(q));
     }
     return list;
-  }, [all, party, state, search, linesReady, county, countyMatches]);
+  }, [all, party, state, search, linesReady, county, countyMatches, picked]);
 
   const branchTabs: { key: BranchFilter; label: string }[] = [
     { key: "all", label: "Both chambers" },
@@ -360,8 +403,16 @@ function MembersDirectoryContent() {
       stateCode={state}
       lines={houseLines!}
       query={county}
-      onQuery={setCounty}
+      onQuery={(q) => {
+        setCounty(q);
+        if (picked != null) yourDistrict.setDistrict(null);
+      }}
       matches={countyMatches}
+      picked={picked}
+      onPick={(st, house) =>
+        yourDistrict.setDistrict(house == null ? null : { state: st, lines: linesName, house })
+      }
+      onOtherState={setState}
     />
   );
 
