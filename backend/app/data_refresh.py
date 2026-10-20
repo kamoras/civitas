@@ -53,6 +53,7 @@ from app.contact import BOT_USER_AGENT
 from app.database import SessionLocal
 from app.election_calendar import last_certified_general
 from app.election_phase import active_election
+from app.error_utils import output_summary
 from app.file_cache import Uncached, files_stamp, read_json_preferring
 from app.forecast import model, training_polls
 from app.ops_alerts import resolve_ops_alert, send_ops_alert
@@ -165,9 +166,10 @@ def _record_try(name: str, outcome: str) -> None:
         db.close()
 
 
-def run_command(argv: list[str], timeout_s: int) -> tuple[int, str]:
+def run_command(argv: list[str], timeout_s: int) -> tuple[int | None, str]:
     """Run a generator script from backend/, at the lowest CPU priority so
-    page requests never wait on it. (exit code, the end of its output)."""
+    page requests never wait on it. (exit code, or None when it ran past
+    `timeout_s` and was stopped; its whole output, stdout then stderr)."""
     env = {**os.environ, "PYTHONPATH": str(BACKEND)}
     try:
         # nice(1) rather than preexec_fn: the pipeline process is threaded
@@ -176,9 +178,36 @@ def run_command(argv: list[str], timeout_s: int) -> tuple[int, str]:
             ["nice", "-n", "19", *argv], cwd=BACKEND, env=env, capture_output=True, text=True,
             timeout=timeout_s,
         )
-    except subprocess.TimeoutExpired:
-        return 124, f"timed out after {timeout_s}s"
-    return done.returncode, (done.stdout + done.stderr)[-2000:]
+    except subprocess.TimeoutExpired as stopped:
+        # What it printed before it was stopped: bytes here, whatever `text` says.
+        return None, "".join(
+            part.decode(errors="replace") if isinstance(part, bytes) else part
+            for part in (stopped.stdout, stopped.stderr) if part
+        )
+    return done.returncode, done.stdout + done.stderr
+
+
+# A crash whose exception is one of these is the source not answering, not
+# a bug in the generator: the alert says so. Names, since the exception was
+# raised in the child process (httpx's, urllib's, the socket layer's).
+_SOURCE_ERRORS = frozenset({
+    "ConnectError", "ConnectTimeout", "ReadTimeout", "WriteTimeout", "PoolTimeout", "ReadError",
+    "RemoteProtocolError", "HTTPStatusError", "URLError", "HTTPError", "gaierror", "ConnectionError",
+    "ConnectionRefusedError", "ConnectionResetError", "TimeoutError",
+})
+
+
+def failure_alert(name: str, what: str, detail: str | None, logged_at: str | None) -> str:
+    """An ops alert body for a refresh that kept the copy in use: one plain
+    sentence (which file, what happened, what is still served), then the one
+    line that says why, then where the full output is. Never the output
+    itself: it is in the pipeline log."""
+    body = f"app/data/{name} was not refreshed: {what}. The previous copy stays in use."
+    if detail:
+        body += f"\n{detail}"
+    if logged_at:
+        body += f"\nFull output in the pipeline log at {logged_at}."
+    return body
 
 
 def install(spec: DataFile | str, new: dict, argv: list[str]) -> bool:
@@ -221,33 +250,51 @@ def refresh_one(spec: DataFile, ctx: Context) -> str:
     argv = [fill(a) for a in template]
     docs: dict[str, dict] = {}
     try:
-        code, tail = run_command(argv, spec.timeout_s)
-        failures: list[str] = []
-        if code != 0:
-            failures = [f"the generator exited {code}: {tail.strip()[-600:]}"]
+        code, output = run_command(argv, spec.timeout_s)
+        what, detail = None, None
+        if code is None:
+            what = "its generator ran too long and was stopped"
+            limit = spec.timeout_s
+            detail = f"Time limit: {limit} seconds." if limit < 120 else f"Time limit: {limit / 60:g} minutes."
+        elif code != 0:
+            detail = output_summary(output) or f"It printed nothing (exit code {code})."
+            error_type = re.match(r"([\w.]+)(?::|$)", detail)
+            if error_type and error_type[1].rsplit(".", 1)[-1] in _SOURCE_ERRORS:
+                what = "its generator could not reach its source"
+            else:
+                what = f"its generator crashed (exit code {code})"
         else:
+            unreadable = []
             for name, path in candidates.items():
                 try:
                     docs[name] = json.loads(pathlib.Path(path).read_text())
                     if not (isinstance(docs[name], dict) and docs[name]):
-                        failures.append(f"the generator wrote no JSON object to {name}")
+                        unreadable.append(f"{name} holds no JSON object")
                 except (OSError, ValueError) as e:
-                    failures.append(f"the generator's {name} is unreadable: {e}")
-            if not failures:
-                failures = spec.gate(docs[spec.name], ctx.doc)
+                    unreadable.append(f"{name} is unreadable: {e}")
+            if unreadable:
+                what, detail = "its generator finished without writing a usable file", "; ".join(unreadable)
+            elif refused := spec.gate(docs[spec.name], ctx.doc):
+                # The gate's reasons are the whole story; the generator ran fine.
+                what, detail, output = "its gate refused the new candidate", "; ".join(refused), ""
     finally:
         for path in candidates.values():
             pathlib.Path(path).unlink(missing_ok=True)
         shutil.rmtree(scratch, ignore_errors=True)
     new = docs.get(spec.name, {})
-    if failures:
+    if what:
+        logged_at = None
+        if output.strip():
+            logged_at = utcnow().strftime("%Y-%m-%d %H:%M UTC")
+            logger.warning("Data refresh of %s kept the copy in use (%s); generator output, %s:\n%s",
+                           spec.name, what, logged_at, output)
         send_ops_alert(
             f"{spec.name} not refreshed",
-            f"The automatic refresh of app/data/{spec.name} kept the copy in use: " + "; ".join(failures),
-            dedupe_key=f"{condition}-{content_sha256({'f': failures})[:12]}",
+            failure_alert(spec.name, what, detail, logged_at),
+            dedupe_key=f"{condition}-{content_sha256({'w': what, 'd': detail})[:12]}",
             condition=condition,
         )
-        return "kept: " + "; ".join(failures)
+        return f"kept: {what}" + (f": {detail}" if detail else "")
     changed = install(spec, new, argv)
     for name in spec.outputs:
         changed = install(name, docs[name], argv) or changed

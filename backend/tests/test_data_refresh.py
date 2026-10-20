@@ -82,10 +82,95 @@ def test_a_candidate_failing_its_gate_keeps_the_copy_in_use_and_alerts(alerts):
 def test_a_failing_generator_keeps_the_copy_in_use_and_alerts(alerts):
     _write_runtime("t_fail.json", {"rows": [1]})
     spec = dr.DataFile("t_fail.json", command=lambda ctx: [sys.executable, "-c", "raise SystemExit('source moved')"])
-    assert "exited 1" in dr.refresh_one(spec, _ctx("t_fail.json"))
+    assert "crashed (exit code 1)" in dr.refresh_one(spec, _ctx("t_fail.json"))
     assert dr.read("t_fail.json") == {"rows": [1]}
     assert "source moved" in alerts.send.call_args.args[1]
     assert not list(pathlib.Path(dr.runtime_data_path("t_fail.json")).parent.glob(".t_fail.json.*"))
+
+
+# A generator that prints progress, then crashes in a helper: the output the
+# 2026-10 bill_title_token_df.json alert dumped, cut mid-word ("onres.zip").
+_CRASHING_SCRIPT = """
+import sys
+def fetch(url):
+    print("downloading " + url)
+def main():
+    for i in range(400):
+        fetch(f"https://www.govinfo.gov/bulkdata/BILLSTATUS/119/hconres/{i}/BILLSTATUS-119hconres.zip")
+    print("Wrote /data/.bill_title_token_df.json.candidate", file=sys.stderr)
+    main.cache_clear()
+main()
+"""
+
+
+def _alert_body(alerts) -> str:
+    return alerts.send.call_args.args[1]
+
+
+def test_a_crash_alert_names_the_exception_and_its_line_not_the_output(alerts, tmp_path, caplog):
+    script = tmp_path / "build_thing.py"
+    script.write_text(_CRASHING_SCRIPT)
+    spec = dr.DataFile("t_crash.json", command=lambda ctx: [sys.executable, str(script), "{out}"])
+    with caplog.at_level("WARNING", logger="app.data_refresh"):
+        outcome = dr.refresh_one(spec, _ctx("t_crash.json"))
+    body = _alert_body(alerts)
+    lead, detail, where = body.split("\n")
+    assert lead == ("app/data/t_crash.json was not refreshed: its generator crashed (exit code 1). "
+                    "The previous copy stays in use.")
+    assert detail == "AttributeError: 'function' object has no attribute 'cache_clear' (build_thing.py:9 in main)"
+    assert re.fullmatch(r"Full output in the pipeline log at \d{4}-\d\d-\d\d \d\d:\d\d UTC\.", where)
+    assert "govinfo" not in body and "Traceback" not in body and "Wrote" not in body
+    assert outcome.startswith("kept: its generator crashed") and "govinfo" not in outcome
+    # The whole output is in the log, stamped as the alert says.
+    logged = caplog.text
+    assert where.removeprefix("Full output in the pipeline log at ").rstrip(".") in logged
+    assert "BILLSTATUS-119hconres.zip" in logged and "Traceback (most recent call last):" in logged
+
+
+def test_a_gate_refusal_alert_gives_the_gates_reason(alerts):
+    spec = dr.DataFile("t_refused.json", command=lambda ctx: _writer({"rows": []}),
+                       gate=lambda new, old: ["no rows", "12 titles where the copy in use counts 9000"])
+    dr.refresh_one(spec, _ctx("t_refused.json"))
+    assert _alert_body(alerts) == (
+        "app/data/t_refused.json was not refreshed: its gate refused the new candidate. "
+        "The previous copy stays in use.\nno rows; 12 titles where the copy in use counts 9000"
+    )
+
+
+def test_a_timeout_alert_gives_the_limit(alerts):
+    spec = dr.DataFile("t_slow.json", timeout_s=1, command=lambda ctx: [
+        sys.executable, "-c", "import time; print('working', flush=True); time.sleep(60)"])
+    assert dr.refresh_one(spec, _ctx("t_slow.json")).startswith("kept: its generator ran too long")
+    lead, detail, where = _alert_body(alerts).split("\n")
+    assert lead == ("app/data/t_slow.json was not refreshed: its generator ran too long and was stopped. "
+                    "The previous copy stays in use.")
+    assert detail == "Time limit: 1 seconds."
+    assert where.startswith("Full output in the pipeline log at ")
+
+
+def test_a_source_that_does_not_answer_is_said_so(alerts):
+    spec = dr.DataFile("t_down.json", command=lambda ctx: [
+        sys.executable, "-c", "raise ConnectionRefusedError(111, 'Connection refused')"])
+    dr.refresh_one(spec, _ctx("t_down.json"))
+    lead, detail, _ = _alert_body(alerts).split("\n")
+    assert "its generator could not reach its source." in lead
+    assert detail.startswith("ConnectionRefusedError: [Errno 111] Connection refused (<string>:1 in <module>)")
+
+
+def test_output_summary_points_at_our_frame_not_the_librarys():
+    from app.error_utils import output_summary
+
+    trace = (
+        "progress 1\nTraceback (most recent call last):\n"
+        '  File "/app/scripts/build_x.py", line 245, in main\n    fetch()\n'
+        '  File "/usr/local/lib/python3.13/site-packages/httpx/_client.py", line 900, in get\n'
+        "    raise ConnectError(msg)\n    ^^^^^^^^^^^^^^^^^^^^^^^\n"
+        "httpx.ConnectError: [Errno -2] Name or service not known\n"
+    )
+    assert output_summary(trace) == "httpx.ConnectError: [Errno -2] Name or service not known (build_x.py:245 in main)"
+    assert output_summary("one\nsource moved\n\n") == "source moved"
+    assert output_summary("x " * 400).endswith(" …")
+    assert output_summary("") is None
 
 
 def test_a_refresh_that_moves_scores_says_so(alerts):
