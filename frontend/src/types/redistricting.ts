@@ -138,6 +138,32 @@ export interface RedistrictingIndex {
   }[];
   /** States whose new map is not in force this cycle, with why. */
   heldMaps: { state: string; stateName: string; reason: string | null; url: string | null }[];
+  /** The redistricting watch (backend redistricting.watch); absent from an
+   * older backend. */
+  watch?: RedistrictingWatch;
+}
+
+/** How a map in force was set: an act, a vote, a commission plan or a
+ * court order. */
+export type MapKind = "act" | "ballot_measure" | "commission" | "court_order";
+
+export interface RedistrictingWatch {
+  /** The next general election's year. */
+  nextCycle: number;
+  /** Whether that cycle's maps are confirmed in the record. */
+  confirmed: boolean;
+  /** The cycle whose maps are in force for it. */
+  inForceCycle: number | null;
+  maps: {
+    state: string;
+    stateName: string;
+    map: string | null;
+    kind: MapKind | null;
+    settled: string | null;
+    reason: string | null;
+    source: { title: string | null; issuedBy: string | null; url: string | null };
+  }[];
+  lastSettled: string | null;
 }
 
 /** The ballot page's per-race figures (StateBallot house races). */

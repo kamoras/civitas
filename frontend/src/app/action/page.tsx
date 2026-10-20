@@ -31,6 +31,7 @@ import {
   SECTION_HEADING,
   SourceList,
   SummarySource,
+  TAP_TARGET,
   TEXT_LINK,
   WhatYouCanDo,
 } from "@/components/action/IssueEnrichment";
@@ -136,7 +137,7 @@ function IssueBody({
       <div className="mt-8 flex flex-col gap-3 border-t border-white/[0.07] pt-4">
         <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
           <SourceList issue={issue} />
-          <a href={`/issue/${issue.publicId}`} className={TEXT_LINK}>
+          <a href={`/issue/${issue.publicId}`} className={`${TEXT_LINK} ${TAP_TARGET}`}>
             Read full story →
           </a>
         </div>
@@ -320,7 +321,7 @@ function OpenComments() {
               </span>
               <Link
                 href={`${exploreHref(item)}#comment`}
-                className={`${TEXT_LINK} mt-1 inline-block`}
+                className={`${TEXT_LINK} ${TAP_TARGET} mt-1 sm:inline-block`}
               >
                 Comment →
               </Link>
@@ -452,7 +453,9 @@ function DayPager({
   const checked = selectedDate ? "" : clockTime(data?.checkedAt);
   const changed = selectedDate ? "" : clockTime(data?.generatedAt);
 
-  const link = "text-ink-lo hover:text-ink-hi disabled:cursor-not-allowed disabled:text-ink-min/50";
+  // 44px on a phone (mobile spec P10).
+  const link =
+    "inline-flex min-h-11 items-center sm:min-h-0 text-ink-lo hover:text-ink-hi disabled:cursor-not-allowed disabled:text-ink-min/50";
 
   return (
     <nav
@@ -673,15 +676,18 @@ function ActionPageInner() {
               a 42px content box, so that fractional pixel is enough to raise a
               vertical scrollbar. globals.css paints every scrollbar thumb in
               full-strength phosphor, so it rendered as a bright green 4px bar
-              parked beside the tab row, reading as a deliberate accent. */}
+              parked beside the tab row, reading as a deliberate accent.
+
+              It sticks directly under the header at the header's measured
+              height (`--header-height`), and at the top edge while a phone's
+              header is hidden: it was a literal 82px against an 86px header,
+              so it tucked 4px under it, and 34px short of the phone's 52px
+              one. Solid, like the header: paper, not glass. */}
           <div
             role="tablist"
             aria-label="Action Center sections"
             data-sticky-subnav
-            // Stuck under the header's measured bottom (HeaderClearance's
-            // --header-height), 82px until it is measured: a fixed 82px left
-            // the tabs hidden behind a header wrapped at 200% text.
-            className="sticky top-[var(--header-height,82px)] z-30 -mx-4 mb-8 mt-6 flex gap-0 overflow-x-auto overflow-y-hidden border-b border-white/15 bg-surface-base/95 px-4 backdrop-blur-sm sm:mx-0 sm:px-0"
+            className="sticky top-[var(--header-shown-h,var(--header-height))] z-30 -mx-4 mb-8 mt-6 flex gap-0 overflow-x-auto overflow-y-hidden border-b border-white/15 bg-surface-base px-4 sm:mx-0 sm:px-0"
             onKeyDown={(e) => {
               const tabs = TABS.map((t) => t.id);
               const idx = tabs.indexOf(activeTab);

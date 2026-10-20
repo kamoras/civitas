@@ -5,6 +5,8 @@ import { useId, useMemo, useState } from "react";
 import type { PartySplit, VoteMember } from "@/types/congress";
 import { PARTY_COLORS, PARTY_PLURAL } from "@/lib/partyStyles";
 import { houseSeatLabel } from "@/lib/elections";
+import { useYourState } from "@/hooks/useYourState";
+import { STATE_NAMES } from "@/lib/stateCodes";
 
 const PARTY_NAME = PARTY_PLURAL;
 const BUCKETS: { key: VoteMember["bucket"]; label: string; tone: string }[] = [
@@ -86,6 +88,9 @@ export default function VoteMembers({
 }) {
   const [state, setState] = useState("");
   const [showAll, setShowAll] = useState(!collapsible);
+  // The state set in the header (this tab only): its members' votes first,
+  // before any list is opened (mobile spec P4, P9).
+  const yours = useYourState().state;
   const listId = useId();
   const named = showAll || state !== "";
   const states = useMemo(() => [...new Set(members.map((m) => m.state))].sort(), [members]);
@@ -118,8 +123,58 @@ export default function VoteMembers({
     ];
   }, [members]);
 
+  const mine = yours ? members.filter((m) => m.state === yours) : [];
+  const nameOf = (m: VoteMember) =>
+    m.name ?? (m.firstName ? `${m.firstName} ${m.lastName}` : m.lastName);
+  const memberLink = (m: VoteMember) =>
+    m.page ? (
+      <Link href={m.page} className="text-ink hover:text-phos">
+        {nameOf(m)}
+      </Link>
+    ) : (
+      <span className="text-ink">{nameOf(m)}</span>
+    );
+
   return (
     <div className="flex flex-col gap-4">
+      {mine.length > 0 && (
+        <section
+          aria-label={`Your state: ${STATE_NAMES[yours] ?? yours}`}
+          className="border border-white/15 bg-surface px-3 py-2"
+        >
+          <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
+            Your state: <span className="text-ink-hi">{STATE_NAMES[yours] ?? yours}</span>
+          </p>
+          <ul className="mt-1 flex flex-col text-sm">
+            {[...mine]
+              .sort((a, b) => (a.district ?? 0) - (b.district ?? 0))
+              .map((m) => {
+                const g = groups.find((x) => x.has(m));
+                return (
+                  <li
+                    key={`${m.lastName}-${m.firstName}-${m.district ?? ""}`}
+                    className="flex min-h-11 items-center justify-between gap-3 border-t border-white/[0.07] first:border-t-0"
+                  >
+                    <span className="flex min-w-0 items-baseline gap-2">
+                      {memberLink(m)}
+                      <span
+                        className={`whitespace-nowrap font-mono text-xs ${PARTY_COLORS[m.party] ?? "text-ink-lo"}`}
+                      >
+                        {m.party}
+                        {m.district != null ? `-${houseSeatLabel(m.state, m.district)}` : ""}
+                      </span>
+                    </span>
+                    <span
+                      className={`shrink-0 font-mono text-xs uppercase ${g?.tone ?? "text-ink-lo"}`}
+                    >
+                      {g?.label ?? m.position}
+                    </span>
+                  </li>
+                );
+              })}
+          </ul>
+        </section>
+      )}
       {states.length > 1 && (
         <label className="flex w-fit max-w-full flex-col gap-1 font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
           State
@@ -170,10 +225,14 @@ export default function VoteMembers({
                     return (
                       <li
                         key={`${m.lastName}-${m.state}-${m.firstName}`}
-                        className="flex items-baseline gap-2"
+                        className="flex items-center gap-2 sm:items-baseline"
                       >
                         {m.page ? (
-                          <Link href={m.page} className="text-ink hover:text-phos">
+                          // A 44px row on a phone (mobile spec P10).
+                          <Link
+                            href={m.page}
+                            className="inline-flex min-h-11 items-center text-ink hover:text-phos sm:min-h-0"
+                          >
                             {name}
                           </Link>
                         ) : (

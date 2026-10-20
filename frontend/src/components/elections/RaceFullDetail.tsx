@@ -18,7 +18,7 @@ const SOURCE_NOTE: Record<RaceWithCandidates["candidateSource"], string> = {
     "Nominees confirmed by this state's primary results. A nominee who never ran in a primary (one a party convention chose, or a Libertarian, Green or independent candidate) isn't covered for this state yet, so this list may be short.",
   primary: "Ranked by money raised: the nominee isn't decided until this state's primary.",
   filers:
-    "Ranked by money raised: this state's nominees aren't confirmed yet, so this is every FEC filer.",
+    "Ranked by money raised: everyone registered with the FEC for this seat. None is on the ballot until the state certifies its list.",
 };
 
 /** The `filers` note above says nominees "aren't confirmed YET", which is

@@ -243,8 +243,51 @@ export default async function ElectionsChapter() {
           seat&apos;s usual vote (the same lean the seat map uses). The gap is the swing, in points
           toward one party. A seat&apos;s usual vote comes from presidential elections, so a swing
           mixes the national mood with the race itself. It is a measure of what happened, not a
-          forecast. Between general elections, the elections page leads with all of this instead of
-          a countdown.
+          forecast.
+        </P>
+      </Section>
+
+      <Section id="seasons" title="What leads, and when">
+        <P>
+          The elections page changes what comes first as the calendar turns. It never hides a page;
+          it only changes the order. In the campaign, the ballot and the countdown lead. On election
+          night and through the count, the count leads. Once the count has settled, the election
+          just held leads, as the archive kept it, with how many races its states list as official,
+          until the new Congress is seated on January 3. From then until the next cycle&apos;s first
+          primary or caucus, the special elections, empty seats and the calendar lead, with a
+          countdown to that first primary rather than to a general two years off. From the first
+          primary to the last congressional primary or runoff, the primaries ahead lead. Each
+          boundary comes from the law (election day, January 3) or from the FEC&apos;s election
+          calendar, never a typed date.
+        </P>
+        <P>
+          Between cycles the page also shows who has registered with the FEC for the next one, and
+          which seats the FEC lists as open. Registering is not a place on the ballot, so until a
+          state confirms its list, its page says &ldquo;registered with the FEC&rdquo;, never
+          &ldquo;on the ballot&rdquo;. A member who hasn&apos;t filed is said to have no filing,
+          never to be retiring: no official record says so. Around each FEC reporting deadline the
+          page leads with it. And once a new Congress is seated, it compares the new members with
+          the last Congress: who is new to each chamber, who came from the other one, and the median
+          age by birth year, from each member&apos;s Congress.gov record. Those are the only
+          official fields; gender, race and the like aren&apos;t in an official record, so none is
+          shown.
+        </P>
+        <P>
+          Between cycles the page also lists the states that hold regular state elections in the
+          coming odd year, by their own constitutions and laws, with a link to each state&apos;s
+          election office. Civitas doesn&apos;t list those contests&apos; candidates or read their
+          counts, and the page says so. A redistricting watch says whether the next general&apos;s
+          House maps are settled, and how each map in force got there: an act of the legislature, a
+          vote, a commission plan or a court order, each with its official source.
+        </P>
+        <P>
+          In a presidential year the page adds the presidential contest: each state&apos;s electoral
+          votes (its House seats plus two, three for the District of Columbia), the candidates
+          registered with the FEC, and the primaries and caucuses ahead. Civitas reads no
+          presidential count and calls no race. And between cycles it shows how the last election
+          was run, from the Election Assistance Commission&apos;s survey of every election office:
+          turnout, voting by mail, and how many mail and provisional ballots were rejected. A rate
+          is shown only where every office in a state reported.
         </P>
       </Section>
 

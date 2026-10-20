@@ -116,6 +116,7 @@ from app.pipeline.fetch.state_candidates_common import (
 from app.pipeline.fetch.state_candidates_tabular import DEFAULT_SETTLE_DAYS, _settled
 from app.pipeline.fetch.election_results import (
     ContestCount,
+    FeedUnreadable,
     StateCount,
     UntrustedCount,
     is_special_contest,
@@ -519,7 +520,7 @@ async def fetch_general_results(
     envelope = await fetch_json_with_retry(client, _rate_limiter, index_url, f"{state} Enhanced Voting index")
     elections = envelope.get("elections") if isinstance(envelope, dict) else None
     if not isinstance(elections, list):
-        return None
+        raise FeedUnreadable(f"{state} Enhanced Voting index could not be read")
     day = election_day.isoformat()
     held = [
         e for e in elections
@@ -545,7 +546,7 @@ async def fetch_general_results(
             client, _rate_limiter, data_url.format(id=eid), f"{state} Enhanced Voting general results",
         )
     if not isinstance(payload, dict):
-        return None
+        raise FeedUnreadable(f"{state} Enhanced Voting election {eid} could not be read")
     meta = payload.get("election") or {}
     # The vendor's own page stamps "TEST" across any election whose
     # isProduction is false (its public bundle, verified 2026-09-28), and a

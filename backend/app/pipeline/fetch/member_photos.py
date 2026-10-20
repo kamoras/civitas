@@ -42,6 +42,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import calibration_drift
+from app.error_utils import output_summary
 from app.models import ApiCache, MemberPhoto, Representative, Senator
 from app.photos import bioguide_portrait_url, credited_depiction, photo_source_allowed
 from app.pipeline.fetch.congress import member_detail_cache_key
@@ -93,7 +94,10 @@ async def measure(paths: list[str]) -> dict[str, float | None]:
         await proc.wait()
         raise _MeasureFailed(f"face detection took over {MEASURE_TIMEOUT_S}s") from None
     if proc.returncode != 0:
-        raise _MeasureFailed(f"face detection exited {proc.returncode}: {err.decode(errors='replace')[-500:]}")
+        # One line for the run row and its alerts; the whole stderr to the log.
+        stderr = err.decode(errors="replace")
+        logger.warning("Face detection exited %s; its stderr:\n%s", proc.returncode, stderr)
+        raise _MeasureFailed(f"face detection exited {proc.returncode}: {output_summary(stderr) or 'no output'}")
     return json.loads(out)
 
 

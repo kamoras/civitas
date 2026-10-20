@@ -3,7 +3,7 @@
  * import from both server and client components.
  */
 
-import type { BallotCandidate, CandidateSummary } from "@/types/election";
+import type { BallotBasis, BallotCandidate, CandidateSummary } from "@/types/election";
 import { formatCurrency } from "@/lib/formatting";
 
 /** Which page title the elections hub is showing. */
@@ -38,6 +38,27 @@ export function electionTitle(year: number | null | undefined, view: ElectionTit
     ballot: `${year} ${name} ballot`,
     elections: `${year} elections`,
   }[view];
+}
+
+/** The state ballot page's headline, worded by what its candidate lists are
+ * (the API's ballotBasis, the weakest among its races). Only a list a state
+ * itself has confirmed is "the ballot": FEC filers are registrations, and a
+ * primary ballot is not November's. */
+export function ballotHeadline(stateName: string, basis: BallotBasis["basis"] | undefined): string {
+  if (basis === "filers") return `Everyone registered with the FEC to run in ${stateName}`;
+  if (basis === "primary")
+    return `Everyone running in ${stateName}, from the state's primary lists`;
+  return `Everyone on ${stateName}'s ballot, and who is behind them`;
+}
+
+/** "federal candidates" or, while the lists are FEC filings, "registered
+ * with the FEC": the header's count says what it counts. */
+export function candidateCountLabel(
+  count: number,
+  basis: BallotBasis["basis"] | undefined
+): string {
+  if (basis === "filers") return `${count} registered with the FEC`;
+  return `${count} federal ${count === 1 ? "candidate" : "candidates"}`;
 }
 
 /** "2020 and 2024" from a lean's election window as the API states it
@@ -312,7 +333,9 @@ export function placeDistrictSummary(
  * someone with no FEC report for this election each say so. Read from the
  * figure, not `hasRaisedFunds`: the FEC's roster flag can say no money
  * while its totals report some (12 such candidates on 2026-10-08). */
-export function raisedLabel(c: BallotCandidate): string {
+export function raisedLabel(
+  c: Pick<CandidateSummary, "fecFiled" | "lastFinancialsSync" | "contributions">
+): string {
   if (c.fecFiled === false) return "no FEC filing";
   if (c.lastFinancialsSync == null) return "awaiting FEC sync";
   if (!c.contributions) return "no funds reported";

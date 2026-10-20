@@ -22,6 +22,7 @@ from datetime import datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
+from sqlalchemy.orm import Session
 
 from app.api.response_helpers import CACHE_TTL_LIST_S, cached_json
 from app.election_phase import CAMPAIGN, active_election
@@ -61,9 +62,11 @@ def _load() -> dict | None:
         return _cache
 
 
-def current_map() -> dict:
-    """The map's data while it may be shown; HTTPException otherwise."""
-    election = active_election()
+def current_map(db: Session | None = None) -> dict:
+    """The map's data while it may be shown; HTTPException otherwise. A
+    caller with a session passes it: without one, active_election opens its
+    own in the results window."""
+    election = active_election(db)
     if election.phase != CAMPAIGN:
         raise HTTPException(status_code=404, detail=HIDDEN)
     data = _load()

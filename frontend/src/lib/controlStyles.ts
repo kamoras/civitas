@@ -66,3 +66,17 @@ export function tabControl(selected: boolean): string {
  */
 export const INLINE_LINK =
   "text-signal-cyan underline decoration-signal-cyan/50 underline-offset-2 hover:text-phos";
+
+/**
+ * The case and size of a mono label (mobile spec P2). The tracked caps label
+ * is the site's signature and stays for labels of three words or fewer
+ * ("SPONSOR", "WHAT YOU CAN DO"). A longer one is sentence case at 14px on a
+ * phone, where caps that long read slowly and break mid-phrase, and caps from
+ * 640px up. Write the label in sentence case; this sets how it shows.
+ */
+export function labelCase(text: string): string {
+  return text.trim().split(/\s+/).length > 3 ? LONG_LABEL : "uppercase text-xs";
+}
+
+/** `labelCase` for a label known to run past three words. */
+export const LONG_LABEL = "normal-case text-[0.875rem] sm:text-xs sm:uppercase";

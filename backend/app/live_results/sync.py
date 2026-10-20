@@ -36,6 +36,7 @@ from app.ops_alerts import send_ops_alert
 from app.pipeline.fetch.election_results import (
     ContestCount,
     StateCount,
+    FeedUnreadable,
     UntrustedCount,
     fetch_state_count,
     live_results_states,
@@ -661,6 +662,8 @@ async def read_state(client: httpx.AsyncClient, state: str, election_day: date) 
         count = await fetch_state_count(client, state, election_day)
     except UntrustedCount as refused:
         return StateRead("untrusted", reason=str(refused))
+    except FeedUnreadable as unread:
+        return StateRead("unavailable", reason=str(unread))
     except Exception as exc:  # one state's broken feed never stops the pass
         logger.exception("Live results read failed for %s", state)
         return StateRead("failed", reason=type(exc).__name__)

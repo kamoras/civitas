@@ -10,6 +10,13 @@ const nextConfig = {
   // populated Lighthouse audit caught. The cost is the first byte waiting for the
   // metadata fetch the page makes anyway (cached, revalidate 3600).
   htmlLimitedBots: /.*/,
+  // The Open Graph images read their fonts from src/app/fonts/og at request
+  // time (lib/ogFonts.ts); the standalone server only has the files tracing
+  // copies in, and a path built from process.cwd() isn't traced.
+  outputFileTracingIncludes: {
+    "/api/og": ["./src/app/fonts/og/*.ttf"],
+    "/opengraph-image": ["./src/app/fonts/og/*.ttf"],
+  },
   // Old paths that still have links out in the world — search results,
   // Bluesky posts, Action Center issues — keep working. Query strings are
   // carried over. /bills moved under /congress (2026-09); /scorecard became

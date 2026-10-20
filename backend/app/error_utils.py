@@ -74,3 +74,35 @@ def record_exception(run, exc: BaseException, where: str | None = None) -> str:
     earlier = getattr(run, "error_detail", None)
     run.error_detail = f"{earlier}\n\n{detail}" if earlier else detail
     return detail.split("\n", 1)[0]
+
+
+_FRAME_RE = re.compile(r'^\s*File "([^"]+)", line (\d+), in (.+)$')
+_TRACEBACK_HEAD = "Traceback (most recent call last):"
+# Longest line an alert quotes from a child process's output.
+OUTPUT_LINE_CHARS = 300
+
+
+def output_summary(output: str) -> str | None:
+    """The one line of a child process's output worth an alert. For a
+    Python traceback, exception_summary's shape, ``Type: message (file:line
+    in function)``, the frame being the innermost one in our own code (not a
+    library's), since that is the line to open; otherwise the output's last
+    whole line. None for empty output. Credential parameters redacted."""
+    lines = [line.rstrip() for line in output.splitlines()]
+    if _TRACEBACK_HEAD in lines:
+        # The last traceback printed is the one that ended the process.
+        block = lines[len(lines) - 1 - lines[::-1].index(_TRACEBACK_HEAD) + 1:]
+        frames = [(i, m) for i, line in enumerate(block) if (m := _FRAME_RE.match(line))]
+        after = block[frames[-1][0] + 1:] if frames else block
+        error = next((line for line in after if line and not line[0].isspace()), None)
+        if error:
+            ours = [m for _, m in frames if "site-packages" not in m[1] and "/lib/python" not in m[1]]
+            frame = (ours or [m for _, m in frames] or [None])[-1]
+            at = f" ({frame[1].rsplit('/', 1)[-1]}:{frame[2]} in {frame[3]})" if frame else ""
+            return redact_sensitive_params(_clip(error) + at)
+    last = next((line.strip() for line in reversed(lines) if line.strip()), None)
+    return redact_sensitive_params(_clip(last)) if last else None
+
+
+def _clip(line: str) -> str:
+    return line if len(line) <= OUTPUT_LINE_CHARS else line[:OUTPUT_LINE_CHARS].rsplit(" ", 1)[0] + " …"
