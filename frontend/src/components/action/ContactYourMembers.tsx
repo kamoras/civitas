@@ -1,5 +1,6 @@
 "use client";
 
+import { membersHref } from "@/lib/routes";
 import { useId, useMemo, useState } from "react";
 import Link from "next/link";
 import {
@@ -382,10 +383,7 @@ export default function ContactYourMembers({
       {state && members.error && (
         <p className="mt-2 text-[13px] text-signal-amber" role="alert">
           Couldn&apos;t load {stateName}&apos;s members. Try again, or use the{" "}
-          <Link
-            href={`/politicians?state=${encodeURIComponent(state)}`}
-            className="underline underline-offset-2"
-          >
+          <Link href={membersHref(state)} className="underline underline-offset-2">
             directory
           </Link>
           .

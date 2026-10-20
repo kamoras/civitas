@@ -2,6 +2,7 @@
 
 from app.models import President
 from app.services.president_service import (
+    get_president_list,
     get_current_president,
     get_president,
     get_president_leaderboard,
@@ -101,6 +102,18 @@ class TestGetPresidentScoreBreakdown:
         assert (facts("a-1")["historiansRank"], facts("a-1")["historiansRated"]) == (1, 3)
         assert facts("b-2")["historiansRank"] == facts("c-3")["historiansRank"] == 2
         assert facts("d-4")["historiansRank"] is None
+
+    def test_the_list_states_the_same_rank_as_the_profile(self, db_session):
+        """/executive/presidents reads the rank from GET /api/presidents."""
+        for n, (pid, pts) in enumerate((("a-1", 900), ("b-2", 700), ("c-3", 700), ("d-4", None)), 1):
+            db_session.add(_make_president(pid, number=n, historical_legacy_score=pts))
+        db_session.commit()
+        rows = get_president_list(db_session)
+        assert [r["id"] for r in rows] == ["d-4", "c-3", "b-2", "a-1"]
+        for r in rows:
+            facts = get_president_score_breakdown(db_session, r["id"])["historicalLegacy"]["facts"]
+            assert (r["historiansRank"], r["historiansRated"]) == (facts["historiansRank"], facts["historiansRated"])
+        assert rows[0]["historiansRank"] is None
 
     def test_breakdown_has_all_four_dimensions(self, db_session):
         db_session.add(_make_president("test-3", gdp_growth_avg=3.0))

@@ -25,22 +25,7 @@ import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR, type ShareSubject } from "@/lib/shareImage";
 import { absoluteUrl } from "@/lib/site";
 import { ordinal } from "./format";
-
-const PARTY: Record<string, { label: string; text: string; border: string }> = {
-  D: { label: "Democrat", text: "text-dem-blue", border: "border-dem-blue/40" },
-  R: { label: "Republican", text: "text-signal-red", border: "border-signal-red/40" },
-  DR: { label: "Democratic-Republican", text: "text-signal-cyan", border: "border-signal-cyan/40" },
-  F: { label: "Federalist", text: "text-ind-purple", border: "border-ind-purple/40" },
-  W: { label: "Whig", text: "text-signal-amber", border: "border-signal-amber/40" },
-};
-const NO_PARTY = { label: "No party", text: "text-ink", border: "border-white/30" };
-// "U": a president who belonged to no party (George Washington).
-PARTY.U = NO_PARTY;
-
-/** A president's party label and colours (also the leaderboard's summary). */
-export function presidentParty(code: string) {
-  return PARTY[code] ?? NO_PARTY;
-}
+import { presidentParty } from "@/lib/presidentParty";
 
 const LINK = "font-mono text-[13px] text-ink-lo underline underline-offset-2 hover:text-phos";
 

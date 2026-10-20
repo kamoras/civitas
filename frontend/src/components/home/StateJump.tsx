@@ -1,5 +1,6 @@
 "use client";
 
+import { membersHref } from "@/lib/routes";
 import { useId } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -26,7 +27,7 @@ export default function StateJump({
   to: "members" | "ballot";
 }) {
   const hrefFor = (state: string) =>
-    to === "ballot" ? stateBallotHref(state) : `/politicians?state=${state}`;
+    to === "ballot" ? stateBallotHref(state) : membersHref(state);
   const router = useRouter();
   const id = useId();
   const { state } = useYourState();

@@ -190,18 +190,44 @@ def get_president_score_breakdown(db: Session, president_id: str) -> dict | None
     # The historians' own ranking, attributed to them: the place of this
     # presidency's survey points among every rated presidency (competition
     # rank, ties shared), what the page shows in place of a composite.
-    rated = [v for (v,) in db.query(President.historical_legacy_score)
-             .filter(President.historical_legacy_score.isnot(None)).all()]
-    points = p.historical_legacy_score
+    rated = _rated_points(db.query(President.historical_legacy_score).all())
     legacy_facts = breakdown["historicalLegacy"]["facts"]
-    legacy_facts["historiansRank"] = (1 + sum(1 for v in rated if v > points)) if points is not None else None
+    legacy_facts["historiansRank"] = historians_rank(p.historical_legacy_score, rated)
     legacy_facts["historiansRated"] = len(rated)
     return breakdown
+
+
+def _rated_points(rows) -> list[int]:
+    """Every rated presidency's C-SPAN survey points, from (points,) rows."""
+    return [v for (v,) in rows if v is not None]
+
+
+def historians_rank(points: int | None, rated: list[int]) -> int | None:
+    """A presidency's place among every rated presidency by the historians'
+    survey points: competition rank (ties share a place), None when the
+    survey hasn't rated it (a sitting or just-departed president)."""
+    return (1 + sum(1 for v in rated if v > points)) if points is not None else None
 
 
 def get_all_presidents(db: Session) -> list[PresidentSchema]:
     presidents = db.query(President).order_by(President.number.desc()).all()
     return [_build_response(p) for p in presidents]
+
+
+def get_president_list(db: Session) -> list[dict]:
+    """Every president, newest first, as the site's list reads them (GET
+    /api/presidents): each with the historians' rank among the rated
+    presidencies (`historiansRank`, `historiansRated`), the figure the
+    profile states. Not part of the public API's president schema."""
+    presidents = db.query(President).order_by(President.number.desc()).all()
+    rated = _rated_points((p.historical_legacy_score,) for p in presidents)
+    rows = []
+    for p in presidents:
+        row = _build_response(p).model_dump(by_alias=True)
+        row["historiansRank"] = historians_rank(p.historical_legacy_score, rated)
+        row["historiansRated"] = len(rated)
+        rows.append(row)
+    return rows
 
 
 def current_president(db: Session) -> President | None:

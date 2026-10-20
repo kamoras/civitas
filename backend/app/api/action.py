@@ -1278,8 +1278,8 @@ def _upcoming_civic_events(year: int, today: date) -> list[dict]:
             "description": "The Supreme Court begins its new term on the first Monday in October,"
                            " hearing oral arguments and issuing opinions through June.",
             "category": "scotus",
-            "link": "/politicians?branch=scotus",
-            "linkLabel": "View justice scorecards",
+            "link": "/court",
+            "linkLabel": "View the justices and decisions",
         })
 
     if year % 2 == 1:
@@ -1293,8 +1293,8 @@ def _upcoming_civic_events(year: int, today: date) -> list[dict]:
                 "description": "New session of Congress begins. Newly elected members are sworn in"
                                " and leadership elections take place.",
                 "category": "congress",
-                "link": "/leaderboard",
-                "linkLabel": "View congressional rankings",
+                "link": "/congress/members",
+                "linkLabel": "View the members of Congress",
             })
 
     if year % 4 == 1:
@@ -1307,8 +1307,8 @@ def _upcoming_civic_events(year: int, today: date) -> list[dict]:
                 "title": "Presidential Inauguration Day",
                 "description": "The president-elect is sworn into office at the U.S. Capitol.",
                 "category": "executive",
-                "link": "/politicians?branch=president",
-                "linkLabel": "View presidential scorecards",
+                "link": "/executive/presidents",
+                "linkLabel": "View every president",
             })
 
     return sorted(events, key=lambda e: e["date"])

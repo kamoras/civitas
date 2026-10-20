@@ -15,13 +15,15 @@ describe("SectionTabs", () => {
       "Reports",
       "Latest week",
       "Latest month",
-      "Bills",
       "Members",
+      "Measure by measure",
+      "Compare members",
+      "Bills",
       "Committees",
       "Nominations",
       "Votes with the president",
     ]);
-    expect(links[7]).toHaveAttribute("aria-current", "page");
+    expect(links[9]).toHaveAttribute("aria-current", "page");
     expect(links.filter((l) => l.hasAttribute("aria-current"))).toHaveLength(1);
     for (const l of links) expect(l.className).toContain("min-h-11");
   });
