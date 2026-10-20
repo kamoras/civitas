@@ -18,6 +18,7 @@ from app import committee_routing
 from app import data_refresh as dr
 from app.config import settings
 from app.election_phase import ActiveElection
+from app.error_utils import output_summary
 from app.pipeline.fetch.state_candidates_common import fec_party_label
 from app.state_names import STATE_NAMES
 
@@ -144,7 +145,7 @@ def test_a_timeout_alert_gives_the_limit(alerts):
     lead, detail, where = _alert_body(alerts).split("\n")
     assert lead == ("app/data/t_slow.json was not refreshed: its generator ran too long and was stopped. "
                     "The previous copy stays in use.")
-    assert detail == "Time limit: 1 seconds."
+    assert detail == "Time limit: 1 second."
     assert where.startswith("Full output in the pipeline log at ")
 
 
@@ -158,8 +159,6 @@ def test_a_source_that_does_not_answer_is_said_so(alerts):
 
 
 def test_output_summary_points_at_our_frame_not_the_librarys():
-    from app.error_utils import output_summary
-
     trace = (
         "progress 1\nTraceback (most recent call last):\n"
         '  File "/app/scripts/build_x.py", line 245, in main\n    fetch()\n'

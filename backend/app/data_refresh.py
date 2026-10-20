@@ -255,7 +255,8 @@ def refresh_one(spec: DataFile, ctx: Context) -> str:
         if code is None:
             what = "its generator ran too long and was stopped"
             limit = spec.timeout_s
-            detail = f"Time limit: {limit} seconds." if limit < 120 else f"Time limit: {limit / 60:g} minutes."
+            detail = (f"Time limit: {limit} second{'' if limit == 1 else 's'}." if limit < 120
+                      else f"Time limit: {limit / 60:g} minutes.")
         elif code != 0:
             detail = output_summary(output) or f"It printed nothing (exit code {code})."
             error_type = re.match(r"([\w.]+)(?::|$)", detail)
