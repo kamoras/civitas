@@ -1,4 +1,4 @@
-import type { VoteStep, VoteTask } from "@/types/election";
+import type { VoteStep, VoteTask, VoterCalendar } from "@/types/election";
 import { safeHref } from "@/lib/formatting";
 import { INLINE_LINK } from "@/lib/controlStyles";
 import { countdownText } from "@/components/elections/VoterCalendar";
@@ -92,6 +92,56 @@ function Step({ step, n }: { step: VoteStep; n: number }) {
         </p>
       )}
     </li>
+  );
+}
+
+/**
+ * The steps and the voter deadlines in one line above the ballot: the next
+ * deadline with its countdown (the backend's, on the state's own clock), or
+ * that every deadline has passed, and a jump to the steps and the full
+ * calendar after the contests. A reader who came for the ballot sees it in
+ * the first screen of a phone; one who must still register sees when,
+ * before anything else. Every date stays quoted with its rule and source in
+ * the calendar below (AGENTS.md section 7).
+ */
+export function VoteStepsLead({
+  calendar,
+  hasSteps,
+}: {
+  calendar: VoterCalendar | null | undefined;
+  hasSteps: boolean;
+}) {
+  const read = calendar && !calendar.unread ? calendar : null;
+  const next = read?.next ?? null;
+  const passed = !!read && !next && read.items.length > 0;
+  if (!hasSteps && !calendar) return null;
+  const left = next ? countdownText(next) : null;
+  const soon =
+    next?.status === "open" && (next.countdown === "today" || next.countdown === "tomorrow");
+  return (
+    <p
+      data-testid="vote-steps-lead"
+      className={`mb-4 border border-white/30 border-l-4 bg-surface px-4 py-2 text-sm ${
+        soon ? "border-l-signal-orange" : "border-l-ink-hi"
+      }`}
+    >
+      {next && (
+        <span className="text-ink-hi">
+          Next deadline: {next.sentence}
+          {left && <span className="font-semibold text-signal-amber"> · {left}</span>}.{" "}
+        </span>
+      )}
+      {passed && (
+        <span className="text-ink-hi">Every voter deadline for this election has passed. </span>
+      )}
+      <a
+        href={hasSteps ? "#vote-steps" : "#voter-deadlines"}
+        className="inline-flex min-h-6 items-center font-semibold text-ink-hi underline underline-offset-2 hover:text-phos"
+      >
+        {hasSteps ? "Your vote, step by step, and every deadline" : "Every voter deadline"}
+        <span aria-hidden="true">&nbsp;↓</span>
+      </a>
+    </p>
   );
 }
 

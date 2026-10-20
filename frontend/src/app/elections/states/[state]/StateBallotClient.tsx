@@ -12,7 +12,7 @@ import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
 import BallotMeasureCard, { measureAnchor } from "@/components/elections/BallotMeasureCard";
 import BallotBasisNotice from "@/components/elections/BallotBasisNotice";
 import VoterCalendar from "@/components/elections/VoterCalendar";
-import VoteSteps from "@/components/elections/VoteSteps";
+import VoteSteps, { VoteStepsLead } from "@/components/elections/VoteSteps";
 import GeneralRunoffNotice, {
   otherPrimaryLabel,
   RankedChoiceNotice,
@@ -1976,20 +1976,16 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
               </div>
             </header>
 
-            {/* Before the ballot: a reader who isn't registered by the
-              deadline can't vote on any of it. Gone in the results window,
-              when every deadline has passed. */}
-            {!resultsMode && ballot.voteSteps && (
-              <VoteSteps steps={ballot.voteSteps} stateName={stateName} />
-            )}
-
-            {!resultsMode && ballot.voterCalendar && (
-              <VoterCalendar
-                showRegister={!ballot.voteSteps?.length}
+            {/* Before the ballot, in one line: the next voter deadline (a
+              reader who isn't registered by it can't vote on any of it) and
+              a jump to the steps and the full calendar, which follow the
+              contests. As full blocks here they put the ballot two screens
+              down on a phone. Gone in the results window, when every
+              deadline has passed. */}
+            {!resultsMode && (
+              <VoteStepsLead
                 calendar={ballot.voterCalendar}
-                stateName={stateName}
-                lookupHref={lookupHref}
-                lookupIsStateSpecific={lookupIsStateSpecific}
+                hasSteps={!!ballot.voteSteps?.length}
               />
             )}
 
@@ -2186,6 +2182,23 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                 {ballotLinks}
               </div>
             </div>
+
+            {/* The steps and every deadline, after the contests (the line
+              above the ballot leads here). */}
+            {!resultsMode && (ballot.voteSteps?.length || ballot.voterCalendar) && (
+              <div className="mt-8">
+                {ballot.voteSteps && <VoteSteps steps={ballot.voteSteps} stateName={stateName} />}
+                {ballot.voterCalendar && (
+                  <VoterCalendar
+                    showRegister={!ballot.voteSteps?.length}
+                    calendar={ballot.voterCalendar}
+                    stateName={stateName}
+                    lookupHref={lookupHref}
+                    lookupIsStateSpecific={lookupIsStateSpecific}
+                  />
+                )}
+              </div>
+            )}
           </div>
         </main>
 

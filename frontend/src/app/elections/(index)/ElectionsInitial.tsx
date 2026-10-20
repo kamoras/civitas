@@ -13,6 +13,7 @@ import type {
   PresidentialContest,
 } from "@/types/nextCycle";
 import type { RedistrictingWatch } from "@/types/redistricting";
+import type { RegistrationClosing } from "@/types/thisWeek";
 
 /** What the server already read for /elections (elections/layout.tsx): the
  * lean map and which mode the page is in, so the masthead, map and state
@@ -51,6 +52,10 @@ export interface ElectionsInitial {
   presidential?: PresidentialContest | null;
   /** How the last general was run (the EAC's survey), between cycles. */
   administration?: ElectionAdministration | null;
+  /** The states whose registration closes soon (GET /api/this-week), shown
+   * as one line to the calendar. */
+  registrationClosing?: RegistrationClosing[] | null;
+  closingSoonDays?: number;
   /** The server's clock when it rendered, so the countdown reads the same
    * on the server and in the browser. */
   renderedAt: number;

@@ -260,7 +260,7 @@ describe("the ballot page", () => {
     expect(within(box).getByText("Shannon Bly")).toBeInTheDocument();
   });
 
-  it("opens with the state's voter deadlines, before the ballot", () => {
+  it("leads with the next voter deadline in one line, the full calendar after the ballot", () => {
     const deadline = {
       kind: "registration" as const,
       method: "online" as const,
@@ -300,11 +300,19 @@ describe("the ballot page", () => {
         })}
       />
     );
+    const lead = screen.getByTestId("vote-steps-lead");
+    expect(lead).toHaveTextContent("Next deadline: Online registration closes Oct 26");
+    expect(within(lead).getByRole("link")).toHaveAttribute("href", "#voter-deadlines");
+    const ballotColumns = screen.getByTestId("ballot-columns");
+    expect(
+      lead.compareDocumentPosition(ballotColumns) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    // Every deadline, with its rule and source, still on the page: after
+    // the contests, so the ballot is in a phone's first screen.
     const section = screen.getByRole("region", { name: /VOTER DEADLINES/ });
     expect(section).toHaveTextContent("Online registration closes Oct 26 (6 days left).");
     expect(
-      section.compareDocumentPosition(screen.getByTestId("ballot-columns")) &
-        Node.DOCUMENT_POSITION_FOLLOWING
+      ballotColumns.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
   });
 
