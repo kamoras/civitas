@@ -21,7 +21,7 @@ export default function ComparePresidentsError({ retry }: { retry: () => void })
           <button
             type="button"
             onClick={retry}
-            className={`border px-3 py-2 font-mono text-xs uppercase tracking-[0.12em] transition-colors ${BOXED_CONTROL.unselected}`}
+            className={`border px-3 py-2 font-mono text-xs transition-colors ${BOXED_CONTROL.unselected}`}
           >
             Try again
           </button>

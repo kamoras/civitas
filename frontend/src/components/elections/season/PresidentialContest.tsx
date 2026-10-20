@@ -19,7 +19,7 @@ export default function PresidentialContest({ data }: { data: Contest | null }) 
     >
       <h2
         id="president-heading"
-        className="border-b border-white/[0.07] py-2.5 font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
+        className="border-b border-white/[0.07] py-2.5 font-mono text-xs text-ink-min"
       >
         President · {data.cycle}
       </h2>
@@ -40,7 +40,7 @@ export default function PresidentialContest({ data }: { data: Contest | null }) 
       </p>
       {ev.states.length > 0 && (
         <details className="mt-2">
-          <summary className="flex min-h-11 cursor-pointer items-center font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
+          <summary className="flex min-h-11 cursor-pointer items-center font-mono text-xs text-ink-min">
             Electoral votes by state
           </summary>
           <ul className="mt-1 grid grid-cols-3 gap-px bg-white/[0.07] sm:grid-cols-6 lg:grid-cols-9">
@@ -61,9 +61,7 @@ export default function PresidentialContest({ data }: { data: Contest | null }) 
           </ul>
         </details>
       )}
-      <h3 className="mt-4 font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-        Registered with the FEC
-      </h3>
+      <h3 className="mt-4 font-mono text-xs text-ink-min">Registered with the FEC</h3>
       {candidates.length ? (
         <>
           <p className="mt-1 text-sm text-ink-lo">
@@ -93,7 +91,7 @@ export default function PresidentialContest({ data }: { data: Contest | null }) 
       )}
       {(data.primaries ?? []).length > 0 && (
         <>
-          <h3 className="mt-4 font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
+          <h3 className="mt-4 font-mono text-xs text-ink-min">
             Presidential primaries and caucuses ahead
           </h3>
           <ul className="mt-1">
@@ -102,7 +100,7 @@ export default function PresidentialContest({ data }: { data: Contest | null }) 
                 key={`${p.date}-${p.state}-${p.label}`}
                 className="border-t border-white/[0.07] py-1.5 text-sm text-ink-lo"
               >
-                <span className="font-mono text-[11px] tracking-[0.12em] text-ink-min">
+                <span className="font-mono text-[11px] text-ink-min">
                   {longDate(p.date).toUpperCase()}
                 </span>{" "}
                 {p.stateName}: {p.label}

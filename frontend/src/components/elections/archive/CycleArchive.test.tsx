@@ -167,7 +167,7 @@ describe("CycleArchive", () => {
 
   it("shows the count as the state reported it, and never calls the race", () => {
     renderArchive(record());
-    expect(screen.getByText("LEADS · OFFICIAL COUNT")).toBeTruthy();
+    expect(screen.getByText("Leads · Official count")).toBeTruthy();
     expect(screen.getByText(/Civitas calls no race/)).toBeTruthy();
     expect(screen.queryByText(/\bwon\b|\bwins\b/i)).toBeNull();
     expect(

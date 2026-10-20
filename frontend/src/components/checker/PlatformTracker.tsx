@@ -1,3 +1,4 @@
+import { asLabel } from "@/lib/formatting";
 import { PartisanDepth } from "@/types/senator";
 import { usePolicyLabel } from "@/hooks/useConfig";
 import CollapsibleSection from "../shared/CollapsibleSection";
@@ -9,10 +10,10 @@ interface PlatformTrackerProps {
 }
 
 const DEPTH_STYLES = {
-  deep: { text: "text-signal-magenta", label: "DEEPLY PARTISAN" },
-  moderate: { text: "text-signal-amber", label: "MODERATELY PARTISAN" },
-  centrist: { text: "text-ink-hi", label: "CENTRIST" },
-  "cross-cutting": { text: "text-signal-cyan", label: "CROSS-CUTTING" },
+  deep: { text: "text-signal-magenta", label: "Deeply partisan" },
+  moderate: { text: "text-signal-amber", label: "Moderately partisan" },
+  centrist: { text: "text-ink-hi", label: "Centrist" },
+  "cross-cutting": { text: "text-signal-cyan", label: "Cross-cutting" },
 };
 
 // The spectrum bar's ends. A member's vote lean is the mean over policy areas
@@ -53,7 +54,7 @@ function PartisanDepthPanel({
         <h4 className="text-sm font-mono text-signal-cyan">
           {">"}{" "}
           <MetricTooltip text="Measures how partisan this member's actual votes are. Counts each Yea toward the party a bill leans to and each Nay toward the other, where the lean is how the parties voted on the bill's roll call (its content only when no roll call recorded that). Based on what they voted for, not what they say. The bar's ends are the limits of the measure: the left end would mean every counted vote went the way of the Democrats' positions in every policy area, the right end the Republicans'. The label above the bar (deeply or moderately partisan, or centrist) ranks this member within their own party, so a short bar can still be among the most partisan in it. Cross-cutting means the areas where they side with the other party make up more than 30% of their areas, each area counted by how strongly it leans.">
-            PARTISAN DEPTH ANALYSIS
+            Partisan depth analysis
           </MetricTooltip>
         </h4>
         <span className={`text-xs font-mono ${depthStyle.text}`}>{depthStyle.label}</span>
@@ -63,7 +64,7 @@ function PartisanDepthPanel({
       <div className="mb-3">
         <div className="flex justify-between text-xs mb-1">
           <span className="text-dem-blue font-display font-semibold">← DEM</span>
-          <span className="text-ink-min font-display font-semibold">CENTER</span>
+          <span className="text-ink-min font-display font-semibold">Center</span>
           <span className="text-signal-red font-display font-semibold">REP →</span>
         </div>
         {/* Both party bars paint at full token strength. The D side used to be
@@ -101,7 +102,7 @@ function PartisanDepthPanel({
           </div>
           <div className="[&>span]:justify-center text-xs text-ink-min">
             <MetricTooltip text="Overall ideological direction derived from roll-call votes. R = votes lean Republican, D = votes lean Democrat, CTR = at the center (within 0.02).">
-              LEAN
+              Lean
             </MetricTooltip>
           </div>
         </div>
@@ -109,7 +110,7 @@ function PartisanDepthPanel({
           <div className="text-sm font-mono text-ink-hi">{depth.totalPositions}</div>
           <div className="[&>span]:justify-center text-xs text-ink-min">
             <MetricTooltip text="Number of policy areas where this member has cast votes. Each area's lean is derived from the votes cast on D-leaning vs R-leaning bills in that area.">
-              AREAS
+              Areas
             </MetricTooltip>
           </div>
         </div>
@@ -121,7 +122,7 @@ function PartisanDepthPanel({
           </div>
           <div className="[&>span]:justify-center text-xs text-ink-min">
             <MetricTooltip text="Number of policy areas where this member's votes align with the opposite party's positions. Higher = more ideologically independent.">
-              CROSS
+              Cross
             </MetricTooltip>
           </div>
         </div>
@@ -167,7 +168,7 @@ function PartisanDepthPanel({
       {/* Per-policy breakdown */}
       {depth.policyBreakdown.length > 0 && (
         <div className="space-y-1">
-          <div className="text-xs text-ink-min font-mono mb-1">VOTING RECORD BY POLICY AREA</div>
+          <div className="text-xs text-ink-min font-mono mb-1">Voting record by policy area</div>
           {depth.policyBreakdown.map((p, i) => {
             const barWidth = Math.round(p.strength * 100);
             const isR = p.alignment === "R";
@@ -205,12 +206,12 @@ export default function PlatformTracker({ partisanDepth, senatorParty }: Platfor
 
   const summaryParts: string[] = [];
   if (hasPartisan) {
-    summaryParts.push(partisanDepth.depth.toUpperCase());
+    summaryParts.push(asLabel(partisanDepth.depth));
   }
 
   return (
     <CollapsibleSection
-      title="POSITIONS vs. VOTES"
+      title="Positions vs. Votes"
       summary={summaryParts.join(" · ")}
       source="Derived from roll-call votes"
     >

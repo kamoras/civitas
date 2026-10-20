@@ -22,7 +22,7 @@ export default function CommentWindowBar({
           style={{ width: `${w.elapsedPercent}%` }}
         />
       </span>
-      <span className="font-mono text-xs tracking-[0.06em] text-ink-lo">{words}</span>
+      <span className="font-mono text-xs text-ink-lo">{words}</span>
     </span>
   );
 }

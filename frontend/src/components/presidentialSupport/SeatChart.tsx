@@ -174,12 +174,12 @@ export default function SeatChart({
               </span>
             ))}
           </div>
-          <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
+          <p className="font-mono text-xs text-ink-min">
             Seat lean (Cook PVI) · Up: share of counted votes on the president&apos;s side
           </p>
         </div>
       </div>
-      <figcaption className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
+      <figcaption className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs text-ink-min">
         <span>
           <svg width="8" height="8" className="mr-1 inline align-middle" aria-hidden="true">
             <rect x="0.5" y="0.5" width="7" height="7" className="fill-ink-lo stroke-ink-lo" />

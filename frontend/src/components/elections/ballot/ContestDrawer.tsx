@@ -7,9 +7,9 @@ import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 
 const COLUMN_LABEL: Record<BallotContest["column"], string> = {
-  federal: "FEDERAL",
-  state: "STATE",
-  local: "MEASURES · LOCAL",
+  federal: "Federal",
+  state: "State",
+  local: "Measures · Local",
 };
 
 /** One contest's research, over the ballot: a sheet from the bottom of a
@@ -86,19 +86,19 @@ export default function ContestDrawer({
         className="relative flex h-[85svh] w-full min-w-0 flex-col border-t-3 border-ink-min/60 bg-surface-base font-sans lg:h-full lg:w-[660px] lg:border-l lg:border-t-0 lg:border-white/25"
       >
         <div className="flex flex-wrap items-center justify-between gap-x-3 border-b border-white/[0.14] px-4 py-2.5">
-          <span className="min-w-0 font-mono text-xs tracking-[0.12em] text-ink-lo">
+          <span className="min-w-0 font-mono text-xs text-ink-lo">
             {/* "Section", not "contest": the drawer also pages through parts
                 that are not contests (news coverage), and the page header
                 counts contests the voter actually decides ("17 contests"
                 beside "contest 6 of 7" read as a contradiction). */}
-            SECTION {index + 1} OF {total} · {COLUMN_LABEL[contest.column]}
+            Section {index + 1} of {total} · {COLUMN_LABEL[contest.column]}
           </span>
           <button
             type="button"
             onClick={onClose}
-            className="min-h-[44px] px-2 font-mono text-xs tracking-[0.1em] text-signal-cyan hover:text-phos"
+            className="min-h-[44px] px-2 font-mono text-xs text-signal-cyan hover:text-phos"
           >
-            ALL CONTESTS
+            All contests
           </button>
         </div>
         <div className="flex gap-[3px] px-4 pt-2" aria-hidden="true">

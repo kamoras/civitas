@@ -1,5 +1,6 @@
 "use client";
 
+import { asLabel } from "@/lib/formatting";
 import Link from "next/link";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { fetchCompareAgreement } from "@/lib/api";
@@ -55,8 +56,8 @@ export default function VotingAgreement({
         {...{ [SHARE_SECTION_ATTR]: "voted-alike" }}
       >
         <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <h3 id="voting-agreement" className="tracking-[0.16em] text-ink-min">
-            VOTED ALIKE · THIS CONGRESS
+          <h3 id="voting-agreement" className="text-ink-min">
+            Voted alike · This Congress
           </h3>
           <ShareSectionButton label="Voted alike" anchor={null} />
         </div>
@@ -75,7 +76,7 @@ export default function VotingAgreement({
         <p className="mt-2 font-sans text-sm leading-snug text-ink">{data.sentence}</p>
         {data.recentSplits.length > 0 && (
           <>
-            <h4 className="mt-3 tracking-[0.12em] text-ink-min">LATEST VOTES THEY SPLIT ON</h4>
+            <h4 className="mt-3 text-ink-min">Latest votes they split on</h4>
             <ul className="mt-1">
               {data.recentSplits.map((v) => (
                 <Split
@@ -104,11 +105,11 @@ function Split({ vote: v, left, right }: { vote: AgreementSplit; left: string; r
         {what}
       </Link>
       <span className="mt-0.5 block text-ink-lo">
-        {shortDate(v.date).toUpperCase()} · {v.result}
+        {shortDate(v.date)} · {v.result}
       </span>
       <span className="mt-0.5 block text-ink-lo">
-        {left}: <span className="text-ink-hi">{v.left.toUpperCase()}</span> · {right}:{" "}
-        <span className="text-ink-hi">{v.right.toUpperCase()}</span>
+        {left}: <span className="text-ink-hi">{asLabel(v.left)}</span> · {right}:{" "}
+        <span className="text-ink-hi">{asLabel(v.right)}</span>
       </span>
     </li>
   );

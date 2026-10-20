@@ -34,10 +34,10 @@ describe("PageMasthead", () => {
       <PageMasthead
         eyebrow="E"
         title="T"
-        aside={<span>REFRESH FAILED · LAST READ 9:02 PM ET</span>}
+        aside={<span>Refresh failed · last read 9:02 PM ET</span>}
       />
     );
-    const cell = screen.getByText(/REFRESH FAILED/).parentElement!;
+    const cell = screen.getByText(/Refresh failed/).parentElement!;
     expect(cell.className).toContain("max-w-full");
     expect(cell.className).toContain("min-w-0");
   });

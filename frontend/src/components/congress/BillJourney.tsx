@@ -44,7 +44,7 @@ export default function BillJourney({
   );
   return (
     <div className="flex flex-col gap-4">
-      <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">Its path</p>
+      <p className="font-mono text-xs text-ink-min">Its path</p>
       <ol className="flex flex-col lg:flex-row">
         {journey.stops.map((s, i) => {
           const reached = s.status !== "ahead";
@@ -78,7 +78,7 @@ export default function BillJourney({
                 {s.status === "current" && (
                   <span
                     aria-hidden="true"
-                    className="w-fit border border-signal-cyan/50 px-1 font-mono text-[11px] uppercase tracking-[0.12em] text-signal-cyan"
+                    className="w-fit border border-signal-cyan/50 px-1 font-mono text-[11px] text-signal-cyan"
                   >
                     Now
                   </span>
@@ -105,9 +105,7 @@ export default function BillJourney({
       </ol>
       {passage.length > 0 && (
         <div className="flex flex-col gap-2">
-          <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-            How it passed
-          </p>
+          <p className="font-mono text-xs text-ink-min">How it passed</p>
           <ul className="flex flex-col gap-1.5 text-sm leading-relaxed text-ink">
             {passage.map((p) => (
               <li key={`${p.chamber}-${p.date}-${p.kind}`}>{p.sentence}</li>

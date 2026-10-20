@@ -35,13 +35,13 @@ export default function StateAtAGlance({
       id="at-a-glance"
       aria-label={`${stateName} at a glance`}
       {...onThisPage("At a glance")}
-      className="mb-5 border border-white/[0.14] px-3 py-2 font-mono text-xs tracking-[0.08em]"
+      className="mb-5 border border-white/[0.14] px-3 py-2 font-mono text-xs"
     >
-      <h2 className="mb-1 text-ink-min tracking-[0.16em]">AT A GLANCE</h2>
+      <h2 className="mb-1 text-ink-min">At a glance</h2>
       <ul className="flex flex-col gap-1">
         {senate.map((s) => (
           <li key={s.id}>
-            <SeatOnMap seat={s} label={s.special ? "SENATE (SPECIAL)" : "SENATE"} />
+            <SeatOnMap seat={s} label={s.special ? "Senate (special)" : "Senate"} />
           </li>
         ))}
         {redrawn && (
@@ -50,7 +50,7 @@ export default function StateAtAGlance({
               href={redistrictingHref(state)}
               className="inline-flex min-h-6 items-center text-signal-cyan hover:text-phos"
             >
-              NEW HOUSE MAP: WHAT CHANGED →
+              New House map: what changed →
             </Link>
           </li>
         )}

@@ -61,7 +61,7 @@ export default function SiteSearch({ className = "" }: { className?: string }) {
         href="/search"
         onClick={show}
         aria-haspopup="dialog"
-        className={`inline-flex items-center font-mono uppercase tracking-widest text-ink-lo transition-colors hover:text-ink-hi motion-reduce:transition-none ${className}`}
+        className={`inline-flex items-center font-mono text-ink-lo transition-colors hover:text-ink-hi motion-reduce:transition-none ${className}`}
       >
         Search
       </a>
@@ -77,16 +77,13 @@ export default function SiteSearch({ className = "" }: { className?: string }) {
       >
         <div className="flex flex-col gap-4 p-4 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-x-4 border-b-2 border-white/15 pb-3">
-            <h2
-              id={titleId}
-              className="font-wordmark text-sm font-extrabold tracking-widest text-ink-hi"
-            >
-              SEARCH
+            <h2 id={titleId} className="font-wordmark text-sm font-extrabold text-ink-hi">
+              Search
             </h2>
             <button
               type="button"
               onClick={close}
-              className="inline-flex min-h-11 min-w-11 max-w-full flex-wrap items-center justify-center px-2 font-mono text-xs uppercase tracking-widest text-ink-lo hover:text-ink-hi"
+              className="inline-flex min-h-11 min-w-11 max-w-full flex-wrap items-center justify-center px-2 font-mono text-xs text-ink-lo hover:text-ink-hi"
             >
               Close <span className="sr-only">search</span>
               <span aria-hidden="true" className="ml-1 text-ink-min">

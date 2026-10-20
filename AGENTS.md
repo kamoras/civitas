@@ -2539,10 +2539,28 @@ the pending list).
   an em dash in any string there that isn't a docstring or a log message.
 - **On a phone nothing a reader must read is under 13px** (`globals.css`, "A
   phone's type scale", 2026-10): `text-xs` and the 9-12px one-offs are 13px
-  under 640px and wide tracking is 0.08em. A mono caps label of four words or
-  more is written in sentence case and styled with `labelCase` /
-  `LONG_LABEL` (`lib/controlStyles.ts`), caps only from 640px up; three words
-  or fewer stay caps everywhere.
+  under 640px. A label of four words or more is 14px there (`labelCase` /
+  `LONG_LABEL`, `lib/controlStyles.ts`).
+- **Letter case: sentence case, not capitals** (2026-10). A reader said the
+  site's capitals felt intimidating, and the evidence agrees for anything
+  longer than a word or two: capitals slow reading as text gets longer
+  (Tinker 1955; Perea, Rosa & Marcet 2017 measured about 4-5% on sentences
+  with the width held equal), dyslexia guidance (BDA) asks for no block
+  capitals, and a screen reader may spell typed capitals out letter by
+  letter. So labels, kickers, buttons, links, nav items, tabs, tags and table
+  headers are sentence case, with no wide letter-spacing; emphasis comes from
+  weight, size or the accent colour. The one narrow use the evidence leaves
+  open is a one-to-three-word section eyebrow that is not a control (on a
+  single short word the cost is close to nil, Perea et al.; small capitals
+  stay legible, Arditi & Cho 2007): it uses `EYEBROW` (`lib/typeStyles.ts`),
+  with the text written in sentence case so CSS raises it. The logotype
+  (CIVITAS | RESEARCH in the header and on the OG cards) keeps its capitals.
+  Acronyms and official identifiers keep their own (H.R. 1, FEC, S.Res. 852,
+  state codes, party letters, Cook's "EVEN"), and so does a record quoted as
+  printed ("HONEYWELL INTL INC", an official ballot title). Never
+  `.toUpperCase()` a label for display. `src/lib/noAllCaps.test.ts` fails on
+  an `uppercase` class outside `typeStyles.ts` and on a word typed in
+  capitals that isn't on its acronym list.
 - Every metric shown on scorecards has a `MetricTooltip` component providing
   plain-English explanation (hover on desktop, tap on mobile). When adding new
   metrics, always add a corresponding tooltip so users can understand what they

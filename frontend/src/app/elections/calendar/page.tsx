@@ -76,10 +76,7 @@ export default async function ElectionCalendarPage() {
           )}
 
           <section aria-labelledby="dates" className="mt-8">
-            <h2
-              id="dates"
-              className="border-b border-white/15 pb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
-            >
+            <h2 id="dates" className="border-b border-white/15 pb-2 font-mono text-xs text-ink-min">
               Every date
             </h2>
             <div className="mt-4">
@@ -94,7 +91,7 @@ export default async function ElectionCalendarPage() {
           >
             <h2
               id="specials"
-              className="border-b border-white/[0.07] py-2.5 font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
+              className="border-b border-white/[0.07] py-2.5 font-mono text-xs text-ink-min"
             >
               Special elections
             </h2>

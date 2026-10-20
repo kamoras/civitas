@@ -129,7 +129,7 @@ export default function CollapsibleSection({
             </span>
             <span id={titleId}>{title}</span>
           </span>
-          <span className="flex items-center gap-3 font-normal normal-case tracking-normal">
+          <span className="flex items-center gap-3 font-normal tracking-normal">
             {!open && summary && (
               <span className="text-xs text-ink-lo max-w-xs truncate hidden sm:inline">
                 {summary}

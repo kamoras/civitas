@@ -172,8 +172,8 @@ export default function StateResults({
 
   if (!results) {
     return (
-      <p role="status" className="mb-6 font-mono text-sm tracking-[0.12em] text-ink-min">
-        READING THE COUNT…
+      <p role="status" className="mb-6 font-mono text-sm text-ink-min">
+        Reading the count…
       </p>
     );
   }
@@ -244,44 +244,42 @@ export default function StateResults({
           announcement for the live-updates feed below, which is
           deliberately not live itself. */}
       <p
-        className={`flex flex-wrap gap-x-2 font-mono text-xs tracking-[0.08em] ${
+        className={`flex flex-wrap gap-x-2 font-mono text-xs ${
           error || (failed && races.length > 0) ? "text-signal-amber" : "text-ink-min"
         }`}
       >
         <span role="status">
           {error
-            ? "REFRESH FAILED"
+            ? "Refresh failed"
             : stillVoting
-              ? "POLLS NOT YET CLOSED"
+              ? "Polls not yet closed"
               : failed
                 ? behind
-                  ? "STALE"
-                  : "FEED READ FAILED"
+                  ? "Stale"
+                  : "Feed read failed"
                 : races.length > 0
-                  ? "LIVE"
-                  : "POLLS CLOSED"}
+                  ? "Live"
+                  : "Polls closed"}
         </span>{" "}
         <span>
           {"· "}
           {error
             ? [
                 failedAt != null
-                  ? `AT ${formatEasternTime(new Date(serverTimeOf(results, failedAt)).toISOString()).toUpperCase()}`
+                  ? `At ${formatEasternTime(new Date(serverTimeOf(results, failedAt)).toISOString())}`
                   : null,
                 races.length > 0
                   ? countReadAt
-                    ? `SHOWING THE COUNT READ AT ${formatEasternTime(countReadAt).toUpperCase()}`
-                    : "SHOWING AN OLDER COUNT"
+                    ? `Showing the count read at ${formatEasternTime(countReadAt)}`
+                    : "Showing an older count"
                   : null,
-                `RETRYING ${describeInterval(retryMs ?? RETRY_BACKOFF_MS[0]).toUpperCase()}`,
+                `Retrying ${describeInterval(retryMs ?? RETRY_BACKOFF_MS[0])}`,
               ]
                 .filter(Boolean)
                 .join(" · ")
             : [
-                countReadAt && !failed
-                  ? `UPDATED ${formatEasternTime(countReadAt).toUpperCase()}`
-                  : null,
-                `THIS PAGE CHECKS ${describeInterval(RESULTS_POLL_MS).toUpperCase()}`,
+                countReadAt && !failed ? `Updated ${formatEasternTime(countReadAt)}` : null,
+                `This page checks ${describeInterval(RESULTS_POLL_MS)}`,
               ]
                 .filter(Boolean)
                 .join(" · ")}
@@ -332,28 +330,23 @@ export default function StateResults({
       {/* Not while this page's own refreshes fail: the line above then
           says so, and when the count was read — the only statement. */}
       {races.length > 0 && failed && !error && (
-        <p className="font-mono text-xs tracking-[0.06em] text-signal-amber">
+        <p className="font-mono text-xs text-signal-amber">
           {behind ? (
             feed?.checkedAt ? (
               <>
-                {stateName.toUpperCase()}&apos;S FEED HASN&apos;T BEEN CHECKED SINCE{" "}
-                {formatEasternTime(feed.checkedAt).toUpperCase()}
+                {stateName}&apos;s feed hasn&apos;t been checked since{" "}
+                {formatEasternTime(feed.checkedAt)}
               </>
             ) : (
-              <>
-                NO RECORD OF {stateName.toUpperCase()}&apos;S FEED BEING CHECKED SINCE ITS POLLS
-                CLOSED
-              </>
+              <>No record of {stateName}&apos;s feed being checked since its polls closed</>
             )
           ) : (
             <>
-              THE LAST READ OF {stateName.toUpperCase()}&apos;S FEED, AT{" "}
-              {formatEasternTime(feed?.checkedAt ?? "").toUpperCase()}, COULDN&apos;T BE USED
+              The last read of {stateName}&apos;s feed, at{" "}
+              {formatEasternTime(feed?.checkedAt ?? "")}, couldn&apos;t be used
             </>
           )}
-          {countReadAt
-            ? ` · THE COUNT BELOW WAS READ AT ${formatEasternTime(countReadAt).toUpperCase()}`
-            : ""}
+          {countReadAt ? ` · The count below was read at ${formatEasternTime(countReadAt)}` : ""}
         </p>
       )}
       {senateRows.map((row) =>
@@ -386,8 +379,8 @@ export default function StateResults({
               >
                 U.S. House
               </h2>
-              <span className="font-mono text-xs tracking-[0.1em] text-ink-lo">
-                {formatLed(led)} LEADING{anyCountNotFinal(house) ? ` · ${NOT_FINAL}` : ""}
+              <span className="font-mono text-xs text-ink-lo">
+                {formatLed(led)} leading{anyCountNotFinal(house) ? ` · ${NOT_FINAL}` : ""}
               </span>
             </div>
             {newLines && (

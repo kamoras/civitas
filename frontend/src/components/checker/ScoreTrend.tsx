@@ -111,7 +111,7 @@ export default function ScoreTrend({ snapshots, change = null }: ScoreTrendProps
       aria-label={`Score trend from ${snapshots[0].date} to ${snapshots[snapshots.length - 1].date}: ${displayScore(first)} to ${displayScore(last)}`}
     >
       <div className="flex items-center justify-between mb-1">
-        <span className="font-mono text-xs text-ink-lo tracking-widest">SCORE HISTORY</span>
+        <span className="font-mono text-xs text-ink-lo">Score history</span>
         <span className="font-mono text-xs" style={{ color: changeColor }}>
           {changeLabel}
         </span>

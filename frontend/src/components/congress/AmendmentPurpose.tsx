@@ -24,11 +24,7 @@ export default function AmendmentPurpose({
   compact?: boolean;
 }) {
   if (!vote.amendment || vote.amendmentPurpose == null) return null;
-  const label = (
-    <span className="mr-2 font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
-      Official purpose
-    </span>
-  );
+  const label = <span className="mr-2 font-mono text-xs text-ink-min">Official purpose</span>;
   if (!vote.amendmentPurpose)
     return (
       <p className={compact ? "text-sm text-ink-lo" : "text-base text-ink-lo"}>
@@ -45,7 +41,7 @@ export default function AmendmentPurpose({
     );
   return (
     <figure className="max-w-3xl border-l-2 border-signal-cyan/60 pl-3">
-      <figcaption className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
+      <figcaption className="font-mono text-xs text-ink-min">
         Official purpose of {vote.amendment}
       </figcaption>
       <blockquote className="mt-1 text-lg leading-snug text-ink-hi">

@@ -261,9 +261,9 @@ describe("asLabel", () => {
 });
 
 describe("policyAreaLabel", () => {
-  it("prints a code without its underscores", () => {
-    expect(policyAreaLabel("FOREIGN_POLICY")).toBe("FOREIGN POLICY");
-    expect(policyAreaLabel("TECH")).toBe("TECH");
+  it("prints a code in sentence case", () => {
+    expect(policyAreaLabel("FOREIGN_POLICY")).toBe("Foreign policy");
+    expect(policyAreaLabel("TECH")).toBe("Tech");
   });
 });
 

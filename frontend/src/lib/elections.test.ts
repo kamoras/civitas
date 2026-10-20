@@ -48,14 +48,14 @@ describe("race labels", () => {
   const atLarge = { office: "H", state: "AK", district: 0 };
 
   it("does not conflate a null district (Senate) with at-large 0", () => {
-    expect(raceBadgeLabel({ office: "H", district: null })).toBe("HOUSE");
-    expect(raceBadgeLabel({ office: "H", district: 0 })).toBe("HOUSE-AL");
+    expect(raceBadgeLabel({ office: "H", district: null })).toBe("House");
+    expect(raceBadgeLabel({ office: "H", district: 0 })).toBe("House-AL");
   });
 
   it("raceBadgeLabel omits the state for a page already scoped to one", () => {
-    expect(raceBadgeLabel(senate)).toBe("SENATE");
-    expect(raceBadgeLabel(house)).toBe("HOUSE-7");
-    expect(raceBadgeLabel(atLarge)).toBe("HOUSE-AL");
+    expect(raceBadgeLabel(senate)).toBe("Senate");
+    expect(raceBadgeLabel(house)).toBe("House-7");
+    expect(raceBadgeLabel(atLarge)).toBe("House-AL");
   });
 });
 
@@ -416,7 +416,7 @@ describe("matchesDistrictQuery", () => {
 
   it("matches on a county the reader lives in", () => {
     expect(matchesDistrictQuery(race, "providence")).toBe(true);
-    expect(matchesDistrictQuery(race, "PROVIDENCE")).toBe(true);
+    expect(matchesDistrictQuery(race, "Providence")).toBe(true);
     // Partial county names work — a reader types what they remember.
     expect(matchesDistrictQuery(race, "wash")).toBe(true);
   });
@@ -527,36 +527,36 @@ describe("candidateName", () => {
 
 describe("incumbencyLabel", () => {
   it("words FEC's codes on a seat whose lines did not change", () => {
-    expect(incumbencyLabel("I", false)).toBe("INCUMBENT");
-    expect(incumbencyLabel("C", false)).toBe("CHALLENGER");
-    expect(incumbencyLabel("O", false)).toBe("OPEN SEAT");
+    expect(incumbencyLabel("I", false)).toBe("Incumbent");
+    expect(incumbencyLabel("C", false)).toBe("Challenger");
+    expect(incumbencyLabel("O", false)).toBe("Open seat");
     expect(incumbencyLabel(null, false)).toBeNull();
   });
 
   it("calls a sitting member on a redrawn seat a sitting member, and says nothing of the old seat", () => {
     // Casar holds TX-35 and runs in the new TX-37: not TX-37's incumbent.
-    expect(incumbencyLabel("I", true)).toBe("SITTING MEMBER");
+    expect(incumbencyLabel("I", true)).toBe("Sitting member");
     expect(incumbencyLabel("C", true)).toBeNull();
     expect(incumbencyLabel("O", true)).toBeNull();
   });
 
   it("names the seat a sitting member holds today when the payload carries it", () => {
-    expect(incumbencyLabel("I", true, "TX-35")).toBe("SITTING MEMBER, TX-35");
+    expect(incumbencyLabel("I", true, "TX-35")).toBe("Sitting member, TX-35");
     // Unchanged lines: still the incumbent of this seat, whatever is passed.
-    expect(incumbencyLabel("I", false, "GA-6")).toBe("INCUMBENT");
+    expect(incumbencyLabel("I", false, "GA-6")).toBe("Incumbent");
   });
 
   it("says who the member was going in, not that they sit, from election day on", () => {
     // The results window runs to Jan 3, when the Congress the election
     // seated takes office: from noon that day a defeated member no longer
     // sits, and a re-elected one sits for the new seat.
-    expect(incumbencyLabel("I", true, null, true)).toBe("MEMBER BEFORE THIS ELECTION");
-    expect(incumbencyLabel("I", true, "TX-35", true)).toBe("MEMBER BEFORE THIS ELECTION, TX-35");
+    expect(incumbencyLabel("I", true, null, true)).toBe("Member before this election");
+    expect(incumbencyLabel("I", true, "TX-35", true)).toBe("Member before this election, TX-35");
     expect(incumbencyLabel("C", true, null, true)).toBeNull();
     // FEC's code for the seat itself is about the election, true either way.
-    expect(incumbencyLabel("I", false, "GA-6", true)).toBe("INCUMBENT");
-    expect(redrawnMemberWords(false)).toBe("SITTING MEMBER");
-    expect(redrawnMemberWords(true)).toBe("MEMBER BEFORE THIS ELECTION");
+    expect(incumbencyLabel("I", false, "GA-6", true)).toBe("Incumbent");
+    expect(redrawnMemberWords(false)).toBe("Sitting member");
+    expect(redrawnMemberWords(true)).toBe("Member before this election");
   });
 
   it("treats only House seats in a state on new lines as redrawn", () => {

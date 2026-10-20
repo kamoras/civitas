@@ -48,17 +48,17 @@ async function fetchNotable(): Promise<Notable | null> {
 }
 
 const KIND: Record<NotableEntry["kind"], { tag: string; tone: string }> = {
-  closest: { tag: "CLOSEST VOTE", tone: "text-signal-amber" },
-  loneBreak: { tag: "LONE BREAK", tone: "text-signal-cyan" },
+  closest: { tag: "Closest vote", tone: "text-signal-amber" },
+  loneBreak: { tag: "Lone break", tone: "text-signal-cyan" },
 };
 
 // The site's bracketed command style (the header search's "[ SEARCH ]"), sized to a 32px
 // touch target.
 const COMMAND =
-  "inline-flex min-h-[32px] items-center font-mono text-xs tracking-[0.12em] text-phos-mid hover:text-phos";
+  "inline-flex min-h-[32px] items-center font-mono text-xs text-phos-mid hover:text-phos";
 
 function chamberWord(c: "senate" | "house") {
-  return c === "senate" ? "SENATE" : "HOUSE";
+  return c === "senate" ? "Senate" : "House";
 }
 
 function Entry({ entry }: { entry: NotableEntry }) {
@@ -69,14 +69,14 @@ function Entry({ entry }: { entry: NotableEntry }) {
     <li className="grid grid-cols-1 gap-x-8 gap-y-1 border-b border-white/[0.07] py-3 md:grid-cols-[11rem_minmax(0,1fr)_auto]">
       {/* One line on a phone, three stacked lines beside the entry on a
           wide screen: the docket reference reads as a margin note. */}
-      <p className="font-mono text-xs leading-relaxed tracking-[0.08em]">
+      <p className="font-mono text-xs leading-relaxed">
         <span className={`md:block ${kind.tone}`}>{kind.tag}</span>
         <span className="text-ink-min">
           <span className="md:hidden"> · </span>
-          <span className="md:block">{shortDate(v.date).toUpperCase()}</span>
+          <span className="md:block">{shortDate(v.date)}</span>
           <span className="md:hidden"> · </span>
           <span className="md:block">
-            {chamberWord(v.chamber)} ROLL CALL <span className="font-id">{v.number}</span>
+            {chamberWord(v.chamber)} roll call <span className="font-id">{v.number}</span>
           </span>
         </span>
       </p>
@@ -103,7 +103,7 @@ function Entry({ entry }: { entry: NotableEntry }) {
           aria-label={`${v.chamber === "senate" ? "Senate" : "House"} roll call ${v.number}`}
           className={COMMAND}
         >
-          [ ROLL CALL ]
+          [ Roll call ]
         </Link>
         {entry.kind === "loneBreak" && entry.memberId && (
           <Link
@@ -111,7 +111,7 @@ function Entry({ entry }: { entry: NotableEntry }) {
             aria-label={entry.memberName}
             className={COMMAND}
           >
-            [ {entry.memberName.toUpperCase()} ]
+            [ {entry.memberName} ]
           </Link>
         )}
         {entry.kind === "loneBreak" && entry.memberId && entry.compareWithId && (
@@ -120,7 +120,7 @@ function Entry({ entry }: { entry: NotableEntry }) {
             aria-label={`Compare ${entry.memberName} vs. ${entry.compareWithName ?? "the state's other senator"}`}
             className={COMMAND}
           >
-            [ VS. {(entry.compareWithName ?? "").toUpperCase()} ]
+            [ vs. {entry.compareWithName ?? ""} ]
           </Link>
         )}
       </p>
@@ -139,13 +139,13 @@ export function OnTheRecordList({
     <section aria-labelledby="on-the-record" className="mx-auto mt-8 max-w-7xl px-4 sm:px-6">
       {/* The week's link sits beside the heading, not in it: inside, it made
           the heading's name "On the record Week of ...: every roll call". */}
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 border-b border-white/15 pb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 border-b border-white/15 pb-2 font-mono text-xs text-ink-min">
         <h2 id="on-the-record">
           {recess ? `Last week of business: ${shortDate(data.weekStart)}` : "On the record"}
         </h2>
         <Link
           href={weekHref(data.weekStart)}
-          className="normal-case tracking-[0.06em] underline decoration-white/30 underline-offset-4 hover:text-phos"
+          className="underline decoration-white/30 underline-offset-4 hover:text-phos"
         >
           {recess ? "Every roll call" : `Week of ${shortDate(data.weekStart)}: every roll call`}{" "}
           &rarr;

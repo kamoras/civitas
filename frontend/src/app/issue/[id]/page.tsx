@@ -66,9 +66,7 @@ function Withdrawn({ retraction }: { retraction: Retraction }) {
       <Navbar />
       <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
         <div className="mx-auto flex max-w-2xl flex-col gap-4">
-          <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-            Withdrawn {retraction.date}
-          </p>
+          <p className="font-mono text-xs text-ink-min">Withdrawn {retraction.date}</p>
           <h1 className="font-display text-3xl font-semibold text-ink-hi">
             This issue was withdrawn
           </h1>
@@ -177,7 +175,7 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
         <div className="relative z-10 mx-auto max-w-3xl">
           <Link
             href={ACTION_CENTER_HREF}
-            className="font-mono text-xs uppercase tracking-[0.14em] text-ink-lo hover:text-ink-hi"
+            className="font-mono text-xs text-ink-lo hover:text-ink-hi"
           >
             ← Action Center
           </Link>
@@ -238,7 +236,7 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
                   return (
                     <h2
                       key={i}
-                      className="mt-10 border-b border-white/15 pb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min first:mt-0"
+                      className="mt-10 border-b border-white/15 pb-2 font-mono text-xs text-ink-min first:mt-0"
                     >
                       {para.slice(3)}
                     </h2>

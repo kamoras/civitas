@@ -111,7 +111,7 @@ export function RankedChoiceNotice({
 /** "U.S. HOUSE 1, 2, 6, 7" -- which contests an OtherPrimary date is for,
  * in the header's own capitals. */
 export function otherPrimaryLabel(o: OtherPrimary): string {
-  if (o.offices === "*") return "ALL CONTESTS";
-  const office = o.offices.map((x) => (x === "S" ? "U.S. SENATE" : "U.S. HOUSE")).join(" & ");
+  if (o.offices === "*") return "All contests";
+  const office = o.offices.map((x) => (x === "S" ? "U.S. Senate" : "U.S. House")).join(" & ");
   return o.districts?.length ? `${office} ${o.districts.join(", ")}` : office;
 }

@@ -43,7 +43,7 @@ function RecordPanel({ race }: { race: RaceWithCandidates }) {
           >
             <span className="flex min-w-0 flex-col">
               <span className="text-[15px] font-semibold text-ink-hi">{candidateName(c)}</span>
-              <span className={`font-mono text-[11px] tracking-[0.08em] ${getPartyMeta(c).color}`}>
+              <span className={`font-mono text-[11px] ${getPartyMeta(c).color}`}>
                 {getPartyMeta(c).label}
               </span>
             </span>

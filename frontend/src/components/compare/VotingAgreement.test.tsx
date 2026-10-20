@@ -48,6 +48,6 @@ describe("VotingAgreement", () => {
     const link = screen.getByRole("link", { name: "A nominee" });
     // A vote on no bill (a nomination) opens its own page.
     expect(link.getAttribute("href")).toBe("/congress/votes/senate/119/2/41");
-    expect(screen.getByText(/Pat Able:/).textContent).toContain("NAY");
+    expect(screen.getByText(/Pat Able:/).textContent).toContain("Nay");
   });
 });

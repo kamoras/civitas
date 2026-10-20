@@ -100,9 +100,7 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
             >
               <header className="flex flex-col gap-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="font-mono text-xs uppercase tracking-[0.14em] text-ink-lo">
-                    {eyebrow}
-                  </p>
+                  <p className="font-mono text-xs text-ink-lo">{eyebrow}</p>
                   <ShareSectionButton label="This vote" withStrip={false} />
                 </div>
                 <h1
@@ -153,7 +151,7 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
                       <VoteCount vote={vote} size="text-5xl" />
                     </p>
                   )}
-                  <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 font-mono text-xs uppercase tracking-[0.1em]">
+                  <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 font-mono text-xs">
                     {counts.map(([label, n]) => (
                       <div key={label} className="contents">
                         <dt className="text-ink-min">{label}</dt>
@@ -172,9 +170,7 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
                   // An election of the Speaker is votes for names, not yea
                   // and nay: each party's candidates, as the bars show them.
                   <div className="flex flex-col gap-3">
-                    <h2 className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-                      By party
-                    </h2>
+                    <h2 className="font-mono text-xs text-ink-min">By party</h2>
                     {vote.parties.map((p) => (
                       <PartyBar key={p.party} split={p} />
                     ))}
@@ -249,9 +245,7 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
                   </li>
                 </ul>
                 <div className="flex flex-col gap-2">
-                  <h3 className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-                    Cite this vote
-                  </h3>
+                  <h3 className="font-mono text-xs text-ink-min">Cite this vote</h3>
                   <CiteThis
                     title={`Roll call vote ${vote.number}, ${ordinal(vote.congress)} Congress, ${ordinal(vote.session)} session: ${subject}`}
                     date={vote.date}
@@ -305,7 +299,7 @@ function NominationLinks({ nv }: { nv: NominationVote }) {
   const unread = nv.citationCount - nv.nominations.length;
   return (
     <details className="text-sm text-ink-lo">
-      <summary className="cursor-pointer font-mono text-xs uppercase tracking-[0.12em] hover:text-phos">
+      <summary className="cursor-pointer font-mono text-xs hover:text-phos">
         [{nv.label} on {nv.citationCount} nominations at once, each with its record]
       </summary>
       <ul className="mt-2 flex flex-col gap-1">

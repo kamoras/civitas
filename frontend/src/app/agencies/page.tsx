@@ -33,7 +33,7 @@ function one(v: string | string[] | undefined): string {
 }
 
 const DISCLOSURE =
-  "inline-flex min-h-6 cursor-pointer items-center font-mono text-xs uppercase tracking-[0.12em] text-ink-lo hover:text-phos";
+  "inline-flex min-h-6 cursor-pointer items-center font-mono text-xs text-ink-lo hover:text-phos";
 
 /** Rows in two columns from a laptop up: half the page's height. */
 function AgencyList({
@@ -172,9 +172,9 @@ export default async function AgenciesPage({
               />
               <button
                 type="submit"
-                className="min-h-11 shrink-0 border border-phos/40 px-4 font-mono text-sm tracking-[0.12em] text-phos hover:bg-phos/10"
+                className="min-h-11 shrink-0 border border-phos/40 px-4 font-mono text-sm text-phos hover:bg-phos/10"
               >
-                [ FIND ]
+                [ Find ]
               </button>
             </form>
 
@@ -219,7 +219,7 @@ export default async function AgenciesPage({
                   </div>
                   {rest.length > 0 && (
                     <details className="mt-3" data-share-exclude>
-                      <summary className="inline-flex min-h-6 cursor-pointer items-center font-mono text-xs uppercase tracking-[0.12em] text-ink-lo hover:text-phos">
+                      <summary className="inline-flex min-h-6 cursor-pointer items-center font-mono text-xs text-ink-lo hover:text-phos">
                         [Every other agency: {rest.length}]
                       </summary>
                       <div className="mt-2">
@@ -253,7 +253,7 @@ export default async function AgenciesPage({
               <h2 id="agency-directory" className="font-display text-xl font-semibold text-ink-hi">
                 Every agency
               </h2>
-              <p className="mt-3 font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
+              <p className="mt-3 font-mono text-xs text-ink-min">
                 {index.agencies.length === 0
                   ? "Agency list not read yet"
                   : q
@@ -284,7 +284,7 @@ export default async function AgenciesPage({
                 </p>
               )}
               {!q && departments.length > 0 && (
-                <h3 className="mt-4 font-mono text-xs uppercase tracking-[0.14em] text-ink-lo">
+                <h3 className="mt-4 font-mono text-xs text-ink-lo">
                   Departments and other agencies with sub-agencies
                 </h3>
               )}

@@ -53,7 +53,7 @@ const FUNDING: Record<FundingSourceKey, { label: string; color: string }> = {
 function FundingLegend() {
   return (
     <div className="mb-1 border-b border-white/[0.07] pb-3">
-      <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-min">
+      <p className="font-mono text-[11px] text-ink-min">
         Where contributions came from · 1 block = 5%
       </p>
       <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-ink-lo">
@@ -148,7 +148,7 @@ export default function RaceMoneyBars({
                     </span>
                   )}
                   {showUnconfirmed && !c.confirmed && (
-                    <span className="ml-2 font-mono text-[10px] text-ink-min">UNCONFIRMED</span>
+                    <span className="ml-2 font-mono text-[10px] text-ink-min">Unconfirmed</span>
                   )}
                 </p>
                 <p className="shrink-0 font-mono text-xs tabular-nums text-ink-lo">

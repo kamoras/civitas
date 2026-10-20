@@ -169,16 +169,10 @@ export default function AboutOverview() {
               <span className="font-display text-base font-semibold text-ink-hi">{s.name}</span>
               <span className="mt-1 text-sm text-ink">{s.question}</span>
               <span className="mt-3 text-sm text-ink-lo">
-                <span className="font-mono text-xs uppercase tracking-[0.1em] text-phos-mid">
-                  Higher
-                </span>{" "}
-                {s.high}
+                <span className="font-mono text-xs text-phos-mid">Higher</span> {s.high}
               </span>
               <span className="mt-1.5 text-sm text-ink-lo">
-                <span className="font-mono text-xs uppercase tracking-[0.1em] text-signal-red">
-                  Lower
-                </span>{" "}
-                {s.low}
+                <span className="font-mono text-xs text-signal-red">Lower</span> {s.low}
               </span>
               <span className="mt-auto pt-3 font-mono text-xs text-signal-cyan">
                 How it works →
@@ -312,7 +306,7 @@ function PillLink({
   children: ReactNode;
 }) {
   const cls =
-    "inline-block border border-white/[0.09] px-3 py-2 font-mono text-xs uppercase tracking-[0.08em] text-ink-lo transition-colors hover:border-ink-min hover:text-ink-hi";
+    "inline-block border border-white/[0.09] px-3 py-2 font-mono text-xs text-ink-lo transition-colors hover:border-ink-min hover:text-ink-hi";
   return external ? (
     <a href={href} target="_blank" rel="noopener noreferrer" className={cls}>
       {children}

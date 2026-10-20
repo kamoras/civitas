@@ -26,7 +26,7 @@ export default function ElectionAdministration({ data }: { data: Admin | null })
     >
       <h2
         id="election-administration"
-        className="border-b border-white/[0.07] py-2.5 font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
+        className="border-b border-white/[0.07] py-2.5 font-mono text-xs text-ink-min"
       >
         How the {data.year} election was run
       </h2>
@@ -61,7 +61,7 @@ export default function ElectionAdministration({ data }: { data: Admin | null })
         )}
       </p>
       <details className="mt-2">
-        <summary className="flex min-h-11 cursor-pointer items-center font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
+        <summary className="flex min-h-11 cursor-pointer items-center font-mono text-xs text-ink-min">
           Every state
         </summary>
         <div className="overflow-x-auto">
@@ -70,7 +70,7 @@ export default function ElectionAdministration({ data }: { data: Admin | null })
               Election administration by state, {data.year}, from the EAC&apos;s survey
             </caption>
             <thead>
-              <tr className="font-mono text-[11px] uppercase tracking-[0.1em] text-ink-min">
+              <tr className="font-mono text-[11px] text-ink-min">
                 <th scope="col" className="py-1.5 pr-3 font-normal">
                   State
                 </th>

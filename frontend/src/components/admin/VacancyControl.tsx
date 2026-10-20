@@ -51,11 +51,8 @@ export function VacancyControl({ token }: { token: string }) {
         </p>
         <div className="flex flex-wrap items-end gap-2">
           <div className="flex flex-col gap-1">
-            <label
-              className="text-ink-lo text-xs font-mono tracking-wider"
-              htmlFor="vacancy-politician"
-            >
-              POLITICIAN ID
+            <label className="text-ink-lo text-xs font-mono" htmlFor="vacancy-politician">
+              Politician ID
             </label>
             <input
               id="vacancy-politician"
@@ -66,11 +63,8 @@ export function VacancyControl({ token }: { token: string }) {
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label
-              className="text-ink-lo text-xs font-mono tracking-wider"
-              htmlFor="vacancy-action"
-            >
-              ACTION
+            <label className="text-ink-lo text-xs font-mono" htmlFor="vacancy-action">
+              Action
             </label>
             <select
               id="vacancy-action"
@@ -85,11 +79,8 @@ export function VacancyControl({ token }: { token: string }) {
           {action === "vacate" && (
             <>
               <div className="flex flex-col gap-1">
-                <label
-                  className="text-ink-lo text-xs font-mono tracking-wider"
-                  htmlFor="vacancy-reason"
-                >
-                  REASON
+                <label className="text-ink-lo text-xs font-mono" htmlFor="vacancy-reason">
+                  Reason
                 </label>
                 <select
                   id="vacancy-reason"
@@ -105,11 +96,8 @@ export function VacancyControl({ token }: { token: string }) {
                 </select>
               </div>
               <div className="flex flex-col gap-1">
-                <label
-                  className="text-ink-lo text-xs font-mono tracking-wider"
-                  htmlFor="vacancy-left-office"
-                >
-                  LEFT OFFICE
+                <label className="text-ink-lo text-xs font-mono" htmlFor="vacancy-left-office">
+                  Left office
                 </label>
                 <input
                   id="vacancy-left-office"
@@ -126,7 +114,7 @@ export function VacancyControl({ token }: { token: string }) {
             disabled={submitting || !politicianId.trim()}
             className="font-mono text-xs text-signal-cyan border border-white/15 px-3 py-1.5 hover:bg-signal-cyan/10 transition-colors disabled:opacity-40"
           >
-            {submitting ? "SUBMITTING..." : "SUBMIT"}
+            {submitting ? "Submitting..." : "Submit"}
           </button>
         </div>
         {result && <p className="text-ink-hi text-xs font-mono">{result}</p>}

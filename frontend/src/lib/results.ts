@@ -389,11 +389,11 @@ export function flipNotShownTag(r: {
   candidates: { votes: number }[];
 }): string | null {
   if (!flipNotShownText(r)) return null;
-  if (!(r.votesCounted > 0)) return "NO VOTES IN THIS COUNT";
-  if (isTied(r)) return "TIED";
-  if (r.leaderParty && r.leaderParty === r.heldBy) return "HOLDER'S PARTY LEADS";
-  if (!r.leaderParty) return "LEADER'S PARTY NOT GIVEN";
-  return "NOT IN THIS COUNT";
+  if (!(r.votesCounted > 0)) return "No votes in this count";
+  if (isTied(r)) return "Tied";
+  if (r.leaderParty && r.leaderParty === r.heldBy) return "Holder's party leads";
+  if (!r.leaderParty) return "Leader's party not given";
+  return "Not in this count";
 }
 
 /** Share of reporting units in, 0..1, or null when the state gives none. */
@@ -618,13 +618,13 @@ export function describeUpdate(event: ResultEvent): UpdateText {
   switch (event.kind) {
     case "first_returns":
       return {
-        tag: "FIRST",
+        tag: "First",
         tone: "neutral",
         text: sentence("First returns", reporting, shares, notFinal),
       };
     case "lead_change":
       return {
-        tag: "LEAD",
+        tag: "Lead",
         tone: "lead",
         text: sentence(
           d.previousLeader
@@ -637,7 +637,7 @@ export function describeUpdate(event: ResultEvent): UpdateText {
       };
     case "all_reporting":
       return {
-        tag: "ALL IN",
+        tag: "All in",
         tone: "neutral",
         text: sentence(
           // A state that gives no unit count still says every unit is in:
@@ -649,7 +649,7 @@ export function describeUpdate(event: ResultEvent): UpdateText {
       };
     case "official":
       return {
-        tag: "OFFICIAL COUNT",
+        tag: "Official count",
         tone: "official",
         text: sentence("The state lists its count as official", shares, "Not called"),
       };
@@ -659,7 +659,7 @@ export function describeUpdate(event: ResultEvent): UpdateText {
       // goes to a runoff), and Civitas never calls a race — the backend's
       // templates (live_results/bluesky.py) say the same.
       return {
-        tag: "FLIP",
+        tag: "Flip",
         tone: "flip",
         // "Leads" even in a count the state lists as official: that is not
         // a result (a Georgia general short of a majority goes to a
@@ -680,7 +680,7 @@ export function describeUpdate(event: ResultEvent): UpdateText {
       // The holder's party ahead again — or nobody: an exact tie has no
       // leader to name.
       return {
-        tag: "UPDATE",
+        tag: "Update",
         tone: "lead",
         text: sentence(
           d.leader && d.leader.party === d.heldBy
@@ -693,7 +693,7 @@ export function describeUpdate(event: ResultEvent): UpdateText {
         ),
       };
     default:
-      return { tag: "UPDATE", tone: "neutral", text: sentence(shares, reporting) };
+      return { tag: "Update", tone: "neutral", text: sentence(shares, reporting) };
   }
 }
 
@@ -718,7 +718,7 @@ export function formatEasternTime(iso: string): string {
  * below the candidate list, more than a screen under the tag on a phone
  * (1.16 viewport heights for a seven-candidate Senate race, measured on a
  * simulated election night, 2026-10-14), so a reader saw LEADING alone. */
-export const NOT_FINAL = "NOT FINAL";
+export const NOT_FINAL = "Not final";
 
 /** Some race among these has votes in a count the state doesn't list as
  * official: a tally of leads over them is not final either. */

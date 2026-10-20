@@ -168,7 +168,7 @@ describe("MapAccountability", () => {
     expect(
       screen.getByText("House: no seat has an official Democrat-versus-Republican count yet.")
     ).toBeTruthy();
-    expect(screen.getByRole("link", { name: "CSV · SWING AND RANGES" }).getAttribute("href")).toBe(
+    expect(screen.getByRole("link", { name: "CSV · Swing and ranges" }).getAttribute("href")).toBe(
       "/api/elections/archive/2026/swing.csv"
     );
     // Source lines inside each shareable section.

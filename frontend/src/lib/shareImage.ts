@@ -338,7 +338,7 @@ export async function captureSection(
     ctx.font = badgeValueFont;
     const valueW = ctx.measureText(badgeValue).width;
     ctx.font = smallMono(11);
-    badgeW = Math.max(valueW, ctx.measureText(subject.badge.label.toUpperCase()).width);
+    badgeW = Math.max(valueW, ctx.measureText(subject.badge.label).width);
   }
   const titleMax = innerW - (badgeW ? badgeW + 24 * scale : 0);
   ctx.font = titleFont;
@@ -352,9 +352,7 @@ export async function captureSection(
   const subtitleLineH = 18 * scale;
   ctx.font = smallMono(12);
   const subtitleLines =
-    withStrip && subject.subtitle
-      ? wrapWords(ctx, subject.subtitle.toUpperCase(), subtitleMax, 2)
-      : [];
+    withStrip && subject.subtitle ? wrapWords(ctx, subject.subtitle, subtitleMax, 2) : [];
   const stripBottom = subtitleLines.length
     ? subtitleBaseline + (subtitleLines.length - 1) * subtitleLineH
     : subtitleBaseline - 22 * scale;
@@ -388,7 +386,7 @@ export async function captureSection(
       ctx.textAlign = "right";
       ctx.font = smallMono(11);
       ctx.fillStyle = inkMin;
-      ctx.fillText(subject.badge.label.toUpperCase(), right, y + 14 * scale);
+      ctx.fillText(subject.badge.label, right, y + 14 * scale);
       ctx.font = badgeValueFont;
       ctx.fillStyle = resolveClassStyle(subject.badge.colorClass, "color", inkHi);
       ctx.fillText(badgeValue, right, y + 50 * scale);

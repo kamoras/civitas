@@ -26,29 +26,29 @@ function Harness() {
 describe("BranchSelector keyboard", () => {
   it("keeps focus on the tabs: ArrowRight twice from the first tab focuses the third", () => {
     render(<Harness />);
-    const first = screen.getByRole("tab", { name: "SENATE" });
+    const first = screen.getByRole("tab", { name: "Senate" });
     first.focus();
 
     fireEvent.keyDown(document.activeElement!, { key: "ArrowRight" });
     runFrames();
-    expect(document.activeElement).toBe(screen.getByRole("tab", { name: "HOUSE" }));
+    expect(document.activeElement).toBe(screen.getByRole("tab", { name: "House" }));
 
     fireEvent.keyDown(document.activeElement!, { key: "ArrowRight" });
     runFrames();
-    const third = screen.getByRole("tab", { name: "PRESIDENT" });
+    const third = screen.getByRole("tab", { name: "President" });
     expect(document.activeElement).toBe(third);
     expect(third).toHaveAttribute("aria-selected", "true");
   });
 
   it("does not focus a tab that stopped being selected before the frame fired", () => {
     render(<Harness />);
-    screen.getByRole("tab", { name: "SENATE" }).focus();
+    screen.getByRole("tab", { name: "Senate" }).focus();
 
     fireEvent.keyDown(document.activeElement!, { key: "ArrowRight" }); // queues HOUSE
     fireEvent.click(screen.getByRole("tab", { name: "SCOTUS" }));
     runFrames();
 
-    expect(document.activeElement).not.toBe(screen.getByRole("tab", { name: "HOUSE" }));
+    expect(document.activeElement).not.toBe(screen.getByRole("tab", { name: "House" }));
   });
 
   it("waits for a selection that renders a frame late, then focuses the incoming tab", () => {
@@ -63,12 +63,12 @@ describe("BranchSelector keyboard", () => {
       );
     }
     render(<LateHarness />);
-    screen.getByRole("tab", { name: "SENATE" }).focus();
+    screen.getByRole("tab", { name: "Senate" }).focus();
 
     fireEvent.keyDown(document.activeElement!, { key: "ArrowRight" });
     runFrames(); // focus check runs before the selection lands
     runFrames(); // selection has landed
 
-    expect(document.activeElement).toBe(screen.getByRole("tab", { name: "HOUSE" }));
+    expect(document.activeElement).toBe(screen.getByRole("tab", { name: "House" }));
   });
 });

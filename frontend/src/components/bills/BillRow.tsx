@@ -36,7 +36,7 @@ export default function BillRow({ bill }: { bill: BillInFlight }) {
           "TO PRESIDENT") measure ~85px, which with the 12px of horizontal
           padding overflowed the old 92px box and truncated. */}
       <span
-        className={`shrink-0 mt-0.5 text-xs font-mono uppercase tracking-wider px-1.5 py-0.5 border w-[100px] text-center truncate ${stageStyle.text} ${stageStyle.border} ${stageStyle.bg}`}
+        className={`shrink-0 mt-0.5 text-xs font-mono px-1.5 py-0.5 border w-[100px] text-center truncate ${stageStyle.text} ${stageStyle.border} ${stageStyle.bg}`}
         title={stageInfo?.name ?? bill.stage}
       >
         {stageInfo?.name ?? bill.stage}
@@ -58,7 +58,7 @@ export default function BillRow({ bill }: { bill: BillInFlight }) {
               className="shrink-0 text-xs font-mono text-signal-cyan border border-white/15 bg-signal-cyan/10 px-1.5 py-0.5"
               title={`Referenced in ${bill.mentionCount} current Action Center issue${bill.mentionCount === 1 ? "" : "s"}`}
             >
-              ACTIVE ×{bill.mentionCount}
+              Active ×{bill.mentionCount}
             </span>
           )}
         </div>

@@ -6,10 +6,10 @@ import { REDISTRICTING_HREF } from "@/lib/redistricting";
 
 /** How each map in force was set, as a label beside it. */
 export const MAP_KIND_LABEL: Record<MapKind, string> = {
-  act: "ENACTED BY THE LEGISLATURE",
-  ballot_measure: "APPROVED BY VOTERS",
-  commission: "ADOPTED BY A COMMISSION",
-  court_order: "SET OR HELD BY A COURT",
+  act: "Enacted by the legislature",
+  ballot_measure: "Approved by voters",
+  commission: "Adopted by a commission",
+  court_order: "Set or held by a Court",
 };
 
 /** The redistricting watch: whether the next general's House maps are
@@ -38,7 +38,7 @@ export default function RedistrictingWatch({
     >
       <h2
         id="redistricting-watch"
-        className="border-b border-white/[0.07] py-2.5 font-mono text-xs uppercase tracking-[0.16em] text-ink-min"
+        className="border-b border-white/[0.07] py-2.5 font-mono text-xs text-ink-min"
       >
         Redistricting watch
       </h2>
@@ -74,10 +74,10 @@ export default function RedistrictingWatch({
             const url = safeHref(m.source.url ?? "");
             return (
               <li key={m.state} className="border-t border-white/[0.07] py-2">
-                <p className="font-mono text-[11px] tracking-[0.12em] text-ink-min">
-                  {m.stateName.toUpperCase()}
+                <p className="font-mono text-[11px] text-ink-min">
+                  {m.stateName}
                   {m.kind ? ` · ${MAP_KIND_LABEL[m.kind]}` : ""}
-                  {m.settled ? ` · ${longDate(m.settled).toUpperCase()}` : ""}
+                  {m.settled ? ` · ${longDate(m.settled)}` : ""}
                 </p>
                 <p className="text-sm text-ink-lo">
                   {m.reason}
@@ -90,7 +90,7 @@ export default function RedistrictingWatch({
                         rel="noopener noreferrer"
                         className="inline-flex min-h-6 items-center font-mono text-xs text-signal-cyan hover:text-phos"
                       >
-                        [ {m.source.issuedBy ?? "OFFICIAL SOURCE"} ↗ ]
+                        [ {m.source.issuedBy ?? "Official source"} ↗ ]
                       </a>
                     </>
                   )}

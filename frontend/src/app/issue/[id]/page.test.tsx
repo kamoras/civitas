@@ -97,7 +97,7 @@ describe("an issue's facts section", () => {
     // caches — so no time is named at all.
     await renderIssue(issue());
     const section = factsSection();
-    expect(section.textContent).toMatch(/NOT FINAL · The state's own results site/);
+    expect(section.textContent).toMatch(/Not final · The state's own results site/);
     expect(section.textContent).not.toMatch(/count as of|9:41/);
   });
 
@@ -109,7 +109,7 @@ describe("an issue's facts section", () => {
 
   it("takes the backend's official flag over the title", async () => {
     await renderIssue(issue({ countAsOf: "2026-11-04T01:15:00Z", countOfficial: true }));
-    expect(factsSection().textContent).toMatch(/OFFICIAL COUNT/);
+    expect(factsSection().textContent).toMatch(/Official count/);
   });
 
   it("calls an official count official, not 'not final'", async () => {
@@ -120,8 +120,8 @@ describe("an issue's facts section", () => {
       })
     );
     const section = factsSection();
-    expect(section.textContent).toMatch(/OFFICIAL COUNT/);
-    expect(section.textContent).not.toMatch(/NOT FINAL/);
+    expect(section.textContent).toMatch(/Official count/);
+    expect(section.textContent).not.toMatch(/Not final/);
   });
 
   it("adds no count line to a news issue, nor to a count issue confirmed by coverage", async () => {
@@ -130,6 +130,6 @@ describe("an issue's facts section", () => {
     );
     const section = factsSection();
     expect(section.id).toBe("media-coverage");
-    expect(section.textContent).not.toMatch(/NOT FINAL|OFFICIAL COUNT|count as of/);
+    expect(section.textContent).not.toMatch(/Not final|official count|count as of/);
   });
 });

@@ -105,12 +105,10 @@ function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
         <div className="panel">
           <TerminalTitlebar title="Sign in" />
           <div className="p-6">
-            <h1 className="font-mono text-sm text-ink-hi tracking-widest mb-6 text-center">
-              CIVITAS ADMIN
-            </h1>
+            <h1 className="font-mono text-sm text-ink-hi mb-6 text-center">Civitas admin</h1>
             <form onSubmit={handleSubmit}>
               <label htmlFor="admin-token" className="block text-ink-lo text-xs font-mono mb-2">
-                ADMIN TOKEN:
+                Admin token:
               </label>
               <input
                 id="admin-token"
@@ -141,7 +139,7 @@ function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
                 // still looked like a rendering fault.
                 className="mt-4 w-full border border-transparent bg-phos py-2 font-mono text-xs text-surface-base transition-colors hover:bg-signal-cyan disabled:border-white/15 disabled:bg-transparent disabled:text-ink-min"
               >
-                {loading ? "AUTHENTICATING..." : "AUTHENTICATE"}
+                {loading ? "Authenticating..." : "Authenticate"}
               </button>
             </form>
           </div>
@@ -254,23 +252,23 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
       setPipelineRestarting(false);
 
       const watched: WatchedPipeline[] = [
-        { key: "senate", label: "SENATE", running: senateIsRunning(s), run: s.lastRun },
-        { key: "house", label: "HOUSE", running: !!s.houseIsRunning, run: s.houseLastRun },
+        { key: "senate", label: "Senate", running: senateIsRunning(s), run: s.lastRun },
+        { key: "house", label: "House", running: !!s.houseIsRunning, run: s.houseLastRun },
         {
           key: "supplementary",
-          label: "SUPPLEMENTARY",
+          label: "Supplementary",
           running: !!s.supplementaryIsRunning,
           run: s.supplementaryLastRun,
         },
         {
           key: "stock_trades",
-          label: "STOCK TRADES",
+          label: "Stock trades",
           running: !!s.stockTradesIsRunning,
           run: s.stockTradesLastRun,
         },
         {
           key: "election",
-          label: "ELECTION",
+          label: "Election",
           running: !!s.electionIsRunning,
           run: s.electionLastRun,
         },
@@ -360,13 +358,13 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <h1 className="font-mono text-sm sm:text-lg tracking-widest">CIVITAS // ADMIN</h1>
+          <h1 className="font-mono text-sm sm:text-lg">Civitas admin</h1>
           <div className="flex items-center gap-3">
             <button
               onClick={loadDashboard}
               className="text-xs font-mono text-ink-min hover:text-ink-lo transition-colors"
             >
-              [REFRESH]
+              [Refresh]
             </button>
             <button
               onClick={onLogout}
@@ -374,7 +372,7 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
               className="text-xs font-mono text-ink-lo hover:text-signal-magenta border border-signal-magenta/40 hover:border-signal-magenta/40
                          px-3 py-1  transition-colors"
             >
-              [LOGOUT]
+              [Logout]
             </button>
           </div>
         </div>
@@ -436,14 +434,14 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
                           : "text-ink-hi"
                     }`}
                   >
-                    {r.label} PIPELINE{" "}
+                    {r.label} pipeline{" "}
                     {r.status === "failed"
-                      ? "FAILED"
+                      ? "Failed"
                       : r.status === "stuck"
-                        ? "STOPPED WITHOUT AN OUTCOME: SEE PIPELINES"
+                        ? "Stopped without an outcome: see pipelines"
                         : r.status === "partial"
-                          ? "FINISHED PARTIAL"
-                          : "COMPLETED"}
+                          ? "Finished partial"
+                          : "Completed"}
                   </span>
                   <span className="text-ink-lo text-xs font-mono">
                     {formatDuration(r.elapsedSeconds)}
@@ -481,7 +479,7 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
               aria-controls={`admin-tabpanel-${t.id}`}
               tabIndex={tab === t.id ? 0 : -1}
               onClick={() => selectTab(t.id)}
-              className={`-mb-px whitespace-nowrap border-b-3 px-3 py-3 font-mono text-xs uppercase tracking-[0.14em] transition-colors sm:px-4 ${tabControl(
+              className={`-mb-px whitespace-nowrap border-b-3 px-3 py-3 font-mono text-xs transition-colors sm:px-4 ${tabControl(
                 tab === t.id
               )}`}
             >

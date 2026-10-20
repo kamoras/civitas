@@ -53,11 +53,7 @@ export default function ScoreColumn({
             {tooltip ? <MetricTooltip text={tooltip}>{title}</MetricTooltip> : title}
           </h2>
         </div>
-        {aside ? (
-          <span className="shrink-0 font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-            {aside}
-          </span>
-        ) : null}
+        {aside ? <span className="shrink-0 font-mono text-xs text-ink-min">{aside}</span> : null}
       </header>
       <div className="flex flex-1 flex-col gap-5 px-5 py-4">
         {finding && (
@@ -70,7 +66,7 @@ export default function ScoreColumn({
             className="group border-t border-white/[0.08] pt-4"
           >
             <summary
-              className={`flex min-h-[44px] cursor-pointer list-none items-center gap-2 font-mono tracking-[0.14em] text-ink-lo hover:text-phos [&::-webkit-details-marker]:hidden ${LONG_LABEL}`}
+              className={`flex min-h-[44px] cursor-pointer list-none items-center gap-2 font-mono text-ink-lo hover:text-phos [&::-webkit-details-marker]:hidden ${LONG_LABEL}`}
             >
               <span aria-hidden="true" className="inline-block group-open:rotate-90">
                 &#9656;
@@ -112,9 +108,7 @@ export default function ScoreColumn({
  *  label's text when the children aren't plain text (a tooltip around it). */
 export function BlockLabel({ children, words }: { children: ReactNode; words?: string }) {
   const text = typeof children === "string" ? children : (words ?? "");
-  return (
-    <h3 className={`font-mono tracking-[0.14em] text-ink-min ${labelCase(text)}`}>{children}</h3>
-  );
+  return <h3 className={`font-mono text-ink-min ${labelCase(text)}`}>{children}</h3>;
 }
 
 /** A column block set off by a hairline above it. */

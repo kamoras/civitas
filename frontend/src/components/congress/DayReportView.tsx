@@ -55,7 +55,7 @@ function ChamberHead({ day }: { day: ChamberDay }) {
           {CHAMBER_NAME[day.chamber]}
         </h2>
         <span
-          className={`border px-2 py-1 font-mono text-xs uppercase tracking-[0.12em] ${
+          className={`border px-2 py-1 font-mono text-xs ${
             live ? "border-phos-mid text-phos-mid" : "border-white/20 text-ink-lo"
           }`}
         >
@@ -299,7 +299,7 @@ export default function DayReportView({
             <ChamberColumn day={house} />
           </div>
           <footer className="mt-12 border-t border-white/15 pt-5 text-sm leading-relaxed text-ink-lo">
-            <p className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">Source</p>
+            <p className="font-mono text-xs text-ink-min">Source</p>
             <p className="mt-2 max-w-4xl">
               The Congressional Record&apos;s Daily Digest (Government Publishing Office) once
               published, and each chamber&apos;s own floor log and roll-call votes until then.
