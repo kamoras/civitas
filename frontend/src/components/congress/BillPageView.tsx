@@ -84,6 +84,48 @@ function SectionHead({
   );
 }
 
+/** A CRS summary longer than this many words shows its title line and
+ *  first paragraph, and the rest behind a disclosure. About twelve lines
+ *  of the summary column at 1280 px: H.R. 1's whole summary put its votes
+ *  55.6 screens down. */
+const SUMMARY_OPEN_WORDS = 200;
+
+const words = (text: string) => text.split(/\s+/).filter(Boolean).length;
+
+/** The summary's paragraphs, the first one (the title line) bold. A long
+ *  one keeps its title line and first paragraph open and the rest in a
+ *  native disclosure, which find-in-page still searches and opens. */
+function SummaryBody({ paragraphs }: { paragraphs: string[] }) {
+  const para = (p: string, i: number) => (
+    <p
+      key={i}
+      className={`max-w-3xl leading-relaxed ${i === 0 ? "font-semibold text-ink-hi" : "text-ink"}`}
+    >
+      {p}
+    </p>
+  );
+  const total = paragraphs.reduce((n, p) => n + words(p), 0);
+  const open = paragraphs.length > 2 && total > SUMMARY_OPEN_WORDS ? 2 : paragraphs.length;
+  return (
+    <>
+      {paragraphs.slice(0, open).map(para)}
+      {open < paragraphs.length && (
+        <details className="group flex flex-col gap-3">
+          <summary className="inline-flex min-h-6 w-fit cursor-pointer list-none items-center font-mono text-xs uppercase tracking-[0.12em] text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos [&::-webkit-details-marker]:hidden">
+            <span className="group-open:hidden">
+              Read the full CRS summary ({total.toLocaleString("en-US")} words)
+            </span>
+            <span className="hidden group-open:inline">Hide the rest of the summary</span>
+          </summary>
+          <div className="mt-3 flex flex-col gap-3">
+            {paragraphs.slice(open).map((p, i) => para(p, i + open))}
+          </div>
+        </details>
+      )}
+    </>
+  );
+}
+
 /** A section's share-image attributes: the id is the section's anchor. */
 const shareSection = (id: string) => ({ [SHARE_SECTION_ATTR]: id });
 
@@ -138,6 +180,26 @@ export default function BillPageView({
   // after its title line (the paragraph the page's description uses too).
   const summary = record?.summary;
   const lead = summary ? (summary.paragraphs[1] ?? summary.paragraphs[0]) : null;
+  const votesCount = record
+    ? record.coverage?.votes.held === false
+      ? "not held"
+      : !record.votes.length &&
+          record.passage?.length &&
+          record.passage.every((p) => p.method !== "rollCall")
+        ? "no roll call"
+        : `${record.votes.length} recorded`
+    : undefined;
+  // The page's sections, listed under the title: a long bill's summary and
+  // path put its votes many screens down.
+  const jumps: [string, string, string?][] = [
+    ["summary", "Summary"],
+    ...(record?.journey ? [["journey", "Its path"] as [string, string]] : []),
+    ["votes", "Votes", votesCount],
+    ["history", "History"],
+    ["committee", "In committee"],
+    ["text", "Text"],
+    ["sources", "Data & citation"],
+  ];
   // What a shared image of any section says it is from.
   const shareSubject = {
     title: title && title !== label ? `${label}: ${title}` : label,
@@ -215,6 +277,28 @@ export default function BillPageView({
                     </p>
                   </div>
                 )}
+                <nav aria-label="On this page" className="font-mono text-xs text-ink-lo">
+                  <ul className="flex flex-wrap items-center gap-x-1">
+                    {jumps.map(([id, name, count], i) => (
+                      <li key={id} className="flex items-center gap-x-1">
+                        {i > 0 && (
+                          <span aria-hidden="true" className="text-ink-min">
+                            ·
+                          </span>
+                        )}
+                        <a
+                          href={`#${id}`}
+                          className="inline-flex min-h-6 items-center px-1 uppercase tracking-[0.12em] underline decoration-white/30 underline-offset-4 hover:text-phos"
+                        >
+                          {name}
+                          {/* Text, not a margin: a margin left the link's
+                              name as "Votes(47 recorded)". */}
+                          {count && ` (${count})`}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </nav>
                 {record?.sponsors.length ? (
                   <p className="flex flex-wrap items-baseline gap-x-2 text-sm lg:hidden">
                     <span className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
@@ -254,7 +338,9 @@ export default function BillPageView({
                   </div>
                 )}
                 {record?.journey && (
-                  <BillJourney journey={record.journey} passage={record.passage} />
+                  <div id="journey">
+                    <BillJourney journey={record.journey} passage={record.passage} />
+                  </div>
                 )}
                 {detail?.stageMilestones && <StageLadder data={detail.stageMilestones} />}
                 <div className="flex flex-wrap items-center gap-2">
@@ -398,28 +484,6 @@ export default function BillPageView({
                 third of the screen. */}
             {strip && <div className="mt-10">{strip}</div>}
 
-            <nav
-              aria-label="On this page"
-              className="mt-10 flex flex-wrap gap-6 border-b border-white/15"
-            >
-              {[
-                ["summary", "Summary"],
-                ["votes", "Votes"],
-                ["history", "History"],
-                ["committee", "In committee"],
-                ["text", "Text"],
-                ["sources", "Data & citation"],
-              ].map(([id, name]) => (
-                <a
-                  key={id}
-                  href={`#${id}`}
-                  className="py-3 font-mono text-xs uppercase tracking-[0.12em] text-ink-lo hover:text-ink-hi"
-                >
-                  {name}
-                </a>
-              ))}
-            </nav>
-
             <div className="mt-8 grid grid-cols-1 gap-12 lg:grid-cols-[minmax(0,1fr)_22rem]">
               <div className="flex min-w-0 flex-col gap-12">
                 <section className="flex flex-col gap-3" {...shareSection("summary")}>
@@ -430,14 +494,7 @@ export default function BillPageView({
                         Congressional Research Service · {record.summary.actionDesc},{" "}
                         {longDate(record.summary.actionDate)}
                       </p>
-                      {record.summary.paragraphs.map((p, i) => (
-                        <p
-                          key={i}
-                          className={`max-w-3xl leading-relaxed ${i === 0 ? "font-semibold text-ink-hi" : "text-ink"}`}
-                        >
-                          {p}
-                        </p>
-                      ))}
+                      <SummaryBody paragraphs={record.summary.paragraphs} />
                     </>
                   ) : (
                     <p className="text-ink-lo">
@@ -449,22 +506,7 @@ export default function BillPageView({
                 </section>
 
                 <section className="flex flex-col gap-3" {...shareSection("votes")}>
-                  <SectionHead
-                    id="votes"
-                    title="Votes"
-                    count={
-                      record
-                        ? record.coverage?.votes.held === false
-                          ? "not held"
-                          : !record.votes.length &&
-                              record.passage?.length &&
-                              record.passage.every((p) => p.method !== "rollCall")
-                            ? "no roll call"
-                            : `${record.votes.length} recorded`
-                        : undefined
-                    }
-                    shareable
-                  />
+                  <SectionHead id="votes" title="Votes" count={votesCount} shareable />
                   <VotePanel
                     votes={record?.votes ?? []}
                     congress={record?.congress ?? detail?.congress ?? 0}
@@ -568,8 +610,7 @@ export default function BillPageView({
                                 (bill_journey), the first time it appears. */}
                             {a.term && a.meaning && explained.get(a.term) === i && (
                               <span className="text-xs leading-relaxed text-ink-lo">
-                                <span className="font-semibold text-ink">{a.term}:</span>{" "}
-                                {a.meaning}
+                                <span className="font-semibold text-ink">{a.term}:</span> {a.meaning}
                               </span>
                             )}
                           </span>
