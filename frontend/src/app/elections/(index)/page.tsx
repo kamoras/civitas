@@ -1,5 +1,6 @@
 "use client";
 
+import { fade, overlay, partyMark } from "@/lib/chartColors";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import SectionTabs from "@/components/layout/SectionTabs";
@@ -32,6 +33,7 @@ import {
   serverTimeOf,
   showsResults,
   stateFeedBehind,
+  FAINT,
 } from "@/lib/results";
 import { useResultsNow } from "@/hooks/useResultsNow";
 import { fetchPviMap } from "@/lib/api";
@@ -54,21 +56,21 @@ import { STATE_NAMES } from "@/lib/stateCodes";
 // Flat, unchanging fill — no hover-brighten variant — so DC reads as
 // visibly non-interactive rather than inviting a click that silently
 // does nothing (see onStateClick below).
-const DC_FILL = "rgba(255, 255, 255, 0.06)";
+const DC_FILL = overlay(0.06);
 
-// Partisan fills, keyed to the party colours in the palette (#6699FF /
-// #FF5C5C) rather than the ad-hoc rgb() triples this file used before, so
-// the map agrees with every party chip elsewhere on the site.
+// Partisan fills from the map party marks (chartColors), the same as the
+// seat and results maps, so the lean map follows the theme with them. FAINT
+// is the faintest party fill that keeps 3:1 off the page in both themes.
 function pviFillColor(pvi: number | null): string {
-  if (pvi == null) return "rgba(255, 255, 255, 0.07)";
-  if (pvi === 0) return "rgba(255, 255, 255, 0.22)";
-  return pvi > 0 ? "rgba(255, 92, 92, 0.32)" : "rgba(102, 153, 255, 0.32)";
+  if (pvi == null) return overlay(0.07);
+  if (pvi === 0) return overlay(0.22);
+  return fade(partyMark(pvi > 0 ? "REP" : "DEM"), FAINT);
 }
 
 function pviHoverColor(pvi: number | null): string {
-  if (pvi == null) return "rgba(0, 255, 65, 0.30)";
-  if (pvi === 0) return "rgba(255, 255, 255, 0.42)";
-  return pvi > 0 ? "rgba(255, 92, 92, 0.55)" : "rgba(102, 153, 255, 0.55)";
+  if (pvi == null) return fade("var(--phos)", 0.3);
+  if (pvi === 0) return overlay(0.42);
+  return fade(partyMark(pvi > 0 ? "REP" : "DEM"), 0.85);
 }
 
 // DC has no voting House/Senate race (the backend's
@@ -543,7 +545,7 @@ export default function ElectionsPage() {
                     <span className="flex items-center gap-2 font-mono text-xs text-ink-lo">
                       <span
                         className="inline-block h-2.5 w-4"
-                        style={{ backgroundColor: "rgba(102, 153, 255, 0.32)" }}
+                        style={{ backgroundColor: pviFillColor(-1) }}
                         aria-hidden="true"
                       />
                       D-LEANING <span className="text-ink-min">{dLean}</span>
@@ -551,7 +553,7 @@ export default function ElectionsPage() {
                     <span className="flex items-center gap-2 font-mono text-xs text-ink-lo">
                       <span
                         className="inline-block h-2.5 w-4"
-                        style={{ backgroundColor: "rgba(255, 92, 92, 0.32)" }}
+                        style={{ backgroundColor: pviFillColor(1) }}
                         aria-hidden="true"
                       />
                       R-LEANING <span className="text-ink-min">{rLean}</span>
@@ -559,7 +561,7 @@ export default function ElectionsPage() {
                     <span className="flex items-center gap-2 font-mono text-xs text-ink-lo">
                       <span
                         className="inline-block h-2.5 w-4"
-                        style={{ backgroundColor: "rgba(255, 255, 255, 0.22)" }}
+                        style={{ backgroundColor: pviFillColor(0) }}
                         aria-hidden="true"
                       />
                       EVEN <span className="text-ink-min">{even}</span>

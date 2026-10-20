@@ -9,6 +9,7 @@ import ClosestSeats from "./ClosestSeats";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR, shareMetaAttrs } from "@/lib/shareImage";
 import { trapTab } from "@/lib/focusedDialog";
 import { MAP_LABEL_HALO } from "@/lib/results";
+import { overlay } from "@/lib/chartColors";
 import {
   CHAMBER_LABEL,
   CLOSE_HATCH,
@@ -30,6 +31,8 @@ import {
   VIEW_LABEL,
   VIEW_STAMP,
   binFill,
+  DEM_MARK,
+  REP_MARK,
   changedLine,
   coverageSentence,
   crossesEven,
@@ -64,8 +67,8 @@ const TILE = 10;
 const GAP = 1;
 const W = TILE_COLS * (TILE + GAP);
 const H = TILE_ROWS * (TILE + GAP);
-const DEM = "rgb(130, 172, 255)";
-const REP = "rgb(255, 137, 137)";
+const DEM = DEM_MARK;
+const REP = REP_MARK;
 
 /** The close hatch: grey under thin ink-lo lines at -45°, finer than any
  * results-map texture so the two maps never share a symbol. */
@@ -91,7 +94,7 @@ function fillFor(bin: MapBin | null, hatch: string): string {
   return bin === "close" ? `url(#${hatch})` : binFill(bin);
 }
 
-const NO_POLL_STROKE = "#CDC7BC";
+const NO_POLL_STROKE = "var(--ink-lo)";
 
 /** A tile's fill and outline in a view. A seat with no poll of its own
  * (usual vote and national swing only) is outlined in dashes in the Polls
@@ -131,12 +134,12 @@ function tileStyle(
       };
     return {
       fill: ranged || view === "usual" ? fillFor(bin, hatch) : NO_CONTEST_FILL,
-      stroke: "rgba(255,255,255,0.18)",
+      stroke: overlay(0.18),
       strokeWidth: width,
       strokeDasharray: undefined as string | undefined,
     };
   })();
-  return selected ? { ...base, stroke: "#F2EEE7", strokeWidth: width * 4 } : base;
+  return selected ? { ...base, stroke: "var(--ink-hi)", strokeWidth: width * 4 } : base;
 }
 
 /** The Senate tile map: one tile per state, a seat's tile split in two
@@ -166,7 +169,7 @@ function SenateTileMap({
   return (
     <svg
       viewBox={`0 0 ${W} ${H}`}
-      className="night block h-auto w-full"
+      className="block h-auto w-full"
       role={mini ? undefined : "group"}
       aria-hidden={mini ? true : undefined}
       aria-label={mini ? undefined : "Senate seats by state"}
@@ -255,7 +258,7 @@ function SenateTileMap({
                 width={TILE + 1}
                 height={TILE + 1}
                 fill="none"
-                stroke={seats.some((s) => s.id === selected) ? "#F2EEE7" : "transparent"}
+                stroke={seats.some((s) => s.id === selected) ? "var(--ink-hi)" : "transparent"}
                 strokeWidth="0.6"
               />
             )}
@@ -330,7 +333,7 @@ function HouseTileMap({
   return (
     <svg
       viewBox={`-2 -2 ${layout.width + 4} ${layout.height + 4}`}
-      className="night block h-auto w-full"
+      className="block h-auto w-full"
       role={mini ? undefined : "group"}
       aria-hidden={mini ? true : undefined}
       aria-label={mini ? undefined : "House seats, grouped by state"}
@@ -474,12 +477,12 @@ function HouseStateList({
     const dashed =
       s.status === "no_lean" ||
       (view !== "usual" && s.status === "range" && !s.difference.seatPolls);
-    const border = dashed ? `1px dashed ${NO_POLL_STROKE}` : "1px solid rgba(255,255,255,0.18)";
+    const border = dashed ? `1px dashed ${NO_POLL_STROKE}` : `1px solid ${overlay(0.18)}`;
     if (view === "diff" || bin === null) return { border, background: "transparent" };
     if (bin === "close")
       return {
         border,
-        background: `repeating-linear-gradient(-45deg, ${CLOSE_HATCH}99 0 1px, ${binFill("close")} 1px 3px)`,
+        background: `repeating-linear-gradient(-45deg, color-mix(in srgb, ${CLOSE_HATCH} 60%, transparent) 0 1px, ${binFill("close")} 1px 3px)`,
       };
     return { border, background: binFill(bin) };
   };
@@ -638,7 +641,7 @@ function Legend({ data, view }: { data: ElectionMapData; view: MapView }) {
                 width="10"
                 height="6"
                 fill={fillFor(bin, hatch)}
-                stroke="rgba(255,255,255,0.3)"
+                stroke={overlay(0.3)}
                 strokeWidth="0.3"
               />
             </svg>

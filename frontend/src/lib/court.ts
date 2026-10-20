@@ -49,19 +49,20 @@ export function heatDomain(pairs: CourtPair[]): [number, number] {
   return [Math.min(90, Math.floor(low / 10) * 10), 100];
 }
 
-// The ramp's ends: the page's raised surface, and a dark teal on which the
-// heading ink (#F2EEE7) still reads at 6.4:1, so every cell's value label
-// passes WCAG AA whatever its shade (court.test.ts checks both ends).
-export const HEAT_LOW = [0x19, 0x15, 0x12] as const;
-export const HEAT_HIGH = [0x1f, 0x5e, 0x60] as const;
+// The ramp's ends are theme variables (globals.css --heat-low and
+// --heat-high): paper to a mid teal in the light theme, carbon to a dark
+// teal in the dark, each end under the heading ink at 4.5:1 or more, so
+// every cell's value label passes WCAG AA whatever its shade (court.test.ts
+// checks both themes).
+export const HEAT_LOW = "var(--heat-low)";
+export const HEAT_HIGH = "var(--heat-high)";
 
 /** A cell's background for `share` on the domain: a straight line between
- *  the ramp's ends. Darker is more agreement; the value label carries the
- *  figure itself, so colour is never the only encoding. */
+ *  the ramp's ends. More agreement is more teal; the value label carries
+ *  the figure itself, so colour is never the only encoding. */
 export function heatColor(share: number, [lo, hi]: [number, number]): string {
   const t = hi > lo ? Math.max(0, Math.min(1, (share - lo) / (hi - lo))) : 1;
-  const c = HEAT_LOW.map((l, i) => Math.round(l + (HEAT_HIGH[i] - l) * t));
-  return `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
+  return `color-mix(in srgb, ${HEAT_HIGH} ${Math.round(t * 100)}%, ${HEAT_LOW})`;
 }
 
 /** Where a position falls on an axis from `lo` to `hi`, as a percentage. */

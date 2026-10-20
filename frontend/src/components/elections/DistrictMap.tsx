@@ -1,5 +1,6 @@
 "use client";
 
+import { fade, partyMark } from "@/lib/chartColors";
 import type { KeyboardEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { ComposableMap, Geographies, Geography } from "react-simple-maps";
@@ -23,6 +24,7 @@ import {
   raceStatusText,
   reportingText,
   resultFill,
+  FAINT,
 } from "@/lib/results";
 
 /**
@@ -50,9 +52,9 @@ import {
  *
  * Colour follows the SAME rule as the district list (pviColor: R red,
  * D blue), with intensity for distance from even, so a close seat reads
- * faint and a safe one saturated. (Faint, not pale: the fill's opacity
- * drops over a near-black page, so a close seat is dimmer, not lighter —
- * every legend says "fainter".) Deliberately not a new "toss-up"
+ * faint and a safe one saturated. (Faint: the fill fades toward the
+ * page, from the theme's floor up (chartColors.fade), so a close seat is
+ * nearer the ground in either theme — every legend says "fainter".) Deliberately not a new "toss-up"
  * category: a second classification on the same page would eventually
  * disagree with the first.
  *
@@ -85,18 +87,18 @@ import {
  * plain image, out of the tab order.
  */
 
-const DEM = "#82acff";
-const REP = "#ff8989";
-const EVEN = "#cdc7bc";
-const UNKNOWN = "#3a352f";
-/** A district with only a statewide lean: lighter than UNKNOWN so a state
- * of them is not one dark mass at phone width. */
-const UNSHADED = "#6f685f";
-const UNSHADED_OPACITY = 0.6;
-const BORDER = "#0e0c0a";
-/** Border when every district is UNSHADED: light, or at 390px the lines
+// Theme variables throughout (globals.css), so the map draws on paper in
+// the light theme and on carbon in the dark.
+const EVEN = "var(--ink-lo)";
+const UNKNOWN = "var(--map-unknown)";
+/** A district with only a statewide lean: set apart from UNKNOWN so a
+ * state of them is not one flat mass at phone width. */
+const UNSHADED = fade("var(--chart-muted)", 0.6);
+/** The lines between districts, in the page's own colour. */
+const BORDER = "var(--surface-base)";
+/** Border when every district is UNSHADED: in ink, or at 390px the lines
  * between thirty-eight same-coloured districts do not read. */
-const UNSHADED_BORDER = "#d9d3c7";
+const UNSHADED_BORDER = "var(--ink-lo)";
 const WIDTH = 800;
 
 type Bbox = [number, number, number, number];
@@ -124,11 +126,11 @@ export function fitMercator(bbox: Bbox, width: number, pad = 0.06) {
 
 /** Fill for a seat's lean — same direction as pviColor, intensity by
  * distance from even. Exported for tests. */
-export function leanFill(pvi: number | null): { fill: string; opacity: number } {
-  if (pvi == null) return { fill: UNKNOWN, opacity: 1 };
-  if (pvi === 0) return { fill: EVEN, opacity: 0.55 };
+export function leanFill(pvi: number | null): string {
+  if (pvi == null) return UNKNOWN;
+  if (pvi === 0) return fade(EVEN, 0.55);
   const strength = Math.min(Math.abs(pvi), 25) / 25;
-  return { fill: pvi > 0 ? REP : DEM, opacity: 0.22 + 0.7 * strength };
+  return fade(partyMark(pvi > 0 ? "REP" : "DEM"), FAINT + (1 - FAINT) * strength);
 }
 
 interface Topo {
@@ -328,7 +330,7 @@ export default function DistrictMap({
                 <span
                   aria-hidden="true"
                   className="inline-block h-2 w-3 border border-white/30"
-                  style={{ background: `${STALE_SWATCH}, rgba(255,137,137,0.6)` }}
+                  style={{ background: `${STALE_SWATCH}, ${fade(partyMark("REP"), 0.6)}` }}
                 />
                 stale: the last count read, not live
               </li>
@@ -352,7 +354,6 @@ export default function DistrictMap({
       </div>
 
       <ComposableMap
-        className="night"
         projection="geoMercator"
         projectionConfig={{ center: fit.center, scale: fit.scale }}
         width={WIDTH}
@@ -375,18 +376,14 @@ export default function DistrictMap({
               // What a click opens: the ballot race, or — only where the
               // caller lands picks on counts — the count's own race.
               const pickId = race?.id ?? (pickCounts && counted ? counted.raceId : null);
-              const { fill, opacity } = results
-                ? {
-                    fill:
-                      !counted && answered
-                        ? paint(NO_COUNT_FILL)
-                        : paint(resultFill(counted, true), stale && !!counted),
-                    opacity: 1,
-                  }
+              const fill = results
+                ? !counted && answered
+                  ? paint(NO_COUNT_FILL)
+                  : paint(resultFill(counted, true), stale && !!counted)
                 : // A statewide stand-in says nothing about one district:
                   // painting every seat the state's colour would.
                   unshaded || race?.pviLevel === "state"
-                  ? { fill: UNSHADED, opacity: UNSHADED_OPACITY }
+                  ? UNSHADED
                   : leanFill(race?.pvi ?? null);
               const isPicked = district === pickedDistrict;
               const isHovered = district === hovered;
@@ -442,7 +439,6 @@ export default function DistrictMap({
                   }}
                   style={{
                     fill,
-                    fillOpacity: opacity,
                     stroke:
                       isPicked || isHovered ? "var(--phos)" : unshaded ? UNSHADED_BORDER : BORDER,
                     strokeWidth: isPicked ? 2 : isHovered ? 1.2 : unshaded ? 0.8 : 0.6,
