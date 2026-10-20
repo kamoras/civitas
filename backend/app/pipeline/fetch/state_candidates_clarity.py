@@ -98,7 +98,14 @@ from app.pipeline.fetch.state_candidates_common import (
     pick_nominee,
     federal_record,
 )
-from app.pipeline.fetch.election_results import ContestCount, StateCount, UntrustedCount, is_special_contest, pick_election
+from app.pipeline.fetch.election_results import (
+    ContestCount,
+    FeedUnreadable,
+    StateCount,
+    UntrustedCount,
+    is_special_contest,
+    pick_election,
+)
 from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -412,7 +419,7 @@ async def _general_election_id(
             return None
         resp = await _get(client, page_url, f"{state} Clarity landing page")
         if resp is None:
-            return None
+            raise FeedUnreadable(f"{state} Clarity landing page could not be read")
         page = resp.text
         year = election_day[:4]
         ids, named = set(), set()
@@ -445,11 +452,11 @@ async def _general_election_id(
         return found
     resp = await _get(client, f"{base}/{state}/elections.json", f"{state} Clarity elections")
     if resp is None:
-        return None
+        raise FeedUnreadable(f"{state} Clarity elections.json could not be read")
     try:
         elections = resp.json() or []
-    except ValueError:
-        return None
+    except ValueError as exc:
+        raise FeedUnreadable(f"{state} Clarity elections.json is not JSON") from exc
     held = [
         (e.get("ElectionName") or "", e.get("EID"))
         for e in elections
@@ -531,14 +538,14 @@ async def fetch_general_results(
     resp = await _get(client, f"{base}/{state}/{eid}/current_ver.txt", f"{state} Clarity version")
     version = resp.text.strip() if resp is not None else ""
     if not version.isdigit():
-        return None
+        raise FeedUnreadable(f"{state} Clarity election {eid} has no readable version")
     resp = await _get(client, f"{base}/{state}/{eid}/{version}/json/sum.json", f"{state} Clarity summary")
     if resp is None:
-        return None
+        raise FeedUnreadable(f"{state} Clarity election {eid} summary could not be read")
     try:
         summary = resp.json() or {}
-    except ValueError:
-        return None
+    except ValueError as exc:
+        raise FeedUnreadable(f"{state} Clarity election {eid} summary is not JSON") from exc
     # The election's own settings say whether this is a test run and which
     # day it is for. Clarity publishes dry runs on the real endpoints; a
     # settings file that can't be read is not taken as "not a test".
@@ -551,7 +558,7 @@ async def fetch_general_results(
     except ValueError:
         details = None
     if details is None:
-        return None
+        raise FeedUnreadable(f"{state} Clarity election {eid} settings could not be read")
     key = (base, state, day)
     if _flag_set(details.get("istestmode")) or _flag_set(details.get("showtestdatawatermark")):
         _general_eids.pop(key, None)

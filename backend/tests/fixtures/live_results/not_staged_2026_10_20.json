@@ -1,0 +1,157 @@
+{
+ "_source": "Fetched 2026-10-20, two weeks before the 2026 general, as the readiness check read them. 'ga_index': Georgia's real Enhanced Voting index (results.sos.ga.gov/results/public/api/jurisdictions/Georgia), elections cut to publicElectionId/date/English name, newest eight: nothing listed for 2026-11-03 yet. 'co_elections': Colorado's real Clarity elections.json, newest six of 24 entries: no 2026-11-03 entry. 'nd_elections': North Dakota's Tally ENR election list, which answered HTTP 504 three times at 14:21Z the same day and this at 17:05Z: the 2026 general (id 348) listed.",
+ "ga_index": {
+  "elections": [
+   {
+    "publicElectionId": "08252026SpecialElectionRunoff",
+    "electionDate": "2026-08-25",
+    "name": [
+     {
+      "languageId": "en",
+      "text": "August 25th, 2026 Special Election Runoff"
+     }
+    ]
+   },
+   {
+    "publicElectionId": "072826GASpecialElection",
+    "electionDate": "2026-07-28",
+    "name": [
+     {
+      "languageId": "en",
+      "text": "July 28th, 2026 - Special Election"
+     }
+    ]
+   },
+   {
+    "publicElectionId": "06162026GeneralPrimaryRunoff",
+    "electionDate": "2026-06-16",
+    "name": [
+     {
+      "languageId": "en",
+      "text": "June 16th, 2026 General Primary Runoff"
+     }
+    ]
+   },
+   {
+    "publicElectionId": "06092026SpecialElectionRunoff",
+    "electionDate": "2026-06-09",
+    "name": [
+     {
+      "languageId": "en",
+      "text": "June 9th, 2026 Special Election Runoff"
+     }
+    ]
+   },
+   {
+    "publicElectionId": "RECOUNTPSCDistrict3",
+    "electionDate": "2026-05-19",
+    "name": [
+     {
+      "languageId": "en",
+      "text": "RECOUNT - May 19th, 2026 PSC District 3-REP"
+     }
+    ]
+   },
+   {
+    "publicElectionId": "GeneralPrimary51926",
+    "electionDate": "2026-05-19",
+    "name": [
+     {
+      "languageId": "en",
+      "text": "May 19, 2026 - General Primary"
+     }
+    ]
+   },
+   {
+    "publicElectionId": "51226SpecialElection",
+    "electionDate": "2026-05-12",
+    "name": [
+     {
+      "languageId": "en",
+      "text": "May 12, 2026 – Special Election "
+     }
+    ]
+   },
+   {
+    "publicElectionId": "40726SpecialElection",
+    "electionDate": "2026-04-07",
+    "name": [
+     {
+      "languageId": "en",
+      "text": "April 7, 2026 – Special Election "
+     }
+    ]
+   }
+  ]
+ },
+ "co_elections": [
+  {
+   "State": "CO",
+   "StateId": "286",
+   "County": "",
+   "CountyId": "",
+   "EID": "126592",
+   "ElectionName": "2026 Primary",
+   "Date": "6/30/2026 12:00:00 AM"
+  },
+  {
+   "State": "CO",
+   "StateId": "286",
+   "County": "",
+   "CountyId": "",
+   "EID": "124409",
+   "ElectionName": "2025 Coordinated",
+   "Date": "11/4/2025 12:00:00 AM"
+  },
+  {
+   "State": "CO",
+   "StateId": "286",
+   "County": "",
+   "CountyId": "",
+   "EID": "122598",
+   "ElectionName": "2024 General",
+   "Date": "11/5/2024 12:00:00 AM"
+  },
+  {
+   "State": "CO",
+   "StateId": "286",
+   "County": "",
+   "CountyId": "",
+   "EID": "121727",
+   "ElectionName": "2024 Primary",
+   "Date": "6/25/2024 12:00:00 AM"
+  },
+  {
+   "State": "CO",
+   "StateId": "286",
+   "County": "",
+   "CountyId": "",
+   "EID": "119943",
+   "ElectionName": "2024 Presidential Primary",
+   "Date": "3/5/2024 12:00:00 AM"
+  },
+  {
+   "State": "CO",
+   "StateId": "286",
+   "County": "",
+   "CountyId": "",
+   "EID": "118892",
+   "ElectionName": "2023 Coordinated Election",
+   "Date": "11/7/2023 12:00:00 AM"
+  }
+ ],
+ "nd_elections": [
+  {
+   "electionID": "348",
+   "electionName": "2026 General Election",
+   "electionDate": "2026-11-03T00:00:00",
+   "isDefault": false
+  },
+  {
+   "electionID": "346",
+   "electionName": "2026 Primary Election",
+   "electionDate": "2026-06-09T00:00:00",
+   "isDefault": true
+  }
+ ]
+}
