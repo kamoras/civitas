@@ -12,6 +12,15 @@ import RaceMap, { FIPS_TO_STATE } from "@/components/elections/RaceMap";
 import PviMethodologyNote from "@/components/elections/PviMethodologyNote";
 import ResultsOverview from "@/components/elections/results/ResultsOverview";
 import OffSeasonLead from "@/components/elections/specials/OffSeasonLead";
+import ArchiveLead from "@/components/elections/season/ArchiveLead";
+import PrimariesLead from "@/components/elections/season/PrimariesLead";
+import FecDeadlineCard from "@/components/elections/season/FecDeadlineCard";
+import NewCongress from "@/components/elections/season/NewCongress";
+import NextField from "@/components/elections/season/NextField";
+import OddYearStates from "@/components/elections/season/OddYearStates";
+import PresidentialContest from "@/components/elections/season/PresidentialContest";
+import ElectionAdministration from "@/components/elections/season/ElectionAdministration";
+import RedistrictingWatch from "@/components/redistricting/RedistrictingWatch";
 import { electionTitle, formatPvi, pviColor, stateBallotHref } from "@/lib/elections";
 import { formatUtcDate } from "@/lib/formatting";
 import {
@@ -84,15 +93,23 @@ function daysUntil(isoDate: string, asOf: number): number | null {
   return Math.round((target - today) / 86_400_000);
 }
 
-/** The masthead's figure: how far off the next federal Election Day is. */
-function ElectionCountdown({ electionDay, asOf }: { electionDay: string; asOf: number }) {
+/** The masthead's figure: how far off the next federal Election Day is (or,
+ * before the primaries, the first of them). */
+function ElectionCountdown({
+  electionDay,
+  asOf,
+  label = "Election Day",
+}: {
+  electionDay: string;
+  asOf: number;
+  label?: string;
+}) {
   const days = daysUntil(electionDay, asOf);
   if (days === null || days < 0) return null;
   return (
     <div className="text-right">
       <p className="font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
-        Election Day ·{" "}
-        {formatUtcDate(electionDay, { month: "short", day: "numeric", year: "numeric" })}
+        {label} · {formatUtcDate(electionDay, { month: "short", day: "numeric", year: "numeric" })}
       </p>
       <p className="mt-1 font-display text-3xl font-semibold leading-none tabular-nums text-ink-hi">
         {days === 0 ? "Today" : days}
@@ -241,9 +258,14 @@ export default function ElectionsPage() {
             }
           : null;
 
-  // Between general elections (the backend's season) the specials and the
-  // calendar lead, not a countdown to a general a year or more away.
-  const betweenCycles = campaignMode && !!initial?.specials?.season?.betweenCycles;
+  // The backend's season (election_phase.season) decides what leads outside
+  // the results window: between general elections the archive, the
+  // specials and the calendar, not a countdown to a general a year or more
+  // away; in primary season the primaries ahead.
+  const season = initial?.specials?.season ?? null;
+  const betweenCycles = campaignMode && !!season?.betweenCycles;
+  const postCount = betweenCycles && season?.season === "post_certification";
+  const primarySeason = campaignMode && season?.season === "ramp";
 
   const haveServerPvi = !!initial?.pvi;
   useEffect(() => {
@@ -310,9 +332,15 @@ export default function ElectionsPage() {
                       ? `Elections · ${initial.phase.phase.phase === "election_day" ? "election day" : "results"} · ${
                           initial.phase.phase.electionDate
                         }`
-                      : campaignMode
-                        ? "Elections · partisan lean by state"
-                        : "Elections"
+                      : postCount
+                        ? `Elections · after the ${season?.heldCycle} count`
+                        : betweenCycles
+                          ? "Elections · between general elections"
+                          : primarySeason
+                            ? `Elections · primary season · ${season?.cycle}`
+                            : campaignMode
+                              ? "Elections · partisan lean by state"
+                              : "Elections"
             }
             title={
               stillVoting && results
@@ -323,11 +351,17 @@ export default function ElectionsPage() {
                     ? electionTitle(initial.phase.cycleYear, "election_day")
                     : serverMode === "results" && initial?.phase
                       ? electionTitle(initial.phase.cycleYear, "results")
-                      : campaignMode
-                        ? electionTitle(pvi?.cycleYear, "ballot")
-                        : // Phase not known yet: say nothing either mode would
-                          // contradict.
-                          electionTitle(pvi?.cycleYear, "elections")
+                      : postCount && season?.heldCycle
+                        ? electionTitle(season.heldCycle, "results")
+                        : betweenCycles && season
+                          ? `${electionTitle(season.cycle, "elections")}: before the primaries`
+                          : primarySeason && season
+                            ? `${electionTitle(season.cycle, "elections")}: primary season`
+                            : campaignMode
+                              ? electionTitle(pvi?.cycleYear, "ballot")
+                              : // Phase not known yet: say nothing either mode would
+                                // contradict.
+                                electionTitle(pvi?.cycleYear, "elections")
             }
             aside={
               <div className="flex flex-col items-end gap-3">
@@ -366,8 +400,15 @@ export default function ElectionsPage() {
                     </>
                   )}
                 </p>
-                {campaignMode && pvi?.electionDay && asOf !== null && (
+                {campaignMode && !betweenCycles && pvi?.electionDay && asOf !== null && (
                   <ElectionCountdown electionDay={pvi.electionDay} asOf={asOf} />
+                )}
+                {betweenCycles && !postCount && season?.firstPrimary && asOf !== null && (
+                  <ElectionCountdown
+                    electionDay={season.firstPrimary}
+                    asOf={asOf}
+                    label="First primary"
+                  />
                 )}
               </div>
             }
@@ -384,6 +425,17 @@ export default function ElectionsPage() {
                 state&apos;s feed every five minutes (hourly once no count has moved for a day), and
                 this page checks for a new read every minute. A race &ldquo;leads&rdquo; even once
                 the state lists its count as official; Civitas calls no race.
+              </>
+            ) : postCount ? (
+              <>
+                The {season?.heldCycle} count has settled. What Civitas kept of it comes first, with
+                how much each state lists as official, then the specials, vacant seats and every
+                federal date ahead. Shading below is partisan lean, not a forecast.
+              </>
+            ) : primarySeason ? (
+              <>
+                Primary season: each state picks its nominees on its own date. Pick a state for who
+                has filed and its ballot so far. Shading is partisan lean, not a forecast.
               </>
             ) : betweenCycles ? (
               <>
@@ -412,9 +464,33 @@ export default function ElectionsPage() {
             </p>
           )}
 
+          {postCount && season && (
+            <ArchiveLead season={season} archive={initial?.archive ?? null} />
+          )}
+
           {betweenCycles && initial?.specials && (
             <OffSeasonLead board={initial.specials} cal={initial.calendar} />
           )}
+
+          {primarySeason && season && (
+            <PrimariesLead season={season} cal={initial?.calendar ?? null} />
+          )}
+
+          {campaignMode && <FecDeadlineCard event={initial?.fecDeadline ?? null} />}
+
+          {season?.season === "off_season" && campaignMode && (
+            <NewCongress data={initial?.newCongress ?? null} />
+          )}
+
+          {(betweenCycles || primarySeason) && <NextField field={initial?.field ?? null} />}
+
+          {campaignMode && <PresidentialContest data={initial?.presidential ?? null} />}
+
+          {betweenCycles && <OddYearStates data={initial?.oddYear ?? null} />}
+
+          {betweenCycles && <RedistrictingWatch watch={initial?.redistrictingWatch} compact />}
+
+          {betweenCycles && <ElectionAdministration data={initial?.administration ?? null} />}
 
           {resultsMode && results && (
             <ResultsOverview

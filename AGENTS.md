@@ -1765,6 +1765,11 @@ January 3 (20th Amendment), and only then rolls to the next cycle.
 `active_election()` is the one answer for the pipeline's cycle, the API's
 `electionDate`/`phase` and the season jobs — never `next_election_day()`
 directly, which flips to the next cycle the night polls close.
+`election_phase.season()` refines it into the six stretches the elections
+pages lead by (campaign, election night, results, post-certification to
+January 3, off-season to the cycle's first primary on the FEC's calendar,
+and the primaries' ramp to the last congressional primary): read it for any
+"what leads now" decision, never a second copy of these boundaries.
 
 In that window a five-minute job (`scheduler._election_results_sync`) reads
 each covered state's own election-night feed — Clarity, Tally ENR, TotalVote,
@@ -2292,6 +2297,8 @@ the pending list).
 | Seat-flip DEVELOPING issues + election-night posts (feed, then Bluesky) | `backend/app/live_results/signals.py`, `live_results/bluesky.py` |
 | Results UI (map colouring, live updates, state results) | `frontend/src/lib/results.ts`, `frontend/src/hooks/useLiveResults.ts`, `frontend/src/components/elections/results/` |
 | Confirmed candidates — who is really on the November ballot, per state | `backend/app/pipeline/fetch/state_candidates.py` (`STRATEGIES` dispatch) + `backend/app/data/state_candidate_sources.json` (every URL/threshold; its `_contract` key documents the config shape). Adapters are per VENDOR, not per state — adding a state already on a supported vendor is a JSON entry, never new code, and no adapter branches on a state's name. Shared office/party/surname/winner parsing lives in `state_candidates_common.py`; that is what stops per-vendor decaying into per-state. |
+| Next cycle: FEC registrations by seat, the FEC deadline event, how the new Congress compares (Congress.gov terms and birth years) | `backend/app/next_cycle.py`, `frontend/src/components/elections/season/` |
+| Presidential contest (national `{cycle}-PRES` race, electoral votes from the apportionment) and the EAC's election administration survey | `backend/app/electoral_votes.py`, `backend/app/election_administration.py`, `backend/scripts/fetch_eavs.py` → `app/data/eavs.json`, `frontend/src/components/elections/season/PresidentialContest.tsx`, `ElectionAdministration.tsx` |
 | Voter calendar (registration, early voting, mail-ballot deadlines; status on the state's own clock) | `backend/app/voter_calendar.py`, `backend/app/data/election_calendar.json` (built by `backend/scripts/build_election_calendar.py` from `scripts/election_calendar_sources.json`), `frontend/src/components/elections/VoterCalendar.tsx` |
 | Statewide ballot-measure ingestion (verbatim, no LLM) | `backend/app/pipeline/fetch/ballot_measures_pdf.py` (pipeline stage + `STRATEGIES`), one reader per state in `fetch/ballot_measures_<st>.py`, registry `backend/app/data/ballot_measure_pdf_sources.json` |
 | What changed on the new House maps (old/new district overlap, lean before/after, enacting act) | `backend/app/redistricting.py`, `backend/app/api/redistricting.py`, `backend/scripts/build_redistricting_overlap.py` → `app/data/redistricting_overlap.json`, `frontend/src/components/redistricting/`, `frontend/src/app/elections/redistricting/` |

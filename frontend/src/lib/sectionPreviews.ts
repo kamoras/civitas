@@ -1,6 +1,6 @@
 import type { SectionFigures } from "@/types/sections";
 import { calendarDate, monthLabel, shortDate } from "@/lib/congress";
-import { formatCurrency } from "@/lib/formatting";
+import { formatCurrency, formatUtcDate } from "@/lib/formatting";
 
 /** One section page's live figure, worded: the figure and what it counts. */
 export interface Preview {
@@ -8,6 +8,9 @@ export interface Preview {
   caption: string;
 }
 
+/** "Jan 15, 2028": a date that may be a year or more off says its year. */
+const dated = (iso: string) =>
+  formatUtcDate(iso, { month: "short", day: "numeric", year: "numeric" });
 const n = (x: number) => x.toLocaleString("en-US");
 const plural = (x: number, one: string, many = `${one}s`) => (x === 1 ? one : many);
 
@@ -53,7 +56,7 @@ function president(f: SectionFigures["congress"]["president"]): Preview {
  * the About chapters) has no entry. A figure the site can't give yet says
  * what it is waiting on: an empty default is content.
  */
-const PREVIEWS: Record<string, Record<string, (f: SectionFigures) => Preview>> = {
+const PREVIEWS: Record<string, Record<string, (f: SectionFigures) => Preview | null>> = {
   action: {
     today: ({ action: { today } }) =>
       today.date
@@ -153,15 +156,33 @@ const PREVIEWS: Record<string, Record<string, (f: SectionFigures) => Preview>> =
         : { figure: "Not yet", caption: "the member rosters haven't been read yet" },
   },
   elections: {
-    ballots: ({ elections: { ballots: b } }) =>
-      b.phase === "campaign" && b.daysUntil > 0
+    ballots: ({ elections: { ballots: b, season } }) => {
+      // Between cycles a general a year or two off is no headline: the
+      // archive's election, or the next primaries, lead instead.
+      if (season?.season === "post_certification" && season.heldCycle)
+        return {
+          figure: String(season.heldCycle),
+          caption: `the ${season.heldCycle} election as recorded · next general ${dated(b.date)}`,
+        };
+      if (season?.season === "off_season")
+        return season.firstPrimary
+          ? {
+              figure: dated(season.firstPrimary),
+              caption: `the ${season.cycle} primaries begin, by the FEC's calendar · ${n(b.states)} ballots`,
+            }
+          : {
+              figure: String(season.cycle),
+              caption: `next general ${dated(b.date)}; its primaries aren't on the FEC's calendar yet`,
+            };
+      return b.phase === "campaign" && b.daysUntil > 0
         ? {
             figure: n(b.daysUntil),
-            caption: `${plural(b.daysUntil, "day")} to Election Day, ${shortDate(b.date)} · ${n(b.states)} ballots`,
+            caption: `${plural(b.daysUntil, "day")} to Election Day, ${shortDate(b.date)} · ${n(b.states)} ballots${season?.season === "ramp" ? " · primaries under way" : ""}`,
           }
         : b.daysUntil === 0
           ? { figure: "Today", caption: `is Election Day · ${n(b.states)} ballots and counts` }
-          : { figure: "Results", caption: `the ${shortDate(b.date)} election, state by state` },
+          : { figure: "Results", caption: `the ${shortDate(b.date)} election, state by state` };
+    },
     map: ({ elections: { map } }) =>
       !map.available
         ? { figure: "Off", caption: map.reason }
@@ -184,6 +205,24 @@ const PREVIEWS: Record<string, Record<string, (f: SectionFigures) => Preview>> =
     // The archive's card leads with the public check of the map: how many
     // official margins fell inside its ranges. Before the first archive, or
     // before any count is official, it says so, never a bare 0.
+    // The FEC's next reporting deadline: a recurring event, worded around
+    // its day (backend next_cycle.deadline_event).
+    calendar: ({ elections: { calendar } }) => {
+      if (calendar === undefined) throw new Error("older backend");
+      const d = calendar.deadline;
+      if (!d) return null;
+      const what = d.label ?? d.reportType;
+      if (d.status === "due_today") return { figure: "Today", caption: `FEC ${what} reports due` };
+      if (d.status === "passed")
+        return {
+          figure: dated(d.date),
+          caption: `FEC ${what} reports were due · every date and deadline ahead`,
+        };
+      return {
+        figure: dated(d.date),
+        caption: `next FEC filing deadline: ${what} reports · every date and deadline ahead`,
+      };
+    },
     archive: ({ elections: { archive, ballots } }) => {
       if (archive === undefined) throw new Error("older backend");
       if (!archive)
@@ -241,4 +280,19 @@ export function sectionPreview(
     // A figure missing from an older backend's answer: no figure, not a crash.
     return null;
   }
+}
+
+/** A section's pages in the order the season leads with (backend
+ * election_phase.SEASON_LEAD): nothing is dropped, a page the order doesn't
+ * name keeps its place after the ones it does. */
+export function leadOrder<T extends { key: string }>(tabs: T[], lead: string[] | undefined): T[] {
+  if (!lead?.length) return tabs;
+  const rank = (k: string) => (lead.includes(k) ? lead.indexOf(k) : lead.length);
+  return [...tabs].sort((a, b) => rank(a.key) - rank(b.key));
+}
+
+/** The order the elections section's season leads with; undefined for any
+ * other section, or an answer without it. */
+export function seasonLead(figures: SectionFigures | null, section: string): string[] | undefined {
+  return section === "elections" ? figures?.elections?.season?.lead : undefined;
 }

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { connection } from "next/server";
 import { SECTIONS, type SectionKey } from "@/lib/routes";
-import { sectionPreview } from "@/lib/sectionPreviews";
+import { leadOrder, sectionPreview, seasonLead } from "@/lib/sectionPreviews";
 import { fetchSectionFigures } from "@/components/sections/SectionCards";
 import type { SectionFigures } from "@/types/sections";
 
@@ -89,7 +89,7 @@ export default async function SectionsBand() {
               </h3>
               <ul className="mt-1 border-l border-white/15 pl-3">
                 {recess && <ReportsInRecess line={recess.line} />}
-                {tabs.map((t) => {
+                {leadOrder([...tabs], seasonLead(figures, key)).map((t) => {
                   if (recess && REPORT_TABS.has(t.key)) return null;
                   const p = sectionPreview(figures, key, t.key);
                   return (

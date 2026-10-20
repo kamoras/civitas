@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import StateBallotClient from "./StateBallotClient";
 import type { RaceWithCandidates, StateBallot, VoteStep } from "@/types/election";
@@ -180,7 +180,7 @@ describe("the ballot page", () => {
     );
     expect(
       screen.getByText(
-        /3 federal candidates, 1 outside the two major parties · 1 with a congressional voting record/
+        /3 registered with the FEC, 1 outside the two major parties · 1 with a congressional voting record/
       )
     ).toBeInTheDocument();
   });
@@ -191,7 +191,26 @@ describe("the ballot page", () => {
         ballot={ballot({ houseRaces: [houseRace({ candidates: [candidate({ id: "d" })] })] })}
       />
     );
-    expect(screen.getByText(/^1 contest · 1 federal candidate/)).toBeInTheDocument();
+    expect(screen.getByText(/^1 contest · 1 registered with the FEC/)).toBeInTheDocument();
+    cleanup();
+    // Once the state has confirmed its list, it is the ballot's candidates.
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          ballotBasis: {
+            basis: "confirmed",
+            primaryPassed: true,
+            daysSincePrimary: 60,
+            supersededByPrimary: false,
+          },
+          houseRaces: [houseRace({ candidates: [candidate({ id: "d" })] })],
+        })}
+      />
+    );
+    expect(screen.getByText(/^1 contest · 1 federal candidate(?!s)/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+      "Everyone on OH's ballot, and who is behind them"
+    );
   });
 
   it("shows a candidate the state certified even with no FEC activity", () => {
