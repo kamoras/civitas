@@ -8,9 +8,9 @@ import { focusTabWhenSelected } from "@/lib/tabFocus";
 export type Branch = "senate" | "house" | "president" | "scotus";
 
 export const BRANCHES: { key: Branch; label: string }[] = [
-  { key: "senate", label: "SENATE" },
-  { key: "house", label: "HOUSE" },
-  { key: "president", label: "PRESIDENT" },
+  { key: "senate", label: "Senate" },
+  { key: "house", label: "House" },
+  { key: "president", label: "President" },
   { key: "scotus", label: "SCOTUS" },
 ];
 
@@ -58,7 +58,7 @@ export default function BranchSelector({ selected, onChange }: BranchSelectorPro
           aria-controls={`branch-panel-${key}`}
           tabIndex={selected === key ? 0 : -1}
           onClick={() => onChange(key)}
-          className={`border px-3 py-2 font-mono text-xs tracking-wider transition-colors sm:px-5 sm:text-sm ${boxedControl(
+          className={`border px-3 py-2 font-mono text-xs transition-colors sm:px-5 sm:text-sm ${boxedControl(
             selected === key
           )}`}
         >

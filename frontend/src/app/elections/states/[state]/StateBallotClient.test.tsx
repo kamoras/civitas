@@ -309,7 +309,7 @@ describe("the ballot page", () => {
     ).toBeTruthy();
     // Every deadline, with its rule and source, still on the page: after
     // the contests, so the ballot is in a phone's first screen.
-    const section = screen.getByRole("region", { name: /VOTER DEADLINES/ });
+    const section = screen.getByRole("region", { name: /Voter deadlines/ });
     expect(section).toHaveTextContent("Online registration closes Oct 26 (6 days left).");
     expect(
       ballotColumns.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING
@@ -363,7 +363,7 @@ describe("the ballot page", () => {
     ).toHaveAttribute("href", "https://www.nass.org/can-i-vote/voter-registration-status");
     // The page's one register link is the step's.
     expect(screen.getAllByRole("link", { name: /^Register/ })).toHaveLength(1);
-    expect(screen.queryByText(/OFFICIAL VOTER LOOKUP/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Official voter lookup/)).not.toBeInTheDocument();
     // The sample-ballot lookup is a button above the ballot (#1123), and
     // the register link is not beside it.
     const lookup = screen.getByTestId("ballot-lookup");
@@ -417,7 +417,7 @@ describe("the contest drawer", () => {
   it("walks the ballot in order with Next and Previous", async () => {
     render(<StateBallotClient ballot={twoContests()} />);
     const drawer = await openContest(/U\.S\. Senator/);
-    expect(drawer.getByText(/SECTION 1 OF/)).toBeInTheDocument();
+    expect(drawer.getByText(/Section 1 of/)).toBeInTheDocument();
     await userEvent.click(drawer.getByRole("button", { name: "U.S. Representative\u00a0→" }));
     expect(
       within(screen.getByRole("dialog")).getByRole("heading", { name: "U.S. Representative" })
@@ -456,7 +456,7 @@ describe("the contest drawer", () => {
       drawer.getByRole("link", { name: /House member, OH-2 · record and peers/ })
     ).toHaveAttribute("href", "/politicians/eric-conway");
     // Never worded as this seat's incumbent.
-    expect(drawer.queryByText(/INCUMBENT/)).toBeNull();
+    expect(drawer.queryByText(/Incumbent/)).toBeNull();
     expect(drawer.getAllByText("not linked")).toHaveLength(1);
   });
 
@@ -484,7 +484,7 @@ describe("the contest drawer", () => {
     render(<StateBallotClient ballot={ballot()} />);
     const drawer = within(screen.getByRole("dialog"));
     expect(drawer.getByRole("heading", { name: "U.S. Representative" })).toBeInTheDocument();
-    await userEvent.click(drawer.getByRole("button", { name: "ALL CONTESTS" }));
+    await userEvent.click(drawer.getByRole("button", { name: "All contests" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     window.history.replaceState(null, "", "/");
   });
@@ -575,22 +575,22 @@ describe("U.S. Representative", () => {
     expect(drawer.queryByText(/\(I\)/)).not.toBeInTheDocument();
     await userEvent.click(drawer.getByRole("button", { name: /Greg Lindqvist/ }));
     const research = within(screen.getByRole("dialog"));
-    expect(research.getByText("SITTING MEMBER")).toBeInTheDocument();
-    expect(research.queryByText("INCUMBENT")).not.toBeInTheDocument();
+    expect(research.getByText("Sitting member")).toBeInTheDocument();
+    expect(research.queryByText("Incumbent")).not.toBeInTheDocument();
     window.location.hash = "";
   });
 
   it("marks a sitting member on a single new-lines seat's ballot box the same way", () => {
     render(<StateBallotClient ballot={ballot({ newDistrictLines: true })} />);
     const box = screen.getByTestId("ballot-columns");
-    expect(within(box).getByText("SITTING MEMBER")).toBeInTheDocument();
-    expect(within(box).queryByText("INCUMBENT")).not.toBeInTheDocument();
+    expect(within(box).getByText("Sitting member")).toBeInTheDocument();
+    expect(within(box).queryByText("Incumbent")).not.toBeInTheDocument();
   });
 
   it("keeps INCUMBENT on a state's old lines", () => {
     render(<StateBallotClient ballot={ballot()} />);
     const box = screen.getByTestId("ballot-columns");
-    expect(within(box).getByText("INCUMBENT")).toBeInTheDocument();
+    expect(within(box).getByText("Incumbent")).toBeInTheDocument();
   });
 
   it("opens a picked district's research with its full county list", async () => {
@@ -604,7 +604,7 @@ describe("U.S. Representative", () => {
       )
     ).toBeInTheDocument();
     expect(window.location.hash).toBe("#race-d2");
-    await userEvent.click(drawer.getByRole("button", { name: "← PICK ANOTHER DISTRICT" }));
+    await userEvent.click(drawer.getByRole("button", { name: "← Pick another district" }));
     expect(within(screen.getByRole("dialog")).getByText("Greg Lindqvist (I)")).toBeInTheDocument();
     window.location.hash = "";
   });
@@ -801,7 +801,7 @@ describe("U.S. Representative", () => {
     b.houseRaces = b.houseRaces.map((r) => ({ ...r, redistricting: note }));
     render(<StateBallotClient ballot={b} />);
     expect(
-      screen.getAllByRole("link", { name: /WHAT CHANGED/ }).map((a) => a.getAttribute("href"))
+      screen.getAllByRole("link", { name: /what changed/i }).map((a) => a.getAttribute("href"))
     ).toContain("/elections/redistricting/OH");
     const drawer = await openContest(/U\.S\. Representative/);
     await userEvent.click(drawer.getAllByRole("button", { name: /County 1/ })[0]);
@@ -812,7 +812,7 @@ describe("U.S. Representative", () => {
 
   it("links no redistricting page where the lines are unchanged", () => {
     render(<StateBallotClient ballot={fourDistricts()} />);
-    expect(screen.queryByRole("link", { name: /WHAT CHANGED/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /What changed/ })).not.toBeInTheDocument();
   });
 
   it("links no lookup at all on new lines when the state has none of its own", async () => {
@@ -916,7 +916,7 @@ describe("statewide executive offices", () => {
       />
     );
     const drawer = await openContest(/Statewide offices/);
-    expect(drawer.getByText(/EXECUTIVE COUNCIL · 4 SEATS/)).toBeInTheDocument();
+    expect(drawer.getByText(/Executive Council · 4 seats/)).toBeInTheDocument();
     expect(drawer.getByText(/Each voter votes in one district's seat only/)).toBeInTheDocument();
     fireEvent.change(drawer.getByLabelText(/Filter Executive Council seats/), {
       target: { value: "concord" },
@@ -1171,8 +1171,8 @@ describe("state legislature", () => {
   it("renders both chambers with their contested seat counts", async () => {
     render(<StateBallotClient ballot={ballot(legislature)} />);
     const drawer = await open();
-    expect(drawer.getByText("STATE SENATE · 1 SEAT CONTESTED")).toBeInTheDocument();
-    expect(drawer.getByText("STATE HOUSE · 4 SEATS CONTESTED")).toBeInTheDocument();
+    expect(drawer.getByText("State Senate · 1 seat contested")).toBeInTheDocument();
+    expect(drawer.getByText("State House · 4 seats contested")).toBeInTheDocument();
   });
 
   it("shows each seat's towns so a reader can find it without an address", async () => {
@@ -1258,7 +1258,7 @@ describe("state legislature", () => {
 
   it("is not a contest at all for a state whose seats are not covered", () => {
     render(<StateBallotClient ballot={ballot()} />);
-    expect(screen.queryByText(/SEATS CONTESTED/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Seats contested/)).not.toBeInTheDocument();
     expect(screen.queryByText(/State Senate/)).not.toBeInTheDocument();
   });
 
@@ -1313,8 +1313,8 @@ describe("judges", () => {
       />
     );
     const drawer = await openContest(/Judges/);
-    expect(drawer.getByText("COURT OF APPEALS")).toBeInTheDocument();
-    expect(drawer.getByText("DISTRICT COURT")).toBeInTheDocument();
+    expect(drawer.getByText("Court of Appeals")).toBeInTheDocument();
+    expect(drawer.getByText("District Court")).toBeInTheDocument();
     expect(drawer.getByText("District 14, Seat 3")).toBeInTheDocument();
     expect(drawer.getByText(/Michael C\. Byrne/)).toBeInTheDocument();
     expect(drawer.getByText(/Sherry Miller/)).toBeInTheDocument();
@@ -1763,7 +1763,7 @@ describe("ballot measures", () => {
     expect(document.activeElement).toBe(drawer.getByRole("heading", { name: "3" }));
     expect(window.location.hash).toBe("#measure-OH-3");
     // Closing returns the reader to the ballot, the hash cleared.
-    await userEvent.click(drawer.getByRole("button", { name: "ALL CONTESTS" }));
+    await userEvent.click(drawer.getByRole("button", { name: "All contests" }));
     expect(window.location.hash).toBe("");
   });
 
@@ -1797,7 +1797,8 @@ describe("state offices not loaded", () => {
   it("fills the State column with a placeholder rather than leaving it empty", async () => {
     render(<StateBallotClient ballot={ballot()} />);
     const box = screen.getByTestId("ballot-columns");
-    expect(within(box).getByText("State offices")).toBeInTheDocument();
+    // The column title and the placeholder contest share the words.
+    expect(within(box).getAllByText("State offices")).toHaveLength(2);
     const drawer = await openContest(/State offices/);
     expect(drawer.getByText(/does not have OH's own offices yet/)).toBeInTheDocument();
     expect(drawer.getByText("not")).toBeInTheDocument(); // "This does not mean there are none"
@@ -1816,7 +1817,10 @@ describe("state offices not loaded", () => {
         })}
       />
     );
-    expect(screen.queryByText("State offices")).not.toBeInTheDocument();
+    // Only the column title: no placeholder contest.
+    expect(within(screen.getByTestId("ballot-columns")).getAllByText("State offices")).toHaveLength(
+      1
+    );
   });
 });
 
@@ -1919,8 +1923,8 @@ describe("state office terms", () => {
       />
     );
     const drawer = await openContest(/State Senate/);
-    expect(drawer.getByText(/STATE SENATE · 1 SEAT CONTESTED/).textContent).toContain(
-      "4-YEAR TERMS"
+    expect(drawer.getByText(/State Senate · 1 seat contested/).textContent).toContain(
+      "4-year terms"
     );
   });
 });

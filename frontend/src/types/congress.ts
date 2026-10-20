@@ -1,4 +1,5 @@
 import type { NominationVote } from "@/types/nomination";
+import type { StageMilestone } from "@/types/bill";
 /** The Congress reports (backend/app/services/congress_service.py) and a
  * bill's record (backend/app/services/bill_record.py). Every count and
  * sentence here is computed by the backend. */
@@ -449,7 +450,7 @@ export interface CongressGlance {
   /** How many of this Congress's bills reached each step; null before any. */
   pipeline: {
     total: number;
-    milestones: { label: string; bills: number; share: number; shareText: string }[];
+    milestones: StageMilestone[];
   } | null;
 }
 

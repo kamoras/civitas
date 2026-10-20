@@ -59,7 +59,7 @@ const SOURCE_ORDER = { issue: 0, monitor: 1, bill: 2 } as const;
 export function formatEntryDate(iso: string): string {
   const d = parseUtc(iso);
   if (!d) return "";
-  const month = d.toLocaleString("en-US", { month: "short", timeZone: "UTC" }).toUpperCase();
+  const month = d.toLocaleString("en-US", { month: "short", timeZone: "UTC" });
   return `${String(d.getUTCDate()).padStart(2, "0")} ${month}`;
 }
 
@@ -190,7 +190,7 @@ export function RecordIndexList({ entries }: { entries: RecordEntry[] }) {
         </h2>
         <Link
           href={ACTION_CENTER_HREF}
-          className="normal-case tracking-[0.06em] underline decoration-white/30 underline-offset-4 hover:text-phos"
+          className="underline decoration-white/30 underline-offset-4 hover:text-phos"
         >
           The Action Center today &rarr;
         </Link>
@@ -199,7 +199,7 @@ export function RecordIndexList({ entries }: { entries: RecordEntry[] }) {
         {entries.map((entry) => (
           <li key={entry.ref} className="border-t border-white/30 first:border-t-0">
             <Link href={entry.href} className="group block px-4 py-3 sm:px-5">
-              <span className={`font-mono text-xs tracking-[0.08em] ${entry.tone}`}>
+              <span className={`font-mono text-xs ${entry.tone}`}>
                 {formatEntryDate(entry.date)} · <span className="font-id">{entry.ref}</span>
               </span>
               <span className="mt-1 block font-display text-base font-semibold leading-snug text-ink-hi group-hover:underline">

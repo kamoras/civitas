@@ -1,5 +1,6 @@
 "use client";
 
+import { asLabel } from "@/lib/formatting";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   clearStuckElectionPipeline,
@@ -104,7 +105,7 @@ function PipelineStatusPanel({
     <Panel title="Pipeline status">
       <div className="space-y-1.5 text-sm font-mono">
         <StuckAwareRow
-          label="SENATE"
+          label="Senate"
           isRunning={senateIsRunning(status)}
           run={senate}
           token={token}
@@ -125,7 +126,7 @@ function PipelineStatusPanel({
           }
         />
         <StuckAwareRow
-          label="HOUSE"
+          label="House"
           isRunning={!!status?.houseIsRunning}
           run={house}
           token={token}
@@ -150,7 +151,7 @@ function PipelineStatusPanel({
         {/* Supplementary: explore docs + SCOTUS + presidents. Independent of
             Senate (see supplementary_pipeline.py). */}
         <StuckAwareRow
-          label="SUPPLEMENTARY"
+          label="Supplementary"
           isRunning={!!status?.supplementaryIsRunning}
           run={supp}
           token={token}
@@ -168,7 +169,7 @@ function PipelineStatusPanel({
           }
         />
         <StuckAwareRow
-          label="STOCK TRADES"
+          label="Stock trades"
           isRunning={!!status?.stockTradesIsRunning}
           run={stock}
           token={token}
@@ -188,7 +189,7 @@ function PipelineStatusPanel({
             here at all, so a stuck election run could only be cleared with
             curl. */}
         <StuckAwareRow
-          label="ELECTION"
+          label="Election"
           isRunning={!!status?.electionIsRunning}
           run={election}
           token={token}
@@ -206,15 +207,15 @@ function PipelineStatusPanel({
         />
         <div className="border-t border-white/[0.07] pt-2 mt-2 space-y-1.5">
           <div className="flex justify-between">
-            <span className="text-ink-lo">SCHEDULE</span>
+            <span className="text-ink-lo">Schedule</span>
             <span className="text-ink">{dashboard?.pipeline.cronSchedule ?? "—"}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-ink-lo">NEXT RUN</span>
+            <span className="text-ink-lo">Next run</span>
             <span className="text-ink">{formatTime(dashboard?.pipeline.nextScheduled)}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-ink-lo">SENATE RUNS, ALL TIME</span>
+            <span className="text-ink-lo">Senate runs, all time</span>
             <span className="text-ink">
               {dashboard?.pipeline.totalRuns ?? 0}{" "}
               <span className="text-ink-min">
@@ -232,11 +233,11 @@ function PipelineStatusPanel({
 // --- Per-phase timings --------------------------------------------------------
 
 const TIMING_KINDS: { value: string; label: string }[] = [
-  { value: "pipeline_runs", label: "SENATE" },
-  { value: "house_pipeline_runs", label: "HOUSE" },
-  { value: "supplementary_pipeline_runs", label: "SUPP" },
-  { value: "stock_trades_pipeline_runs", label: "STOCK" },
-  { value: "election_pipeline_runs", label: "ELECTION" },
+  { value: "pipeline_runs", label: "Senate" },
+  { value: "house_pipeline_runs", label: "House" },
+  { value: "supplementary_pipeline_runs", label: "Supp" },
+  { value: "stock_trades_pipeline_runs", label: "Stock" },
+  { value: "election_pipeline_runs", label: "Election" },
 ];
 
 // Canonical order a pipeline's phases run in. Colours are assigned by
@@ -272,7 +273,7 @@ function phaseFill({ color, dashed }: { color: string; dashed: boolean }): strin
   return dashed ? `repeating-linear-gradient(45deg, ${color} 0 3px, transparent 3px 6px)` : color;
 }
 
-const phaseLabel = (p: string) => PHASE_LABELS[p] ?? (p ? p.toUpperCase() : "UNTAGGED");
+const phaseLabel = (p: string) => PHASE_LABELS[p] ?? (p ? asLabel(p) : "Untagged");
 
 /**
  * Per-phase duration for recent runs of one pipeline.
@@ -326,7 +327,7 @@ function PhaseTimings({ token }: { token: string }) {
   return (
     <Panel title="Phase timings">
       <div className="mb-4">
-        <Segmented label="PIPELINE" options={TIMING_KINDS} value={kind} onChange={setKind} />
+        <Segmented label="Pipeline" options={TIMING_KINDS} value={kind} onChange={setKind} />
       </div>
 
       {!loading && runs.length === 0 ? (
@@ -341,7 +342,7 @@ function PhaseTimings({ token }: { token: string }) {
         <div className={loading ? "opacity-50 transition-opacity" : "transition-opacity"}>
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <LineChart
-              title="TIME PER PHASE, RUN OVER RUN"
+              title="Time per phase, run over run"
               subtitle="which phase absorbed a slowdown"
               xLabels={oldestFirst.map(runLabel)}
               xTickLabel={(i) => `#${oldestFirst[i].runId}`}
@@ -361,8 +362,8 @@ function PhaseTimings({ token }: { token: string }) {
             />
             {!loading && runs.every((r) => r.blockedPct === 0) ? (
               <div>
-                <div className="text-xs font-mono tracking-wider text-ink-lo">
-                  SHARE OF RUN BLOCKED ON RATE LIMITS
+                <div className="text-xs font-mono text-ink-lo">
+                  Share of run blocked on rate limits
                 </div>
                 <p className="mt-2 text-xs font-mono text-ink-min">
                   None: no run in this window waited on an external API&apos;s rate limit, so its
@@ -371,7 +372,7 @@ function PhaseTimings({ token }: { token: string }) {
               </div>
             ) : (
               <LineChart
-                title="SHARE OF RUN BLOCKED ON RATE LIMITS"
+                title="Share of run blocked on rate limits"
                 subtitle="high = throughput-bound on someone else's API; faster hardware won't help"
                 xLabels={oldestFirst.map(runLabel)}
                 xTickLabel={(i) => `#${oldestFirst[i].runId}`}
@@ -465,9 +466,7 @@ function PhaseTimings({ token }: { token: string }) {
                     ))}
                     {run.rateLimitSources.length > 0 && (
                       <div className="pt-1 mt-1 border-t border-white/[0.07] space-y-0.5">
-                        <div className="text-ink-min text-xs font-mono tracking-wider">
-                          BLOCKED ON RATE LIMITS
-                        </div>
+                        <div className="text-ink-min text-xs font-mono">Blocked on rate limits</div>
                         {run.rateLimitSources.map((s) => (
                           <div key={s.source} className="flex justify-between gap-3">
                             <span className="text-ink-min text-xs font-mono truncate">
@@ -548,15 +547,15 @@ function LastRunCards({
         extraStats={
           senate && (
             <>
-              <Stat label="SENATORS">
+              <Stat label="Senators">
                 {senate.senatorsProcessed}/{senate.senatorsTotal}
                 {senate.senatorsFailed > 0 && (
                   <span className="text-signal-magenta ml-1">({senate.senatorsFailed} failed)</span>
                 )}
               </Stat>
-              <Stat label="LLM CALLS">{senate.llmCalls}</Stat>
-              <Stat label="BILLS CLASSIFIED">{senate.billsClassified}</Stat>
-              <Stat label="CACHE HIT RATE">
+              <Stat label="LLM calls">{senate.llmCalls}</Stat>
+              <Stat label="Bills classified">{senate.billsClassified}</Stat>
+              <Stat label="Cache hit rate">
                 {cacheTotal > 0 ? `${Math.round((senate.cacheHits / cacheTotal) * 100)}%` : "—"}{" "}
                 <span className="text-ink-min">
                   ({senate.cacheHits}H / {senate.cacheMisses}M)
@@ -571,7 +570,7 @@ function LastRunCards({
         run={house}
         extraStats={
           house && (
-            <Stat label="REPS">
+            <Stat label="Reps">
               {house.repsProcessed}/{house.repsTotal}
               {house.repsFailed > 0 && (
                 <span className="text-signal-magenta ml-1">({house.repsFailed} failed)</span>
@@ -586,11 +585,11 @@ function LastRunCards({
         extraStats={
           supp && (
             <>
-              <Stat label="EXPLORE DOCS">{supp.exploreDocsIngested}</Stat>
+              <Stat label="Explore docs">{supp.exploreDocsIngested}</Stat>
               <Stat label="SCOTUS">
                 {supp.justicesSkipped ? "skipped" : `${supp.justicesScored} justices`}
               </Stat>
-              <Stat label="PRESIDENTS">{supp.presidentsUpdated}</Stat>
+              <Stat label="Presidents">{supp.presidentsUpdated}</Stat>
             </>
           )
         }
@@ -600,7 +599,7 @@ function LastRunCards({
         run={stock}
         extraStats={
           stock && (
-            <Stat label="TRADES INGESTED">
+            <Stat label="Trades ingested">
               {stock.houseTradesIngested}H / {stock.senateTradesIngested}S /{" "}
               {stock.presidentTradesIngested}P
             </Stat>
@@ -613,9 +612,9 @@ function LastRunCards({
         extraStats={
           election && (
             <>
-              <Stat label="CANDIDATES SYNCED">{election.candidatesSynced ?? 0}</Stat>
-              <Stat label="FINANCIALS">{election.financialsRefreshed ?? 0}</Stat>
-              <Stat label="COVERAGE">{election.coverageItemsIngested ?? 0}</Stat>
+              <Stat label="Candidates synced">{election.candidatesSynced ?? 0}</Stat>
+              <Stat label="Financials">{election.financialsRefreshed ?? 0}</Stat>
+              <Stat label="Coverage">{election.coverageItemsIngested ?? 0}</Stat>
             </>
           )
         }
@@ -680,7 +679,7 @@ export function PipelinesDashboard({
 
   return (
     <div className="space-y-6">
-      <Segmented label="RANGE" options={RANGE_OPTIONS} value={range} onChange={setRange} />
+      <Segmented label="Range" options={RANGE_OPTIONS} value={range} onChange={setRange} />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile
@@ -716,7 +715,7 @@ export function PipelinesDashboard({
         />
         <Panel title="Outcomes">
           <LineChart
-            title="FINISHED RUNS PER DAY, BY OUTCOME"
+            title="Finished runs per day, by outcome"
             subtitle="all five pipelines, by UTC start date; today is still filling in"
             xLabels={dayLabels}
             series={[
@@ -753,7 +752,7 @@ export function PipelinesDashboard({
             return (
               <LineChart
                 key={type}
-                title={PIPELINE_LABELS[type].toUpperCase()}
+                title={PIPELINE_LABELS[type]}
                 xLabels={labels}
                 // Local date, the same clock formatTime uses for the tooltip
                 // and table, so a 03:00 UTC run isn't a day apart between them.

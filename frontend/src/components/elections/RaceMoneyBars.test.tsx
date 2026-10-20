@@ -101,7 +101,7 @@ describe("RaceMoneyBars", () => {
 
   it("marks the incumbent", () => {
     render(<RaceMoneyBars cycleYear={2026} candidates={[cand({ incumbentChallenge: "I" })]} />);
-    expect(screen.getByText("INCUMBENT")).toBeInTheDocument();
+    expect(screen.getByText("Incumbent")).toBeInTheDocument();
   });
 
   it("calls an incumbent on a redrawn seat a sitting member, not the incumbent", () => {
@@ -112,8 +112,8 @@ describe("RaceMoneyBars", () => {
         redrawnSeat
       />
     );
-    expect(screen.getByText("SITTING MEMBER")).toBeInTheDocument();
-    expect(screen.queryByText("INCUMBENT")).not.toBeInTheDocument();
+    expect(screen.getByText("Sitting member")).toBeInTheDocument();
+    expect(screen.queryByText("Incumbent")).not.toBeInTheDocument();
   });
 
   it("calls them the member before this election from election day on", () => {
@@ -125,8 +125,8 @@ describe("RaceMoneyBars", () => {
         resultsMode
       />
     );
-    expect(screen.getByText("MEMBER BEFORE THIS ELECTION")).toBeInTheDocument();
-    expect(screen.queryByText(/SITTING MEMBER|INCUMBENT/)).not.toBeInTheDocument();
+    expect(screen.getByText("Member before this election")).toBeInTheDocument();
+    expect(screen.queryByText(/Sitting member|incumbent/)).not.toBeInTheDocument();
   });
 
   it("links an incumbent's representation score, shown as the scorecard shows it", () => {
@@ -147,9 +147,9 @@ describe("RaceMoneyBars", () => {
     const { rerender } = render(
       <RaceMoneyBars cycleYear={2026} candidates={[cand({ confirmed: false })]} showUnconfirmed />
     );
-    expect(screen.getByText("UNCONFIRMED")).toBeInTheDocument();
+    expect(screen.getByText("Unconfirmed")).toBeInTheDocument();
     rerender(<RaceMoneyBars cycleYear={2026} candidates={[cand({ confirmed: false })]} />);
-    expect(screen.queryByText("UNCONFIRMED")).not.toBeInTheDocument();
+    expect(screen.queryByText("Unconfirmed")).not.toBeInTheDocument();
   });
 
   it("splits contributions into the FEC's categories, in blocks and in words", () => {

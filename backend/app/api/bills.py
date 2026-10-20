@@ -12,7 +12,7 @@ from app.database import get_db, off_loop
 from app.http_client import make_async_client
 from app.pipeline.fetch.congress import expected_current_congress
 from app.services.bill_record import canonical_bill_id, fetch_bill_record, shape_record
-from app.services.bill_service import get_bill_detail, get_bills_in_flight
+from app.services.bill_service import MILESTONE_HEADINGS, get_bill_detail, get_bills_in_flight
 
 router = APIRouter()
 
@@ -28,6 +28,7 @@ def list_bills_in_flight(
     party: str | None = Query(None, pattern=PARTY_QUERY_PATTERN),
     q: str | None = Query(None, max_length=100),
     sort: str = Query("recent", pattern="^(recent|hot|stale)$"),
+    reached: str | None = Query(None, pattern=f"^({'|'.join(MILESTONE_HEADINGS)})$"),
     page: int = Query(1, ge=1),
     per_page: int = Query(25, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -37,9 +38,12 @@ def list_bills_in_flight(
     sort=hot restricts to bills currently referenced by a live Action
     Center issue, ranked by mention count. sort=stale orders oldest-action-
     first — pass `stage` alongside it, since "stuck" is stage-relative.
+    reached=<milestone stage> keeps this Congress's bills that got at least
+    that far: the bills /congress's pipeline row of that milestone counts.
     """
     data = get_bills_in_flight(
         db, stage=stage, chamber=chamber, party=party, q=q, sort=sort, page=page, per_page=per_page,
+        reached=reached,
     )
     return _cached_json(data.model_dump(by_alias=True), max_age=CACHE_TTL_DETAIL_S)
 

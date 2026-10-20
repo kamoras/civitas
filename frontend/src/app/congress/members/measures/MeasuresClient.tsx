@@ -51,7 +51,7 @@ function Callout({
   if (points.length === 0) return null;
   return (
     <div>
-      <p className="text-[13px] font-semibold uppercase tracking-[0.06em] text-ink-lo">{title}</p>
+      <p className="text-[13px] font-semibold text-ink-lo">{title}</p>
       <ul className="mt-1 text-sm">
         {points.map((p) => (
           <li key={p.id}>

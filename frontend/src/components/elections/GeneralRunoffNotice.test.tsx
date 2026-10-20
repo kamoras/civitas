@@ -78,8 +78,8 @@ describe("GeneralRunoffNotice", () => {
 
   it("names the contests a separate primary date is for", () => {
     expect(otherPrimaryLabel({ offices: ["H"], districts: [1, 2, 6, 7], date: "2026-08-11" })).toBe(
-      "U.S. HOUSE 1, 2, 6, 7"
+      "U.S. House 1, 2, 6, 7"
     );
-    expect(otherPrimaryLabel({ offices: ["H"], date: "2026-11-03" })).toBe("U.S. HOUSE");
+    expect(otherPrimaryLabel({ offices: ["H"], date: "2026-11-03" })).toBe("U.S. House");
   });
 });

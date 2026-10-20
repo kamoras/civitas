@@ -52,7 +52,7 @@ export default function BallotMeasureCard({ measure }: { measure: BallotMeasure 
           {measure.number || measure.title}
         </h3>
         <span
-          className={`text-[9px] font-mono tracking-[0.1em] px-1.5 py-0.5 border ${
+          className={`text-[9px] font-mono px-1.5 py-0.5 border ${
             removed ? "border-signal-red/40 text-signal-red" : "border-white/15 text-ink-lo"
           }`}
         >
@@ -74,9 +74,7 @@ export default function BallotMeasureCard({ measure }: { measure: BallotMeasure 
 
       {measure.officialTitle && (
         <section className="mb-3">
-          <h4 className="font-mono text-[10px] text-ink-lo tracking-widest mb-1">
-            OFFICIAL BALLOT TITLE
-          </h4>
+          <h4 className="font-mono text-[10px] text-ink-lo mb-1">Official ballot title</h4>
           <blockquote className="text-xs text-ink border-l-2 border-white/15 pl-3">
             {measure.officialTitle}
           </blockquote>
@@ -86,9 +84,7 @@ export default function BallotMeasureCard({ measure }: { measure: BallotMeasure 
 
       {measure.officialSummary && (
         <section className="mb-3">
-          <h4 className="font-mono text-[10px] text-ink-lo tracking-widest mb-1">
-            OFFICIAL SUMMARY
-          </h4>
+          <h4 className="font-mono text-[10px] text-ink-lo mb-1">Official summary</h4>
           <p className="text-xs text-ink whitespace-pre-line">{measure.officialSummary}</p>
           {drafted(summaryDrafter)}
         </section>
@@ -98,17 +94,13 @@ export default function BallotMeasureCard({ measure }: { measure: BallotMeasure 
         <section className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
           {measure.yesMeans && (
             <div className="border border-white/[0.09] p-2.5">
-              <h4 className="font-mono text-[10px] text-signal-cyan tracking-widest mb-1">
-                A YES VOTE
-              </h4>
+              <h4 className="font-mono text-[10px] text-signal-cyan mb-1">A yes vote</h4>
               <p className="text-xs text-ink">{measure.yesMeans}</p>
             </div>
           )}
           {measure.noMeans && (
             <div className="border border-white/[0.09] p-2.5">
-              <h4 className="font-mono text-[10px] text-signal-cyan tracking-widest mb-1">
-                A NO VOTE
-              </h4>
+              <h4 className="font-mono text-[10px] text-signal-cyan mb-1">A no vote</h4>
               <p className="text-xs text-ink">{measure.noMeans}</p>
             </div>
           )}
@@ -122,7 +114,7 @@ export default function BallotMeasureCard({ measure }: { measure: BallotMeasure 
 
       {measure.fiscalImpact && (
         <section className="mb-3">
-          <h4 className="font-mono text-[10px] text-ink-lo tracking-widest mb-1">FISCAL IMPACT</h4>
+          <h4 className="font-mono text-[10px] text-ink-lo mb-1">Fiscal impact</h4>
           <p className="text-xs text-ink whitespace-pre-line">{measure.fiscalImpact}</p>
           {measure.fiscalAuthority && (
             <p className="text-[10px] text-ink-min mt-1">Prepared by {measure.fiscalAuthority}</p>
@@ -144,7 +136,7 @@ export default function BallotMeasureCard({ measure }: { measure: BallotMeasure 
             aria-label={`Read the full text of ${measure.number || measure.title} at the source (opens in new tab)`}
             className="text-[10px] font-mono text-signal-cyan hover:text-phos"
           >
-            FULL TEXT AT SOURCE ↗
+            Full text at source ↗
           </a>
         )}
       </footer>

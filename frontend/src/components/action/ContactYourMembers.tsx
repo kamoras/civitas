@@ -41,7 +41,7 @@ import type { ActionIssue, IssueMember, IssueVote } from "@/types/action";
 // 44px on a phone, where call, write and what to say are the issue's point
 // (mobile spec P10); 32px beside the text from 640px up.
 const COMMAND =
-  "inline-flex min-h-11 sm:min-h-[32px] items-center font-mono text-xs tracking-[0.12em] text-phos-mid hover:text-phos";
+  "inline-flex min-h-11 sm:min-h-[32px] items-center font-mono text-xs text-phos-mid hover:text-phos";
 
 const STATES_BY_NAME = [...STATE_CODES].sort((a, b) =>
   STATE_NAMES[a].localeCompare(STATE_NAMES[b])
@@ -154,7 +154,7 @@ function Script({
               type="button"
               aria-pressed={position === value}
               onClick={() => setPosition(value)}
-              className={`min-h-[32px] min-w-[5.5rem] border px-2 font-mono text-xs uppercase tracking-[0.12em] ${boxedControl(position === value)}`}
+              className={`min-h-[32px] min-w-[5.5rem] border px-2 font-mono text-xs ${boxedControl(position === value)}`}
             >
               {label}
             </button>
@@ -172,7 +172,7 @@ function Script({
             copy(text);
           }}
         >
-          {copied ? "[ COPIED ]" : "[ COPY ]"}
+          {copied ? "[ Copied ]" : "[ Copy ]"}
         </button>
         <CopyStatus feedback={feedback} />
       </div>
@@ -226,7 +226,7 @@ function MemberRow({
               aria-label={`Call ${who}'s office, ${member.officePhone}`}
               onClick={tapper(issue, "call")}
             >
-              [ CALL {member.officePhone} ]
+              [ Call {member.officePhone} ]
             </a>
           )}
           {safeHref(member.contactFormUrl) && (
@@ -238,7 +238,7 @@ function MemberRow({
               aria-label={`Write to ${who} (opens the office's contact form)`}
               onClick={tapper(issue, "write")}
             >
-              [ WRITE ↗ ]
+              [ Write ↗ ]
             </a>
           )}
           <button
@@ -249,7 +249,7 @@ function MemberRow({
             aria-label={`What to say to ${who}`}
             onClick={() => setScriptOpen((o) => !o)}
           >
-            [ WHAT TO SAY ]
+            [ What to say ]
           </button>
         </span>
       </div>
@@ -257,10 +257,7 @@ function MemberRow({
         const what = [v.billLabel, v.question].filter(Boolean).join(" · ");
         return (
           <p key={v.number + v.chamber} className="mt-0.5 text-[13px] text-ink-lo">
-            <span className="font-mono text-xs uppercase tracking-[0.08em] text-ink-hi">
-              {position}
-            </span>{" "}
-            on{" "}
+            <span className="font-mono text-xs text-ink-hi">{position}</span> on{" "}
             <Link
               href={rollCallHref(v)}
               className="underline decoration-white/20 underline-offset-4"
@@ -425,7 +422,7 @@ export default function ContactYourMembers({
               )}
               {!showAllHouse && (
                 <button type="button" className={COMMAND} onClick={() => setShowAllHouse(true)}>
-                  [ ALL {reps.length} ]
+                  [ All {reps.length} ]
                 </button>
               )}
             </div>

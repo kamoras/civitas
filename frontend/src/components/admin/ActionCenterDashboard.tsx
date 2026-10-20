@@ -1,5 +1,6 @@
 "use client";
 
+import { asLabel } from "@/lib/formatting";
 import { useEffect, useState } from "react";
 import { useNow } from "@/hooks/useNow";
 import {
@@ -24,16 +25,16 @@ import { Panel, RankBars, Segmented, StatTile } from "./widgets";
 
 // --- Action Center Status Panel ---
 const ACTION_STAGE_LABELS: Record<string, string> = {
-  fetch: "FETCHING ARTICLES",
-  filter: "FILTERING RELEVANCE",
-  cluster: "CLUSTERING TOPICS",
-  rank: "RANKING CLUSTERS",
-  issues: "GENERATING ISSUES",
-  monitors: "UPDATING MONITORS",
-  theme: "GENERATING THEME",
-  stories: "WRITING STORIES",
-  bluesky: "POSTING TO BLUESKY",
-  cleanup: "CLEANUP",
+  fetch: "Fetching articles",
+  filter: "Filtering relevance",
+  cluster: "Clustering topics",
+  rank: "Ranking clusters",
+  issues: "Generating issues",
+  monitors: "Updating monitors",
+  theme: "Generating theme",
+  stories: "Writing stories",
+  bluesky: "Posting to Bluesky",
+  cleanup: "Cleanup",
 };
 
 // Seconds since a run started, ticking. Nothing is stored: the elapsed time is
@@ -58,7 +59,7 @@ function ActionCenterStatus({ ac }: { ac: ActionRefreshState | null }) {
     );
   }
 
-  const stageLabel = ac.stage ? (ACTION_STAGE_LABELS[ac.stage] ?? ac.stage.toUpperCase()) : null;
+  const stageLabel = ac.stage ? (ACTION_STAGE_LABELS[ac.stage] ?? asLabel(ac.stage)) : null;
 
   // Parse N/M progress detail
   const progressMatch = ac.stageDetail ? /^(\d+)\/(\d+)/.exec(ac.stageDetail) : null;
@@ -76,11 +77,11 @@ function ActionCenterStatus({ ac }: { ac: ActionRefreshState | null }) {
     <div className="p-4 space-y-3 text-xs font-mono">
       {/* Status + elapsed */}
       <div className="flex items-center justify-between">
-        <span className="text-ink-lo">STATUS</span>
+        <span className="text-ink-lo">Status</span>
         <span
           className={ac.isRunning ? "text-signal-cyan pulse-subtle font-semibold" : "text-ink-lo"}
         >
-          {ac.isRunning ? `RUNNING · ${formatDuration(totalElapsed)}` : "IDLE"}
+          {ac.isRunning ? `Running · ${formatDuration(totalElapsed)}` : "Idle"}
         </span>
       </div>
 
@@ -88,7 +89,7 @@ function ActionCenterStatus({ ac }: { ac: ActionRefreshState | null }) {
       {ac.isRunning && stageLabel && (
         <div className="border border-white/15 px-3 py-2 bg-signal-cyan/10">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-signal-cyan font-semibold tracking-wider">{stageLabel}</span>
+            <span className="text-signal-cyan font-semibold">{stageLabel}</span>
             <span className="text-signal-cyan shrink-0">
               {progressDone !== null && progressTotal !== null
                 ? `${progressDone}/${progressTotal}`
@@ -109,18 +110,18 @@ function ActionCenterStatus({ ac }: { ac: ActionRefreshState | null }) {
       {/* Last run results */}
       <div className="border-t border-white/[0.07] pt-2 space-y-1.5">
         <div className="flex justify-between">
-          <span className="text-ink-lo">LAST RUN</span>
+          <span className="text-ink-lo">Last run</span>
           <span className="text-ink">{formatTime(ac.lastCompletedAt)}</span>
         </div>
         {ac.lastElapsed > 0 && (
           <div className="flex justify-between">
-            <span className="text-ink-lo">DURATION</span>
+            <span className="text-ink-lo">Duration</span>
             <span className="text-ink">{formatDuration(ac.lastElapsed)}</span>
           </div>
         )}
         {(ac.lastIssuesCreated > 0 || ac.lastIssuesRetired > 0) && (
           <div className="flex justify-between">
-            <span className="text-ink-lo">ISSUES</span>
+            <span className="text-ink-lo">Issues</span>
             <span>
               <span className="text-ink-hi">+{ac.lastIssuesCreated} created</span>
               {ac.lastIssuesRetired > 0 && (
@@ -131,13 +132,13 @@ function ActionCenterStatus({ ac }: { ac: ActionRefreshState | null }) {
         )}
         {ac.lastStoriesGenerated > 0 && (
           <div className="flex justify-between">
-            <span className="text-ink-lo">STORIES</span>
+            <span className="text-ink-lo">Stories</span>
             <span className="text-ink-hi">{ac.lastStoriesGenerated} written</span>
           </div>
         )}
         {ac.lastBskyPosted > 0 && (
           <div className="flex justify-between">
-            <span className="text-ink-lo">BLUESKY</span>
+            <span className="text-ink-lo">Bluesky</span>
             <span className="text-signal-cyan">{ac.lastBskyPosted} posted</span>
           </div>
         )}
@@ -206,7 +207,7 @@ export function ActionTapsPanel({ token }: { token: string }) {
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <LineChart
-            title="STATE PICKS AND CONTACTS PER DAY"
+            title="State picks and contacts per day"
             subtitle="contacts = calls + contact forms"
             xLabels={days.map((d) => d.date.slice(5))}
             series={[
@@ -223,13 +224,13 @@ export function ActionTapsPanel({ token }: { token: string }) {
           />
           <div className="space-y-6">
             <RankBars
-              title="BY KIND · 30 DAYS"
+              title="By kind · 30 days"
               entries={kinds.map((k) => ({ name: TAP_LABELS[k] ?? k, count: data!.totals[k] }))}
               unit="taps"
               labelWidth="w-32"
             />
             <RankBars
-              title="ISSUES BY CONTACTS · 30 DAYS"
+              title="Issues by contacts · 30 days"
               entries={(data?.issues ?? [])
                 .map((i) => ({ name: i.title ?? i.publicId, count: contacts(i) }))
                 .filter((e) => e.count > 0)}
@@ -272,7 +273,7 @@ export function ActorConcentrationPanel({ token }: { token: string }) {
       </p>
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <LineChart
-          title="ACTOR CONCENTRATION PER WEEK"
+          title="Actor concentration per week"
           subtitle="Herfindahl index of principal actors, and the share of issues the president leads"
           xLabels={labels}
           series={[
@@ -303,15 +304,15 @@ export function ActorConcentrationPanel({ token }: { token: string }) {
         <div className="text-xs font-mono">
           {current && current.top ? (
             <dl className="grid grid-cols-2 gap-x-4 gap-y-1">
-              <dt className="text-ink-lo">THIS WEEK</dt>
+              <dt className="text-ink-lo">This week</dt>
               <dd className="text-ink-hi tabular-nums">{current.issues} issues</dd>
-              <dt className="text-ink-lo">HERFINDAHL</dt>
+              <dt className="text-ink-lo">Herfindahl</dt>
               <dd className="text-ink-hi tabular-nums">{current.hhi?.toFixed(2) ?? "—"}</dd>
-              <dt className="text-ink-lo">MOST FREQUENT</dt>
+              <dt className="text-ink-lo">Most frequent</dt>
               <dd className="text-ink-hi">
                 {current.top.name} ({current.top.issues})
               </dd>
-              <dt className="text-ink-lo">NO GOVERNMENT ACTOR</dt>
+              <dt className="text-ink-lo">No government actor</dt>
               <dd className="text-ink-hi tabular-nums">{current.noGovernment}</dd>
             </dl>
           ) : (
@@ -442,7 +443,7 @@ export function ActionCenterDashboard({
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-4">
-        <Segmented label="WINDOW" options={WINDOW_OPTIONS} value={limit} onChange={setLimit} />
+        <Segmented label="Window" options={WINDOW_OPTIONS} value={limit} onChange={setLimit} />
         {refetchFailed && (
           <span role="status" className="text-xs font-mono text-signal-amber">
             Couldn&apos;t refresh: showing data from {fetchedAt ? hourLabel(fetchedAt) : "—"}
@@ -488,7 +489,7 @@ export function ActionCenterDashboard({
         </Panel>
         <Panel title="Intake">
           <LineChart
-            title="ARTICLES PER RUN"
+            title="Articles per run"
             subtitle="fetched, and how many passed the policy-relevance filter; a gap is an hour with no refresh"
             xLabels={labels}
             xTickLabel={tickLabel}
@@ -522,7 +523,7 @@ export function ActionCenterDashboard({
         </p>
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <LineChart
-            title="ISSUES PUBLISHED VS SUPPRESSED, PER RUN"
+            title="Issues published vs suppressed, per run"
             xLabels={labels}
             xTickLabel={tickLabel}
             series={[
@@ -546,7 +547,7 @@ export function ActionCenterDashboard({
           <div>
             {suppressedEntries.length > 0 ? (
               <RankBars
-                title="SUPPRESSED BY GATE · THIS WINDOW"
+                title="Suppressed by gate · This window"
                 entries={suppressedEntries}
                 unit="suppressed"
                 labelWidth="w-48"

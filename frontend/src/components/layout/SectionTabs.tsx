@@ -32,7 +32,7 @@ export default function SectionTabs<S extends SectionKey>({
         key={t.key}
         href={t.href}
         aria-current={on ? "page" : undefined}
-        className={`flex min-h-11 items-center font-mono uppercase transition-colors ${extra} ${
+        className={`flex min-h-11 items-center font-mono transition-colors ${extra} ${
           on ? TAB_CONTROL.selected : TAB_CONTROL.unselected
         }`}
       >
@@ -46,7 +46,7 @@ export default function SectionTabs<S extends SectionKey>({
           with one page has nothing to switch to, so it is a plain label. */}
       {tabs.length > 1 ? (
         <details className="group border-b border-white/15 sm:hidden" data-section-switcher="">
-          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 font-mono text-[0.8125rem] uppercase tracking-[0.08em] [&::-webkit-details-marker]:hidden">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 font-mono text-[0.8125rem] [&::-webkit-details-marker]:hidden">
             <span className="text-ink-min">{label}</span>
             <span aria-hidden="true" className="text-ink-min">
               ▸
@@ -58,12 +58,12 @@ export default function SectionTabs<S extends SectionKey>({
           </summary>
           <ul className="flex flex-col pb-2">
             {tabs.map((t) => (
-              <li key={t.key}>{link(t, "border-l-2 pl-3 text-[0.8125rem] tracking-[0.08em]")}</li>
+              <li key={t.key}>{link(t, "border-l-2 pl-3 text-[0.8125rem] ")}</li>
             ))}
           </ul>
         </details>
       ) : (
-        <p className="flex min-h-11 items-center gap-2 border-b border-white/15 font-mono text-[0.8125rem] uppercase tracking-[0.08em] sm:hidden">
+        <p className="flex min-h-11 items-center gap-2 border-b border-white/15 font-mono text-[0.8125rem] sm:hidden">
           <span className="text-ink-min">{label}</span>
           <span aria-hidden="true" className="text-ink-min">
             ▸
@@ -75,10 +75,8 @@ export default function SectionTabs<S extends SectionKey>({
         className="hidden flex-wrap items-end gap-x-5 border-b border-white/15 sm:flex sm:gap-x-8"
         data-section-row=""
       >
-        <span className="flex min-h-11 items-center font-mono text-xs uppercase tracking-[0.16em] text-ink-min">
-          {label}
-        </span>
-        {tabs.map((t) => link(t, "-mb-px border-b-2 text-sm tracking-[0.14em]"))}
+        <span className="flex min-h-11 items-center font-mono text-xs text-ink-min">{label}</span>
+        {tabs.map((t) => link(t, "-mb-px border-b-2 text-sm "))}
       </div>
     </nav>
   );

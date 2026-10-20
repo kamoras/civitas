@@ -30,7 +30,7 @@ describe("CommitteeEntries", () => {
       "href",
       "/congress/bills/S.1254?congress=119"
     );
-    expect(screen.getByRole("link", { name: /SEP 30/ })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /Sep 30/ })).toHaveAttribute(
       "href",
       "/congress/2026-09-30"
     );

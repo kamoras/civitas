@@ -78,5 +78,5 @@ it("links a state page and a district anchor", () => {
 });
 
 it("words a net seat change", () => {
-  expect([netWord(4), netWord(-3), netWord(0)]).toEqual(["(+4)", "(−3)", "(SAME)"]);
+  expect([netWord(4), netWord(-3), netWord(0)]).toEqual(["(+4)", "(−3)", "(Same)"]);
 });

@@ -32,7 +32,7 @@ interface Handlers {
   openableDates: string[] | null;
 }
 
-const dayLabel = (d: string) => formatUtcDate(d, { month: "short", day: "2-digit" }).toUpperCase();
+const dayLabel = (d: string) => formatUtcDate(d, { month: "short", day: "2-digit" });
 
 function daysAway(dateStr: string, asOf: number): number {
   const target = new Date(dateStr + "T00:00:00");
@@ -51,9 +51,7 @@ function DayRow({
   const openable = openableDates === null || openableDates.includes(entry.date);
   return (
     <li className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-baseline gap-3 border-b border-white/[0.07] py-2.5">
-      <span className="font-mono text-xs tracking-[0.08em] tabular-nums text-ink-min">
-        {dayLabel(entry.date)}
-      </span>
+      <span className="font-mono text-xs tabular-nums text-ink-min">{dayLabel(entry.date)}</span>
       <span className="min-w-0">
         {openable ? (
           <button
@@ -74,7 +72,7 @@ function DayRow({
             )}
           </>
         )}
-        <span className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1 font-mono text-xs tracking-[0.06em] text-ink-min">
+        <span className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1 font-mono text-xs text-ink-min">
           {(entry.policyAreas ?? []).length > 0 && (
             <span>{entry.policyAreas.slice(0, 2).map(policyAreaLabel).join(" · ")}</span>
           )}
@@ -131,7 +129,7 @@ function PeriodSummary({ children }: { children: React.ReactNode }) {
 function WeekBlock({ week, ...handlers }: { week: TimelineWeek } & Handlers) {
   return (
     <div className="mt-5">
-      <h3 className="flex flex-wrap items-baseline justify-between gap-2 font-mono text-xs uppercase tracking-[0.12em] text-ink-lo">
+      <h3 className="flex flex-wrap items-baseline justify-between gap-2 font-mono text-xs text-ink-lo">
         <span>{week.isCurrent ? "This week" : formatWeekRange(week.startDate, week.endDate)}</span>
         <span className="text-ink-min">
           {week.entryCount} day{week.entryCount !== 1 ? "s" : ""}
@@ -178,7 +176,7 @@ function ComingUp({ events, asOf }: { events: UpcomingEvent[]; asOf: number }) {
               key={ev.date + ev.category}
               className="grid grid-cols-[4.5rem_minmax(0,1fr)_auto] items-baseline gap-3 border-b border-white/[0.07] py-3"
             >
-              <span className="font-mono text-xs tracking-[0.08em] tabular-nums text-ink-min">
+              <span className="font-mono text-xs tabular-nums text-ink-min">
                 {dayLabel(ev.date)}
               </span>
               <span className="min-w-0">
@@ -210,11 +208,7 @@ export default function TimelineTab(handlers: Handlers) {
 
   if (request.loading) {
     return (
-      <p
-        role="status"
-        aria-live="polite"
-        className="py-10 font-mono text-sm tracking-[0.12em] text-ink-min"
-      >
+      <p role="status" aria-live="polite" className="py-10 font-mono text-sm text-ink-min">
         Reading the archive…
       </p>
     );
@@ -266,17 +260,13 @@ export default function TimelineTab(handlers: Handlers) {
 
       <dl className="grid grid-cols-1 gap-px border border-white/[0.07] bg-white/[0.07] sm:grid-cols-3">
         <div className="bg-surface-base px-4 py-3.5">
-          <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
-            Days on record · {data.year}
-          </dt>
+          <dt className="font-mono text-xs text-ink-min">Days on record · {data.year}</dt>
           <dd className="mt-1.5 font-display text-2xl font-semibold tabular-nums text-ink-hi">
             {data.totalDays}
           </dd>
         </div>
         <div className="bg-surface-base px-4 py-3.5">
-          <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
-            Most covered
-          </dt>
+          <dt className="font-mono text-xs text-ink-min">Most covered</dt>
           <dd className="mt-1.5 font-display text-2xl font-semibold text-ink-hi">
             {top ? (
               <>
@@ -291,9 +281,7 @@ export default function TimelineTab(handlers: Handlers) {
           </dd>
         </div>
         <div className="bg-surface-base px-4 py-3.5">
-          <dt className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
-            Concerns tracked
-          </dt>
+          <dt className="font-mono text-xs text-ink-min">Concerns tracked</dt>
           <dd className="mt-1.5 font-display text-2xl font-semibold tabular-nums text-ink-hi">
             {monitors.length} {/* Parenthesised: run together, "1 0 active" read as one number. */}
             <span className="text-sm font-normal text-ink-lo">({activeMonitors} active)</span>
@@ -338,7 +326,7 @@ export default function TimelineTab(handlers: Handlers) {
                       <span className="block font-display text-lg font-semibold text-ink-hi">
                         {month.name}
                       </span>
-                      <span className="mt-0.5 block font-mono text-xs tracking-[0.06em] text-ink-min">
+                      <span className="mt-0.5 block font-mono text-xs text-ink-min">
                         {monthMeta(month)}
                       </span>
                     </span>

@@ -4,15 +4,14 @@ import { describe, expect, it } from "vitest";
 import { LONG_LABEL, labelCase } from "./controlStyles";
 
 describe("labelCase", () => {
-  it("keeps caps for a label of three words or fewer", () => {
+  it("keeps a label of three words or fewer at text-xs", () => {
     expect(labelCase("Top 5 donors")).not.toBe(LONG_LABEL);
-    expect(labelCase("Sponsor")).toContain("uppercase");
+    expect(labelCase("Sponsor")).toContain("");
   });
 
-  it("sets a longer label in sentence case at 14px on a phone, caps from 640px up", () => {
+  it("sets a longer label at 14px on a phone, and never in capitals", () => {
     expect(labelCase("Also on record, not part of the score")).toBe(LONG_LABEL);
-    expect(LONG_LABEL).toMatch(/\bnormal-case\b/);
-    expect(LONG_LABEL).toMatch(/\bsm:uppercase\b/);
+    expect(LONG_LABEL).not.toMatch(/uppercase/);
     expect(LONG_LABEL).toContain("text-[0.875rem]");
   });
 });
@@ -28,9 +27,8 @@ describe("a phone's type scale (globals.css)", () => {
     for (const px of [9, 10, 11, 12]) expect(phone).toContain(`.text-\\[${px}px\\]`);
   });
 
-  it("drops wide tracking to 0.08em", () => {
-    expect(phone).toContain("--tracking-widest: 0.08em;");
-    for (const em of ["0\\.1em", "0\\.12em", "0\\.14em", "0\\.16em"])
+  it("tightens the tracked capitals left (eyebrow, logotype) to 0.08em", () => {
+    for (const em of ["0\\.12em", "0\\.14em", "0\\.18em"])
       expect(phone).toContain(`.tracking-\\[${em}\\]`);
   });
 });

@@ -37,7 +37,7 @@ export default function StateJump({
   const { state } = useYourState();
   const name = state ? (STATE_NAMES[state] ?? state) : "";
   return (
-    <div className="mt-3">
+    <div className="mt-auto pt-3">
       {state && showYours && (
         <Link href={hrefFor(state)} className={`inline-flex min-h-11 items-center ${INLINE_LINK}`}>
           {name}&apos;s {to === "ballot" ? "ballot" : "members"} &rarr;

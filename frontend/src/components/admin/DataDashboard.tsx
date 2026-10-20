@@ -8,55 +8,55 @@ import { NotLoaded } from "./widgets";
 // --- Data Inventory ---
 const INVENTORY_SECTIONS: { label: string; keys: { key: string; label: string }[] }[] = [
   {
-    label: "SENATE",
+    label: "Senate",
     keys: [
-      { key: "senators", label: "SENATORS" },
-      { key: "senatorDonors", label: "DONORS" },
-      { key: "senatorIndustryDonations", label: "INDUSTRY $" },
-      { key: "senatorVotes", label: "VOTES" },
-      { key: "senatorLobbyingMatches", label: "LOBBY MATCHES" },
-      { key: "senatorPromises", label: "PROMISES" },
-      { key: "senatorBills", label: "BILLS" },
+      { key: "senators", label: "Senators" },
+      { key: "senatorDonors", label: "Donors" },
+      { key: "senatorIndustryDonations", label: "Industry $" },
+      { key: "senatorVotes", label: "Votes" },
+      { key: "senatorLobbyingMatches", label: "Lobby matches" },
+      { key: "senatorPromises", label: "Promises" },
+      { key: "senatorBills", label: "Bills" },
     ],
   },
   {
-    label: "HOUSE",
+    label: "House",
     keys: [
-      { key: "representatives", label: "REPS" },
-      { key: "repDonors", label: "DONORS" },
-      { key: "repIndustryDonations", label: "INDUSTRY $" },
-      { key: "repVotes", label: "VOTES" },
-      { key: "repLobbyingMatches", label: "LOBBY MATCHES" },
-      { key: "repPromises", label: "PROMISES" },
-      { key: "repBills", label: "BILLS" },
+      { key: "representatives", label: "Reps" },
+      { key: "repDonors", label: "Donors" },
+      { key: "repIndustryDonations", label: "Industry $" },
+      { key: "repVotes", label: "Votes" },
+      { key: "repLobbyingMatches", label: "Lobby matches" },
+      { key: "repPromises", label: "Promises" },
+      { key: "repBills", label: "Bills" },
     ],
   },
   {
-    label: "EXECUTIVE & JUDICIARY",
+    label: "Executive & judiciary",
     keys: [
-      { key: "presidents", label: "PRESIDENTS" },
-      { key: "justices", label: "JUSTICES" },
-      { key: "justiceVotes", label: "JUSTICE VOTES" },
+      { key: "presidents", label: "Presidents" },
+      { key: "justices", label: "Justices" },
+      { key: "justiceVotes", label: "Justice votes" },
     ],
   },
   {
-    label: "ACTION CENTER",
+    label: "Action Center",
     keys: [
-      { key: "actionIssues", label: "ISSUES" },
-      { key: "nationalMonitors", label: "MONITORS" },
-      { key: "monitorUpdates", label: "MONITOR UPDATES" },
-      { key: "timelineEntries", label: "TIMELINE ENTRIES" },
-      { key: "exploreDocuments", label: "EXPLORE DOCS" },
+      { key: "actionIssues", label: "Issues" },
+      { key: "nationalMonitors", label: "Monitors" },
+      { key: "monitorUpdates", label: "Monitor updates" },
+      { key: "timelineEntries", label: "Timeline entries" },
+      { key: "exploreDocuments", label: "Explore docs" },
     ],
   },
   {
-    label: "SYSTEM",
+    label: "System",
     keys: [
-      { key: "scoreSnapshots", label: "SCORE SNAPSHOTS" },
-      { key: "learnedClassifications", label: "LEARNED CLASSES" },
-      { key: "pipelineRuns", label: "PIPELINE RUNS" },
-      { key: "apiCacheEntries", label: "API CACHE" },
-      { key: "analysisCacheEntries", label: "ANALYSIS CACHE" },
+      { key: "scoreSnapshots", label: "Score snapshots" },
+      { key: "learnedClassifications", label: "Learned classes" },
+      { key: "pipelineRuns", label: "Pipeline runs" },
+      { key: "apiCacheEntries", label: "API cache" },
+      { key: "analysisCacheEntries", label: "Analysis cache" },
     ],
   },
 ];
@@ -67,18 +67,16 @@ function DataInventory({ data }: { data: Record<string, number> }) {
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between mb-1">
-        <span className="font-mono text-xs text-ink-min tracking-widest">TOTAL RECORDS</span>
+        <span className="font-mono text-xs text-ink-min">Total records</span>
         <span className="font-mono text-sm text-ink-hi">{total.toLocaleString()}</span>
       </div>
       {INVENTORY_SECTIONS.map((section) => {
         const sectionTotal = section.keys.reduce((s, { key }) => s + (data[key] ?? 0), 0);
-        if (sectionTotal === 0 && section.label !== "SYSTEM") return null;
+        if (sectionTotal === 0 && section.label !== "System") return null;
         return (
           <div key={section.label}>
             <div className="flex items-center gap-2 mb-2">
-              <span className="font-mono text-xs text-ind-purple tracking-widest">
-                {section.label}
-              </span>
+              <span className="font-mono text-xs text-ind-purple">{section.label}</span>
               <span className="text-xs font-mono text-ink-min">
                 {sectionTotal.toLocaleString()}
               </span>
@@ -90,7 +88,7 @@ function DataInventory({ data }: { data: Record<string, number> }) {
                   <div className="text-base font-mono text-ink-hi">
                     {(data[key] ?? 0).toLocaleString()}
                   </div>
-                  <div className="text-xs font-mono text-ink-lo tracking-wider mt-0.5">{label}</div>
+                  <div className="text-xs font-mono text-ink-lo mt-0.5">{label}</div>
                 </div>
               ))}
             </div>
@@ -121,19 +119,17 @@ export function DataDashboard({ d }: { d: AdminDashboard | null }) {
           <div className="p-4 space-y-4">
             {d.system.vectorDb.status !== "ok" ? (
               <p className="text-signal-magenta text-xs font-mono">
-                VECTOR DB UNAVAILABLE: {d.system.vectorDb.error}
+                Vector DB unavailable: {d.system.vectorDb.error}
               </p>
             ) : (
               <>
                 {/* Embedding Model */}
                 <div>
-                  <h3 className="text-xs font-mono text-ink-lo tracking-wider mb-2">
-                    EMBEDDING MODELS
-                  </h3>
+                  <h3 className="text-xs font-mono text-ink-lo mb-2">Embedding models</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="border border-white/[0.07] p-3">
                       <div className="text-xs font-mono text-ink-min mb-1">
-                        CLASSIFICATION MODEL
+                        Classification model
                       </div>
                       <div className="text-xs font-mono text-signal-cyan break-all">
                         {d.system.vectorDb.embeddingModel}
@@ -143,7 +139,7 @@ export function DataDashboard({ d }: { d: AdminDashboard | null }) {
                       </div>
                     </div>
                     <div className="border border-white/[0.07] p-3">
-                      <div className="text-xs font-mono text-ink-min mb-1">SEARCH INDEX MODEL</div>
+                      <div className="text-xs font-mono text-ink-min mb-1">Search index model</div>
                       <div className="text-sm font-mono text-ink-hi">
                         {d.system.vectorDb.indexModelVersion || "—"}
                       </div>
@@ -162,7 +158,7 @@ export function DataDashboard({ d }: { d: AdminDashboard | null }) {
                       )}
                     </div>
                     <div className="border border-white/[0.07] p-3">
-                      <div className="text-xs font-mono text-ink-min mb-1">DIMENSIONS</div>
+                      <div className="text-xs font-mono text-ink-min mb-1">Dimensions</div>
                       <div className="text-sm font-mono text-ink-hi">
                         {d.system.vectorDb.embeddingDimensions}
                       </div>
@@ -172,8 +168,8 @@ export function DataDashboard({ d }: { d: AdminDashboard | null }) {
 
                 {/* Collections */}
                 <div>
-                  <h3 className="text-xs font-mono text-ink-lo tracking-wider mb-2">
-                    COLLECTIONS ({d.system.vectorDb.collections?.length ?? 0})
+                  <h3 className="text-xs font-mono text-ink-lo mb-2">
+                    Collections ({d.system.vectorDb.collections?.length ?? 0})
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {d.system.vectorDb.collections?.map((col) => {
@@ -217,25 +213,25 @@ export function DataDashboard({ d }: { d: AdminDashboard | null }) {
 
                 {/* Storage Summary */}
                 <div>
-                  <h3 className="text-xs font-mono text-ink-lo tracking-wider mb-2">STORAGE</h3>
+                  <h3 className="text-xs font-mono text-ink-lo mb-2">Storage</h3>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <div className="border border-white/[0.07] p-3 text-center">
                       <div className="text-lg font-mono text-ink-hi">
                         {(d.system.vectorDb.totalVectors ?? 0).toLocaleString()}
                       </div>
-                      <div className="text-xs font-mono text-ink-lo">TOTAL VECTORS</div>
+                      <div className="text-xs font-mono text-ink-lo">Total vectors</div>
                     </div>
                     <div className="border border-white/[0.07] p-3 text-center">
                       <div className="text-lg font-mono text-ink-hi">
                         {formatBytes(d.system.vectorDb.sizeBytes ?? 0)}
                       </div>
-                      <div className="text-xs font-mono text-ink-lo">DISK SIZE</div>
+                      <div className="text-xs font-mono text-ink-lo">Disk size</div>
                     </div>
                     <div className="border border-white/[0.07] p-3 text-center">
                       <div className="text-lg font-mono text-ink-hi">
                         {d.system.vectorDb.collections?.length ?? 0}
                       </div>
-                      <div className="text-xs font-mono text-ink-lo">COLLECTIONS</div>
+                      <div className="text-xs font-mono text-ink-lo">Collections</div>
                     </div>
                     <div className="border border-white/[0.07] p-3 text-center">
                       <div className="text-lg font-mono text-ink-hi">
@@ -243,7 +239,7 @@ export function DataDashboard({ d }: { d: AdminDashboard | null }) {
                           ? `${Math.round(d.system.vectorDb.sizeBytes / d.system.vectorDb.totalVectors)} B`
                           : "—"}
                       </div>
-                      <div className="text-xs font-mono text-ink-lo">AVG PER VECTOR</div>
+                      <div className="text-xs font-mono text-ink-lo">Avg per vector</div>
                     </div>
                   </div>
                 </div>
@@ -251,15 +247,13 @@ export function DataDashboard({ d }: { d: AdminDashboard | null }) {
                 {/* Learning Store */}
                 {d.system.vectorDb.learningStore && !d.system.vectorDb.learningStore.error && (
                   <div>
-                    <h3 className="text-xs font-mono text-ink-lo tracking-wider mb-2">
-                      LEARNING STORE
-                    </h3>
+                    <h3 className="text-xs font-mono text-ink-lo mb-2">Learning store</h3>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                       <div className="border border-white/[0.07] p-3 text-center">
                         <div className="text-lg font-mono text-ink-hi">
                           {d.system.vectorDb.learningStore.totalEntries.toLocaleString()}
                         </div>
-                        <div className="text-xs font-mono text-ink-lo">CLASSIFICATIONS</div>
+                        <div className="text-xs font-mono text-ink-lo">Classifications</div>
                       </div>
                       <div className="border border-white/[0.07] p-3 text-center">
                         <div className="text-lg font-mono text-ink-hi">
@@ -267,26 +261,26 @@ export function DataDashboard({ d }: { d: AdminDashboard | null }) {
                             ? `${(d.system.vectorDb.learningStore.avgConfidence * 100).toFixed(1)}%`
                             : "—"}
                         </div>
-                        <div className="text-xs font-mono text-ink-lo">AVG CONFIDENCE</div>
+                        <div className="text-xs font-mono text-ink-lo">Avg confidence</div>
                       </div>
                       <div className="border border-white/[0.07] p-3 text-center">
                         <div className="text-lg font-mono text-ink-hi">
                           {Object.keys(d.system.vectorDb.learningStore.bySource).length}
                         </div>
-                        <div className="text-xs font-mono text-ink-lo">SOURCES</div>
+                        <div className="text-xs font-mono text-ink-lo">Sources</div>
                       </div>
                       <div className="border border-white/[0.07] p-3 text-center">
                         <div className="text-lg font-mono text-ink-hi">
                           {Object.keys(d.system.vectorDb.learningStore.byType).length}
                         </div>
-                        <div className="text-xs font-mono text-ink-lo">ENTITY TYPES</div>
+                        <div className="text-xs font-mono text-ink-lo">Entity types</div>
                       </div>
                     </div>
 
                     {/* By Source breakdown */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="border border-white/[0.07] p-3">
-                        <div className="text-xs font-mono text-ink-min mb-2">BY SOURCE</div>
+                        <div className="text-xs font-mono text-ink-min mb-2">By source</div>
                         <div className="space-y-1.5">
                           {Object.entries(d.system.vectorDb.learningStore.bySource)
                             .sort(([, a], [, b]) => (b as number) - (a as number))
@@ -320,7 +314,7 @@ export function DataDashboard({ d }: { d: AdminDashboard | null }) {
                         </div>
                       </div>
                       <div className="border border-white/[0.07] p-3">
-                        <div className="text-xs font-mono text-ink-min mb-2">BY ENTITY TYPE</div>
+                        <div className="text-xs font-mono text-ink-min mb-2">By entity type</div>
                         <div className="space-y-1.5">
                           {Object.entries(d.system.vectorDb.learningStore.byType)
                             .sort(([, a], [, b]) => (b as number) - (a as number))
@@ -360,7 +354,7 @@ export function DataDashboard({ d }: { d: AdminDashboard | null }) {
                       0 && (
                       <div className="border border-white/[0.07] p-3 mt-3">
                         <div className="text-xs font-mono text-ink-min mb-2">
-                          CONFIDENCE DISTRIBUTION
+                          Confidence distribution
                         </div>
                         <div className="flex items-end gap-1 h-16">
                           {(() => {
@@ -430,9 +424,7 @@ export function DataDashboard({ d }: { d: AdminDashboard | null }) {
                 .filter(([, val]) => val === null || typeof val !== "object")
                 .map(([key, val]) => (
                   <div key={key}>
-                    <span className="text-ink-lo text-xs block">
-                      {key.replace(/_/g, " ").toUpperCase()}
-                    </span>
+                    <span className="text-ink-lo text-xs block">{key.replace(/_/g, " ")}</span>
                     <span>{val === null ? "—" : String(val)}</span>
                   </div>
                 ))}

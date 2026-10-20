@@ -109,7 +109,7 @@ export default async function ElectionsChapter() {
           Civitas with Cook&apos;s formula (Cook&apos;s own PVI is shown beside it as a
           cross-check): how much more Republican or Democratic it voted than the nation in the last
           two presidential elections. Under it, every seat of its kind on one axis of lean against
-          the nation, from the most Democratic-leaning at the left, through EVEN, to the most
+          the nation, from the most Democratic-leaning at the left, through even, to the most
           Republican: every U.S. House district on the lines this election is fought on, or the 50
           states for a Senate race. Each seat is one mark, stacked with the seats of the same lean,
           coloured by the side its own lean falls on, and this seat&apos;s column is outlined; the
@@ -761,7 +761,7 @@ export default async function ElectionsChapter() {
             <Item label="Leads, not wins">
               A candidate &ldquo;leads&rdquo;. The lead is &ldquo;not final&rdquo; while the state
               hasn&apos;t listed its count as official, and the tag beside the leader says so itself
-              (LEADING · NOT FINAL), not only the note under the candidates. It still
+              (leading · Not final), not only the note under the candidates. It still
               &ldquo;leads&rdquo; once it has, and never &ldquo;wins&rdquo;: an official
               count&apos;s leader can still face a runoff (Georgia requires a majority), a recount
               or a court.
@@ -874,7 +874,7 @@ export default async function ElectionsChapter() {
       <Section id="measures" title="Ballot measures: quoted, never rewritten">
         <P>
           Each measure shows its official ballot title, official summary, fiscal impact statement,
-          and the state&apos;s own description of what a YES and a NO vote do: all verbatim, linked
+          and the state&apos;s own description of what a yes and a no vote do: all verbatim, linked
           to the source. Where a state publishes no yes/no description, none is shown. We never
           infer one: the intuitive reading (&ldquo;yes enacts it&rdquo;) is backwards on a veto
           referendum, where approving <em>keeps</em> the law being challenged.
@@ -915,7 +915,7 @@ export default async function ElectionsChapter() {
             Ballot language is hard to read (statewide measures averaged a grade-21 reading level in
             2025), and a plain-language version would genuinely help. We left it out on purpose. Our
             checks on generated text confirm that its words appear in the source; they can&apos;t
-            tell whether a sentence points the same direction. &ldquo;A YES vote repeals this
+            tell whether a sentence points the same direction. &ldquo;A yes vote repeals this
             tax&rdquo;, when the official text says approval <em>keeps</em> it, passes every check,
             because every word is in the source. On a page that can change how someone votes, an
             error we can&apos;t detect is one we won&apos;t ship.

@@ -13,9 +13,7 @@ export default function MethodNotes({
   return (
     <div className="space-y-3 font-sans text-sm leading-relaxed text-ink-lo">
       <p>
-        <span className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
-          Source ·{" "}
-        </span>
+        <span className="font-mono text-xs text-ink-min">Source · </span>
         <a
           href={method.sourceUrl}
           target="_blank"
@@ -26,25 +24,19 @@ export default function MethodNotes({
         </a>
       </p>
       <p>
-        <span className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
-          Counted ·{" "}
-        </span>
+        <span className="font-mono text-xs text-ink-min">Counted · </span>
         {method.counted}
       </p>
       <p>
-        <span className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
-          Position ·{" "}
-        </span>
+        <span className="font-mono text-xs text-ink-min">Position · </span>
         {method.position}
       </p>
       <p>
-        <span className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">
-          Expected ·{" "}
-        </span>
+        <span className="font-mono text-xs text-ink-min">Expected · </span>
         {method.expected}
       </p>
       <p>
-        <span className="font-mono text-xs uppercase tracking-[0.12em] text-ink-min">Range · </span>
+        <span className="font-mono text-xs text-ink-min">Range · </span>
         {method.interval}
       </p>
       <p>{method.neutral}</p>
@@ -58,12 +50,12 @@ export default function MethodNotes({
           aria-label="This Congress's fit, by party"
         >
           <table className="w-full border-collapse font-mono text-xs text-ink-lo">
-            <caption className="mb-1 text-left uppercase tracking-[0.12em] text-ink-min">
+            <caption className="mb-1 text-left text-ink-min">
               This Congress&apos;s fit: logit(rate) = a + b·alignment + b<sub>opp</sub>
               ·min(alignment, 0)
             </caption>
             <thead>
-              <tr className="border-b border-white/[0.09] text-left uppercase tracking-[0.12em] text-ink-min">
+              <tr className="border-b border-white/[0.09] text-left text-ink-min">
                 <th className="py-1 font-normal">Party</th>
                 <th className="py-1 font-normal">a</th>
                 <th className="py-1 font-normal">b</th>
@@ -87,7 +79,7 @@ export default function MethodNotes({
           </table>
         </div>
       )}
-      <p className="font-mono text-xs uppercase tracking-[0.12em]">
+      <p className="font-mono text-xs">
         <a
           href={jsonHref}
           download

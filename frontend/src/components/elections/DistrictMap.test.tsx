@@ -148,7 +148,7 @@ describe("DistrictMap", () => {
     expect(screen.queryByText(/paler/)).not.toBeInTheDocument();
     shape.focus();
     expect(await screen.findByText("tied · not called")).toBeInTheDocument();
-    expect(screen.getByText("TIED")).toBeInTheDocument();
+    expect(screen.getByText("Tied")).toBeInTheDocument();
     expect(screen.getByText(/Ann Rep/)).not.toHaveClass("text-rep-red");
   });
 

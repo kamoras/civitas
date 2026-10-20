@@ -21,10 +21,10 @@ interface StockTradesProps {
 }
 
 const TXN_TYPE_LABEL: Record<StockTrade["transactionType"], string> = {
-  purchase: "BUY",
-  sale_full: "SELL",
-  sale_partial: "SELL (PARTIAL)",
-  exchange: "EXCHANGE",
+  purchase: "Buy",
+  sale_full: "Sell",
+  sale_partial: "Sell (partial)",
+  exchange: "Exchange",
 };
 
 function formatAmountRange(trade: StockTrade): string {
@@ -41,9 +41,7 @@ function TransactionBadge({ type }: { type: StockTrade["transactionType"] }) {
         ? "text-signal-amber bg-signal-amber/10 border-signal-amber/40"
         : "text-signal-red bg-signal-red/10 border-signal-red/40";
   return (
-    <span className={`font-mono text-xs tracking-widest px-2 py-1 border ${styles}`}>
-      {TXN_TYPE_LABEL[type]}
-    </span>
+    <span className={`font-mono text-xs px-2 py-1 border ${styles}`}>{TXN_TYPE_LABEL[type]}</span>
   );
 }
 
@@ -57,7 +55,7 @@ function TimelinessBadge({ late, daysToDisclose }: { late: boolean; daysToDisclo
       }`}
       title={`Disclosed ${daysToDisclose} day${daysToDisclose !== 1 ? "s" : ""} after the transaction: the STOCK Act requires disclosure within 45 days.`}
     >
-      {late ? "LATE DISCLOSURE" : "ON TIME"}
+      {late ? "Late disclosure" : "On time"}
     </span>
   );
 }
@@ -76,21 +74,21 @@ function TradeRow({ trade }: { trade: StockTrade }) {
         {trade.parseConfidence === "ocr" && (
           <MetricTooltip text="Read by OCR from a scanned filing. The amount is one of the form's own ranges, but a digit of the date may be misread, so no timeliness is shown. A president's scanned periodic reports are replaced by the annual report, which lists the year's transactions as text, once it is filed.">
             <span className="block text-xs px-1 py-0.5 border text-signal-amber border-signal-amber/40">
-              READ FROM A SCAN
+              Read from a scan
             </span>
           </MetricTooltip>
         )}
         {trade.reportKind === "annual" && (
           <MetricTooltip text="From the annual report (OGE Form 278e), which lists every transaction of the year. It does not say when each was first reported, so no timeliness is shown.">
             <span className="block text-xs px-1 py-0.5 border text-ink-lo border-white/15">
-              ANNUAL REPORT
+              Annual report
             </span>
           </MetricTooltip>
         )}
         {trade.beforeTermStart && (
           <MetricTooltip text="Dated before this term began. The annual report covers the whole calendar year, so the first one also lists the weeks before the inauguration.">
             <span className="block text-xs px-1 py-0.5 border text-ink-lo border-white/15">
-              BEFORE TAKING OFFICE
+              Before taking office
             </span>
           </MetricTooltip>
         )}
@@ -120,7 +118,7 @@ function TradeRow({ trade }: { trade: StockTrade }) {
           rel="noopener noreferrer"
           className="text-ink-lo hover:text-phos transition-colors"
         >
-          SOURCE ↗
+          Source ↗
         </a>
       </div>
     </div>
@@ -183,7 +181,7 @@ export default function StockTrades({ politicianId, filer = "senate" }: StockTra
 
   return (
     <CollapsibleSection
-      title={filer === "president" ? "STOCK & CRYPTO TRADES" : "STOCK TRADES"}
+      title={filer === "president" ? "Stock & crypto trades" : "Stock trades"}
       titleColor="text-signal-amber"
       summary={`${data.total} trade${data.total !== 1 ? "s" : ""}${data.lateCount > 0 ? ` · ${data.lateCount} late` : ""}`}
       source={SOURCE_LABEL[filer]}
@@ -191,7 +189,7 @@ export default function StockTrades({ politicianId, filer = "senate" }: StockTra
       <div className="space-y-3 mt-4">
         <p className="text-xs text-ink-min">
           <MetricTooltip text={filer === "president" ? ABOUT_DATA.president : ABOUT_DATA.congress}>
-            ABOUT THIS DATA
+            About this data
           </MetricTooltip>
         </p>
         {error && (

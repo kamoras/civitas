@@ -56,12 +56,12 @@ describe("BallotMeasureCard", () => {
     // The label still shows, as the card's heading line...
     expect(screen.getByText("Proposition 3")).toBeInTheDocument();
     // ... but not under "OFFICIAL BALLOT TITLE".
-    expect(screen.queryByText("OFFICIAL BALLOT TITLE")).not.toBeInTheDocument();
+    expect(screen.queryByText("Official ballot title")).not.toBeInTheDocument();
   });
 
   it("names the drafter beside the summary when there is no official title", () => {
     render(<BallotMeasureCard measure={measure({})} />);
-    const summary = screen.getByText("OFFICIAL SUMMARY").closest("section");
+    const summary = screen.getByText("Official summary").closest("section");
     expect(summary).toHaveTextContent("Drafted by Texas Legislature");
     expect(screen.getAllByText(/Drafted by/)).toHaveLength(1);
   });
@@ -75,7 +75,7 @@ describe("BallotMeasureCard", () => {
         })}
       />
     );
-    const title = screen.getByText("OFFICIAL BALLOT TITLE").closest("section");
+    const title = screen.getByText("Official ballot title").closest("section");
     expect(title).toHaveTextContent("BUDGET STABILIZATION FUND");
     expect(title).toHaveTextContent("Drafted by Florida Legislature");
     expect(screen.getAllByText(/Drafted by/)).toHaveLength(1);
@@ -94,11 +94,11 @@ describe("BallotMeasureCard", () => {
         })}
       />
     );
-    const title = screen.getByText("OFFICIAL BALLOT TITLE").closest("section");
+    const title = screen.getByText("Official ballot title").closest("section");
     expect(title).toHaveTextContent("Drafted by A Legislature");
-    const summary = screen.getByText("OFFICIAL SUMMARY").closest("section");
+    const summary = screen.getByText("Official summary").closest("section");
     expect(summary).toHaveTextContent("Drafted by A Fair Ballot Commission");
-    const framing = screen.getByText("A YES VOTE").closest("section");
+    const framing = screen.getByText("A yes vote").closest("section");
     expect(framing).toHaveTextContent("Drafted by A Fair Ballot Commission");
     expect(screen.getAllByText(/Drafted by/)).toHaveLength(3);
   });

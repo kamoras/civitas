@@ -73,7 +73,7 @@ function sourceLine(src: { sourceName: string | null; ballotList: boolean }): st
  * judgeships) as its ballot page showed them: who was on the ballot, from
  * whose list. Civitas read no count for these. */
 function StateContests({ contests }: { contests: ArchivedStateContests }) {
-  const heading = "font-mono text-xs uppercase tracking-[0.14em] text-ink-min";
+  const heading = "font-mono text-xs text-ink-min";
   const row =
     "grid gap-x-4 gap-y-0.5 border-b border-white/[0.07] px-4 py-2.5 text-sm last:border-b-0 sm:grid-cols-[14rem_minmax(0,1fr)]";
   return (
@@ -145,11 +145,11 @@ function RaceEntry({ race, record }: { race: ArchivedRace; record: ArchiveRecord
             : `U.S. House · ${raceLabel(race)}`}
         </h4>
         <span
-          className={`border px-2 py-0.5 font-mono text-[11px] tracking-[0.08em] ${
+          className={`border px-2 py-0.5 font-mono text-[11px] ${
             tag ? tag.className : "border-dashed border-white/25 text-ink-min"
           }`}
         >
-          {tag ? tag.text : "NO COUNT"}
+          {tag ? tag.text : "No count"}
         </span>
       </div>
       {r ? (
@@ -200,9 +200,7 @@ function RaceEntry({ race, record }: { race: ArchivedRace; record: ArchiveRecord
       )}
       {race.candidates.length > 0 ? (
         <p className="mt-2 text-sm text-ink-lo">
-          <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-ink-min">
-            On the ballot
-          </span>{" "}
+          <span className="font-mono text-[11px] text-ink-min">On the ballot</span>{" "}
           {race.candidates.map((c, i) => (
             <span key={c.id}>
               {i > 0 && " · "}
@@ -274,7 +272,7 @@ export default function CycleArchive({
           ["Statewide measures", t.measures],
         ].map(([label, n]) => (
           <div key={label} className="bg-surface-base px-4 py-3">
-            <dt className="text-[11px] uppercase tracking-[0.12em] text-ink-min">{label}</dt>
+            <dt className="text-[11px] text-ink-min">{label}</dt>
             <dd className="mt-1 text-2xl font-semibold tabular-nums text-ink-hi">{n}</dd>
           </div>
         ))}
@@ -282,10 +280,7 @@ export default function CycleArchive({
 
       <section id="final-map" aria-labelledby="final-map-title" className="space-y-4">
         <div>
-          <h2
-            id="final-map-title"
-            className="font-mono text-sm uppercase tracking-[0.14em] text-ink-hi"
-          >
+          <h2 id="final-map-title" className="font-mono text-sm text-ink-hi">
             The map before election day
           </h2>
           <p className="mt-1 max-w-3xl text-sm text-ink-lo">
@@ -311,10 +306,7 @@ export default function CycleArchive({
 
       <section id="by-state" aria-labelledby="by-state-title" className="space-y-6">
         <div>
-          <h2
-            id="by-state-title"
-            className="font-mono text-sm uppercase tracking-[0.14em] text-ink-hi"
-          >
+          <h2 id="by-state-title" className="font-mono text-sm text-ink-hi">
             Count and ballot, by state
           </h2>
           <p className="mt-1 max-w-3xl text-sm text-ink-lo">
@@ -352,7 +344,7 @@ export default function CycleArchive({
             >
               <h3
                 id={`state-${s.state}-title`}
-                className="border-b border-phos/20 pb-1 font-display text-xl font-semibold uppercase text-ink-hi"
+                className="border-b border-phos/20 pb-1 font-display text-xl font-semibold text-ink-hi"
               >
                 {s.stateName}
               </h3>
@@ -371,9 +363,7 @@ export default function CycleArchive({
               {s.stateContests && <StateContests contests={s.stateContests} />}
               {measures.length > 0 && (
                 <div className="space-y-3">
-                  <h4 className="font-mono text-xs uppercase tracking-[0.14em] text-ink-min">
-                    Statewide ballot measures
-                  </h4>
+                  <h4 className="font-mono text-xs text-ink-min">Statewide ballot measures</h4>
                   {measures.map((m) => (
                     <BallotMeasureCard key={m.id} measure={m} />
                   ))}
