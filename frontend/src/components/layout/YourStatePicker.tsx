@@ -8,6 +8,10 @@ import { STATE_CODES, STATE_NAMES } from "@/lib/stateCodes";
 import { stateBallotHref } from "@/lib/elections";
 
 // By name, as a reader looks for their state.
+/** The code itself from the fixed list, or "": the confirmation builds hrefs
+ *  from it, so nothing read from the page goes into a link unchecked. */
+const knownCode = (code: string) => STATE_CODES.find((c) => c === code) ?? "";
+
 const STATES_BY_NAME = [...STATE_CODES].sort((a, b) =>
   (STATE_NAMES[a] ?? a).localeCompare(STATE_NAMES[b] ?? b)
 );
@@ -95,7 +99,7 @@ export default function YourStatePicker({
         if (code) {
           setState(code);
           setStatus("");
-          setConfirmed(code);
+          setConfirmed(knownCode(code));
         } else {
           setStatus("That location isn't in a U.S. state. Pick yours from the list.");
         }
@@ -123,7 +127,7 @@ export default function YourStatePicker({
         onChange={(e) => {
           setState(e.target.value);
           setStatus("");
-          setConfirmed(e.target.value);
+          setConfirmed(knownCode(e.target.value));
         }}
         className={`${tall ? "min-h-11" : "min-h-6"} border border-ink-min/60 bg-surface-base px-1 font-mono text-xs text-ink`}
       >
