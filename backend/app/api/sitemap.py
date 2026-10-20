@@ -12,7 +12,7 @@ Read path only: plain column selects, no ORM hydration, no model inference.
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
-from fastapi.responses import JSONResponse
+from app.api.response_helpers import JSONResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 

@@ -214,5 +214,9 @@ export interface PresidentEffectivenessFacts {
 export interface HistoricalLegacyFacts {
   points: number | null;
   pointsMean: number | null;
+  /** The survey's own order: this presidency's place by total points among
+   *  every rated one (ties shared), and how many are rated. */
+  historiansRank?: number | null;
+  historiansRated?: number;
   otherTerms: { id: string; number: number; points: number; score: number | null }[];
 }

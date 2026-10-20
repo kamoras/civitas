@@ -42,6 +42,8 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
   // A quorum call or a Speaker election puts no question: no yeas, nays or
   // threshold to show (roll_call_shape).
   const isQuestion = !vote.kind || vote.kind === "question";
+  // The public API's record of this roll call (api/public.py get_roll_call).
+  const positionsApi = `/api/public/v1/roll-calls/${vote.chamber}/${vote.congress}/${vote.session}/${vote.number}`;
   const counts: [string, number][] = [
     ...(isQuestion
       ? ([
@@ -105,7 +107,7 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
                 </div>
                 <h1
                   id="vote-title"
-                  className="max-w-4xl font-display text-2xl font-extrabold leading-tight text-ink-hi sm:text-4xl"
+                  className="max-w-4xl font-display text-2xl font-semibold leading-tight text-ink-hi sm:text-4xl"
                 >
                   {subject}
                 </h1>
@@ -187,7 +189,7 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
               <h2
                 id="members"
                 {...onThisPage(`How each ${MEMBERS[vote.chamber]} voted`, vote.members.length)}
-                className="font-display text-2xl font-extrabold text-ink-hi"
+                className="font-display text-2xl font-semibold text-ink-hi"
               >
                 How each {MEMBERS[vote.chamber]} voted
                 <span className="ml-2 font-mono text-sm font-normal text-ink-min">
@@ -204,7 +206,7 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
               <h2
                 id="sources"
                 {...onThisPage("Source and citation")}
-                className="font-display text-2xl font-extrabold text-ink-hi"
+                className="font-display text-2xl font-semibold text-ink-hi"
               >
                 Source and citation
               </h2>
@@ -230,6 +232,16 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
                       </Link>
                     </li>
                   )}
+                  <li className="border-b border-white/[0.07] py-1.5 text-ink-lo">
+                    Every member&apos;s position as data:{" "}
+                    <a href={`${positionsApi}.csv`} download className={LINK}>
+                      spreadsheet (CSV)
+                    </a>{" "}
+                    ·{" "}
+                    <a href={positionsApi} className={LINK}>
+                      JSON
+                    </a>
+                  </li>
                   <li className="py-1.5 text-ink-lo">
                     <Link href="/about/data" className={LINK}>
                       Every data source

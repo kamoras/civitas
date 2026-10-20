@@ -2,7 +2,7 @@
 
 import { useCallback, useState, type ReactNode } from "react";
 import type { Senator } from "@/types/senator";
-import type { ChamberField, Committee } from "@/types/politicians";
+import type { Committee } from "@/types/politicians";
 import type { RepresentationScoreBreakdown } from "@/types/scoreBreakdown";
 import { useConfig } from "@/hooks/useConfig";
 import { displayScore } from "@/lib/formatting";
@@ -22,13 +22,13 @@ import StockTrades from "@/components/checker/StockTrades";
 import VotingRecord from "@/components/checker/VotingRecord";
 import AlignmentColumn from "./AlignmentColumn";
 import AlsoOnRecord, { type RecordView } from "./AlsoOnRecord";
-import AtAGlance from "./AtAGlance";
-import ChamberStrip from "./ChamberStrip";
 import EffectivenessColumn from "./EffectivenessColumn";
 import FundingColumn from "./FundingColumn";
 import MethodsLedger from "./MethodsLedger";
 import ScorecardDrawer from "./ScorecardDrawer";
 import ScorecardHeader from "./ScorecardHeader";
+import WhereTheyStand from "./WhereTheyStand";
+import type { PeerComparison } from "@/types/peers";
 import TopDonorsTable from "./TopDonorsTable";
 
 type DrawerView = "donors" | "votes" | "bills" | RecordView;
@@ -43,8 +43,10 @@ const DRAWER_TITLE: Record<DrawerView, string> = {
 };
 
 /**
- * A senator's or representative's scorecard, at a glance: who they are and
- * their Representation Score, then the three scored dimensions side by side,
+ * A senator's or representative's page: who they are and how to reach them,
+ * then where they stand among peers measure by measure (no composite score
+ * or rank: redesign 2026-10), then the record behind it, money, votes and
+ * bills side by side,
  * each led by the breakdown's one-sentence finding and then the evidence
  * behind its number (no expanding to find it; only the method, the
  * components, weights and statistics, sits behind "How this is computed"),
@@ -64,11 +66,10 @@ export default function MemberScorecard({
   district,
   leadershipTitle,
   committees,
-  rank,
   titleAs = "h1",
   former = false,
-  field = null,
   scoredOn = null,
+  peers = null,
 }: {
   member: Senator;
   chamber: "senate" | "house";
@@ -78,12 +79,11 @@ export default function MemberScorecard({
   district?: number | null;
   leadershipTitle?: string | null;
   committees?: Committee[];
-  rank?: { rank: number; of: number } | null;
   titleAs?: "h1" | "h2";
   /** No longer serving: the header leaves out how to reach them. */
   former?: boolean;
-  /** The chamber the rank is taken over, for the header's strip. */
-  field?: ChamberField | null;
+  /** Where the member stands among the caucus, read by the server page. */
+  peers?: PeerComparison | null;
   /** The latest scoring run, for the methods section and its citation. */
   scoredOn?: { date: string; algorithmVersion: string | null } | null;
 }) {
@@ -155,31 +155,28 @@ export default function MemberScorecard({
             district={district}
             leadershipTitle={leadershipTitle}
             committees={committees}
-            rank={rank}
             titleAs={titleAs}
             former={former}
-            standing={
-              field &&
-              rank && (
-                <ChamberStrip
-                  field={field}
-                  memberId={member.id}
-                  name={member.name}
-                  score={overall}
-                  rank={rank}
-                  chamber={chamber}
-                />
-              )
-            }
-            glance={<AtAGlance breakdown={breakdown} scores={scores} />}
           />
+
+          {!former && (
+            <WhereTheyStand
+              memberId={member.id}
+              name={member.name}
+              chamber={chamber}
+              initial={peers}
+            />
+          )}
+
+          <h2 className="border-t-[3px] border-ink-hi pt-3 font-display text-[22px] font-semibold text-ink-hi sm:text-[26px]">
+            The record behind it
+          </h2>
 
           <div className="grid grid-cols-[minmax(0,1fr)] items-stretch gap-5 lg:grid-cols-3">
             <FundingColumn
               funding={member.funding}
               dimension={breakdown?.fundingIndependence}
               score={scores.fundingIndependence}
-              weight={weights?.fundingIndependence}
               onMore={() => setView("donors")}
               donorVoteLinks={member.lobbyingMatches?.length ?? 0}
               onDonorVotes={() => setView("donorVotes")}
@@ -193,7 +190,6 @@ export default function MemberScorecard({
               approval={member.constituentApproval}
               dimension={breakdown?.constituentAlignment}
               score={scores.constituentAlignment}
-              weight={weights?.constituentAlignment}
               onMore={() => setView("votes")}
             />
             <EffectivenessColumn
@@ -201,7 +197,6 @@ export default function MemberScorecard({
               bills={member.sponsoredBills ?? []}
               dimension={breakdown?.legislativeEffectiveness}
               score={scores.legislativeEffectiveness}
-              weight={weights?.legislativeEffectiveness}
               onMore={() => setView("bills")}
             />
           </div>

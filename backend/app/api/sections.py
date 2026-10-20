@@ -11,7 +11,7 @@ own reason, or a null), never a zero for something not yet read.
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import JSONResponse
+from app.api.response_helpers import JSONResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 

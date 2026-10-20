@@ -37,8 +37,9 @@ export default function PresidentsAndJusticesChapter() {
     >
       <Summary>
         <Point>
-          Presidents get three scores: public approval, the economy, and historians&apos;
-          assessment. Historians count for half.
+          A president&apos;s page leads with the historians&apos; own rank, named as theirs, then
+          two records Civitas measures: public approval and the economy. No page shows a blended
+          grade.
         </Point>
         <Point>
           Where a president has no real data for a score (no historians&apos; rating yet for recent
@@ -59,11 +60,11 @@ export default function PresidentsAndJusticesChapter() {
       <Section id="presidents" title="How presidents are scored">
         <P>
           Every figure, and each president&apos;s name, party and term dates, comes from live,
-          historical or expert-survey data. The ranked list compares past presidents; the sitting
-          president is shown on their own, since comparison with predecessors is the only meaningful
-          ranking for that office. The leaderboard shows the sitting president&apos;s scores above
-          the ranked list, linking to the full scorecard. Any two presidents, the sitting one
-          included, can be set side by side on the{" "}
+          historical or expert-survey data. Since 2026-10 no page blends the three into one grade or
+          ranks presidents by it: half of that blend was the historians&apos; survey, so a page
+          leads with the historians&apos; own rank (C-SPAN&apos;s, by total points, attributed to
+          them) beside the two records Civitas measures. The blend below is still worked out for the
+          public API. Any two presidents, the sitting one included, can be set side by side on the{" "}
           <Link href="/compare/presidents" className="underline underline-offset-2 hover:text-phos">
             president comparison
           </Link>

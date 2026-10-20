@@ -103,7 +103,7 @@ export default async function SectionCards({
                 </h3>
                 {p ? (
                   <p className="mt-2">
-                    <span className="block font-display text-3xl font-extrabold leading-none tabular-nums text-ink-hi">
+                    <span className="block font-display text-3xl font-semibold leading-none tabular-nums text-ink-hi">
                       {p.figure}
                     </span>
                     <span className="mt-1.5 block font-sans text-sm leading-snug text-ink-lo">

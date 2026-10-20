@@ -242,3 +242,15 @@ computed with (president_effective_weights): with Historical Legacy and
 both others present, 50/25/25; with one other, two thirds and one third;
 a sitting president, unrated by historians, 50/50 on the other two.
 ```
+
+## Closing record (2026-10)
+
+The site no longer shows the weighted composite or ranks members by it.
+Member pages compare each measure with peers instead (`app/peer_comparison.py`,
+`/about/scores#peers`): a weighted average of unlike things carries a judgment
+in its weights that no data decides, and the 2026-07 audit above showed how far
+the ranks move with them. The member weights here are retained only for the
+deprecated `overall` (and `rank`) of public API v1, kept for one deprecation
+cycle and removed in v2. The presidents' weights are unchanged until the
+presidents' page is redone.
+

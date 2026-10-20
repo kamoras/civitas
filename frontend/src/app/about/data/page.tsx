@@ -1,5 +1,6 @@
 import { pageMetadata } from "@/lib/site";
 import ComputedLeanData from "@/components/about/ComputedLeanData";
+import DataLicense from "@/components/about/DataLicense";
 import {
   AboutPage,
   Summary,
@@ -51,6 +52,10 @@ export default function DataChapter() {
           Every model runs on the same small computer as the site. No data is sent to an AI company.
         </Point>
         <Point>
+          Civitas&apos;s own data is free to reuse with credit (CC BY 4.0). The Supreme Court record
+          is for non-commercial use only, as its sources require.
+        </Point>
+        <Point>
           No accounts, no cookies of our own, no ad or analytics trackers. Visits are counted in a
           way that can&apos;t be traced back to anyone once the day is over.
         </Point>
@@ -86,7 +91,9 @@ export default function DataChapter() {
               bill of an earlier Congress says its votes aren&apos;t held and links each roll call
               to the chamber&apos;s record. A Senate tie the Vice President broke is shown with the
               Vice President&apos;s vote, an election of the Speaker by each candidate&apos;s votes,
-              and a quorum call as the members present, with no result.
+              and a quorum call as the members present, with no result. The election map&apos;s past
+              House results for a year the FEC has not yet compiled come from the Clerk&apos;s
+              official election statistics, checked against the Clerk&apos;s own district totals.
             </Fact>
             <Fact label="unitedstates/congress-legislators">
               Committee seats and party leadership titles, an open dataset refreshed weekly. It
@@ -206,10 +213,12 @@ export default function DataChapter() {
               town selector, a fixed public building per district to fill in candidate lists), never
               a visitor&apos;s.
             </Fact>
-            <Fact label="State election offices · USAGov">
-              Each state&apos;s own voter lookup, linked after a nightly check that it still opens,
-              or, where the state&apos;s site turns the check away, linked as unconfirmed beside
-              USAGov&apos;s directory of election offices; otherwise USAGov&apos;s directory alone.
+            <Fact label="State election offices · NASS · USAGov · vote.gov">
+              Each state&apos;s own pages for checking registration, registering, a sample ballot,
+              the polling place and voting by mail, as NASS&apos;s Can I Vote lists them, linked
+              after a nightly check that each still opens, or, where the state&apos;s site turns the
+              check away, linked as unconfirmed with a backup beside it; otherwise the backup alone
+              (Can I Vote, USAGov&apos;s office directory, or vote.gov).
             </Fact>
             <Fact label="Silver Bulletin · Wikipedia">
               The election map&apos;s past polls, which its ranges are fitted and checked on, come
@@ -240,6 +249,14 @@ export default function DataChapter() {
           where its data comes from; the record itself as JSON from the{" "}
           <A href="/developers">public API</A> (a member&apos;s votes, a bill&apos;s roll calls);
           and an APA-style reference with the date it was scored.
+        </P>
+      </Section>
+
+      <Section id="license" title="License: what you may do with the data">
+        <DataLicense />
+        <P>
+          The same data as JSON and CSV, with every column described:{" "}
+          <A href="/developers#downloads">the public API</A>.
         </P>
       </Section>
 
