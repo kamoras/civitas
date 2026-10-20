@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import type { ElectionCalendar, SpecialElection, SpecialsBoard } from "@/types/specials";
+import type { ElectionCalendar, Season, SpecialElection, SpecialsBoard } from "@/types/specials";
 import SpecialsBoardView, { noCountText } from "./Specials";
 import OffSeasonLead from "./OffSeasonLead";
 import CalendarList from "./CalendarList";
@@ -8,11 +8,16 @@ import { calendarEntries } from "@/lib/specials";
 
 afterEach(cleanup);
 
-const SEASON = {
-  season: "off_season" as const,
+const SEASON: Season = {
+  season: "off_season",
   betweenCycles: true,
   cycle: 2028,
+  electionDay: "2028-11-07",
+  heldCycle: 2026,
+  until: "2028-03-06",
   firstPrimary: "2028-03-07",
+  lastPrimary: "2028-09-12",
+  lead: ["calendar", "archive", "ballots", "redistricting", "map"],
 };
 
 function special(over: Partial<SpecialElection> = {}): SpecialElection {

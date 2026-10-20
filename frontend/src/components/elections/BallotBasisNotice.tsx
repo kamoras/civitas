@@ -60,9 +60,9 @@ export default function BallotBasisNotice({ basis }: { basis?: BallotBasis | nul
         className="mb-6 font-mono text-xs leading-relaxed text-ink-min"
         data-testid="ballot-filers"
       >
-        Candidates below are FEC filers, not confirmed ballot positions: this state&apos;s primary
-        has not been held yet, so nobody knows the ballot. Sorted by money raised, which is the only
-        published signal of who is running a real campaign.
+        Everyone below is registered with the FEC, not on the ballot: this state&apos;s primary has
+        not been held yet, and the state certifies its own ballot after it. Sorted by money raised,
+        which is the only published signal of who is running a real campaign.
       </p>
     );
   }

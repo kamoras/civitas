@@ -1,0 +1,2765 @@
+{
+ "_source": "U.S. Election Assistance Commission, 2024 Election Administration and Voting Survey, public release version 2 (https://www.eac.gov/sites/default/files/2026-02/2024_EAVS_for_Public_Release_nolabel_V2_csv.zip), summed by state from its jurisdiction rows; negative survey codes are left out of each sum and counted as not reporting. Generated 2026-10-17 by backend/scripts/fetch_eavs.py.",
+ "year": 2024,
+ "version": 2,
+ "url": "https://www.eac.gov/sites/default/files/2026-02/2024_EAVS_for_Public_Release_nolabel_V2_csv.zip",
+ "items": {
+  "A1a": "Total registered voters",
+  "F1a": "Total voters who participated",
+  "F1b": "Voted in person on election day",
+  "F1f": "Voted in person before election day",
+  "F1d": "Voted by mail",
+  "C1a": "Mail ballots sent to voters",
+  "C1b": "Mail ballots returned by voters",
+  "C8a": "Mail ballots counted",
+  "C9a": "Mail ballots rejected",
+  "E1a": "Provisional ballots cast",
+  "E1d": "Provisional ballots rejected"
+ },
+ "states": {
+  "AK": {
+   "jurisdictions": 1,
+   "items": {
+    "A1a": {
+     "value": 611078,
+     "reporting": 1
+    },
+    "F1a": {
+     "value": 340981,
+     "reporting": 1
+    },
+    "F1b": {
+     "value": 175541,
+     "reporting": 1
+    },
+    "F1f": {
+     "value": 92281,
+     "reporting": 1
+    },
+    "F1d": {
+     "value": 48744,
+     "reporting": 1
+    },
+    "C1a": {
+     "value": 60695,
+     "reporting": 1
+    },
+    "C1b": {
+     "value": 49616,
+     "reporting": 1
+    },
+    "C8a": {
+     "value": 48744,
+     "reporting": 1
+    },
+    "C9a": {
+     "value": 872,
+     "reporting": 1
+    },
+    "E1a": {
+     "value": 15138,
+     "reporting": 1
+    },
+    "E1d": {
+     "value": 352,
+     "reporting": 1
+    }
+   }
+  },
+  "AL": {
+   "jurisdictions": 67,
+   "items": {
+    "A1a": {
+     "value": 3868040,
+     "reporting": 67
+    },
+    "F1a": {
+     "value": 2272911,
+     "reporting": 67
+    },
+    "F1b": {
+     "value": 0,
+     "reporting": 0
+    },
+    "F1f": {
+     "value": 0,
+     "reporting": 0
+    },
+    "F1d": {
+     "value": 126055,
+     "reporting": 67
+    },
+    "C1a": {
+     "value": 140558,
+     "reporting": 67
+    },
+    "C1b": {
+     "value": 0,
+     "reporting": 0
+    },
+    "C8a": {
+     "value": 126018,
+     "reporting": 67
+    },
+    "C9a": {
+     "value": 1779,
+     "reporting": 67
+    },
+    "E1a": {
+     "value": 13355,
+     "reporting": 67
+    },
+    "E1d": {
+     "value": 6093,
+     "reporting": 67
+    }
+   }
+  },
+  "AR": {
+   "jurisdictions": 75,
+   "items": {
+    "A1a": {
+     "value": 1835723,
+     "reporting": 75
+    },
+    "F1a": {
+     "value": 1122278,
+     "reporting": 72
+    },
+    "F1b": {
+     "value": 294235,
+     "reporting": 73
+    },
+    "F1f": {
+     "value": 810714,
+     "reporting": 73
+    },
+    "F1d": {
+     "value": 23843,
+     "reporting": 73
+    },
+    "C1a": {
+     "value": 29173,
+     "reporting": 75
+    },
+    "C1b": {
+     "value": 25976,
+     "reporting": 75
+    },
+    "C8a": {
+     "value": 24552,
+     "reporting": 74
+    },
+    "C9a": {
+     "value": 2274,
+     "reporting": 70
+    },
+    "E1a": {
+     "value": 7085,
+     "reporting": 66
+    },
+    "E1d": {
+     "value": 5623,
+     "reporting": 65
+    }
+   }
+  },
+  "AS": {
+   "jurisdictions": 1,
+   "items": {
+    "A1a": {
+     "value": 15948,
+     "reporting": 1
+    },
+    "F1a": {
+     "value": 10215,
+     "reporting": 1
+    },
+    "F1b": {
+     "value": 9035,
+     "reporting": 1
+    },
+    "F1f": {
+     "value": 991,
+     "reporting": 1
+    },
+    "F1d": {
+     "value": 189,
+     "reporting": 1
+    },
+    "C1a": {
+     "value": 207,
+     "reporting": 1
+    },
+    "C1b": {
+     "value": 190,
+     "reporting": 1
+    },
+    "C8a": {
+     "value": 189,
+     "reporting": 1
+    },
+    "C9a": {
+     "value": 1,
+     "reporting": 1
+    },
+    "E1a": {
+     "value": 0,
+     "reporting": 1
+    },
+    "E1d": {
+     "value": 0,
+     "reporting": 1
+    }
+   }
+  },
+  "AZ": {
+   "jurisdictions": 15,
+   "items": {
+    "A1a": {
+     "value": 5075337,
+     "reporting": 15
+    },
+    "F1a": {
+     "value": 3477975,
+     "reporting": 15
+    },
+    "F1b": {
+     "value": 496753,
+     "reporting": 15
+    },
+    "F1f": {
+     "value": 349129,
+     "reporting": 15
+    },
+    "F1d": {
+     "value": 2597974,
+     "reporting": 15
+    },
+    "C1a": {
+     "value": 3582082,
+     "reporting": 15
+    },
+    "C1b": {
+     "value": 2859348,
+     "reporting": 15
+    },
+    "C8a": {
+     "value": 2816885,
+     "reporting": 15
+    },
+    "C9a": {
+     "value": 25071,
+     "reporting": 15
+    },
+    "E1a": {
+     "value": 49911,
+     "reporting": 15
+    },
+    "E1d": {
+     "value": 34158,
+     "reporting": 15
+    }
+   }
+  },
+  "CA": {
+   "jurisdictions": 58,
+   "items": {
+    "A1a": {
+     "value": 25720597,
+     "reporting": 58
+    },
+    "F1a": {
+     "value": 16164330,
+     "reporting": 58
+    },
+    "F1b": {
+     "value": 1836518,
+     "reporting": 57
+    },
+    "F1f": {
+     "value": 878489,
+     "reporting": 55
+    },
+    "F1d": {
+     "value": 0,
+     "reporting": 0
+    },
+    "C1a": {
+     "value": 23003434,
+     "reporting": 58
+    },
+    "C1b": {
+     "value": 13185566,
+     "reporting": 58
+    },
+    "C8a": {
+     "value": 13062318,
+     "reporting": 58
+    },
+    "C9a": {
+     "value": 123248,
+     "reporting": 58
+    },
+    "E1a": {
+     "value": 327003,
+     "reporting": 58
+    },
+    "E1d": {
+     "value": 37312,
+     "reporting": 58
+    }
+   }
+  },
+  "CO": {
+   "jurisdictions": 64,
+   "items": {
+    "A1a": {
+     "value": 4583280,
+     "reporting": 64
+    },
+    "F1a": {
+     "value": 3240754,
+     "reporting": 64
+    },
+    "F1b": {
+     "value": 141556,
+     "reporting": 64
+    },
+    "F1f": {
+     "value": 109209,
+     "reporting": 64
+    },
+    "F1d": {
+     "value": 0,
+     "reporting": 64
+    },
+    "C1a": {
+     "value": 4090266,
+     "reporting": 64
+    },
+    "C1b": {
+     "value": 3000301,
+     "reporting": 64
+    },
+    "C8a": {
+     "value": 2957550,
+     "reporting": 64
+    },
+    "C9a": {
+     "value": 42751,
+     "reporting": 64
+    },
+    "E1a": {
+     "value": 444,
+     "reporting": 64
+    },
+    "E1d": {
+     "value": 237,
+     "reporting": 64
+    }
+   }
+  },
+  "CT": {
+   "jurisdictions": 169,
+   "items": {
+    "A1a": {
+     "value": 2520650,
+     "reporting": 169
+    },
+    "F1a": {
+     "value": 1820891,
+     "reporting": 169
+    },
+    "F1b": {
+     "value": 0,
+     "reporting": 0
+    },
+    "F1f": {
+     "value": 715275,
+     "reporting": 168
+    },
+    "F1d": {
+     "value": 118362,
+     "reporting": 169
+    },
+    "C1a": {
+     "value": 129996,
+     "reporting": 169
+    },
+    "C1b": {
+     "value": 0,
+     "reporting": 0
+    },
+    "C8a": {
+     "value": 127354,
+     "reporting": 169
+    },
+    "C9a": {
+     "value": 2642,
+     "reporting": 169
+    },
+    "E1a": {
+     "value": 73,
+     "reporting": 169
+    },
+    "E1d": {
+     "value": 36,
+     "reporting": 169
+    }
+   }
+  },
+  "DC": {
+   "jurisdictions": 1,
+   "items": {
+    "A1a": {
+     "value": 612904,
+     "reporting": 1
+    },
+    "F1a": {
+     "value": 328871,
+     "reporting": 1
+    },
+    "F1b": {
+     "value": 82396,
+     "reporting": 1
+    },
+    "F1f": {
+     "value": 72914,
+     "reporting": 1
+    },
+    "F1d": {
+     "value": 0,
+     "reporting": 0
+    },
+    "C1a": {
+     "value": 453858,
+     "reporting": 1
+    },
+    "C1b": {
+     "value": 169280,
+     "reporting": 1
+    },
+    "C8a": {
+     "value": 168111,
+     "reporting": 1
+    },
+    "C9a": {
+     "value": 1169,
+     "reporting": 1
+    },
+    "E1a": {
+     "value": 1015,
+     "reporting": 1
+    },
+    "E1d": {
+     "value": 922,
+     "reporting": 1
+    }
+   }
+  },
+  "DE": {
+   "jurisdictions": 3,
+   "items": {
+    "A1a": {
+     "value": 788441,
+     "reporting": 3
+    },
+    "F1a": {
+     "value": 514367,
+     "reporting": 3
+    },
+    "F1b": {
+     "value": 268718,
+     "reporting": 3
+    },
+    "F1f": {
+     "value": 210295,
+     "reporting": 3
+    },
+    "F1d": {
+     "value": 33659,
+     "reporting": 3
+    },
+    "C1a": {
+     "value": 40728,
+     "reporting": 3
+    },
+    "C1b": {
+     "value": 35475,
+     "reporting": 3
+    },
+    "C8a": {
+     "value": 33659,
+     "reporting": 3
+    },
+    "C9a": {
+     "value": 1816,
+     "reporting": 3
+    },
+    "E1a": {
+     "value": 204,
+     "reporting": 3
+    },
+    "E1d": {
+     "value": 190,
+     "reporting": 3
+    }
+   }
+  },
+  "FL": {
+   "jurisdictions": 67,
+   "items": {
+    "A1a": {
+     "value": 15740083,
+     "reporting": 67
+    },
+    "F1a": {
+     "value": 10999125,
+     "reporting": 67
+    },
+    "F1b": {
+     "value": 2596761,
+     "reporting": 67
+    },
+    "F1f": {
+     "value": 5364821,
+     "reporting": 67
+    },
+    "F1d": {
+     "value": 2945893,
+     "reporting": 67
+    },
+    "C1a": {
+     "value": 3524965,
+     "reporting": 67
+    },
+    "C1b": {
+     "value": 2960238,
+     "reporting": 67
+    },
+    "C8a": {
+     "value": 2947371,
+     "reporting": 67
+    },
+    "C9a": {
+     "value": 21126,
+     "reporting": 67
+    },
+    "E1a": {
+     "value": 22095,
+     "reporting": 67
+    },
+    "E1d": {
+     "value": 15945,
+     "reporting": 67
+    }
+   }
+  },
+  "GA": {
+   "jurisdictions": 159,
+   "items": {
+    "A1a": {
+     "value": 8234335,
+     "reporting": 159
+    },
+    "F1a": {
+     "value": 5297500,
+     "reporting": 159
+    },
+    "F1b": {
+     "value": 1239125,
+     "reporting": 159
+    },
+    "F1f": {
+     "value": 3768395,
+     "reporting": 159
+    },
+    "F1d": {
+     "value": 268751,
+     "reporting": 159
+    },
+    "C1a": {
+     "value": 327241,
+     "reporting": 159
+    },
+    "C1b": {
+     "value": 273512,
+     "reporting": 159
+    },
+    "C8a": {
+     "value": 268751,
+     "reporting": 159
+    },
+    "C9a": {
+     "value": 4761,
+     "reporting": 159
+    },
+    "E1a": {
+     "value": 7950,
+     "reporting": 151
+    },
+    "E1d": {
+     "value": 4721,
+     "reporting": 151
+    }
+   }
+  },
+  "GU": {
+   "jurisdictions": 1,
+   "items": {
+    "A1a": {
+     "value": 62098,
+     "reporting": 1
+    },
+    "F1a": {
+     "value": 30283,
+     "reporting": 1
+    },
+    "F1b": {
+     "value": 24291,
+     "reporting": 1
+    },
+    "F1f": {
+     "value": 5774,
+     "reporting": 1
+    },
+    "F1d": {
+     "value": 104,
+     "reporting": 1
+    },
+    "C1a": {
+     "value": 77,
+     "reporting": 1
+    },
+    "C1b": {
+     "value": 54,
+     "reporting": 1
+    },
+    "C8a": {
+     "value": 45,
+     "reporting": 1
+    },
+    "C9a": {
+     "value": 9,
+     "reporting": 1
+    },
+    "E1a": {
+     "value": 115,
+     "reporting": 1
+    },
+    "E1d": {
+     "value": 50,
+     "reporting": 1
+    }
+   }
+  },
+  "HI": {
+   "jurisdictions": 5,
+   "items": {
+    "A1a": {
+     "value": 861333,
+     "reporting": 4
+    },
+    "F1a": {
+     "value": 522236,
+     "reporting": 4
+    },
+    "F1b": {
+     "value": 0,
+     "reporting": 4
+    },
+    "F1f": {
+     "value": 39158,
+     "reporting": 4
+    },
+    "F1d": {
+     "value": 0,
+     "reporting": 2
+    },
+    "C1a": {
+     "value": 755841,
+     "reporting": 4
+    },
+    "C1b": {
+     "value": 487239,
+     "reporting": 4
+    },
+    "C8a": {
+     "value": 483078,
+     "reporting": 4
+    },
+    "C9a": {
+     "value": 4161,
+     "reporting": 4
+    },
+    "E1a": {
+     "value": 0,
+     "reporting": 4
+    },
+    "E1d": {
+     "value": 0,
+     "reporting": 4
+    }
+   }
+  },
+  "IA": {
+   "jurisdictions": 99,
+   "items": {
+    "A1a": {
+     "value": 2256774,
+     "reporting": 99
+    },
+    "F1a": {
+     "value": 1674011,
+     "reporting": 99
+    },
+    "F1b": {
+     "value": 0,
+     "reporting": 0
+    },
+    "F1f": {
+     "value": 0,
+     "reporting": 0
+    },
+    "F1d": {
+     "value": 0,
+     "reporting": 0
+    },
+    "C1a": {
+     "value": 235170,
+     "reporting": 99
+    },
+    "C1b": {
+     "value": 221210,
+     "reporting": 99
+    },
+    "C8a": {
+     "value": 220041,
+     "reporting": 99
+    },
+    "C9a": {
+     "value": 1169,
+     "reporting": 99
+    },
+    "E1a": {
+     "value": 1315,
+     "reporting": 99
+    },
+    "E1d": {
+     "value": 563,
+     "reporting": 99
+    }
+   }
+  },
+  "ID": {
+   "jurisdictions": 44,
+   "items": {
+    "A1a": {
+     "value": 1178750,
+     "reporting": 44
+    },
+    "F1a": {
+     "value": 917469,
+     "reporting": 44
+    },
+    "F1b": {
+     "value": 508734,
+     "reporting": 44
+    },
+    "F1f": {
+     "value": 225973,
+     "reporting": 44
+    },
+    "F1d": {
+     "value": 177211,
+     "reporting": 44
+    },
+    "C1a": {
+     "value": 196032,
+     "reporting": 44
+    },
+    "C1b": {
+     "value": 182434,
+     "reporting": 44
+    },
+    "C8a": {
+     "value": 179777,
+     "reporting": 44
+    },
+    "C9a": {
+     "value": 2657,
+     "reporting": 44
+    },
+    "E1a": {
+     "value": 0,
+     "reporting": 0
+    },
+    "E1d": {
+     "value": 0,
+     "reporting": 0
+    }
+   }
+  },
+  "IL": {
+   "jurisdictions": 108,
+   "items": {
+    "A1a": {
+     "value": 8970541,
+     "reporting": 108
+    },
+    "F1a": {
+     "value": 5717147,
+     "reporting": 108
+    },
+    "F1b": {
+     "value": 2666185,
+     "reporting": 108
+    },
+    "F1f": {
+     "value": 2001203,
+     "reporting": 107
+    },
+    "F1d": {
+     "value": 1016208,
+     "reporting": 108
+    },
+    "C1a": {
+     "value": 1177760,
+     "reporting": 108
+    },
+    "C1b": {
+     "value": 1030362,
+     "reporting": 108
+    },
+    "C8a": {
+     "value": 1022256,
+     "reporting": 107
+    },
+    "C9a": {
+     "value": 16559,
+     "reporting": 104
+    },
+    "E1a": {
+     "value": 13634,
+     "reporting": 108
+    },
+    "E1d": {
+     "value": 3756,
+     "reporting": 108
+    }
+   }
+  },
+  "IN": {
+   "jurisdictions": 92,
+   "items": {
+    "A1a": {
+     "value": 4840856,
+     "reporting": 92
+    },
+    "F1a": {
+     "value": 2986839,
+     "reporting": 92
+    },
+    "F1b": {
+     "value": 1372508,
+     "reporting": 92
+    },
+    "F1f": {
+     "value": 1397345,
+     "reporting": 92
+    },
+    "F1d": {
+     "value": 1603815,
+     "reporting": 92
+    },
+    "C1a": {
+     "value": 1616735,
+     "reporting": 92
+    },
+    "C1b": {
+     "value": 1607247,
+     "reporting": 92
+    },
+    "C8a": {
+     "value": 1603815,
+     "reporting": 92
+    },
+    "C9a": {
+     "value": 3432,
+     "reporting": 92
+    },
+    "E1a": {
+     "value": 6280,
+     "reporting": 92
+    },
+    "E1d": {
+     "value": 4335,
+     "reporting": 91
+    }
+   }
+  },
+  "KS": {
+   "jurisdictions": 105,
+   "items": {
+    "A1a": {
+     "value": 2031119,
+     "reporting": 105
+    },
+    "F1a": {
+     "value": 1342102,
+     "reporting": 105
+    },
+    "F1b": {
+     "value": 604319,
+     "reporting": 105
+    },
+    "F1f": {
+     "value": 557906,
+     "reporting": 105
+    },
+    "F1d": {
+     "value": 147276,
+     "reporting": 105
+    },
+    "C1a": {
+     "value": 165077,
+     "reporting": 105
+    },
+    "C1b": {
+     "value": 149591,
+     "reporting": 104
+    },
+    "C8a": {
+     "value": 149350,
+     "reporting": 105
+    },
+    "C9a": {
+     "value": 561,
+     "reporting": 105
+    },
+    "E1a": {
+     "value": 43059,
+     "reporting": 104
+    },
+    "E1d": {
+     "value": 16090,
+     "reporting": 104
+    }
+   }
+  },
+  "KY": {
+   "jurisdictions": 120,
+   "items": {
+    "A1a": {
+     "value": 3548136,
+     "reporting": 120
+    },
+    "F1a": {
+     "value": 2086090,
+     "reporting": 120
+    },
+    "F1b": {
+     "value": 1267653,
+     "reporting": 120
+    },
+    "F1f": {
+     "value": 687057,
+     "reporting": 120
+    },
+    "F1d": {
+     "value": 116324,
+     "reporting": 120
+    },
+    "C1a": {
+     "value": 131762,
+     "reporting": 120
+    },
+    "C1b": {
+     "value": 120400,
+     "reporting": 120
+    },
+    "C8a": {
+     "value": 116324,
+     "reporting": 120
+    },
+    "C9a": {
+     "value": 4076,
+     "reporting": 120
+    },
+    "E1a": {
+     "value": 210,
+     "reporting": 120
+    },
+    "E1d": {
+     "value": 141,
+     "reporting": 120
+    }
+   }
+  },
+  "LA": {
+   "jurisdictions": 64,
+   "items": {
+    "A1a": {
+     "value": 3046376,
+     "reporting": 64
+    },
+    "F1a": {
+     "value": 2021588,
+     "reporting": 64
+    },
+    "F1b": {
+     "value": 1047445,
+     "reporting": 64
+    },
+    "F1f": {
+     "value": 849784,
+     "reporting": 64
+    },
+    "F1d": {
+     "value": 119694,
+     "reporting": 64
+    },
+    "C1a": {
+     "value": 167577,
+     "reporting": 64
+    },
+    "C1b": {
+     "value": 122627,
+     "reporting": 64
+    },
+    "C8a": {
+     "value": 119706,
+     "reporting": 64
+    },
+    "C9a": {
+     "value": 2921,
+     "reporting": 64
+    },
+    "E1a": {
+     "value": 3926,
+     "reporting": 64
+    },
+    "E1d": {
+     "value": 3032,
+     "reporting": 64
+    }
+   }
+  },
+  "MA": {
+   "jurisdictions": 351,
+   "items": {
+    "A1a": {
+     "value": 5142343,
+     "reporting": 351
+    },
+    "F1a": {
+     "value": 3512930,
+     "reporting": 351
+    },
+    "F1b": {
+     "value": 1713191,
+     "reporting": 351
+    },
+    "F1f": {
+     "value": 600225,
+     "reporting": 351
+    },
+    "F1d": {
+     "value": 1173112,
+     "reporting": 351
+    },
+    "C1a": {
+     "value": 1349590,
+     "reporting": 351
+    },
+    "C1b": {
+     "value": 1186310,
+     "reporting": 351
+    },
+    "C8a": {
+     "value": 1173112,
+     "reporting": 351
+    },
+    "C9a": {
+     "value": 13198,
+     "reporting": 351
+    },
+    "E1a": {
+     "value": 5105,
+     "reporting": 351
+    },
+    "E1d": {
+     "value": 3309,
+     "reporting": 351
+    }
+   }
+  },
+  "MD": {
+   "jurisdictions": 24,
+   "items": {
+    "A1a": {
+     "value": 4555217,
+     "reporting": 24
+    },
+    "F1a": {
+     "value": 3028813,
+     "reporting": 24
+    },
+    "F1b": {
+     "value": 1145134,
+     "reporting": 24
+    },
+    "F1f": {
+     "value": 974945,
+     "reporting": 24
+    },
+    "F1d": {
+     "value": 744244,
+     "reporting": 24
+    },
+    "C1a": {
+     "value": 878815,
+     "reporting": 24
+    },
+    "C1b": {
+     "value": 747040,
+     "reporting": 24
+    },
+    "C8a": {
+     "value": 744244,
+     "reporting": 24
+    },
+    "C9a": {
+     "value": 2796,
+     "reporting": 24
+    },
+    "E1a": {
+     "value": 150002,
+     "reporting": 24
+    },
+    "E1d": {
+     "value": 4239,
+     "reporting": 24
+    }
+   }
+  },
+  "ME": {
+   "jurisdictions": 497,
+   "items": {
+    "A1a": {
+     "value": 1223468,
+     "reporting": 489
+    },
+    "F1a": {
+     "value": 842447,
+     "reporting": 490
+    },
+    "F1b": {
+     "value": 463500,
+     "reporting": 489
+    },
+    "F1f": {
+     "value": 157116,
+     "reporting": 489
+    },
+    "F1d": {
+     "value": 215242,
+     "reporting": 489
+    },
+    "C1a": {
+     "value": 224646,
+     "reporting": 489
+    },
+    "C1b": {
+     "value": 215753,
+     "reporting": 489
+    },
+    "C8a": {
+     "value": 215242,
+     "reporting": 489
+    },
+    "C9a": {
+     "value": 511,
+     "reporting": 489
+    },
+    "E1a": {
+     "value": 128,
+     "reporting": 488
+    },
+    "E1d": {
+     "value": 0,
+     "reporting": 0
+    }
+   }
+  },
+  "MI": {
+   "jurisdictions": 83,
+   "items": {
+    "A1a": {
+     "value": 8440236,
+     "reporting": 83
+    },
+    "F1a": {
+     "value": 5706503,
+     "reporting": 83
+    },
+    "F1b": {
+     "value": 2453252,
+     "reporting": 83
+    },
+    "F1f": {
+     "value": 1214409,
+     "reporting": 83
+    },
+    "F1d": {
+     "value": 2017704,
+     "reporting": 83
+    },
+    "C1a": {
+     "value": 2213167,
+     "reporting": 83
+    },
+    "C1b": {
+     "value": 2081265,
+     "reporting": 83
+    },
+    "C8a": {
+     "value": 2017704,
+     "reporting": 83
+    },
+    "C9a": {
+     "value": 63561,
+     "reporting": 83
+    },
+    "E1a": {
+     "value": 140,
+     "reporting": 83
+    },
+    "E1d": {
+     "value": 130,
+     "reporting": 83
+    }
+   }
+  },
+  "MN": {
+   "jurisdictions": 87,
+   "items": {
+    "A1a": {
+     "value": 3853668,
+     "reporting": 87
+    },
+    "F1a": {
+     "value": 3271069,
+     "reporting": 87
+    },
+    "F1b": {
+     "value": 1960360,
+     "reporting": 87
+    },
+    "F1f": {
+     "value": 850705,
+     "reporting": 87
+    },
+    "F1d": {
+     "value": 328830,
+     "reporting": 87
+    },
+    "C1a": {
+     "value": 576563,
+     "reporting": 87
+    },
+    "C1b": {
+     "value": 455698,
+     "reporting": 87
+    },
+    "C8a": {
+     "value": 446576,
+     "reporting": 87
+    },
+    "C9a": {
+     "value": 9122,
+     "reporting": 87
+    },
+    "E1a": {
+     "value": 0,
+     "reporting": 0
+    },
+    "E1d": {
+     "value": 0,
+     "reporting": 0
+    }
+   }
+  },
+  "MO": {
+   "jurisdictions": 116,
+   "items": {
+    "A1a": {
+     "value": 4388787,
+     "reporting": 116
+    },
+    "F1a": {
+     "value": 3126837,
+     "reporting": 116
+    },
+    "F1b": {
+     "value": 2067247,
+     "reporting": 116
+    },
+    "F1f": {
+     "value": 867936,
+     "reporting": 116
+    },
+    "F1d": {
+     "value": 178526,
+     "reporting": 116
+    },
+    "C1a": {
+     "value": 199327,
+     "reporting": 116
+    },
+    "C1b": {
+     "value": 183764,
+     "reporting": 116
+    },
+    "C8a": {
+     "value": 178526,
+     "reporting": 116
+    },
+    "C9a": {
+     "value": 5238,
+     "reporting": 116
+    },
+    "E1a": {
+     "value": 8554,
+     "reporting": 116
+    },
+    "E1d": {
+     "value": 3020,
+     "reporting": 116
+    }
+   }
+  },
+  "MP": {
+   "jurisdictions": 1,
+   "items": {
+    "A1a": {
+     "value": 19329,
+     "reporting": 1
+    },
+    "F1a": {
+     "value": 12610,
+     "reporting": 1
+    },
+    "F1b": {
+     "value": 5571,
+     "reporting": 1
+    },
+    "F1f": {
+     "value": 6124,
+     "reporting": 1
+    },
+    "F1d": {
+     "value": 915,
+     "reporting": 1
+    },
+    "C1a": {
+     "value": 1168,
+     "reporting": 1
+    },
+    "C1b": {
+     "value": 0,
+     "reporting": 0
+    },
+    "C8a": {
+     "value": 0,
+     "reporting": 0
+    },
+    "C9a": {
+     "value": 13,
+     "reporting": 1
+    },
+    "E1a": {
+     "value": 12,
+     "reporting": 1
+    },
+    "E1d": {
+     "value": 12,
+     "reporting": 1
+    }
+   }
+  },
+  "MS": {
+   "jurisdictions": 82,
+   "items": {
+    "A1a": {
+     "value": 2131726,
+     "reporting": 82
+    },
+    "F1a": {
+     "value": 1225176,
+     "reporting": 82
+    },
+    "F1b": {
+     "value": 1010752,
+     "reporting": 82
+    },
+    "F1f": {
+     "value": 0,
+     "reporting": 0
+    },
+    "F1d": {
+     "value": 0,
+     "reporting": 0
+    },
+    "C1a": {
+     "value": 28558,
+     "reporting": 82
+    },
+    "C1b": {
+     "value": 0,
+     "reporting": 0
+    },
+    "C8a": {
+     "value": 0,
+     "reporting": 0
+    },
+    "C9a": {
+     "value": 0,
+     "reporting": 0
+    },
+    "E1a": {
+     "value": 21421,
+     "reporting": 82
+    },
+    "E1d": {
+     "value": 6736,
+     "reporting": 82
+    }
+   }
+  },
+  "MT": {
+   "jurisdictions": 56,
+   "items": {
+    "A1a": {
+     "value": 800573,
+     "reporting": 56
+    },
+    "F1a": {
+     "value": 612423,
+     "reporting": 56
+    },
+    "F1b": {
+     "value": 0,
+     "reporting": 0
+    },
+    "F1f": {
+     "value": 0,
+     "reporting": 0
+    },
+    "F1d": {
+     "value": 0,
+     "reporting": 0
+    },
+    "C1a": {
+     "value": 503295,
+     "reporting": 56
+    },
+    "C1b": {
+     "value": 432394,
+     "reporting": 56
+    },
+    "C8a": {
+     "value": 430159,
+     "reporting": 56
+    },
+    "C9a": {
+     "value": 2235,
+     "reporting": 56
+    },
+    "E1a": {
+     "value": 10636,
+     "reporting": 56
+    },
+    "E1d": {
+     "value": 1510,
+     "reporting": 56
+    }
+   }
+  },
+  "NC": {
+   "jurisdictions": 100,
+   "items": {
+    "A1a": {
+     "value": 7854464,
+     "reporting": 100
+    },
+    "F1a": {
+     "value": 5756106,
+     "reporting": 100
+    },
+    "F1b": {
+     "value": 1175905,
+     "reporting": 100
+    },
+    "F1f": {
+     "value": 4224909,
+     "reporting": 100
+    },
+    "F1d": {
+     "value": 298269,
+     "reporting": 100
+    },
+    "C1a": {
+     "value": 451176,
+     "reporting": 100
+    },
+    "C1b": {
+     "value": 307185,
+     "reporting": 100
+    },
+    "C8a": {
+     "value": 298269,
+     "reporting": 100
+    },
+    "C9a": {
+     "value": 8916,
+     "reporting": 100
+    },
+    "E1a": {
+     "value": 65230,
+     "reporting": 100
+    },
+    "E1d": {
+     "value": 40298,
+     "reporting": 100
+    }
+   }
+  },
+  "ND": {
+   "jurisdictions": 53,
+   "items": {
+    "A1a": {
+     "value": 0,
+     "reporting": 0
+    },
+    "F1a": {
+     "value": 371974,
+     "reporting": 53
+    },
+    "F1b": {
+     "value": 181998,
+     "reporting": 53
+    },
+    "F1f": {
+     "value": 99007,
+     "reporting": 53
+    },
+    "F1d": {
+     "value": 89429,
+     "reporting": 53
+    },
+    "C1a": {
+     "value": 94676,
+     "reporting": 53
+    },
+    "C1b": {
+     "value": 89930,
+     "reporting": 53
+    },
+    "C8a": {
+     "value": 89429,
+     "reporting": 53
+    },
+    "C9a": {
+     "value": 501,
+     "reporting": 53
+    },
+    "E1a": {
+     "value": 0,
+     "reporting": 0
+    },
+    "E1d": {
+     "value": 0,
+     "reporting": 0
+    }
+   }
+  },
+  "NE": {
+   "jurisdictions": 93,
+   "items": {
+    "A1a": {
+     "value": 1263487,
+     "reporting": 93
+    },
+    "F1a": {
+     "value": 965145,
+     "reporting": 93
+    },
+    "F1b": {
+     "value": 564660,
+     "reporting": 93
+    },
+    "F1f": {
+     "value": 80304,
+     "reporting": 93
+    },
+    "F1d": {
+     "value": 260899,
+     "reporting": 93
+    },
+    "C1a": {
+     "value": 323237,
+     "reporting": 93
+    },
+    "C1b": {
+     "value": 308601,
+     "reporting": 93
+    },
+    "C8a": {
+     "value": 307135,
+     "reporting": 93
+    },
+    "C9a": {
+     "value": 1466,
+     "reporting": 93
+    },
+    "E1a": {
+     "value": 15870,
+     "reporting": 93
+    },
+    "E1d": {
+     "value": 5219,
+     "reporting": 93
+    }
+   }
+  },
+  "NH": {
+   "jurisdictions": 320,
+   "items": {
+    "A1a": {
+     "value": 1008952,
+     "reporting": 320
+    },
+    "F1a": {
+     "value": 829090,
+     "reporting": 320
+    },
+    "F1b": {
+     "value": 730273,
+     "reporting": 320
+    },
+    "F1f": {
+     "value": 0,
+     "reporting": 320
+    },
+    "F1d": {
+     "value": 92945,
+     "reporting": 320
+    },
+    "C1a": {
+     "value": 98762,
+     "reporting": 320
+    },
+    "C1b": {
+     "value": 94362,
+     "reporting": 320
+    },
+    "C8a": {
+     "value": 92945,
+     "reporting": 320
+    },
+    "C9a": {
+     "value": 1552,
+     "reporting": 320
+    },
+    "E1a": {
+     "value": 0,
+     "reporting": 0
+    },
+    "E1d": {
+     "value": 0,
+     "reporting": 0
+    }
+   }
+  },
+  "NJ": {
+   "jurisdictions": 21,
+   "items": {
+    "A1a": {
+     "value": 6630364,
+     "reporting": 21
+    },
+    "F1a": {
+     "value": 4321921,
+     "reporting": 21
+    },
+    "F1b": {
+     "value": 0,
+     "reporting": 0
+    },
+    "F1f": {
+     "value": 0,
+     "reporting": 0
+    },
+    "F1d": {
+     "value": 828200,
+     "reporting": 21
+    },
+    "C1a": {
+     "value": 1100762,
+     "reporting": 21
+    },
+    "C1b": {
+     "value": 839944,
+     "reporting": 21
+    },
+    "C8a": {
+     "value": 828200,
+     "reporting": 21
+    },
+    "C9a": {
+     "value": 11191,
+     "reporting": 21
+    },
+    "E1a": {
+     "value": 130146,
+     "reporting": 21
+    },
+    "E1d": {
+     "value": 13618,
+     "reporting": 21
+    }
+   }
+  },
+  "NM": {
+   "jurisdictions": 33,
+   "items": {
+    "A1a": {
+     "value": 1415984,
+     "reporting": 33
+    },
+    "F1a": {
+     "value": 927923,
+     "reporting": 33
+    },
+    "F1b": {
+     "value": 252629,
+     "reporting": 33
+    },
+    "F1f": {
+     "value": 556395,
+     "reporting": 33
+    },
+    "F1d": {
+     "value": 111167,
+     "reporting": 33
+    },
+    "C1a": {
+     "value": 122478,
+     "reporting": 33
+    },
+    "C1b": {
+     "value": 112494,
+     "reporting": 33
+    },
+    "C8a": {
+     "value": 111527,
+     "reporting": 33
+    },
+    "C9a": {
+     "value": 967,
+     "reporting": 33
+    },
+    "E1a": {
+     "value": 2145,
+     "reporting": 33
+    },
+    "E1d": {
+     "value": 548,
+     "reporting": 33
+    }
+   }
+  },
+  "NV": {
+   "jurisdictions": 17,
+   "items": {
+    "A1a": {
+     "value": 2256275,
+     "reporting": 17
+    },
+    "F1a": {
+     "value": 1486297,
+     "reporting": 17
+    },
+    "F1b": {
+     "value": 247291,
+     "reporting": 17
+    },
+    "F1f": {
+     "value": 543461,
+     "reporting": 17
+    },
+    "F1d": {
+     "value": 0,
+     "reporting": 17
+    },
+    "C1a": {
+     "value": 2069339,
+     "reporting": 17
+    },
+    "C1b": {
+     "value": 669445,
+     "reporting": 17
+    },
+    "C8a": {
+     "value": 656140,
+     "reporting": 17
+    },
+    "C9a": {
+     "value": 13305,
+     "reporting": 17
+    },
+    "E1a": {
+     "value": 30813,
+     "reporting": 17
+    },
+    "E1d": {
+     "value": 2556,
+     "reporting": 17
+    }
+   }
+  },
+  "NY": {
+   "jurisdictions": 62,
+   "items": {
+    "A1a": {
+     "value": 13579416,
+     "reporting": 62
+    },
+    "F1a": {
+     "value": 8389626,
+     "reporting": 62
+    },
+    "F1b": {
+     "value": 4320467,
+     "reporting": 62
+    },
+    "F1f": {
+     "value": 2986704,
+     "reporting": 62
+    },
+    "F1d": {
+     "value": 836987,
+     "reporting": 62
+    },
+    "C1a": {
+     "value": 975377,
+     "reporting": 57
+    },
+    "C1b": {
+     "value": 862737,
+     "reporting": 62
+    },
+    "C8a": {
+     "value": 836987,
+     "reporting": 62
+    },
+    "C9a": {
+     "value": 25750,
+     "reporting": 62
+    },
+    "E1a": {
+     "value": 251783,
+     "reporting": 62
+    },
+    "E1d": {
+     "value": 62703,
+     "reporting": 62
+    }
+   }
+  },
+  "OH": {
+   "jurisdictions": 88,
+   "items": {
+    "A1a": {
+     "value": 8074098,
+     "reporting": 88
+    },
+    "F1a": {
+     "value": 5851625,
+     "reporting": 88
+    },
+    "F1b": {
+     "value": 3130240,
+     "reporting": 88
+    },
+    "F1f": {
+     "value": 1536604,
+     "reporting": 88
+    },
+    "F1d": {
+     "value": 1060096,
+     "reporting": 88
+    },
+    "C1a": {
+     "value": 1131278,
+     "reporting": 88
+    },
+    "C1b": {
+     "value": 1066229,
+     "reporting": 88
+    },
+    "C8a": {
+     "value": 1058400,
+     "reporting": 88
+    },
+    "C9a": {
+     "value": 8335,
+     "reporting": 88
+    },
+    "E1a": {
+     "value": 139051,
+     "reporting": 88
+    },
+    "E1d": {
+     "value": 34304,
+     "reporting": 88
+    }
+   }
+  },
+  "OK": {
+   "jurisdictions": 77,
+   "items": {
+    "A1a": {
+     "value": 2442211,
+     "reporting": 77
+    },
+    "F1a": {
+     "value": 1573274,
+     "reporting": 77
+    },
+    "F1b": {
+     "value": 1174876,
+     "reporting": 77
+    },
+    "F1f": {
+     "value": 294037,
+     "reporting": 77
+    },
+    "F1d": {
+     "value": 98548,
+     "reporting": 77
+    },
+    "C1a": {
+     "value": 124664,
+     "reporting": 77
+    },
+    "C1b": {
+     "value": 103025,
+     "reporting": 77
+    },
+    "C8a": {
+     "value": 98548,
+     "reporting": 77
+    },
+    "C9a": {
+     "value": 4477,
+     "reporting": 77
+    },
+    "E1a": {
+     "value": 4234,
+     "reporting": 77
+    },
+    "E1d": {
+     "value": 2636,
+     "reporting": 77
+    }
+   }
+  },
+  "OR": {
+   "jurisdictions": 36,
+   "items": {
+    "A1a": {
+     "value": 3060374,
+     "reporting": 36
+    },
+    "F1a": {
+     "value": 2269608,
+     "reporting": 36
+    },
+    "F1b": {
+     "value": 0,
+     "reporting": 0
+    },
+    "F1f": {
+     "value": 0,
+     "reporting": 0
+    },
+    "F1d": {
+     "value": 0,
+     "reporting": 36
+    },
+    "C1a": {
+     "value": 3038435,
+     "reporting": 36
+    },
+    "C1b": {
+     "value": 2291579,
+     "reporting": 36
+    },
+    "C8a": {
+     "value": 2253114,
+     "reporting": 36
+    },
+    "C9a": {
+     "value": 38465,
+     "reporting": 36
+    },
+    "E1a": {
+     "value": 180,
+     "reporting": 36
+    },
+    "E1d": {
+     "value": 128,
+     "reporting": 36
+    }
+   }
+  },
+  "PA": {
+   "jurisdictions": 67,
+   "items": {
+    "A1a": {
+     "value": 9175133,
+     "reporting": 67
+    },
+    "F1a": {
+     "value": 7074875,
+     "reporting": 67
+    },
+    "F1b": {
+     "value": 5043808,
+     "reporting": 67
+    },
+    "F1f": {
+     "value": 0,
+     "reporting": 0
+    },
+    "F1d": {
+     "value": 1933707,
+     "reporting": 67
+    },
+    "C1a": {
+     "value": 2204273,
+     "reporting": 67
+    },
+    "C1b": {
+     "value": 1952372,
+     "reporting": 67
+    },
+    "C8a": {
+     "value": 1933102,
+     "reporting": 67
+    },
+    "C9a": {
+     "value": 19270,
+     "reporting": 67
+    },
+    "E1a": {
+     "value": 98032,
+     "reporting": 67
+    },
+    "E1d": {
+     "value": 28544,
+     "reporting": 67
+    }
+   }
+  },
+  "PR": {
+   "jurisdictions": 1,
+   "items": {
+    "A1a": {
+     "value": 1987317,
+     "reporting": 1
+    },
+    "F1a": {
+     "value": 1283628,
+     "reporting": 1
+    },
+    "F1b": {
+     "value": 1071954,
+     "reporting": 1
+    },
+    "F1f": {
+     "value": 4004,
+     "reporting": 1
+    },
+    "F1d": {
+     "value": 132157,
+     "reporting": 1
+    },
+    "C1a": {
+     "value": 149339,
+     "reporting": 1
+    },
+    "C1b": {
+     "value": 134396,
+     "reporting": 1
+    },
+    "C8a": {
+     "value": 132157,
+     "reporting": 1
+    },
+    "C9a": {
+     "value": 2239,
+     "reporting": 1
+    },
+    "E1a": {
+     "value": 22889,
+     "reporting": 1
+    },
+    "E1d": {
+     "value": 10313,
+     "reporting": 1
+    }
+   }
+  },
+  "RI": {
+   "jurisdictions": 39,
+   "items": {
+    "A1a": {
+     "value": 792075,
+     "reporting": 39
+    },
+    "F1a": {
+     "value": 522164,
+     "reporting": 39
+    },
+    "F1b": {
+     "value": 290699,
+     "reporting": 39
+    },
+    "F1f": {
+     "value": 173547,
+     "reporting": 39
+    },
+    "F1d": {
+     "value": 51995,
+     "reporting": 39
+    },
+    "C1a": {
+     "value": 56663,
+     "reporting": 39
+    },
+    "C1b": {
+     "value": 52301,
+     "reporting": 39
+    },
+    "C8a": {
+     "value": 51995,
+     "reporting": 39
+    },
+    "C9a": {
+     "value": 306,
+     "reporting": 39
+    },
+    "E1a": {
+     "value": 5308,
+     "reporting": 39
+    },
+    "E1d": {
+     "value": 2794,
+     "reporting": 39
+    }
+   }
+  },
+  "SC": {
+   "jurisdictions": 46,
+   "items": {
+    "A1a": {
+     "value": 3851187,
+     "reporting": 46
+    },
+    "F1a": {
+     "value": 2566404,
+     "reporting": 46
+    },
+    "F1b": {
+     "value": 977341,
+     "reporting": 46
+    },
+    "F1f": {
+     "value": 1476843,
+     "reporting": 46
+    },
+    "F1d": {
+     "value": 98782,
+     "reporting": 46
+    },
+    "C1a": {
+     "value": 108922,
+     "reporting": 46
+    },
+    "C1b": {
+     "value": 101585,
+     "reporting": 46
+    },
+    "C8a": {
+     "value": 98782,
+     "reporting": 46
+    },
+    "C9a": {
+     "value": 2803,
+     "reporting": 46
+    },
+    "E1a": {
+     "value": 6571,
+     "reporting": 46
+    },
+    "E1d": {
+     "value": 2303,
+     "reporting": 46
+    }
+   }
+  },
+  "SD": {
+   "jurisdictions": 66,
+   "items": {
+    "A1a": {
+     "value": 690306,
+     "reporting": 66
+    },
+    "F1a": {
+     "value": 435739,
+     "reporting": 66
+    },
+    "F1b": {
+     "value": 273648,
+     "reporting": 66
+    },
+    "F1f": {
+     "value": 0,
+     "reporting": 66
+    },
+    "F1d": {
+     "value": 159335,
+     "reporting": 66
+    },
+    "C1a": {
+     "value": 155015,
+     "reporting": 66
+    },
+    "C1b": {
+     "value": 152146,
+     "reporting": 66
+    },
+    "C8a": {
+     "value": 151762,
+     "reporting": 66
+    },
+    "C9a": {
+     "value": 738,
+     "reporting": 66
+    },
+    "E1a": {
+     "value": 406,
+     "reporting": 61
+    },
+    "E1d": {
+     "value": 205,
+     "reporting": 58
+    }
+   }
+  },
+  "TN": {
+   "jurisdictions": 95,
+   "items": {
+    "A1a": {
+     "value": 4825601,
+     "reporting": 95
+    },
+    "F1a": {
+     "value": 3090161,
+     "reporting": 95
+    },
+    "F1b": {
+     "value": 856491,
+     "reporting": 95
+    },
+    "F1f": {
+     "value": 2132535,
+     "reporting": 95
+    },
+    "F1d": {
+     "value": 86904,
+     "reporting": 95
+    },
+    "C1a": {
+     "value": 98452,
+     "reporting": 95
+    },
+    "C1b": {
+     "value": 88748,
+     "reporting": 95
+    },
+    "C8a": {
+     "value": 86904,
+     "reporting": 95
+    },
+    "C9a": {
+     "value": 1844,
+     "reporting": 95
+    },
+    "E1a": {
+     "value": 12715,
+     "reporting": 95
+    },
+    "E1d": {
+     "value": 9574,
+     "reporting": 95
+    }
+   }
+  },
+  "TX": {
+   "jurisdictions": 254,
+   "items": {
+    "A1a": {
+     "value": 18623931,
+     "reporting": 254
+    },
+    "F1a": {
+     "value": 11488820,
+     "reporting": 254
+    },
+    "F1b": {
+     "value": 2329171,
+     "reporting": 254
+    },
+    "F1f": {
+     "value": 8703181,
+     "reporting": 253
+    },
+    "F1d": {
+     "value": 384221,
+     "reporting": 254
+    },
+    "C1a": {
+     "value": 463200,
+     "reporting": 254
+    },
+    "C1b": {
+     "value": 398270,
+     "reporting": 254
+    },
+    "C8a": {
+     "value": 384221,
+     "reporting": 254
+    },
+    "C9a": {
+     "value": 14049,
+     "reporting": 254
+    },
+    "E1a": {
+     "value": 66811,
+     "reporting": 235
+    },
+    "E1d": {
+     "value": 51128,
+     "reporting": 236
+    }
+   }
+  },
+  "UT": {
+   "jurisdictions": 29,
+   "items": {
+    "A1a": {
+     "value": 2039862,
+     "reporting": 29
+    },
+    "F1a": {
+     "value": 1466896,
+     "reporting": 28
+    },
+    "F1b": {
+     "value": 104350,
+     "reporting": 26
+    },
+    "F1f": {
+     "value": 36381,
+     "reporting": 26
+    },
+    "F1d": {
+     "value": 0,
+     "reporting": 10
+    },
+    "C1a": {
+     "value": 1475522,
+     "reporting": 27
+    },
+    "C1b": {
+     "value": 1268103,
+     "reporting": 28
+    },
+    "C8a": {
+     "value": 1239070,
+     "reporting": 29
+    },
+    "C9a": {
+     "value": 23819,
+     "reporting": 29
+    },
+    "E1a": {
+     "value": 47272,
+     "reporting": 29
+    },
+    "E1d": {
+     "value": 3623,
+     "reporting": 29
+    }
+   }
+  },
+  "VA": {
+   "jurisdictions": 133,
+   "items": {
+    "A1a": {
+     "value": 6380686,
+     "reporting": 133
+    },
+    "F1a": {
+     "value": 4511853,
+     "reporting": 133
+    },
+    "F1b": {
+     "value": 2053905,
+     "reporting": 133
+    },
+    "F1f": {
+     "value": 1840239,
+     "reporting": 133
+    },
+    "F1d": {
+     "value": 474332,
+     "reporting": 133
+    },
+    "C1a": {
+     "value": 531154,
+     "reporting": 133
+    },
+    "C1b": {
+     "value": 479139,
+     "reporting": 133
+    },
+    "C8a": {
+     "value": 474332,
+     "reporting": 133
+    },
+    "C9a": {
+     "value": 4807,
+     "reporting": 133
+    },
+    "E1a": {
+     "value": 119249,
+     "reporting": 133
+    },
+    "E1d": {
+     "value": 7859,
+     "reporting": 133
+    }
+   }
+  },
+  "VI": {
+   "jurisdictions": 1,
+   "items": {
+    "A1a": {
+     "value": 56304,
+     "reporting": 1
+    },
+    "F1a": {
+     "value": 15952,
+     "reporting": 1
+    },
+    "F1b": {
+     "value": 6832,
+     "reporting": 1
+    },
+    "F1f": {
+     "value": 8506,
+     "reporting": 1
+    },
+    "F1d": {
+     "value": 613,
+     "reporting": 1
+    },
+    "C1a": {
+     "value": 648,
+     "reporting": 1
+    },
+    "C1b": {
+     "value": 613,
+     "reporting": 1
+    },
+    "C8a": {
+     "value": 613,
+     "reporting": 1
+    },
+    "C9a": {
+     "value": 6,
+     "reporting": 1
+    },
+    "E1a": {
+     "value": 1,
+     "reporting": 1
+    },
+    "E1d": {
+     "value": 0,
+     "reporting": 1
+    }
+   }
+  },
+  "VT": {
+   "jurisdictions": 247,
+   "items": {
+    "A1a": {
+     "value": 500986,
+     "reporting": 247
+    },
+    "F1a": {
+     "value": 361604,
+     "reporting": 247
+    },
+    "F1b": {
+     "value": 122386,
+     "reporting": 247
+    },
+    "F1f": {
+     "value": 2631,
+     "reporting": 247
+    },
+    "F1d": {
+     "value": 234038,
+     "reporting": 247
+    },
+    "C1a": {
+     "value": 441666,
+     "reporting": 247
+    },
+    "C1b": {
+     "value": 237565,
+     "reporting": 247
+    },
+    "C8a": {
+     "value": 240375,
+     "reporting": 247
+    },
+    "C9a": {
+     "value": 467,
+     "reporting": 247
+    },
+    "E1a": {
+     "value": 0,
+     "reporting": 0
+    },
+    "E1d": {
+     "value": 0,
+     "reporting": 0
+    }
+   }
+  },
+  "WA": {
+   "jurisdictions": 39,
+   "items": {
+    "A1a": {
+     "value": 5597156,
+     "reporting": 39
+    },
+    "F1a": {
+     "value": 3949810,
+     "reporting": 39
+    },
+    "F1b": {
+     "value": 0,
+     "reporting": 0
+    },
+    "F1f": {
+     "value": 171,
+     "reporting": 39
+    },
+    "F1d": {
+     "value": 0,
+     "reporting": 39
+    },
+    "C1a": {
+     "value": 5169231,
+     "reporting": 39
+    },
+    "C1b": {
+     "value": 3927132,
+     "reporting": 39
+    },
+    "C8a": {
+     "value": 3890945,
+     "reporting": 39
+    },
+    "C9a": {
+     "value": 36187,
+     "reporting": 39
+    },
+    "E1a": {
+     "value": 120,
+     "reporting": 39
+    },
+    "E1d": {
+     "value": 108,
+     "reporting": 39
+    }
+   }
+  },
+  "WI": {
+   "jurisdictions": 1851,
+   "items": {
+    "A1a": {
+     "value": 3933068,
+     "reporting": 1851
+    },
+    "F1a": {
+     "value": 3434185,
+     "reporting": 1851
+    },
+    "F1b": {
+     "value": 1870285,
+     "reporting": 1851
+    },
+    "F1f": {
+     "value": 977648,
+     "reporting": 1851
+    },
+    "F1d": {
+     "value": 570657,
+     "reporting": 1851
+    },
+    "C1a": {
+     "value": 614367,
+     "reporting": 1851
+    },
+    "C1b": {
+     "value": 575257,
+     "reporting": 1851
+    },
+    "C8a": {
+     "value": 572434,
+     "reporting": 1851
+    },
+    "C9a": {
+     "value": 2823,
+     "reporting": 1851
+    },
+    "E1a": {
+     "value": 661,
+     "reporting": 1851
+    },
+    "E1d": {
+     "value": 509,
+     "reporting": 1851
+    }
+   }
+  },
+  "WV": {
+   "jurisdictions": 55,
+   "items": {
+    "A1a": {
+     "value": 1210415,
+     "reporting": 55
+    },
+    "F1a": {
+     "value": 769206,
+     "reporting": 55
+    },
+    "F1b": {
+     "value": 431925,
+     "reporting": 55
+    },
+    "F1f": {
+     "value": 310305,
+     "reporting": 55
+    },
+    "F1d": {
+     "value": 22377,
+     "reporting": 55
+    },
+    "C1a": {
+     "value": 24830,
+     "reporting": 55
+    },
+    "C1b": {
+     "value": 22624,
+     "reporting": 55
+    },
+    "C8a": {
+     "value": 22377,
+     "reporting": 55
+    },
+    "C9a": {
+     "value": 247,
+     "reporting": 55
+    },
+    "E1a": {
+     "value": 7782,
+     "reporting": 55
+    },
+    "E1d": {
+     "value": 4709,
+     "reporting": 55
+    }
+   }
+  },
+  "WY": {
+   "jurisdictions": 23,
+   "items": {
+    "A1a": {
+     "value": 296960,
+     "reporting": 23
+    },
+    "F1a": {
+     "value": 271123,
+     "reporting": 23
+    },
+    "F1b": {
+     "value": 154579,
+     "reporting": 23
+    },
+    "F1f": {
+     "value": 76943,
+     "reporting": 23
+    },
+    "F1d": {
+     "value": 38217,
+     "reporting": 23
+    },
+    "C1a": {
+     "value": 39842,
+     "reporting": 23
+    },
+    "C1b": {
+     "value": 38421,
+     "reporting": 23
+    },
+    "C8a": {
+     "value": 38217,
+     "reporting": 23
+    },
+    "C9a": {
+     "value": 204,
+     "reporting": 23
+    },
+    "E1a": {
+     "value": 130,
+     "reporting": 19
+    },
+    "E1d": {
+     "value": 67,
+     "reporting": 19
+    }
+   }
+  }
+ }
+}

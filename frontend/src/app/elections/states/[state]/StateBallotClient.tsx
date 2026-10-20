@@ -46,6 +46,8 @@ import {
   contestHash,
 } from "@/lib/ballotContests";
 import {
+  ballotHeadline,
+  candidateCountLabel,
   candidateName,
   districtAreaLabel,
   formatPvi,
@@ -1917,18 +1919,26 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                   <span>{longDate(ballot.electionDate).toUpperCase()}</span>
                 </p>
                 <h1 className="mt-1 font-display text-2xl font-semibold text-ink-hi sm:text-[28px]">
-                  {resultsFraming ? (
-                    `${stateName} results`
-                  ) : (
-                    <>Everyone on {stateName}&apos;s ballot, and who is behind them</>
-                  )}
+                  {resultsFraming
+                    ? `${stateName} results`
+                    : ballotHeadline(stateName, ballot.ballotBasis?.basis)}
                 </h1>
                 <p className="mt-1.5 text-sm text-ink-lo">
                   {contestCount} {contestCount === 1 ? "contest" : "contests"} ·{" "}
-                  {federalCandidates.length} federal{" "}
-                  {federalCandidates.length === 1 ? "candidate" : "candidates"}
+                  {candidateCountLabel(federalCandidates.length, ballot.ballotBasis?.basis)}
                   {thirdParty > 0 && `, ${thirdParty} outside the two major parties`}
                   {withRecords > 0 && ` · ${withRecords} with a congressional voting record`}
+                  {ballot.electoralVotes != null && (
+                    <>
+                      {" · "}
+                      <Link
+                        href="/elections#president"
+                        className="inline-flex min-h-6 items-center underline decoration-white/30 hover:text-phos"
+                      >
+                        {ballot.electoralVotes} electoral votes for president
+                      </Link>
+                    </>
+                  )}
                   {ballot.statePvi !== null && !resultsMode && (
                     <>
                       {" · "}

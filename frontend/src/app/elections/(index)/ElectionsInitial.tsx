@@ -3,6 +3,16 @@
 import { createContext, useContext } from "react";
 import type { ElectionPhaseInfo, PviMap } from "@/types/election";
 import type { ElectionCalendar, SpecialsBoard } from "@/types/specials";
+import type { ArchiveIndex } from "@/types/electionArchive";
+import type {
+  ElectionAdministration,
+  FecDeadlineEvent,
+  NewCongress,
+  NextField,
+  OddYearStates,
+  PresidentialContest,
+} from "@/types/nextCycle";
+import type { RedistrictingWatch } from "@/types/redistricting";
 
 /** What the server already read for /elections (elections/layout.tsx): the
  * lean map and which mode the page is in, so the masthead, map and state
@@ -23,8 +33,24 @@ export interface ElectionsInitial {
    * general elections it leads the page, with the calendar. Null when the
    * server couldn't read it. */
   specials: SpecialsBoard | null;
-  /** The calendar, read only between general elections. */
+  /** The calendar, read between general elections and in primary season. */
   calendar: ElectionCalendar | null;
+  /** The archive's index, read after the count settles (post-certification). */
+  archive?: ArchiveIndex | null;
+  /** The next cycle's FEC registrations, between cycles and in primary season. */
+  field?: NextField | null;
+  /** How the sitting Congress compares, in the off-season. */
+  newCongress?: NewCongress | null;
+  /** The FEC's reporting deadline the page leads with around its day. */
+  fecDeadline?: FecDeadlineEvent | null;
+  /** The redistricting watch and the coming odd year's state elections,
+   * between cycles. */
+  redistrictingWatch?: RedistrictingWatch | null;
+  oddYear?: OddYearStates | null;
+  /** The presidential contest (shown in the cycles that hold one). */
+  presidential?: PresidentialContest | null;
+  /** How the last general was run (the EAC's survey), between cycles. */
+  administration?: ElectionAdministration | null;
   /** The server's clock when it rendered, so the countdown reads the same
    * on the server and in the browser. */
   renderedAt: number;
