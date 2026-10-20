@@ -77,7 +77,7 @@ export function stateFeed(code: string, name: string): Feed {
 
 /** One followed thing's feed (backend app/entity_feeds.py; paths from
  *  api/feed.py member_feed_path and its siblings, titled as the feed titles
- *  itself). A member: votes, sponsored bills' actions, score changes and
+ *  itself). A member: votes, sponsored bills' actions and
  *  disclosures. */
 export function memberFeed(id: string, name: string): Feed {
   return { url: `/feed/members/${encodeURIComponent(id)}.xml`, title: `Civitas Research: ${name}` };
@@ -229,7 +229,7 @@ export function notFoundMetadata(title: string, description: string): Metadata {
  * RECORD", matched no query anyone makes. Both are kept under what a
  * result page shows (~60 and 160 characters).
  */
-export const HOME_TITLE = "Civitas Research: Congress Scorecards, Money and Votes";
+export const HOME_TITLE = "Civitas Research: Congress Voting Records, Money and Bills";
 export const HOME_DESCRIPTION =
   "Civitas Research is an independent record of the U.S. government: who funds Congress and the president, how they vote, and the source of every number.";
 /**

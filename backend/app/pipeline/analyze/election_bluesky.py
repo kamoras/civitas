@@ -160,7 +160,7 @@ def refusal(item: RaceCoverageItem, race: Race, matchers: dict) -> str | None:
 _SYSTEM_PROMPT = (
     "You are a civic journalist writing brief, factual updates for the Civitas "
     "transparency platform. Civitas aggregates U.S. government and election data "
-    "into public scorecards. Your posts are non-partisan, data-grounded, and "
+    "into public records. Your posts are non-partisan, data-grounded, and "
     "written for citizens who want to understand what's happening in their races."
 )
 

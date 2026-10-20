@@ -101,8 +101,8 @@ export default async function ElectionsChapter() {
           Each federal contest&apos;s research opens with what shapes the race. Civitas publishes no
           odds or rating for any race, and calls none; these figures describe a race. The one place
           this year&apos;s polls appear is the <A href="#election-map">Senate and House map</A>, as
-          a range for the margin, kept apart from this block because the block shows the
-          incumbent&apos;s Representation Score.
+          a range for the margin, kept apart from this block, which links to the incumbent&apos;s
+          record.
         </P>
         <P>
           <strong>The seat.</strong> Its lean is the figure the election map shows, computed by
@@ -166,12 +166,12 @@ export default async function ElectionsChapter() {
           same way (when a range leaned one way by this much, how often that side carried the seat),
           and why there is no seat total. The archive&apos;s polls reach only the final weeks before
           election day, so further out the map shows each seat&apos;s structural range alone,
-          labelled fundamentals only, with its polls listed beside it. It has nothing to do with
-          Representation Scores, which measure a member&apos;s record, not an election. Only
-          Democrat-versus-Republican races whose November ballot Civitas has confirmed get a range.
-          The House fit covers every cycle from 2018 whose House results the FEC has compiled, with
-          each district&apos;s lean rebuilt from precinct returns as it stood before each election,
-          on the lines it was held on.
+          labelled fundamentals only, with its polls listed beside it. It has nothing to do with a
+          member&apos;s record on their page, which describes what the member did, not an election.
+          Only Democrat-versus-Republican races whose November ballot Civitas has confirmed get a
+          range. The House fit covers every cycle from 2018 whose House results the FEC has
+          compiled, with each district&apos;s lean rebuilt from precinct returns as it stood before
+          each election, on the lines it was held on.
         </P>
         <P>
           This year&apos;s polls come from Wikipedia&apos;s race articles. The poll figures and the
@@ -309,19 +309,21 @@ export default async function ElectionsChapter() {
           legislative line in a year the state elects no legislature.
         </P>
         <P>
-          Each state page opens with &ldquo;Your vote, step by step&rdquo;: five buttons, in the
-          order you do them (check your registration, register, see your sample ballot, find your
-          polling place, vote early or by mail). Each names the site it opens and carries its
-          deadline. Every link is the state&apos;s own page, found through the Secretaries of
-          State&apos;s directory (NASS&apos;s Can I Vote) and opened to check it. A sample ballot
-          button goes to the state&apos;s lookup only where that lookup says it shows one; elsewhere
-          it goes to your county election office. Each night Civitas checks that every link still
-          opens its page; when one doesn&apos;t (the page is gone, or moved to the site&apos;s
-          homepage), that step goes to vote.gov for registering, NASS&apos;s Can I Vote for the
-          rest, or USAGov&apos;s directory for a sample ballot. Some states&apos; sites turn away
-          every automated check, though they open for a person. Civitas never gets past that block,
-          so it can&apos;t confirm those links are up: the step still links the state&apos;s page,
-          says it couldn&apos;t be checked, and gives the backup beside it.
+          Above the ballot, each state page has one button to your official sample ballot, then its
+          next voter deadline in one line, which leads to &ldquo;Your vote, step by step&rdquo;
+          after the contests: five buttons, in the order you do them (check your registration,
+          register, see your sample ballot, find your polling place, vote early or by mail). Each
+          names the site it opens and carries its deadline. Every link is the state&apos;s own page,
+          found through the Secretaries of State&apos;s directory (NASS&apos;s Can I Vote) and
+          opened to check it. A sample ballot button goes to the state&apos;s lookup only where that
+          lookup says it shows one; elsewhere it goes to your county election office. Each night
+          Civitas checks that every link still opens its page; when one doesn&apos;t (the page is
+          gone, or moved to the site&apos;s homepage), that step goes to vote.gov for registering,
+          NASS&apos;s Can I Vote for the rest, or USAGov&apos;s directory for a sample ballot. Some
+          states&apos; sites turn away every automated check, though they open for a person. Civitas
+          never gets past that block, so it can&apos;t confirm those links are up: the step still
+          links the state&apos;s page, says it couldn&apos;t be checked, and gives the backup beside
+          it.
         </P>
       </Section>
 

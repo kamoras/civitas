@@ -33,7 +33,7 @@ describe("describeProfile", () => {
     const { title, description } = describeProfile(
       profile("senate", { state: "CA", stateName: "California", isCurrent: true })
     );
-    expect(title).toBe("Sen. Jane Doe (D-CA): Voting Record, Donors & Scorecard");
+    expect(title).toBe("Sen. Jane Doe (D-CA): Voting Record, Donors & Bills");
     expect(description).toContain("Democratic senator for California");
     expect(description.length).toBeLessThanOrEqual(160);
   });

@@ -21,8 +21,12 @@ const STATES = Object.entries(STATE_NAMES).sort((a, b) => a[1].localeCompare(b[1
 export default function StateJump({
   label,
   to,
+  showYours = true,
 }: {
   label: string;
+  /** Off where the page already links the header's state itself
+   *  (/elections' "Your state" line). */
+  showYours?: boolean;
   /** Where a pick goes: the state's members, or its ballot page. */
   to: "members" | "ballot";
 }) {
@@ -34,7 +38,7 @@ export default function StateJump({
   const name = state ? (STATE_NAMES[state] ?? state) : "";
   return (
     <div className="mt-auto pt-3">
-      {state && (
+      {state && showYours && (
         <Link href={hrefFor(state)} className={`inline-flex min-h-11 items-center ${INLINE_LINK}`}>
           {name}&apos;s {to === "ballot" ? "ballot" : "members"} &rarr;
         </Link>

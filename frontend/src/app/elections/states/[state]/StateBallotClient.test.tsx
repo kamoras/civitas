@@ -260,7 +260,7 @@ describe("the ballot page", () => {
     expect(within(box).getByText("Shannon Bly")).toBeInTheDocument();
   });
 
-  it("opens with the state's voter deadlines, before the ballot", () => {
+  it("leads with the next voter deadline in one line, the full calendar after the ballot", () => {
     const deadline = {
       kind: "registration" as const,
       method: "online" as const,
@@ -300,11 +300,19 @@ describe("the ballot page", () => {
         })}
       />
     );
+    const lead = screen.getByTestId("vote-steps-lead");
+    expect(lead).toHaveTextContent("Next deadline: Online registration closes Oct 26");
+    expect(within(lead).getByRole("link")).toHaveAttribute("href", "#voter-deadlines");
+    const ballotColumns = screen.getByTestId("ballot-columns");
+    expect(
+      lead.compareDocumentPosition(ballotColumns) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    // Every deadline, with its rule and source, still on the page: after
+    // the contests, so the ballot is in a phone's first screen.
     const section = screen.getByRole("region", { name: /Voter deadlines/ });
     expect(section).toHaveTextContent("Online registration closes Oct 26 (6 days left).");
     expect(
-      section.compareDocumentPosition(screen.getByTestId("ballot-columns")) &
-        Node.DOCUMENT_POSITION_FOLLOWING
+      ballotColumns.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
   });
 
@@ -356,6 +364,17 @@ describe("the ballot page", () => {
     // The page's one register link is the step's.
     expect(screen.getAllByRole("link", { name: /^Register/ })).toHaveLength(1);
     expect(screen.queryByText(/Official voter lookup/)).not.toBeInTheDocument();
+    // The sample-ballot lookup is a button above the ballot (#1123), and
+    // the register link is not beside it.
+    const lookup = screen.getByTestId("ballot-lookup");
+    expect(lookup).toHaveAttribute("href", "https://my.arizona.vote/sample_ballot");
+    expect(
+      lookup.compareDocumentPosition(screen.getByTestId("ballot-index")) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      within(screen.getByTestId("vote-steps-lead")).queryByRole("link", { name: /^Register/ })
+    ).not.toBeInTheDocument();
   });
 
   it("gives a verified lookup no caveat", () => {
@@ -453,7 +472,7 @@ describe("the contest drawer", () => {
     expect(drawer.getAllByText("not linked")).toHaveLength(2);
     expect(drawer.queryByText(/no scorecard|has a Civitas scorecard/i)).toBeNull();
     expect(
-      drawer.getByText("No one in this race is linked to a Civitas scorecard.")
+      drawer.getByText("No one in this race is linked to a member's record on Civitas.")
     ).toBeInTheDocument();
   });
 

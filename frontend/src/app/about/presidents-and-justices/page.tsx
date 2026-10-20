@@ -43,9 +43,8 @@ export default function PresidentsAndJusticesChapter() {
         </Point>
         <Point>
           Where a president has no real data for a score (no historians&apos; rating yet for recent
-          presidents, no approval polling or election win for four of them), it reads N/A and is
-          left out of their overall score, rather than filled with a guess. Each score on their page
-          shows its actual share of their overall.
+          presidents, no approval polling or election win for four of them), it reads N/A rather
+          than being filled with a guess.
         </Point>
         <Point>
           A justice&apos;s page draws the record beside every sitting justice&apos;s: majority and
