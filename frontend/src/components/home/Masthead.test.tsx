@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import Masthead, { electionLinks } from "./Masthead";
 import StateJump from "./StateJump";
+import { YOUR_STATE_KEY } from "@/hooks/useYourState";
 import { ELECTION_MAP_HREF } from "@/lib/electionMap";
 
 const push = vi.fn();
@@ -38,5 +39,16 @@ describe("StateJump", () => {
     await userEvent.selectOptions(screen.getByLabelText("State"), "OR");
     expect(push).toHaveBeenCalledWith("/politicians?state=OR");
     expect(window.localStorage.length + window.sessionStorage.length).toBe(0);
+  });
+
+  it("leads with the header's state, named for it, when one is set", () => {
+    sessionStorage.setItem(YOUR_STATE_KEY, "OH");
+    render(<StateJump label="State" to="ballot" />);
+    expect(screen.getByRole("link", { name: /Ohio's ballot/ })).toHaveAttribute(
+      "href",
+      "/elections/states/OH"
+    );
+    expect(screen.getByLabelText("Another state")).toBeInTheDocument();
+    sessionStorage.clear();
   });
 });

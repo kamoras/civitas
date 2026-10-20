@@ -54,8 +54,11 @@ DIRECT = {
 }
 # The research scripts' own imports beyond DIRECT (openpyxl: pandas loads it
 # by name in read_excel for .xlsx; time-machine: frozen_clock_plugin.py;
-# pyproj: build_district_lean.py).
+# pyproj: build_district_lean.py; fonttools and brotli, which reads woff2:
+# fetch_site_fonts.py's Open Graph fonts).
 RESEARCH_DIRECT = {
+    "brotli",
+    "fonttools",
     "onnxruntime",
     "openpyxl",
     "pandas",

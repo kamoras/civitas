@@ -50,6 +50,10 @@ import { exploreHref } from "@/lib/exploreHref";
 export const SECTION_HEADING =
   "flex items-baseline justify-between gap-3 border-b border-white/15 pb-2 font-mono text-xs uppercase tracking-[0.16em] text-ink-min";
 
+/** A standalone link's target on a phone: 44px tall (mobile spec P10), its
+ *  own height from 640px up. Not for a link inside a sentence. */
+export const TAP_TARGET = "inline-flex min-h-11 items-center sm:min-h-0";
+
 /** An underlined sentence-case link, the records pages' only link treatment. */
 export const TEXT_LINK =
   "font-sans text-sm text-ink-hi underline decoration-ink-min/60 underline-offset-4 transition-colors hover:decoration-ink-hi";
@@ -617,7 +621,7 @@ export function WhatYouCanDo({
       <OnTheBallot ballot={issue.ballot} />
       <ul>
         {rows.map((row) => {
-          const cls = `${TEXT_LINK} whitespace-nowrap`;
+          const cls = `${TEXT_LINK} ${TAP_TARGET} whitespace-nowrap`;
           return (
             <li
               key={row.key}

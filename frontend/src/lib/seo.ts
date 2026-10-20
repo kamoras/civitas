@@ -316,6 +316,7 @@ export function describeStateBallot(
     cycleYear: number;
     electionDate: string;
     measures: unknown[];
+    ballotBasis?: { basis: string | null } | null;
   },
   resultsMode: boolean,
   live: boolean | null
@@ -343,6 +344,13 @@ export function describeStateBallot(
     n > 0
       ? `, and ${n} statewide ballot ${n === 1 ? "measure" : "measures"} quoted from official sources`
       : "";
+  // Before any state list, the candidates are FEC registrations, never
+  // "on the ballot" (ballotHeadline's rule, for the search result too).
+  if (ballot.ballotBasis?.basis === "filers")
+    return {
+      title: `${name} ${year} Elections: Senate & House Candidates Registered with the FEC`,
+      description: `Who has registered with the FEC to run for U.S. Senate and House in ${name} for ${year} (${ballot.electionDate}), with fundraising${measures}. The state certifies its own ballot later.`,
+    };
   return {
     title: `${name} Ballot ${year}: Senate, House Races & Ballot Measures`,
     description: `What's on the ${year} ${name} ballot (${ballot.electionDate}): U.S. Senate and House candidates with FEC fundraising${measures}.`,

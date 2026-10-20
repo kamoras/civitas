@@ -29,7 +29,7 @@ export default function ConstituentApproval({
     .map((g) => GROUP_POSSESSIVE[g.party]);
   return (
     <div className="flex flex-col gap-2 border-t border-white/[0.08] pt-4">
-      <BlockLabel>
+      <BlockLabel words="Approval among their own constituents">
         <MetricTooltip text={TOOLTIP}>Approval among their own constituents</MetricTooltip>
       </BlockLabel>
       <ul className="flex flex-col gap-1.5" aria-label="Approval among constituents, by party">

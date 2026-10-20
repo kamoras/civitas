@@ -5,6 +5,7 @@ import { useAsyncData } from "@/hooks/useAsyncData";
 import { fetchMapSeats } from "@/lib/api";
 import { redistrictingHref } from "@/lib/redistricting";
 import SeatOnMap, { PollRangeSource } from "@/components/elections/SeatOnMap";
+import { onThisPage } from "@/lib/onThisPage";
 
 /**
  * The state at a glance, above the ballot in both layouts: each Senate
@@ -31,7 +32,9 @@ export default function StateAtAGlance({
   if (!senate.length && !redrawn) return null;
   return (
     <section
+      id="at-a-glance"
       aria-label={`${stateName} at a glance`}
+      {...onThisPage("At a glance")}
       className="mb-5 border border-white/[0.14] px-3 py-2 font-mono text-xs tracking-[0.08em]"
     >
       <h2 className="mb-1 text-ink-min tracking-[0.16em]">AT A GLANCE</h2>

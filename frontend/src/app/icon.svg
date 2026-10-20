@@ -1,12 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- surface.base, not the old violet-cast CRT black -->
-  <rect width="32" height="32" fill="#0e0c0a"/>
-  <!-- Pixel-art "C" in ink-hi, not phosphor — phosphor lands on data, never
-       on chrome, and a tab icon is chrome. Three bars forming the letter. -->
-  <!-- Left vertical bar -->
-  <rect x="3"  y="4"  width="6"  height="24" fill="#f2eee7"/>
-  <!-- Top horizontal bar -->
-  <rect x="9"  y="4"  width="19" height="6"  fill="#f2eee7"/>
-  <!-- Bottom horizontal bar -->
-  <rect x="9"  y="22" width="19" height="6"  fill="#f2eee7"/>
+  <!-- The wordmark's C (Archivo 800, the glyph's own outline) over a ledger
+       rule. Light scheme: parchment on ink, so the mark holds its ground on
+       a light tab strip; dark scheme: ink on parchment. Each rule is its
+       theme's ledger green. Rendered to apple-icon.png and the manifest's
+       PNGs (see icons.test.ts); librsvg ignores the media query, so those
+       take the light-scheme colours. -->
+  <style>
+    .g { fill: #1e1a15 } .c { fill: #f5efe2 } .r { fill: #7fd49a }
+    @media (prefers-color-scheme: dark) {
+      .g { fill: #f5efe2 } .c { fill: #1e1a15 } .r { fill: #1b5e34 }
+    }
+  </style>
+  <rect class="g" width="32" height="32"/>
+  <path class="c" d="M16.41 24Q13.14 24 10.85 22.86Q8.56 21.73 7.38 19.39Q6.19 17.06 6.19 13.49Q6.19 8.23 8.84 5.61Q11.48 3 16.41 3Q19.16 3 21.29 3.93Q23.41 4.86 24.61 6.71Q25.81 8.55 25.81 11.3H20.64Q20.64 10 20.12 9.07Q19.6 8.14 18.67 7.64Q17.74 7.14 16.41 7.14Q14.76 7.14 13.7 7.81Q12.63 8.49 12.13 9.76Q11.63 11.03 11.63 12.84V14.16Q11.63 15.97 12.13 17.25Q12.63 18.54 13.68 19.2Q14.73 19.86 16.38 19.86Q17.8 19.86 18.79 19.39Q19.78 18.92 20.3 17.99Q20.81 17.06 20.81 15.76H25.81Q25.81 18.51 24.64 20.34Q23.47 22.17 21.36 23.08Q19.25 24 16.41 24Z"/>
+  <rect class="r" x="6" y="26" width="20" height="2"/>
 </svg>

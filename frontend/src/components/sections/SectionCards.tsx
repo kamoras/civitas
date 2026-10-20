@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { SECTIONS, type SectionKey } from "@/lib/routes";
 import { absoluteUrl } from "@/lib/site";
-import { sectionPreview } from "@/lib/sectionPreviews";
+import { leadOrder, sectionPreview, seasonLead } from "@/lib/sectionPreviews";
 import { shareMetaAttrs } from "@/lib/shareImage";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
@@ -55,7 +55,10 @@ export default async function SectionCards({
 }) {
   const figures = await fetchSectionFigures();
   const { label, href } = SECTIONS[section];
-  const cards = SECTIONS[section].tabs.filter((t) => t.key !== current);
+  const cards = leadOrder(
+    SECTIONS[section].tabs.filter((t) => t.key !== current),
+    seasonLead(figures, section)
+  );
   const headingId = `${section}-pages-heading`;
   return (
     <ShareSubjectProvider

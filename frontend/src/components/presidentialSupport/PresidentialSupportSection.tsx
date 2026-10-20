@@ -19,6 +19,7 @@ import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import { absoluteUrl } from "@/lib/site";
 import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
+import { onThisPage } from "@/lib/onThisPage";
 
 /**
  * A member's votes with the president's stated positions, on the profile.
@@ -67,7 +68,11 @@ export default function PresidentialSupportSection({
         <TerminalTitlebar title="With the president" />
         <div className="border border-t-0 border-white/[0.07] bg-surface-base p-4">
           <div className="flex flex-wrap items-baseline justify-between gap-3">
-            <h2 id="ps-heading" className="font-display text-lg font-semibold text-ink-hi">
+            <h2
+              id="ps-heading"
+              {...onThisPage("With the president")}
+              className="font-display text-lg font-semibold text-ink-hi"
+            >
               How often {name} votes with the president
             </h2>
             <ShareSectionButton label="With the president" />

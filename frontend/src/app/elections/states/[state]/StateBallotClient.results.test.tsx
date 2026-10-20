@@ -421,7 +421,7 @@ describe("the state page in results mode", () => {
     ).toBeInTheDocument();
     // People are still voting: research first, nothing in the past tense.
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-      "Everyone on Ohio's ballot, and who is behind them"
+      "Everyone registered with the FEC to run in Ohio"
     );
     expect(screen.queryByText(/^RESULTS ·/)).not.toBeInTheDocument();
     expect(screen.queryByText(/WHO WAS ON THE BALLOT/)).not.toBeInTheDocument();
@@ -444,7 +444,9 @@ describe("the state page in results mode", () => {
 
   it("asks for no results during a campaign", () => {
     render(<StateBallotClient ballot={ballot({ phase: undefined })} />);
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/Everyone on Ohio/);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+      /Everyone registered with the FEC to run in Ohio/
+    );
     expect(fetchLiveResults).not.toHaveBeenCalled();
   });
 

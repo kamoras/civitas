@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import RecordsBand, {
+  RunStatusSquare,
   __resetStatusCache,
   describeRunState,
   formatRunTimestamp,
@@ -215,5 +216,42 @@ describe("RecordsBand rendering", () => {
     render(<RecordsBand />);
 
     expect(await screen.findByText(/STATUS UNAVAILABLE/)).toBeInTheDocument();
+  });
+});
+
+describe("RunStatusSquare (the band on a phone)", () => {
+  it("is a 44px button named with the whole status, filled when every run completed", async () => {
+    fetchPipelineStatus.mockResolvedValue(status());
+    render(<RunStatusSquare />);
+    const button = await screen.findByRole("button", {
+      name: "Data status: Filed 2026-08-18 07:26 UTC, complete",
+    });
+    expect(button.className).toContain("min-h-11");
+    expect(button.querySelector("[aria-hidden]")!.className).toContain("bg-phos");
+  });
+
+  it("is hollow when a run failed, and names it", async () => {
+    fetchPipelineStatus.mockResolvedValue(status({ links: links({ Senate: "failed" }) }));
+    render(<RunStatusSquare />);
+    const button = await screen.findByRole("button", {
+      name: "Data status: senate data run failed, 4 of 5 filed",
+    });
+    const square = button.querySelector("[aria-hidden]")!;
+    expect(square.className).toContain("border-signal-red");
+    expect(square.className).not.toMatch(/\bbg-/);
+  });
+
+  it("opens the status line on a tap and closes on Escape", async () => {
+    fetchPipelineStatus.mockResolvedValue(status());
+    render(<RunStatusSquare />);
+    const button = await screen.findByRole("button", { name: /^Data status/ });
+    const line = document.getElementById(button.getAttribute("aria-controls")!)!;
+    expect(line.hidden).toBe(true);
+    fireEvent.click(button);
+    expect(button).toHaveAttribute("aria-expanded", "true");
+    expect(line.hidden).toBe(false);
+    expect(line).toHaveTextContent("FILED 2026-08-18 07:26 UTC");
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(line.hidden).toBe(true);
   });
 });

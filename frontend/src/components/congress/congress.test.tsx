@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import DayReportView from "./DayReportView";
 import PeriodReportView from "./PeriodReportView";
 import BillPageView from "./BillPageView";
 import RollCallView from "./RollCallView";
+import VotePanel from "./VotePanel";
 import type {
   BillRecord,
   ChamberDay,
@@ -956,6 +957,62 @@ describe("bill page: a long summary and the page's sections", () => {
     expect(within(nav).getByRole("link", { name: /^Votes \(.+\)$/ })).toBeTruthy();
     for (const a of links)
       expect(document.getElementById(a.getAttribute("href")!.slice(1))).toBeTruthy();
+  });
+});
+
+describe("bill page on a phone: the votes first", () => {
+  // Mobile spec #2: on a phone the votes came after the sponsor box, the
+  // cosponsors, the "this week" strip and the summary; H.R. 1's 47 votes then
+  // listed every row before the selected one's split.
+  const many = {
+    ...record,
+    votes: Array.from({ length: 12 }, (_, i) => ({
+      ...record.votes[0],
+      number: 300 - i,
+      question: `Question ${i}`,
+    })),
+  };
+
+  it("puts Votes before the facts box and the summary, and the strip after the record", () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => detail }));
+    render(
+      <BillPageView
+        billId="S.4668"
+        canonicalPath="/congress/bills/S.4668"
+        record={record}
+        detail={null}
+        stageName={null}
+        strip={<p>This week strip</p>}
+      />
+    );
+    const follows = (el: Element, other: Element) =>
+      Boolean(el.compareDocumentPosition(other) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const votes = screen.getByRole("heading", { name: /^Votes/ });
+    const facts = screen.getByRole("complementary", { name: "Sponsor and facts" });
+    const summary = screen.getByRole("heading", { name: "Summary" });
+    expect(follows(votes, facts)).toBe(true);
+    expect(follows(facts, summary)).toBe(true);
+    expect(follows(summary, screen.getByText("This week strip"))).toBe(true);
+    // The overview's shared picture leaves the votes out (they have their own).
+    expect(votes.closest("[data-share-exclude]")).toBeTruthy();
+    expect(votes.closest("[data-share-section]")!.getAttribute("data-share-section")).toBe("votes");
+  });
+
+  it("lists the latest five votes, the rest behind one disclosure, the split under its row", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => detail }));
+    render(<VotePanel votes={many.votes} congress={119} />);
+    const toggle = screen.getByText("All 12 votes");
+    const folded = toggle.closest("details")!;
+    expect(folded.open).toBe(false);
+    expect(within(folded).getAllByRole("button", { pressed: false })).toHaveLength(7);
+    const first = screen.getByRole("button", { name: /Question 0/ });
+    expect(first).toHaveAttribute("aria-pressed", "true");
+    // The selected vote's split opens inside its own row.
+    expect(within(first.closest("li")!).getByText(/Open the roll call/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Question 3/ }));
+    const third = screen.getByRole("button", { name: /Question 3/ }).closest("li")!;
+    expect(within(third).getByText(/Open the roll call/)).toBeTruthy();
+    expect(within(first.closest("li")!).queryByText(/Open the roll call/)).toBeNull();
   });
 });
 

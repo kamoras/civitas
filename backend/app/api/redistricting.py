@@ -17,7 +17,7 @@ from app.district_places import counties_on_lines_of, places_on_lines_of
 from app.election_calendar import next_election_day
 from app.election_phase import election_today
 from app.live_results.sync import _maps
-from app.redistricting import overlap_file, redrawn_overlap_states, state_changes
+from app.redistricting import overlap_file, redrawn_overlap_states, state_changes, watch
 from app.state_names import STATE_NAMES
 
 router = APIRouter(prefix="/elections/redistricting")
@@ -58,6 +58,9 @@ def redistricting_index():
             "toCongress": doc.get("toCongress"),
             "states": states,
             "heldMaps": held,
+            # The maps in force, how each was set, and whether the next
+            # general election's maps are confirmed (redistricting.watch).
+            "watch": watch(next_election_day(election_today()).year),
         },
         max_age=CACHE_TTL_REFERENCE_S,
     )

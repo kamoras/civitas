@@ -283,8 +283,8 @@ CANDIDATES_PER_PAGE = 100
 async def fetch_all_candidates(
     client: httpx.AsyncClient, db: Session, cycle: int, office: str,
 ) -> list[dict]:
-    """Fetch every candidate actually on the ballot for `office` ("H" or
-    "S") in `cycle`'s election.
+    """Fetch every candidate actually on the ballot for `office` ("H", "S"
+    or, in a presidential cycle, "P") in `cycle`'s election.
 
     Unlike find_candidate (resolves ONE incumbent's own record by
     name+state+office), this pages through /v1/candidates/ in bulk — the
