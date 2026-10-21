@@ -12,7 +12,7 @@ vi.mock("@/lib/api", () => ({
 }));
 
 function category(overrides: Partial<HoldingCategory>): HoldingCategory {
-  return {
+  const c = {
     category: "STOCKS",
     label: "Stocks",
     color: "#3987e5",
@@ -24,7 +24,23 @@ function category(overrides: Partial<HoldingCategory>): HoldingCategory {
     openEnded: false,
     weight: 8000.5,
     share: 1,
+    valueShown: "$1K \u2013 $15K",
     ...overrides,
+  };
+  // What the API prints for these figures (holdings_service).
+  const shareShown = `${Math.round(c.share * 100)}%`;
+  return {
+    shareShown,
+    mark:
+      c.weight > 0
+        ? {
+            id: c.category,
+            label: c.label,
+            shown: `${shareShown} of the stated value`,
+            context: `${c.valueShown}, ${c.count} asset${c.count === 1 ? "" : "s"}`,
+          }
+        : null,
+    ...c,
   };
 }
 
@@ -110,6 +126,26 @@ describe("Holdings", () => {
       )
     );
     expect(screen.getByText(/Stocks: 1 holding, largest first/)).toBeInTheDocument();
+  });
+
+  it("each slice reads from the keyboard, and Enter lists that type's assets", async () => {
+    fetchSenatorHoldings.mockResolvedValueOnce(holdings());
+    render(<Holdings memberId="S1" />);
+    const pie = await screen.findByRole("group", {
+      name: /^Holdings by asset type: 2 marks\. Arrow keys move between them, Enter selects one\./,
+    });
+    pie.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(
+      screen.getByText("Mutual funds & ETFs: 80% of the stated value, $1K – $15K, 1 asset.")
+    ).toBeInTheDocument();
+    fetchSenatorHoldings.mockResolvedValueOnce(holdings({ categoryFilter: "FUNDS" }));
+    await userEvent.keyboard("{Enter}");
+    expect(fetchSenatorHoldings).toHaveBeenLastCalledWith("S1", {
+      page: 1,
+      perPage: 15,
+      category: "FUNDS",
+    });
   });
 
   it("a failed filter keeps the previous selection and shows the error with the list collapsed", async () => {

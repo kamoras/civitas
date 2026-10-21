@@ -29,6 +29,7 @@ from app.schemas import (
     JusticeIntervalSchema,
     JusticeMeasureSchema,
     JusticePeerPointSchema,
+    ReadoutMarkSchema,
 )
 from app.services.court_service import _position, _positions
 from app.services.justice_service import CI_Z
@@ -146,17 +147,22 @@ def _appointed_by(db: Session, j: Justice) -> JusticeAppointedBySchema | None:
     )
 
 
+def _interval(p: Justice) -> JusticeIntervalSchema:
+    low = round(p.appointer_effect - CI_Z * p.appointer_effect_se, 4)
+    high = round(p.appointer_effect + CI_Z * p.appointer_effect_se, 4)
+    return JusticeIntervalSchema(
+        id=p.id, name=p.name, estimate=p.appointer_effect, ci_low=low, ci_high=high,
+        estimate_shown=_points(p.appointer_effect), interval_shown=f"{_points(low)} to {_points(high)}",
+    )
+
+
 def _appointer(subject: Justice, peers: list[Justice]) -> JusticeAppointerSchema | None:
     """Every sitting justice's appointer estimate with its 95% interval,
     widest effect last; None when the subject has none."""
     if subject.appointer_effect is None or subject.appointer_effect_se is None:
         return None
     rows = sorted(
-        (JusticeIntervalSchema(
-            id=p.id, name=p.name, estimate=p.appointer_effect,
-            ci_low=round(p.appointer_effect - CI_Z * p.appointer_effect_se, 4),
-            ci_high=round(p.appointer_effect + CI_Z * p.appointer_effect_se, 4),
-        ) for p in peers if p.appointer_effect is not None and p.appointer_effect_se is not None),
+        (_interval(p) for p in peers if p.appointer_effect is not None and p.appointer_effect_se is not None),
         key=lambda r: (r.estimate, r.name),
     )
     me = next(r for r in rows if r.id == subject.id)
@@ -168,6 +174,9 @@ def _appointer(subject: Justice, peers: list[Justice]) -> JusticeAppointerSchema
                   f"for the federal government under the appointing president than under others "
                   f"(95% interval {_points(me.ci_low)} to {_points(me.ci_high)}), across {votes} votes."),
         through_term=subject.loyalty_through_term,
+        marks=[ReadoutMarkSchema(id=r.id, label=r.name, shown=f"{r.estimate_shown} points",
+                                 context=f"95% interval {r.interval_shown}", href=f"/politicians/{r.id}")
+               for r in rows],
     )
 
 

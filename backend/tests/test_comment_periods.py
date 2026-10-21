@@ -33,6 +33,8 @@ def test_the_first_sentence_is_verbatim_and_whole():
 
 def test_the_window_runs_from_publication_to_the_deadline():
     assert comment_window("2026-10-01", "2026-10-31", "2026-10-21") == {
-        "opened": "2026-10-01", "closes": "2026-10-31", "totalDays": 30, "daysLeft": 10, "elapsedPercent": 67}
+        "opened": "2026-10-01", "closes": "2026-10-31", "totalDays": 30, "daysLeft": 10, "elapsedPercent": 67,
+        "marks": [{"id": "elapsed", "label": "Comment period", "detail": None, "shown": "20 of 30 days gone",
+                   "context": "opened Oct 1, 2026, closes Oct 31, 2026", "href": None}]}
     assert comment_window("2026-10-01", "2026-10-31", "2026-10-31")["daysLeft"] == 0
     assert comment_window(None, "2026-10-31", "2026-10-21") is None
