@@ -1876,8 +1876,13 @@ wrong number on election night is worse than none:
   general in 2026; and on 2026-10-12 New Mexico's and Montana's results hosts
   sent their current-election page to their Secretary of State's landing page
   (Montana's says results come "after 8:00 on November 3"), where in 2024 both
-  served the staged general a month ahead. Those two will alert daily until
-  their hosts serve the general — the honest state of the feed.
+  served the staged general a month ahead. New Mexico's general stayed
+  staged under its own id (eid=2917, 2026-10-21), found from the ids the
+  state's own results page for the year links (`general_eid_discovery`,
+  each page taken only on its own type and date); Montana's will be named
+  until its host serves the general — the honest state of the feed. The
+  check raises one alert a day listing every state not ready with its
+  reason (condition `results-readiness`), not one per state.
 - A race the state's feed stops listing mid-count (a renamed contest, one set
   aside as impossible) keeps its last count, tagged NOT IN LATEST READ on the
   page (`inLatestRead`), and pages someone (`sync._dropped_races`): the

@@ -453,6 +453,74 @@ class TestTotalVoteElectionDate:
         assert {p for _, p, _ in senate.candidates} >= {"D", "R"}
 
 
+class TestTotalVoteFindsAStagedGeneralById:
+    """New Mexico, 2026-10-21: the no-eid page redirects to the Secretary of
+    State's site while the general stays staged at eid=2917; the state's
+    2026 results page links 2911 (the primary) and 2912 (a runoff)."""
+
+    BASE = "https://electionresults.sos.nm.gov"
+    SOURCE = {"base_url": BASE, "queries": [{"type": "FED", "map": "CTY"}],
+              "general_eid_discovery": {"page_url": "https://www.sos.nm.gov/results/{year}-election-results/"}}
+    INDEX = ('<a href="https://electionresults.sos.nm.gov/default.aspx?eid=2911">2026 Primary</a>'
+             '<a href="https://electionresults.sos.nm.gov/default.aspx?eid=2912">Runoff</a>'
+             '<a href="https://archive.example/resultsSW.aspx?type=FED&amp;eid=9999">another host</a>')
+    NM = TestTotalVoteElectionDate.NM
+    PRIMARY = NM.replace('value="General"', 'value="Primary"')
+
+    def _serve(self, monkeypatch, pages, index=INDEX):
+        totalvote._general_eids.clear()
+        totalvote._general_eid_misses.clear()
+        asked = []
+
+        async def fetch(client, rl, method, url, **kw):
+            asked.append(url)
+            eid = url.rsplit("eid=", 1)[1] if "eid=" in url else None
+            if eid in pages:
+                return SimpleNamespace(status_code=200, text=pages[eid], headers={})
+            return SimpleNamespace(status_code=302, text="", headers={"location": "https://www.sos.nm.gov/"})
+
+        async def text(client, rl, url, label):
+            asked.append(url)
+            return index
+
+        monkeypatch.setattr(http_utils, "fetch_with_retry", fetch)
+        monkeypatch.setattr(totalvote, "fetch_text_with_retry", text)
+        return asked
+
+    async def test_the_staged_general_is_read_under_its_id(self, monkeypatch):
+        asked = self._serve(monkeypatch, {"2911": self.PRIMARY, "2916": self.PRIMARY, "2917": self.NM})
+        got = await totalvote.fetch_general_results(None, date(2026, 11, 3), "NM", self.SOURCE)
+        assert got.page_url == f"{self.BASE}/resultsSW.aspx?type=FED&map=CTY&eid=2917"
+        assert ("S", None) in _by_seat(got.contests)
+        assert "https://www.sos.nm.gov/results/2026-election-results/" in asked
+        assert not any("9999" in u for u in asked)
+        # Remembered: the next read goes straight to the id.
+        asked.clear()
+        await totalvote.fetch_general_results(None, date(2026, 11, 3), "NM", self.SOURCE)
+        assert asked == [f"{self.BASE}/resultsSW.aspx?type=FED&map=CTY", f"{self.BASE}/resultsSW.aspx?type=FED&map=CTY&eid=2917"]
+
+    async def test_no_general_near_the_linked_ids_is_not_published_yet(self, monkeypatch):
+        self._serve(monkeypatch, {"2911": self.PRIMARY})
+        assert await totalvote.fetch_general_results(None, date(2026, 11, 3), "NM", self.SOURCE) is None
+        self._serve(monkeypatch, {}, index="<p>no results links</p>")
+        assert await totalvote.fetch_general_results(None, date(2026, 11, 3), "NM", self.SOURCE) is None
+
+    async def test_two_generals_on_the_day_are_refused(self, monkeypatch):
+        self._serve(monkeypatch, {"2913": self.NM, "2917": self.NM})
+        with pytest.raises(election_results.UntrustedCount):
+            await totalvote.fetch_general_results(None, date(2026, 11, 3), "NM", self.SOURCE)
+
+    async def test_an_unreadable_index_is_unreadable(self, monkeypatch):
+        self._serve(monkeypatch, {}, index=None)
+        with pytest.raises(election_results.FeedUnreadable):
+            await totalvote.fetch_general_results(None, date(2026, 11, 3), "NM", self.SOURCE)
+
+    async def test_a_state_without_discovery_stays_not_published(self, monkeypatch):
+        self._serve(monkeypatch, {"2917": self.NM})
+        source = {k: v for k, v in self.SOURCE.items() if k != "general_eid_discovery"}
+        assert await totalvote.fetch_general_results(None, date(2026, 11, 3), "NM", source) is None
+
+
 # --- Review fixes: Enhanced Voting labels, demo ids, units, write-ins -------
 
 _EV = _json("fixtures_ev_general_payloads.json")
