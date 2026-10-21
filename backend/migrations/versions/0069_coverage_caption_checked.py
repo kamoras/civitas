@@ -7,16 +7,16 @@ NULL, every row stored before this, is "not yet verified".
 Adds a nullable column only. The previous image never reads it and its
 inserts leave it NULL, which the nightly re-check reads as unverified.
 
-Revision ID: 0068
-Revises: 0067
+Revision ID: 0069
+Revises: 0068 (0068_outlet_post_links, PR #1188)
 Create Date: 2026-10-21
 """
 from alembic import op
 import sqlalchemy as sa
 
 
-revision = '0068'
-down_revision = '0067'
+revision = '0069'
+down_revision = '0068'
 branch_labels = None
 depends_on = None
 

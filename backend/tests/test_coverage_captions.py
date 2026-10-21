@@ -57,15 +57,34 @@ def _pages(pages: dict):
 async def test_a_caption_led_summary_is_replaced_by_the_pages_own_description(db_session):
     item = _item(db_session, 1, "https://example.com/roe", CAPTION_LED)
     p, _ = _pages({"https://example.com/roe": STATES_NEWSROOM_PAGE})
-    with p:
+
+    def rescore(db, rows):
+        for row in rows:
+            row.relevance = 0.7
+        db.commit()
+        return len(rows)
+
+    with p, patch.object(cc, "score_items", rescore):
         counts = await cc.recheck_stored_captions(db_session)
     db_session.refresh(item)
     assert item.summary == (
         "Jane Roe’s quest to win a U.S. Senate seat as a newcomer doesn’t sound impossible to a former governor."
     )
-    assert item.relevance is None  # rescored by the next ingest
+    assert item.relevance == 0.7  # rescored in the same pass, on the new text
     assert item.caption_checked_at is not None
-    assert counts["fixed"] == 1 and counts["remaining"] == 0
+    assert counts["fixed"] == 1 and counts["rescored"] == 1 and counts["remaining"] == 0
+
+
+async def test_a_fixed_item_keeps_its_old_score_when_scoring_fails(db_session):
+    """Never off its race page in between: no model here, so scoring fails
+    (conftest refuses to build one) and the old relevance stands."""
+    item = _item(db_session, 1, "https://example.com/roe", CAPTION_LED)
+    p, _ = _pages({"https://example.com/roe": STATES_NEWSROOM_PAGE})
+    with p:
+        counts = await cc.recheck_stored_captions(db_session)
+    db_session.refresh(item)
+    assert item.summary.startswith("Jane Roe")
+    assert (item.relevance, counts["rescored"]) == (0.9, 0)
 
 
 async def test_a_figcaption_is_recognised_too(db_session):

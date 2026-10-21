@@ -15,8 +15,8 @@ its <figcaption> elements and the `caption` of every image in its JSON-LD
 pages render it without a <figcaption>). An item whose summary opens with
 one gets the page's own description (og:description, else the meta
 description: the publisher's excerpt, which is the feed's <description>) in
-its place, is rescored (relevance NULL until the next ingest scores it), and
-is marked verified. One that doesn't is marked verified as it stands.
+its place, is rescored in the same pass (keeping its old score if scoring
+fails, so it never drops off its race page), and is marked verified. One that doesn't is marked verified as it stands.
 
 Failure is never clean. A page that can't be read, or that has a caption and
 no description to put in its place, keeps its summary and stays unverified,
@@ -38,6 +38,7 @@ from sqlalchemy.orm import Session
 from app.contact import BOT_USER_AGENT
 from app.http_client import make_async_client
 from app.models import RaceCoverageItem
+from app.pipeline.analyze.election_coverage import score_items
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.fetch.news_feeds import MAX_SUMMARY_CHARS, _strip_html
@@ -218,6 +219,7 @@ async def recheck_stored_captions(db: Session, *, limit: int = MAX_PER_NIGHT, de
     stood, items whose page couldn't be read, caption with no description,
     and how many unverified items remain."""
     by_url: dict[str, list[RaceCoverageItem]] = {}
+    fixed: list[RaceCoverageItem] = []
     for row in _unverified(db).order_by(RaceCoverageItem.fetched_at.desc(), RaceCoverageItem.id.desc()):
         by_url.setdefault(row.url, []).append(row)
     counts = {"pages": 0, "fixed": 0, "clean": 0, "unreadable": 0, "no_description": 0}
@@ -247,12 +249,14 @@ async def recheck_stored_captions(db: Session, *, limit: int = MAX_PER_NIGHT, de
                 elif replacement:
                     logger.info("Coverage item %s opened with a photo caption; replaced with the page's description", item.id)
                     item.summary = replacement
-                    item.relevance = None
                     item.caption_checked_at = utcnow()
                     counts["fixed"] += 1
+                    fixed.append(item)
                 else:
                     counts["no_description"] += 1
             db.commit()
+    # Rescored now, on the new text; if scoring fails each keeps its old score.
+    counts["rescored"] = score_items(db, fixed)
     counts["remaining"] = _unverified(db).count()
     logger.info("Coverage caption re-check: %s", counts)
     return counts

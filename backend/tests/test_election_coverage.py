@@ -207,13 +207,18 @@ class TestIngestRaceCoverage:
             title="Brennan leads in Georgia Senate race", url=url,
             source_name="Georgia Recorder", summary="Polling shows a tight contest.",
         )
+        rescored = []
         with patch.object(election_coverage, "fetch_news_articles", return_value=[article]), \
-                patch.object(election_coverage, "score_unscored_items", return_value=0):
+                patch.object(election_coverage, "score_unscored_items", return_value=0), \
+                patch.object(election_coverage, "score_items", lambda db, rows: rescored.extend(rows) or 0):
             assert await election_coverage.ingest_race_coverage(db_session) == 0
 
         item = db_session.query(RaceCoverageItem).one()
         assert item.summary == "Polling shows a tight contest."
-        assert item.relevance is None
+        assert rescored == [item]
+        # Its old score stands until the new one lands: never off the page.
+        assert item.relevance == 0.9
+        assert item.caption_checked_at is not None
 
     async def test_short_surname_never_matches(self, db_session):
         """A 3-char-or-shorter surname (e.g. "OZ") is too likely to match
