@@ -219,7 +219,7 @@ export function ActionTapsPanel({ token }: { token: string }) {
               },
               { key: "contact", label: "Contacts", color: SERIES[0], values: days.map(contacts) },
             ]}
-            formatValue={(v) => v.toLocaleString()}
+            formatValue={(v) => v.toLocaleString("en-US")}
             emptyMessage={data ? "No taps in this window." : "Loading…"}
           />
           <div className="space-y-6">
@@ -471,12 +471,12 @@ export function ActionCenterDashboard({
         />
         <StatTile
           label="Issues published"
-          value={loaded ? published.toLocaleString() : "—"}
+          value={loaded ? published.toLocaleString("en-US") : "—"}
           note="new topics + updates to existing"
         />
         <StatTile
           label="Suppressed by a gate"
-          value={loaded ? suppressed.toLocaleString() : "—"}
+          value={loaded ? suppressed.toLocaleString("en-US") : "—"}
           note="dropped by a validator: see below"
         />
       </div>
@@ -507,7 +507,7 @@ export function ActionCenterDashboard({
                 values: count("articles_policy_relevant"),
               },
             ]}
-            formatValue={(v) => v.toLocaleString()}
+            formatValue={(v) => v.toLocaleString("en-US")}
             formatTick={formatCompact}
             stale={stale}
             emptyMessage={emptyMessage}
@@ -540,7 +540,7 @@ export function ActionCenterDashboard({
                 values: slots.map((s) => slotSum(s, (r) => r.suppressed)),
               },
             ]}
-            formatValue={(v) => v.toLocaleString()}
+            formatValue={(v) => v.toLocaleString("en-US")}
             stale={stale}
             emptyMessage={emptyMessage}
           />

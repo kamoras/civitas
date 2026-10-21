@@ -18,11 +18,11 @@ function updateTime(update: MonitorUpdate): string {
   if (!created || Number.isNaN(created.getTime())) {
     return formatUtcDate(update.date, { month: "short", day: "numeric", year: "numeric" });
   }
-  return `${created.toLocaleDateString(undefined, {
+  return `${created.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
-  })} at ${created.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
+  })} at ${created.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
 }
 
 const shortDate = (d: string) => formatUtcDate(d, { month: "short", day: "numeric" });

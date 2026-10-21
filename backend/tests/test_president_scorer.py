@@ -21,6 +21,7 @@ from app.pipeline.analyze.president_scorer import (
     FULL_TERM_DAYS,
     president_effective_weights,
     fit_trend_on_start,
+    keep_fuller,
     recalculate_president_scores,
     term_days,
     window_reference,
@@ -199,7 +200,21 @@ _HISTORY = [
 def test_the_trend_fit_finds_that_high_starters_fall_further():
     fit = fit_trend_on_start(_HISTORY)
     assert fit["n"] == 14 and fit["slope"] < -0.5
-    assert fit_trend_on_start(_HISTORY[:9]) is None
+    assert fit_trend_on_start(_HISTORY[:2]) is None  # a line and its spread need three
+    assert fit_trend_on_start(_HISTORY[:3])["n"] == 3
+
+
+def test_a_run_never_replaces_a_stat_measured_on_more_presidencies():
+    """The population only grows, so a stat on fewer presidencies is a
+    source the run couldn't read: the persisted one stands."""
+    old = {"avg_approval": {"mean": 50.0, "stdev": 9.0, "n": 15}, "macro": {"x": 1}}
+    new = {"avg_approval": {"mean": 70.0, "stdev": 2.0, "n": 4},
+           "election_margin": {"mean": 8.0, "stdev": 7.0, "n": 42}}
+    merged = keep_fuller(old, new)
+    assert merged["avg_approval"]["n"] == 15 and merged["election_margin"]["n"] == 42
+    assert merged["macro"] == {"x": 1}
+    grown = keep_fuller(old, {"avg_approval": {"mean": 49.0, "stdev": 12.0, "n": 16}})
+    assert grown["avg_approval"]["n"] == 16  # a wider spread from a new presidency still replaces it
 
 
 def test_a_small_decline_from_near_the_floor_is_not_rewarded():

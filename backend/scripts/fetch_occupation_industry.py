@@ -39,7 +39,12 @@ is counted as such, never guessed into an industry.
 
 Run in the backend image:
     python scripts/fetch_occupation_industry.py --download --work /tmp/occ
-Rerun when a new ACS release or O*NET database comes out; commit the file.
+The ACS year and the O*NET version are the newest each publisher has out
+(newest_pums_year, newest_onet: read from the Census Bureau's PUMS
+directory and O*NET's database page, never typed); --year and --onet pin
+them. Rerun when a new ACS release or O*NET database comes out (the data
+refresh job's staleness check, app/data_refresh.py, alerts when one has),
+and commit the file: a new release moves donors' industries, so scores.
 """
 
 import argparse
@@ -50,6 +55,7 @@ import json
 import pathlib
 import re
 import sys
+import urllib.error
 import urllib.request
 import zipfile
 from collections import defaultdict
@@ -59,15 +65,46 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from app.contact import BOT_USER_AGENT  # noqa: E402
 from app.pipeline.transform.occupation_industry import normalize_title  # noqa: E402
 
-PUMS_YEAR = 2023
-SOURCES = {
-    "csv_pus.zip": f"https://www2.census.gov/programs-surveys/acs/data/pums/{PUMS_YEAR}/1-Year/csv_pus.zip",
-    "pumsdict.csv": (
-        "https://www2.census.gov/programs-surveys/acs/tech_docs/pums/data_dict/"
-        f"PUMS_Data_Dictionary_{PUMS_YEAR}.csv"
-    ),
-    "onet.zip": "https://www.onetcenter.org/dl_files/database/db_29_3_text.zip",
-}
+PUMS_URL = "https://www2.census.gov/programs-surveys/acs/data/pums/{year}/1-Year/csv_pus.zip"
+PUMS_DICT_URL = ("https://www2.census.gov/programs-surveys/acs/tech_docs/pums/data_dict/"
+                 "PUMS_Data_Dictionary_{year}.csv")
+ONET_PAGE = "https://www.onetcenter.org/database.html"
+ONET_URL = "https://www.onetcenter.org/dl_files/database/db_{major}_{minor}_text.zip"
+_ONET_VERSION = re.compile(r"db_(\d+)_(\d+)_")
+
+
+def _exists(url: str) -> bool:
+    req = urllib.request.Request(url, method="HEAD", headers={"User-Agent": BOT_USER_AGENT})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return resp.status == 200
+    except urllib.error.HTTPError:
+        return False
+
+
+def newest_pums_year(today: date) -> int:
+    """The newest ACS 1-year PUMS the Census Bureau has posted: a year's
+    file comes out the autumn after it, so last year's or the one before."""
+    for year in (today.year - 1, today.year - 2):
+        if _exists(PUMS_URL.format(year=year)):
+            return year
+    raise SystemExit(f"No ACS 1-year PUMS found for {today.year - 1} or {today.year - 2}")
+
+
+def newest_onet(page: str) -> tuple[int, int]:
+    """The newest O*NET database version O*NET's database page links."""
+    versions = {(int(a), int(b)) for a, b in _ONET_VERSION.findall(page)}
+    if not versions:
+        raise SystemExit("O*NET's database page names no database version")
+    return max(versions)
+
+
+def sources(year: int, onet: tuple[int, int]) -> dict[str, str]:
+    return {
+        "csv_pus.zip": PUMS_URL.format(year=year),
+        "pumsdict.csv": PUMS_DICT_URL.format(year=year),
+        "onet.zip": ONET_URL.format(major=onet[0], minor=onet[1]),
+    }
 # ESR, employment status recode: civilian employed at work / with a job but
 # not at work, Armed Forces at work / with a job but not at work.
 EMPLOYED = {"1", "2", "4", "5"}
@@ -129,9 +166,9 @@ def industry_of_code(code: str) -> str | None:
     return NAICS_INDUSTRY[best] if best is not None else None
 
 
-def fetch(work: pathlib.Path) -> None:
+def fetch(work: pathlib.Path, urls: dict[str, str]) -> None:
     work.mkdir(parents=True, exist_ok=True)
-    for name, url in SOURCES.items():
+    for name, url in urls.items():
         path = work / name
         if not path.exists():
             print(f"fetching {url}")
@@ -246,14 +283,25 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--work", type=pathlib.Path, default=pathlib.Path(".research-cache/occupation-industry"))
     ap.add_argument("--download", action="store_true")
+    ap.add_argument("--year", type=int, help="ACS PUMS year (default: the newest posted)")
+    ap.add_argument("--onet", help="O*NET version as MAJOR.MINOR (default: the newest published)")
     args = ap.parse_args()
+    year = args.year or newest_pums_year(date.today())
+    if args.onet:
+        onet = tuple(int(x) for x in args.onet.split("."))
+    else:
+        req = urllib.request.Request(ONET_PAGE, headers={"User-Agent": BOT_USER_AGENT})
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            onet = newest_onet(resp.read().decode("utf-8", "replace"))
+    print(f"ACS {year} 1-year PUMS, O*NET {onet[0]}.{onet[1]}")
     if args.download:
-        fetch(args.work)
+        fetch(args.work / str(year), sources(year, onet))
+    args.work = args.work / str(year)
     socp_labels, naicsp_labels = labels(args.work / "pumsdict.csv")
     print(f"{len(socp_labels)} occupations, {len(naicsp_labels)} industries in the dictionary")
     # The crosstab takes the longest (2.4 GB of records); kept beside the
     # downloads so a rerun reads it back.
-    cached = args.work / f"crosstab_{PUMS_YEAR}.json"
+    cached = args.work / f"crosstab_{year}.json"
     if cached.exists():
         table = json.loads(cached.read_text())
     else:
@@ -269,10 +317,13 @@ def main():
           f"{len(mapping)} titles")
     data = {
         "_source": (
-            f"Census Bureau ACS {PUMS_YEAR} 1-year PUMS persons (SOCP x NAICSP, PWGTP, employed), "
-            "O*NET 29.3 titles (US Department of Labor, CC BY 4.0); Census industry labels classified "
-            "by transform/industry_classifier. Regenerate with backend/scripts/fetch_occupation_industry.py."
+            f"Census Bureau ACS {year} 1-year PUMS persons (SOCP x NAICSP, PWGTP, employed), "
+            f"O*NET {onet[0]}.{onet[1]} titles (US Department of Labor, CC BY 4.0); Census industry labels "
+            "classified by transform/industry_classifier. Regenerate with "
+            "backend/scripts/fetch_occupation_industry.py."
         ),
+        "acs_year": year,
+        "onet_version": f"{onet[0]}.{onet[1]}",
         "_generated": date.today().isoformat(),
         "majority": MAJORITY,
         "naics_industry": {f"{c} {naicsp_labels[c]}": i for c, i in sorted(naics_industry.items())},

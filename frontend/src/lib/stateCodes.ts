@@ -123,3 +123,10 @@ export const STATE_NAMES: Record<string, string> = {
   WI: "Wisconsin",
   WY: "Wyoming",
 };
+
+/** Orders state codes by the states' names, for any list a reader sees by
+ *  name or hears read out: "AK" after "AL", "DC" among the Ds. Lists sorted
+ *  by code put Alaska before Alabama (2026-10). */
+export function byStateName(a: string, b: string): number {
+  return (STATE_NAMES[a] ?? a).localeCompare(STATE_NAMES[b] ?? b, "en-US");
+}

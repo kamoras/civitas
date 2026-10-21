@@ -23,7 +23,9 @@ The choice is stored per member (models.MemberPhoto) for the photo-sources
 endpoint to read. Nothing here runs on a page request, and OpenCV is never
 loaded by this module or anything that imports it: the detector runs in a
 child process for the night's batch (face_detection.py), so a native fault
-there ends that process, not the pipeline or page serving. A fetch that fails (anything but a 404) leaves the
+there ends that process, not the pipeline or page serving. A member neither
+source has a photo of gets a row with no source, so the API sends no photo
+path (photos.members_without_photo). A fetch that fails (anything but a 404) leaves the
 member's stored choice as it was, since an outage is not a missing photo.
 """
 
@@ -137,9 +139,13 @@ async def _image(client: httpx.AsyncClient, url: str) -> bytes | None:
     return resp.content
 
 
-def _members_to_check(db: Session) -> list[tuple[str, str]]:
-    """(bioguide id, credited depiction URL) for every stored member whose
-    choice is missing, made against another depiction, or due a recheck."""
+def _members_to_check(db: Session) -> list[tuple[str, str | None]]:
+    """(bioguide id, credited depiction URL or None) for every stored member
+    whose choice is missing, made against another depiction, or due a
+    recheck. A member with no credited depiction is checked too: when
+    bioguide has no portrait either, there is no official photo to serve,
+    and the row says so (source_url None) so the API sends no photo path
+    for a route that could only answer 404."""
     ids = {b for (b,) in db.execute(select(Senator.bioguide_id))} | {
         b for (b,) in db.execute(select(Representative.bioguide_id))
     }
@@ -153,14 +159,8 @@ def _members_to_check(db: Session) -> list[tuple[str, str]]:
         except ValueError:
             depiction = None
         row = stored.get(bioguide_id)
-        if depiction is None:
-            # No credited depiction: bioguide's portrait, nothing to choose.
-            if row is not None:
-                db.delete(row)
-            continue
         if row is None or row.depiction_url != depiction or row.checked_at < due_before:
             out.append((bioguide_id, depiction))
-    db.commit()
     return out
 
 
@@ -178,7 +178,7 @@ async def refresh_member_photos(db: Session, client: httpx.AsyncClient, budget: 
                 logger.info("Member photos: budget spent, the rest wait for the next run")
                 break
             try:
-                depiction_bytes = await _image(client, depiction)
+                depiction_bytes = await _image(client, depiction) if depiction else None
                 portrait_bytes = await _image(client, bioguide_portrait_url(bioguide_id))
             except _FetchFailed as exc:
                 failed += 1
@@ -199,8 +199,13 @@ async def refresh_member_photos(db: Session, client: httpx.AsyncClient, budget: 
         portrait = bioguide_portrait_url(bioguide_id)
         depiction_share = shares.get(depiction_path) if depiction_path else None
         portrait_share = shares.get(portrait_path) if portrait_path else None
-        if depiction_path is None:
-            # The record names a photo Congress.gov doesn't have: bioguide's.
+        if depiction_path is None and portrait_path is None:
+            # Neither host has a photo (a member sworn in before either
+            # posted one): nothing to serve, so the API sends no photo.
+            source = None
+        elif depiction_path is None:
+            # No credited depiction, or one Congress.gov doesn't have:
+            # bioguide's portrait.
             source = portrait
         else:
             source = portrait if prefers_bioguide(portrait_share, depiction_share) else depiction

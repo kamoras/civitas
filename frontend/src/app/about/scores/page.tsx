@@ -151,6 +151,13 @@ export default function ScoresChapter() {
           the whole chamber instead.
         </P>
         <P>
+          The dashed tick on a strip is the seat average where the score has one: for votes against
+          the party, the average break rate of members of the same party in seats that lean the same
+          way. It is an average, not the middle: a few members break often and most rarely, so most
+          members sit below their seat average and the tick can sit to the right of most of the
+          dots. Where the score has no seat figure, the tick is the peers&apos; median.
+        </P>
+        <P>
           The word is set by a fixed rule, not a judgment: &ldquo;well above&rdquo; or &ldquo;well
           below peers&rdquo; outside the middle 80% of peers and more than one standard deviation
           from the expected figure; &ldquo;above&rdquo; or &ldquo;below peers&rdquo; outside the

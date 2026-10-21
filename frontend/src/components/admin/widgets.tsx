@@ -151,7 +151,7 @@ export function RankBars({
               <div
                 className="h-1.5 w-full bg-white/[0.03]"
                 role="img"
-                aria-label={`${e.name}: ${e.count.toLocaleString()} ${unit}`}
+                aria-label={`${e.name}: ${e.count.toLocaleString("en-US")} ${unit}`}
               >
                 <div
                   className="h-full"
@@ -160,7 +160,7 @@ export function RankBars({
               </div>
             </div>
             <span className="text-ink-lo text-xs font-mono tabular-nums w-12 text-right shrink-0">
-              {e.count.toLocaleString()}
+              {e.count.toLocaleString("en-US")}
             </span>
           </div>
         ))}

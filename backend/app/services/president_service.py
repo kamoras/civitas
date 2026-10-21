@@ -228,15 +228,17 @@ def get_all_presidents(db: Session) -> list[PresidentSchema]:
 def get_president_list(db: Session) -> list[dict]:
     """Every president, newest first, as the site's list reads them (GET
     /api/presidents): each with the historians' rank among the rated
-    presidencies (`historiansRank`, `historiansRated`), the figure the
-    profile states. Not part of the public API's president schema."""
+    presidencies (`historiansRank`, `historiansRated`, and the survey edition
+    `historiansEdition`), the figure the profile states. Not part of the public API's president schema."""
     presidents = db.query(President).order_by(President.number.desc()).all()
     rated = _rated_points((p.historical_legacy_score,) for p in presidents)
+    edition = stored_edition(db)
     rows = []
     for p in presidents:
         row = _build_response(p).model_dump(by_alias=True)
         row["historiansRank"] = historians_rank(p.historical_legacy_score, rated)
         row["historiansRated"] = len(rated)
+        row["historiansEdition"] = edition
         rows.append(row)
     return rows
 

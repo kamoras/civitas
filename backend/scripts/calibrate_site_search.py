@@ -66,7 +66,9 @@ sys.path.insert(0, str(ROOT))
 from sqlalchemy import create_engine, text  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
-from app.site_search import CALIBRATION_PATH, Params, answer, gather, is_direct, score  # noqa: E402
+from app.site_search import (  # noqa: E402
+    CALIBRATION_PATH, Params, _candidates, _connect, answer, gather, index_kinds, is_direct, params as fitted_params, score,
+)
 from app.site_search_index import SITE_SEARCH_DB, normalize  # noqa: E402
 
 # Wrong jumps allowed on the fit half: 0.5% of all probes, and none in any
@@ -83,6 +85,13 @@ GRID = {
     "importance_weight": [0.0, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4],
 }
 FLOORS = [0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.93, 0.95, 1.0]
+# Candidate-pool sizes tried, smallest first, against a pool far larger than
+# any query's candidates (REFERENCE): the smallest that changes no fit-half
+# probe's answer rank is kept. The grid only sets where the search looks;
+# the rule (no answer lost) decides.
+POOLS = [10, 20, 40, 80, 120, 160, 240, 320, 480, 640]
+ENOUGH = [5, 10, 20, 40, 80, 160, 320]
+REFERENCE = 5000
 MARGINS = [0.02, 0.05, 0.08, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4]
 PER_TYPE = 400
 
@@ -206,8 +215,8 @@ def _rr(ranked, probe) -> float:
     return 0.0
 
 
-def fit_params(gathered: list[tuple[dict, str, list]]) -> Params:
-    p = Params()
+def fit_params(gathered: list[tuple[dict, str, list]], start: Params | None = None) -> Params:
+    p = start or Params()
 
     def mrr(params: Params) -> float:
         return statistics.fmean(_rr(score(q, hits, params), probe) for probe, q, hits in gathered)
@@ -224,6 +233,34 @@ def fit_params(gathered: list[tuple[dict, str, list]]) -> Params:
         if not moved:
             break
     return p
+
+
+def _answer_ranks(fit: list[dict], index: str, p: Params) -> list[int | None]:
+    """Each probe's answer rank (0-based, top 10) from its entity
+    candidates alone under p's pool and enough, listed at any match."""
+    open_floor = replace(p, list_floor=0.0)
+    conn = _connect(index)
+    ranks = []
+    try:
+        for probe in fit:
+            q = normalize(probe["q"])
+            hits, _ = _candidates(conn, probe["q"], q, p) if q else ({}, set())
+            ranked = score(q, list(hits.values()), open_floor)
+            accept = set(probe["accept"]) | {probe["url"]}
+            ranks.append(next((i for i, h in enumerate(ranked[:10]) if h.url in accept), None))
+    finally:
+        conn.close()
+    return ranks
+
+
+def fit_pool(fit: list[dict], index: str, p: Params) -> tuple[int, int]:
+    """(pool, enough): each the smallest on its grid that changes no fit
+    probe's answer rank against REFERENCE (pool first, with enough at
+    REFERENCE, then enough at the chosen pool)."""
+    ref = _answer_ranks(fit, index, replace(p, pool=REFERENCE, enough=REFERENCE))
+    pool = next((n for n in POOLS if _answer_ranks(fit, index, replace(p, pool=n, enough=REFERENCE)) == ref), REFERENCE)
+    enough = next((n for n in ENOUGH if _answer_ranks(fit, index, replace(p, pool=pool, enough=n)) == ref), REFERENCE)
+    return pool, enough
 
 
 def fit_direct(gathered, p: Params) -> tuple[float, float]:
@@ -301,27 +338,39 @@ def main() -> None:
     ap.add_argument("--index", default=SITE_SEARCH_DB)
     ap.add_argument("--database", default=None, help="SQLAlchemy URL of the main database, for Explore titles")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--candidates-only", action="store_true",
+                    help="fit pool and enough only, keeping the ranking parameters in use")
     args = ap.parse_args()
     db = Session(create_engine(args.database)) if args.database else None
 
     all_probes = probes(args.index, db)
     fit = [p for p in all_probes if p["half"] == 0 and p["type"] != "deep"]
     held = [p for p in all_probes if p["half"] == 1]
-    gathered = [(probe, *gather(probe["q"], args.index, db)) for probe in fit]
-    params = fit_params(gathered)
-    floor, margin = fit_direct(gathered, params)
-    params = replace(params, direct_floor=floor, direct_margin=margin)
+    pool, enough = fit_pool(fit, args.index, fitted_params())
+    if args.candidates_only:
+        params = replace(fitted_params(), pool=pool, enough=enough)
+    else:
+        start = replace(Params(), pool=pool, enough=enough)
+        gathered = [(probe, *gather(probe["q"], args.index, db, start)) for probe in fit]
+        params = replace(fit_params(gathered, start), pool=pool, enough=enough)
+        floor, margin = fit_direct(gathered, params)
+        params = replace(params, direct_floor=floor, direct_margin=margin)
     report = measure(held, args.index, db, params)
     out = {
         "_source": (
             "scripts/calibrate_site_search.py on the live index "
             f"({datetime.date.today().isoformat()}): parameters fitted on half the entities' known-item "
-            "probes, measured on the other half."
+            "probes, measured on the other half. pool and enough: the smallest on their grids that change no "
+            "fit probe's answer rank against a 5,000-candidate pool; list_floor is not fitted: "
+            "known-item probes say whether an answer is listed, never whether the rest of a list is junk."
+            + (" Ranking parameters kept from the calibration in use (--candidates-only)." if args.candidates_only
+               else "")
         ),
         "params": {k: v for k, v in asdict(params).items()},
         "wrong_direct_target": WRONG_DIRECT_TARGET,
         "wrong_direct_type_cap": WRONG_DIRECT_TYPE_CAP,
         "held_out": report,
+        "kinds": sorted(index_kinds(args.index) or ()),
     }
     print(json.dumps(out, indent=2))
     if not args.dry_run:

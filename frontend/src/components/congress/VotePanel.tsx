@@ -149,7 +149,7 @@ export default function VotePanel({
             {CHAMBER_NAME[vote.chamber]} vote {vote.number} · {shortDate(vote.date)}
           </p>
           <p className="mt-1 text-lg font-semibold text-ink-hi">
-            {vote.question}: {voteResult(vote).toLowerCase()}, <TallyText vote={vote} />
+            {vote.question}: {voteResult(vote)}, <TallyText vote={vote} />
           </p>
         </div>
         <Link

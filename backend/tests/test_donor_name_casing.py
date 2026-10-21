@@ -22,6 +22,10 @@ from app.pipeline.transform import normalize_finance as nf
     # Spacing tidied; a name not in capitals is as filed.
     ("RIVER FINANCIAL  CORPORATION", "River Financial Corporation"),
     ("Harvard University", "Harvard University"),
+    # Initials usage has no record of: no vowel, so not a word.
+    ("NRSC", "NRSC"),
+    ("DSCC VICTORY FUND", "DSCC Victory Fund"),
+    ("DR JONES PLLC", "Dr Jones PLLC"),
 ])
 def test_names_are_shown_as_written(filed, shown):
     assert nf._clean_donor_name(filed) == shown
