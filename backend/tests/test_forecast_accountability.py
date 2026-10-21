@@ -141,12 +141,19 @@ class TestGrade:
                                                     "median": 10.2, "medianLabel": "R+10"}
         # An unranged seat still has its usual vote, but no count, no swing.
         assert _seat(g, "house", "2026-HOUSE-GA-9")["usualMargin"] == -20.0
+        # The swing map's readouts, counted by the API.
+        marks = g["chambers"]["senate"]["stateMarks"]
+        assert marks["GA"]["shown"] == f"{ga['marginLabel']}, usual D+6, swing R+2"
+        house = g["chambers"]["house"]["stateMarks"]["GA"]
+        assert house["shown"] == "4 seats" and house["context"].startswith("1 with an official count, median swing ")
 
     def test_aggregates_by_chamber_and_basis_beside_the_promise(self):
         g = accountability.grade(_map(), _record())
         senate = g["chambers"]["senate"]
         assert senate["all"]["graded"] == 2 and senate["all"]["held80"] == 1 and senate["all"]["held95"] == 1
-        assert senate["all"]["share80"] == 0.5
+        assert senate["all"]["share80"] == 0.5 and senate["all"]["share80Shown"] == "50%"
+        assert senate["all"]["interval80Shown"].endswith("%") and " to " in senate["all"]["interval80Shown"]
+        assert senate["promised"]["heldOut"]["coverage80Shown"] == "81%"
         assert senate["all"]["interval80"] == accountability.clopper_pearson(1, 2)
         by = {b["basis"]: b for b in senate["byBasis"]}
         assert by["polls"]["graded"] == 1 and by["polls"]["ranged"] == 2 and by["polls"]["held80"] == 1
@@ -162,7 +169,9 @@ class TestGrade:
         g = accountability.grade(_map(), _record(counts))
         for c in g["chambers"].values():
             assert c["all"] == {"graded": 0, "held80": 0, "share80": None, "interval80": None,
-                                "held95": 0, "share95": None, "interval95": None}
+                                "share80Shown": "n/a", "interval80Shown": None,
+                                "held95": 0, "share95": None, "interval95": None,
+                                "share95Shown": "n/a", "interval95Shown": None}
             assert c["certified"] == 0 and c["misses"] == [] and c["swing"]["seats"] == 0
 
 

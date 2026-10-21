@@ -12,6 +12,8 @@ Read path only: no model, no fetch.
 """
 from datetime import date
 
+from app.ordinals import ordinal
+
 
 def mark(id: str, label: str, shown: str, *, detail: str | None = None,
          context: str | None = None, href: str | None = None) -> dict:
@@ -55,6 +57,13 @@ def compact_money(amount: float) -> str:
 def share_text(share: float) -> str:
     """A share of a whole as printed: "34%", and "<1%" for a sliver."""
     return "<1%" if 0 < share < 0.01 else f"{round(share * 100)}%"
+
+
+def seat_name(state_name: str, district: int | None, special: bool) -> str:
+    """"Ohio", "Florida (special)", "Ohio's 9th district", "Alaska at-large"."""
+    if district is not None:
+        return f"{state_name} at-large" if district == 0 else f"{state_name}'s {ordinal(district)} district"
+    return f"{state_name} (special)" if special else state_name
 
 
 def _short(iso: str) -> str:
