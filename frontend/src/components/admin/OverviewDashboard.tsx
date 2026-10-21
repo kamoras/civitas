@@ -194,10 +194,12 @@ export function OverviewDashboard({
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile
           label="Confirmed visitors today"
-          value={today?.confirmedVisitors != null ? today.confirmedVisitors.toLocaleString() : "—"}
+          value={
+            today?.confirmedVisitors != null ? today.confirmedVisitors.toLocaleString("en-US") : "—"
+          }
           note={
             today
-              ? `${today.firstPaintLoads.toLocaleString()} first-paint loads`
+              ? `${today.firstPaintLoads.toLocaleString("en-US")} first-paint loads`
               : loadFailed.visits
                 ? "couldn't load"
                 : undefined
@@ -208,7 +210,7 @@ export function OverviewDashboard({
           value={loadToday?.p75 != null ? formatMs(loadToday.p75) : "—"}
           note={
             loadTimes
-              ? `${(loadToday?.samples ?? 0).toLocaleString()} loads measured`
+              ? `${(loadToday?.samples ?? 0).toLocaleString("en-US")} loads measured`
               : loadFailed.loadTimes
                 ? "couldn't load"
                 : undefined
@@ -216,7 +218,7 @@ export function OverviewDashboard({
         />
         <StatTile
           label="Failed runs, 7 days"
-          value={trend ? failed.toLocaleString() : "—"}
+          value={trend ? failed.toLocaleString("en-US") : "—"}
           tone={failed > 0 ? "text-signal-magenta" : "text-ink-hi"}
           note={
             trend
@@ -259,7 +261,7 @@ export function OverviewDashboard({
                 values: (visits ?? []).map((v) => v.firstPaintLoads),
               },
             ]}
-            formatValue={(v) => v.toLocaleString()}
+            formatValue={(v) => v.toLocaleString("en-US")}
             formatTick={formatCompact}
             height={130}
             emptyMessage={emptyText(!!visits, loadFailed.visits, "No visits recorded yet.")}

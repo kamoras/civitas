@@ -449,7 +449,7 @@ describe("the contest drawer", () => {
     render(<StateBallotClient ballot={ballot({ senateRaces: [senate] })} />);
     const drawer = await openContest(/U\.S\. Senator/);
     expect(
-      drawer.getByRole("link", { name: /house member, OH-2 · where this member stands/ })
+      drawer.getByRole("link", { name: /House member, OH-2 · where this member stands/ })
     ).toHaveAttribute("href", "/politicians/eric-conway");
     await userEvent.click(drawer.getByRole("tab", { name: "Record" }));
     expect(

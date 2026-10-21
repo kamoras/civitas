@@ -231,7 +231,7 @@ function PaginatedVoteList({
           still the last one's. */}
       {narrowed && (
         <p className="mb-2 text-xs text-ink-lo" role="status">
-          {counts.all.toLocaleString()} {counts.all === 1 ? "vote" : "votes"}
+          {counts.all.toLocaleString("en-US")} {counts.all === 1 ? "vote" : "votes"}
           {q ? (counts.all === 1 ? " matches this search" : " match this search") : ""}
         </p>
       )}
@@ -326,7 +326,7 @@ export default function VotingRecord({
     <div className="grid grid-cols-3 gap-2 mb-2 text-center text-sm">
       <div className="panel px-2 py-3 sm:p-3">
         <div className="text-xl font-display font-semibold text-ink-hi">
-          {totalVotes.toLocaleString()}
+          {totalVotes.toLocaleString("en-US")}
         </div>
         <div className="[&>span]:justify-center text-ink-min text-[11px] sm:text-xs">
           <MetricTooltip text="Roll-call votes listed below for this member: the chamber's latest votes and the key bills Civitas follows, from Congress.gov and Senate.gov. The party-line figures beside it cover every party-line vote of this Congress, not only these.">
@@ -344,12 +344,12 @@ export default function VotingRecord({
           </MetricTooltip>
         </div>
         <div className="text-xs text-ink-lo">
-          with the party on {votedWithPartyCount.toLocaleString()}
+          with the party on {votedWithPartyCount.toLocaleString("en-US")}
         </div>
       </div>
       <div className="panel px-2 py-3 sm:p-3">
         <div className="text-xl font-display font-semibold text-signal-amber">
-          {votedAgainstPartyCount.toLocaleString()}
+          {votedAgainstPartyCount.toLocaleString("en-US")}
         </div>
         <div className="[&>span]:justify-center text-ink-min text-[11px] sm:text-xs">
           <MetricTooltip text="Party-line votes this Congress on which the member sided with the other party, each bill or nomination once: the breaks figure the profile compares with peers. Breaks from the party's own flank are listed on the member page but not counted.">
