@@ -566,6 +566,10 @@ export interface VoteStep {
   isStateSpecific: boolean;
   unconfirmed: boolean;
   fallback: { url: string; sourceName: string; host: string } | null;
+  /** The sample ballot step in a state whose election authority publishes
+   * no statewide sample ballot lookup: who publishes it there ("county",
+   * "city or town"), named on the button. Absent from an older API. */
+  localOffice?: string | null;
   deadline: {
     sentence: string;
     status: string;

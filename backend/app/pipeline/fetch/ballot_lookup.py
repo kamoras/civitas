@@ -125,7 +125,12 @@ def task_link(state: str, task: str) -> dict[str, Any]:
         return {"url": entry["url"], "sourceName": state_entry.get("source_name") or "", "isStateSpecific": True,
                 "verifiedAt": entry.get("verified_at"), "unconfirmed": unconfirmed,
                 "fallback": fallback if unconfirmed else None}
-    return {**fallback, "isStateSpecific": False, "verifiedAt": None, "unconfirmed": False, "fallback": None}
+    # A state whose authority publishes no statewide sample ballot lookup
+    # names who does ("county", "city or town"), so the button can say why
+    # it opens a directory of local offices rather than the state's site.
+    local = state_entry.get("sample_ballot_office") if task == "sample_ballot" else None
+    return {**fallback, "isStateSpecific": False, "verifiedAt": None, "unconfirmed": False, "fallback": None,
+            "localOffice": local}
 
 
 def lookup_for_state(state: str) -> dict[str, Any]:
@@ -198,7 +203,7 @@ def vote_steps(state: str, calendar: dict | None) -> list[dict[str, Any]]:
                     else _mail_deadline(calendar) if task == "mail_ballot" else None)
         if link is None:
             steps.append({"task": task, "url": None, "host": None, "sourceName": None, "isStateSpecific": True,
-                          "unconfirmed": False, "fallback": None, "deadline": deadline})
+                          "unconfirmed": False, "fallback": None, "localOffice": None, "deadline": deadline})
             continue
         fallback = link.get("fallback")
         steps.append({
@@ -209,6 +214,7 @@ def vote_steps(state: str, calendar: dict | None) -> list[dict[str, Any]]:
             "isStateSpecific": link["isStateSpecific"],
             "unconfirmed": link["unconfirmed"],
             "fallback": {**fallback, "host": _host(fallback["url"])} if fallback else None,
+            "localOffice": link.get("localOffice"),
             "deadline": deadline,
         })
     return steps
@@ -242,7 +248,21 @@ def _check(requested: str, response: httpx.Response) -> str:
     return DEAD if homepage else VERIFIED
 
 
-async def _check_url(client: httpx.AsyncClient, url: str) -> str:
+async def _check_url(client: httpx.AsyncClient, url: str, attempts: int = 2) -> str:
+    """No answer (a timeout, a reset) or a server error is asked once more
+    before the link is hidden for the night: local runs of the check on
+    2026-10-20 lost a different live page each run (South Carolina's
+    registration lookup, then Montana's), while the same URL listed for
+    another task verified in the same run. A challenge, a refusal or a 404
+    is the site's answer and is never retried (AGENTS.md section 7)."""
+    for _ in range(attempts):
+        result = await _check_once(client, url)
+        if result is not None:
+            return result
+    return DEAD
+
+
+async def _check_once(client: httpx.AsyncClient, url: str) -> str | None:
     try:
         # BROWSER_HEADERS: honest identity, complete request, the shape
         # several state WAFs require before they answer anyone (see
@@ -253,9 +273,11 @@ async def _check_url(client: httpx.AsyncClient, url: str) -> str:
         # polling-place page read as dead from 2026-10 for want of that alone.
         response = await client.get(url, timeout=_LINK_CHECK_TIMEOUT_S, follow_redirects=True,
                                     headers=BROWSER_HEADERS)
-        return _check(url, response)
     except Exception:
-        return DEAD
+        return None
+    if response.status_code >= 500 and not is_bot_challenge(response):
+        return None
+    return _check(url, response)
 
 
 async def refresh_link_verification(client: httpx.AsyncClient) -> dict[str, int]:

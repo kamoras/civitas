@@ -426,6 +426,41 @@ def _answering(**by_url):
 
 
 @pytest.mark.asyncio
+async def test_link_check_asks_again_after_no_answer_but_never_after_an_answer():
+    """A timeout or a server error is asked once more before a live page is
+    hidden for the night; a 404, a refusal or a challenge is the site's
+    answer and is asked once."""
+    import httpx
+
+    from app.pipeline.fetch import ballot_lookup
+
+    class _Flaky:
+        def __init__(self, *answers):
+            self.answers, self.asked = list(answers), 0
+
+        async def get(self, url, **kwargs):
+            self.asked += 1
+            answer = self.answers.pop(0)
+            if isinstance(answer, Exception):
+                raise answer
+            status, headers = answer
+            return httpx.Response(status, headers=headers, request=httpx.Request("GET", url))
+
+    url = "https://vote.example.gov/lookup"
+    timeout_then_ok = _Flaky(httpx.ReadTimeout("slow"), (200, {}))
+    assert await ballot_lookup._check_url(timeout_then_ok, url) == ballot_lookup.VERIFIED
+    error_then_ok = _Flaky((502, {}), (200, {}))
+    assert await ballot_lookup._check_url(error_then_ok, url) == ballot_lookup.VERIFIED
+    always_down = _Flaky(httpx.ConnectError("down"), (503, {}))
+    assert await ballot_lookup._check_url(always_down, url) == ballot_lookup.DEAD
+    for answer, result in (((404, {}), ballot_lookup.DEAD), ((403, {}), ballot_lookup.BLOCKED),
+                           ((503, {"cf-mitigated": "challenge"}), ballot_lookup.BLOCKED)):
+        client = _Flaky(answer, (200, {}))
+        assert await ballot_lookup._check_url(client, url) == result, answer
+        assert client.asked == 1, answer
+
+
+@pytest.mark.asyncio
 async def test_link_verification_clears_a_link_that_stops_resolving(monkeypatch, tmp_path):
     """A link that rots between runs must stop being shown, not keep
     riding a check that passed weeks ago — and the state's page falls back
@@ -779,6 +814,66 @@ def test_bundled_ballot_lookups_cover_every_state_from_its_own_authority():
             assert link["_checked"], (code, task)
         if "sample_ballot" in tasks:
             assert "sample ballot" in tasks["sample_ballot"]["_checked"], code
+        # Either the state's own sample ballot lookup, or who publishes the
+        # sample ballot there, with what was checked: never neither.
+        assert ("sample_ballot" in tasks) != bool(entry.get("sample_ballot_office")), code
+        if entry.get("sample_ballot_office"):
+            assert entry["sample_ballot_office"] in ("county", "city or town"), code
+            assert "no statewide sample ballot lookup" in entry["_sample_ballot_checked"], code
+            assert "Checked 20" in entry["_sample_ballot_checked"], code
+
+
+def _official_host(host: str, listed: set[str]) -> bool:
+    """A .gov host, a state government's state.<st>.us host, or one the
+    data file lists as an election authority's own documented domain."""
+    labels = host.split(".")
+    return (host.endswith(".gov")
+            or (len(labels) >= 3 and labels[-3] == "state" and len(labels[-2]) == 2 and labels[-1] == "us")
+            or any(host == d or host.endswith("." + d) for d in listed))
+
+
+def test_every_bundled_ballot_lookup_is_on_an_official_host():
+    """Every per-state link opens the election authority's own site: never
+    a vendor, an aggregator or a lookalike domain. A host that is neither
+    .gov nor state.<st>.us must be listed in `official_hosts` with where
+    the authority links it, and every listed host must still be used."""
+    from urllib.parse import urlsplit
+
+    from app.pipeline.fetch import ballot_lookup
+
+    data = json.loads(open(ballot_lookup._BUNDLED_PATH, encoding="utf-8").read())
+    listed = {h for h in data["official_hosts"] if not h.startswith("_")}
+    assert all(data["official_hosts"][h] for h in listed)
+    used = set()
+    for code, entry in data["states"].items():
+        for task, link in entry["tasks"].items():
+            host = urlsplit(link["url"]).hostname
+            assert _official_host(host, listed), (code, task, host)
+            used |= {d for d in listed if host == d or host.endswith("." + d)}
+    assert used == listed, listed - used
+    assert not _official_host("sos.state.example.com", listed)
+    assert not _official_host("wv.omniballot.us", listed)
+    assert _official_host("www.sos.state.co.us", listed)
+
+
+def test_sample_ballot_step_names_who_publishes_it_where_no_state_lookup(monkeypatch, tmp_path):
+    """A state whose authority publishes no statewide sample ballot lookup
+    says who does (the button names it); a state lookup the check has
+    passed carries none."""
+    ballot_lookup, _ = _link_files(monkeypatch, tmp_path, {})
+    bundled = json.loads(open(ballot_lookup._BUNDLED_PATH).read())
+    bundled["states"] = {
+        "IA": {"source_name": "Iowa SoS", "sample_ballot_office": "county", "tasks": {}},
+        "WI": {"source_name": "WEC", "sample_ballot_office": "county", "tasks": {"sample_ballot": {
+            "url": "https://myvote.wi.gov/ballot", "verified_at": "2026-10-20T00:00:00"}}},
+    }
+    open(ballot_lookup._BUNDLED_PATH, "w").write(json.dumps(bundled))
+    ballot_lookup.invalidate_cache()
+    ia = {s["task"]: s for s in ballot_lookup.vote_steps("IA", None)}
+    assert ia["sample_ballot"]["isStateSpecific"] is False and ia["sample_ballot"]["localOffice"] == "county"
+    assert ia["polling_place"]["localOffice"] is None
+    wi = {s["task"]: s for s in ballot_lookup.vote_steps("WI", None)}
+    assert wi["sample_ballot"]["isStateSpecific"] is True and wi["sample_ballot"]["localOffice"] is None
 
 
 def _calendar(registration=None, items=()):
