@@ -25,7 +25,7 @@ export function partyMembers(party: string): string {
 export function count(n: number, one: string, many: string): string {
   if (n === 0) return `no ${many}`;
   if (n === 1) return `one ${one}`;
-  return `${n.toLocaleString()} ${many}`;
+  return `${n.toLocaleString("en-US")} ${many}`;
 }
 
 /** "Jul 22, 2026" for an ISO date; anything else is shown as given. */

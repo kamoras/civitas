@@ -30,7 +30,7 @@ export default function NominationRow({ n }: { n: NominationSummary }) {
         className="mt-1 block text-base text-ink underline decoration-white/20 underline-offset-4 hover:text-phos"
       >
         {isList
-          ? `${n.nomineeCount.toLocaleString()} nominees: ${[n.positionTitle, n.organization].filter(Boolean).join(", ")}`
+          ? `${n.nomineeCount.toLocaleString("en-US")} nominees: ${[n.positionTitle, n.organization].filter(Boolean).join(", ")}`
           : // A military nomination carries no description: its nominee and grade.
             n.description ||
             [n.nominees[0], n.positionTitle || n.organization].filter(Boolean).join(": ") ||

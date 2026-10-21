@@ -61,7 +61,7 @@ import calibrate_site_search as site_probes  # noqa: E402
 import evaluate_explore_search as doc_probes  # noqa: E402
 from app.database import SessionLocal  # noqa: E402
 from app.services.explore_search import hybrid_search  # noqa: E402
-from app.site_search import FUSION_PATH, Fusion, answer, document_url, fused_order  # noqa: E402
+from app.site_search import FUSION_PATH, Fusion, answer, document_url, fused_order, index_kinds  # noqa: E402
 from app.site_search_index import SITE_SEARCH_DB  # noqa: E402
 
 # Wide enough to see the plateau's extent: on the first runs (2026-10-20)
@@ -252,6 +252,7 @@ def main() -> None:
         "structure": gate_note,
         "cutoff": CUTOFF,
         "held_out": report(held, chosen),
+        "kinds": sorted(index_kinds(args.index) or ()),
     }
     print(json.dumps(out, indent=2))
     if not args.dry_run:

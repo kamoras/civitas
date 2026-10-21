@@ -234,7 +234,7 @@ describe("RunStatusSquare (the band on a phone)", () => {
     fetchPipelineStatus.mockResolvedValue(status({ links: links({ Senate: "failed" }) }));
     render(<RunStatusSquare />);
     const button = await screen.findByRole("button", {
-      name: "Data status: senate data run failed, 4 of 5 filed",
+      name: "Data status: Senate data run failed, 4 of 5 filed",
     });
     const square = button.querySelector("[aria-hidden]")!;
     expect(square.className).toContain("border-signal-red");

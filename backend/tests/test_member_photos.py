@@ -15,9 +15,11 @@ import cv2
 import httpx
 import numpy as np
 import pytest
+from fastapi import HTTPException
 
 from app.api.photos import get_photo_source
 from app.models import ApiCache, MemberPhoto, Senator
+from app.photos import bioguide_photo, members_without_photo
 from app.pipeline.fetch import member_photos
 from app.pipeline.fetch.face_detection import MODEL_PATH
 from app.pipeline.fetch.member_photos import (
@@ -165,12 +167,43 @@ async def test_a_new_depiction_is_measured_again(db_session, measured, freeze_ut
     assert db_session.get(MemberPhoto, "X000001").source_url == DEPICTION
 
 
-async def test_a_member_with_no_credited_depiction_has_no_choice(db_session, measured, freeze_utcnow):
+async def test_a_member_with_no_credited_depiction_gets_bioguides_portrait(db_session, measured, freeze_utcnow):
     freeze_utcnow(NOW)
     _member(db_session, attribution="")
     db_session.add(MemberPhoto(bioguide_id="X000001", source_url=DEPICTION, depiction_url=DEPICTION, checked_at=NOW))
     db_session.commit()
+    async with _client({PORTRAIT: _jpeg(b"0.50")}) as client:
+        assert await refresh_member_photos(db_session, client, timedelta(minutes=1)) == 1
+        assert client.seen == [PORTRAIT]
+    row = db_session.get(MemberPhoto, "X000001")
+    assert (row.source_url, row.depiction_url) == (PORTRAIT, None)
+    assert get_photo_source("bioguide", "X000001", db=db_session) == {"url": PORTRAIT}
+    assert members_without_photo(db_session) == frozenset()
+    # Checked again only when due, not every night.
     async with _client({}) as client:
+        assert await refresh_member_photos(db_session, client, timedelta(minutes=1)) == 0
+
+
+@pytest.mark.parametrize("attribution", ["", "Image courtesy of the Member"])
+async def test_a_member_neither_source_has_has_no_photo(db_session, measured, freeze_utcnow, attribution):
+    """No depiction (or one Congress.gov 404s) and no bioguide portrait: the
+    API sends no photo path, and the source endpoint has nothing to give."""
+    freeze_utcnow(NOW)
+    _member(db_session, attribution=attribution)
+    async with _client({DEPICTION: httpx.Response(404), PORTRAIT: httpx.Response(404)}) as client:
+        assert await refresh_member_photos(db_session, client, timedelta(minutes=1)) == 1
+    assert db_session.get(MemberPhoto, "X000001").source_url is None
+    assert members_without_photo(db_session) == frozenset({"X000001"})
+    assert bioguide_photo("X000001", members_without_photo(db_session)) is None
+    assert bioguide_photo("X000002", members_without_photo(db_session)) == "/photo/bioguide/X000002"
+    with pytest.raises(HTTPException):
+        get_photo_source("bioguide", "X000001", db=db_session)
+
+
+async def test_a_failed_portrait_fetch_is_not_read_as_no_photo(db_session, measured, freeze_utcnow):
+    freeze_utcnow(NOW)
+    _member(db_session, attribution="")
+    async with _client({PORTRAIT: httpx.Response(503)}) as client:
         assert await refresh_member_photos(db_session, client, timedelta(minutes=1)) == 0
     assert db_session.get(MemberPhoto, "X000001") is None
     assert get_photo_source("bioguide", "X000001", db=db_session) == {"url": PORTRAIT}

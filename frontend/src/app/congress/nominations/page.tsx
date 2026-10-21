@@ -130,8 +130,8 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
                 <span className="font-mono text-xs text-signal-amber">Still reading</span>
                 <br />
                 {expected != null
-                  ? `${read.toLocaleString()} of about ${expected.toLocaleString()} nominations read so far.`
-                  : `${read.toLocaleString()} nominations read so far.`}{" "}
+                  ? `${read.toLocaleString("en-US")} of about ${expected.toLocaleString("en-US")} nominations read so far.`
+                  : `${read.toLocaleString("en-US")} nominations read so far.`}{" "}
                 Counts will change until every one is read
                 {nightsLeft != null
                   ? `, in about ${nightsLeft} more day${nightsLeft === 1 ? "" : "s"}`
@@ -156,8 +156,9 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
                     id="glance-title"
                     className="max-w-3xl font-display text-xl leading-snug text-ink sm:text-2xl"
                   >
-                    {stats.total.toLocaleString()} nominations{complete ? "" : " read so far"},
-                    naming {stats.people.toLocaleString()} people.{" "}
+                    {stats.total.toLocaleString("en-US")} nominations
+                    {complete ? "" : " read so far"}, naming {stats.people.toLocaleString("en-US")}{" "}
+                    people.{" "}
                     {complete && civilian.median != null && (
                       <>
                         A civilian nomination took a median of{" "}
@@ -183,7 +184,7 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
                       >
                         <span className="font-mono text-xs text-ink-min">{STATUS_LABEL[s]}</span>
                         <span className="font-mono text-3xl tabular-nums leading-none text-ink-hi sm:text-4xl">
-                          {stats.counts[s].toLocaleString()}
+                          {stats.counts[s].toLocaleString("en-US")}
                         </span>
                       </Link>
                     </li>
@@ -301,7 +302,7 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
                     !f.status ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
                   }`}
                 >
-                  All {list.allStatuses.toLocaleString()}
+                  All {list.allStatuses.toLocaleString("en-US")}
                 </Link>
                 {STATUSES.map((s) => (
                   <Link
@@ -312,7 +313,7 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
                       f.status === s ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
                     }`}
                   >
-                    {STATUS_LABEL[s]} {list.counts[s].toLocaleString()}
+                    {STATUS_LABEL[s]} {list.counts[s].toLocaleString("en-US")}
                   </Link>
                 ))}
               </nav>
@@ -344,7 +345,7 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
                     <span />
                   )}
                   <span className="font-mono text-xs text-ink-min">
-                    Page {f.page} of {pages} · {list.total.toLocaleString()} nominations
+                    Page {f.page} of {pages} · {list.total.toLocaleString("en-US")} nominations
                   </span>
                   {f.page < pages ? (
                     <Link

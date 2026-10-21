@@ -8,7 +8,7 @@ import { rollCallHref, shortDate, voteResult, weekHref } from "@/lib/congress";
 import { stateBallotHref } from "@/lib/elections";
 import ClosingSoon from "@/components/elections/ClosingSoon";
 import RegisterLink from "@/components/elections/RegisterLink";
-import { STATE_NAMES } from "@/lib/stateCodes";
+import { STATE_NAMES, byStateName } from "@/lib/stateCodes";
 import { exploreHref } from "@/lib/exploreHref";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
@@ -89,7 +89,7 @@ function StatePicker({ states, compact }: { states: string[]; compact: boolean }
     <ul
       className={`grid gap-1 font-mono text-xs ${compact ? "grid-cols-[repeat(auto-fill,minmax(2.75rem,1fr))]" : "grid-cols-[repeat(auto-fill,minmax(2.5rem,1fr))]"}`}
     >
-      {states.map((st) => (
+      {[...states].sort(byStateName).map((st) => (
         <li key={st}>
           <Link
             href={stateBallotHref(st)}

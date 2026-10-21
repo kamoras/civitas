@@ -8,6 +8,8 @@ import json
 import os
 from functools import lru_cache
 
+from app.state_names import by_state_name
+
 _PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "state_ballot_scope.json")
 
 KINDS = ("legislature", "judicial_contests", "judicial_retention")
@@ -49,7 +51,7 @@ def odd_year_elections(year: int) -> list[dict]:
     if year % 2 == 0:
         return []
     out = []
-    for state, entry in sorted(_states().items()):
+    for state, entry in sorted(_states().items(), key=lambda kv: by_state_name(kv[0])):
         kinds = [k for k, words in _KIND_WORDS.items()
                  if isinstance(entry.get(k), dict) and (year - entry[k]["from"]) % entry[k]["every"] == 0]
         if kinds:

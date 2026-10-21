@@ -1233,6 +1233,10 @@ pipeline. The model is YuNet from the OpenCV Zoo (MIT), vendored in
 `app/data/`; source and hash are in the calibration file. The endpoint reads
 the stored choice, and a member without one (a departed
 bill sponsor, or before the first run) gets the depiction-first rule. A
+member neither source has a photo of (a new member, before Congress.gov
+or bioguide posts one) is stored with no source, and every response that
+names the member sends no photo path (`photos.members_without_photo`), so
+the page shows initials instead of asking for a route that can only 404. A
 depiction is used only on Congress.gov's `/img/member/` path and only with
 the attribution Congress.gov gives it; one without falls back to bioguide,
 so the credit on `/about/data#privacy` stays true. Many
@@ -2355,7 +2359,7 @@ the pending list).
 | A president among the other presidencies (strips, words; no score) | `backend/app/president_peers.py`, `frontend/src/components/scorecard/PresidentStanding.tsx` |
 | A president's term charted against the others (approval, jobs, growth) | `backend/app/president_charts.py`, `frontend/src/components/scorecard/PresidentCharts.tsx` |
 | Justice record and appointer estimate (not scored, justice v3) | `backend/app/pipeline/justice_pipeline.py`, `backend/app/pipeline/analyze/justice_loyalty.py` |
-| The Court page (`/court`: Martin-Quinn line, agreement grid, splits by term, decision lineups) and each justice's case list | `backend/app/services/court_service.py`, `backend/app/api/court.py`, `frontend/src/app/court/page.tsx`, `frontend/src/components/court/`, `frontend/src/components/scorecard/JusticeCases.tsx` |
+| The Court page (`/court`: Martin-Quinn line, agreement grid, splits by term, decision lineups) and each justice's case list | `backend/app/services/court_service.py`, `backend/app/api/court.py`, `frontend/src/app/court/page.tsx`, `frontend/src/components/court/`, `frontend/src/components/scorecard/JusticeCases.tsx`; the Court-level appointer finding is generated, `app/data/court_finding.json` from `scripts/research_justice_loyalty.py --write-finding` (`GET /api/court/finding`) |
 | A justice's page (no score: each figure beside every sitting justice's, the appointing president linked, the appointer estimate as every justice's interval) and a president's "Justices appointed" | `backend/app/services/justice_figures.py`, `frontend/src/components/justice/`, `GET /api/justices/appointed-by/{president_id}` (every appointment since 1789: `JusticeAppointment`, stored from the FJC directory by `justice_pipeline.store_court_seats`) |
 | Election cycle pipeline (candidates, financials, ballot measures, coverage) | `backend/app/pipeline/election_pipeline.py` |
 | What shapes a race (seat lean among all seats, FEC contribution categories, state CSV; descriptive, no forecast) | `backend/app/race_context.py`, `frontend/src/components/elections/ballot/RaceContext.tsx`, `RaceMoneyBars.tsx` |
@@ -2660,6 +2664,20 @@ the pending list).
 - The "this week" strip (`components/shared/ThisWeekStrip.tsx`) is an async
   server component; a client page gets it as a `strip` prop from its server
   `page.tsx`, never by fetching it on the client.
+- **What the server renders, the browser must render identically** (React
+  #418, 2026-10). Every `toLocale*String` names its locale ("en-US"), and a
+  date that is a calendar day is formatted in UTC (`formatUtcDate`);
+  `lib/localeStable.test.ts` holds it. The root layout renders no `<head>`
+  of its own: the flight payload sends a head's children as a lazy chunk,
+  and when it hadn't streamed in yet React suspended on the head, replayed
+  it and hydrated `<body>` against the head's first child, on a share of
+  loads of every page behind Cloudflare. The theme script is the body's
+  first child instead (`layoutStability.test.ts`).
+- A label lowered to sit mid-sentence goes through `midSentence`
+  (`lib/formatting.ts`), which keeps House, Senate, Congress, the parties,
+  months and state names capitalised; a bare `toLowerCase()` printed
+  "senate data run failed". A list shown by state name is sorted by name
+  (`byStateName`, `app/state_names.by_state_name`), not by postal code.
 - Every page's `<main>` is `id="main-content"`: the skip link targets it, and
   `globals.css` gives it `min-height: 100vh` so the footer never paints in the
   first screen while a client-fetched page loads and then jumps away (CLS
