@@ -3,6 +3,7 @@
  */
 
 import type { RedistrictingNote } from "@/types/redistricting";
+import type { Figure } from "@/types/figure";
 
 export interface CandidateSummary {
   id: string;
@@ -706,6 +707,30 @@ export interface StateBallot {
   /** What this page deliberately does not cover, enumerated by the
    * backend so the limitation renders as content rather than a footnote. */
   omits: string[];
+  /** The page's boxes: a templated line and a counted figure for the
+   * ballot's shape and each contest (backend services/ballot_boxes.py).
+   * Absent from an older API. */
+  boxes?: BallotBoxes;
+}
+
+/** One box's line and figure, as the backend filled them. */
+export interface BallotBoxLine {
+  /** Null where the title says it all. */
+  dek: string | null;
+  figure: Figure | null;
+}
+
+export interface BallotBoxes {
+  /** The ballot at a glance: contests, candidates, the lean, electoral votes. */
+  summary: (BallotBoxLine & {
+    key: "contests" | "candidates" | "lean" | "electoral";
+    kicker: string;
+    title: string;
+  })[];
+  /** Keyed as lib/ballotContests.ts keys contests ("house", "senate-<id>",
+   * "measures"...), plus "no-senate". */
+  contests: Record<string, BallotBoxLine>;
+  contestCount: number;
 }
 
 /** Provenance of the district table /pvi serves — the lines this cycle's

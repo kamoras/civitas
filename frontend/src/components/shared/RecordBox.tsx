@@ -132,6 +132,10 @@ export type RecordBoxProps = Line & {
   lead?: boolean;
   /** Anything else the box draws (a ladder, a share button), under the line. */
   children?: ReactNode;
+  /** What the box draws across its full width, under the line and the
+   *  figure (a list of candidates, a row of commands): beside a figure,
+   *  `children` share the text's narrower column. */
+  below?: ReactNode;
 };
 
 const RULE = "border-white/25";
@@ -153,6 +157,7 @@ export default function RecordBox(props: RecordBoxProps) {
     more,
     lead = false,
     children,
+    below,
   } = props;
   const Heading = `h${level}` as const;
   return (
@@ -238,6 +243,7 @@ export default function RecordBox(props: RecordBoxProps) {
           </div>
         )}
       </div>
+      {below && <div className="mt-3">{below}</div>}
       {more && (
         <details className="group/more mt-3 text-sm">
           <summary

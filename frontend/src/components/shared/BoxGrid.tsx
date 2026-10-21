@@ -22,21 +22,26 @@ export default function BoxGrid({
   columns = 3,
   label,
   labelId,
+  labelLevel = 2,
   labelHref,
   labelHrefText,
   children,
   className = "",
 }: {
   columns?: 1 | 2 | 3;
-  /** The grid's heading (an h2): what the boxes are. */
+  /** The grid's heading: what the boxes are. */
   label?: string;
   labelId?: string;
+  /** The heading's level: an h2, or an h3 for a grid under a page section's
+   *  own h2 (give its boxes `level={4}`). */
+  labelLevel?: 2 | 3;
   /** A link beside the heading to the whole list the boxes come from. */
   labelHref?: string;
   labelHrefText?: string;
   children: ReactNode;
   className?: string;
 }) {
+  const Heading = `h${labelLevel}` as const;
   return (
     <section
       aria-labelledby={label ? labelId : undefined}
@@ -44,9 +49,9 @@ export default function BoxGrid({
     >
       {label && (
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b-2 border-ink-hi pb-1.5">
-          <h2 id={labelId} className="font-display text-xl font-semibold text-ink-hi">
+          <Heading id={labelId} className="font-display text-xl font-semibold text-ink-hi">
             {label}
-          </h2>
+          </Heading>
           {labelHref && labelHrefText && (
             <BoxAnchor
               href={labelHref}

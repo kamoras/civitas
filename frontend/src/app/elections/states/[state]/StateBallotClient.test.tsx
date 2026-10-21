@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import StateBallotClient from "./StateBallotClient";
 import type { RaceWithCandidates, StateBallot, VoteStep } from "@/types/election";
@@ -111,52 +111,61 @@ function ballot(overrides: Partial<StateBallot> = {}): StateBallot {
   };
 }
 
-/** Opens a contest the way a phone reader does — from the index of
- * contests — and returns the drawer to query inside. The desktop columns
- * render too (CSS picks one), so every assertion is scoped to the dialog. */
+/** Opens a contest from its box's title (the office) and returns the
+ * drawer to query inside; every assertion about the detail is scoped to
+ * the dialog. */
 async function openContest(name: RegExp) {
-  const index = screen.getByRole("navigation", { name: "Contests on this ballot" });
-  await userEvent.click(within(index).getByRole("button", { name }));
+  const grid = screen.getByTestId("ballot-contests");
+  const heading = within(grid)
+    .getAllByRole("heading")
+    .find((h) => name.test(h.textContent ?? ""));
+  if (!heading) throw new Error(`No contest box titled ${name}`);
+  await userEvent.click(within(heading).getByRole("button"));
   return within(screen.getByRole("dialog"));
 }
 
 describe("the ballot page", () => {
-  it("offers the state's own feed, with no account", () => {
+  it("offers the state's own feed, with no account, under the title", () => {
     const b = ballot();
     render(<StateBallotClient ballot={b} />);
     const name = b.stateName ?? b.state;
-    // Beside the title from lg up, and after the contests on a phone, so the
-    // ballot is the first thing under a phone's title (mobile spec #5).
     const head = document.querySelector<HTMLElement>("main header")!;
-    const phone = screen.getByTestId("ballot-index");
-    for (const where of [head, phone]) {
-      expect(
-        within(where).getByRole("link", { name: `Follow ${name} without an account` })
-      ).toHaveAttribute("href", `/feed/states/${b.state}.xml`);
-      expect(within(where).getByRole("link", { name: "about feeds" })).toHaveAttribute(
-        "href",
-        "/feeds"
-      );
-      expect(within(where).getByText("A research tool, not an official ballot.")).toBeTruthy();
-    }
     expect(
-      within(head).getByText("A research tool, not an official ballot.").parentElement!.className
-    ).toMatch(/\bhidden\b.*\blg:flex\b/);
-    const contests = within(phone).getByRole("navigation", { name: "Contests on this ballot" });
-    expect(
-      contests.compareDocumentPosition(within(phone).getByText(/^A research tool/)) &
-        Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
+      within(head).getByRole("link", { name: `Follow ${name} without an account` })
+    ).toHaveAttribute("href", `/feed/states/${b.state}.xml`);
+    expect(within(head).getByRole("link", { name: "about feeds" })).toHaveAttribute(
+      "href",
+      "/feeds"
+    );
+    expect(within(head).getByText("A research tool, not an official ballot.")).toBeTruthy();
+    // Said once: the page no longer draws a phone copy and a desktop copy.
+    expect(screen.getAllByText("A research tool, not an official ballot.")).toHaveLength(1);
   });
 
-  it("lays the ballot out as contests, federal first, with no drawer open", () => {
-    render(<StateBallotClient ballot={ballot()} />);
-    const index = screen.getByRole("navigation", { name: "Contests on this ballot" });
-    const titles = within(index)
-      .getAllByRole("button")
-      .map((b) => b.textContent);
-    expect(titles[0]).toContain("U.S. Representative");
+  it("lays the ballot out as contest boxes, federal first, with no drawer open", () => {
+    render(<StateBallotClient ballot={ballot({ nextSenateElection: null })} />);
+    const grid = within(screen.getByTestId("ballot-contests"));
+    expect(grid.getByRole("heading", { level: 2, name: "Contests" })).toBeInTheDocument();
+    const titles = grid.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
+    expect(titles[0]).toBe("U.S. Representative");
+    expect(titles.at(-1)).toBe("What a statewide page leaves out");
+    // Listed in the phone's "On this page" bar, which needs the id and the
+    // label on one element.
+    expect(grid.getByRole("heading", { name: "What a statewide page leaves out" })).toHaveAttribute(
+      "id",
+      "not-on-this-page"
+    );
+    // The kicker says the column and the ballot's own instruction.
+    expect(grid.getAllByText("Federal offices · Vote for one").length).toBeGreaterThan(0);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("works on an older API without boxes: each contest keeps its own label", () => {
+    render(<StateBallotClient ballot={ballot({ boxes: undefined, nextSenateElection: null })} />);
+    expect(screen.queryByRole("region", { name: "This ballot" })).not.toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("ballot-contests")).getByText(/2-year term/)
+    ).toBeInTheDocument();
   });
 
   it("names federal offices one way everywhere", () => {
@@ -174,60 +183,91 @@ describe("the ballot page", () => {
     expect(screen.queryByText(/United States Senator/)).not.toBeInTheDocument();
   });
 
-  it("counts the ballot's federal candidates, third parties and voting records in the header", () => {
-    render(
-      <StateBallotClient
-        ballot={ballot({
-          houseRaces: [
-            houseRace({
-              candidates: [
-                candidate({
-                  id: "d",
-                  name: "A Dem",
-                  party: "DEM",
-                  incumbentRecord: { id: "L000001", score: 71.2 },
-                }),
-                candidate({ id: "r", name: "A Rep", party: "REP" }),
-                candidate({ id: "l", name: "A Lib", party: "LIB" }),
-              ],
-            }),
-          ],
-        })}
-      />
-    );
-    expect(
-      screen.getByText(
-        /3 registered with the FEC, 1 outside the two major parties · 1 with a congressional voting record/
-      )
-    ).toBeInTheDocument();
-  });
-
-  it("says 1 contest and 1 candidate, not 1 contests", () => {
-    render(
-      <StateBallotClient
-        ballot={ballot({ houseRaces: [houseRace({ candidates: [candidate({ id: "d" })] })] })}
-      />
-    );
-    expect(screen.getByText(/^1 contest · 1 registered with the FEC/)).toBeInTheDocument();
-    cleanup();
-    // Once the state has confirmed its list, it is the ballot's candidates.
+  it("draws the backend's boxes for the ballot's shape, each with its figure", () => {
+    const stat = (value: number, caption: string, text?: string) => ({
+      type: "stat" as const,
+      value,
+      caption,
+      ...(text ? { text } : {}),
+    });
     render(
       <StateBallotClient
         ballot={ballot({
           ballotBasis: {
-            basis: "confirmed",
+            basis: "nominees",
             primaryPassed: true,
-            daysSincePrimary: 60,
+            daysSincePrimary: 70,
             supersededByPrimary: false,
           },
-          houseRaces: [houseRace({ candidates: [candidate({ id: "d" })] })],
+          boxes: {
+            contestCount: 6,
+            summary: [
+              {
+                key: "contests",
+                kicker: "The ballot",
+                title: "6 contests on this page",
+                dek: "Each one opens below.",
+                figure: stat(6, "contests"),
+              },
+              {
+                key: "candidates",
+                kicker: "Who is on it",
+                title: "10 federal candidates, 4 with a voting record in Congress",
+                dek: "Nominees from the August 11, 2026 primary results.",
+                figure: stat(10, "candidates"),
+              },
+              {
+                key: "lean",
+                kicker: "Usual vote",
+                title: "Ohio leans R+5",
+                dek: "Not a forecast.",
+                figure: stat(5, "statewide lean", "R+5"),
+              },
+            ],
+            contests: {
+              house: { dek: "2 districts; each voter has one.", figure: stat(2, "districts") },
+            },
+          },
         })}
       />
     );
-    expect(screen.getByText(/^1 contest · 1 federal candidate(?!s)/)).toBeInTheDocument();
+    const grid = within(screen.getByRole("region", { name: "This ballot" }));
+    expect(grid.getByRole("img", { name: "6 contests." })).toBeInTheDocument();
+    expect(grid.getByRole("img", { name: "R+5 statewide lean." })).toBeInTheDocument();
+    // The lists' basis is said above the ballot; the figures follow the
+    // contests, so the ballot stays near the top.
+    const contestsGrid = screen.getByTestId("ballot-contests");
+    const follows = (a: Node, b: Node) =>
+      !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(follows(screen.getByTestId("ballot-nominees"), contestsGrid)).toBe(true);
+    expect(follows(contestsGrid, screen.getByRole("region", { name: "This ballot" }))).toBe(true);
+    // A contest's line and count are the backend's too.
+    const contests = within(screen.getByTestId("ballot-contests"));
+    expect(contests.getByText("2 districts; each voter has one.")).toBeInTheDocument();
+    expect(contests.getByRole("img", { name: "2 districts." })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
       "Everyone on OH's ballot, and who is behind them"
     );
+  });
+
+  it("says loudly, above the ballot, when the lists are filers for a decided primary", () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          ballotBasis: {
+            basis: "filers",
+            primaryPassed: true,
+            daysSincePrimary: 40,
+            supersededByPrimary: true,
+          },
+        })}
+      />
+    );
+    const notice = screen.getByTestId("ballot-superseded");
+    expect(
+      notice.compareDocumentPosition(screen.getByTestId("ballot-contests")) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
   });
 
   it("shows a candidate the state certified even with no FEC activity", () => {
@@ -256,7 +296,7 @@ describe("the ballot page", () => {
         })}
       />
     );
-    const box = screen.getByTestId("ballot-columns");
+    const box = screen.getByTestId("ballot-contests");
     expect(within(box).getByText("Shannon Bly")).toBeInTheDocument();
   });
 
@@ -301,9 +341,14 @@ describe("the ballot page", () => {
       />
     );
     const lead = screen.getByTestId("vote-steps-lead");
-    expect(lead).toHaveTextContent("Next deadline: Online registration closes Oct 26");
-    expect(within(lead).getByRole("link")).toHaveAttribute("href", "#voter-deadlines");
-    const ballotColumns = screen.getByTestId("ballot-columns");
+    expect(
+      within(lead).getByRole("heading", { name: "Online registration closes Oct 26" })
+    ).toBeInTheDocument();
+    expect(within(lead).getByRole("link", { name: /Every voter deadline/ })).toHaveAttribute(
+      "href",
+      "#voter-deadlines"
+    );
+    const ballotColumns = screen.getByTestId("ballot-contests");
     expect(
       lead.compareDocumentPosition(ballotColumns) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
@@ -369,7 +414,7 @@ describe("the ballot page", () => {
     const lookup = screen.getByTestId("ballot-lookup");
     expect(lookup).toHaveAttribute("href", "https://my.arizona.vote/sample_ballot");
     expect(
-      lookup.compareDocumentPosition(screen.getByTestId("ballot-index")) &
+      lookup.compareDocumentPosition(screen.getByTestId("ballot-contests")) &
         Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
     expect(
@@ -546,7 +591,7 @@ describe("U.S. Representative", () => {
 
   it("offers every district from the ballot itself, no address needed", async () => {
     render(<StateBallotClient ballot={twoDistricts()} />);
-    const box = screen.getByTestId("ballot-columns");
+    const box = screen.getByTestId("ballot-contests");
     expect(within(box).getByRole("button", { name: "District 1" })).toBeInTheDocument();
     expect(within(box).getByRole("button", { name: "District 2" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Select your district")).not.toBeInTheDocument();
@@ -582,20 +627,20 @@ describe("U.S. Representative", () => {
 
   it("marks a sitting member on a single new-lines seat's ballot box the same way", () => {
     render(<StateBallotClient ballot={ballot({ newDistrictLines: true })} />);
-    const box = screen.getByTestId("ballot-columns");
+    const box = screen.getByTestId("ballot-contests");
     expect(within(box).getByText("Sitting member")).toBeInTheDocument();
     expect(within(box).queryByText("Incumbent")).not.toBeInTheDocument();
   });
 
   it("keeps INCUMBENT on a state's old lines", () => {
     render(<StateBallotClient ballot={ballot()} />);
-    const box = screen.getByTestId("ballot-columns");
+    const box = screen.getByTestId("ballot-contests");
     expect(within(box).getByText("Incumbent")).toBeInTheDocument();
   });
 
   it("opens a picked district's research with its full county list", async () => {
     render(<StateBallotClient ballot={twoDistricts()} />);
-    const box = screen.getByTestId("ballot-columns");
+    const box = screen.getByTestId("ballot-contests");
     await userEvent.click(within(box).getByRole("button", { name: "District 2" }));
     const drawer = within(screen.getByRole("dialog"));
     expect(
@@ -949,7 +994,7 @@ describe("statewide executive offices", () => {
         ballot={ballot({ ...covered, statewideRaces: [...covered.statewideRaces, ...seats] })}
       />
     );
-    const box = within(screen.getByTestId("ballot-columns"));
+    const box = within(screen.getByTestId("ballot-contests"));
     // Governor, Secretary of State and the Council: three offices, not four rows.
     expect(box.getByText(/^3 offices · from primary results$/)).toBeInTheDocument();
     expect(box.getByText(/Executive Council/)).toBeInTheDocument();
@@ -1575,7 +1620,7 @@ describe("ballot measures", () => {
         })}
       />
     );
-    const box = within(screen.getByTestId("ballot-columns"));
+    const box = within(screen.getByTestId("ballot-contests"));
     expect(box.getByText(/From our last successful read: may be out of date/)).toBeInTheDocument();
     expect(box.getByText("removed")).toBeInTheDocument();
     expect(box.getByText("1 measure")).toBeInTheDocument();
@@ -1599,7 +1644,7 @@ describe("ballot measures", () => {
         })}
       />
     );
-    const box = within(screen.getByTestId("ballot-columns"));
+    const box = within(screen.getByTestId("ballot-contests"));
     expect(box.getByText(/our determination, not a list from the state/)).toBeInTheDocument();
     expect(box.getByText("removed")).toBeInTheDocument();
   });
@@ -1756,7 +1801,7 @@ describe("ballot measures", () => {
 
   it("opens the drawer at a measure from its row in the ballot box, focus on its heading", async () => {
     render(<StateBallotClient ballot={threeMeasures()} />);
-    const box = within(screen.getByTestId("ballot-columns"));
+    const box = within(screen.getByTestId("ballot-contests"));
     await userEvent.click(box.getByRole("button", { name: /^3\s*Issue 3$/ }));
     const drawer = within(screen.getByRole("dialog"));
     expect(drawer.getByRole("heading", { name: "Statewide ballot measures" })).toBeInTheDocument();
@@ -1767,11 +1812,11 @@ describe("ballot measures", () => {
     expect(window.location.hash).toBe("");
   });
 
-  it("gives the phone's index one button per measure", async () => {
+  it("gives each measure its own button in the box", async () => {
     render(<StateBallotClient ballot={threeMeasures()} />);
-    const index = within(screen.getByTestId("ballot-index"));
-    const group = within(index.getByRole("group", { name: "Open a measure" }));
-    await userEvent.click(group.getByRole("button", { name: "2: Issue 2" }));
+    const index = within(screen.getByTestId("ballot-contests"));
+    const group = within(index.getByRole("list", { name: "Open a measure" }));
+    await userEvent.click(group.getByRole("button", { name: /Issue 2/ }));
     const drawer = within(screen.getByRole("dialog"));
     expect(document.activeElement).toBe(drawer.getByRole("heading", { name: "2" }));
   });
@@ -1796,7 +1841,7 @@ describe("ballot measures", () => {
 describe("state offices not loaded", () => {
   it("fills the State column with a placeholder rather than leaving it empty", async () => {
     render(<StateBallotClient ballot={ballot()} />);
-    const box = screen.getByTestId("ballot-columns");
+    const box = screen.getByTestId("ballot-contests");
     // The column title and the placeholder contest share the words.
     expect(within(box).getAllByText("State offices")).toHaveLength(2);
     const drawer = await openContest(/State offices/);
@@ -1818,9 +1863,9 @@ describe("state offices not loaded", () => {
       />
     );
     // Only the column title: no placeholder contest.
-    expect(within(screen.getByTestId("ballot-columns")).getAllByText("State offices")).toHaveLength(
-      1
-    );
+    expect(
+      within(screen.getByTestId("ballot-contests")).getAllByText("State offices")
+    ).toHaveLength(1);
   });
 });
 
@@ -1835,7 +1880,7 @@ describe("term lengths", () => {
         })}
       />
     );
-    const box = screen.getByTestId("ballot-columns");
+    const box = screen.getByTestId("ballot-contests");
     expect(
       within(box).getByText(/you vote in one · 2-year term|One statewide seat · 2-year term/)
     ).toBeInTheDocument();
@@ -1858,7 +1903,7 @@ describe("term lengths", () => {
         })}
       />
     );
-    const box = screen.getByTestId("ballot-columns");
+    const box = screen.getByTestId("ballot-contests");
     expect(
       within(box).getByText(/Special election · .* · fills the rest of the term/)
     ).toBeInTheDocument();
@@ -1895,7 +1940,7 @@ describe("state office terms", () => {
         })}
       />
     );
-    const box = screen.getByTestId("ballot-columns");
+    const box = screen.getByTestId("ballot-contests");
     expect(within(box).getByText(/· 4-year terms/)).toBeInTheDocument();
     expect(within(box).getByText(/· 6-year terms/)).toBeInTheDocument();
     expect(within(box).getByText("Labor Commissioner").textContent).toBe("Labor Commissioner");

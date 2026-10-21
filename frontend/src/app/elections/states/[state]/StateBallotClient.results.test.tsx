@@ -403,8 +403,8 @@ describe("the state page in results mode", () => {
       await screen.findByText(/hasn.t read Ohio.s results feed since Nov 3, 10:00 PM ET/)
     ).toBeInTheDocument();
     expect(screen.queryByText(/hasn.t started yet/)).not.toBeInTheDocument();
-    const index = screen.getByRole("navigation", { name: "Contests on this ballot" });
-    await userEvent.click(within(index).getByRole("button", { name: /U.S. Representative/ }));
+    const index = screen.getByTestId("ballot-contests");
+    await userEvent.click(within(index).getByRole("button", { name: "U.S. Representative" }));
     expect(districtMapProps.every((p) => p.results === undefined)).toBe(true);
   });
 
@@ -426,8 +426,8 @@ describe("the state page in results mode", () => {
     expect(screen.queryByText(/^Results ·/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Who was on the ballot/)).not.toBeInTheDocument();
     // …and no district drawn by the count, not even as "no votes yet".
-    const index = screen.getByRole("navigation", { name: "Contests on this ballot" });
-    await userEvent.click(within(index).getByRole("button", { name: /U.S. Representative/ }));
+    const index = screen.getByTestId("ballot-contests");
+    await userEvent.click(within(index).getByRole("button", { name: "U.S. Representative" }));
     expect(districtMapProps.every((p) => p.results === undefined)).toBe(true);
   });
 
@@ -456,8 +456,8 @@ describe("the state page in results mode", () => {
     const two = [houseRace(), { ...houseRace(), id: "2026-HOUSE-OH-2", district: 2 }];
     render(<StateBallotClient ballot={ballot({ houseRaces: two })} />);
     await screen.findByRole("heading", { name: "No live count for Ohio here" });
-    const index = screen.getByRole("navigation", { name: "Contests on this ballot" });
-    await userEvent.click(within(index).getByRole("button", { name: /U.S. Representative/ }));
+    const index = screen.getByTestId("ballot-contests");
+    await userEvent.click(within(index).getByRole("button", { name: "U.S. Representative" }));
     expect(districtMapProps.length).toBeGreaterThan(0);
     expect(districtMapProps.every((p) => p.results === undefined)).toBe(true);
   });
@@ -467,8 +467,8 @@ describe("the state page in results mode", () => {
     const two = [houseRace(), { ...houseRace(), id: "2026-HOUSE-OH-2", district: 2 }];
     render(<StateBallotClient ballot={ballot({ houseRaces: two })} />);
     await screen.findByRole("region", { name: "U.S. House" });
-    const index = screen.getByRole("navigation", { name: "Contests on this ballot" });
-    await userEvent.click(within(index).getByRole("button", { name: /U.S. Representative/ }));
+    const index = screen.getByTestId("ballot-contests");
+    await userEvent.click(within(index).getByRole("button", { name: "U.S. Representative" }));
     const drawer = within(screen.getByRole("dialog"));
     // The picker lists both districts, with no D+3 beside either.
     expect(drawer.getAllByRole("button", { name: /no Democrat listed/ })).toHaveLength(2);
@@ -619,8 +619,8 @@ describe("the state page in results mode", () => {
     const two = [houseRace(), { ...houseRace(), id: "2026-HOUSE-OH-2", district: 2 }];
     render(<StateBallotClient ballot={ballot({ houseRaces: two })} />);
     await screen.findByText(/couldn.t read Ohio.s results feed/);
-    const index = screen.getByRole("navigation", { name: "Contests on this ballot" });
-    await userEvent.click(within(index).getByRole("button", { name: /U.S. Representative/ }));
+    const index = screen.getByTestId("ballot-contests");
+    await userEvent.click(within(index).getByRole("button", { name: "U.S. Representative" }));
     expect(districtMapProps.length).toBeGreaterThan(0);
     expect(districtMapProps.every((p) => p.results === undefined)).toBe(true);
   });
@@ -630,10 +630,10 @@ describe("the state page in results mode", () => {
     const two = [houseRace(), { ...houseRace(), id: "2026-HOUSE-OH-2", district: 2 }];
     render(<StateBallotClient ballot={ballot({ houseRaces: two, newDistrictLines: true })} />);
     await screen.findByRole("region", { name: "U.S. House" });
-    const index = screen.getByRole("navigation", { name: "Contests on this ballot" });
+    const index = screen.getByTestId("ballot-contests");
     expect(screen.getAllByText(/2 districts · one per voter/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/you vote in one/)).not.toBeInTheDocument();
-    await userEvent.click(within(index).getByRole("button", { name: /U.S. Representative/ }));
+    await userEvent.click(within(index).getByRole("button", { name: "U.S. Representative" }));
     const drawer = within(screen.getByRole("dialog"));
     const intro = drawer.getByText(/new congressional district lines/).closest("p");
     expect(intro).toHaveTextContent(
@@ -647,8 +647,8 @@ describe("the state page in results mode", () => {
     const two = [houseRace(), { ...houseRace(), id: "2026-HOUSE-OH-2", district: 2 }];
     render(<StateBallotClient ballot={ballot({ houseRaces: two })} />);
     await screen.findByRole("region", { name: "U.S. House" });
-    const index = screen.getByRole("navigation", { name: "Contests on this ballot" });
-    await userEvent.click(within(index).getByRole("button", { name: /U.S. Representative/ }));
+    const index = screen.getByTestId("ballot-contests");
+    await userEvent.click(within(index).getByRole("button", { name: "U.S. Representative" }));
     const drawer = within(screen.getByRole("dialog"));
     expect(
       drawer.getByText(/Each voter has exactly one of these on the ballot\./)
@@ -819,8 +819,8 @@ describe("the state page in results mode", () => {
       document.dispatchEvent(new Event("visibilitychange"));
     });
     await screen.findByText("Refresh failed");
-    const index = screen.getByRole("navigation", { name: "Contests on this ballot" });
-    await userEvent.click(within(index).getByRole("button", { name: /U.S. Representative/ }));
+    const index = screen.getByTestId("ballot-contests");
+    await userEvent.click(within(index).getByRole("button", { name: "U.S. Representative" }));
     within(screen.getByRole("dialog"));
     // The drawer's map is the one handed showLean (the results section's
     // never is): an older count there is not live either.
@@ -838,8 +838,8 @@ describe("the state page in results mode", () => {
     const two = [houseRace(), { ...houseRace(), id: "2026-HOUSE-OH-2", district: 2 }];
     render(<StateBallotClient ballot={ballot({ houseRaces: two })} />);
     await screen.findByRole("region", { name: "U.S. House" });
-    const index = screen.getByRole("navigation", { name: "Contests on this ballot" });
-    await userEvent.click(within(index).getByRole("button", { name: /U.S. Representative/ }));
+    const index = screen.getByTestId("ballot-contests");
+    await userEvent.click(within(index).getByRole("button", { name: "U.S. Representative" }));
     const resultsMaps = districtMapProps.filter((p) => p.showLean === undefined && p.results);
     expect(resultsMaps.at(-1)?.pickCounts).toBe(true);
     const drawerMaps = districtMapProps.filter((p) => p.showLean !== undefined && p.results);
@@ -852,8 +852,8 @@ describe("the state page in results mode", () => {
     const two = [houseRace(), { ...houseRace(), id: "2026-HOUSE-OH-2", district: 2 }];
     render(<StateBallotClient ballot={ballot({ houseRaces: two })} />);
     await screen.findByRole("region", { name: "U.S. House" });
-    const index = screen.getByRole("navigation", { name: "Contests on this ballot" });
-    await userEvent.click(within(index).getByRole("button", { name: /U.S. Representative/ }));
+    const index = screen.getByTestId("ballot-contests");
+    await userEvent.click(within(index).getByRole("button", { name: "U.S. Representative" }));
     const drawerMaps = districtMapProps.filter((p) => p.showLean !== undefined && p.results);
     expect(drawerMaps.at(-1)?.stale).toBe(false);
   });
@@ -948,8 +948,8 @@ describe("the state page in results mode", () => {
       ];
       render(<StateBallotClient ballot={ballot({ houseRaces: two, newDistrictLines: true })} />);
       await screen.findByRole("region", { name: "U.S. House" });
-      const index = screen.getByRole("navigation", { name: "Contests on this ballot" });
-      await userEvent.click(within(index).getByRole("button", { name: /U.S. Representative/ }));
+      const index = screen.getByTestId("ballot-contests");
+      await userEvent.click(within(index).getByRole("button", { name: "U.S. Representative" }));
       const drawer = within(screen.getByRole("dialog"));
       expect(
         drawer.getByText("Greg Lindqvist (member before this election, OH-2)")
@@ -973,7 +973,7 @@ describe("the state page in results mode", () => {
         />
       );
       await screen.findByRole("region", { name: "U.S. House" });
-      const box = screen.getByTestId("ballot-columns");
+      const box = screen.getByTestId("ballot-contests");
       expect(within(box).getByText("Member before this election, OH-2")).toBeInTheDocument();
       expect(within(box).queryByText(/Sitting member/)).not.toBeInTheDocument();
     });

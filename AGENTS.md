@@ -2429,7 +2429,7 @@ the pending list).
 | SEO: per-route metadata, canonicals, JSON-LD, sitemap | `frontend/src/lib/site.ts`, `frontend/src/lib/seo.ts`, `frontend/src/app/sitemap.ts`, `backend/app/api/sitemap.py` |
 | Frontend types | `frontend/src/types/` |
 | Metric explanations (tooltips on all scorecard metrics) | `frontend/src/components/checker/MetricTooltip.tsx` |
-| Record boxes ("Boxes, not blocks": ruled grid, box, figures shared with the homepage) and the bill page built from them | `frontend/src/components/shared/BoxGrid.tsx`, `RecordBox.tsx`, `RecordFigure.tsx`, `frontend/src/types/figure.ts`, `frontend/src/components/congress/BillPageView.tsx`; the bill page's lines from `backend/app/services/bill_boxes.py` (`boxes` on `GET /api/bills/{id}/record`) and `committee_record.search`'s `headline` |
+| Record boxes ("Boxes, not blocks": ruled grid, box, figures shared with the homepage) and the bill and state ballot pages built from them | `frontend/src/components/shared/BoxGrid.tsx`, `RecordBox.tsx`, `RecordFigure.tsx`, `frontend/src/types/figure.ts`, `frontend/src/components/congress/BillPageView.tsx`, `frontend/src/app/elections/states/[state]/StateBallotClient.tsx`; the bill page's lines from `backend/app/services/bill_boxes.py` (`boxes` on `GET /api/bills/{id}/record`) and `committee_record.search`'s `headline`; the ballot page's from `backend/app/services/ballot_boxes.py` (`boxes` on `GET /api/elections/states/{state}`) |
 | Detail pages' two layers: where a member stands among peers, methods ledger, bill stage ladder and sources, "cite this", held and thin-data marks | `frontend/src/components/scorecard/WhereTheyStand.tsx`, `MethodsLedger.tsx`, `HeldScore.tsx`, `frontend/src/components/congress/StageLadder.tsx`, `BillSources.tsx`, `frontend/src/components/shared/CiteThis.tsx` (a government document or record cites its issuer: `frontend/src/lib/citedSources.ts`); data from `api/politicians.py` (`_chamber_field`, `_scored_on`) and `bill_service.stage_milestones` |
 | Action Center issue parts (shared with `/issue/[id]`: meta, tags, "What you can do", coverage, sources) | `frontend/src/components/action/IssueEnrichment.tsx` |
 | Where a member stands among peers (per-measure figure, expected, percentile, word by a fixed rule, template sentence) | `backend/app/peer_comparison.py`, `GET /api/{senators,representatives}/{id}/peers`, public breakdown `peerComparison` |
@@ -2874,8 +2874,19 @@ paraphrase written in the component, and never a count the frontend worked
 out: a count in a box is a field the backend served (backend owns
 calculations). A box whose content is a list (the days in the daily
 reports, related issues) takes a fixed label for a title, not a sentence.
-The bill page (`BillPageView.tsx`) is the first page built this way; a new
-record page, or a rebuilt one, should use the pair rather than a new card.
+The bill page (`BillPageView.tsx`) is the first page built this way and the
+state ballot page (`StateBallotClient.tsx`, lines from
+`services/ballot_boxes.py`) the second; a new record page, or a rebuilt one,
+should use the pair rather than a new card. What the pair already takes, so
+a page doesn't grow its own: `below` for what spans the box under the line
+and the figure (a race's candidates, a row of commands; `children` share
+the text's narrower column beside a figure), a stat's `text` where the
+backend writes the value ("D+8" for a lean of -8), a countdown's `caption`
+for a date that isn't a comment period (`""` when the title says what
+closes; no period, no bar), and `labelLevel` / `level` for a grid under a
+section's own heading. On a ballot page the box lines are counts and
+labels only: what a measure does, what yes or no means and every deadline
+stay quoted where §7 puts them, never summarised in a box.
 
 #### Empty defaults are content (2026-10)
 

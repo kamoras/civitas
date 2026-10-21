@@ -24,7 +24,9 @@ import { ballotHouseLines } from "@/lib/districtAt";
 import DistrictMap from "@/components/elections/DistrictMap";
 import TownContestCard from "@/components/elections/TownContestCard";
 import FollowFeed from "@/components/shared/FollowFeed";
-import ContestBox from "@/components/elections/ballot/ContestBox";
+import BoxGrid from "@/components/shared/BoxGrid";
+import RecordBox from "@/components/shared/RecordBox";
+import ShareSectionButton from "@/components/share/ShareSectionButton";
 import BallotRaceRows from "@/components/elections/ballot/BallotRaceRows";
 import ContestDrawer from "@/components/elections/ballot/ContestDrawer";
 import RaceResearch from "@/components/elections/ballot/RaceResearch";
@@ -42,14 +44,12 @@ import {
 import {
   buildBallotContests,
   contestForHash,
-  countBallotContests,
   groupStatewideRaces,
   type BallotContest,
   contestHash,
 } from "@/lib/ballotContests";
 import {
   ballotHeadline,
-  candidateCountLabel,
   candidateName,
   districtAreaLabel,
   formatPvi,
@@ -1348,334 +1348,32 @@ function HouseDetail({
   );
 }
 
-// ── The ballot itself: boxes in three columns ─────────────────────────
+// ── The ballot itself: one box per contest ────────────────────────────
 
+/** A contest's command: opens its research in the drawer. */
 function OpenButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
       {...{ [SHARE_EXCLUDE_ATTR]: "" }}
-      className="min-h-[44px] w-full px-4 text-left font-mono text-xs text-signal-cyan hover:text-phos"
+      className="inline-flex min-h-8 items-center border-2 border-ink-hi px-3 text-sm font-semibold text-ink-hi hover:border-phos hover:text-phos"
     >
       {label} →
     </button>
   );
 }
 
-function ContestOverview({
-  contest,
-  ballot,
-  onOpen,
-  resultsMode,
-}: {
-  contest: BallotContest;
-  ballot: StateBallot;
-  onOpen: (key: string, houseRaceId?: string | null, measureId?: string | null) => void;
-  /** From election day on — how incumbency is worded (incumbencyLabel). */
-  resultsMode: boolean;
-}) {
-  // Shared as an image unless the box is only controls (the House district
-  // picker), linking to the fragment that opens this contest.
-  const box = (children: ReactNode, share: { houseRaceId?: string | null } | false = {}) => (
-    <ContestBox
-      title={contest.title}
-      subtitle={contest.subtitle}
-      instruction={contest.instruction}
-      shareId={share ? `contest-${contest.key}` : undefined}
-      shareAnchor={share ? contestHash(contest, share.houseRaceId ?? null).slice(1) : undefined}
-    >
-      {children}
-    </ContestBox>
-  );
-
-  switch (contest.kind) {
-    case "senate": {
-      const race = contest.race!;
-      const stories = ballot.coverage.filter((c) => c.race?.id === race.id).length;
-      return box(
-        <>
-          <BallotRaceRows
-            race={race}
-            newLines={ballot.newDistrictLines}
-            resultsMode={resultsMode}
-          />
-          <OpenButton
-            label={`Research this race${stories ? ` · ${stories} ${stories === 1 ? "story" : "stories"}` : ""}`}
-            onClick={() => onOpen(contest.key)}
-          />
-        </>
-      );
-    }
-    case "house": {
-      if (ballot.houseRaces.length === 1) {
-        return box(
-          <>
-            <BallotRaceRows
-              race={ballot.houseRaces[0]}
-              newLines={ballot.newDistrictLines}
-              resultsMode={resultsMode}
-            />
-            <OpenButton
-              label="Research this race"
-              onClick={() => onOpen("house", ballot.houseRaces[0].id)}
-            />
-          </>,
-          { houseRaceId: ballot.houseRaces[0].id }
-        );
-      }
-      return box(
-        <div className="px-4 py-3">
-          {/* First, not after the numbers: most voters don't know their
-              district number, and after a 38-button grid this was the
-              56th Tab stop on a big state's page. */}
-          <button
-            type="button"
-            onClick={() => onOpen("house", null)}
-            className="mb-2 min-h-[44px] font-mono text-xs text-signal-cyan hover:text-phos"
-          >
-            Don&apos;t know your district? Map, town or county →
-          </button>
-          <p className="mb-2 text-[13px] text-ink-lo">Or pick its number to research the race:</p>
-          <div className="grid grid-cols-7 gap-1.5">
-            {ballot.houseRaces.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                onClick={() => onOpen("house", r.id)}
-                aria-label={r.district === 0 ? "At-large district" : `District ${r.district}`}
-                className="min-h-[44px] border border-white/25 font-mono text-sm text-ink-hi hover:border-phos hover:text-phos"
-              >
-                {r.district === 0 ? "AL" : r.district}
-              </button>
-            ))}
-          </div>
-          {/* On new lines the first question is whether the reader's
-              district changed; the drawer answers per district, this
-              page answers for the whole map. */}
-          {ballot.houseRaces.some((r) => r.redistricting) && (
-            <Link
-              href={redistrictingHref(ballot.state)}
-              className="mt-3 inline-block min-h-[44px] py-2 font-mono text-xs text-signal-cyan hover:text-phos"
-            >
-              New lines this year: what changed →
-            </Link>
-          )}
-        </div>,
-        false
-      );
-    }
-    case "statewide":
-      return box(
-        ballot.statewideRaces.length === 0 ? (
-          <p className="px-4 py-3 text-[13px] text-ink-lo">
-            No statewide executive offices are on this ballot.
-          </p>
-        ) : (
-          <>
-            <ul>
-              {groupStatewideRaces(ballot.statewideRaces).map((g) =>
-                g.race ? (
-                  <li key={g.key} className="border-b border-white/[0.09] px-4 py-2">
-                    <span className="block text-[13px] font-semibold text-ink-hi">
-                      {g.race.label}
-                      {termPhrase(g.race.termYears) && (
-                        <span className="font-normal text-ink-lo">
-                          {" "}
-                          · {termPhrase(g.race.termYears)}
-                        </span>
-                      )}
-                    </span>
-                    <span className="flex flex-wrap gap-x-3 text-sm">
-                      {g.race.nominees.map((n) => (
-                        <NomineeName key={`${n.party}-${n.name}`} nominee={n} />
-                      ))}
-                    </span>
-                  </li>
-                ) : (
-                  // A body's seats under one heading, saying how it is
-                  // elected: listed flat, New Hampshire's five council
-                  // districts read as five offices every voter marks.
-                  <li key={g.key} className="border-b border-white/[0.09] px-4 py-2">
-                    <span className="block text-[13px] font-semibold text-ink-hi">
-                      {g.seats![0].officeLabel || g.seats![0].label}
-                      <span className="font-normal text-ink-lo">
-                        {" "}
-                        · {g.seats!.length} {g.seats!.length === 1 ? "seat" : "seats"}
-                        {termPhrase(g.seats![0].termYears) &&
-                          ` · ${termPhrase(g.seats![0].termYears)}`}
-                      </span>
-                    </span>
-                    {g.seats![0].electedBy === "district" && (
-                      <span className="block text-[12px] text-ink-lo">
-                        Each voter votes in their district&apos;s seat only
-                      </span>
-                    )}
-                    {g.seats![0].electedBy === "statewide" && (
-                      <span className="block text-[12px] text-ink-lo">
-                        Every voter votes for each seat
-                      </span>
-                    )}
-                    {g.seats!.map((seat) => (
-                      <span
-                        key={seat.office}
-                        className="flex flex-wrap items-baseline gap-x-3 text-sm"
-                      >
-                        <span className="font-mono text-[11px] text-ink-lo">
-                          {/^\d/.test(seat.seat ?? "") ? `District ${seat.seat}` : seat.seat}
-                        </span>
-                        {seat.nominees.map((n) => (
-                          <NomineeName key={`${n.party}-${n.name}`} nominee={n} />
-                        ))}
-                      </span>
-                    ))}
-                  </li>
-                )
-              )}
-            </ul>
-            <OpenButton label="Source and notes" onClick={() => onOpen(contest.key)} />
-          </>
-        )
-      );
-    case "stateleg":
-      return box(
-        <>
-          <ul>
-            {ballot.stateLegRaces.map((c) => (
-              <li
-                key={c.chamber}
-                className="border-b border-white/[0.09] px-4 py-2 text-[13px] text-ink-lo"
-              >
-                <span className="font-semibold text-ink-hi">{c.label}</span> · {c.districts.length}{" "}
-                {c.districts.length === 1 ? "seat" : "seats"} contested
-                {termPhrase(c.termYears) && ` · ${termPhrase(c.termYears)}`}
-              </li>
-            ))}
-          </ul>
-          <OpenButton label="Find your seats by town" onClick={() => onOpen(contest.key)} />
-        </>
-      );
-    case "judicial":
-      return box(
-        ballot.judicialRaces.length === 0 ? (
-          <p className="px-4 py-3 text-[13px] text-ink-lo">
-            None on this ballot: judges here are elected at the primary.
-          </p>
-        ) : (
-          <>
-            <ul>
-              {ballot.judicialRaces.map((c) => (
-                <li
-                  key={c.court}
-                  className="border-b border-white/[0.09] px-4 py-2 text-[13px] text-ink-lo"
-                >
-                  <span className="font-semibold text-ink-hi">{c.label}</span> · {c.seats.length}{" "}
-                  {c.seats.length === 1 ? "seat" : "seats"}
-                  {termPhrase(c.termYears) && ` · ${termPhrase(c.termYears)}`}
-                </li>
-              ))}
-            </ul>
-            <OpenButton label="See the candidates" onClick={() => onOpen(contest.key)} />
-          </>
-        )
-      );
-    case "stateNone":
-      return box(
-        <>
-          <p className="px-4 pt-3 text-[13px] text-ink-lo">
-            Civitas does not have this state&apos;s own offices yet: that does not mean there are
-            none on the ballot.
-          </p>
-          <OpenButton label="Details" onClick={() => onOpen(contest.key)} />
-        </>
-      );
-    case "measures":
-      return box(
-        ballot.measures.length > 0 ? (
-          <>
-            {/* This box is shared as an image on its own, so it carries the
-                drawer's two caveats in short: a list the latest read did not
-                confirm is not presented as current, and a measure no longer
-                on the ballot is not listed as if it were. */}
-            {(ballot.measureCoverage.unreadReason ||
-              (ballot.measureCoverage.status !== "covered" &&
-                ballot.measureCoverage.status !== "confirmed_none")) && (
-              <p className="border-b border-white/[0.09] px-4 py-2 text-[12px] text-signal-amber">
-                From our last successful read: may be out of date.
-              </p>
-            )}
-            {/* An operator's accepted absence marks every row removed; say
-                whose determination that is, or the image reads as the state
-                having struck them. */}
-            {ballot.measureCoverage.status === "confirmed_none" &&
-              ballot.measureCoverage.basis === "operator" && (
-                <p className="border-b border-white/[0.09] px-4 py-2 text-[12px] text-signal-amber">
-                  {OPERATOR_NONE_SHORT}
-                </p>
-              )}
-            {/* Each row opens the drawer at its own measure: California's
-                fourteen run to ten screens of verbatim text, and the ninth
-                was a click and seven screens of scrolling away. */}
-            <ul>
-              {ballot.measures.map((m) => (
-                <li key={m.id} className="border-b border-white/[0.09]">
-                  <button
-                    type="button"
-                    data-open-measure={m.id}
-                    onClick={() => onOpen(contest.key, null, m.id)}
-                    className="min-h-[44px] w-full px-4 py-2 text-left text-[13px] text-ink-hi hover:text-phos"
-                  >
-                    <span className="mr-2 font-mono text-xs text-ink-lo">{m.number}</span>
-                    {m.title}
-                    {(m.status === "removed" || m.status === "withdrawn") && (
-                      <span className="ml-2 font-mono text-[10px] text-signal-red">{m.status}</span>
-                    )}
-                  </button>
-                </li>
-              ))}
-            </ul>
-            <OpenButton label="Read the measures" onClick={() => onOpen(contest.key)} />
-          </>
-        ) : (
-          <>
-            <p className="px-4 pt-3 text-[13px] text-ink-lo">
-              {ballot.measureCoverage.status === "confirmed_none"
-                ? ballot.measureCoverage.basis === "operator"
-                  ? OPERATOR_NONE_SHORT
-                  : "No statewide measures are on record for this ballot."
-                : "Civitas does not have this state's measures yet: that does not mean there are none."}
-            </p>
-            <OpenButton label="Details" onClick={() => onOpen(contest.key)} />
-          </>
-        )
-      );
-    case "local":
-      return box(<OpenButton label="Choose your town" onClick={() => onOpen(contest.key)} />);
-    case "news":
-      return box(
-        <OpenButton
-          label={
-            ballot.coverage.length ? `Read ${ballot.coverage.length} stories` : "No coverage yet"
-          }
-          onClick={() => onOpen(contest.key)}
-        />
-      );
-  }
-}
-
-/** Why a column that should hold the Senate race doesn't: the three-class
- * rotation means most states have no regular Senate race most cycles, and
- * an absent box reads as missing data rather than "not up until later". */
-function NoSenateBox({ ballot }: { ballot: StateBallot }) {
+/** A contest's title: the office, as a button that opens its research. */
+function ContestTitle({ title, onClick }: { title: string; onClick: () => void }) {
   return (
-    <ContestBox title="U.S. Senator" subtitle="Not on this ballot">
-      <p className="px-4 py-3 text-[13px] text-ink-lo">
-        Neither of {ballot.state}&apos;s Senate seats is up for election in {ballot.cycleYear}.
-        Senators serve staggered six-year terms, so a state votes on one of its two seats roughly
-        once every three cycles. This state&apos;s next regular Senate election is in{" "}
-        {ballot.nextSenateElection}.
-      </p>
-    </ContestBox>
+    <button
+      type="button"
+      onClick={onClick}
+      className="text-left underline decoration-white/30 underline-offset-4 hover:text-phos hover:decoration-phos"
+    >
+      {title}
+    </button>
   );
 }
 
@@ -1684,6 +1382,322 @@ const COLUMN_TITLES: Record<BallotContest["column"], string> = {
   state: "State offices",
   local: "Measures · Local",
 };
+
+/** A box's kicker where its column's name doesn't say what it is. */
+const KICKER: Partial<Record<BallotContest["kind"], string>> = {
+  measures: "Measures",
+  local: "Local",
+  news: "Coverage",
+};
+
+/** One contest as a record box: the office, the backend's line and count
+ * for it (services/ballot_boxes.py; the contest's own label from an older
+ * API), what a reader needs to pick it, and its research one tap away. */
+function ContestCard({
+  contest,
+  ballot,
+  onOpen,
+  resultsMode,
+  level,
+}: {
+  contest: BallotContest;
+  ballot: StateBallot;
+  onOpen: (key: string, houseRaceId?: string | null, measureId?: string | null) => void;
+  /** From election day on — how incumbency is worded (incumbencyLabel). */
+  resultsMode: boolean;
+  level: 3 | 4;
+}) {
+  const line = ballot.boxes?.contests[contest.key];
+  const open = () => onOpen(contest.key);
+  const singleHouse = contest.kind === "house" && ballot.houseRaces.length === 1;
+  // Shared as an image unless the box is only controls (the House district
+  // picker), linking to the fragment that opens this contest.
+  const shareable = contest.kind !== "house" || singleHouse;
+  const shareId = shareable ? `contest-${contest.key}` : undefined;
+  const shareAnchor = contestHash(contest, singleHouse ? ballot.houseRaces[0].id : null).slice(1);
+  const box = (children: ReactNode, more: { label: string; children: ReactNode } | null = null) => (
+    <RecordBox
+      level={level}
+      kicker={[KICKER[contest.kind] ?? COLUMN_TITLES[contest.column], contest.instruction]
+        .filter(Boolean)
+        .join(" · ")}
+      title={<ContestTitle title={contest.title} onClick={open} />}
+      dek={line?.dek ?? contest.subtitle}
+      figure={line?.figure ?? null}
+      share={shareId}
+      more={more}
+      below={
+        // Across the box, under the line and the count: rows and lists
+        // take their own line, the commands share one.
+        <div className="flex flex-wrap items-center gap-3">
+          {children}
+          {shareId && (
+            <span {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
+              <ShareSectionButton label={contest.title} anchor={shareAnchor} />
+            </span>
+          )}
+        </div>
+      }
+    />
+  );
+
+  switch (contest.kind) {
+    case "senate": {
+      const race = contest.race!;
+      return box(
+        <>
+          <div className="w-full">
+            <BallotRaceRows
+              race={race}
+              newLines={ballot.newDistrictLines}
+              resultsMode={resultsMode}
+            />
+          </div>
+          <OpenButton label="Research this race" onClick={open} />
+        </>
+      );
+    }
+    case "house": {
+      if (singleHouse) {
+        return box(
+          <>
+            <div className="w-full">
+              <BallotRaceRows
+                race={ballot.houseRaces[0]}
+                newLines={ballot.newDistrictLines}
+                resultsMode={resultsMode}
+              />
+            </div>
+            <OpenButton
+              label="Research this race"
+              onClick={() => onOpen("house", ballot.houseRaces[0].id)}
+            />
+          </>
+        );
+      }
+      return box(
+        <>
+          {/* First, not the numbers: most voters don't know their
+              district number. */}
+          <OpenButton
+            label="Don't know your district? Map, town or county"
+            onClick={() => onOpen("house", null)}
+          />
+          {/* On new lines the first question is whether the reader's
+              district changed; the drawer answers per district, this
+              page answers for the whole map. */}
+          {ballot.houseRaces.some((r) => r.redistricting) && (
+            <Link
+              href={redistrictingHref(ballot.state)}
+              className={`inline-flex min-h-6 items-center text-sm ${INLINE_LINK}`}
+            >
+              New lines this year: what changed →
+            </Link>
+          )}
+        </>,
+        {
+          label: "pick a district by number",
+          children: (
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(2.75rem,1fr))] gap-1.5">
+              {ballot.houseRaces.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => onOpen("house", r.id)}
+                  aria-label={r.district === 0 ? "At-large district" : `District ${r.district}`}
+                  className="min-h-[44px] border border-white/25 font-mono text-sm text-ink-hi hover:border-phos hover:text-phos"
+                >
+                  {r.district === 0 ? "AL" : r.district}
+                </button>
+              ))}
+            </div>
+          ),
+        }
+      );
+    }
+    case "statewide":
+      return box(
+        ballot.statewideRaces.length > 0 && <OpenButton label="Source and notes" onClick={open} />,
+        ballot.statewideRaces.length === 0
+          ? null
+          : {
+              label: "every office and its nominees",
+              children: (
+                <ul>
+                  {groupStatewideRaces(ballot.statewideRaces).map((g) =>
+                    g.race ? (
+                      <li key={g.key} className="border-b border-white/[0.09] py-2 last:border-b-0">
+                        <span className="block text-[13px] font-semibold text-ink-hi">
+                          {g.race.label}
+                          {termPhrase(g.race.termYears) && (
+                            <span className="font-normal text-ink-lo">
+                              {" "}
+                              · {termPhrase(g.race.termYears)}
+                            </span>
+                          )}
+                        </span>
+                        <span className="flex flex-wrap gap-x-3 text-sm">
+                          {g.race.nominees.map((n) => (
+                            <NomineeName key={`${n.party}-${n.name}`} nominee={n} />
+                          ))}
+                        </span>
+                      </li>
+                    ) : (
+                      // A body's seats under one heading, saying how it is
+                      // elected: listed flat, New Hampshire's five council
+                      // districts read as five offices every voter marks.
+                      <li key={g.key} className="border-b border-white/[0.09] py-2 last:border-b-0">
+                        <span className="block text-[13px] font-semibold text-ink-hi">
+                          {g.seats![0].officeLabel || g.seats![0].label}
+                          <span className="font-normal text-ink-lo">
+                            {" "}
+                            · {g.seats!.length} {g.seats!.length === 1 ? "seat" : "seats"}
+                            {termPhrase(g.seats![0].termYears) &&
+                              ` · ${termPhrase(g.seats![0].termYears)}`}
+                          </span>
+                        </span>
+                        {g.seats![0].electedBy === "district" && (
+                          <span className="block text-[13px] text-ink-lo">
+                            Each voter votes in their district&apos;s seat only
+                          </span>
+                        )}
+                        {g.seats![0].electedBy === "statewide" && (
+                          <span className="block text-[13px] text-ink-lo">
+                            Every voter votes for each seat
+                          </span>
+                        )}
+                        {g.seats!.map((seat) => (
+                          <span
+                            key={seat.office}
+                            className="flex flex-wrap items-baseline gap-x-3 text-sm"
+                          >
+                            <span className="font-mono text-[11px] text-ink-lo">
+                              {/^\d/.test(seat.seat ?? "") ? `District ${seat.seat}` : seat.seat}
+                            </span>
+                            {seat.nominees.map((n) => (
+                              <NomineeName key={`${n.party}-${n.name}`} nominee={n} />
+                            ))}
+                          </span>
+                        ))}
+                      </li>
+                    )
+                  )}
+                </ul>
+              ),
+            }
+      );
+    case "stateleg":
+      return box(
+        <>
+          <ul className="w-full text-[13px] text-ink-lo">
+            {ballot.stateLegRaces.map((c) => (
+              <li key={c.chamber}>
+                <span className="font-semibold text-ink-hi">{c.label}</span> · {c.districts.length}{" "}
+                {c.districts.length === 1 ? "seat" : "seats"} contested
+                {termPhrase(c.termYears) && ` · ${termPhrase(c.termYears)}`}
+              </li>
+            ))}
+          </ul>
+          <OpenButton label="Find your seats by town" onClick={open} />
+        </>
+      );
+    case "judicial":
+      return box(
+        ballot.judicialRaces.length > 0 && (
+          <>
+            <ul className="w-full text-[13px] text-ink-lo">
+              {ballot.judicialRaces.map((c) => (
+                <li key={c.court}>
+                  <span className="font-semibold text-ink-hi">{c.label}</span> · {c.seats.length}{" "}
+                  {c.seats.length === 1 ? "seat" : "seats"}
+                  {termPhrase(c.termYears) && ` · ${termPhrase(c.termYears)}`}
+                </li>
+              ))}
+            </ul>
+            <OpenButton label="See the candidates" onClick={open} />
+          </>
+        )
+      );
+    case "stateNone":
+      return box(<OpenButton label="Details" onClick={open} />);
+    case "measures":
+      return box(
+        <>
+          {/* This box is shared as an image on its own, so it carries the
+              drawer's two caveats in short: a list the latest read did not
+              confirm is not presented as current, and a measure no longer
+              on the ballot is not listed as if it were. */}
+          {ballot.measures.length > 0 &&
+            (ballot.measureCoverage.unreadReason ||
+              (ballot.measureCoverage.status !== "covered" &&
+                ballot.measureCoverage.status !== "confirmed_none")) && (
+              <p className="w-full text-[13px] text-signal-amber">
+                From our last successful read: may be out of date.
+              </p>
+            )}
+          {/* An operator's accepted absence marks every row removed; say
+              whose determination that is, or the image reads as the state
+              having struck them. */}
+          {ballot.measureCoverage.status === "confirmed_none" &&
+            ballot.measureCoverage.basis === "operator" && (
+              <p className="w-full text-[13px] text-signal-amber">{OPERATOR_NONE_SHORT}</p>
+            )}
+          {/* One button per measure, opening the drawer at it: California's
+              fourteen run to ten screens of verbatim text, and the ninth
+              was a click and seven screens of scrolling away. */}
+          {ballot.measures.length > 0 && (
+            <ul aria-label="Open a measure" className="w-full">
+              {ballot.measures.map((m) => (
+                <li key={m.id} className="border-b border-white/[0.09] last:border-b-0">
+                  <button
+                    type="button"
+                    data-open-measure={m.id}
+                    onClick={() => onOpen(contest.key, null, m.id)}
+                    className="min-h-[44px] w-full py-2 text-left text-[13px] text-ink-hi hover:text-phos"
+                  >
+                    <span className="mr-2 font-mono text-xs text-ink-lo">{m.number}</span>
+                    {m.title}
+                    {(m.status === "removed" || m.status === "withdrawn") && (
+                      <span className="ml-2 font-mono text-[11px] text-signal-red">{m.status}</span>
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <OpenButton
+            label={ballot.measures.length > 0 ? "Read the measures" : "Details"}
+            onClick={open}
+          />
+        </>
+      );
+    case "local":
+      return box(<OpenButton label="Choose your town" onClick={open} />);
+    case "news":
+      return box(
+        ballot.coverage.length > 0 && (
+          <OpenButton label={`Read ${ballot.coverage.length} stories`} onClick={open} />
+        )
+      );
+  }
+}
+
+/** Why the federal offices hold no Senate race: the three-class rotation
+ * means most states have no regular Senate race most cycles, and an absent
+ * box reads as missing data rather than "not up until later". */
+function NoSenateBox({ ballot, level }: { ballot: StateBallot; level: 3 | 4 }) {
+  return (
+    <RecordBox
+      level={level}
+      kicker="Federal offices · Not on this ballot"
+      title="U.S. Senator"
+      dek={
+        ballot.boxes?.contests["no-senate"]?.dek ??
+        `Neither of ${ballot.state}'s Senate seats is up for election in ${ballot.cycleYear}. This state's next regular Senate election is in ${ballot.nextSenateElection}.`
+      }
+    />
+  );
+}
 
 export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   const { officialLookup } = ballot;
@@ -1854,12 +1868,13 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
   const openIndex = open ? contests.findIndex((c) => c.key === open.key) : -1;
   const openContestEntry = openIndex >= 0 ? contests[openIndex] : null;
 
-  // What the header counts — the ballot's shape at a glance.
   const federalRaces = [...ballot.senateRaces, ...ballot.houseRaces];
-  const federalCandidates = federalRaces.flatMap((r) => r.candidates.filter(isActiveCandidate));
-  const thirdParty = federalCandidates.filter((c) => majorPartyOf(c) === null).length;
-  const withRecords = federalCandidates.filter((c) => c.incumbentRecord || c.memberRecord).length;
-  const contestCount = countBallotContests(contests, ballot);
+  // The ballot's shape at a glance, counted by the backend. The lean is
+  // left out from election day: beside a live count it reads as a
+  // prediction of it.
+  const summary = (ballot.boxes?.summary ?? []).filter((b) => !(resultsMode && b.key === "lean"));
+  // Under the results section's heading, the contests are a level down.
+  const contestLevel = resultsFraming ? 4 : 3;
 
   function detailFor(contest: BallotContest) {
     switch (contest.kind) {
@@ -1921,8 +1936,6 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
     }
   }
 
-  const columns: BallotContest["column"][] = ["federal", "state", "local"];
-
   // What a shared image of any contest says it is from. "Statewide", like
   // the page itself: a precinct's ballot has more on it (ballot.omits).
   const shareSubject = {
@@ -1934,12 +1947,10 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
     asOf: null,
   };
 
-  // The page's caveat, the official lookup, its feed and what it shows on
-  // election night: rendered beside the title from lg up and after the
-  // contests on a phone (one of the two is display:none at any width).
+  // The official lookup (an older API without steps), the state's feed and
+  // what the page shows on election night, under the title.
   const ballotLinks = (
     <>
-      <span className="text-xs text-ink-lo">A research tool, not an official ballot.</span>
       {/* The voter lookup is a step in "Your vote, step by step" below,
           named for its task; an older API without steps keeps this one
           link. */}
@@ -1949,7 +1960,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
           target="_blank"
           rel="noopener noreferrer"
           aria-label={`${officialLookup.label} (opens in new tab)`}
-          className="font-mono text-xs text-signal-cyan hover:text-phos"
+          className="inline-flex min-h-6 items-center font-mono text-xs text-signal-cyan hover:text-phos"
         >
           {lookupIsStateSpecific
             ? `${ballot.state} official voter lookup ↗`
@@ -1962,7 +1973,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
       {!resultsMode && (
         <Link
           href="/about/elections#election-night"
-          className="text-xs text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
+          className="inline-flex min-h-6 items-center text-xs text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
         >
           What this page shows on election night
         </Link>
@@ -1986,86 +1997,40 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
               ← All states
             </Link>
 
-            <header className="mb-5 flex flex-col gap-4 border-b border-white/[0.14] pb-5 font-sans lg:flex-row lg:items-end lg:justify-between">
-              <div className="min-w-0">
-                <p className="font-mono text-xs text-phos">
-                  {resultsFraming ? "Results" : "Ballot research"} · {stateName} ·{" "}
-                  <span>{longDate(ballot.electionDate)}</span>
-                </p>
-                <h1 className="mt-1 font-display text-2xl font-semibold text-ink-hi sm:text-[28px]">
-                  {resultsFraming
-                    ? `${stateName} results`
-                    : ballotHeadline(stateName, ballot.ballotBasis?.basis)}
-                </h1>
-                <p className="mt-1.5 text-sm text-ink-lo">
-                  {contestCount} {contestCount === 1 ? "contest" : "contests"} ·{" "}
-                  {candidateCountLabel(federalCandidates.length, ballot.ballotBasis?.basis)}
-                  {thirdParty > 0 && `, ${thirdParty} outside the two major parties`}
-                  {withRecords > 0 && ` · ${withRecords} with a congressional voting record`}
-                  {ballot.electoralVotes != null && (
-                    <>
+            <header className="mb-5 font-sans">
+              <p className="font-mono text-xs text-phos">
+                {resultsFraming ? "Results" : "Ballot research"} · {stateName} ·{" "}
+                <span>{longDate(ballot.electionDate)}</span>
+              </p>
+              <h1 className="mt-1 font-display text-2xl font-semibold text-ink-hi sm:text-[28px]">
+                {resultsFraming
+                  ? `${stateName} results`
+                  : ballotHeadline(stateName, ballot.ballotBasis?.basis)}
+              </h1>
+              <p className="mt-1.5 text-sm text-ink-lo">A research tool, not an official ballot.</p>
+              {ballot.primaryDate && (
+                <p className="mt-0.5 font-mono text-xs text-ink-min">
+                  Primary: {calendarDate(ballot.primaryDate)}
+                  {(ballot.otherPrimaries ?? []).map((o) => (
+                    <span key={`${String(o.offices)}-${o.date}`}>
                       {" · "}
-                      <Link
-                        href="/elections#president"
-                        className="inline-flex min-h-6 items-center underline decoration-white/30 hover:text-phos"
-                      >
-                        {ballot.electoralVotes} electoral votes for president
-                      </Link>
-                    </>
-                  )}
-                  {ballot.statePvi !== null && !resultsMode && (
-                    <>
-                      {" · "}
-                      <span className={`font-mono ${pviColor(ballot.statePvi)}`}>
-                        {formatPvi(ballot.statePvi)}
-                      </span>{" "}
-                      statewide lean
-                    </>
-                  )}
+                      {otherPrimaryLabel(o)}: {calendarDate(o.date)}
+                    </span>
+                  ))}
                 </p>
-                {ballot.primaryDate && (
-                  <p className="mt-0.5 font-mono text-xs text-ink-min">
-                    Primary: {calendarDate(ballot.primaryDate)}
-                    {(ballot.otherPrimaries ?? []).map((o) => (
-                      <span key={`${String(o.offices)}-${o.date}`}>
-                        {" · "}
-                        {otherPrimaryLabel(o)}: {calendarDate(o.date)}
-                      </span>
-                    ))}
-                  </p>
-                )}
-                {/* From election day the page is about the count; a lean
-                  readout beside live results reads as a prediction of them. */}
-                {ballot.statePvi !== null && !resultsMode && (
-                  <div className="mt-1 max-w-2xl">
-                    <PviMethodologyNote />
-                  </div>
-                )}
-              </div>
-              {/* The caveat and the official lookup: beside the title from lg
-                  up; on a phone after the contests, so the ballot itself is
-                  the first thing under the title (mobile spec #5). */}
-              <div className="hidden shrink-0 flex-col gap-1 lg:flex lg:items-end lg:text-right">
-                {ballotLinks}
-              </div>
+              )}
+              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">{ballotLinks}</div>
             </header>
 
             {/* Before the ballot: the official sample-ballot lookup as a
               button (#1123: a reader who couldn't find it clicked
-              registration), then in one line the next voter deadline and a
-              jump to the steps and the full calendar, which follow the
-              contests. As full blocks here they put the ballot two screens
-              down on a phone. Gone in the results window, when every
+              registration), then the next voter deadline as a box with its
+              countdown and a jump to the steps and the full calendar, which
+              follow the contests. Gone in the results window, when every
               deadline has passed. */}
             {!resultsMode && (
               <VoteStepsLead calendar={ballot.voterCalendar} steps={ballot.voteSteps} />
             )}
-
-            <StateAtAGlance
-              state={ballot.state}
-              stateName={stateName}
-              redrawn={ballot.houseRaces.some((r) => r.redistricting)}
-            />
 
             {resultsMode && (
               <>
@@ -2105,155 +2070,89 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
               </p>
             )}
 
-            {/* Desktop: the ballot as it is printed — three columns, each
-              contest a box, fitting about one screen. The research for any
-              contest opens beside it. */}
-            <div className="hidden gap-5 lg:grid lg:grid-cols-3" data-testid="ballot-columns">
-              {columns.map((col) => (
-                <div key={col} className="flex flex-col gap-4">
-                  <h2 className="font-mono text-xs text-phos">{COLUMN_TITLES[col]}</h2>
-                  {col === "federal" &&
-                    ballot.senateRaces.length === 0 &&
-                    ballot.nextSenateElection !== null &&
-                    ballot.houseRaces.length > 0 && <NoSenateBox ballot={ballot} />}
-                  {contests
-                    .filter((c) => c.column === col)
-                    .map((c) => (
-                      <ContestOverview
-                        key={c.key}
-                        contest={c}
-                        ballot={ballot}
-                        onOpen={openContest}
-                        resultsMode={resultsMode}
-                      />
-                    ))}
-                  {col === "local" && (
-                    <ContestBox title="Not on this page">
-                      <p className="px-4 pt-3 text-[13px] text-ink-lo">
-                        Ballots are printed per precinct, so some of what you will vote on cannot be
-                        shown on a statewide page:
-                      </p>
-                      <ul className="list-disc px-4 pb-3 pl-8 pt-1 text-[13px] text-ink-lo">
-                        {ballot.omits.map((item) => (
-                          <li key={item}>{item}</li>
-                        ))}
-                      </ul>
-                    </ContestBox>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {/* Phone: the index of every contest, one line each; a contest
-              opens in a sheet over the ballot with Previous/Next. */}
+            {/* The contests, in the ballot's order: a box each, its research
+              in a drawer with Previous/Next. */}
             <div
-              className="lg:hidden"
-              data-testid="ballot-index"
               id="contests"
-              {...onThisPage("Contests", contests.length)}
+              data-testid="ballot-contests"
+              {...onThisPage("Contests", ballot.boxes?.contestCount ?? contests.length)}
             >
-              <nav
-                aria-label="Contests on this ballot"
-                className="border border-white/25 bg-surface font-sans"
+              <BoxGrid
+                label="Contests"
+                labelId="contests-heading"
+                labelLevel={resultsFraming ? 3 : 2}
               >
-                {columns.map((col) => {
-                  const inCol = contests.filter((c) => c.column === col);
-                  if (inCol.length === 0) return null;
-                  return (
-                    <div key={col}>
-                      <p className="px-4 pb-1.5 pt-3 font-mono text-[11px] text-phos">
-                        {COLUMN_TITLES[col]}
-                      </p>
-                      <ul>
-                        {inCol.map((c) => (
-                          <li key={c.key}>
-                            <button
-                              type="button"
-                              onClick={() => openContest(c.key)}
-                              className="flex min-h-[52px] w-full items-center gap-3 border-b border-white/[0.14] px-4 py-2.5 text-left"
-                            >
-                              <span className="w-5 font-mono text-xs text-ink-min">
-                                {contests.indexOf(c) + 1}
-                              </span>
-                              <span className="flex min-w-0 flex-1 flex-col">
-                                <span className="text-[15px] font-semibold text-ink-hi">
-                                  {c.title}
-                                </span>
-                                <span className="text-[13px] text-ink-lo">{c.summary}</span>
-                              </span>
-                              <span aria-hidden="true" className="text-ink-lo">
-                                ›
-                              </span>
-                            </button>
-                            {/* The phone's ballot has no measures box, so the
-                                measures row carries one button per measure:
-                                a reader after the ninth taps it, not the row
-                                and then nine measures of scrolling. */}
-                            {c.kind === "measures" && ballot.measures.length > 1 && (
-                              <div
-                                role="group"
-                                aria-label="Open a measure"
-                                className="flex flex-wrap gap-1.5 border-b border-white/[0.14] px-4 py-2 pl-12"
-                              >
-                                {/* Said on screen too: a row of bare numbers
-                                    doesn't say what tapping one does. The
-                                    group's label speaks for it. */}
-                                <span
-                                  aria-hidden="true"
-                                  className="w-full font-mono text-[11px] text-ink-lo"
-                                >
-                                  Open a measure:
-                                </span>
-                                {ballot.measures.map((m) => (
-                                  <button
-                                    key={m.id}
-                                    type="button"
-                                    data-open-measure={m.id}
-                                    onClick={() => openContest(c.key, null, m.id)}
-                                    aria-label={[m.number, m.title].filter(Boolean).join(": ")}
-                                    className="min-h-[44px] min-w-[44px] max-w-[12rem] truncate border border-white/25 px-2 font-mono text-sm text-ink-hi hover:border-phos hover:text-phos"
-                                  >
-                                    {m.number || m.title}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  );
-                })}
-              </nav>
-              {contests.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => openContest(contests[0].key)}
-                  className="mt-3 min-h-13 w-full bg-phos font-semibold text-surface-base hover:bg-phos-mid"
+                {ballot.senateRaces.length === 0 &&
+                  ballot.nextSenateElection !== null &&
+                  ballot.houseRaces.length > 0 && (
+                    <NoSenateBox ballot={ballot} level={contestLevel} />
+                  )}
+                {contests.map((c) => (
+                  <ContestCard
+                    key={c.key}
+                    contest={c}
+                    ballot={ballot}
+                    onOpen={openContest}
+                    resultsMode={resultsMode}
+                    level={contestLevel}
+                  />
+                ))}
+                <RecordBox
+                  level={contestLevel}
+                  // The "On this page" bar finds a heading by its id.
+                  headingAttrs={{ id: "not-on-this-page", ...onThisPage("Not on this page") }}
+                  kicker="Not on this page"
+                  title="What a statewide page leaves out"
+                  dek="Ballots are printed per precinct, so some of what you will vote on cannot be shown here. Your sample ballot lists it."
                 >
-                  Research contest 1 →
-                </button>
-              )}
-              <details
-                className="mt-3 border border-white/25 bg-surface p-4"
-                id="not-on-this-page"
-                {...onThisPage("Not on this page")}
-              >
-                <summary className="cursor-pointer text-sm font-semibold text-ink-hi">
-                  Not on this page
-                </summary>
-                <ul className="mt-2 list-disc pl-5 text-[13px] text-ink-lo">
-                  {ballot.omits.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-              </details>
-              <div className="mt-4 flex flex-col gap-1 border-t border-white/[0.14] pt-3">
-                {ballotLinks}
-              </div>
+                  <ul className="list-disc pl-5 text-[13px] text-ink-lo">
+                    {ballot.omits.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </RecordBox>
+              </BoxGrid>
             </div>
 
-            {/* The steps and every deadline, after the contests (the line
+            {/* The ballot's shape, a box per figure, after the contests so
+              the ballot stays near the top (the next deadline's countdown
+              is the page's first figure). */}
+            {summary.length > 0 && (
+              <BoxGrid
+                columns={summary.length > 3 ? 2 : 3}
+                label="This ballot"
+                labelId="this-ballot"
+                labelLevel={resultsFraming ? 3 : 2}
+                className="mt-8"
+              >
+                {summary.map((b) => (
+                  <RecordBox
+                    key={b.key}
+                    level={contestLevel}
+                    kicker={b.kicker}
+                    title={b.title}
+                    href={b.key === "electoral" ? "/elections#president" : undefined}
+                    dek={b.dek ?? undefined}
+                    figure={b.figure}
+                    more={
+                      b.key === "lean"
+                        ? { label: "how the lean is measured", children: <PviMethodologyNote /> }
+                        : null
+                    }
+                  />
+                ))}
+              </BoxGrid>
+            )}
+
+            <div className="mt-6">
+              <StateAtAGlance
+                state={ballot.state}
+                stateName={stateName}
+                redrawn={ballot.houseRaces.some((r) => r.redistricting)}
+              />
+            </div>
+
+            {/* The steps and every deadline, after the contests (the box
               above the ballot leads here). */}
             {!resultsMode && (ballot.voteSteps?.length || ballot.voterCalendar) && (
               <div className="mt-8">

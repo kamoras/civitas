@@ -51,16 +51,6 @@ export function ballotHeadline(stateName: string, basis: BallotBasis["basis"] | 
   return `Everyone on ${stateName}'s ballot, and who is behind them`;
 }
 
-/** "federal candidates" or, while the lists are FEC filings, "registered
- * with the FEC": the header's count says what it counts. */
-export function candidateCountLabel(
-  count: number,
-  basis: BallotBasis["basis"] | undefined
-): string {
-  if (basis === "filers") return `${count} registered with the FEC`;
-  return `${count} federal ${count === 1 ? "candidate" : "candidates"}`;
-}
-
 /** "2020 and 2024" from a lean's election window as the API states it
  * ("2020+2024"), so no page names a window the data doesn't. Null when the
  * API gave none. */

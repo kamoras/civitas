@@ -96,6 +96,7 @@ from app.pipeline.fetch.state_candidates_common import (
 from app.pipeline.fetch.state_election_dates import primary_date
 from app.pipeline.fetch.town_directory import address_for_town, towns_for_state
 from app.race_context import funding_sources, lean_context, races_csv
+from app.services.ballot_boxes import ballot_boxes
 from app.services.senator_service import STATE_NAMES
 from app.time_utils import utcnow
 
@@ -1628,7 +1629,7 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
         db, state, cycle, _judicial_marker(db, state, cycle))
 
     voter_calendar = calendar_for_state(state, election.election_day)
-    return cached_json({
+    payload = {
         "state": state,
         # The full name is what people search for ("California ballot
         # measures"), and the page's title and heading had only the code.
@@ -1765,7 +1766,11 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
             # page that just looks empty.
             "DC's Delegate to the House (non-voting) is not covered here",
         ] if state == "DC" else []),
-    }, max_age=phase_cache_s(election))
+    }
+    # The page's boxes: a templated line and a counted figure per part of
+    # the ballot, from the lists above (services/ballot_boxes.py).
+    payload["boxes"] = ballot_boxes(payload)
+    return cached_json(payload, max_age=phase_cache_s(election))
 
 
 # The live count moves on a five-minute sync. nginx's catch-all /api/

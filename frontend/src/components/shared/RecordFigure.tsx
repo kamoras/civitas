@@ -109,12 +109,16 @@ function Dots({ f, mini = false }: { f: DotsFigure; mini?: boolean }) {
 }
 
 export function daysLeftWords(f: CountdownFigure): string {
-  return f.daysLeft === 0
-    ? "Comments close today"
-    : `${f.daysLeft} day${f.daysLeft === 1 ? "" : "s"} left to comment`;
+  const deadline = f.caption !== undefined;
+  if (f.daysLeft === 0) return deadline ? "Closes today" : "Comments close today";
+  const what = deadline ? (f.caption ? ` ${f.caption}` : "") : " to comment";
+  return `${f.daysLeft} day${f.daysLeft === 1 ? "" : "s"} left${what}`;
 }
 
+/** How much of a comment period has gone; nothing for a deadline with no
+ *  period behind it. */
 function Elapsed({ f, className = "" }: { f: CountdownFigure; className?: string }) {
+  if (f.totalDays == null || f.elapsedPercent == null) return null;
   return (
     <div
       role="img"
@@ -128,8 +132,14 @@ function Elapsed({ f, className = "" }: { f: CountdownFigure; className?: string
 }
 
 function Countdown({ f, size }: { f: CountdownFigure; size: FigureSize }) {
+  // Without a period's bar (which carries its own text), the number is
+  // the image and says what closes.
+  const bare = f.totalDays == null || f.elapsedPercent == null;
   return (
-    <div className="text-center">
+    <div
+      className="text-center"
+      {...(bare ? { role: "img", "aria-label": `${daysLeftWords(f)}.` } : {})}
+    >
       <div
         className={`font-display font-semibold leading-none text-signal-amber ${
           size === "lead" ? VALUE.tier : VALUE[size]
@@ -138,7 +148,11 @@ function Countdown({ f, size }: { f: CountdownFigure; size: FigureSize }) {
         {f.daysLeft === 0 ? "Today" : f.daysLeft}
       </div>
       <div className="mt-1 text-sm text-ink-lo">
-        {f.daysLeft === 0 ? "comments close" : `day${f.daysLeft === 1 ? "" : "s"} left`}
+        {f.daysLeft === 0
+          ? f.caption !== undefined
+            ? "closes"
+            : "comments close"
+          : `day${f.daysLeft === 1 ? "" : "s"} left${f.caption ? ` ${f.caption}` : ""}`}
       </div>
       <Elapsed f={f} className="mx-auto mt-2" />
     </div>
@@ -146,16 +160,13 @@ function Countdown({ f, size }: { f: CountdownFigure; size: FigureSize }) {
 }
 
 function Stat({ f, size }: { f: StatFigure; size: FigureSize }) {
+  const value = f.text ?? f.value.toLocaleString("en-US");
   return (
-    <div
-      role="img"
-      aria-label={`${f.value.toLocaleString("en-US")} ${f.caption}.`}
-      className="text-center"
-    >
+    <div role="img" aria-label={`${value} ${f.caption}.`} className="text-center">
       <div
         className={`whitespace-nowrap font-display font-semibold leading-none text-ink-hi ${VALUE[size]}`}
       >
-        {f.value.toLocaleString("en-US")}
+        {value}
       </div>
       <div className="mt-1.5 text-sm text-ink-lo">{f.caption}</div>
     </div>

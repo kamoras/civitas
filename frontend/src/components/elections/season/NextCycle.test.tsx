@@ -4,7 +4,7 @@ import NextField from "./NextField";
 import NewCongress from "./NewCongress";
 import FecDeadlineCard from "./FecDeadlineCard";
 import BallotBasisNotice from "@/components/elections/BallotBasisNotice";
-import { ballotHeadline, candidateCountLabel } from "@/lib/elections";
+import { ballotHeadline } from "@/lib/elections";
 import { describeStateBallot } from "@/lib/seo";
 import type {
   FecDeadlineEvent,
@@ -161,7 +161,6 @@ describe("FEC filers are never said to be on the ballot", () => {
   it("in the headline, the count, the search wording and the notice", () => {
     const words = [
       ballotHeadline("Ohio", "filers"),
-      candidateCountLabel(12, "filers"),
       describeStateBallot(ballot, false, null).title,
       describeStateBallot(ballot, false, null).description,
     ];
@@ -182,13 +181,11 @@ describe("FEC filers are never said to be on the ballot", () => {
       expect(w).not.toMatch(/What's on the/);
     }
     expect(words[0]).toBe("Everyone registered with the FEC to run in Ohio");
-    expect(words[1]).toBe("12 registered with the FEC");
   });
 
   it("keeps the ballot wording once a state has confirmed its list", () => {
     expect(ballotHeadline("Ohio", "confirmed")).toBe(
       "Everyone on Ohio's ballot, and who is behind them"
     );
-    expect(candidateCountLabel(1, "nominees")).toBe("1 federal candidate");
   });
 });
