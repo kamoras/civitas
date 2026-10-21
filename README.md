@@ -1959,6 +1959,24 @@ copy kept; and a key no document answers any more still links its official
 copy from the 404. Floor speeches are kept after their Congress
 (`explore_pipeline._purge_old_format_speeches`), about 120 MB a Congress.
 
+**The page leads with one box (2026-10).** Above the source text, which is
+unchanged, a document's page opens with a record box (`BoxGrid` /
+`RecordBox`): the title as the page's heading, a line the backend fills from
+the record's fields ("Proposed Rule from the State Department, August 28,
+2026 · 91 FR 55505", `api/explore.py` `document_headline`), the comment
+period as a countdown while it is open (`commentWindow`, the same
+`comment_periods.comment_window` the Action Center uses), "Submit your
+comment", and chips for the agency, the speaker's record, the bills a
+speech's Record heading names, the executive orders the text cites that have
+a page here (`cited_orders`, read with the citation graph's own
+`extract_citations`; the document's own number left out, six at most), the
+official copy and "Cite". The box's grid is `#comment`, where every
+"Comment" link lands, at the height of the panel it replaced. Measured on
+an iPhone SE (375 px) with the density audit's method: an open rule went
+from 5.7 to 5.3 screens, with `#comment` at 0.26 screens either way and
+first-screen prose down from 20% to 16%. A rule's text moved up from 2.03
+to 1.58 screens and a floor speech's from 1.83 to 1.32.
+
 Bill text itself is not indexed here; it's used separately, title-only, for
 the tier-3 kNN bill-classification step in the scoring pipeline (see Phase 3
 above).
