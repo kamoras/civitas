@@ -38,7 +38,17 @@ function grid() {
         title="The House agreed, 218 to 214"
         href="/congress/votes/house/119/1/190"
         share="vote-190"
-        figure={{ type: "split", yeas: 218, nays: 214, yeaShare: 0.5046, caption: "Passed" }}
+        figure={{
+          type: "split",
+          yeas: 218,
+          nays: 214,
+          yeaShare: 0.5046,
+          caption: "Passed",
+          marks: [
+            { id: "yea", label: "Yea", shown: "218 votes", context: "50% of the 432 voting" },
+            { id: "nay", label: "Nay", shown: "214 votes", context: "50% of the 432 voting" },
+          ],
+        }}
         links={[
           { label: "Roll call 190", href: "/congress/votes/house/119/1/190" },
           { label: "The Clerk's record", href: "https://clerk.house.gov/evs/2025/roll190.xml" },
@@ -57,8 +67,10 @@ describe("RecordBox", () => {
     expect(within(lead).getByText("Became law · July 4, 2025")).toBeTruthy();
     expect(within(lead).getByText("45")).toBeTruthy();
     expect(within(lead).getByText("days, bill to law")).toBeTruthy();
-    // A split is an image that says what it shows.
-    expect(screen.getByRole("img", { name: "218 yea to 214 nay. Passed." })).toBeTruthy();
+    // A split's bar says what it shows, and names each side.
+    expect(
+      screen.getByRole("group", { name: /^218 yea to 214 nay, Passed: 2 marks/ })
+    ).toBeTruthy();
   });
 
   it("credits a quote to its source, in quotation marks", () => {

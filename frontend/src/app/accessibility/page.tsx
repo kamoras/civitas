@@ -177,6 +177,13 @@ export default function AccessibilityPage() {
                   opens the page, and a screen reader hears each dot as it is reached. Every strip
                   also has a table of the same figures with linked names.
                 </Item>
+                <Item label="Charts">
+                  Other charts work the same way, one chart at a time: a vote&apos;s yea and nay bar
+                  names each side with its votes and share and links to who voted each way, a
+                  party&apos;s dots name each member and their vote, and a comment period&apos;s bar
+                  gives its days gone and its dates. Each is one Tab stop the arrow keys walk, and
+                  its figures are also written out beside it.
+                </Item>
               </List>
               <More label="Typefaces, and why">
                 <P>
