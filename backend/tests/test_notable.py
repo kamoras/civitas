@@ -328,3 +328,11 @@ def test_the_endpoint_reads_the_eastern_clock(db_session, freeze_utcnow):
     assert r.headers["cache-control"].startswith("public, max-age=300")
     body = r.json()
     assert body["asOf"] == "2026-10-21" and body["lead"]["kind"] == "closest"
+
+
+def test_a_law_with_a_short_title_leads_with_its_name():
+    named = {"name": "Example Fisheries Enforcement Act of 2026", "billLabel": "S. 9", "billId": "S.9"}
+    assert nt._law_name(named) == "Example Fisheries Enforcement Act of 2026"
+    # An official long title is not a name news uses: the number leads.
+    long = {"name": "A bill to amend title 46 to improve example enforcement.", "billLabel": "H.R. 9", "billId": "HR.9"}
+    assert nt._law_name(long) is None
