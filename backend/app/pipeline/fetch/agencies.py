@@ -74,6 +74,13 @@ REQUEST_PAUSE_S = 0.25
 # the nightly refresh's 2,000 a night (explore_pipeline) took five nights.
 LINK_PER_RUN = 500
 
+# Static pages under /agencies (frontend/src/app/agencies/<name>/), which
+# Next serves ahead of the [slug] route: an agency with one of these slugs
+# would have no reachable page, and every link to it would land on the
+# static one. The Register's slugs are names ("environmental-protection-
+# agency"), none of them one of these; the sync alerts if one ever is.
+RESERVED_SLUGS = frozenset({"budget"})
+
 CROSSWALK_PATH = pathlib.Path(__file__).resolve().parents[2] / "data" / "agency_crosswalk.json"
 _crosswalk_cache: dict | None = None
 
@@ -252,6 +259,22 @@ def _alert(source: str, ok: bool) -> None:
     )
 
 
+def _alert_reserved(agencies: list[dict]) -> None:
+    condition = "agency-sync-reserved-slug"
+    taken = sorted({a["slug"] for a in agencies} & RESERVED_SLUGS)
+    if not taken:
+        resolve_ops_alert(condition)
+        return
+    send_ops_alert(
+        f"Agency sync: the Federal Register lists an agency slug a page uses: {', '.join(taken)}",
+        f"/agencies/{taken[0]} is a page of its own (frontend/src/app/agencies/), so the agency "
+        "with that slug has no reachable page and links to it land on that page. Rename the page "
+        "and update RESERVED_SLUGS in app/pipeline/fetch/agencies.py.",
+        dedupe_key=f"{condition}-{'-'.join(taken)}",
+        condition=condition,
+    )
+
+
 async def sync_agencies(db: Session, client: httpx.AsyncClient, *, fr_due: bool = True,
                         usaspending_due: bool = True) -> dict:
     """Read the sources that are due and store what each gave. Returns
@@ -262,6 +285,7 @@ async def sync_agencies(db: Session, client: httpx.AsyncClient, *, fr_due: bool 
     if fr is not None:
         _store_fr(db, fr, now)
         db.commit()
+        _alert_reserved(fr)
     toptier = await fetch_toptier_agencies(client) if usaspending_due else None
     stats: dict = {"frAgencies": len(fr) if fr is not None else None,
                    "toptier": len(toptier) if toptier is not None else None,

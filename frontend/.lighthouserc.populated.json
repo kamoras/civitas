@@ -30,6 +30,8 @@
         "http://localhost:3000/elections/states/MD",
         "http://localhost:3000/elections/states/NY",
         "http://localhost:3000/congress/bills",
+        "http://localhost:3000/agencies",
+        "http://localhost:3000/agencies/budget",
         "http://localhost:3000/about/scores"
       ],
       "settings": {

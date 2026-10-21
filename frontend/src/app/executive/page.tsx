@@ -8,7 +8,12 @@ import { fetchAgencyIndex } from "@/lib/agencyServer";
 import { exploreHref } from "@/lib/exploreHref";
 import { calendarDate } from "@/lib/congress";
 import { NOMINATIONS_HREF, nominationHref } from "@/lib/nominations";
-import { EXECUTIVE_HREF, EXECUTIVE_ORDERS_HREF, PRESIDENTS_HREF } from "@/lib/routes";
+import {
+  AGENCY_BUDGETS_HREF,
+  EXECUTIVE_HREF,
+  EXECUTIVE_ORDERS_HREF,
+  PRESIDENTS_HREF,
+} from "@/lib/routes";
 import { ordinal } from "@/components/scorecard/format";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
@@ -223,7 +228,7 @@ export default async function ExecutivePage() {
               <Panel
                 id="agencies"
                 title="The largest agencies"
-                more={{ href: "/agencies#budget", label: "Every agency's budget" }}
+                more={{ href: AGENCY_BUDGETS_HREF, label: "Every agency's budget" }}
               >
                 {!agencies ? (
                   <Unavailable what="The agency budgets" />
