@@ -65,6 +65,7 @@ import httpx
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.contact import BOT_USER_AGENT  # noqa: E402
+from app.election_phase import active_election  # noqa: E402
 from app.pipeline.fetch import state_candidates_ma as ma  # noqa: E402
 from app.pipeline.fetch import state_candidates_nh as nh  # noqa: E402
 from app.pipeline.fetch.http_utils import fetch_text_with_retry  # noqa: E402
@@ -242,4 +243,5 @@ async def main(year: int) -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main(int(sys.argv[1]) if len(sys.argv) > 1 else 2026))
+    # The site's election (election_phase.active_election), or a cycle named.
+    asyncio.run(main(int(sys.argv[1]) if len(sys.argv) > 1 else active_election().cycle))

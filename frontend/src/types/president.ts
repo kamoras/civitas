@@ -31,6 +31,9 @@ export interface President {
    *  rated this presidency. */
   historiansRank?: number | null;
   historiansRated?: number | null;
+  /** The survey edition (year) those points are from; null before the
+   *  survey has been read. */
+  historiansEdition?: number | null;
   /** Average approval over a rolling last-90-days window rather than the
    * full term — informational, not part of any scored dimension. Null
    * once a president leaves office and no new polls populate it. */
