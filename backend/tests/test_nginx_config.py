@@ -281,3 +281,13 @@ def test_access_log_keeps_no_query_strings_or_referrers():
         line = line.split("#", 1)[0].strip()
         if line.startswith("access_log") and line != "access_log off;":
             assert line.endswith("civitas_private;"), line
+
+
+def test_permissions_policy_lets_the_site_itself_ask_for_location():
+    # The header's "Use my location" and the district finder ask the browser
+    # for a position on a click and place it on the device (AGENTS.md §8).
+    # geolocation=() refused every such request on this site; =(self) allows
+    # this origin only, still none for a frame from another host.
+    text = SNIPPET.read_text()
+    assert "geolocation=(self)" in text
+    assert "geolocation=()" not in text

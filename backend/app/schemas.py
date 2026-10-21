@@ -1469,6 +1469,11 @@ class PresidentialScoreSchema(CamelModel):
     effective_weights: dict[str, float] = {}
 
 
+class PhotoCreditSchema(CamelModel):
+    text: str = Field(description="The credit line: the author where the source names one, and the license")
+    url: str | None = Field(description="The image's page at its source (Wikimedia Commons)")
+
+
 class PresidentSchema(CamelModel):
     id: str
     name: str
@@ -1494,6 +1499,13 @@ class PresidentSchema(CamelModel):
     # once a president leaves office and no new polls populate it. See
     # app.pipeline.fetch.presidential_approval.recent_polls.
     recent_avg_approval: float | None = None
+    # The site's own path to the president's public-domain portrait
+    # (/photo/president/<id>, app/photos.py) and its credit line; null
+    # without one.
+    photo_url: str | None = Field(None, description="The portrait's path on this site (/photo/president/<id>), "
+                                                    "a public-domain image; null without one")
+    photo_credit: PhotoCreditSchema | None = Field(None, description="The portrait's credit line and its source "
+                                                                     "page; null without a portrait")
 
 
 class PresidentLeaderboardEntry(CamelModel):

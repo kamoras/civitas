@@ -8,6 +8,7 @@ import type { PresidentCharts } from "@/types/presidentCharts";
 import { fetchPresidentStockTrades } from "@/lib/api";
 import { SectionHeadingLevelProvider } from "@/components/shared/CollapsibleSection";
 import Holdings from "@/components/checker/Holdings";
+import Photo from "@/components/Photo";
 import StockTrades from "@/components/checker/StockTrades";
 import PresidentStanding from "./PresidentStanding";
 import PresidentChartsSection from "./PresidentCharts";
@@ -69,6 +70,17 @@ export default function PresidentScorecard({
     asOf: scoredOn?.date ?? null,
   };
 
+  // Without a portrait (or when it fails to load), the president's number.
+  const numberMark = (
+    <div
+      className={`flex h-24 w-20 shrink-0 flex-col items-center justify-center border-2 sm:h-28 sm:w-24 ${party.border} ${party.text}`}
+      aria-hidden="true"
+    >
+      <span className="font-display text-4xl font-semibold leading-none">{president.number}</span>
+      <span className="mt-1 text-xs">President</span>
+    </div>
+  );
+
   useEffect(() => {
     if (!president.isCurrent) return;
     let live = true;
@@ -92,15 +104,18 @@ export default function PresidentScorecard({
             {/* Portrait above the name below sm: beside it, the name had
                 about 146px at 320px and long surnames split mid-word. */}
             <div className="flex min-w-0 flex-col gap-5 sm:flex-row">
-              <div
-                className={`flex h-24 w-20 shrink-0 flex-col items-center justify-center border-2 sm:h-28 sm:w-24 ${party.border} ${party.text}`}
-                aria-hidden="true"
-              >
-                <span className="font-display text-4xl font-semibold leading-none">
-                  {president.number}
-                </span>
-                <span className="mt-1 text-xs">President</span>
-              </div>
+              {president.photoUrl ? (
+                <Photo
+                  src={president.photoUrl}
+                  alt={president.name}
+                  sizes="96px"
+                  priority
+                  className={`h-28 w-24 shrink-0 border-2 object-cover object-[center_25%] ${party.border}`}
+                  fallback={numberMark}
+                />
+              ) : (
+                numberMark
+              )}
               <div className="flex min-w-0 flex-col gap-2">
                 <Title className="break-words text-3xl font-semibold leading-tight text-ink-hi sm:text-4xl">
                   {president.name}
@@ -136,6 +151,17 @@ export default function PresidentScorecard({
                     Compare with another president
                   </Link>
                 </p>
+                {president.photoCredit && (
+                  <p className="text-xs text-ink-lo">
+                    {president.photoCredit.url ? (
+                      <a href={president.photoCredit.url} className="underline underline-offset-2">
+                        {president.photoCredit.text}
+                      </a>
+                    ) : (
+                      president.photoCredit.text
+                    )}
+                  </p>
+                )}
               </div>
             </div>
             <div className="flex flex-col gap-2 border-t border-white/[0.12] pt-5 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">

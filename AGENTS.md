@@ -1205,7 +1205,10 @@ site at `/photo/<kind>/<id>` (2026-10): the API hands out those paths
 (`app/photos.py`; JSON-LD makes them absolute), and the frontend route
 (`app/photo/[kind]/[id]/route.ts`, `lib/photos.ts`) fetches the picture
 server-side, from a source the backend names by kind and id through
-`GET /api/photo-sources/…`: a justice's or issue's stored URL (Oyez, the
+`GET /api/photo-sources/…`: a president's public-domain portrait
+(`president`: Wikidata's image for the office holder, kept only when Commons
+marks it public domain and credited on the page, `pipeline/fetch/
+president_portraits.py`), a justice's or issue's stored URL (Oyez, the
 outlet), and for a member (`bioguide`) one of two official photos: the
 headshot on the member's Congress.gov record (`depiction`, read from the
 record the pipeline stored in `api_cache`) or bioguide.congress.gov's

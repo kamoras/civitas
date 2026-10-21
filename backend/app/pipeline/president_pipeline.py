@@ -73,6 +73,7 @@ from app.pipeline.fetch.presidential_approval import (
     recent_polls,
 )
 from app.pipeline.fetch.electoral_college import fetch_elections
+from app.pipeline.fetch.president_portraits import fetch_president_portraits
 from app.pipeline.fetch.macro_series import (
     CONSUMER_PRICES,
     PAYROLLS,
@@ -187,6 +188,9 @@ async def run_president_pipeline(db: Session) -> dict:
     async with make_async_client() as client:
         logger.info("Fetching executive-order counts (UCSB, all presidents)...")
         eo_data = await fetch_historical_eo_counts(db)
+        # Not scored: each president's public-domain portrait for the page
+        # (served through /photo/president/<id>); an outage keeps the last set.
+        await fetch_president_portraits(client, db)
         logger.info("EO data fetched for %d presidents", len(eo_data))
 
         logger.info("Fetching presidential roster (UCSB)...")

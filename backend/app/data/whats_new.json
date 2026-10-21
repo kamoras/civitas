@@ -16,6 +16,13 @@
       "url": "/agencies/budget"
     },
     {
+      "id": "president-portraits",
+      "date": "2026-10-20",
+      "title": "Presidents' portraits",
+      "summary": "Every president with a public-domain portrait now shows it on the page, the president list and the share card, served from this site and credited to its author.",
+      "url": "/politicians?branch=president"
+    },
+    {
       "id": "president-term-charts",
       "date": "2026-10-20",
       "title": "A president's term, drawn",

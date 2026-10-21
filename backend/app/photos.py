@@ -10,6 +10,8 @@ and an id — never a URL — and fetches the picture server-side:
   the pipeline measured to be the head-and-shoulders shot
   (`bioguide_photo_source`, looked up through the endpoint below like the
   stored kinds);
+- `president`: a president's public-domain portrait, from Wikimedia
+  Commons by way of Wikidata (pipeline/fetch/president_portraits.py);
 - `justice`: a justice's Oyez thumbnail, and `issue`: an Action Center
   issue's rights-cleared news photo — both stored by the pipeline, and
   looked up by the route through `GET /api/photo-sources/{kind}/{id}`
@@ -48,6 +50,13 @@ PHOTO_SOURCE_HOSTS: dict[str, frozenset[str]] = {
     # rollcall.com (10 of 10, 2026-10-10). A feed that starts granting
     # rights on another host needs that host added here, deliberately.
     "issue": frozenset({"rollcall.com"}),
+    # A president's public-domain portrait on Wikimedia Commons
+    # (pipeline/fetch/president_portraits.py): the API's thumbnail URLs are
+    # on thumb.wikimedia.org, and a thumbnail not yet rendered redirects to
+    # upload.wikimedia.org (checked 2026-10-20); a National Portrait Gallery
+    # CC0 portrait, where Wikidata's is not public domain, is on the
+    # Smithsonian's image service, ids.si.edu.
+    "president": frozenset({"thumb.wikimedia.org", "upload.wikimedia.org", "ids.si.edu"}),
 }
 
 
@@ -129,6 +138,25 @@ def bioguide_photo_source(db: Session, bioguide_id: str) -> str | None:
 
 def bioguide_photo(bioguide_id: str | None) -> str | None:
     return f"/photo/bioguide/{bioguide_id}" if bioguide_id else None
+
+
+def president_photo(president, portraits: dict[str, dict]) -> str | None:
+    """`portraits` is pipeline/fetch/president_portraits.stored_portraits."""
+    return f"/photo/president/{president.id}" if str(president.number) in portraits else None
+
+
+def portrait_credit(portrait: dict | None) -> dict | None:
+    """The credit line a president's portrait carries, from the file's own
+    metadata: its author where Commons names one, and the license."""
+    if not portrait:
+        return None
+    artist = portrait.get("artist") or ""
+    named = artist and "unknown" not in artist.lower() and artist.lower() != "photographer"
+    return {
+        "text": f"Portrait{': ' + artist if named else ''}. {portrait.get('license') or 'Public domain'}, "
+                f"via {portrait.get('via') or 'Wikimedia Commons'}.",
+        "url": portrait.get("page"),
+    }
 
 
 def justice_photo(justice) -> str | None:
