@@ -3,7 +3,18 @@ import Navbar from "@/components/layout/Navbar";
 import PageMasthead from "@/components/layout/PageMasthead";
 import Footer from "@/components/layout/Footer";
 import CopyText from "@/components/CopyText";
-import { Summary, Point, Section, P, List, Item, More, A } from "@/components/about/AboutPage";
+import {
+  Summary,
+  Point,
+  Section,
+  P,
+  List,
+  Item,
+  More,
+  A,
+  Boxes,
+  Box,
+} from "@/components/about/AboutPage";
 import DataLicense from "@/components/about/DataLicense";
 import {
   codeSpans,
@@ -73,9 +84,12 @@ function Prose({ text }: { text: string }) {
 
 function Params({ params }: { params: Parameter[] }) {
   return (
-    <dl className="divide-y divide-white/[0.05] border-y border-white/[0.07]">
+    <dl className="@container divide-y divide-white/[0.05] border-y border-white/[0.07]">
       {params.map((p) => (
-        <div key={p.name} className="grid grid-cols-1 gap-1 py-2 sm:grid-cols-[11rem_1fr] sm:gap-4">
+        <div
+          key={p.name}
+          className="grid grid-cols-[minmax(0,1fr)] gap-1 py-2 @min-[32rem]:grid-cols-[11rem_minmax(0,1fr)] @min-[32rem]:gap-4"
+        >
           <dt>
             <code className={CODE}>{p.name}</code>
             <span className="ml-2 font-mono text-[11px] text-ink-min">
@@ -116,11 +130,14 @@ function Fields({
 }) {
   const properties = Object.entries(schema.properties ?? {});
   return (
-    <dl className="divide-y divide-white/[0.05] border-y border-white/[0.07]">
+    <dl className="@container divide-y divide-white/[0.05] border-y border-white/[0.07]">
       {properties.map(([name, field]) => {
         const nested = depth < 2 ? nestedObject(field, spec) : null;
         return (
-          <div key={name} className="grid grid-cols-1 gap-1 py-2 sm:grid-cols-[11rem_1fr] sm:gap-4">
+          <div
+            key={name}
+            className="grid grid-cols-[minmax(0,1fr)] gap-1 py-2 @min-[32rem]:grid-cols-[11rem_minmax(0,1fr)] @min-[32rem]:gap-4"
+          >
             <dt>
               <code className={`${CODE} break-all`}>{name}</code>
             </dt>
@@ -252,103 +269,149 @@ export default async function DevelopersPage() {
                 text={`curl "${absoluteUrl(`${API}/senators?state=GA`)}"`}
                 label="example request"
               />
-              <List>
-                <Item label="Ids">
-                  A member&apos;s id is the one in their Civitas address:{" "}
-                  <code className={CODE}>jane-doe</code> in{" "}
-                  <code className={CODE}>/politicians/jane-doe</code>. The lists give each one, and
-                  every record carries <code className={CODE}>siteUrl</code>, its page here, to link
-                  or cite. An id changes when the member&apos;s name does; the old one keeps
-                  working, and the record comes back under the new one. A president&apos;s or
-                  justice&apos;s id is the one in their address too; a roll call is named by its
-                  chamber, Congress, session and number, a nomination by its Congress and citation,
-                  and an agency by the Federal Register&apos;s id.
-                </Item>
-                <Item label="Lists">
-                  Pages of <code className={CODE}>entries</code> with{" "}
-                  <code className={CODE}>total</code>, <code className={CODE}>page</code>,{" "}
-                  <code className={CODE}>perPage</code> and <code className={CODE}>totalPages</code>
-                  . A member&apos;s <code className={CODE}>rank</code> (deprecated, see below) is
-                  their place in the whole chamber by the composite score, whatever you filter by.
-                </Item>
-                <Item label="Measures">
-                  Each breakdown&apos;s <code className={CODE}>peerComparison</code> is what the
-                  site shows: every measure against peers, with the word&apos;s rule, and each
-                  dimension&apos;s <code className={CODE}>facts</code> are the figures behind it (
-                  <A href="/about/scores">how senators and representatives are compared</A>). A
-                  member&apos;s 0 to 100 scores are deprecated (see below); presidents&apos; are
-                  not.
-                </Item>
-                <Item label="Errors">
-                  An unknown id is 404, a parameter out of range or not among the listed values is
-                  422 with the reason in <code className={CODE}>detail</code>, and past the rate
-                  limit it is 429 with <code className={CODE}>Retry-After</code>.
-                </Item>
-              </List>
-              <More label="Rate-limit headers, caching and the spec">
-                <p>
-                  Each answer carries <code className={CODE}>X-RateLimit-Limit</code>,{" "}
-                  <code className={CODE}>X-RateLimit-Remaining</code> and{" "}
-                  <code className={CODE}>X-RateLimit-Reset</code> (a Unix time: when the quota is
-                  whole again, or on a 429 when the next request is let in).{" "}
-                  <code className={CODE}>Cache-Control</code> says how long an answer can be reused.
-                </p>
-                <p>The OpenAPI 3 description, to generate a client from:</p>
-                <CopyText text={SPEC_URL} label="OpenAPI spec address" />
-              </More>
+              <Boxes>
+                <Box
+                  title="Ids"
+                  dek="A member's id is the one in the member's Civitas address. An old id keeps working after a name change."
+                  more="ids for every kind of record"
+                >
+                  <P>
+                    A member&apos;s id is the one in their Civitas address:{" "}
+                    <code className={CODE}>jane-doe</code> in{" "}
+                    <code className={CODE}>/politicians/jane-doe</code>. The lists give each one,
+                    and every record carries <code className={CODE}>siteUrl</code>, its page here,
+                    to link or cite. An id changes when the member&apos;s name does; the old one
+                    keeps working, and the record comes back under the new one. A president&apos;s
+                    or justice&apos;s id is the one in their address too; a roll call is named by
+                    its chamber, Congress, session and number, a nomination by its Congress and
+                    citation, and an agency by the Federal Register&apos;s id.
+                  </P>
+                </Box>
+                <Box
+                  title="Lists"
+                  dek="Lists come in pages of entries, with the total and page counts."
+                  more="the fields, and rank"
+                >
+                  <P>
+                    Pages of <code className={CODE}>entries</code> with{" "}
+                    <code className={CODE}>total</code>, <code className={CODE}>page</code>,{" "}
+                    <code className={CODE}>perPage</code> and{" "}
+                    <code className={CODE}>totalPages</code>. A member&apos;s{" "}
+                    <code className={CODE}>rank</code> (deprecated, see below) is their place in the
+                    whole chamber by the composite score, whatever you filter by.
+                  </P>
+                </Box>
+                <Box
+                  title="Measures"
+                  dek="Each breakdown's peerComparison is what the site shows: every measure against peers."
+                  more="facts, and the deprecated scores"
+                >
+                  <P>
+                    Each breakdown&apos;s <code className={CODE}>peerComparison</code> is what the
+                    site shows: every measure against peers, with the word&apos;s rule, and each
+                    dimension&apos;s <code className={CODE}>facts</code> are the figures behind it (
+                    <A href="/about/scores">how senators and representatives are compared</A>). A
+                    member&apos;s 0 to 100 scores are deprecated (see below); presidents&apos; are
+                    not.
+                  </P>
+                </Box>
+                <Box
+                  title="Errors"
+                  dek="An unknown id is 404, a bad parameter is 422 and past the rate limit it is 429."
+                  more="the reason and the retry"
+                >
+                  <P>
+                    An unknown id is 404, a parameter out of range or not among the listed values is
+                    422 with the reason in <code className={CODE}>detail</code>, and past the rate
+                    limit it is 429 with <code className={CODE}>Retry-After</code>.
+                  </P>
+                </Box>
+                <Box
+                  title="Rate limits, caching and the spec"
+                  dek="Each answer says how many requests are left and how long it can be reused. The OpenAPI 3 description is here too."
+                  more="rate-limit headers, caching and the spec"
+                >
+                  <p>
+                    Each answer carries <code className={CODE}>X-RateLimit-Limit</code>,{" "}
+                    <code className={CODE}>X-RateLimit-Remaining</code> and{" "}
+                    <code className={CODE}>X-RateLimit-Reset</code> (a Unix time: when the quota is
+                    whole again, or on a 429 when the next request is let in).{" "}
+                    <code className={CODE}>Cache-Control</code> says how long an answer can be
+                    reused.
+                  </p>
+                  <p>The OpenAPI 3 description, to generate a client from:</p>
+                  <CopyText text={SPEC_URL} label="OpenAPI spec address" />
+                </Box>
+              </Boxes>
             </Section>
 
             <Section id="deprecations" title="Deprecations">
-              <p>
-                The site stopped showing the composite score and ranking members by it in October
-                2026, and then presidents&apos; 0 to 100 scores: a weighted average of unlike
-                measures carries a judgment its weights decide, and a rank turns a measurement into
-                a verdict. Member pages then stopped showing the 0 to 100 part scores too, in favour
-                of the figures behind them. These fields stay in version 1 for one deprecation cycle
-                and are removed in version 2, after{" "}
-                <strong className="font-semibold">January 4, 2027</strong>:
-              </p>
-              <ul className="list-disc pl-6">
-                <li>
-                  <code className={CODE}>representationScore.overall</code> and{" "}
-                  <code className={CODE}>rank</code> on members (list, profile),{" "}
-                  <code className={CODE}>overall</code> on a breakdown and on each history snapshot.
-                </li>
-                <li>
-                  A member&apos;s part scores: <code className={CODE}>fundingIndependence</code>,{" "}
-                  <code className={CODE}>constituentAlignment</code>,{" "}
-                  <code className={CODE}>legislativeEffectiveness</code> and{" "}
-                  <code className={CODE}>fundingDiversity</code> in{" "}
-                  <code className={CODE}>representationScore</code> and on each history snapshot, a
-                  breakdown&apos;s <code className={CODE}>weights</code>, and each breakdown
-                  dimension&apos;s scores, weight and components.
-                </li>
-                <li>
-                  <code className={CODE}>score</code> (the Presidential Score and its parts) and{" "}
-                  <code className={CODE}>rank</code> on presidents.
-                </li>
-                <li>
-                  The <code className={CODE}>rank</code>, <code className={CODE}>overall</code> and
-                  part-score columns of <code className={CODE}>senators.csv</code>,{" "}
-                  <code className={CODE}>representatives.csv</code> and{" "}
-                  <code className={CODE}>presidents.csv</code>, and the president score columns (
-                  <code className={CODE}>public_mandate</code>,{" "}
-                  <code className={CODE}>effectiveness</code>,{" "}
-                  <code className={CODE}>historical_legacy</code>,{" "}
-                  <code className={CODE}>dimensions_available</code>).
-                </li>
-              </ul>
-              <p>
-                Responses that carry them send <code className={CODE}>Deprecation</code>,{" "}
-                <code className={CODE}>Sunset</code> and a <code className={CODE}>Link</code> to
-                this notice, and the schema below marks the fields deprecated. Read a
-                breakdown&apos;s <code className={CODE}>peerComparison</code> and each
-                snapshot&apos;s <code className={CODE}>facts</code> instead, and for a president the
-                record fields (<code className={CODE}>avgApproval</code>,{" "}
-                <code className={CODE}>jobsCreatedMillions</code>,{" "}
-                <code className={CODE}>gdpGrowthAvg</code>, <code className={CODE}>eoCount</code>,{" "}
-                <code className={CODE}>historicalLegacyScore</code>).
-              </p>
+              <Boxes>
+                <Box
+                  title="What goes in version 2"
+                  dek="The composite score, ranks and 0 to 100 scores stay in version 1 and are removed in version 2, after January 4, 2027."
+                  more="why, and every field"
+                >
+                  <p>
+                    The site stopped showing the composite score and ranking members by it in
+                    October 2026, and then presidents&apos; 0 to 100 scores: a weighted average of
+                    unlike measures carries a judgment its weights decide, and a rank turns a
+                    measurement into a verdict. Member pages then stopped showing the 0 to 100 part
+                    scores too, in favour of the figures behind them. These fields stay in version 1
+                    for one deprecation cycle and are removed in version 2, after{" "}
+                    <strong className="font-semibold">January 4, 2027</strong>:
+                  </p>
+                  <ul className="list-disc pl-6">
+                    <li>
+                      <code className={CODE}>representationScore.overall</code> and{" "}
+                      <code className={CODE}>rank</code> on members (list, profile),{" "}
+                      <code className={CODE}>overall</code> on a breakdown and on each history
+                      snapshot.
+                    </li>
+                    <li>
+                      A member&apos;s part scores: <code className={CODE}>fundingIndependence</code>
+                      , <code className={CODE}>constituentAlignment</code>,{" "}
+                      <code className={CODE}>legislativeEffectiveness</code> and{" "}
+                      <code className={CODE}>fundingDiversity</code> in{" "}
+                      <code className={CODE}>representationScore</code> and on each history
+                      snapshot, a breakdown&apos;s <code className={CODE}>weights</code>, and each
+                      breakdown dimension&apos;s scores, weight and components.
+                    </li>
+                    <li>
+                      <code className={CODE}>score</code> (the Presidential Score and its parts) and{" "}
+                      <code className={CODE}>rank</code> on presidents.
+                    </li>
+                    <li>
+                      The <code className={CODE}>rank</code>, <code className={CODE}>overall</code>{" "}
+                      and part-score columns of <code className={CODE}>senators.csv</code>,{" "}
+                      <code className={CODE}>representatives.csv</code> and{" "}
+                      <code className={CODE}>presidents.csv</code>, and the president score columns
+                      (<code className={CODE}>public_mandate</code>,{" "}
+                      <code className={CODE}>effectiveness</code>,{" "}
+                      <code className={CODE}>historical_legacy</code>,{" "}
+                      <code className={CODE}>dimensions_available</code>).
+                    </li>
+                  </ul>
+                </Box>
+                <Box
+                  title="What to read instead"
+                  dek="Responses with these fields send Deprecation and Sunset headers. Read peerComparison and facts instead."
+                  more="the headers and the replacement fields"
+                >
+                  <p>
+                    Responses that carry them send <code className={CODE}>Deprecation</code>,{" "}
+                    <code className={CODE}>Sunset</code> and a <code className={CODE}>Link</code> to
+                    this notice, and the schema below marks the fields deprecated. Read a
+                    breakdown&apos;s <code className={CODE}>peerComparison</code> and each
+                    snapshot&apos;s <code className={CODE}>facts</code> instead, and for a president
+                    the record fields (<code className={CODE}>avgApproval</code>,{" "}
+                    <code className={CODE}>jobsCreatedMillions</code>,{" "}
+                    <code className={CODE}>gdpGrowthAvg</code>,{" "}
+                    <code className={CODE}>eoCount</code>,{" "}
+                    <code className={CODE}>historicalLegacyScore</code>).
+                  </p>
+                </Box>
+              </Boxes>
             </Section>
 
             <Section id="downloads" title="Spreadsheets (CSV)">
@@ -385,13 +448,21 @@ export default async function DevelopersPage() {
             </Section>
 
             <Section id="mcp" title="Use it from an AI assistant (MCP)">
-              <P>
-                The same API is an MCP server, so an assistant such as Claude can look up members,
-                scores and documents itself. Every endpoint below is a tool of the same name,
-                answering exactly what the API does. It uses streamable HTTP and needs no sign-in.
-                An argument a tool doesn&apos;t take is refused by name rather than ignored, so a
-                misnamed filter can&apos;t come back looking applied.
-              </P>
+              <Boxes columns={1}>
+                <Box
+                  title="Every endpoint is a tool"
+                  dek="The same API is an MCP server. Each endpoint is a tool of the same name, with no sign-in."
+                  more="how the tools behave"
+                >
+                  <P>
+                    The same API is an MCP server, so an assistant such as Claude can look up
+                    members, scores and documents itself. Every endpoint below is a tool of the same
+                    name, answering exactly what the API does. It uses streamable HTTP and needs no
+                    sign-in. An argument a tool doesn&apos;t take is refused by name rather than
+                    ignored, so a misnamed filter can&apos;t come back looking applied.
+                  </P>
+                </Box>
+              </Boxes>
               <CopyText text={MCP_URL} label="MCP server address" />
               <List>
                 <Item label="Claude Code">

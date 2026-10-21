@@ -22,4 +22,11 @@ describe("SCORE_VERSIONS", () => {
     const names = SCORE_VERSIONS.map((v) => v.version);
     expect(new Set(names).size).toBe(names.length);
   });
+
+  it("gives every version a one-line headline, which /changelog shows as its box's line", () => {
+    for (const v of SCORE_VERSIONS) {
+      expect(v.title.trim(), v.version).not.toBe("");
+      expect(v.title, v.version).not.toMatch(/\n/);
+    }
+  });
 });
