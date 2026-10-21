@@ -2,7 +2,7 @@ import { ImageResponse } from "next/og";
 import { OG_FAMILY, ogFonts } from "@/lib/ogFonts";
 import { OgLockup } from "@/lib/ogLockup";
 import { OG_COLOR as C } from "@/lib/ogTheme";
-import { DEFAULT_OG_IMAGE, SITE_TAGLINE } from "@/lib/site";
+import { DEFAULT_OG_IMAGE, SITE_DOMAIN, SITE_TAGLINE } from "@/lib/site";
 
 export const runtime = "nodejs";
 export const alt = DEFAULT_OG_IMAGE.alt;
@@ -11,7 +11,7 @@ export const contentType = "image/png";
 
 const DESCRIPTION =
   "Congress, the money, the votes, elections and agencies, from the public record.";
-const DOMAIN = "civitas-research.org";
+const DOMAIN = SITE_DOMAIN;
 
 /** The site card, set like the first page of a register: the lockup as the
  *  header carries it, the promise in the title face, a ruled foot with the

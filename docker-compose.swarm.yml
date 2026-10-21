@@ -1,5 +1,8 @@
-# Swarm-only overlay — apply alongside the base file:
-#   docker stack deploy -c docker-compose.yml -c docker-compose.swarm.yml civitas
+# Swarm-only overlay — apply alongside the base file, merged by
+#   docker compose -f docker-compose.yml -f docker-compose.swarm.yml config
+# and that output stack-deployed as `civitas` (check-and-deploy.sh does it;
+# `docker stack deploy -c` with both files directly ignores `!reset` and
+# rejects `name:`). A new host from nothing: docs/self-hosting.md.
 #
 # What this changes and why:
 #
@@ -200,6 +203,11 @@ services:
       context: ./nginx
       dockerfile: Dockerfile
     image: civitas-nginx:${IMAGE_TAG:-latest}
+    # Which proxy in front may name the visitor (nginx/real-ip.sh). Empty
+    # means loopback only; a host behind a reverse proxy sets it in .env.
+    environment:
+      - REAL_IP_FROM=${REAL_IP_FROM:-}
+      - REAL_IP_HEADER=${REAL_IP_HEADER:-}
     ports:
       - target: 8081
         published: 8081
