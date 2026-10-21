@@ -103,7 +103,7 @@ class TestTieBreaker:
         rc = _store_senate(db_session, TIE)
         rc.majority_requirement = "1/2"
         found = notable._closest([rc])
-        assert found["sentence"] == ("Tied 50–50 in the Senate, broken by the Vice President of the United States "
+        assert found["headline"] == ("Tied 50–50 in the Senate, broken by the Vice President of the United States "
                                      "voting Yea: Bill Passed.")
         assert found["vote"]["tieBreaker"] == VP
 

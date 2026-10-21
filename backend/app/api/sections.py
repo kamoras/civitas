@@ -71,9 +71,8 @@ def congress(db: Session) -> dict:
 def _recess(db: Session, day: date | None) -> dict | None:
     """When the latest day Congress met had no business (/congress's own
     `recess`), when the last business was: the week and month cards show it
-    rather than "None", and the homepage's "On the record" is headed as the
-    last week of business. None when there was business, or before any day
-    is on record."""
+    rather than "None". None when there was business, or before any day is
+    on record."""
     if day is None:
         return None
     r = congress_service.recess(db, congress_service.day_report(db, day))
