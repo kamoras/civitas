@@ -281,7 +281,7 @@ export default function RaceContext({
             {race.district == null ? "state" : "district"} usually votes.{" "}
             <Link
               href={mapHref("polls", race.district == null ? "senate" : "house", race.id)}
-              className="whitespace-nowrap font-mono text-xs text-signal-cyan hover:text-phos"
+              className="whitespace-nowrap font-mono text-xs text-signal-cyan underline underline-offset-2 hover:text-phos"
               {...{ [SHARE_EXCLUDE_ATTR]: "" }}
             >
               [ {race.district == null ? "Senate" : "House"} map → ]
@@ -331,7 +331,7 @@ export default function RaceContext({
             measure against colleagues in the same party:{" "}
             <Link
               href={`/politicians/${incumbent.incumbentRecord.id}`}
-              className="whitespace-nowrap font-mono text-xs text-signal-cyan hover:text-phos"
+              className="whitespace-nowrap font-mono text-xs text-signal-cyan underline underline-offset-2 hover:text-phos"
             >
               [ Where they stand → ]
             </Link>
@@ -349,7 +349,7 @@ export default function RaceContext({
             )}{" "}
             <Link
               href={`/politicians/${race.seatHolder.id}`}
-              className="whitespace-nowrap font-mono text-xs text-signal-cyan hover:text-phos"
+              className="whitespace-nowrap font-mono text-xs text-signal-cyan underline underline-offset-2 hover:text-phos"
             >
               [ Where they stand → ]
             </Link>

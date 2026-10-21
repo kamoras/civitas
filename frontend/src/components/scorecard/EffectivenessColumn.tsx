@@ -144,7 +144,9 @@ export default function EffectivenessColumn({
                 >
                   {b.title}
                 </Link>
-                <span className="shrink-0 font-mono text-xs text-ink-min">
+                {/* Capped so a long stage name wraps in its own column: at 200%
+                    text on a phone it ran past the screen. */}
+                <span className="max-w-[45%] shrink-0 text-right font-mono text-xs text-ink-min">
                   {(b.stage && config?.billStages[b.stage]?.name) || b.stage}
                 </span>
               </li>
