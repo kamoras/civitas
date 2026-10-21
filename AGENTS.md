@@ -2423,6 +2423,7 @@ the pending list).
 | SEO: per-route metadata, canonicals, JSON-LD, sitemap | `frontend/src/lib/site.ts`, `frontend/src/lib/seo.ts`, `frontend/src/app/sitemap.ts`, `backend/app/api/sitemap.py` |
 | Frontend types | `frontend/src/types/` |
 | Metric explanations (tooltips on all scorecard metrics) | `frontend/src/components/checker/MetricTooltip.tsx` |
+| Record boxes ("Boxes, not blocks": ruled grid, box, figures shared with the homepage) and the bill page built from them | `frontend/src/components/shared/BoxGrid.tsx`, `RecordBox.tsx`, `RecordFigure.tsx`, `frontend/src/types/figure.ts`, `frontend/src/components/congress/BillPageView.tsx`; the bill page's lines from `backend/app/services/bill_boxes.py` (`boxes` on `GET /api/bills/{id}/record`) and `committee_record.search`'s `headline` |
 | Detail pages' two layers: where a member stands among peers, methods ledger, bill stage ladder and sources, "cite this", held and thin-data marks | `frontend/src/components/scorecard/WhereTheyStand.tsx`, `MethodsLedger.tsx`, `HeldScore.tsx`, `frontend/src/components/congress/StageLadder.tsx`, `BillSources.tsx`, `frontend/src/components/shared/CiteThis.tsx` (a government document or record cites its issuer: `frontend/src/lib/citedSources.ts`); data from `api/politicians.py` (`_chamber_field`, `_scored_on`) and `bill_service.stage_milestones` |
 | Action Center issue parts (shared with `/issue/[id]`: meta, tags, "What you can do", coverage, sources) | `frontend/src/components/action/IssueEnrichment.tsx` |
 | Where a member stands among peers (per-measure figure, expected, percentile, word by a fixed rule, template sentence) | `backend/app/peer_comparison.py`, `GET /api/{senators,representatives}/{id}/peers`, public breakdown `peerComparison` |
@@ -2845,6 +2846,30 @@ state in the query string is exposed to them.
   chips and the Documents filter's form are plain navigations, not
   replaceState; their links set `prefetch={false}`, since each prefetch of
   `/search?q=` would be a search with a query encode.
+
+#### Boxes, not blocks (2026-10)
+
+A record page leads with boxes, not paragraphs: `BoxGrid` and `RecordBox`
+(`src/components/shared/`), the homepage front page's vocabulary as one
+component pair. A box is a kicker, a title, **one** line, an optional figure
+(`RecordFigure`: stat, split, dots, countdown, the same union and drawing the
+front page uses), chips, and a "More" that keeps the full text in a native
+`<details>`. Nothing is dropped to make a page short: what a box's line
+doesn't say goes behind its "More". The grid is ruled in columns and reflows
+by its own width (one column under 40rem, two, then three at 62rem; container
+queries, so a side column or 200% text reflows too).
+
+The line follows one rule, the same as §7's: it is either `dek`, a
+**template the backend filled from stored fields** (dates, counts, the
+source's own labels; the bill page's come from `services/bill_boxes.py`), or
+`quote`, the **source's own words, credited** (`{ text, source }`: the bill
+page quotes the CRS summary's first sentence). Never model text, never a
+paraphrase written in the component, and never a count the frontend worked
+out: a count in a box is a field the backend served (backend owns
+calculations). A box whose content is a list (the days in the daily
+reports, related issues) takes a fixed label for a title, not a sentence.
+The bill page (`BillPageView.tsx`) is the first page built this way; a new
+record page, or a rebuilt one, should use the pair rather than a new card.
 
 #### Empty defaults are content (2026-10)
 

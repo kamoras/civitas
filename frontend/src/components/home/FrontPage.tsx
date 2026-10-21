@@ -1,16 +1,7 @@
 import Link from "next/link";
 import { connection } from "next/server";
 import type { ReactNode } from "react";
-import type {
-  CountdownFigure,
-  DotsFigure,
-  Figure,
-  FrontPage as FrontPageData,
-  FrontPageEntry,
-  FrontPageVote,
-  SplitFigure,
-  StatFigure,
-} from "@/types/frontPage";
+import type { FrontPage as FrontPageData, FrontPageEntry, FrontPageVote } from "@/types/frontPage";
 import { billHref, rollCallHref, shortDate, weekHref } from "@/lib/congress";
 import { nominationHref } from "@/lib/nominations";
 import { exploreHref } from "@/lib/exploreHref";
@@ -18,9 +9,11 @@ import { ACTION_CENTER_HREF, OPEN_COMMENTS_HREF, agencyHref, monitorHref } from 
 import { INLINE_LINK } from "@/lib/controlStyles";
 import { SHARE_SECTION_ATTR, shareMetaAttrs } from "@/lib/shareImage";
 import { absoluteUrl } from "@/lib/site";
-import { overlay, partyMark } from "@/lib/chartColors";
 import AmendmentPurpose from "@/components/congress/AmendmentPurpose";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
+import RecordFigure, { InlineRecordFigure, daysLeftWords } from "@/components/shared/RecordFigure";
+import { CHIP, Glyph, Kicker as BoxKicker } from "@/components/shared/RecordBox";
+import type { BoxTone } from "@/types/figure";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import YourMembersLink from "./YourMembersLink";
 
@@ -62,33 +55,19 @@ async function fetchFrontPage(): Promise<FrontPageData | null> {
   }
 }
 
-// A bordered command, the mockup's chip, sized to a 32px target.
-const CHIP =
-  "inline-flex min-h-8 items-center border border-ink-hi/60 px-2.5 text-sm text-ink-hi hover:border-phos hover:text-phos";
 const MORE = `${INLINE_LINK} mt-3 inline-flex min-h-6 items-center text-sm`;
 const RULE = "border-white/25";
 
 const CHAMBER = { senate: "Senate", house: "House" } as const;
 
-const KIND: Record<FrontPageEntry["kind"], { label: string; glyph: string; tone: string }> = {
-  closest: { label: "Closest vote", glyph: "=", tone: "text-signal-orange" },
-  loneBreak: { label: "Lone break", glyph: "1", tone: "text-signal-orange" },
-  law: { label: "Became law", glyph: "§", tone: "text-signal-orange" },
-  confirmed: { label: "Confirmed", glyph: "✓", tone: "text-signal-orange" },
-  comment: { label: "Comment deadline", glyph: "✎", tone: "text-phos" },
-  issue: { label: "In the news", glyph: "¶", tone: "text-ink-lo" },
+const KIND: Record<FrontPageEntry["kind"], { label: string; glyph: string; tone: BoxTone }> = {
+  closest: { label: "Closest vote", glyph: "=", tone: "record" },
+  loneBreak: { label: "Lone break", glyph: "1", tone: "record" },
+  law: { label: "Became law", glyph: "§", tone: "record" },
+  confirmed: { label: "Confirmed", glyph: "✓", tone: "record" },
+  comment: { label: "Comment deadline", glyph: "✎", tone: "done" },
+  issue: { label: "In the news", glyph: "¶", tone: "neutral" },
 };
-
-function Glyph({ children }: { children: ReactNode }) {
-  return (
-    <span
-      aria-hidden="true"
-      className="grid h-5 w-5 flex-none place-items-center border-[1.5px] border-current font-id text-[0.6875rem] leading-none"
-    >
-      {children}
-    </span>
-  );
-}
 
 function kicker(e: FrontPageEntry, lead: boolean): string {
   const parts: string[] = [];
@@ -112,10 +91,9 @@ function kicker(e: FrontPageEntry, lead: boolean): string {
 function Kicker({ entry, lead = false }: { entry: FrontPageEntry; lead?: boolean }) {
   const k = KIND[entry.kind];
   return (
-    <div className={`mb-1.5 flex items-center gap-2 text-sm font-semibold ${k.tone}`}>
-      <Glyph>{k.glyph}</Glyph>
-      <span className="min-w-0 [overflow-wrap:anywhere]">{kicker(entry, lead)}</span>
-    </div>
+    <BoxKicker mark={k.glyph} tone={k.tone}>
+      {kicker(entry, lead)}
+    </BoxKicker>
   );
 }
 
@@ -286,167 +264,6 @@ function Links({ entry }: { entry: FrontPageEntry }) {
   return <div className="mt-3 flex flex-wrap gap-2">{items}</div>;
 }
 
-// ── Figures ─────────────────────────────────────────────────────────
-
-const YEA = "var(--phos)";
-const NAY = "var(--signal-red)";
-
-function splitLabel(f: SplitFigure): string {
-  return `${f.yeas} yea to ${f.nays} nay. ${f.caption}.`;
-}
-
-function BigSplit({ f, size }: { f: SplitFigure; size: "lead" | "tier" }) {
-  return (
-    <div role="img" aria-label={splitLabel(f)}>
-      <div
-        className={`text-center font-display font-semibold leading-none text-ink-hi ${
-          size === "lead" ? "text-[3.5rem] sm:text-[4.5rem]" : "text-[2.125rem]"
-        }`}
-      >
-        {f.yeas}–{f.nays}
-      </div>
-      <div className="mt-1.5 text-center text-sm text-ink-lo">yeas to nays</div>
-      <SplitBar f={f} height={size === "lead" ? "h-6" : "h-3"} />
-      <div className="mt-1 flex justify-between gap-2 text-sm text-ink-lo">
-        <span>{f.yeas} yea</span>
-        <span>{f.nays} nay</span>
-      </div>
-      <div className="mt-0.5 text-center text-sm text-ink-hi">{f.caption}</div>
-    </div>
-  );
-}
-
-function SplitBar({ f, height }: { f: SplitFigure; height: string }) {
-  return (
-    <div className={`mt-3 flex gap-0.5 ${height}`}>
-      <span style={{ flex: f.yeas, background: YEA }} />
-      <span style={{ flex: f.nays, background: NAY }} />
-    </div>
-  );
-}
-
-function MiniSplit({ f }: { f: SplitFigure }) {
-  return (
-    <div role="img" aria-label={splitLabel(f)} className="mb-0.5 mt-1.5 w-full max-w-[180px]">
-      <div className="flex h-2 gap-px">
-        <span style={{ flex: f.yeas, background: YEA }} />
-        <span style={{ flex: f.nays, background: NAY }} />
-      </div>
-    </div>
-  );
-}
-
-// Dots per row: a Senate party in three rows, a House party (200-odd
-// members) in no more than eight.
-function dotColumns(n: number): number {
-  return n <= 60 ? 15 : n <= 150 ? 20 : 30;
-}
-
-function Dots({ f, mini = false }: { f: DotsFigure; mini?: boolean }) {
-  const cols = dotColumns(f.voting);
-  const rows = Math.ceil(f.voting / cols);
-  const pitch = 12;
-  const mark = partyMark(f.party);
-  return (
-    <div role="img" aria-label={`${f.caption}.`} className={mini ? "mt-1.5 max-w-[180px]" : ""}>
-      <svg
-        viewBox={`0 0 ${cols * pitch} ${rows * pitch}`}
-        className="block w-full max-w-[180px]"
-        aria-hidden="true"
-      >
-        {Array.from({ length: f.voting }, (_, i) => {
-          const breaker = i === f.voting - 1;
-          return (
-            <circle
-              key={i}
-              cx={(i % cols) * pitch + pitch / 2}
-              cy={Math.floor(i / cols) * pitch + pitch / 2}
-              r={breaker ? 3.6 : 4.4}
-              // The breaker is a ring, not another colour: told apart by
-              // shape, never by a party's colour.
-              fill={breaker ? "none" : mark}
-              stroke={breaker ? "var(--ink-hi)" : undefined}
-              strokeWidth={breaker ? 2 : undefined}
-            />
-          );
-        })}
-      </svg>
-      {!mini && <div className="mt-2 text-sm text-ink-lo">{f.caption}</div>}
-    </div>
-  );
-}
-
-function daysLeftWords(f: CountdownFigure): string {
-  return f.daysLeft === 0
-    ? "Comments close today"
-    : `${f.daysLeft} day${f.daysLeft === 1 ? "" : "s"} left to comment`;
-}
-
-function Elapsed({ f, className = "" }: { f: CountdownFigure; className?: string }) {
-  return (
-    <div
-      role="img"
-      aria-label={`${f.totalDays - f.daysLeft} of the period's ${f.totalDays} days gone. ${daysLeftWords(f)}.`}
-      className={`flex h-2 w-full max-w-[180px] ${className}`}
-      style={{ background: overlay(0.15) }}
-    >
-      <span style={{ width: `${f.elapsedPercent}%`, background: "var(--signal-amber)" }} />
-    </div>
-  );
-}
-
-function Countdown({ f }: { f: CountdownFigure }) {
-  return (
-    <div className="text-center">
-      <div className="font-display text-[2.125rem] font-semibold leading-none text-signal-amber">
-        {f.daysLeft === 0 ? "Today" : f.daysLeft}
-      </div>
-      <div className="mt-1 text-sm text-ink-lo">
-        {f.daysLeft === 0 ? "comments close" : `day${f.daysLeft === 1 ? "" : "s"} left`}
-      </div>
-      <Elapsed f={f} className="mx-auto mt-2" />
-    </div>
-  );
-}
-
-function Stat({ f, size }: { f: StatFigure; size: "lead" | "tier" }) {
-  return (
-    <div className="text-center">
-      <div
-        className={`font-display font-semibold leading-none text-ink-hi ${
-          size === "lead" ? "text-[3.5rem] sm:text-[4.5rem]" : "text-[2.125rem]"
-        }`}
-      >
-        {f.value}
-      </div>
-      <div className="mt-1.5 text-sm text-ink-lo">{f.caption}</div>
-    </div>
-  );
-}
-
-function BigFigure({ f, size }: { f: Figure; size: "lead" | "tier" }) {
-  switch (f.type) {
-    case "split":
-      return <BigSplit f={f} size={size} />;
-    case "dots":
-      return <Dots f={f} />;
-    case "countdown":
-      return <Countdown f={f} />;
-    case "stat":
-      return <Stat f={f} size={size} />;
-  }
-}
-
-/** A column item's small figure, where its data has one. */
-function InlineFigure({ entry }: { entry: FrontPageEntry }) {
-  const f = entry.figure;
-  if (!f) return null;
-  if (f.type === "split") return <MiniSplit f={f} />;
-  if (f.type === "dots") return <Dots f={f} mini />;
-  if (f.type === "countdown") return <Elapsed f={f} className="mb-0.5 mt-1.5" />;
-  return null;
-}
-
 // ── Layout ──────────────────────────────────────────────────────────
 
 function Headline({
@@ -485,7 +302,7 @@ function Lead({ entry }: { entry: FrontPageEntry }) {
       </div>
       {entry.figure && (
         <div className="self-center pt-4 md:pl-6 md:pt-0">
-          <BigFigure f={entry.figure} size="lead" />
+          <RecordFigure f={entry.figure} size="lead" />
         </div>
       )}
     </article>
@@ -506,7 +323,7 @@ function TierStory({ entry, second }: { entry: FrontPageEntry; second: boolean }
           <Dek entry={entry} lead={false} />
           <Links entry={entry} />
         </div>
-        {entry.figure && <BigFigure f={entry.figure} size="tier" />}
+        {entry.figure && <RecordFigure f={entry.figure} size="tier" />}
       </div>
     </article>
   );
@@ -543,7 +360,7 @@ function ColumnItem({ entry }: { entry: FrontPageEntry }) {
     <li className={`border-b py-2.5 last:border-b-0 ${RULE}`}>
       <Headline entry={entry} as="h4" className="mb-1 text-base leading-snug" />
       {entry.kind === "law" && <div className="mt-0.5 text-sm text-ink-lo">{entry.dek}</div>}
-      <InlineFigure entry={entry} />
+      <InlineRecordFigure f={entry.figure} />
       <div className="mt-0.5 text-sm text-ink-min">
         {itemMeta(entry)}
         {entry.kind === "issue" && entry.alsoDates.length > 0 && (
