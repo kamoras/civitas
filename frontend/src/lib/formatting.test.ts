@@ -1,4 +1,16 @@
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+
+const SRC = join(import.meta.dirname, "..");
+
+function sourceFiles(dir: string): string[] {
+  return readdirSync(dir).flatMap((entry) => {
+    const path = join(dir, entry);
+    if (statSync(path).isDirectory()) return sourceFiles(path);
+    return /\.tsx?$/.test(entry) && !/\.test\.tsx?$/.test(entry) ? [path] : [];
+  });
+}
 import {
   asLabel,
   cashOnHandDisplay,
@@ -10,6 +22,7 @@ import {
   isCommentPeriodOpen,
   formatCurrency,
   formatUtcDate,
+  midSentence,
   formatWeekRange,
   issueDateLabel,
   isNewFact,
@@ -299,5 +312,37 @@ describe("restatesTitle", () => {
     ).toBe(false);
     expect(restatesTitle("Senate passes the bill", "")).toBe(false);
     expect(restatesTitle("Senate passes the bill", undefined)).toBe(false);
+  });
+});
+
+describe("midSentence", () => {
+  it.each([
+    ["New House maps", "new House maps"],
+    ["Senate data run failed", "Senate data run failed"],
+    ["House member, TX-5", "House member, TX-5"],
+    ["October Quarterly", "October quarterly"],
+    ["APRIL QUARTERLY", "April quarterly"],
+    ["NEW HAMPSHIRE PRIMARY", "New Hampshire primary"],
+    ["Pre-General report", "pre-general report"],
+    ["Results in New Hampshire and West Virginia", "results in New Hampshire and West Virginia"],
+    ["FEC filings", "FEC filings"],
+  ])("%s -> %s", (label, lowered) => {
+    expect(midSentence(label)).toBe(lowered);
+  });
+
+  it("is the only way a label is lowered for display", () => {
+    // A bare lowercasing of a label or of all but its first letter dropped
+    // the capitals of House, Senate and state names (2026-10).
+    const helper = join("lib", "formatting.ts");
+    const offenders = sourceFiles(SRC)
+      .filter((file) => !file.endsWith(helper))
+      .flatMap((file) =>
+        (
+          readFileSync(file, "utf8").match(
+            /\.slice\(1\)\.toLowerCase\(\)|\{[\w.]*\b(?:label|labelOne)\.toLowerCase\(\)\}|\.replace\(\/\^\.\/, \(\w+\) => \w+\.toLowerCase\(\)\)/g
+          ) ?? []
+        ).map((m) => `${file.slice(SRC.length + 1)}: ${m}`)
+      );
+    expect(offenders).toEqual([]);
   });
 });

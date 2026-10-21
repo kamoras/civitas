@@ -40,7 +40,7 @@ from app.member_ids import resolve_member_id
 from app.issue_ids import to_public_id
 from app.models import ActionIssue, ExploreDocument, Justice, President, Representative, ScoreSnapshot, Senator
 from app.ordinals import ordinal
-from app.photos import bioguide_photo, justice_photo, president_photo
+from app.photos import bioguide_photo, justice_photo, members_without_photo, president_photo
 from app.pipeline.fetch.president_portraits import stored_portraits
 from app.pipeline.analyze.president_scorer import compute_president_overall_score
 from app.pipeline.analyze.score_calculator import compute_overall_score
@@ -140,6 +140,7 @@ def list_politicians(
 ) -> JSONResponse:
     """Return all currently-serving politicians as a unified directory."""
     issue_map = _build_active_issue_map(db)
+    no_photo = members_without_photo(db)
     results: list[dict] = []
     q_lower = q.lower() if q else None
 
@@ -162,7 +163,7 @@ def list_politicians(
                 "stateName": STATE_NAMES.get(s.state, s.state),
                 "district": None,
                 "role": "Senator",
-                "thumbnailUrl": bioguide_photo(s.bioguide_id),
+                "thumbnailUrl": bioguide_photo(s.bioguide_id, no_photo),
                 "hasScorecard": overall is not None,
                 "overallScore": overall,
                 "activeIssueCount": len(issue_map.get(s.id, [])),
@@ -191,7 +192,7 @@ def list_politicians(
                 "stateName": STATE_NAMES.get(r.state, r.state),
                 "district": getattr(r, "district", None),
                 "role": "Representative",
-                "thumbnailUrl": bioguide_photo(r.bioguide_id),
+                "thumbnailUrl": bioguide_photo(r.bioguide_id, no_photo),
                 "hasScorecard": overall is not None,
                 "overallScore": overall,
                 "activeIssueCount": len(issue_map.get(r.id, [])),
@@ -284,7 +285,7 @@ def _build_identity(branch: str, entity, db: Session | None = None) -> dict:
             "state": entity.state,
             "stateName": STATE_NAMES.get(entity.state, entity.state),
             "role": "Senator",
-            "thumbnailUrl": bioguide_photo(entity.bioguide_id),
+            "thumbnailUrl": bioguide_photo(entity.bioguide_id, members_without_photo(db) if db else ()),
             "yearsInOffice": entity.years_in_office,
             "contactFormUrl": entity.contact_form_url or "",
             "websiteUrl": entity.website_url or "",
@@ -304,7 +305,7 @@ def _build_identity(branch: str, entity, db: Session | None = None) -> dict:
             "stateName": STATE_NAMES.get(entity.state, entity.state),
             "district": getattr(entity, "district", None),
             "role": "Representative",
-            "thumbnailUrl": bioguide_photo(entity.bioguide_id),
+            "thumbnailUrl": bioguide_photo(entity.bioguide_id, members_without_photo(db) if db else ()),
             "contactFormUrl": entity.contact_form_url or "",
             "websiteUrl": entity.website_url or "",
             "isCurrent": entity.is_current,

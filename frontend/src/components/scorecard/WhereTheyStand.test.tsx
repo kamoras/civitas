@@ -53,7 +53,7 @@ function measure(over: Partial<PeerMeasure>): PeerMeasure {
     expected: 0.24,
     expectedBasis: "seat",
     median: 0.2,
-    peerGroup: { key: "caucus", label: "Senate Democrats", n: 3 },
+    peerGroup: { key: "caucus", label: "Senate Democrats", labelOne: "Senate Democrat", n: 3 },
     distribution: [0.13, 0.2, 0.3],
     distributionIds: ["pat-lee", "sam-ray", "ari-cole"],
     distributionNames: ["Pat Lee", "Sam Ray", "Ari Cole"],
@@ -116,6 +116,11 @@ describe("WhereTheyStand", () => {
       caption.closest("figcaption")?.id
     );
     expect(screen.getAllByText("well below peers")[0]).toBeInTheDocument();
+    // The table's caption keeps the group's capitals; the tick is a seat average.
+    expect(
+      screen.getAllByText(/every Senate Democrat's figure, lowest first/)[0]
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/seat average$/)[0]).toBeInTheDocument();
     // The measure over time, from the snapshots that kept it.
     expect(
       await screen.findByText(/Over time: 1\.0% on Mon, Oct 19, 2\.0% on Mon, Oct 26\./)

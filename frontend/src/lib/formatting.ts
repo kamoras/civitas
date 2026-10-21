@@ -1,3 +1,5 @@
+import { STATE_NAMES } from "./stateCodes";
+
 export function formatCurrency(amount: number): string {
   // Compact on magnitude, then re-attach the sign OUTSIDE the "$" so a
   // negative reads "-$1.0M", not "$-1,000,000". Operating on the raw value
@@ -28,7 +30,7 @@ export function formatCurrency(amount: number): string {
   if (abs > 0 && abs < 1) {
     return `${sign}$${Math.max(abs, 0.01).toFixed(2)}`;
   }
-  return `${sign}$${Math.round(abs).toLocaleString()}`;
+  return `${sign}$${Math.round(abs).toLocaleString("en-US")}`;
 }
 
 /** Cash on hand exactly as the FEC reports it, sign included: a negative
@@ -53,17 +55,24 @@ export function localDateStr(d: Date = new Date()): string {
 }
 
 /**
- * Format a date string ("YYYY-MM-DD") for display using the browser's locale.
- * Parses as local noon so the calendar date is always preserved regardless of timezone.
+ * Format a date string ("YYYY-MM-DD") for display, in US English and UTC by
+ * default. Never the runtime's locale or zone: pages render this on the
+ * server and hydrate it in the browser, and a reader whose browser says
+ * en-GB got "4 July 2026" where the server wrote "July 4, 2026", a
+ * hydration mismatch (React #418). The date is its own calendar day, read
+ * at UTC noon in UTC, so no zone can move it.
  */
 export function formatUtcDate(
   dateStr: string,
   opts: Intl.DateTimeFormatOptions = { year: "numeric", month: "long", day: "numeric" },
-  locale?: string
+  locale = "en-US"
 ): string {
   if (!dateStr) return "";
   try {
-    return new Date(dateStr + "T12:00:00").toLocaleDateString(locale, opts);
+    return new Date(dateStr + "T12:00:00Z").toLocaleDateString(locale, {
+      timeZone: "UTC",
+      ...opts,
+    });
   } catch {
     return dateStr;
   }
@@ -296,4 +305,71 @@ export function restatesTitle(title: string, summary: string | null | undefined)
   const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
   const s = norm(summary ?? "");
   return s.length > 0 && norm(title).includes(s);
+}
+
+// Words that keep their capital wherever they fall: the chambers and the
+// Court, the parties, months and days, and every state's name (matched
+// whole, so "New Hampshire" keeps both words).
+const PROPER_WORDS = new Set([
+  "House",
+  "Senate",
+  "Congress",
+  "Supreme",
+  "Court",
+  "Capitol",
+  "Democrat",
+  "Democrats",
+  "Democratic",
+  "Republican",
+  "Republicans",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
+]);
+const STATE_NAME_RE = new RegExp(
+  `\\b(?:${Object.values(STATE_NAMES)
+    .sort((a, b) => b.length - a.length)
+    .join("|")})\\b`,
+  "gi"
+);
+const STATE_BY_LOWER = new Map(Object.values(STATE_NAMES).map((n) => [n.toLowerCase(), n]));
+
+/**
+ * A label lowered to sit mid-sentence ("New House maps" -> "new House
+ * maps", "APRIL QUARTERLY" -> "April quarterly"): every word loses its
+ * capital except proper nouns (PROPER_WORDS, state names) and, in a label
+ * not written all in capitals, initials or codes ("FEC", "TX-5"). The one
+ * way a label is lowered for running text: a bare toLowerCase() printed
+ * "senate data run failed" and "house member, TX-5".
+ */
+export function midSentence(label: string): string {
+  const allCaps = label === label.toUpperCase();
+  const kept: string[] = [];
+  const masked = label.replace(
+    STATE_NAME_RE,
+    (name) => `\u0000${kept.push(STATE_BY_LOWER.get(name.toLowerCase()) ?? name) - 1}\u0000`
+  );
+  return masked
+    .replace(/[A-Za-z][A-Za-z'’-]*/g, (word) => {
+      const proper = word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+      if (PROPER_WORDS.has(proper)) return proper;
+      return !allCaps && word.length > 1 && word === word.toUpperCase() ? word : word.toLowerCase();
+    })
+    .replace(/\u0000(\d+)\u0000/g, (_, i: string) => kept[Number(i)]);
 }

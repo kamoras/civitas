@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.config_definitions import BillStage
 from app.models import CongressDay, Representative, RepSponsoredBill, RollCall, RollCallPosition, Senator, SponsoredBill
-from app.photos import bioguide_photo
+from app.photos import bioguide_photo, members_without_photo
 from app.pipeline.congress_activity import eastern_today
 from app.pipeline.fetch.bill_display_titles import cached_display_titles, titles_key
 from app.pipeline.fetch.congressional_record import congress_start
@@ -123,6 +123,7 @@ def state_members(db: Session, state: str) -> list[dict]:
     is the reader's own pick, sent in the URL and kept nowhere (AGENTS.md
     section 8)."""
     congress = settings.CURRENT_CONGRESS
+    no_photo = members_without_photo(db)
     members = [(m, "senate") for m in db.query(Senator).filter(
         Senator.state == state, Senator.is_current.is_(True)).order_by(Senator.name)]
     members += [(m, "house") for m in db.query(Representative).filter(
@@ -135,7 +136,7 @@ def state_members(db: Session, state: str) -> list[dict]:
         out.append({
             "id": m.id, "name": m.name, "party": m.party, "chamber": chamber, "state": m.state,
             "district": getattr(m, "district", None) if chamber == "house" else None,
-            "photo": bioguide_photo(m.bioguide_id),
+            "photo": bioguide_photo(m.bioguide_id, no_photo),
             "rollCalls": recorded, "chamberRollCalls": votes.get("chamberRollCalls", 0),
             "voted": recorded - missed, "missed": missed,
             "votes": [{"date": v["date"], "vote": v["vote"], "billId": v["billId"], "billName": v["billName"],

@@ -8,7 +8,7 @@
  * Center's top issue and its expanded secondary issues render one body, not a
  * full-size copy and a hand-compacted one that drift apart.
  *
- * Set in the records style (see PageMasthead, RecordIndex): small mono caps
+ * Set in the records style (see PageMasthead, the homepage front page): small mono caps
  * over a hairline for a section, hairline rows for items, the display face for
  * anything a person reads, underlined sentence-case links. No tinted boxes and
  * no per-block accent colour; colour is left for what is true about the data
@@ -46,7 +46,7 @@ import OnTheBallot from "@/components/action/OnTheBallot";
 import AgencyLink from "@/components/agencies/AgencyLink";
 import { exploreHref } from "@/lib/exploreHref";
 
-/** Hairline section header: the one used by RecordIndex and /elections. */
+/** Hairline section header: the one used on /elections. */
 export const SECTION_HEADING =
   "flex items-baseline justify-between gap-3 border-b border-white/15 pb-2 font-mono text-xs text-ink-min";
 

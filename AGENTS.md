@@ -1233,6 +1233,10 @@ pipeline. The model is YuNet from the OpenCV Zoo (MIT), vendored in
 `app/data/`; source and hash are in the calibration file. The endpoint reads
 the stored choice, and a member without one (a departed
 bill sponsor, or before the first run) gets the depiction-first rule. A
+member neither source has a photo of (a new member, before Congress.gov
+or bioguide posts one) is stored with no source, and every response that
+names the member sends no photo path (`photos.members_without_photo`), so
+the page shows initials instead of asking for a route that can only 404. A
 depiction is used only on Congress.gov's `/img/member/` path and only with
 the attribution Congress.gov gives it; one without falls back to bioguide,
 so the credit on `/about/data#privacy` stays true. Many
@@ -2426,7 +2430,7 @@ the pending list).
 | The chamber measure by measure (`/congress/members/measures`; replaced the leaderboard page, and `/leaderboard` redirects), compare's pair strips; the leaderboard API stays for the deprecated composite | `frontend/src/app/congress/members/measures/`, `frontend/src/components/compare/PairStrips.tsx`, `GET /api/congress/measures` (`peer_comparison.chamber_measures`); `backend/app/api/leaderboard.py`, `backend/app/score_display.py` (`score_spread`, `thin_dimensions`) |
 | Site navigation: sections, main menu, footer (site pages only), section tabs and hub cards | `frontend/src/lib/routes.ts` (`SECTIONS`), `frontend/src/components/layout/Navbar.tsx`, `Footer.tsx`, `SectionTabs.tsx`, `frontend/src/components/sections/SectionCards.tsx`, `frontend/src/lib/sectionPreviews.ts`, `backend/app/api/sections.py` |
 
-| Homepage (masthead, task boxes and registration closing, on-the-record entries, record index) | `frontend/src/components/home/Masthead.tsx`, `HomeTasks.tsx`, `StateJump.tsx`, `OnTheRecord.tsx` (from `backend/app/api/notable.py`), `RecordIndex.tsx`; the source ledger is on `/about/data#sources` (`frontend/src/components/about/SourceLedger.tsx`, `backend/app/api/sources.py`) |
+| Homepage (masthead, "Entered into the record" front page: lead, tier and Congress/Agencies/news columns by a fixed rule, task boxes and registration closing) | `frontend/src/components/home/Masthead.tsx`, `FrontPage.tsx` and `YourMembersLink.tsx` (from `GET /api/front-page`, `backend/app/api/notable.py`), `HomeTasks.tsx`, `StateJump.tsx`; the source ledger is on `/about/data#sources` (`frontend/src/components/about/SourceLedger.tsx`, `backend/app/api/sources.py`) |
 
 ## Conventions
 
@@ -2660,6 +2664,20 @@ the pending list).
 - The "this week" strip (`components/shared/ThisWeekStrip.tsx`) is an async
   server component; a client page gets it as a `strip` prop from its server
   `page.tsx`, never by fetching it on the client.
+- **What the server renders, the browser must render identically** (React
+  #418, 2026-10). Every `toLocale*String` names its locale ("en-US"), and a
+  date that is a calendar day is formatted in UTC (`formatUtcDate`);
+  `lib/localeStable.test.ts` holds it. The root layout renders no `<head>`
+  of its own: the flight payload sends a head's children as a lazy chunk,
+  and when it hadn't streamed in yet React suspended on the head, replayed
+  it and hydrated `<body>` against the head's first child, on a share of
+  loads of every page behind Cloudflare. The theme script is the body's
+  first child instead (`layoutStability.test.ts`).
+- A label lowered to sit mid-sentence goes through `midSentence`
+  (`lib/formatting.ts`), which keeps House, Senate, Congress, the parties,
+  months and state names capitalised; a bare `toLowerCase()` printed
+  "senate data run failed". A list shown by state name is sorted by name
+  (`byStateName`, `app/state_names.by_state_name`), not by postal code.
 - Every page's `<main>` is `id="main-content"`: the skip link targets it, and
   `globals.css` gives it `min-height: 100vh` so the footer never paints in the
   first screen while a client-fetched page loads and then jumps away (CLS

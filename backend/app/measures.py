@@ -78,8 +78,10 @@ MEASURES = (
                       "voted on opposite sides. A break is a vote with the other party's majority, "
                       "counted over this Congress; a vote against the party from its outer "
                       "flank (judged by the member's Voteview position) is not counted, and each "
-                      "measure counts once. The tick is the usual break rate for the same party in "
-                      "seats with the same Cook PVI lean, measured each run from every member. "
+                      "measure counts once. The tick is the seat average: the mean break rate for the "
+                      "same party in seats with the same Cook PVI lean, measured each run from every "
+                      "member. A few members break often and most rarely, so most sit below the "
+                      "average and the peers' middle is lower than it. "
                       "Fewer than 20 party-line votes draws no word.")),
     Measure("pacMoney", "Money from PACs", "fundingIndependence",
             "higher means more of the money came from PACs", "share", _FEC,
@@ -115,7 +117,7 @@ MEASURES = (
                       "11 CFR 104.3(a)(4)); the rest are filed as one unnamed total. ActBlue and "
                       "WinRed name every donor whatever the size, so gifts through them are left "
                       "out and the share undercounts small donors; a campaign that names every "
-                      "donor shows no figure. The tick is the share expected for a state of that "
+                      "donor shows no figure. The tick is the average share for a state of that "
                       "size for a senator, the peer median for a representative."),
             window="election"),
     Measure("billsMoved", "Bills past committee", "legislativeEffectiveness",
