@@ -71,7 +71,7 @@ describe("MeasuresClient", () => {
   it("lists the chamber alphabetically, sorts by a fact, filters, and ranks no one", async () => {
     render(<MeasuresClient chamber="senate" data={DATA} />);
     expect(
-      screen.getByRole("heading", { level: 1, name: "The Senate, measure by measure" })
+      screen.getByRole("heading", { level: 1, name: "The Senate by the numbers" })
     ).toBeInTheDocument();
     expect(screen.getByText("Furthest above expected")).toBeInTheDocument();
     const table = screen.getByRole("table");
