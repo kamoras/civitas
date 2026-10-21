@@ -44,7 +44,7 @@ MACHINES = ("aarch64", "x86_64")
 # every pin that went unused with it.
 DIRECT = {
     "alembic", "apscheduler", "atproto", "certifi", "cryptography", "cssselect", "defusedxml",
-    "diff-cover", "fastapi", "httptools", "httpx", "lxml", "mcp", "numpy",
+    "diff-cover", "fastapi", "httptools", "httpx", "huggingface-hub", "lxml", "mcp", "numpy",
     "opencv-python-headless",
     "packaging", "pdfplumber", "pillow", "playwright", "pydantic",
     "pydantic-settings", "pytesseract", "pytest", "pytest-asyncio",

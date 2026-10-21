@@ -1,7 +1,7 @@
 "use client";
 
 import RelatedVotes from "@/components/action/RelatedVotes";
-import { Suspense, useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { Suspense, useEffect, useMemo, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
@@ -13,30 +13,34 @@ import { fetchActionIssues, fetchOpenComments, OpenCommentItem } from "@/lib/api
 import { useAsyncData, type AsyncData } from "@/hooks/useAsyncData";
 import {
   commentPeriodToday,
-  describeDaysLeft,
   formatUtcDate,
+  issueRef,
   policyAreaLabel,
   restatesTitle,
 } from "@/lib/formatting";
 import ShareButtons from "@/components/action/ShareButtons";
-import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
+import ContactYourMembers from "@/components/action/ContactYourMembers";
+import TrackedLink from "@/components/action/TrackedLink";
 import { focusTabWhenSelected, keepFocusOnSelectedTab, retryKeepingFocus } from "@/lib/tabFocus";
 import BackToTop from "@/components/BackToTop";
 import {
+  billLink,
   Coverage,
   DevelopingDisclosure,
+  followResultsActions,
+  IssueCommands,
   IssueImage,
-  IssueMeta,
-  IssueTags,
-  SECTION_HEADING,
+  OutletLink,
   SourceList,
-  SummarySource,
   TAP_TARGET,
   TEXT_LINK,
   WhatYouCanDo,
 } from "@/components/action/IssueEnrichment";
+import BoxGrid from "@/components/shared/BoxGrid";
+import RecordBox, { ACTION, CHIP } from "@/components/shared/RecordBox";
 import type { ActionIssue, ActionIssuesResponse } from "@/types/action";
 import { countIsOfficial } from "@/lib/developing";
+import { CHAMBER_NAME, rollCallHref } from "@/lib/congress";
 import { tabControl } from "@/lib/controlStyles";
 import { OPEN_COMMENTS_HREF, issuesUrl } from "@/lib/routes";
 import AgencyLink from "@/components/agencies/AgencyLink";
@@ -95,234 +99,244 @@ function isValidTab(s: string | null): s is Tab {
   return s !== null && TABS.some((t) => t.id === s);
 }
 
+/** "Oct 19", or "Oct 19, updated Oct 20" for a story re-matched to fresh
+ *  coverage (the day it appears under is `date`; it surfaced earlier). */
+function shortDated(issue: ActionIssue): string {
+  const short = (d: string) => formatUtcDate(d, { month: "short", day: "numeric" });
+  return issue.firstSurfaced && issue.firstSurfaced !== issue.date
+    ? `${short(issue.firstSurfaced)}, updated ${short(issue.date)}`
+    : short(issue.date);
+}
+
 /**
- * Everything below an issue's title: the same content, in the same order, for
- * the top issue and for an expanded secondary one.
+ * One issue as a record box (AGENTS.md, "Boxes, not blocks"): the outlet's
+ * own headline, its quoted line credited to the outlet, the policy area and
+ * the day, the ongoing story it belongs to, the bills and votes it links,
+ * and its commands as buttons. Everything else the issue has (its picture,
+ * every row of "What you can do", the related votes with their tallies, the
+ * quoted coverage, the sources, sharing) is behind its "More". The top
+ * issue spans the grid and carries the reader's own members' panel.
  */
-function IssueBody({
+function IssueBox({
   issue,
   today,
-  headingLevel,
-  onMonitor,
-}: {
-  issue: ActionIssue;
-  today: string;
-  headingLevel: "h3" | "h4";
-  onMonitor: (slug: string) => void;
-}) {
-  return (
-    <>
-      {!restatesTitle(issue.title, issue.summary) && (
-        <p className="mb-4 max-w-3xl font-sans text-base leading-relaxed text-ink sm:text-[17px]">
-          {issue.summary}
-          <SummarySource issue={issue} />
-        </p>
-      )}
-      {issue.status === "developing" && (
-        <DevelopingDisclosure
-          sourceType={issue.sourceType}
-          countOfficial={countIsOfficial(issue)}
-        />
-      )}
-      <IssueTags issue={issue} onMonitor={onMonitor} />
-
-      <RelatedVotes issue={issue} headingLevel={headingLevel} />
-      <WhatYouCanDo issue={issue} today={today} headingLevel={headingLevel} />
-      <Coverage issue={issue} headingLevel={headingLevel} />
-
-      <div className="mt-8 flex flex-col gap-3 border-t border-white/[0.07] pt-4">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
-          <SourceList issue={issue} />
-          <a href={`/issue/${issue.publicId}`} className={`${TEXT_LINK} ${TAP_TARGET}`}>
-            Read full story →
-          </a>
-        </div>
-        <ShareButtons issue={issue} />
-      </div>
-    </>
-  );
-}
-
-function HeroIssue({
-  issue,
-  today,
-  isDeepLinked = false,
-  onMonitor,
-}: {
-  issue: ActionIssue;
-  today: string;
-  isDeepLinked?: boolean;
-  onMonitor: (slug: string) => void;
-}) {
-  const heroRef = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    if (isDeepLinked && heroRef.current) {
-      heroRef.current.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
-    }
-  }, [isDeepLinked]);
-
-  return (
-    <article
-      ref={heroRef}
-      {...{ [SHARE_SECTION_ATTR]: `issue-${issue.publicId}` }}
-      className="border border-white/25 border-t-3 bg-surface p-5 sm:p-8"
-    >
-      <IssueMeta issue={issue} lead="Top issue" />
-      <h2 className="mb-4 mt-3 text-balance font-display text-2xl font-semibold leading-tight text-ink-hi sm:text-[28px]">
-        {issue.title}
-      </h2>
-      <IssueImage issue={issue} priority />
-      <IssueBody issue={issue} today={today} headingLevel="h3" onMonitor={onMonitor} />
-    </article>
-  );
-}
-
-function SecondaryIssue({
-  issue,
-  today,
+  lead = false,
   deepLinked = false,
   onToggle,
   onMonitor,
 }: {
   issue: ActionIssue;
   today: string;
+  lead?: boolean;
   deepLinked?: boolean;
   onToggle?: (id: string, expanded: boolean) => void;
   onMonitor: (slug: string) => void;
 }) {
-  const [expanded, setExpanded] = useState(deepLinked);
-  const cardRef = useRef<HTMLElement>(null);
+  const id = `issue-${issue.publicId}`;
 
-  // If this issue is deep-linked, expand and scroll to it once data is ready
+  // A deep link opens the box's "More" (below) and scrolls it into view
+  // once the grid has rendered.
   useEffect(() => {
-    if (deepLinked) {
-      setExpanded(true);
-      // Delay slightly so the panel renders before scrolling
-      const t = setTimeout(() => {
-        cardRef.current?.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
-      }, 100);
-      return () => clearTimeout(t);
-    }
-  }, [deepLinked]);
+    if (!deepLinked) return;
+    const t = setTimeout(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
+    }, 100);
+    return () => clearTimeout(t);
+  }, [deepLinked, id]);
 
-  function handleToggle() {
-    const next = !expanded;
-    setExpanded(next);
-    onToggle?.(issue.publicId, next);
-  }
+  const developing = issue.status === "developing";
+  const kicker = [
+    lead ? "Top issue" : null,
+    ...(issue.policyAreas ?? []).map(policyAreaLabel),
+    shortDated(issue),
+    developing ? "Developing" : null,
+    issue.isTrending ? "Trending" : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const quoted = !!issue.summary && !restatesTitle(issue.title, issue.summary);
+  const outlets = issue.sourceNames ?? [];
+  const line = quoted
+    ? {
+        quote: {
+          text: issue.summary,
+          source: issue.summarySource ? (
+            <OutletLink name={issue.summarySource} url={issue.summarySourceUrl} />
+          ) : (
+            outlets.join(" · ")
+          ),
+        },
+      }
+    : { dek: outlets.length > 0 ? `Reported by ${outlets.join(", ")}` : undefined };
+  const monitors = issue.relatedMonitors ?? [];
+  const bills = issue.relatedBills ?? [];
+  const votes = issue.relatedVotes ?? [];
+  const ownMembers = lead && followResultsActions(issue).length === 0;
 
   return (
-    <li className="border-b border-white/[0.07]">
-      <article ref={cardRef} {...{ [SHARE_SECTION_ATTR]: `issue-${issue.publicId}` }}>
-        <h3>
-          <button
-            onClick={handleToggle}
-            className="flex w-full items-start gap-4 py-4 text-left"
-            aria-expanded={expanded}
-            aria-controls={`issue-detail-${issue.id}`}
-          >
-            {!expanded && <IssueImage issue={issue} size="thumbnail" />}
-            <span className="min-w-0 flex-1">
-              <IssueMeta issue={issue} as="span" />
-              {(issue.policyAreas ?? []).length > 0 && (
-                <span className="mt-1 block font-mono text-xs text-ink-lo">
-                  {issue.policyAreas.map(policyAreaLabel).join(" · ")}
-                </span>
-              )}
-              <span className="mt-1.5 block font-display text-lg font-semibold leading-snug text-ink-hi">
-                {issue.title}
-              </span>
-              {!expanded && !restatesTitle(issue.title, issue.summary) && (
-                <span className="mt-1 line-clamp-2 block font-sans text-[15px] leading-relaxed text-ink-lo">
-                  {issue.summary}
-                </span>
-              )}
-            </span>
-            <span
-              className="mt-0.5 shrink-0 font-mono text-lg leading-none text-ink-min"
-              aria-hidden="true"
-              {...{ [SHARE_EXCLUDE_ATTR]: "" }}
-            >
-              {expanded ? "−" : "+"}
-            </span>
-          </button>
-        </h3>
-
-        {expanded && (
-          <div id={`issue-detail-${issue.id}`} className="pb-6">
+    <RecordBox
+      id={id}
+      share={id}
+      lead={lead}
+      compact={!lead}
+      kicker={kicker}
+      mark={lead ? "!" : undefined}
+      tone={developing ? "deadline" : lead ? "record" : "neutral"}
+      title={issue.title}
+      href={`/issue/${issue.publicId}`}
+      {...line}
+      below={
+        <div className="grid gap-3">
+          {developing && (
+            <DevelopingDisclosure
+              sourceType={issue.sourceType}
+              countOfficial={countIsOfficial(issue)}
+            />
+          )}
+          {(monitors.length > 0 || bills.length > 0 || votes.length > 0) && (
+            <div className="flex flex-wrap gap-2">
+              {monitors.map(({ slug, title }) => (
+                // In place: a <Link> to this same route is a soft navigation
+                // the page never re-reads (it latches ?monitor= at mount).
+                <button key={slug} onClick={() => onMonitor(slug)} className={CHIP}>
+                  Ongoing: {title}
+                </button>
+              ))}
+              {bills.map((bill) => {
+                const { href, internal } = billLink(bill);
+                return (
+                  <TrackedLink
+                    key={bill.id}
+                    issuePublicId={issue.publicId}
+                    kind="bill"
+                    href={href}
+                    internal={internal}
+                    className={CHIP}
+                    ariaLabel={`${bill.id}: ${bill.name}`}
+                  >
+                    {bill.id}
+                  </TrackedLink>
+                );
+              })}
+              {votes.map((v) => (
+                <Link
+                  key={`${v.chamber}-${v.congress}-${v.session}-${v.number}`}
+                  href={rollCallHref(v)}
+                  className={CHIP}
+                >
+                  {CHAMBER_NAME[v.chamber]} vote {v.number}
+                </Link>
+              ))}
+            </div>
+          )}
+          <IssueCommands issue={issue} today={today} className={ACTION} />
+          {ownMembers && (
+            <ContactYourMembers
+              issue={issue}
+              afterNamed={(issue.relatedSenators ?? []).length > 0}
+            />
+          )}
+        </div>
+      }
+      more={{
+        label: "every action, the coverage and sources",
+        open: deepLinked,
+        onToggle: onToggle && ((open) => onToggle(issue.publicId, open)),
+        children: (
+          <>
             <IssueImage issue={issue} />
-            <IssueBody issue={issue} today={today} headingLevel="h4" onMonitor={onMonitor} />
-          </div>
-        )}
-      </article>
-    </li>
+            <WhatYouCanDo
+              issue={issue}
+              today={today}
+              headingLevel="h4"
+              ownMembers={!ownMembers}
+              className="mt-1"
+            />
+            <RelatedVotes issue={issue} headingLevel="h4" />
+            <Coverage issue={issue} headingLevel="h4" />
+            <div className="mt-8 flex flex-col gap-3 border-t border-white/[0.07] pt-4">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+                <SourceList issue={issue} />
+                <a href={`/issue/${issue.publicId}`} className={`${TEXT_LINK} ${TAP_TARGET}`}>
+                  Read full story ({issueRef(issue.publicId)}) →
+                </a>
+              </div>
+              <ShareButtons issue={issue} />
+            </div>
+          </>
+        ),
+      }}
+    />
   );
 }
 
+/** The Federal Register's open comment periods, one box each: the agency's
+ *  own title, the days left as a countdown (the backend's commentWindow),
+ *  the comment link, and the abstract, as the Register printed it, behind
+ *  "More". */
 function OpenComments() {
-  // The clock is read once, when the comment periods land, and carried
-  // alongside them. Reading it again on every render would make the countdown
-  // depend on when React happened to re-render — a value that changes without
-  // any input changing is exactly what a render is not allowed to produce.
-  const [loaded, setLoaded] = useState<{ items: OpenCommentItem[]; asOf: number } | null>(null);
+  const [items, setItems] = useState<OpenCommentItem[] | null>(null);
 
   useEffect(() => {
     fetchOpenComments()
-      .then((items) => setLoaded({ items, asOf: Date.now() }))
+      .then(setItems)
       .catch(() => {});
   }, []);
 
-  if (!loaded || loaded.items.length === 0) return null;
+  if (!items || items.length === 0) return null;
 
   return (
-    <section aria-labelledby="open-comments-heading" className="mt-12">
-      <h2 id="open-comments-heading" className={SECTION_HEADING}>
-        <span>Open for public comment</span>
-        <Link href={OPEN_COMMENTS_HREF} className="text-ink-lo hover:text-ink-hi">
-          Every open comment period →
-        </Link>
-      </h2>
-      <ul>
-        {loaded.items.map((item) => (
-          <li
+    <BoxGrid
+      columns={2}
+      label="Open for public comment"
+      labelId="open-comments-heading"
+      labelHref={OPEN_COMMENTS_HREF}
+      labelHrefText="Every open comment period"
+      className="mt-12"
+    >
+      {items.map((item) => {
+        const abstract = item.summary || item.firstSentence;
+        return (
+          <RecordBox
             key={item.id}
-            className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 border-b border-white/[0.07] py-3"
-          >
-            <span className="min-w-0">
-              <span className="block font-mono text-xs text-ink-min">
+            compact
+            tone="deadline"
+            kicker={
+              <>
                 <AgencyLink name={item.agencyName} slug={item.agencySlug} />
                 {item.agencyName && item.docType ? " · " : ""}
                 {item.docType?.replace(/_/g, " ")}
-              </span>
-              <Link
-                href={exploreHref(item)}
-                className="mt-0.5 block font-sans text-[15px] leading-snug text-ink-hi hover:underline"
-              >
-                {item.title}
-              </Link>
-              {item.firstSentence && (
-                // The abstract's opening sentence, as the Register printed it.
-                <span className="mt-1 block font-sans text-sm leading-snug text-ink-lo">
-                  {item.firstSentence}
-                </span>
-              )}
-            </span>
-            <span className="text-right">
-              <span className="block whitespace-nowrap font-mono text-xs text-signal-amber">
-                {describeDaysLeft(item.commentsCloseOn, loaded.asOf)}
-              </span>
-              <Link
-                href={`${exploreHref(item)}#comment`}
-                className={`${TEXT_LINK} ${TAP_TARGET} mt-1 sm:inline-block`}
-              >
-                Comment →
-              </Link>
-            </span>
-          </li>
-        ))}
-      </ul>
-    </section>
+              </>
+            }
+            title={item.title}
+            href={exploreHref(item)}
+            figure={item.commentWindow ? { type: "countdown", ...item.commentWindow } : null}
+            action={{
+              label: "Comment",
+              href: `${exploreHref(item)}#comment`,
+              ariaLabel: `Comment on ${item.title}`,
+            }}
+            more={
+              abstract
+                ? {
+                    label: "the agency's summary",
+                    children: (
+                      <figure>
+                        <blockquote>
+                          <p>{abstract}</p>
+                        </blockquote>
+                        <figcaption className="mt-1 text-ink-min">
+                          {item.agencyName ? `${item.agencyName}, in the` : "The"} Federal Register
+                        </figcaption>
+                      </figure>
+                    ),
+                  }
+                : null
+            }
+          />
+        );
+      })}
+    </BoxGrid>
   );
 }
 
@@ -355,12 +369,27 @@ function IssuesTab({
   return (
     <div>
       {heroIssue ? (
-        <HeroIssue
-          issue={heroIssue}
-          today={today}
-          isDeepLinked={initialIssueId === heroIssue.publicId}
-          onMonitor={onMonitor}
-        />
+        <BoxGrid
+          columns={2}
+          // A developing seat flip is listed beside the newest day whatever
+          // its own date (backend _latest_current_issues).
+          label={
+            secondaryIssues.every((i) => i.date === heroIssue.date) ? "Issues this day" : "Issues"
+          }
+          labelId="issues-heading"
+        >
+          {issues.map((issue, i) => (
+            <IssueBox
+              key={issue.id}
+              issue={issue}
+              today={today}
+              lead={i === 0}
+              deepLinked={initialIssueId === issue.publicId}
+              onToggle={(id, expanded) => onIssueChange?.(expanded ? id : null)}
+              onMonitor={onMonitor}
+            />
+          ))}
+        </BoxGrid>
       ) : (
         <p className="border-l-2 border-ink-min/60 py-2 pl-4 font-sans text-base text-ink-lo">
           {selectedDate
@@ -370,33 +399,6 @@ function IssuesTab({
               "Nothing from this day is still on the Action Center. Its top issue is kept in the Archive."
             : "No issues on the record for this day yet. The Action Center refreshes hourly."}
         </p>
-      )}
-
-      {secondaryIssues.length > 0 && (
-        <section aria-labelledby="more-issues-heading" className="mt-12">
-          <h2 id="more-issues-heading" className={SECTION_HEADING}>
-            <span>
-              {/* A developing seat flip is listed beside the newest day
-                  whatever its own date (backend _latest_current_issues). */}
-              {secondaryIssues.every((i) => i.date === heroIssue?.date)
-                ? "More issues this day"
-                : "More issues"}
-            </span>
-            <span aria-hidden="true">{secondaryIssues.length}</span>
-          </h2>
-          <ul>
-            {secondaryIssues.map((issue) => (
-              <SecondaryIssue
-                key={issue.id}
-                issue={issue}
-                today={today}
-                deepLinked={initialIssueId === issue.publicId}
-                onToggle={(id, expanded) => onIssueChange?.(expanded ? id : null)}
-                onMonitor={onMonitor}
-              />
-            ))}
-          </ul>
-        </section>
       )}
 
       <OpenComments />
@@ -495,7 +497,7 @@ function DayPager({
 const ACTION_EYEBROW = "Action Center · what is moving right now";
 const ACTION_TITLE = "Today on the record";
 const ACTION_LEDE =
-  "Issues surfaced from news and social coverage, the ongoing concerns they belong to, and the members of Congress who can act. Every item links back to its source.";
+  "Issues from the news, and who in Congress can act. Every item links to its source.";
 
 export default function ActionPage() {
   return (

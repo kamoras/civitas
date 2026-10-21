@@ -744,6 +744,28 @@ def _court_finding_stale(ctx: Context) -> str | None:
             f"at it and rerun with --write-finding (research dependencies, scripts/requirements-research.txt).")
 
 
+# /environmental's grid factor is the EPA's eGRID U.S. average, published in
+# a new edition every year or so (environmental.json `grid.edition`). It is
+# typed from the edition's summary tables, so a newer edition is a person's
+# job: monthly, the EPA's summary page is read and an alert names the newer
+# edition. An unreadable page says nothing (it is checked again next month).
+_EGRID_SUMMARY = "https://www.epa.gov/egrid/summary-data"
+
+
+def _egrid_stale(ctx: Context) -> str | None:
+    if ctx.tried_within(30):
+        return UNCHECKED
+    _record_try(ctx.name, "edition check")
+    have = re.fullmatch(r"eGRID(\d{4})", str((ctx.doc.get("grid") or {}).get("edition") or ""))
+    page = _get_text(_EGRID_SUMMARY) if have else None
+    editions = {int(y) for y in re.findall(r"eGRID ?(20\d{2})", page or "")}
+    if not have or not editions or max(editions) <= int(have[1]):
+        return None
+    return (f"EPA has published eGRID{max(editions)} (/environmental uses {have[0]}). Update "
+            f"environmental.json's `grid` (lbCo2ePerMWh, edition, source, date) from its summary tables' "
+            f"U.S. total output emission rate: {_EGRID_SUMMARY}")
+
+
 # Site search's ranking and its fusion with Explore (scripts/calibrate_site_
 # search.py, calibrate_search_fusion.py) are fitted on known-item probes
 # built from the index, per kind of entity. A kind the fit never saw is
@@ -929,6 +951,7 @@ DATA_FILES: list[DataFile] = [
              due=_every(30), gate=_agency_crosswalk_gate, timeout_s=300),
     DataFile(OCCUPATION_FILE, stale=_occupation_industry_stale),
     DataFile("court_finding.json", stale=_court_finding_stale),
+    DataFile("environmental.json", stale=_egrid_stale),
     DataFile("site_search_calibration.json", stale=_search_kinds_stale("calibrate_site_search.py")),
     DataFile("search_fusion_calibration.json", stale=_search_kinds_stale("calibrate_search_fusion.py")),
     DataFile("ces_member_approval.json", stale=_ces_stale),

@@ -17,6 +17,7 @@ from app.api.response_helpers import JSONResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app import environmental
 from app.api.response_helpers import CACHE_TTL_LIST_S, cached_json
 from app.config import settings
 from app.database import get_db
@@ -116,3 +117,11 @@ def source_ledger(db: Session) -> list[dict]:
 @router.get("/sources")
 def sources(db: Session = Depends(get_db)) -> JSONResponse:
     return cached_json({"sources": source_ledger(db)}, max_age=CACHE_TTL_LIST_S)
+
+
+@router.get("/environmental")
+def environmental_figures(db: Session = Depends(get_db)) -> JSONResponse:
+    """/environmental's boxes: what running the site costs, each figure with
+    its source and date (app/environmental.py); the machine, the models and
+    the pipelines' hours are read as asked for."""
+    return cached_json(environmental.payload(db), max_age=CACHE_TTL_LIST_S)

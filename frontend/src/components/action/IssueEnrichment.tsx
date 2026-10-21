@@ -362,7 +362,7 @@ interface ActionRow {
  * `today` is passed in rather than read from the clock so a server-rendered page
  * and its hydration agree on whether a comment period is still open.
  */
-function actionRows(issue: ActionIssue, today: string): ActionRow[] {
+function actionRows(issue: ActionIssue, today: string, ownMembers = true): ActionRow[] {
   const rows: ActionRow[] = [];
 
   // A roll-call issue's vote on its page here, every member's position by
@@ -453,7 +453,7 @@ function actionRows(issue: ActionIssue, today: string): ActionRow[] {
   // contact form refuses an address outside the district), so when the
   // only contact row was a member from another state, a reader anywhere
   // else had nothing on the page they could complete.
-  if (followResultsActions(issue).length === 0) {
+  if (ownMembers && followResultsActions(issue).length === 0) {
     rows.push({
       key: "your-members",
       verb: "Contact",
@@ -602,13 +602,17 @@ export function WhatYouCanDo({
   today,
   className = "mt-8",
   headingLevel = "h3",
+  ownMembers = true,
 }: {
   issue: ActionIssue;
   today: string;
   className?: string;
   headingLevel?: "h2" | "h3" | "h4";
+  /** The reader's own members' row; false where the page shows
+   *  ContactYourMembers beside the list (the Action Center's top issue). */
+  ownMembers?: boolean;
 }) {
-  const rows = actionRows(issue, today);
+  const rows = actionRows(issue, today, ownMembers);
   const Heading = headingLevel;
   return (
     <section className={className}>
@@ -661,9 +665,126 @@ export function WhatYouCanDo({
   );
 }
 
+/** A command on an issue box: a short label for one of the rows above. */
+interface IssueCommand {
+  key: string;
+  label: string;
+  href: string;
+  internal: boolean;
+  tap?: ActionTapKind;
+  ariaLabel?: string;
+}
+
+/**
+ * The issue's commands, one button each, for its box on the Action Center:
+ * the vote or the live count it reports, call or write each member the
+ * coverage names, the likely committee, and each rule still open for
+ * comment. Every one is a row of "What you can do" (behind the box's
+ * "More", with its detail); documents to read stay there only.
+ */
+export function issueCommands(issue: ActionIssue, today: string): IssueCommand[] {
+  const out: IssueCommand[] = [];
+  for (const a of issue.actions ?? []) {
+    if (a.type === "roll_call" && a.url?.startsWith("/congress/votes/"))
+      out.push({ key: "roll-call", label: "See the roll call", href: a.url, internal: true });
+  }
+  followResultsActions(issue).forEach((a, i) =>
+    out.push({ key: `results-${i}`, label: "Follow the count", href: a.url!, internal: true })
+  );
+  for (const m of issue.relatedSenators ?? []) {
+    const who = `${m.chamber === "house" ? "Rep." : "Sen."} ${m.name}`;
+    const form = safeHref(m.contactFormUrl || m.websiteUrl || null);
+    if (m.officePhone)
+      out.push({
+        key: `call-${m.id}`,
+        label: `Call ${who}`,
+        href: `tel:${m.officePhone.replace(/[^0-9+]/g, "")}`,
+        internal: false,
+        tap: "call",
+        ariaLabel: `Call ${who}'s office, ${m.officePhone}`,
+      });
+    else if (form)
+      out.push({
+        key: `write-${m.id}`,
+        label: `Write to ${who}`,
+        href: form,
+        internal: false,
+        tap: "write",
+      });
+  }
+  for (const a of issue.actions ?? []) {
+    const c = a.type === "contact_committee" ? a.committee : null;
+    const href = c ? safeHref(c.url ?? a.url ?? null) : null;
+    if (!c || !href) continue;
+    out.push({
+      key: `committee-${c.code}`,
+      label: "Likely committee",
+      href,
+      internal: false,
+      tap: "committee",
+      ariaLabel: `Likely committee: ${c.name}`,
+    });
+  }
+  const seen = new Set<number>();
+  for (const a of issue.actions ?? []) {
+    if (a.type !== "comment_period" || !a.docId || !a.closesOn) continue;
+    if (a.closesOn < today || seen.has(a.docId)) continue;
+    seen.add(a.docId);
+    const doc = issue.relatedExploreDocs?.find((d) => d.id === a.docId);
+    const label = `Comment by ${formatUtcDate(a.closesOn, { month: "short", day: "numeric" })}`;
+    out.push({
+      key: `comment-${a.docId}`,
+      label,
+      href: `${exploreHref({ id: a.docId, key: a.docKey })}#comment`,
+      internal: true,
+      tap: "comment",
+      ariaLabel: doc ? `${label} on ${doc.title}` : undefined,
+    });
+  }
+  return out;
+}
+
+/** The commands as a row of buttons, each tap counted (TrackedLink). */
+export function IssueCommands({
+  issue,
+  today,
+  className,
+}: {
+  issue: ActionIssue;
+  today: string;
+  className: string;
+}) {
+  const commands = issueCommands(issue, today);
+  if (commands.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-2">
+      {commands.map((c) =>
+        c.tap ? (
+          <TrackedLink
+            key={c.key}
+            issuePublicId={issue.publicId}
+            kind={c.tap}
+            href={c.href}
+            internal={c.internal}
+            className={className}
+            ariaLabel={c.ariaLabel}
+          >
+            {c.label}
+            {!c.internal && !c.href.startsWith("tel:") && <span aria-hidden="true">&nbsp;↗</span>}
+          </TrackedLink>
+        ) : (
+          <Link key={c.key} href={c.href} className={className} aria-label={c.ariaLabel}>
+            {c.label}
+          </Link>
+        )
+      )}
+    </div>
+  );
+}
+
 /** An outlet's name, linking the article a line was quoted from when the
  *  issue records it (issues before 2026-10 record only the name). */
-function OutletLink({ name, url }: { name: string; url?: string | null }) {
+export function OutletLink({ name, url }: { name: string; url?: string | null }) {
   const href = safeHref(url);
   return href ? (
     <a
