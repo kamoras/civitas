@@ -14,9 +14,12 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import httpx
 import pytest
 
 from app.pipeline.fetch import ballot_measures_id as idaho
+from app.pipeline.fetch.ballot_measure_pdf_sources import source_for_state
+from app.pipeline.fetch.ballot_measures_pdf import discover_pdf_url_checked
 
 FIXTURE = json.loads((Path(__file__).parent / "fixtures_id_voter_pamphlet_2026.json").read_text())
 
@@ -110,3 +113,55 @@ def test_unrecognised_measure_heading_fails_rather_than_being_skipped():
     ]}
     with pytest.raises(ValueError):
         idaho.parse_document(_pages(renamed))
+
+
+# The page voteidaho.gov redirected every address to (302) from 2026-10-21,
+# trimmed from the real archive.voteidaho.gov/index.html: its dropdown and
+# its pamphlet card, both linking the current pamphlet.
+MAINTENANCE_PAGE = """
+<p>We're performing some maintenance on our main website. We've designed this page to get you to your
+destination as quickly as possible while the update is ongoing.</p>
+<li><a class="dropdown-item" href="https://archive.voteidaho.gov/download/2026_Voter_Pamphlet.pdf" target="_blank">Voter Pamphlet [PDF]</a></li>
+<h5 class="card-title">2026 Voter Pamphlet</h5>
+<p class="card-text">Download this PDF for details about Proposition One and other measures on the ballot for November 3rd.</p>
+<a href="https://archive.voteidaho.gov/download/2026_Voter_Pamphlet.pdf" class="btn btn-outline-primary">Voter Pamphlet [PDF]</a>
+"""
+
+
+async def _discover_behind_redirect(target, landing_page=MAINTENANCE_PAGE):
+    def handler(request):
+        if request.url.host == "voteidaho.gov":
+            return httpx.Response(302, headers={"location": target})
+        return httpx.Response(200, text=landing_page)
+
+    source = source_for_state("ID")
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        return await discover_pdf_url_checked(
+            client, source["landing_page_url"], 2026, tuple(source["keyword"]), exclude=tuple(source["exclude"]),
+        )
+
+
+@pytest.mark.asyncio
+async def test_registry_follows_the_sites_redirect_to_the_pamphlet():
+    """2026-10-21: the registered general-election page answered 302 to a
+    maintenance page on archive.voteidaho.gov; reading the redirect as an
+    unreadable page failed Idaho with all four measures still linked."""
+    url, complete = await _discover_behind_redirect("https://archive.voteidaho.gov/index.html")
+    assert url == "https://archive.voteidaho.gov/download/2026_Voter_Pamphlet.pdf"
+    assert complete
+
+
+@pytest.mark.asyncio
+async def test_a_redirect_off_the_states_site_is_not_read():
+    """A redirect to another host is not the state's page: nothing on it is
+    taken, and the crawl is incomplete (a failure), never "not published"."""
+    assert await _discover_behind_redirect("https://example.com/index.html") == (None, False)
+
+
+@pytest.mark.asyncio
+async def test_a_redirected_page_without_the_link_is_not_a_complete_read():
+    """A moved page that lands on a homepage says nothing about the document
+    the registered page would have linked: no link there is a failure, not
+    "not published yet"."""
+    landing = '<a href="https://voteidaho.gov/register">Register to vote</a>'
+    assert await _discover_behind_redirect("https://archive.voteidaho.gov/index.html", landing) == (None, False)
