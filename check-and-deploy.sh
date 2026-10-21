@@ -355,6 +355,31 @@ if [[ "$deploy_ok" == "1" ]]; then
   } >> deploy-poll.log 2>&1 || deploy_ok=0
 fi
 
+# Every unused image of the stack's own repositories (see the prune below).
+STACK_IMAGE_REPOS=(civitas-backend civitas-frontend civitas-nginx ghcr.io/ggml-org/llama.cpp)
+prune_stack_images() {
+  local used repo id tagged digested ref
+  # The images any container uses, running or stopped, by full ID. Checked
+  # by ID rather than left to `docker image rm` refusing: an image with two
+  # tags (a rebuild whose content didn't change gets the new commit's tag
+  # beside the old one) only loses the tag asked for, and if that is the tag
+  # a Swarm service names, its next task can't start. If the containers
+  # can't be listed, prune nothing.
+  used=$(docker ps -aq | xargs -r docker inspect --format '{{.Image}}') || return 0
+  for repo in "${STACK_IMAGE_REPOS[@]}"; do
+    # By tag, or by digest for one pulled by digest (llama-server's).
+    docker image ls --no-trunc --filter "reference=$repo" \
+      --format '{{.ID}} {{.Repository}}:{{.Tag}} {{.Repository}}@{{.Digest}}' \
+      | while read -r id tagged digested; do
+          grep -qxF "$id" <<<"$used" && continue
+          ref=$tagged
+          [[ "$ref" == *:"<none>" ]] && ref=$digested
+          [[ "$ref" == *@"<none>" ]] && continue
+          docker image rm "$ref" >/dev/null 2>&1 || true
+        done
+  done
+}
+
 stack_deployed=0
 if [[ "$deploy_ok" == "1" ]]; then
   stack_deployed=1
@@ -417,7 +442,15 @@ if [[ "$deploy_ok" == "1" ]]; then
   # what to drop, preserving the most-recently-used layers that make
   # consecutive deploys (usually just an app-code change, not a
   # requirements.txt change) fast.
-  { docker image prune -a -f; docker builder prune -f --keep-storage=15GB; } >> deploy-poll.log 2>&1 || true
+  #
+  # Images: only this stack's own, not `docker image prune -a`, which took
+  # every unused image on the host, another project's included
+  # (docs/self-hosting.md). The images the stack runs are the three it
+  # builds and llama-server's (docker-compose*.yml); `docker image rm`
+  # without -f refuses one any container uses, running or stopped, which is
+  # the rule prune -a applied. Base images (python, node, nginx) are left:
+  # they may be another project's too, and change only on a version bump.
+  { prune_stack_images; docker builder prune -f --keep-storage=15GB; } >> deploy-poll.log 2>&1 || true
 else
   log "deploy FAILED"
   ntfy_url=$(grep '^ALERT_NTFY_URL=' .env 2>/dev/null | cut -d= -f2-)

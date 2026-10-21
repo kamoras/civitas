@@ -111,7 +111,7 @@ EVENT_KINDS = ("passed", "failed", "reported", "confirmed", "committee")
 RECORD_PREFERENCE = {"vote": 0, "document": 1, "event": 2, "bill": 3, "issue": 4}
 OFFICIAL_KINDS = frozenset({"vote", "document", "event", "bill"})
 
-_SITE = "https://civitas-research.org"
+_SITE = settings.SITE_URL.rstrip("/")
 # A statute's short title as a trend writes it: capitalised words ending in
 # "Act". A naming convention of U.S. law, not a classifier: the match is
 # then an exact containment in a record's own title.

@@ -203,6 +203,11 @@ services:
       context: ./nginx
       dockerfile: Dockerfile
     image: civitas-nginx:${IMAGE_TAG:-latest}
+    # Which proxy in front may name the visitor (nginx/real-ip.sh). Empty
+    # means loopback and the private ranges; set in .env to narrow it.
+    environment:
+      - REAL_IP_FROM=${REAL_IP_FROM:-}
+      - REAL_IP_HEADER=${REAL_IP_HEADER:-}
     ports:
       - target: 8081
         published: 8081

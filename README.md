@@ -2641,6 +2641,8 @@ See `.env.example` for all options. Key variables:
 | `BLS_API_KEY` | No | Free BLS v2 registration key (data.bls.gov/registrationEngine): 500 jobs-API requests a day instead of 25 |
 | `ADMIN_TOKEN` | Yes | Bearer token for the admin panel and admin API (falls back to `PIPELINE_TRIGGER_TOKEN`) |
 | `PIPELINE_TRIGGER_TOKEN` | Yes | Bearer token for the public `/api/pipeline/trigger` routes. For both tokens, `.env.example`'s `change-me-to-a-random-token` counts as unset and is refused (`app/api/auth.py`) |
+| `SITE_URL` | No | The site's public address (default `https://civitas-research.org`): links, feeds, cards, canonicals, `robots.txt`. Typed only in `backend/app/site_url.py` and `frontend/src/lib/site.ts` (`tests/test_site_url.py`); the frontend gets it at build as `NEXT_PUBLIC_SITE_URL` |
+| `REAL_IP_FROM` / `REAL_IP_HEADER` | No | The proxy in front of nginx allowed to name the visitor (`nginx/real-ip.sh`; default loopback and the private ranges, header `X-Real-IP`) |
 | `CONTACT_EMAIL` | Yes | Your instance's contact address, named in the User-Agent of every request the pipeline and scripts send (`backend/app/contact.py`). Unset or malformed, requests name Civitas with no address, the SEC (whose fair-access policy requires a contact) is not fetched and raises an ops alert, and the pipeline logs a warning at start |
 | `LLM_BACKEND` | No | `llama-server` (default) or `ollama` |
 | `LLAMA_SERVER_URL` | No | llama-server URL (default: `http://llama-server:8070`, the in-stack service) |

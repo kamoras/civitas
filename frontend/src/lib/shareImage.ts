@@ -158,7 +158,7 @@ export async function captureImageData(url: string): Promise<string | false> {
   }
 }
 
-/** "civitas-research.org/politicians/tim-burchett#funding" — the URL as
+/** "example.org/politicians/tim-burchett#funding" — the URL as
  *  printed in the footer, without the scheme nobody types. */
 export function displayUrl(url: string): string {
   return url.replace(/^https?:\/\//, "");

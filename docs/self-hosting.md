@@ -125,6 +125,8 @@ is public, so the server treats it as **no token at all** and refuses it
 | `BSKY_HANDLE`, `BSKY_APP_PASSWORD` | A Bluesky account and an App Password (bsky.app, Settings, Privacy and Security, App Passwords). | Posts go to the site's Atom feeds only. **Leave these empty** unless the account is yours to post from. |
 | `FEEDBACK_TOKEN`, `GITHUB_FEEDBACK_REPO` | A fine-grained GitHub token with Issues read and write on one repository. Point `GITHUB_FEEDBACK_REPO` at **your own** repository; the default is the upstream project's. | `/feedback` answers 503 rather than dropping submissions. |
 | `ALERT_NTFY_URL` | An ntfy topic URL (section 6). | Alerts are still logged and listed on the admin Overview; nothing reaches a phone. |
+| `SITE_URL` | Your site's public address, if not the production one (section 6). | Every link, feed, share card and canonical tag names the production site. |
+| `REAL_IP_FROM`, `REAL_IP_HEADER` | The proxy in front of nginx, Swarm only (section 6). | Loopback and private-range proxies are trusted, which fits most setups. |
 | `CORS_ORIGINS` | Only if a browser on another origin calls the API. | Leave empty when the site and API share an origin behind nginx (the normal case). |
 
 ### Leave at their defaults
@@ -238,11 +240,10 @@ development.
 
 Notes:
 
-- `docker-compose.yml` names its containers `mp-backend`, `mp-frontend` and
-  `mp-llama-server` and binds host ports 8000, 3000 and 8070. To run a
-  second copy beside another, give it a project name (`docker compose -p
-  civitas-trial ...`) and an override file that sets different
-  `container_name` values and `ports: !override` lists.
+- Containers are named from the project (`civitas-backend-1` and so on),
+  and the host ports are 8000, 3000 and 8070. To run a second copy beside
+  another, give it a project name (`docker compose -p civitas-trial ...`)
+  and an override file with different `ports: !override` lists.
 - The data lives in the volume `civitas_app_data` (Compose names it from
   the project name `civitas`). `docker compose down` keeps it;
   `docker compose down -v` deletes it.
@@ -343,9 +344,11 @@ directory), with `.env` and `llama-models/` filled in as above.
    with `FORCE_DEPLOY=1 ./check-and-deploy.sh`), waits while any pipeline,
    chain or Action Center refresh is running (a deploy restarts the
    pipeline service and would kill it), and pushes a failure to
-   `ALERT_NTFY_URL`. It runs `docker image prune -a -f` after a good deploy,
-   which deletes **every** unused image on the host, so give Civitas a host
-   of its own.
+   `ALERT_NTFY_URL`. After a good deploy it removes the unused images of the
+   stack's own repositories (`civitas-backend`, `civitas-frontend`,
+   `civitas-nginx` and the llama.cpp server image) and trims the build cache
+   to 15 GB; other projects' images on the host are left alone, and so are
+   the base images (`python`, `node`, `nginx`) the builds start from.
 
 The admin panel and `/api/admin/` answer only requests from private
 addresses (127.0.0.1, 10/8, 172.16/12, 192.168/16; `nginx/civitas.conf`)
@@ -454,27 +457,32 @@ host-level nginx. Production has a host-level nginx (outside this
 repository) that takes Cloudflare's connection on port 80 and proxies to
 8081.
 
-Two settings name production's own network and need changing for yours:
+Two `.env` settings describe your domain and your network; no file needs
+editing:
 
-1. `nginx/civitas.conf`, `set_real_ip_from 192.168.0.101;`: the address of
-   the proxy that connects to this nginx. It is the Pi's own LAN address,
-   because production's host nginx sets `X-Real-IP` and this hop trusts it.
-   If you put a proxy in front, set this to that proxy's address. If you
-   don't, nothing from that address arrives and visitors are read from the
-   connection, which is right. If it names the wrong hop, every visitor
-   looks like one address and the daily visitor count collapses.
-2. The site's own address is written into the code as
-   `https://civitas-research.org` (canonical links, share images, feed
-   links, Bluesky cards). Under another domain, change it in:
-   `frontend/src/lib/site.ts` (`SITE_URL`, and `BSKY_HANDLE`),
-   `frontend/src/app/opengraph-image.tsx` and
-   `frontend/src/app/api/og/route.tsx` (`DOMAIN`),
-   `backend/app/broadcast.py` (`SITE_URL`),
-   `backend/app/services/record_cards.py` (`SITE_DOMAIN`),
-   `backend/app/pipeline/analyze/trend_evidence.py` (`_SITE`), and the
-   `www.` redirect in `nginx/civitas.conf`. Without the change your copy
-   works, but its canonical tags and shared links point at the production
-   site.
+1. **`SITE_URL`**: your site's public address, for example
+   `SITE_URL=https://civic.example.org` (no trailing slash). Every link the
+   site writes uses it: canonical tags, share images, feeds, the sitemap and
+   `robots.txt`, the public API's `siteUrl`, posts. Unset, it is the
+   production site. The backend reads it at start; the frontend has it
+   baked in at build (Compose passes it as `NEXT_PUBLIC_SITE_URL`), so
+   rebuild the frontend after changing it. The `www.` name redirects to the
+   bare domain whatever it is. The site's Bluesky link names your domain as
+   the handle (Bluesky accepts a domain as a handle). Measured on the test
+   run with `SITE_URL=https://civic.example.net`: `robots.txt`, the
+   homepage and the Atom feed named only that address, and nothing named
+   the production domain.
+2. **`REAL_IP_FROM`**: which proxy in front of nginx may tell it the
+   visitor's address (in `X-Real-IP`, or `REAL_IP_HEADER`). Unset, nginx
+   trusts loopback and the private ranges (the same addresses the admin
+   panel trusts), which covers a proxy on the same host or the LAN wherever
+   it sits; production's host nginx is one. Set one address to trust exactly
+   that hop, or `none` if nothing is in front (visitors are then read from
+   the connection). If Cloudflare connects to nginx directly, set its
+   published ranges and `REAL_IP_HEADER=CF-Connecting-IP`. If this names
+   the wrong hop, every visitor looks like one address and the daily visitor
+   count collapses. `nginx/real-ip.sh` writes the setting into nginx's
+   config at every start.
 
 ### Cloudflare
 
