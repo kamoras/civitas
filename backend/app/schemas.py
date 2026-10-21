@@ -1591,6 +1591,78 @@ class JusticeLeaderboardEntry(CamelModel):
     loyalty: JusticeLoyaltySchema | None = None
 
 
+class JusticePeerPointSchema(CamelModel):
+    id: str
+    name: str
+    value: float
+    shown: str
+
+
+class JusticeSourceSchema(CamelModel):
+    name: str
+    url: str
+
+
+class JusticeMeasureSchema(CamelModel):
+    """One figure on a justice's record beside every sitting justice's
+    (services/justice_figures.py): the plain line on what it answers, the
+    figure as printed, each peer's, the median, how many of the others sit
+    below, and the caption sentence."""
+    key: str
+    question: str
+    label: str
+    why: str
+    unit: Literal["share", "count", "years", "position"]
+    value: float | None
+    shown: str | None
+    # The count the figure rests on (cases, one-vote cases); None for tenure
+    # and position.
+    record: int | None
+    # Every justice compared with a figure, this one included, ascending.
+    peers: list[JusticePeerPointSchema]
+    median: float | None
+    median_shown: str | None
+    below: int | None
+    sentence: str
+    source: JusticeSourceSchema
+
+
+class JusticeIntervalSchema(CamelModel):
+    id: str
+    name: str
+    estimate: float
+    ci_low: float
+    ci_high: float
+
+
+class JusticeAppointerSchema(CamelModel):
+    """Each sitting justice's appointer estimate and 95% interval, smallest
+    first, with the subject's in a sentence. Information, not a measure of
+    loyalty (docs/research/justice-scores.md)."""
+    rows: list[JusticeIntervalSchema]
+    sentence: str
+    through_term: int | None = None
+
+
+class JusticeAppointedBySchema(CamelModel):
+    # The president's page id; None when the presidents table has no match.
+    id: str | None
+    name: str
+    party: str | None
+    # The year the justice joined the Court.
+    year: int | None
+
+
+class JusticeFiguresSchema(CamelModel):
+    appointed_by: JusticeAppointedBySchema | None
+    # How many sitting justices the figures are compared with.
+    peers: int
+    # The terms the voting record covers.
+    terms: list[int]
+    measures: list[JusticeMeasureSchema]
+    appointer: JusticeAppointerSchema | None
+
+
 # ── Action Center ─────────────────────────────────────────────────
 
 class RelatedExploreDoc(CamelModel):

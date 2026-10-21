@@ -11,7 +11,7 @@ import CourtLine from "@/components/court/CourtLine";
 import DecisionLineups from "@/components/court/DecisionLineups";
 import RecentDecisions from "@/components/court/RecentDecisions";
 import { courtLead, currentTermLine, COURT_HREF, COURT_SOURCES } from "@/lib/court";
-import { COURT_FINDING, JUSTICE_RESEARCH_URL, NOT_SCORED_REASON } from "@/lib/justices";
+import { COURT_FINDING } from "@/lib/justices";
 import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import { absoluteUrl, pageMetadata } from "@/lib/site";
 import { fetchRecord } from "@/lib/ssrPayload";
@@ -121,12 +121,6 @@ export default async function CourtPage({ searchParams }: { searchParams: Promis
               <p role="status" className="font-mono text-sm text-ink-lo">
                 {currentTermLine(court)}
               </p>
-              <p className="text-sm leading-relaxed text-ink-lo">
-                Justices are not scored or ranked. {NOT_SCORED_REASON}{" "}
-                <a href={JUSTICE_RESEARCH_URL} className={LINK}>
-                  The research
-                </a>
-              </p>
               <div className="flex justify-end">
                 <ShareSectionButton label="The Supreme Court in short" />
               </div>
@@ -198,10 +192,10 @@ export default async function CourtPage({ searchParams }: { searchParams: Promis
               </p>
               <p>
                 <strong className="text-ink-hi">Votes under the appointing president.</strong>{" "}
-                {COURT_FINDING} Each justice&apos;s own estimate is on their page, with its
-                interval, as information: a justice&apos;s years under the appointing president are
-                always their first, and windows of the same length later in a career produce
-                differences about as large. That is why no justice is scored.{" "}
+                {COURT_FINDING} Each justice&apos;s own estimate is on their page, beside every
+                sitting justice&apos;s, as information, not a measure of loyalty: a justice&apos;s
+                years under the appointing president are always the first, and windows of the same
+                length later in a career produce differences about as large.{" "}
                 <Link href="/about/presidents-and-justices#justices" className={LINK}>
                   How justices are covered
                 </Link>

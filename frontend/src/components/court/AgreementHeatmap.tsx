@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, type KeyboardEvent } from "react";
+import Link from "next/link";
 import type { Court } from "@/types/court";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
@@ -141,7 +142,14 @@ export default function AgreementHeatmap({ court }: { court: Court }) {
                   scope="row"
                   className="whitespace-nowrap pr-2 text-right font-normal text-ink-lo"
                 >
-                  {surname(row)}
+                  {/* Each row's name opens the justice's page, where this
+                      row is drawn on its own. */}
+                  <Link
+                    href={`/politicians/${encodeURIComponent(row.id)}`}
+                    className="underline decoration-white/25 underline-offset-2 hover:text-phos"
+                  >
+                    {surname(row)}
+                  </Link>
                 </th>
                 {justices.map((col, c) => {
                   const p = r === c ? null : find(row.id, col.id);

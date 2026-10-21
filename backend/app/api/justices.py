@@ -14,6 +14,7 @@ from app.api.response_helpers import (
     cached_json as _cached_json,
 )
 from app.services import court_service
+from app.services.justice_figures import justices_appointed_by
 from app.services.justice_service import (
     get_all_justices,
     get_justice,
@@ -56,6 +57,16 @@ def _run_pipeline_background():
         logger.error("Justice pipeline failed: %s", e, exc_info=True)
     finally:
         db.close()
+
+
+@router.get("/appointed-by/{president_id}")
+def appointed_by(president_id: str, db: Session = Depends(get_db)):
+    """The stored justices, sitting and former, the president appointed,
+    by the date each joined the Court."""
+    rows = justices_appointed_by(db, president_id)
+    if rows is None:
+        raise HTTPException(status_code=404, detail="President not found")
+    return _cached_json(rows, max_age=CACHE_TTL_LIST_S)
 
 
 @router.get("/{justice_id}/cases")

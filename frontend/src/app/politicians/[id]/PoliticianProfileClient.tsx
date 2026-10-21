@@ -10,7 +10,8 @@ import BackToTop from "@/components/BackToTop";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import MemberScorecard from "@/components/scorecard/MemberScorecard";
 import PresidentScorecard from "@/components/scorecard/PresidentScorecard";
-import JusticeScorecard from "@/components/scorecard/JusticeScorecard";
+import JusticeProfile from "@/components/justice/JusticeProfile";
+import JusticesAppointed from "@/components/justice/JusticesAppointed";
 import { formerOfficeNotice } from "@/lib/officeStatus";
 import { issueDateLabel, asLabel } from "@/lib/formatting";
 import { houseSeatLabel, stateBallotHref } from "@/lib/elections";
@@ -227,8 +228,9 @@ export default function PoliticianProfileClient({
                   titleAs="h1"
                 />
               )}
+              {branch === "president" && <JusticesAppointed presidentId={profile.id} />}
               {branch === "scotus" && (
-                <JusticeScorecard
+                <JusticeProfile
                   key={(scorecard as unknown as Justice).id}
                   justice={scorecard as unknown as Justice}
                   titleAs="h1"
