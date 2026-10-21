@@ -18,9 +18,7 @@
         "http://localhost:3000/compare",
         "http://localhost:3000/changelog",
         "http://localhost:3000/feeds",
-        "http://localhost:3000/developers",
-        "http://localhost:3000/agencies",
-        "http://localhost:3000/agencies/budget"
+        "http://localhost:3000/developers"
       ],
       "settings": {
         "onlyCategories": [
