@@ -126,6 +126,39 @@ class TestSenateClassesFromTheSenatesList:
 
         assert parse_senate_classes(self._XML) == {1: {"MD", "ZZ"}, 2: {"AK"}, 3: {"MD", "AK"}}
 
+    def test_parses_each_senators_own_class_by_bioguide(self):
+        from app.pipeline.fetch.senate_classes import parse_senator_classes
+
+        xml = b"""<contact_information>
+        <member><state>MD</state><class>Class I</class><bioguide_id>X000001</bioguide_id></member>
+        <member><state>MD</state><class>Class III</class><bioguide_id>X000002</bioguide_id></member>
+        <member><state>AK</state><class>Class II</class></member>
+        </contact_information>"""
+        assert parse_senator_classes(xml) == {"X000001": 1, "X000002": 3}
+        assert parse_senator_classes(b"not xml") == {}
+
+    def test_a_senators_class_is_read_back_from_the_file(self, tmp_path, monkeypatch):
+        from app import election_calendar
+        from app.pipeline.fetch import senate_classes as sc
+
+        path = tmp_path / "senate_classes.json"
+        sc.write_classes({1: {"MD"}, 2: {"AK"}, 3: {"MD", "AK"}}, path, {"X000001": 1})
+        monkeypatch.setattr(election_calendar, "_CLASS_FILES", (path,))
+        election_calendar.reset_senate_classes()
+        try:
+            assert election_calendar.senator_class("X000001") == 1
+            assert election_calendar.senator_class("X999999") is None
+            assert election_calendar.senator_class(None) is None
+        finally:
+            election_calendar.reset_senate_classes()
+
+    def test_the_class_up_follows_the_six_year_rotation(self):
+        from app.election_calendar import class_up
+
+        assert {class_up(y) for y in (2018, 2020, 2022)} == {1, 2, 3}
+        assert class_up(2020) == class_up(2026)
+        assert class_up(2027) is None
+
     def test_a_new_state_needs_no_code_change(self):
         # "ZZ" parsed above like any other state: nothing lists the states.
         from app.pipeline.fetch.senate_classes import gate, parse_senate_classes

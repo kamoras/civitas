@@ -25,11 +25,13 @@ from app.state_ballot_scope import on_november_ballot
 from app.voter_calendar import calendar_for_state
 from app.electoral_votes import electoral_votes, is_presidential
 from app.election_calendar import (
+    class_up,
     federal_states,
     next_election_day,
     previous_election_day,
     next_senate_election_year,
     seats_up_for_year,
+    senator_class,
 )
 from app.http_client import make_async_client
 from app.models import (
@@ -836,6 +838,9 @@ def _race_full(
             _ballot_candidate(c, race, reps_by_district, senators, namesake_fields, stale_incumbent_ids)
             for c in candidates
         ],
+        # The member who holds this seat now, when not a nominee for it
+        # (retiring, running for another office, out in a primary).
+        "seatHolder": _seat_holder(race, candidates, reps_by_district, senators, complete),
     }
 
 
@@ -901,52 +906,99 @@ def member_on_ballot(db: Session, bioguide_id: str | None) -> dict | None:
     return None
 
 
-def member_seat_race(db: Session, state: str, district: int | None, bioguide_id: str | None) -> dict | None:
-    """The race for a sitting House member's own seat on the site's
-    election ballot, and where the member stands in it, or None when no
-    race for that seat is on file (or the Congress that election seats is
-    already sitting, when the member tables may hold its winners):
+def member_seat_race(
+    db: Session, state: str, district: int | None, bioguide_id: str | None, office: str = "H",
+) -> dict | None:
+    """The race for a sitting member's own seat on the site's election
+    ballot, and where the member stands in it, or None when no race for
+    that seat is on file (or the Congress that election seats is already
+    sitting, when the member tables may hold its winners):
     {raceId, cycleYear, state, office, district, redrawn, status,
     certified, sourceName}.
 
-    `status`, from stored rows only (never inferred from news or a
-    primary we didn't read): "nominee" when the member is among the
-    seat's confirmed nominees; "notNominee" when nominees are confirmed
-    and the member isn't one; "unconfirmed" when the state's nominees
-    aren't read yet. `certified` says the confirmation is the state's
+    Found by seat, never by candidacy, so a member who is retiring, running
+    for another office or lost a primary keeps the link. A House seat is
+    its state and district number. A Senate seat is the senator's class
+    (the Senate's own list, election_calendar.senator_class): the regular
+    race when that class is up this cycle, else the state's special, the
+    only other Senate seat a cycle can fill.
+
+    `status` (_member_status), from stored rows only (never inferred from
+    news or a primary we didn't read): "nominee", "notNominee" or
+    "unconfirmed". `certified` says the confirmation is the state's
     complete list of who is on the November ballot (the ballot-basis
     marker), not its primary results, and `sourceName` names whichever it
-    is. On a redrawn map (`redrawn`) the race is the district with the
-    member's number on the new lines, which is not the district they were
-    elected in."""
+    is. On a redrawn map (`redrawn`, House only) the race is the district
+    with the member's number on the new lines, which is not the district
+    they were elected in."""
     cycle = active_election(db).cycle
     if elected_congress_sits(cycle):
         return None
-    race = (
-        db.query(Race)
-        .filter(Race.cycle_year == cycle, Race.office == "H", Race.state == state,
-                Race.district == (district or 0), Race.is_special.is_(False))
-        .options(selectinload(Race.candidates))
-        .first()
-    )
+    query = db.query(Race).filter(Race.cycle_year == cycle, Race.office == office, Race.state == state)
+    if office == "H":
+        query = query.filter(Race.district == (district or 0), Race.is_special.is_(False))
+    else:
+        cls = senator_class(bioguide_id)
+        if cls is None:
+            return None
+        query = query.filter(Race.is_special.is_(cls != class_up(cycle)))
+    race = query.options(selectinload(Race.candidates)).first()
     if race is None:
         return None
     marker = _ballot_marker(db, state, cycle)
     complete = _race_complete(marker, state, race.id)
-    listed = _confirmed_or_all(race.candidates, state, complete)
-    confirmed = any(c.confirmed_general for c in listed)
-    if not confirmed:
-        status = "unconfirmed"
-    elif bioguide_id and any(c.member_bioguide == bioguide_id for c in listed):
-        status = "nominee"
-    else:
-        status = "notNominee"
+    status = _member_status(_confirmed_or_all(race.candidates, state, complete), bioguide_id)
     source = (marker or {}).get("sourceName") if complete else None
     return {
-        "raceId": race.id, "cycleYear": cycle, "state": state, "office": "H", "district": race.district,
-        "redrawn": state in redrawn_states(cycle), "status": status, "certified": confirmed and complete,
+        "raceId": race.id, "cycleYear": cycle, "state": state, "office": office, "district": race.district,
+        "redrawn": office == "H" and state in redrawn_states(cycle), "status": status,
+        "certified": status != "unconfirmed" and complete,
         "sourceName": source or (source_for_state(state) or {}).get("source_name") or None,
     }
+
+
+def _member_status(listed: list[Candidate], bioguide_id: str | None) -> str:
+    """Where a seat's member stands among its listed candidates:
+    "nominee" when among the confirmed nominees; "notNominee" when
+    nominees are confirmed and the member isn't one; "unconfirmed" when
+    the state's nominees aren't read yet."""
+    if not any(c.confirmed_general for c in listed):
+        return "unconfirmed"
+    if bioguide_id and any(c.member_bioguide == bioguide_id for c in listed):
+        return "nominee"
+    return "notNominee"
+
+
+def _seat_holder(
+    race: Race, listed: list[Candidate], reps_by_district: dict[int, Representative],
+    senators: list[Senator], complete: bool,
+) -> dict | None:
+    """The sitting member whose seat this race fills, when they aren't a
+    confirmed nominee for it (a nominee is named by their own candidate
+    row): {id, name, party, status, certified}, status as
+    _member_status. By seat, the same rule as member_seat_race, so the
+    race and the member's profile name each other. None when nobody holds
+    the seat, when the Congress this election seats already sits (the
+    tables may hold its winners), or for a Senate seat whose holder's
+    class isn't on file."""
+    if elected_congress_sits(race.cycle_year):
+        return None
+    if race.office == "H":
+        if race.is_special:
+            return None
+        holder = reps_by_district.get(race.district or 0)
+    else:
+        up = class_up(race.cycle_year)
+        # The regular race is the class up this cycle; a special is the other seat.
+        holder = next((s for s in senators
+                       if (c := senator_class(s.bioguide_id)) is not None and (c == up) != race.is_special), None)
+    if holder is None:
+        return None
+    status = _member_status(listed, holder.bioguide_id)
+    if status == "nominee":
+        return None
+    return {"id": holder.id, "name": holder.name, "party": holder.party, "status": status,
+            "certified": status != "unconfirmed" and complete}
 
 
 def _ballot_candidate(
@@ -2250,11 +2302,19 @@ def race_detail(race_id: str, db: Session = Depends(get_db)):
         **_usual_vote_fields(race, pvi, pvi_level, state_pvi, district_pvi),
         "candidateSource": _candidate_source(race.candidates, complete),
         "candidates": [_candidate_summary(c, stale_incumbent_ids) for c in candidates],
+        "seatHolder": _seat_holder(race, candidates, *_seat_members(db, race), complete),
         "coverage": [_coverage_item(item) for item in coverage],
         # The archived election this race belongs to, once the site has
         # moved on to a later one; null for the site's own election.
         "archiveCycle": _archive_cycle(db, race.cycle_year),
     }, max_age=CACHE_TTL_DETAIL_S)
+
+
+def _seat_members(db: Session, race: Race) -> tuple[dict[int, Representative], list[Senator]]:
+    """The race's state's current members, as state_ballot reads them."""
+    reps = {r.district: r for r in db.query(Representative).filter(
+        Representative.state == race.state, Representative.is_current.is_(True))}
+    return reps, db.query(Senator).filter(Senator.state == race.state, Senator.is_current).all()
 
 
 def _archive_cycle(db: Session, cycle: int) -> int | None:

@@ -11,7 +11,7 @@ import {
 } from "@/lib/elections";
 import { STATE_NAMES } from "@/lib/stateCodes";
 import { mapHref } from "@/lib/electionMap";
-import type { LeanContext, RaceWithCandidates } from "@/types/election";
+import type { LeanContext, RaceWithCandidates, SeatHolder } from "@/types/election";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR, shareMetaAttrs } from "@/lib/shareImage";
 import { INLINE_LINK } from "@/lib/controlStyles";
@@ -337,7 +337,35 @@ export default function RaceContext({
             </Link>
           </Row>
         )}
+        {!incumbent && race.seatHolder && (
+          <Row label="Who holds this seat">
+            {seatHolderSentence(race.seatHolder, stateName)}
+            {redrawn && race.district != null && (
+              <>
+                {" "}
+                {stateName}&apos;s House map was redrawn, so this district is not the one{" "}
+                {race.seatHolder.name} was elected in.
+              </>
+            )}{" "}
+            <Link
+              href={`/politicians/${race.seatHolder.id}`}
+              className="whitespace-nowrap font-mono text-xs text-signal-cyan hover:text-phos"
+            >
+              [ Where they stand → ]
+            </Link>
+          </Row>
+        )}
       </dl>
     </section>
   );
+}
+
+/** The sitting member's place in the race for their own seat, from what
+ * the stored rows say (never a reason they don't state). */
+export function seatHolderSentence(holder: SeatHolder, stateName: string): string {
+  if (holder.status === "unconfirmed")
+    return `${holder.name} holds this seat. Confirmed nominees aren't available for ${stateName} yet.`;
+  return holder.certified
+    ? `${holder.name} holds this seat and is not on the November ballot for it.`
+    : `${holder.name} holds this seat and is not among the nominees ${stateName}'s primary results confirm.`;
 }

@@ -235,6 +235,19 @@ export interface RaceWithCandidates {
    * has the rest). Null or absent elsewhere. */
   redistricting?: RedistrictingNote | null;
   candidates: BallotCandidate[];
+  /** The sitting member whose seat this race fills, when they aren't a
+   * confirmed nominee for it (backend _seat_holder; a nominee is named by
+   * their own candidate row). Status as SeatRace's. Null or absent when
+   * nobody holds the seat or an older backend. */
+  seatHolder?: SeatHolder | null;
+}
+
+export interface SeatHolder {
+  id: string;
+  name: string;
+  party: string;
+  status: "notNominee" | "unconfirmed";
+  certified: boolean;
 }
 
 /** One statewide ballot measure. Every text field is verbatim from

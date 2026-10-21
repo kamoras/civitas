@@ -132,10 +132,11 @@ export interface PoliticianProfile {
     office: "S" | "H";
     district: number | null;
   } | null;
-  /** A House member's own seat's race on the site's election ballot, and
-   * where the member stands in it, from stored rows only (backend
-   * member_seat_race). Null for a senator, a seat with no race on file,
-   * or an older backend. */
+  /** The member's own seat's race on the site's election ballot, found
+   * by seat (a House district, or a senator's class), and where the
+   * member stands in it, from stored rows only (backend
+   * member_seat_race). Null for a seat with no race this cycle, a
+   * senator whose class isn't on file, or an older backend. */
   seatRace?: SeatRace | null;
 }
 
@@ -143,7 +144,7 @@ export interface SeatRace {
   raceId: string;
   cycleYear: number;
   state: string;
-  office: "H";
+  office: "S" | "H";
   district: number | null;
   /** The state's map was redrawn: the race is this number on the new lines. */
   redrawn: boolean;
