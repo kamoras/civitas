@@ -113,6 +113,13 @@ export const PRESIDENT_HREF = "/executive/president";
 /** The sitting president's documents in Explore (executive orders,
  *  proclamations, memoranda), newest first: a redirect resolved like
  *  PRESIDENT_HREF (app/executive/orders). */
+/** Every agency's budget, largest first: a page of its own, so the
+ * "Budgets" tab is never the same page as "Every agency". A static segment
+ * under /agencies, so it shadows an agency slug of the same name; the
+ * agency sync alerts if the Federal Register ever lists one
+ * (RESERVED_SLUGS in backend/app/pipeline/fetch/agencies.py). */
+export const AGENCY_BUDGETS_HREF = "/agencies/budget";
+
 export const EXECUTIVE_ORDERS_HREF = "/executive/orders";
 
 /** Every member of a chamber on four plain measures, side by side
@@ -193,7 +200,7 @@ export const SECTIONS = {
       { key: "presidents", label: "Every president", href: PRESIDENTS_HREF },
       { key: "compare", label: "Compare presidents", href: "/compare/presidents" },
       { key: "agencies", label: "Every agency", href: "/agencies" },
-      { key: "budget", label: "Budgets", href: "/agencies#budget" },
+      { key: "budget", label: "Budgets", href: AGENCY_BUDGETS_HREF },
       { key: "comments", label: "Open comment periods", href: "/explore?comment=open" },
       { key: "orders", label: "Executive orders", href: EXECUTIVE_ORDERS_HREF },
       { key: "nominations", label: "Nominations", href: "/congress/nominations" },
@@ -266,6 +273,38 @@ export function currentSection(pathname: string): SectionKey | null {
     }
   }
   return best;
+}
+
+/** An href's path, without its query string or fragment. */
+export function pathOf(href: string): string {
+  return href.split(/[?#]/)[0];
+}
+
+/**
+ * How a section's sub-page link `href` stands to `pathname`, as its
+ * `aria-current`: "page" when it is the page, "true" when the page sits
+ * under it (an agency's page under "Every agency", a bill under "Bills")
+ * and no other tab claims a longer prefix, else undefined. Never for a tab
+ * sharing its path with another (the Action Center's three tabs are one
+ * path, told apart by the query string, which this can't read without
+ * suspending every page), and the hub only as itself (every page of the
+ * section is under it).
+ */
+export function currentTab(
+  section: SectionKey,
+  href: string,
+  pathname: string
+): "page" | "true" | undefined {
+  const paths = SECTIONS[section].tabs.map((t) => pathOf(t.href));
+  const path = pathOf(href);
+  if (paths.filter((p) => p === path).length !== 1) return undefined;
+  if (path === pathname) return "page";
+  if (path === pathOf(SECTIONS[section].href)) return undefined;
+  const under = (p: string) => pathname.startsWith(`${p}/`);
+  if (!under(path)) return undefined;
+  return paths.some((p) => p.length > path.length && (p === pathname || under(p)))
+    ? undefined
+    : "true";
 }
 
 /** One step of a breadcrumb: a page's name and address. */

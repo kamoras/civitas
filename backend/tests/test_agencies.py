@@ -2,6 +2,7 @@
 outage handling, a document's issuing agency, and the agency API."""
 
 import json
+import pathlib
 from datetime import datetime
 
 import httpx
@@ -124,6 +125,19 @@ class TestSync:
         assert json.loads(db_session.get(AgencyBudget, "068").by_year)[0]["fiscalYear"] == 2026
         assert db_session.get(AgencyBudget, "068").agency_slug == "environmental-protection-agency"
         assert len(quiet_alerts) == 2
+
+    async def test_an_agency_slug_a_static_page_uses_is_alerted(self, db_session, quiet_alerts):
+        listed = [*FR_LIST, {"id": 9, "slug": "budget", "name": "Budget", "parent_id": None}]
+        async with _client({ag.FR_AGENCIES_URL: listed}) as c:
+            await ag.sync_agencies(db_session, c, usaspending_due=False)
+        assert any("budget" in s for s in quiet_alerts)
+
+    def test_reserved_slugs_are_the_static_pages_under_agencies(self):
+        app = pathlib.Path(__file__).resolve().parents[2] / "frontend" / "src" / "app" / "agencies"
+        if not app.is_dir():
+            pytest.skip("no frontend checkout beside the backend (the image)")
+        static = {p.name for p in app.iterdir() if p.is_dir() and not p.name.startswith(("[", "("))}
+        assert static == ag.RESERVED_SLUGS
 
     async def test_an_empty_list_is_an_outage_not_no_agencies(self, db_session, quiet_alerts):
         async with _client({ag.FR_AGENCIES_URL: [], ag.TOPTIER_URL: {"results": []}}) as c:
