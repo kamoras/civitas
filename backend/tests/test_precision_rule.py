@@ -3,7 +3,15 @@
 import numpy as np
 import pytest
 
-from app.precision_rule import PRECISION_LOWER_BOUND, choose, exact_lower, held_out, summary
+from app.precision_rule import (
+    BEST_BOUND,
+    LOWEST_PASSING,
+    PRECISION_LOWER_BOUND,
+    choose,
+    exact_lower,
+    held_out,
+    summary,
+)
 
 
 def test_exact_lower_is_clopper_pearson():
@@ -70,3 +78,35 @@ def test_held_out_passes_nothing_where_the_fit_missed_the_bar():
     result = held_out(scores, correct, days, [0.1, 0.5], folds=3)
     assert result["pooled"]["passed"] == 0
     assert all(not b["threshold_met_bound"] and b["passed"] == 0 for b in result["blocks"])
+
+
+# The two named variants pick among the same passing thresholds: the
+# highest bound (BEST_BOUND, the default) or the lowest threshold, the most
+# passes the bar allows (LOWEST_PASSING, the outlet reposts).
+_GRID = [0.5, 0.6, 0.7, 0.8]
+# 40 right at 0.85, 10 right and 1 wrong at 0.75, 20 wrong at 0.55.
+_SCORES = np.array([0.85] * 40 + [0.75] * 11 + [0.55] * 20)
+_CORRECT = np.array([True] * 50 + [False] * 21)
+
+
+def test_lowest_passing_takes_the_most_passes_the_bar_allows():
+    assert choose(_SCORES, _CORRECT, _GRID, BEST_BOUND) == (0.8, 0.8)
+    assert choose(_SCORES, _CORRECT, _GRID) == (0.8, 0.8)  # the default
+    assert choose(_SCORES, _CORRECT, _GRID, LOWEST_PASSING) == (0.6, 0.8)
+
+
+def test_neither_variant_passes_below_the_bar():
+    scores, correct = np.array([0.9, 0.9]), np.array([True, False])
+    assert choose(scores, correct, _GRID, BEST_BOUND)[0] is None
+    assert choose(scores, correct, _GRID, LOWEST_PASSING)[0] is None
+
+
+def test_held_out_uses_the_variant():
+    days = np.arange(len(_SCORES)) % 3
+    blocks = held_out(_SCORES, _CORRECT, days, _GRID, 3, LOWEST_PASSING)["blocks"]
+    assert {b["threshold"] for b in blocks} == {0.6}
+
+
+def test_an_unknown_variant_is_refused():
+    with pytest.raises(ValueError):
+        choose(_SCORES, _CORRECT, _GRID, "loosest")
