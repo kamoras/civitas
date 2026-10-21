@@ -458,7 +458,7 @@ export function describeMembersDirectory(): { title: string; description: string
 /** The chamber measure by measure (`/congress/members/measures`). */
 export function describeMeasures(): { title: string; description: string } {
   return {
-    title: "Congress, Measure by Measure: Small Gifts, PAC Money, Party Breaks, Bills",
+    title: "Congress by the Numbers: Small Gifts, PAC Money, Party Breaks, Bills for Every Member",
     description:
       "Every senator and representative on four measures from FEC filings, roll calls and Congress.gov, side by side, with no rank and no score.",
   };

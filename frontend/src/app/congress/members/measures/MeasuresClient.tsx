@@ -244,7 +244,7 @@ function FactTable({ members, house }: { members: ChamberMember[]; house: boolea
         {shown.length} of {members.length} members
       </p>
       <ScrollRegion
-        label="Every member, measure by measure"
+        label="Every member, by the numbers"
         className="mt-2 border border-white/25 bg-surface"
       >
         <table className="w-full min-w-[44rem] text-sm">
@@ -338,7 +338,7 @@ export default function MeasuresClient({
       >
         <div className="mx-auto max-w-6xl">
           <h1 className="font-display text-[30px] font-semibold leading-tight sm:text-[44px]">
-            {name}, measure by measure
+            {name} by the numbers
           </h1>
           <p className="mt-2 max-w-2xl text-[17px] text-ink">
             Four plain measures from FEC filings, roll calls and Congress.gov, every member at once.
