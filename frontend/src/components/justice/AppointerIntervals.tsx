@@ -2,7 +2,9 @@ import Link from "next/link";
 import { onThisPage } from "@/lib/onThisPage";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { overlay } from "@/lib/chartColors";
-import { JUSTICE_RESEARCH_URL, signedPoints } from "@/lib/justices";
+import { JUSTICE_RESEARCH_URL } from "@/lib/justices";
+import ChartReadout from "@/components/shared/ChartReadout";
+import { MARK_ATTR } from "@/types/readout";
 import { SHARE_SECTION_ATTR, shareMetaAttrs } from "@/lib/shareImage";
 import type { JusticeFigures } from "@/types/justice";
 
@@ -50,7 +52,13 @@ export default function AppointerIntervals({
         president&apos;s administration argued its cases.
       </p>
       <figure aria-labelledby="appointer-caption" className="flex flex-col gap-1">
-        <div aria-hidden="true">
+        {/* Each row names its justice, estimate and interval (the API's
+            words), smallest estimate first, starting at this justice. */}
+        <ChartReadout
+          label="Each sitting justice's estimate with its 95% interval"
+          marks={appointer.marks ?? []}
+          startId={justiceId}
+        >
           {appointer.rows.map((r) => {
             const mine = r.id === justiceId;
             return (
@@ -63,7 +71,7 @@ export default function AppointerIntervals({
                 >
                   {r.name}
                 </span>
-                <span className="relative block h-6">
+                <span {...{ [MARK_ATTR]: r.id }} className="relative block h-6">
                   <span
                     className="absolute left-1/2 top-0 h-6 border-l"
                     style={{ borderColor: overlay(0.4) }}
@@ -92,7 +100,7 @@ export default function AppointerIntervals({
               Points, right of 0: more often for the government under the appointing president.
             </span>
           </div>
-        </div>
+        </ChartReadout>
         <figcaption id="appointer-caption" className="text-sm text-ink">
           {appointer.sentence}
         </figcaption>
@@ -114,10 +122,8 @@ export default function AppointerIntervals({
                   <th scope="row">
                     <Link href={`/politicians/${encodeURIComponent(r.id)}`}>{r.name}</Link>
                   </th>
-                  <td>{signedPoints(r.estimate)}</td>
-                  <td>
-                    {signedPoints(r.ciLow)} to {signedPoints(r.ciHigh)}
-                  </td>
+                  <td>{r.estimateShown}</td>
+                  <td>{r.intervalShown}</td>
                 </tr>
               ))}
             </tbody>
