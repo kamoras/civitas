@@ -2,7 +2,13 @@
 Engage with news outlet posts on Bluesky.
 
 When a major outlet's recent post matches an active Civitas action center
-issue (cosine similarity >= ENGAGE_THRESHOLD), we repost it and like it.
+issue (cosine similarity at or above engage_threshold()), we repost it and
+like it. The threshold is fitted on posts that link an article an issue
+cites (scripts/calibrate_engagement.py, app/data/engagement_calibration.json),
+under the Action Center's precision rule. Until a fit meets the rule the
+gate runs at UNMEASURED_THRESHOLD, a value nobody measured, kept by the
+user's decision (2026-10-21) so reposting continues while labels are
+gathered; the data file says so beside the measurement.
 This keeps the Civitas feed active between original posts and surfaces
 relevant reporting within the civic transparency context.
 
@@ -13,20 +19,41 @@ Design constraints:
 - Runs silently if credentials are not configured
 """
 
+import json
 import logging
+import pathlib
 from datetime import datetime, timedelta, UTC
 
 import numpy as np
 from sqlalchemy.orm import Session
 
+from app import calibration_drift
 from app.config import settings
 from app.models import ActionIssue, ApiCache
 
 logger = logging.getLogger(__name__)
 
-# Minimum cosine similarity between outlet post text and active issue title
-# to trigger engagement. Set conservatively to avoid off-topic reposts.
-ENGAGE_THRESHOLD = 0.78
+CALIBRATION_PATH = pathlib.Path(__file__).resolve().parents[2] / "data" / "engagement_calibration.json"
+_calibration_cache: dict | None = None
+
+
+# NOT A FITTED VALUE. The hand-set cosine the gate used before it was
+# measured ("set conservatively"), kept by the user's decision (2026-10-21)
+# while no fitted threshold meets the precision rule: on 79-82 labelled
+# posts the best bound was 0.77, at 0.85 (engagement_calibration.json), and
+# that precision is an upper bound, since posts about no issue can't be
+# labelled. A fit that meets the rule replaces it with no code change.
+UNMEASURED_THRESHOLD = 0.78
+
+
+def engage_threshold() -> float | None:
+    """The fitted cosine when a fit meets the precision rule, else the
+    unmeasured one in use (UNMEASURED_THRESHOLD)."""
+    global _calibration_cache
+    if _calibration_cache is None:
+        _calibration_cache = json.loads(CALIBRATION_PATH.read_text())
+    value = _calibration_cache.get("threshold")
+    return float(value) if value is not None else UNMEASURED_THRESHOLD
 
 # Hard cap on reposts per pipeline run (runs hourly) — keeps the feed human-paced
 MAX_REPOSTS_PER_RUN = 3
@@ -40,10 +67,12 @@ _CACHE_TIER = "bsky_engagement"
 # Major news outlets with reliable Bluesky presence.
 # Handles are resolved by atproto — use the domain-style handles that
 # verified outlets register (e.g. apnews.com maps to their Bluesky account).
+# "newshour.bsky.social" was listed until 2026-10-21: an account with no
+# posts at all, so it contributed nothing; an outlet whose feed comes back
+# empty is now logged as a warning.
 NEWS_OUTLET_HANDLES: list[str] = [
     "apnews.com",
     "npr.org",
-    "newshour.bsky.social",
 ]
 
 
@@ -79,6 +108,7 @@ def engage_with_news_posts(db: Session) -> None:
     )
     if not active_issues:
         return
+    threshold = engage_threshold()
 
     from app.pipeline.analyze.action_center import _embed_texts
 
@@ -118,6 +148,9 @@ def engage_with_news_posts(db: Session) -> None:
 
         n_posts = len(feed_resp.feed or [])
         logger.info("@%s: %d posts in feed", outlet_handle, n_posts)
+        if not n_posts:
+            logger.warning("@%s returned no posts: a dead or renamed handle reads as nothing to repost",
+                           outlet_handle)
         for feed_item in (feed_resp.feed or []):
             if reposts_this_run >= MAX_REPOSTS_PER_RUN:
                 break
@@ -156,11 +189,12 @@ def engage_with_news_posts(db: Session) -> None:
 
             # Always mark as processed so we don't re-evaluate next run
             _mark_processed(cid, db)
+            calibration_drift.observe("engagement", [best_sim], threshold)
 
-            if best_sim < ENGAGE_THRESHOLD:
+            if best_sim < threshold:
                 logger.debug(
                     "@%s post below threshold (%.2f < %.2f): %s",
-                    outlet_handle, best_sim, ENGAGE_THRESHOLD, text[:60],
+                    outlet_handle, best_sim, threshold, text[:60],
                 )
                 continue
 
