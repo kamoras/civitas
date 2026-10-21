@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { pageMetadata } from "@/lib/site";
 import { fetchCommitteeRecord, fetchCommittees } from "@/lib/congressServer";
-import { CHAMBER_NAME, currentCongress } from "@/lib/congress";
+import { CHAMBER_NAME, billHref, currentCongress, dayHref, longDate } from "@/lib/congress";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
 import SectionTabs from "@/components/layout/SectionTabs";
-import CommitteeEntries from "@/components/congress/CommitteeEntries";
-import type { CommitteeSummary } from "@/types/congress";
+import BoxGrid from "@/components/shared/BoxGrid";
+import RecordBox from "@/components/shared/RecordBox";
+import type { CommitteeEntry, CommitteeSummary } from "@/types/congress";
 
 export const metadata = pageMetadata({
   title: "Committee Hearings, Markups & Reports in Congress",
@@ -39,6 +40,70 @@ function href(search: Search, page: number): string {
   if (page > 1) q.set("page", String(page));
   const s = q.toString();
   return s ? `/congress/committees?${s}${RESULTS}` : "/congress/committees";
+}
+
+// A markup can name twenty bills: past this many, they wait behind "More"
+// with the entry's whole text rather than filling the box with chips.
+const BILL_CHIPS = 3;
+
+/**
+ * One meeting or report as a box ("Boxes, not blocks"): the chamber, kind
+ * and day over the committee (or the report's number), the Digest's first
+ * sentence quoted and credited, the committee's meetings on record as its
+ * figure, and the whole entry and every bill it names behind "More".
+ */
+function EntryBox({ e, meetings }: { e: CommitteeEntry; meetings: number | null }) {
+  const quote = e.lede || e.text;
+  const bills = e.bills.map((b) => ({ label: b.billLabel, href: billHref(b.billId, e.congress) }));
+  const longer = quote !== e.text || bills.length > BILL_CHIPS;
+  return (
+    <RecordBox
+      compact
+      kicker={`${CHAMBER_NAME[e.chamber]} · ${e.kind === "meeting" ? "Meeting" : "Report"} · ${longDate(e.date)}`}
+      title={
+        e.committee ?? e.report ?? (e.kind === "meeting" ? "Committee meeting" : "Committee report")
+      }
+      quote={{ text: quote, source: `Daily Digest${e.pages ? `, ${e.pages}` : ""}` }}
+      figure={meetings ? { type: "stat", value: meetings, caption: "meetings on record" } : null}
+      links={[
+        {
+          label: "That day",
+          href: dayHref(e.date),
+          ariaLabel: `The day's report, ${longDate(e.date)}`,
+        },
+        ...(bills.length > BILL_CHIPS ? [] : bills),
+      ]}
+      more={
+        longer
+          ? {
+              label:
+                bills.length > BILL_CHIPS
+                  ? `the whole entry and its ${bills.length} bills`
+                  : "the whole entry",
+              children: (
+                <>
+                  <p className="leading-relaxed">{e.text}</p>
+                  {bills.length > BILL_CHIPS && (
+                    <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1 font-id text-xs">
+                      {bills.map((b) => (
+                        <li key={b.href}>
+                          <Link
+                            href={b.href}
+                            className="inline-flex min-h-6 items-center text-phos-mid underline decoration-white/30 underline-offset-4 hover:text-phos"
+                          >
+                            {b.label}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              ),
+            }
+          : null
+      }
+    />
+  );
 }
 
 const FIELD =
@@ -78,6 +143,8 @@ export default async function CommitteesPage({
       per_page: PER_PAGE,
     }),
   ]);
+  // Each meeting's figure: its committee's meetings on record, as served.
+  const meetings = new Map(committees.map((c) => [committeeValue(c), c.meetings]));
   const byChamber = (c: "senate" | "house") => committees.filter((x) => x.chamber === c);
   const total = record?.total ?? 0;
   const filtered = !!(search.committee || search.q || search.kind);
@@ -92,11 +159,11 @@ export default async function CommitteesPage({
             className="mb-8"
             eyebrow="Committees · meetings and reports"
             title="Committee record"
+            more="Find one by committee, by a word (a topic, a nominee, a witness) or by a bill number."
           >
             <p>
               Every committee hearing, markup and business meeting, and every report filed on a
-              bill, as the Congressional Record&apos;s Daily Digest printed it. Find one by
-              committee, by a word (a topic, a nominee, a witness) or by a bill number.
+              bill, as the Congressional Record&apos;s Daily Digest printed it.
             </p>
           </PageMasthead>
 
@@ -173,7 +240,17 @@ export default async function CommitteesPage({
               )}
             </h2>
             {record && record.entries.length > 0 ? (
-              <CommitteeEntries entries={record.entries} />
+              <BoxGrid columns={2}>
+                {record.entries.map((e) => (
+                  <EntryBox
+                    key={e.id}
+                    e={e}
+                    meetings={
+                      e.committee ? (meetings.get(`${e.chamber}|${e.committee}`) ?? null) : null
+                    }
+                  />
+                ))}
+              </BoxGrid>
             ) : (
               <p className="text-ink-lo">
                 Nothing in the committee record matches. Reports name no committee in the Digest, so

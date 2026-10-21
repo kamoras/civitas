@@ -27,6 +27,7 @@ from app.pipeline.fetch.daily_digest import bill_ids, only_bill_id
 from app.services.bill_record import parse_bill_id
 from app.services.congress_service import bill_label
 from app.services.pagination import paginate_bounds
+from app.sentences import lede
 
 # CongressEvent.kind for each, and the word the API uses.
 KINDS = {"meeting": "committee", "report": "reported"}
@@ -56,6 +57,8 @@ def _entry(e: CongressEvent) -> dict:
         # A meeting's committee as the Digest names it; null for a report.
         "committee": (e.name or None) if e.kind == "committee" else None,
         "text": e.text,
+        # Its first sentence, verbatim, for the entry's box to quote.
+        "lede": lede(e.text),
         "pages": e.pages,
         "report": f"{report.group(1)}. Rept. {report.group(2)}" if report else None,
         "bills": [{"billId": b, "billLabel": bill_label(b)} for b in mentioned if bill_label(b)],
