@@ -40,7 +40,7 @@ function Snippet({ text }: { text: string }) {
   const segments = splitHighlights(text);
   if (segments.length === 0) return null;
   return (
-    <p className="mb-1 line-clamp-3 font-sans text-sm leading-relaxed text-ink-lo">
+    <p className="-mt-2 line-clamp-3 font-sans text-sm leading-relaxed text-ink-lo">
       {segments.map((segment, i) =>
         segment.match ? (
           // Ink on a light wash, underlined: the ledger green over a tinted card
@@ -91,7 +91,14 @@ export function DocumentCard({ result, query }: { result: ExploreResult; query: 
     <RecordBox
       compact
       tone={commentOpen ? "deadline" : "neutral"}
-      kicker={[source, result.docType || "Document", result.date ? formatDate(result.date) : ""]
+      // Who, what, when and how cited in one line: a line of its own under
+      // each result made the list longer than the cards it replaced.
+      kicker={[
+        source,
+        result.docType || "Document",
+        result.date ? formatDate(result.date) : "",
+        ...meta,
+      ]
         .filter(Boolean)
         .join(" · ")}
       title={result.title}
@@ -128,12 +135,7 @@ export function DocumentCard({ result, query }: { result: ExploreResult; query: 
           : null
       }
     >
-      {(passage || meta.length > 0) && (
-        <>
-          {passage && <Snippet text={passage} />}
-          {meta.length > 0 && <p className="font-mono text-xs text-ink-min">{meta.join(" · ")}</p>}
-        </>
-      )}
+      {passage && <Snippet text={passage} />}
     </RecordBox>
   );
 }
