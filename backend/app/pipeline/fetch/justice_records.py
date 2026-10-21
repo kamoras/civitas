@@ -214,10 +214,21 @@ async def fetch_scdb(client: httpx.AsyncClient, db: Session) -> dict | None:
     return result
 
 
+def _display_name(r: dict) -> str:
+    """"John G. Roberts, Jr." from the directory's name fields."""
+    middle = (r.get("Middle Name") or "").strip()
+    parts = [(r.get("First Name") or "").strip(), f"{middle[0]}." if middle else "", (r.get("Last Name") or "").strip()]
+    name = " ".join(p for p in parts if p)
+    suffix = (r.get("Suffix") or "").strip()
+    return f"{name}, {suffix}" if suffix else name
+
+
 def fjc_appointments(rows) -> list[dict]:
     """Every Supreme Court appointment in the FJC directory: {"last",
-    "first", "nominated", "from", "until"}, dates ISO, `until` None while
-    serving. A justice appointed twice (Rehnquist) has two."""
+    "first", "nominated", "from", "until", "nid", "name", "seat"}, dates
+    ISO, `until` None while serving; `name` as the directory spells it
+    (first, middle initial, last, suffix) and `seat` its appointment title.
+    A justice appointed twice (an associate later made chief) has two."""
     out = []
     for r in rows:
         for i in range(1, 7):
@@ -232,12 +243,20 @@ def fjc_appointments(rows) -> list[dict]:
                 "first": (r.get("First Name") or "")[:1].upper(),
                 "nominated": nominated, "from": start,
                 "until": _iso(r.get(f"Termination Date ({i})") or ""),
+                "nid": r.get("nid") or "",
+                "name": _display_name(r),
+                "seat": (r.get(f"Appointment Title ({i})") or "").strip() or "Justice",
             })
     return out
 
 
+# The cached appointments' shape: bumped when fjc_appointments adds a field,
+# so a week-old cache without it is read again.
+_FJC_CACHE_KEY = "fjc-supreme-court-v2"
+
+
 async def fetch_fjc(client: httpx.AsyncClient, db: Session) -> list[dict] | None:
-    cached = api_cache_get(db, _CACHE_TIER, "fjc-supreme-court", max_age_hours=24 * 7)
+    cached = api_cache_get(db, _CACHE_TIER, _FJC_CACHE_KEY, max_age_hours=24 * 7)
     if cached is not None:
         return cached
     resp = await _get(client, FJC_JUDGES, "FJC judges")
@@ -247,7 +266,7 @@ async def fetch_fjc(client: httpx.AsyncClient, db: Session) -> list[dict] | None
     if len(appointments) < 100:  # 116 appointments in 2026; far fewer is a changed file
         logger.warning("FJC judges: only %d Supreme Court appointments read", len(appointments))
         return None
-    api_cache_set(db, _CACHE_TIER, "fjc-supreme-court", appointments, normal_ttl_hours=24 * 7)
+    api_cache_set(db, _CACHE_TIER, _FJC_CACHE_KEY, appointments, normal_ttl_hours=24 * 7)
     return appointments
 
 

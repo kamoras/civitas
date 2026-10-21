@@ -68,13 +68,13 @@ describe("describeProfile", () => {
     expect(title).not.toContain("(R");
   });
 
-  it("shortens Oyez's full title and says the justice is not scored", () => {
+  it("shortens Oyez's full title and describes the record, with no score framing", () => {
     const { title, description } = describeProfile(
       profile("scotus", { role: "Associate Justice of the Supreme Court of the United States" })
     );
     expect(title).toBe("Associate Justice Jane Doe: Supreme Court Voting Record");
-    expect(description).toContain("Not scored");
-    expect(description).not.toMatch(/scorecard/i);
+    expect(description).toContain("beside every sitting justice");
+    expect(description).not.toMatch(/scorecard|scored/i);
   });
 
   it("gives presidents their own title", () => {

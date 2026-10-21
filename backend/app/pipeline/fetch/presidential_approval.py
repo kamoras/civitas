@@ -261,6 +261,17 @@ async def fetch_president_approval_history(
     return polls
 
 
+# Long enough that a stored read never counts as expired for the read path.
+_NO_EXPIRY_HOURS = 24 * 365 * 100
+
+
+def stored_approval_history(db: Session, president_id: str) -> list[ApprovalPoll] | None:
+    """The last fetched poll history for a president, whatever its age (the
+    read path never fetches); None when none is stored."""
+    cached = api_cache_get(db, _CACHE_TIER, f"approval-v2-{president_id}", max_age_hours=_NO_EXPIRY_HOURS)
+    return [ApprovalPoll(**p) for p in cached["polls"]] if cached else None
+
+
 def dated_approvals(polls: list[ApprovalPoll]) -> list[tuple[date, float]]:
     """(start date, approve %) for every poll with both, in date order. A
     poll with an unparseable date is left out rather than guessed into

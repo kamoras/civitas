@@ -80,7 +80,7 @@ export function describeProfile(profile: PoliticianProfile): {
   const seat = role.includes("Chief") ? "Chief Justice" : "Associate Justice";
   return {
     title: `${seat} ${name}: Supreme Court Voting Record`,
-    description: `${seat} ${name}: Supreme Court voting record, opinions, and votes under the appointing president, from public case records. Not scored.`,
+    description: `${seat} ${name}: Supreme Court voting record, opinions written, agreement with each justice and the appointing president, beside every sitting justice, from public case records.`,
   };
 }
 
