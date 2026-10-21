@@ -777,8 +777,10 @@ def test_detail_serves_the_comment_window_only_while_open(db_session, freeze_utc
     doc = _make_doc(db_session, doc_type="Proposed Rule", date="2026-10-01", comments_close_on="2026-10-31",
                     comment_url="https://www.regulations.gov/commenton/X-2026-0001-0001")
     body = json.loads(asyncio.run(get_explore_document(str(doc.id), db_session)).body)
-    assert body["commentWindow"] == {"opened": "2026-10-01", "closes": "2026-10-31", "totalDays": 30,
-                                     "daysLeft": 10, "elapsedPercent": 67}
+    window = body["commentWindow"]
+    assert {k: v for k, v in window.items() if k != "marks"} == {
+        "opened": "2026-10-01", "closes": "2026-10-31", "totalDays": 30, "daysLeft": 10, "elapsedPercent": 67}
+    assert window["marks"]  # the bar's readout, comment_periods.period_marks
     assert body["headline"].startswith("Proposed Rule, October 1, 2026")
     doc.comments_close_on = "2026-10-20"
     db_session.commit()

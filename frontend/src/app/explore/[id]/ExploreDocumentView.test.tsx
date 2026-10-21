@@ -180,6 +180,7 @@ describe("The header box", () => {
         totalDays: 40,
         daysLeft: 10,
         elapsedPercent: 75,
+        marks: [],
       },
     });
     const box = document.getElementById("comment")!;
