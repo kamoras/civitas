@@ -6,6 +6,24 @@ combined with two query-independent priors by reciprocal rank fusion. All
 three index structures are derived from the `explore_documents` table and are
 rebuilt from it at the end of every ingest run.
 
+Where readers meet it (2026-10): the site search's results page
+(`/search?q=`) fuses this ranking's first 30 documents with site search's
+own matches by reciprocal rank (`site_search.fuse`, weights from
+`scripts/calibrate_search_fusion.py`), and its Documents filter
+(`/search?tab=documents`, where `/explore` redirects) is this ranking's
+full list and filters, read from `GET /api/explore`. The autocomplete never
+runs it.
+
+```mermaid
+flowchart LR
+    Q(["Enter on /search?q="]) --> SS["site_search.answer<br/>identifier parser · FTS5 · trigram"]
+    SS -->|"one page clearly meant"| JUMP["redirect to that page<br/>(no query encode)"]
+    SS -->|"otherwise"| HY["hybrid_search (this page)<br/>first 30 documents"]
+    SS --> FUSE["site_search.fuse<br/>Σ w / (k + rank), gated weak matches"]
+    HY --> FUSE
+    FUSE --> LIST["one list, each result's kind shown<br/>filter chips: All · each kind · Documents"]
+```
+
 ```mermaid
 flowchart TB
     subgraph INDEX["Indexing — during pipeline runs"]

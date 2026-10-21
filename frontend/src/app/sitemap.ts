@@ -10,6 +10,7 @@ import {
   MEASURES_HREF,
   MEMBERS_HREF,
   PRESIDENTS_HREF,
+  SEARCH_DOCUMENTS_HREF,
 } from "@/lib/routes";
 import { nominationHref } from "@/lib/nominations";
 
@@ -124,7 +125,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}${MEASURES_HREF}`, changeFrequency: "daily", priority: 0.8 },
     { url: `${SITE_URL}/compare`, changeFrequency: "weekly", priority: 0.6 },
     { url: `${SITE_URL}/compare/presidents`, changeFrequency: "weekly", priority: 0.6 },
-    { url: `${SITE_URL}/explore`, changeFrequency: "daily", priority: 0.6 },
+    { url: `${SITE_URL}${SEARCH_DOCUMENTS_HREF}`, changeFrequency: "daily", priority: 0.6 },
     { url: `${SITE_URL}/about`, changeFrequency: "monthly", priority: 0.5 },
     ...ABOUT_CHAPTERS.map((c) => ({
       url: `${SITE_URL}${c.href}`,

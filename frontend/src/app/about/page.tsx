@@ -86,9 +86,9 @@ const COVERAGE: readonly { what: string; detail: string; href: string }[] = [
     href: ACTION_CENTER_HREF,
   },
   {
-    what: "Explore",
-    detail: "Search speeches, executive orders, rules and opinions",
-    href: "/explore",
+    what: "Search",
+    detail: "Members, bills, pages and every speech, rule, order and opinion, in one list",
+    href: "/search",
   },
 ];
 

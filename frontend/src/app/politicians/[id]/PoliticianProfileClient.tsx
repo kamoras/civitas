@@ -4,7 +4,7 @@ import FollowFeed from "@/components/shared/FollowFeed";
 import { memberFeed } from "@/lib/site";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
-import { membersHref, recordTrail } from "@/lib/routes";
+import { documentsHref, membersHref, recordTrail } from "@/lib/routes";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
@@ -322,7 +322,7 @@ export default function PoliticianProfileClient({
               ))}
               {governmentRecord.totalDocs > 5 && (
                 <Link
-                  href={`/explore?politician_id=${profile.id}`}
+                  href={documentsHref({ politician_id: profile.id })}
                   className={`mt-3 block font-mono text-ink-min transition-colors hover:text-phos ${LONG_LABEL}`}
                 >
                   View all {governmentRecord.totalDocs} documents →

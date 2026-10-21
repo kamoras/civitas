@@ -2,6 +2,13 @@
   "_contract": "One entry per user-facing feature, newest first; writing it is part of shipping the feature (AGENTS.md, 'What gets posted'). The same entry is the /changelog 'New on the site' list, the What's new feed and a Bluesky post (app/whats_new.py). id: a stable slug, never reused (it is the post's subject, so changing it posts again). date: the UTC day the feature reached main (git log --date=format-local:%Y-%m-%d with TZ=UTC). title: a name, no trailing period. summary: one plain sentence that stays true: no named politicians, no pronouns, no em dashes, no emoji, no year or Congress number. url: the page's path on the site. tests/test_whats_new.py checks each entry and that the post fits.",
   "entries": [
     {
+      "id": "search-everything-one-list",
+      "date": "2026-10-20",
+      "title": "One search for members, bills and documents",
+      "summary": "Site search ranks members, bills, agencies, pages and federal documents in one list, finds a document by what it is about as well as by its title, and keeps every document filter under its Documents chip.",
+      "url": "/search"
+    },
+    {
       "id": "agency-budgets-page",
       "date": "2026-10-20",
       "title": "A page for agency budgets",
@@ -160,7 +167,7 @@
       "date": "2026-10-17",
       "title": "Comment periods lead with rules",
       "summary": "Agency pages and Explore list proposed and final rules first, fold paperwork renewals apart, and show each abstract's first sentence and the days left.",
-      "url": "/explore?comment=open"
+      "url": "/search?tab=documents&comment=open"
     },
     {
       "id": "supreme-court-page",
@@ -174,7 +181,7 @@
       "date": "2026-10-17",
       "title": "Permanent document links that cite the source",
       "summary": "Each Explore document has a permanent address from its official identifier, cites the body that issued it, and is found first by its docket or Record page.",
-      "url": "/explore"
+      "url": "/search?tab=documents"
     },
     {
       "id": "member-seat-race",
