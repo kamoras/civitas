@@ -21,3 +21,28 @@ def ends_sentence(text: str, at: int) -> bool:
         return True
     word = text[:at].rsplit(" ", 1)[-1].lstrip("(\"“")
     return not ("." in word or len(word) == 1 or word.lower() in _ABBREVIATIONS)
+
+
+# A box's quoted line is one sentence a phone shows in a few lines. Past
+# this many words (a convention: about four lines at 375px) the quote is
+# the sentence's opening words and an ellipsis, still the source's own
+# words in order, with the whole text behind the box's "More".
+LEDE_MAX_WORDS = 40
+
+
+def lede(text: str | None, max_words: int = LEDE_MAX_WORDS) -> str | None:
+    """The text's first sentence, verbatim, for a box to quote: whitespace
+    folded, cut at the first mark that ends a sentence (ends_sentence), and
+    past `max_words` cut at a word with an ellipsis. None for no text."""
+    flat = " ".join((text or "").split())
+    if not flat:
+        return None
+    sentence = flat
+    for m in SENTENCE_END.finditer(flat):
+        if ends_sentence(flat, m.start()):
+            sentence = flat[:m.start() + 1]
+            break
+    words = sentence.split(" ")
+    if len(words) <= max_words:
+        return sentence
+    return " ".join(words[:max_words]).rstrip(",;:") + "…"
