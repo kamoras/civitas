@@ -1137,6 +1137,11 @@ class RaceCoverageItem(Base):
     # those are campaign advocacy, which a non-partisan platform must not
     # carry even attributed.
     has_advocacy: Mapped[bool] = mapped_column(Boolean, default=False)
+    # When the summary was last known not to open with a photo caption: set
+    # at ingest (the feed parser drops captions since 2026-10-21), or by the
+    # nightly re-read of an older item's article page
+    # (fetch/coverage_captions.py). NULL is not yet verified, never clean.
+    caption_checked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
 
     race: Mapped["Race"] = relationship(back_populates="coverage_items")
 

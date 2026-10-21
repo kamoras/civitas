@@ -69,6 +69,7 @@ from app.pipeline.fetch.news_feeds import (
     fetch_state_news_articles,
 )
 from app.pipeline.run_tracker import PipelineRunTracker
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -356,10 +357,15 @@ def _refresh_summary(item: RaceCoverageItem, summary: str | None) -> None:
     stored summary that differs (the publisher edited it, or the feed
     parser's reading of it changed: a photo caption was read as the first
     sentence until 2026-10-21, news_feeds._FIGURE_ELEMENTS) is replaced and
-    scored again. Only while the article is still in its feed."""
-    if summary and item.summary != summary:
+    scored again. Only while the article is still in its feed. Read by
+    today's parser, it is verified caption-free either way (older items
+    are checked by fetch/coverage_captions.py)."""
+    if not summary:
+        return
+    if item.summary != summary:
         item.summary = summary
         item.relevance = None
+    item.caption_checked_at = utcnow()
 
 
 def _title_key(title: str | None) -> str:
@@ -577,7 +583,8 @@ def _store_if_new(
             return False
         seen.add(title_key)
     seen.add(url_key)
-    db.add(RaceCoverageItem(race_id=race_id, **fields))
+    # Read by a parser that drops photo captions (news_feeds._FIGURE_ELEMENTS).
+    db.add(RaceCoverageItem(race_id=race_id, caption_checked_at=utcnow(), **fields))
     return True
 
 

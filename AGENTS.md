@@ -1646,7 +1646,12 @@ the lead photo's caption, and until 2026-10-21 that caption was read as the
 article's first sentence: 632 of 2,522 stored race-coverage summaries led
 with one, and twelve race posts quoted a caption as the news (withdrawn,
 `retractions.json`). An article read again replaces its stored summary
-(`election_coverage._refresh_summary`).
+(`election_coverage._refresh_summary`), and older items are re-read from
+their article pages by the Election run, at most 400 a night
+(`fetch/coverage_captions.py`): a summary opening with the page's own
+`<figcaption>` or JSON-LD image caption gets the page's description, and
+`RaceCoverageItem.caption_checked_at` marks it verified. A page that can't
+be read is never counted clean.
 
 Each feed's publication times are kept for 60 days
 (`ops_alerts.check_source_freshness`), and a feed silent for a day past its
