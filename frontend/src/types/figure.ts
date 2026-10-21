@@ -1,3 +1,5 @@
+import type { ReadoutMark } from "./readout";
+
 /** A record box's figure (components/shared/RecordFigure.tsx): the
  *  homepage's front page and every page built from RecordBox draw these.
  *  Every number and caption is the backend's; the page only draws them. */
@@ -9,6 +11,8 @@ export interface SplitFigure {
   nays: number;
   yeaShare: number;
   caption: string;
+  /** The bar's two sides' readouts, yea then nay. */
+  marks: ReadoutMark[];
 }
 
 /** One dot per member of the party voting Yea or Nay, the breaker's marked. */
@@ -17,6 +21,8 @@ export interface DotsFigure {
   party: "D" | "R";
   voting: number;
   caption: string;
+  /** One readout per dot, in drawing order (the breaker last). */
+  marks: ReadoutMark[];
 }
 
 /** Days left until a date closes: a comment period (with how much of it
@@ -29,6 +35,8 @@ export interface CountdownFigure {
   totalDays?: number;
   daysLeft: number;
   elapsedPercent?: number;
+  /** The period bar's readout, with the bar. */
+  marks?: ReadoutMark[];
   /** What the days are left for, after "N days left" ("to register"; ""
    *  for nothing more, where the box's title says what closes). Without
    *  one, a comment period's ("to comment"). */

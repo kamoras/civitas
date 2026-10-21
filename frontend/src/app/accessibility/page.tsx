@@ -235,8 +235,8 @@ export default function AccessibilityPage() {
                   }
                 />
                 <Box
-                  title="Dot strips"
-                  dek="Pointing near a dot names who it is. Each strip is one Tab stop, moved with the arrow keys, and has a table of the same figures."
+                  title="Dot strips and charts"
+                  dek="Pointing near a dot, bar or segment names what it is. Each chart is one Tab stop, moved with the arrow keys, and its figures are also written out."
                   more="pointer, touch and keyboard"
                 >
                   <P>
@@ -247,6 +247,34 @@ export default function AccessibilityPage() {
                     stop: the arrow keys move from dot to dot in order of value, Home and End go to
                     the ends, Enter opens the page, and a screen reader hears each dot as it is
                     reached. Every strip also has a table of the same figures with linked names.
+                  </P>
+                  <P>
+                    Other charts work the same way, one chart at a time: a vote&apos;s yea and nay
+                    bar names each side with its votes and share and links to who voted each way, a
+                    party&apos;s dots name each member and their vote, a comment period&apos;s bar
+                    gives its days gone and its dates, each voter deadline gives its rule and
+                    source, each column of a race&apos;s lean chart names the seats in it, and each
+                    state on the Elections maps gives its name, its figure and its page. Each is one
+                    Tab stop the arrow keys walk (a map goes state by state, west to east and north
+                    to south), and its figures are also written out beside it.
+                  </P>
+                  <P>
+                    On a president&apos;s page, each month or year of a line gives its figure and
+                    the other presidencies&apos; middle half at the same point, each bar its year,
+                    and each election its winner, electoral votes and popular margin. A
+                    justice&apos;s estimates name each justice and the interval. On a member&apos;s
+                    page, each slice of the holdings pie gives its share and its disclosed sum
+                    (Enter lists those assets, as the legend does), each policy area its side and
+                    strength, and a measure over time each night&apos;s figure. A voter
+                    deadline&apos;s tick sits over the early-voting band, so pointing within 12
+                    pixels of it reaches it.
+                  </P>
+                  <P>
+                    On the Senate and House map, the whole map is one Tab stop and each state names
+                    its race (both, where it has two) or its seats; Enter, a click or a second tap
+                    opens them. A House seat&apos;s small tile is never a target on its own: its
+                    state&apos;s block is, at least 24 pixels. The archive&apos;s swing maps read
+                    each state the same way, and their tables list every seat.
                   </P>
                 </Box>
                 <Box

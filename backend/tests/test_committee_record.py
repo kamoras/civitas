@@ -106,3 +106,13 @@ def test_the_routes_serve_and_validate(events):
     with pytest.raises(congress_api.HTTPException):
         congress_api.committee_search(chamber=None, committee=None, q=None, bill="NOT A BILL", kind=None,
                                       congress=None, page=1, per_page=20, db=events)
+
+
+def test_each_entry_carries_its_first_sentence_verbatim_for_its_box(events):
+    entries = committee_record.search(events, congress=119, per_page=50)["entries"]
+    for e in entries:
+        quoted = e["lede"].removesuffix("…")
+        assert e["text"].startswith(quoted)  # the Digest's own words, in order
+        assert len(e["lede"].split()) <= 40
+    hearing = next(e for e in entries if e["text"] == HEARING)
+    assert hearing["lede"] == HEARING  # one sentence, whole

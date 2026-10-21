@@ -3,6 +3,7 @@
  * against the counts their states list as official, and each seat's swing
  * from its usual vote. Every figure and label is the backend's. */
 import type { MapBin, MapChamberKey } from "@/types/electionMap";
+import type { ReadoutMark } from "@/types/readout";
 
 /** official: the source lists it official (and it is D vs R); counting: a
  * count not yet official; no_count: none read; not_two_party: official,
@@ -53,6 +54,11 @@ export interface CoverageCell {
   held95: number;
   share95: number | null;
   interval95: [number, number] | null;
+  /** As printed ("62%", "n/a"; "35% to 88%"). */
+  share80Shown: string;
+  interval80Shown: string | null;
+  share95Shown: string;
+  interval95Shown: string | null;
 }
 
 export interface BasisCell extends CoverageCell {
@@ -72,18 +78,24 @@ export interface ChamberAccountability {
   promised: {
     nominal80: number;
     nominal95: number;
+    nominal80Shown: string;
+    nominal95Shown: string;
     heldOut: {
       cycles: [number, number] | null;
       races: number | null;
       coverage80: number | null;
       coverage95: number | null;
       coverage80Fundamentals: number | null;
+      coverage80Shown: string;
+      coverage95Shown: string;
     };
     forward: {
       cycle: number;
       races: number;
       coverage80: number;
       coverage95: number;
+      coverage80Shown: string;
+      coverage95Shown: string;
     } | null;
   };
   /** Furthest outside the 80% range first; outsideBy in margin points. */
@@ -96,6 +108,8 @@ export interface ChamberAccountability {
     medianLabel: string | null;
   };
   seats: AccountabilitySeat[];
+  /** Each state's readout on the swing map (accountability.swing_marks). */
+  stateMarks: Record<string, ReadoutMark>;
 }
 
 export interface MapAccountability {

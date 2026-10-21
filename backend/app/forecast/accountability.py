@@ -32,6 +32,7 @@ from scipy.stats import beta
 
 from app.forecast.build import UNITS, bin_of, margin_label, range_label
 from app.forecast.polls import POLL_ATTRIBUTION, POLL_LICENSE, POLL_LICENSE_URL
+from app.readout import mark, seat_name
 
 # What each seat's count is, for the check: "official" (the source lists it
 # official), "counting" (a count, not yet official), "no_count" (none read:
@@ -114,6 +115,11 @@ def _seat(chamber: str, s: dict, result: dict | None) -> dict:
     return out
 
 
+def _pct(share: float | None) -> str:
+    """A share as the check prints it: a whole percent, "n/a" for none."""
+    return "n/a" if share is None else f"{round(share * 100)}%"
+
+
 def _cell(seats: list[dict]) -> dict:
     graded = [s for s in seats if s["inside80"] is not None]
     n = len(graded)
@@ -123,6 +129,10 @@ def _cell(seats: list[dict]) -> dict:
         cell[f"held{level}"] = held
         cell[f"share{level}"] = round(held / n, 3) if n else None
         cell[f"interval{level}"] = clopper_pearson(held, n)
+        # As printed (the page computes nothing).
+        cell[f"share{level}Shown"] = _pct(cell[f"share{level}"])
+        iv = cell[f"interval{level}"]
+        cell[f"interval{level}Shown"] = f"{_pct(iv[0])} to {_pct(iv[1])}" if iv else None
     return cell
 
 
@@ -132,12 +142,16 @@ def _promised(calibration: dict) -> dict:
     the forward check on the newest cycle it never saw)."""
     fw = calibration.get("forward")
     return {
-        "nominal80": 0.8, "nominal95": 0.95,
+        "nominal80": 0.8, "nominal95": 0.95, "nominal80Shown": _pct(0.8), "nominal95Shown": _pct(0.95),
         "heldOut": {"cycles": calibration.get("cycles"), "races": calibration.get("races"),
                     "coverage80": calibration.get("coverage80"), "coverage95": calibration.get("coverage95"),
-                    "coverage80Fundamentals": calibration.get("coverage80Fundamentals")},
+                    "coverage80Fundamentals": calibration.get("coverage80Fundamentals"),
+                    "coverage80Shown": _pct(calibration.get("coverage80")),
+                    "coverage95Shown": _pct(calibration.get("coverage95"))},
         "forward": None if not fw else {"cycle": fw.get("cycle"), "races": fw.get("races"),
-                                        "coverage80": fw.get("coverage80"), "coverage95": fw.get("coverage95")},
+                                        "coverage80": fw.get("coverage80"), "coverage95": fw.get("coverage95"),
+                                        "coverage80Shown": _pct(fw.get("coverage80")),
+                                        "coverage95Shown": _pct(fw.get("coverage95"))},
     }
 
 
@@ -148,6 +162,44 @@ def _swing_summary(seats: list[dict]) -> dict:
     mean, median = statistics.fmean(swings), statistics.median(swings)
     return {"seats": len(swings), "mean": round(mean, 2), "meanLabel": margin_label(mean),
             "median": round(median, 2), "medianLabel": margin_label(median)}
+
+
+# What a seat with no swing is waiting on, in words.
+COUNT_WORDS = {
+    "official": "official",
+    "counting": "count not yet official",
+    "no_count": "no count read",
+    "not_two_party": "official, but not a Democrat against a Republican",
+}
+
+
+def _swing_words(s: dict) -> str:
+    return (f"{s['marginLabel']}, usual {s['usualMarginLabel']}, swing {s['swingLabel']}" if s["swingLabel"]
+            else COUNT_WORDS[s["count"]])
+
+
+def swing_marks(chamber: str, seats: list[dict]) -> dict[str, dict]:
+    """Each state's readout on the swing map: a Senate state its race (or
+    both), a House state how many of its seats have an official count and
+    their median swing. Counted here, so the page counts nothing."""
+    by_state: dict[str, list[dict]] = {}
+    for s in seats:
+        by_state.setdefault(s["state"], []).append(s)
+    out = {}
+    for st, group in by_state.items():
+        name = group[0]["stateName"]
+        if chamber == "house":
+            swings = [s["swing"] for s in group if s["swing"] is not None]
+            context = f"{len(swings)} with an official count" + (
+                f", median swing {margin_label(statistics.median(swings))}" if swings else "")
+            out[st] = mark(st, name, f"{len(group)} {'seat' if len(group) == 1 else 'seats'}", context=context)
+        elif len(group) == 1:
+            s = group[0]
+            out[st] = mark(st, seat_name(name, s["district"], s["special"]), _swing_words(s))
+        else:
+            out[st] = mark(st, name, f"{len(group)} races: " + "; ".join(
+                f"{seat_name(name, s['district'], s['special'])}, {_swing_words(s)}" for s in group))
+    return out
 
 
 def grade(map_data: dict, record: dict) -> dict:
@@ -178,6 +230,7 @@ def grade(map_data: dict, record: dict) -> dict:
                              key=lambda s: -s["outsideBy"]),
             "swing": _swing_summary(seats),
             "seats": seats,
+            "stateMarks": swing_marks(chamber, seats),
         }
     return {
         "cycle": map_data.get("cycle") or record.get("cycle"),
