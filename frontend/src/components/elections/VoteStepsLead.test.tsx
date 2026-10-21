@@ -114,6 +114,29 @@ describe("VoteStepsLead", () => {
     );
   });
 
+  it("says plainly who publishes sample ballots where the state has no statewide lookup", () => {
+    render(
+      <VoteStepsLead
+        calendar={null}
+        steps={[
+          step("sample_ballot", {
+            isStateSpecific: false,
+            localOffice: "city or town",
+            url: "https://www.usa.gov/election-office",
+            host: "usa.gov",
+            sourceName: "USAGov's directory of election offices",
+          }),
+        ]}
+      />
+    );
+    const button = screen.getByTestId("ballot-lookup");
+    expect(button).toHaveTextContent(
+      "Your city or town publishes sample ballots: find your city or town election office"
+    );
+    expect(button).toHaveTextContent("Opens usa.gov · USAGov's directory of election offices");
+    expect(button).not.toHaveTextContent("See your sample ballot");
+  });
+
   it("says every deadline has passed rather than dropping them", () => {
     const d = deadline({ status: "closed", countdown: null, daysLeft: 0 });
     render(<VoteStepsLead calendar={calendar({ items: [d] })} steps={[]} />);
