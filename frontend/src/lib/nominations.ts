@@ -90,7 +90,7 @@ export function voteNominationLine(rc: VoteRollCall | null | undefined): string 
 export function nominationHeading(n: NominationDetail): string {
   const first = n.nominees[0];
   if (n.nomineeCount > 1)
-    return `${n.nomineeCount.toLocaleString()} nominees: ${[n.positionTitle, n.organization].filter(Boolean).join(", ")}`;
+    return `${n.nomineeCount.toLocaleString("en-US")} nominees: ${[n.positionTitle, n.organization].filter(Boolean).join(", ")}`;
   const name = first?.names[0];
   const who = name
     ? [name.firstName, name.middleName, name.lastName].filter(Boolean).join(" ")

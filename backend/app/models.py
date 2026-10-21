@@ -3206,10 +3206,12 @@ class MemberPhoto(Base):
     __tablename__ = "member_photos"
 
     bioguide_id: Mapped[str] = mapped_column(String(7), primary_key=True)
-    source_url: Mapped[str] = mapped_column(String(300), nullable=False)
+    # Null: neither official source has a photo of the member, so the API
+    # sends no photo path (a route that could only answer 404).
+    source_url: Mapped[str | None] = mapped_column(String(300), nullable=True)
     # The credited depiction the choice was made against: a different one
     # on the member's record is measured again.
-    depiction_url: Mapped[str] = mapped_column(String(300), nullable=False)
+    depiction_url: Mapped[str | None] = mapped_column(String(300), nullable=True)
     # The face's height as a share of the avatar square (the image's shorter
     # side); null when bioguide has no portrait.
     bioguide_face_share: Mapped[float | None] = mapped_column(Float, nullable=True)

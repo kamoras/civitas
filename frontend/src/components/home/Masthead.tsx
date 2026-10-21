@@ -66,7 +66,7 @@ export default function Masthead({
             <p className="mt-2 flex flex-wrap gap-x-4 text-sm">
               {extra.map(({ href, label }) => (
                 <Link key={label} href={href} className={VOTER_LINK}>
-                  {label.charAt(0) + label.slice(1).toLowerCase()}
+                  {label}
                 </Link>
               ))}
             </p>

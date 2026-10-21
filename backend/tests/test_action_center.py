@@ -1374,6 +1374,53 @@ class TestFindRelatedSenatorsSameSurnameCollision:
         assert [r["id"] for r in result] == ["lowell-whitfield"]
 
 
+class TestBareSurnameIsAProperNoun:
+    """A surname that is also an ordinary word ("bolder") links its member
+    only where its capital says a person is meant (2026-10: "much harder"
+    linked a member of that surname)."""
+
+    @pytest.fixture()
+    def bolder(self, db_session):
+        from app.models import FeedArticle
+        db_session.add(Representative(id="robin-bolder", name="Robin Bolder", state="OR", party="D", district=4))
+        # The stored prose writes the word in lower case: an ordinary word.
+        db_session.add(FeedArticle(url="https://example.org/a", source_name="Example", text="",
+                                   title="A bolder plan for roads", description="", embedding=b"", model="m"))
+        db_session.commit()
+        return db_session
+
+    @pytest.mark.parametrize("title,summary,linked", [
+        ("How the agency could make the overhaul much bolder", "", False),
+        ("Bolder plans for the agency", "A plan.", False),               # starts a sentence
+        ("How Lawmakers Could Make The Overhaul Much Bolder", "", False),  # Title Case
+        ("Agency plan", "Rep. Bolder said the plan falls short.", True),   # after a title
+        ("Agency plan", "The plan drew criticism from Bolder and others on the panel.", True),
+    ])
+    def test_links_only_a_proper_noun(self, bolder, title, summary, linked):
+        result = _find_related_senators(title, summary, [], bolder)
+        assert ([r["id"] for r in result] == ["robin-bolder"]) is linked
+
+    @pytest.mark.parametrize("text,linked", [
+        ("Steady says the tariffs stay", True),
+        ("A steady hand on the tariffs", False),   # the ordinary word
+        ("Steadying the tariffs", False),          # a word containing it
+        ("A pro-Steady group", True),              # one end of a compound
+    ])
+    def test_the_presidents_surname_alone_needs_its_capital(self, db_session, text, linked):
+        from app.models import President
+        db_session.add(President(id="pat-steady", name="Pat Steady", party="I", number=99,
+                                 term_start="2029-01-20", is_current=True))
+        db_session.commit()
+        result = _find_related_officials(text, "", [], db_session)
+        assert any(r["id"] == "pat-steady" for r in result) is linked
+
+    def test_a_surname_the_prose_never_writes_lowercase_counts_at_a_sentence_start(self, db_session):
+        db_session.add(Senator(id="lowell-whitfield", name="Lowell Whitfield", state="SC", party="R"))
+        db_session.commit()
+        result = _find_related_senators("News", "Whitfield criticized the bill.", [], db_session)
+        assert [r["id"] for r in result] == ["lowell-whitfield"]
+
+
 class TestFindRelatedOfficialsJusticeCommonWordSurnames:
     """Same failure mode as senators/reps, applied to justice matching:
     Justice Mara Lynn Jackson's surname is both a common place name
