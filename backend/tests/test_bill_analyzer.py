@@ -8,10 +8,14 @@ Tests:
 5. Rich text construction for uninformative bill names
 """
 
+import json
+import math
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
+
+from app.pipeline.analyze import bill_analyzer as ba
 
 from app.pipeline.analyze.bill_analyzer import (
     _build_classification_text,
@@ -24,7 +28,11 @@ from app.pipeline.analyze.bill_analyzer import (
 
 
 class TestProceduralDetection:
-    """Procedural texts should be detected via embedding similarity."""
+    """The procedural seed check is closed (procedural_calibration.json): on
+    the Congressional Research Service's own policy areas no threshold made
+    it at least 80% precise, and at the old 0.74 it set aside 15% of
+    substantive bills. Its prototype still ranks ceremonial titles above
+    substantive ones, which is what a reopened check would read."""
 
     @pytest.mark.parametrize(
         "text",
@@ -36,9 +44,12 @@ class TestProceduralDetection:
         ],
     )
     @pytest.mark.slow
-    def test_procedural_texts_detected(self, text):
-        area, confidence = classify_policy_area(text)
-        assert area == "PROCEDURAL"
+    def test_the_seed_never_fires_while_closed_but_still_ranks_ceremony_first(self, text):
+        assert ba.procedural_threshold() == math.inf
+        matched, ceremonial = _is_procedural_seed_match(text)
+        assert matched is False
+        _, substantive = _is_procedural_seed_match("A bill to expand Medicare coverage for hearing aids")
+        assert ceremonial > substantive
 
     def test_empty_text_is_procedural(self):
         area, confidence = classify_policy_area("")
@@ -49,18 +60,6 @@ class TestProceduralDetection:
         area, confidence = classify_policy_area("abc")
         assert area == "PROCEDURAL"
         assert confidence == 0.0
-
-    @pytest.mark.slow
-    def test_seed_matched_procedural_confidence_is_the_real_score_not_1(self):
-        """O3: _is_procedural_seed_match used to hardcode confidence 1.0 for
-        any match; a marginal 0.75 and a comfortable 0.85 aren't equally
-        certain, and the exact-match learning store (lookup_exact) treats
-        whatever confidence is recorded as ground truth forever."""
-        area, confidence = classify_policy_area(
-            "Naming of a post office building in Springfield Illinois",
-        )
-        assert area == "PROCEDURAL"
-        assert 0.70 <= confidence < 1.0
 
 
 class TestIsProceduralSeedMatch:
@@ -993,3 +992,39 @@ class TestPromiseVoteScaleFix:
         assert result["totalPositions"] == 3
         assert result["overallLean"] < -0.5
         assert result["overallParty"] == "D"
+
+
+def test_the_procedural_seed_reads_its_fitted_threshold(monkeypatch):
+    """Fitted on CRS's own policy areas (scripts/calibrate_procedural.py);
+    null closes the seed check, and a bill is never PROCEDURAL by it."""
+    data = json.loads(ba.PROCEDURAL_CALIBRATION_PATH.read_text())
+    assert "calibrate_procedural.py" in data["_source"] and data["labels_sha256"]
+    assert data["crs_policy_areas_sha256"]
+    monkeypatch.setattr(ba, "_procedural_threshold_cache", [])
+    expected = data["threshold"] if data["threshold"] is not None else math.inf
+    assert ba.procedural_threshold() == expected
+    assert "Commemorations" in ba.crs_policy_areas()
+
+
+@pytest.mark.parametrize(
+    ("stored", "threshold", "matches"),
+    [(None, math.inf, False), (0.5, 0.5, True)],
+)
+def test_the_seed_check_applies_the_stored_threshold(monkeypatch, tmp_path, stored, threshold, matches):
+    """With no threshold passed, the seed reads procedural_calibration.json
+    once: null (the fit missed the precision rule) means even a perfect
+    prototype match isn't called procedural; a number is used as written."""
+    path = tmp_path / "procedural_calibration.json"
+    path.write_text(json.dumps({"threshold": stored}))
+    monkeypatch.setattr(ba, "PROCEDURAL_CALIBRATION_PATH", path)
+    monkeypatch.setattr(ba, "_procedural_threshold_cache", [])
+    monkeypatch.setattr(ba, "_procedural_emb", None)
+    fake_model = MagicMock()
+    fake_model.encode.side_effect = [[np.array([1.0, 0.0])], [np.array([1.0, 0.0])]]
+    with patch("app.pipeline.vector_store.get_embedding_model", return_value=fake_model):
+        matched, score = _is_procedural_seed_match("Designating a week as National Example Week")
+    assert matched is matches
+    assert score == pytest.approx(1.0)
+    assert ba.procedural_threshold() == threshold
+    path.write_text(json.dumps({"threshold": 0.1}))
+    assert ba.procedural_threshold() == threshold  # read once, cached

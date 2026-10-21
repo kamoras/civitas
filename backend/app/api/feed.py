@@ -32,6 +32,7 @@ from app import entity_feeds
 from app.api.agencies import children_of, descendants
 from app.api.response_helpers import CACHE_TTL_LIST_S, cached_json
 from app.broadcast import FEEDS, KINDS, SITE_URL, not_withdrawn
+from app.config import settings
 from app.database import get_db
 from app.entity_feeds import EntityFeed
 from app.member_ids import resolve_member_id
@@ -151,7 +152,7 @@ def render_atom(*, title: str, subtitle: str, path: str, posts: list[BroadcastPo
         entry = _sub(feed, "entry")
         # A tag URI on the row id, which is never reused: stable across
         # edits to the site's URLs, unique across every feed.
-        _sub(entry, "id", f"tag:civitas-research.org,2026:post/{post.id}")
+        _sub(entry, "id", f"tag:{settings.SITE_DOMAIN},2026:post/{post.id}")
         _sub(entry, "title", post.title)
         _sub(entry, "link", rel="alternate", type="text/html", href=post.url)
         stamp = _rfc3339(post.published_at)
