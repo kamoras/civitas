@@ -4,7 +4,9 @@ import { pageMetadata, TOPIC_FEEDS } from "@/lib/site";
 import Navbar from "@/components/layout/Navbar";
 import PageMasthead from "@/components/layout/PageMasthead";
 import Footer from "@/components/layout/Footer";
-import { Summary, Point, A, More, List, Item } from "@/components/about/AboutPage";
+import { Summary, Point, A, List, Item } from "@/components/about/AboutPage";
+import BoxGrid from "@/components/shared/BoxGrid";
+import RecordBox from "@/components/shared/RecordBox";
 import { formatUtcDate } from "@/lib/formatting";
 import { SCORE_VERSIONS, type ScoreVersion } from "@/lib/scoreVersions";
 
@@ -100,42 +102,36 @@ const released = (d: string) => formatUtcDate(d, undefined, "en-US");
 /** Link target for a version: "v6.23" -> "v6-23", "President v5" -> "president-v5". */
 const anchor = (v: ScoreVersion) => v.version.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 
+/** One version as a record box: its name and release date over its title,
+ *  which is the entry's own one-line headline (scoreVersions.ts), and its
+ *  summary and every change behind More. The text is never cut at a
+ *  "sentence end", which an abbreviation ("U.S.") fakes. Nothing is dropped. */
 function Entry({ v }: { v: ScoreVersion }) {
-  const id = anchor(v);
   return (
-    <article id={id} aria-labelledby={`${id}-h`} className="border-t border-white/[0.09] pt-6">
-      <p className="font-mono text-xs text-signal-cyan">
-        {v.version} · released <time dateTime={v.date}>{released(v.date)}</time>
-      </p>
-      <h3
-        id={`${id}-h`}
-        className="mt-1 font-display text-lg font-semibold leading-snug text-ink-hi"
-      >
-        {v.title}
-      </h3>
-      <div className="mt-3 space-y-3">
-        {v.tldr ? (
-          <>
-            <p className="text-base leading-relaxed text-ink">{v.tldr}</p>
-            <More label="What changed, and the evidence">
-              <List>
-                {v.changes.map((c, i) => (
-                  <Item key={i}>{c}</Item>
-                ))}
-              </List>
-            </More>
-          </>
-        ) : (
-          // Older entries have no plain-language summary; the detail is all
-          // there is, so it isn't hidden behind a toggle.
-          <List>
-            {v.changes.map((c, i) => (
-              <Item key={i}>{c}</Item>
-            ))}
-          </List>
-        )}
-      </div>
-    </article>
+    <RecordBox
+      id={anchor(v)}
+      level={3}
+      compact
+      kicker={
+        <>
+          {v.version} · released <time dateTime={v.date}>{released(v.date)}</time>
+        </>
+      }
+      title={v.title}
+      more={{
+        label: v.tldr ? "what changed, and the evidence" : "what changed",
+        children: (
+          <div className="space-y-3">
+            {v.tldr && <p className="text-base leading-relaxed text-ink">{v.tldr}</p>}
+            <List>
+              {v.changes.map((c, i) => (
+                <Item key={i}>{c}</Item>
+              ))}
+            </List>
+          </div>
+        ),
+      }}
+    />
   );
 }
 
@@ -219,11 +215,11 @@ export default function ChangelogPage() {
                 Dates are when a version was released. Versions up to v5.8 (July 12, 2026) predate
                 the public code history, so their dates can&apos;t be checked against it.
               </p>
-              <div className="mt-6 space-y-8">
+              <BoxGrid columns={2} className="mt-6">
                 {SCORE_VERSIONS.map((v) => (
                   <Entry key={v.version} v={v} />
                 ))}
-              </div>
+              </BoxGrid>
             </section>
           </div>
         </div>
