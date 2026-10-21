@@ -258,6 +258,20 @@ def _connect(path: str) -> sqlite3.Connection:
     return conn
 
 
+def index_kinds(path: str | None = None) -> set[str] | None:
+    """The kinds of entity the index holds; None when it can't be read.
+    The calibrations record the kinds they were fitted on, and the data
+    refresh job alerts when the index holds one they never saw."""
+    try:
+        conn = _connect(path or SITE_SEARCH_DB)
+    except SearchUnavailable:
+        return None
+    try:
+        return {kind for (kind,) in conn.execute("SELECT DISTINCT kind FROM entity")}
+    finally:
+        conn.close()
+
+
 def _candidates(conn: sqlite3.Connection, raw: str, q: str) -> tuple[dict[int, Hit], set[int]]:
     rows: dict[int, tuple] = {}
     key_ids: set[int] = set()

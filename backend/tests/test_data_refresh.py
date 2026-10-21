@@ -3,6 +3,7 @@ own script on its own cadence, gated, the last good copy kept and an alert
 opened on a failure, and a staleness alert where a person must regenerate.
 Offline: the generators here are tiny inline scripts or mocked."""
 
+import gzip
 import importlib.util
 import json
 import pathlib
@@ -322,7 +323,66 @@ def test_a_newer_maddison_release_is_found_by_search(monkeypatch):
     assert dr._peer_gdp_stale(_ctx("peer_gdp_per_capita.json", doc)) is None
     monkeypatch.setattr(dr.httpx, "get", lambda *a, **k: Resp(["Maddison Project Database 2026", "x"]))
     assert "2026 is published" in dr._peer_gdp_stale(_ctx("peer_gdp_per_capita.json", doc))
-    assert dr._peer_gdp_stale(_ctx("peer_gdp_per_capita.json", doc, last=datetime.now())) is None
+    assert dr._peer_gdp_stale(_ctx("peer_gdp_per_capita.json", doc, last=datetime.now())) is dr.UNCHECKED
+
+
+def test_a_check_that_did_not_look_today_leaves_its_alert_as_it_is(alerts):
+    """A monthly release check returning UNCHECKED neither sends nor
+    resolves: returning None resolved its alert the day after it opened."""
+    spec = dr.DataFile("x.json", stale=lambda ctx: dr.UNCHECKED)
+    with patch.object(dr, "read", return_value={}), patch.object(dr, "_last_try", return_value=(None, False)):
+        assert dr.run_refreshes([spec]) == {"x.json": "current"}
+    alerts.send.assert_not_called()
+    alerts.resolve.assert_not_called()
+
+
+def test_the_eavs_gate_refuses_an_older_survey_a_missing_state_or_other_items():
+    states = {s: {} for s in STATE_NAMES}
+    old = {"year": 2024, "items": {"A1a": "x"}, "states": states}
+    assert dr._eavs_gate({"year": 2026, "items": {"A1a": "x"}, "states": states}, old) == []
+    assert dr._eavs_gate({"year": 2022, "items": {"A1a": "x"}, "states": states}, old)
+    assert dr._eavs_gate({"year": 2026, "items": {"A1a": "x"}, "states": {"AK": {}}}, old)
+    assert dr._eavs_gate({"year": 2026, "items": {"B1": "y"}, "states": states}, old)
+
+
+def test_the_agency_crosswalk_gate_refuses_a_threshold_that_separates_nothing_or_shrunk_lists():
+    old = {"threshold": 0.83, "youden_j": 0.9, "fr_agencies": 400, "toptier_agencies": 110, "labelled": 80}
+    assert dr._agency_crosswalk_gate(dict(old), old) == []
+    assert dr._agency_crosswalk_gate({**old, "youden_j": 0}, old)
+    assert dr._agency_crosswalk_gate({**old, "toptier_agencies": 20}, old)
+
+
+def test_a_newer_acs_or_onet_is_found(monkeypatch):
+    """The bundled file names ACS and O*NET releases in its _source; a
+    newer one posted is an alert, nothing new is not, and a source that
+    can't be read says nothing."""
+    monkeypatch.setattr(dr, "_record_try", lambda n, o: None)
+    with gzip.open(dr.BUNDLED / dr.OCCUPATION_FILE, "rt") as f:
+        source = json.load(f)["_source"]
+    year = int(re.search(r"ACS (\d{4})", source)[1])
+    major, minor = (int(x) for x in re.search(r"O\*NET (\d+)\.(\d+)", source).groups())
+    ctx = _ctx(dr.OCCUPATION_FILE, today=date(year + 3, 1, 1))
+    monkeypatch.setattr(dr, "_url_exists", lambda url: False)
+    monkeypatch.setattr(dr, "_get_text", lambda url: f"db_{major}_{minor}_text.zip")
+    assert dr._occupation_industry_stale(ctx) is None
+    monkeypatch.setattr(dr, "_url_exists", lambda url: str(year + 1) in url)
+    assert f"ACS {year + 1}" in dr._occupation_industry_stale(ctx)
+    monkeypatch.setattr(dr, "_url_exists", lambda url: False)
+    monkeypatch.setattr(dr, "_get_text", lambda url: f"db_{major + 1}_0_text.zip db_{major}_{minor}_x")
+    assert f"O*NET {major + 1}.0" in dr._occupation_industry_stale(ctx)
+    monkeypatch.setattr(dr, "_get_text", lambda url: None)
+    assert dr._occupation_industry_stale(ctx) is None
+
+
+def test_a_newer_supreme_court_database_release_is_found(monkeypatch):
+    monkeypatch.setattr(dr, "_record_try", lambda n, o: None)
+    doc = {"scdbRelease": "2026_01"}
+    monkeypatch.setattr(dr, "_get_text", lambda url: '<a href="data/2026-release-01/">2026 Release 01</a>')
+    assert dr._court_finding_stale(_ctx("court_finding.json", doc)) is None
+    monkeypatch.setattr(dr, "_get_text", lambda url: '<a href="data/2027-release-01/">2027 Release 01</a>')
+    assert "2027 Release 01" in dr._court_finding_stale(_ctx("court_finding.json", doc))
+    monkeypatch.setattr(dr, "_get_text", lambda url: None)
+    assert dr._court_finding_stale(_ctx("court_finding.json", doc)) is None
 
 
 def test_every_generated_file_on_record_exists_and_every_command_names_a_real_script():
@@ -380,3 +440,13 @@ def test_name_casing_refresh_reads_as_many_issues_as_the_bundled_table():
     bundled = json.loads((dr.BUNDLED / "name_casing.json").read_text())["_source"]
     assert issues >= int(re.search(r"the first (\d+) issues", bundled)[1])
     assert argv[argv.index("--year") + 1] == "2026"
+
+
+def test_a_search_calibration_alerts_on_a_kind_its_fit_never_saw(monkeypatch):
+    check = dr._search_kinds_stale("calibrate_site_search.py")
+    monkeypatch.setattr(dr.site_search, "index_kinds", lambda: {"member", "bill", "nomination"})
+    assert "nomination" in check(_ctx("site_search_calibration.json", {"kinds": ["member", "bill"]}))
+    assert check(_ctx("site_search_calibration.json", {"kinds": ["member", "bill", "nomination"]})) is None
+    assert "records no kinds" in check(_ctx("site_search_calibration.json", {"params": {}}))
+    monkeypatch.setattr(dr.site_search, "index_kinds", lambda: None)
+    assert check(_ctx("site_search_calibration.json", {"kinds": []})) is None

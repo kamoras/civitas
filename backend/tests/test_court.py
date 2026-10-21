@@ -202,3 +202,17 @@ def test_an_unread_martin_quinn_file_is_reported(db_session):
          patch.object(justice_pipeline, "_measure_loyalty", AsyncMock(return_value=(measured, None))):
         result = asyncio.run(justice_pipeline.run_justice_pipeline(db_session))
     assert result["positions_unread"] is True
+
+
+def test_the_court_level_finding_is_the_generated_files_never_typed(db_session, monkeypatch):
+    """/court and the methods page state the finding from
+    app/data/court_finding.json (scripts/research_justice_loyalty.py
+    --write-finding), with its source; nothing when it can't be read."""
+    finding = _get(db_session, "/api/court/finding").json()
+    on_file = json.loads((court_service.data_refresh.BUNDLED / "court_finding.json").read_text())
+    assert finding["estimate"] == on_file["estimate"] and finding["low"] < finding["high"]
+    assert finding["excludesZero"] == (finding["low"] > 0 or finding["high"] < 0)
+    assert "research_justice_loyalty.py" in finding["source"]
+    assert _get(db_session, "/api/court").json()["appointerFinding"] == finding
+    monkeypatch.setattr(court_service.data_refresh, "read", lambda name: {})
+    assert _get(db_session, "/api/court/finding").json() is None
