@@ -1,11 +1,21 @@
 """Site search: suggestions as a reader types, and the /search page's
 results (app/site_search.py).
 
+Suggestions are lexical, with no model: they are asked for on every
+keystroke. The results page also ranks Explore's documents by meaning
+(services/explore_search.hybrid_search), which encodes the query with the
+sentence-transformer already loaded for Explore: the one model use on a
+read request (AGENTS.md, "Read path must stay lightweight"). It runs only
+when no page is clearly meant, never for a direct jump.
+
 Private caching only: the reader's own browser may keep an answer for a few
 minutes, nginx keeps none, since a cached copy on its disk would keep the
-query (AGENTS.md §8). Misses reach the backend through the catch-all /api/
-location and its api-misses rate limit, like every other uncached read.
+query (AGENTS.md §8). The /search page asks for results server-side, so
+nginx limits that page's requests per address instead (`location = /search`,
+the same rate as Explore search's misses).
 """
+
+import logging
 
 from fastapi import APIRouter, Depends, Query
 from app.api.response_helpers import JSONResponse
@@ -13,10 +23,15 @@ from sqlalchemy.orm import Session
 
 from app import site_search
 from app.database import get_db
+from app.services.explore_search import hybrid_search
 
 router = APIRouter()
 
 PRIVATE_CACHE = "private, max-age=300"
+# Explore's documents fused into a results page: the hybrid ranker's first
+# page, as many as Explore itself showed.
+DOCUMENTS = 30
+logger = logging.getLogger(__name__)
 
 
 def _answer(data: dict) -> JSONResponse:
@@ -29,7 +44,7 @@ def _unavailable(q: str) -> JSONResponse:
     # results". Not cached: it changes within minutes.
     return JSONResponse(
         content={"query": q, "unavailable": True, "direct": None, "items": [], "groups": [],
-                 "alternatives": [], "near": [], "explore": {"count": None, "url": "/explore"}},
+                 "kinds": [], "alternatives": [], "near": []},
         headers={"Cache-Control": "no-store"},
     )
 
@@ -54,10 +69,21 @@ def search(
     q: str = Query("", max_length=site_search.QUERY_MAX),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
-    """Every match, grouped by kind with counts; Explore's own count for the
-    words; `direct` (as above); `alternatives`, the close calls beside the
-    top match; `near`, the closest names by spelling when nothing matched."""
+    """`direct` (as above), or every match and Explore document ranked
+    together in `items` (each with its kind), with `kinds`, each kind's
+    count; `alternatives`, the close calls beside the top match; `near`,
+    the closest names by spelling when nothing matched."""
+
+    def documents(words: str) -> dict | None:
+        try:
+            out = hybrid_search(db, words, limit=DOCUMENTS)
+        except Exception:  # noqa: BLE001 - the matches still answer
+            logger.exception("search: the documents' half failed")
+            db.rollback()
+            return None
+        return out if out["indexReady"] else None
+
     try:
-        return _answer(site_search.results(q, db))
+        return _answer(site_search.results(q, db, documents=documents))
     except site_search.SearchUnavailable:
         return _unavailable(q)

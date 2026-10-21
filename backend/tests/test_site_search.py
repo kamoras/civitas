@@ -186,19 +186,73 @@ def test_prefix_finds_names_as_they_are_typed(index):
 
 def test_nothing_on_file_offers_the_nearest_names(index):
     out = site_search.results("calnedar", path=index)
-    if not out["groups"]:
+    if not out["items"]:
         assert out["near"], "an empty result names the closest spellings"
     out = site_search.results("qqqqzzzz", path=index)
-    assert out["groups"] == [] and out["direct"] is None
+    assert out["items"] == [] and out["direct"] is None
 
 
-def test_results_group_by_kind_with_counts(index):
+def test_results_count_each_kind(index):
     out = site_search.results("warren", path=index)
-    groups = {g["kind"]: g for g in out["groups"]}
-    assert groups["member"]["count"] == 2
-    assert {i["url"] for i in groups["member"]["items"]} == {
+    kinds = {k["kind"]: k for k in out["kinds"]}
+    assert kinds["member"]["count"] == 2
+    assert {i["url"] for i in out["items"] if i["kind"] == "member"} == {
         "/politicians/elizabeth-warren", "/politicians/warren-davidson"}
-    assert out["explore"]["url"] == "/explore?q=warren"
+
+
+def _doc(i, title="A rule", key=None):
+    return {"id": i, "key": key or f"fr-2026-{i:05d}", "title": title, "docType": "Proposed Rule",
+            "agencyName": "Food and Drug Administration", "date": "2026-10-01", "commentUrl": "",
+            "commentsCloseOn": ""}
+
+
+def test_results_rank_matches_and_documents_together(index):
+    """One list: the hybrid ranker's documents fused by rank with the
+    matches, a page both hold once, each item labelled with its kind."""
+    asked = []
+
+    def documents(words):
+        asked.append(words)
+        return {"results": [_doc(7, "EO 14110: Safe AI"), _doc(8, "Warren county grant")],
+                "semanticUnavailable": False}
+
+    out = site_search.results("warren", path=index, documents=documents)
+    assert asked == ["warren"]
+    urls = [i["url"] for i in out["items"]]
+    assert "/explore/fr-2026-00008" in urls and "/politicians/elizabeth-warren" in urls
+    assert len(urls) == len(set(urls))
+    assert {k["kind"] for k in out["kinds"]} >= {"member", "document"}
+    doc = next(i for i in out["items"] if i["kind"] == "document")
+    assert doc["group"] == "Documents" and "Proposed Rule" in doc["context"]
+
+
+def test_a_document_in_both_lists_is_listed_once_and_ranked_higher():
+    hits = [site_search.Hit("member", "M", "", "/politicians/m", 0.5, ("m",), match=0.9),
+            site_search.Hit("document", "Rule", "", "/explore/7", 0.4, ("rule",), match=0.5)]
+    f = site_search.Fusion(k=1.0, document_weight=1.0)
+    out = site_search.fuse(hits, [_doc(7, "Rule")], f)
+    assert [i["url"] for i in out] == ["/explore/fr-2026-00007", "/politicians/m"]
+
+
+def test_a_weak_match_yields_to_documents_when_fitted_so():
+    hits = [site_search.Hit("member", "M", "", "/politicians/m", 0.5, ("m",), match=0.35)]
+    f = site_search.Fusion(k=1.0, document_weight=1.0, strong_match=0.6, weak_weight=0.5)
+    assert site_search.fuse(hits, [_doc(7)], f)[0]["kind"] == "document"
+    f = site_search.Fusion(k=1.0, document_weight=0.5, strong_match=0.0, weak_weight=1.0)
+    assert site_search.fuse(hits, [_doc(7)], f)[0]["kind"] == "member"
+
+
+def test_a_direct_jump_never_runs_the_document_search(index):
+    def documents(_words):
+        raise AssertionError("encoded a query that names one page")
+
+    assert site_search.results("EPA", path=index, documents=documents)["direct"]
+
+
+def test_documents_that_could_not_be_searched_say_so(index):
+    out = site_search.results("warren", path=index, documents=lambda _w: None)
+    assert out["documentsUnavailable"] is True
+    assert {i["kind"] for i in out["items"]} == {"member"}
 
 
 def test_close_calls_are_offered(index):
@@ -280,11 +334,12 @@ def test_normalize_folds_accents_and_punctuation():
 # ── Read path: no model, no LLM ──────────────────────────────────
 
 def test_read_path_loads_no_model():
-    """Importing and running the search API never imports an embedding
-    model or a model runtime (AGENTS.md, read path)."""
+    """The autocomplete's module never imports an embedding model or a
+    model runtime (AGENTS.md, read path): only the results page's route
+    (api/search.py) reaches Explore's hybrid ranker."""
     code = (
         "import sys\n"
-        "import app.api.search, app.site_search\n"
+        "import app.site_search\n"
         "bad = [m for m in ('sentence_transformers', 'torch', 'transformers') if m in sys.modules]\n"
         "assert not bad, bad\n"
     )
@@ -303,8 +358,27 @@ def test_api_answers_privately_cached(monkeypatch, index, db_session):
     assert body["direct"] == "/agencies/environmental-protection-agency"
     assert body["items"][0]["group"] == "Agencies"
     res = search_api.search(q="warren", db=db_session)
-    assert json.loads(res.body)["groups"][0]["kind"] == "member"
+    assert json.loads(res.body)["items"][0]["kind"] == "member"
     assert "private" in res.headers["cache-control"]
+
+
+def test_suggestions_never_encode_but_results_use_the_hybrid_ranker(monkeypatch, index, db_session):
+    """The autocomplete stays model-free; the results page's documents come
+    from Explore's hybrid ranker (semantic channel included), so it can't
+    be swapped for a title match without this failing."""
+    monkeypatch.setattr(site_search, "SITE_SEARCH_DB", index)
+    calls = []
+
+    def fake_hybrid(db, q, *, limit):
+        calls.append(q)
+        return {"results": [_doc(9, "Warren rule")], "indexReady": True, "semanticUnavailable": False}
+
+    monkeypatch.setattr(search_api, "hybrid_search", fake_hybrid)
+    search_api.suggest(q="warren", db=db_session)
+    assert calls == []
+    body = json.loads(search_api.search(q="warren", db=db_session).body)
+    assert calls == ["warren"]
+    assert "/explore/fr-2026-00009" in [i["url"] for i in body["items"]]
 
 
 def test_api_before_the_index_exists(monkeypatch, tmp_path, db_session):

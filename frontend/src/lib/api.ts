@@ -887,43 +887,6 @@ export interface ExploreNotHeld {
   source: string;
 }
 
-/** A sitting member a search names (GET /api/explore/matches). */
-export interface ExploreMemberMatch {
-  id: string;
-  name: string;
-  party: "D" | "R" | "I";
-  state: string;
-  chamber: "senate" | "house";
-  district: number | null;
-  thumbnailUrl: string | null;
-}
-
-/** A bill a search names: by its number, or by the words of its titles. */
-export interface ExploreBillMatch {
-  billId: string;
-  /** Null for a bill number no sitting member sponsored (its page is Congress.gov's record). */
-  congress: number | null;
-  label: string;
-  title: string | null;
-  shortTitle: string | null;
-  stage: string | null;
-}
-
-/** Explore's typed match groups, beside the document results and never fused into them. */
-export interface ExploreMatches {
-  members: { total: number; items: ExploreMemberMatch[] };
-  bills: { total: number; items: ExploreBillMatch[] };
-  /** Optional only for a response cached before the field. */
-  agencies?: { total: number; items: ExploreAgencyMatch[] };
-}
-
-/** A Federal Register agency whose name, short name or description holds the search's words. */
-export interface ExploreAgencyMatch {
-  slug: string;
-  name: string;
-  shortName: string | null;
-}
-
 /** A state's seats, or one seat, from the election map in a line each;
  * null while the map isn't shown (out of the campaign: 404) or hasn't been
  * built (503), which a page says nothing about. Any other failure throws. */
@@ -940,11 +903,6 @@ export async function fetchMapSeats(query: {
   return (await res.json()) as MapSeatLines;
 }
 
-export async function fetchExploreMatches(q: string): Promise<ExploreMatches> {
-  const url = `${API_BASE}/explore/matches?q=${encodeURIComponent(q)}`;
-  return cachedFetch<ExploreMatches>(url, TTL.SHORT);
-}
-
 export interface ExploreStats {
   totalDocuments: number;
   byType: Record<string, number>;
@@ -958,51 +916,6 @@ export interface ExploreStats {
    * starts where each feed's ingest did. Optional only for a response
    * cached before the field. */
   coverage?: { label: string; from: string; to: string; count: number }[];
-}
-
-export async function searchExplore(
-  query: string,
-  options?: {
-    docType?: string;
-    chamber?: string;
-    limit?: number;
-    commentableOnly?: boolean;
-    sort?: "relevance" | "date";
-    politicianId?: string;
-    /** An agency's slug: its documents and its sub-agencies'. */
-    agency?: string;
-  }
-): Promise<ExploreResponse> {
-  // No query with a politician lists that member's documents, newest first
-  // (a profile's "view all documents" link).
-  const params = new URLSearchParams(query ? { q: query } : {});
-  if (options?.docType) params.set("doc_type", options.docType);
-  if (options?.chamber) params.set("chamber", options.chamber);
-  if (options?.limit) params.set("limit", String(options.limit));
-  if (options?.commentableOnly) params.set("commentable", "true");
-  if (options?.sort) params.set("sort", options.sort);
-  if (options?.politicianId) params.set("politician_id", options.politicianId);
-  if (options?.agency) params.set("agency", options.agency);
-
-  // Can't route through requestJson: it throws on any !res.ok and discards
-  // the body, which would turn the 503 "index still building" contract into a
-  // bare "Explore search failed: 503" and never let the page show the
-  // friendlier indexing state.
-  const res = await fetch(`${API_BASE}/explore?${params}`);
-  if (res.status === 503) {
-    let body: { indexEmpty?: boolean } = {};
-    try {
-      body = await res.json();
-    } catch {
-      /* non-JSON 503 (proxy/gateway) — fall through to the generic error */
-    }
-    if (body?.indexEmpty) {
-      return { query, results: [], count: 0, indexEmpty: true };
-    }
-    throw new Error("Explore search failed: 503");
-  }
-  if (!res.ok) throw new Error(`Explore search failed: ${res.status}`);
-  return (await res.json()) as ExploreResponse;
 }
 
 export interface ExploreDocumentDetail {
@@ -1354,10 +1267,6 @@ export async function submitDocumentComment(
     success: false,
     message: typeof detail === "string" ? detail : "Submission failed. Please try again.",
   };
-}
-
-export async function fetchExploreStats(): Promise<ExploreStats> {
-  return requestJson(`${API_BASE}/explore/stats`, "Explore stats failed");
 }
 
 // --- Page-load timing beacon ---

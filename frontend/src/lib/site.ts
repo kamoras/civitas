@@ -10,7 +10,7 @@ import type { Metadata } from "next";
  * canonical on the root would tell Google every page on the site is a
  * duplicate of the homepage. The same holds for a section layout: a
  * section whose index page is a client component (`/congress/bills`,
- * `/elections`, `/explore`) keeps that page's metadata in
+ * `/elections`) keeps that page's metadata in
  * a layout inside an `(index)` route group, wrapping the index alone. A
  * record page beneath can set its own, but its 404 can't (Next resolves a
  * not-found page's metadata from the layouts above it only), so a section

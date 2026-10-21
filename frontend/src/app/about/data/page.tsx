@@ -448,15 +448,16 @@ export default function DataChapter() {
         <ComputedLeanData />
       </Section>
 
-      <Section id="explore" title="How Explore search ranks results">
+      <Section id="explore" title="How document search ranks results">
         <P>
-          Explore searches floor speeches, presidential actions, Federal Register rules and Supreme
-          Court opinions. A floor speech is one member&apos;s own words, whole, under the heading
-          the Congressional Record printed over them, or as remarks on the debate they joined; floor
-          business such as quorum calls and requests to schedule a vote is left out. A Federal
-          Register document is kept to its first 15,000 characters, and a Supreme Court case to the
-          Court&apos;s summary of its holding and the question it decided; each page says when it
-          shows less than the whole document and links to it. Four rankings are combined
+          Document search (the Documents filter of the site search) covers floor speeches,
+          presidential actions, Federal Register rules and Supreme Court opinions. A floor speech is
+          one member&apos;s own words, whole, under the heading the Congressional Record printed
+          over them, or as remarks on the debate they joined; floor business such as quorum calls
+          and requests to schedule a vote is left out. A Federal Register document is kept to its
+          first 15,000 characters, and a Supreme Court case to the Court&apos;s summary of its
+          holding and the question it decided; each page says when it shows less than the whole
+          document and links to it. Four rankings are combined
           <Cite id="cormack2009" />:
         </P>
         <List>
@@ -485,9 +486,9 @@ export default function DataChapter() {
         </List>
         <P>
           Each kind of document is held from the day Civitas began reading it, not from the start of
-          the record: the search page lists each kind&apos;s first and last date under the search
-          box. Floor speeches are kept after their Congress ends. Every document&apos;s page is at
-          an address made from its official identifier (its Federal Register document number, its
+          the record: the Documents filter lists each kind&apos;s first and last date under its
+          filters. Floor speeches are kept after their Congress ends. Every document&apos;s page is
+          at an address made from its official identifier (its Federal Register document number, its
           Congressional Record granule, its Supreme Court docket), which stays the same when the
           document is read again, and &ldquo;Cite this&rdquo; credits the agency, the chamber or the
           Court that issued it, with Civitas as where it was read.
@@ -498,12 +499,6 @@ export default function DataChapter() {
           moved down, never dropped. Ranking weights are changed only when a measurement of search
           quality says to, never because one set of results looks better.
         </P>
-        <P>
-          Above the documents, a search also lists the sitting members whose names (or states) hold
-          its words, and the bills it names: by number, or by the words of their titles. These are
-          separate lists, not mixed into the document ranking, and they match names and titles as
-          written, with no model.
-        </P>
       </Section>
 
       <Section id="site-search" title="How the site search works">
@@ -511,9 +506,22 @@ export default function DataChapter() {
           The search box in the header looks through everything that has a page here: members of
           Congress, presidents and justices, bills, roll calls, agencies, committees, states,
           districts, races, ballot measures, Action Center issues, ongoing stories, nominations,
-          documents and the site&apos;s own pages. It matches names, numbers and spellings, with no
-          AI model: a bill number in any spelling, a district code like TX-23, an agency&apos;s
-          acronym, a Federal Register citation, a name with a letter wrong.
+          documents and the site&apos;s own pages. As you type, it matches names, numbers and
+          spellings, with no AI model: a bill number in any spelling, a district code like TX-23, an
+          agency&apos;s acronym, a Federal Register citation, a name with a letter wrong.
+        </P>
+        <P>
+          Press Enter and the results are one list: those matches and the federal documents that
+          best fit your words, ranked together. Documents are found the way document search finds
+          them, including by meaning, so describing a rule in your own words works: of six such
+          searches for open proposed rules, the list used to find none and now finds all six in its
+          first ten. Each result says what it is (a member, a bill, a document), and the filters
+          above the list narrow it to one kind; the Documents filter has the document search&apos;s
+          own filters. The two rankings are combined by position, not by score
+          <Cite id="cormack2009" />, with weights measured on test searches held out from the
+          tuning: names, bills, pages and identifiers ranked exactly as well as before, and a
+          document described by its own words was in the first ten 91 times in 100, where it had
+          been 0.
         </P>
         <P>
           When what you typed names one page clearly (a bill number, a district code, a full name),

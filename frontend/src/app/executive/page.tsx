@@ -8,7 +8,12 @@ import { fetchAgencyIndex } from "@/lib/agencyServer";
 import { exploreHref } from "@/lib/exploreHref";
 import { calendarDate } from "@/lib/congress";
 import { NOMINATIONS_HREF, nominationHref } from "@/lib/nominations";
-import { EXECUTIVE_HREF, EXECUTIVE_ORDERS_HREF, PRESIDENTS_HREF } from "@/lib/routes";
+import {
+  EXECUTIVE_HREF,
+  EXECUTIVE_ORDERS_HREF,
+  OPEN_COMMENTS_HREF,
+  PRESIDENTS_HREF,
+} from "@/lib/routes";
 import { ordinal } from "@/components/scorecard/format";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
@@ -195,7 +200,7 @@ export default async function ExecutivePage() {
               <Panel
                 id="comments"
                 title="Open for your comment"
-                more={{ href: "/explore?comment=open", label: "Every open comment period" }}
+                more={{ href: OPEN_COMMENTS_HREF, label: "Every open comment period" }}
               >
                 {!comments ? (
                   <Unavailable what="The comment periods" />

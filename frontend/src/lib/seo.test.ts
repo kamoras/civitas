@@ -221,7 +221,7 @@ describe("siteJsonLd", () => {
       "@type": "SearchAction",
       target: {
         "@type": "EntryPoint",
-        urlTemplate: "https://civitas-research.org/explore?q={search_term_string}",
+        urlTemplate: "https://civitas-research.org/search?q={search_term_string}",
       },
       "query-input": "required name=search_term_string",
     });

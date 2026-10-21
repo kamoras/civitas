@@ -65,18 +65,12 @@ identifier isn't held, with where it is.
 Reported per configuration: MRR (mean reciprocal rank of the target),
 Recall@1 / @5 / @20, and how often the target was missed entirely.
 
-**Typed groups (members and bills).** Explore also offers the sitting
-members and the bills a search names, as their own groups beside the
-documents (services/explore_matches.py), never fused into the document
-ranking. They are measured the same known-item way, from the records
-themselves: a member's surname, full name and a one-letter-transposed
-surname; a bill's number as the Record prints it, its short title (or
-title) in order, and two of its title words out of order. Reported: each
-group's MRR and R@1/R@5 over what it shows (GROUP_LIMIT), and routing —
-how often the right group shows the target at all, and how often the
-other group shows something too (`--skip-documents` runs only this part,
-with no embedding model). The document probes are also run through the
-groups, to report how often a document search gets a group beside it.
+**Through /search.** Since Explore's search page became the Documents
+filter of `/search`, the results page ranks these documents together with
+members, bills and every other kind (app/site_search.fuse). That list is
+measured, on these document probes and on site search's own known items,
+by scripts/calibrate_search_fusion.py, which reuses `build_probes` and
+`build_own_identifier_probes` from here.
 
 Run against the deployed database:
     cd backend && .venv/bin/python scripts/evaluate_explore_search.py
@@ -93,7 +87,6 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.models import Representative, Senator  # noqa: E402
 from app.pipeline.analyze.document_authority import (  # noqa: E402
     congressional_record_identifiers,
     declared_identifiers,
@@ -101,9 +94,6 @@ from app.pipeline.analyze.document_authority import (  # noqa: E402
 )
 from app.pipeline.lexical_index import search_lexical  # noqa: E402
 from app.pipeline.vector_store import search_explore_documents  # noqa: E402
-from app.services.bill_service import get_bills_in_flight  # noqa: E402
-from app.services.congress_service import bill_label  # noqa: E402
-from app.services.explore_matches import GROUP_LIMIT, bill_matches, member_matches  # noqa: E402
 from app.services.explore_search import hybrid_search  # noqa: E402
 
 DEFAULT_SAMPLES = 150
@@ -274,95 +264,7 @@ def measure_not_held(db, queries: list[str]) -> dict:
     return {"n": len(queries), "with_results": returned / n, "noted": noted / n}
 
 
-def _transposed(word: str, rng: random.Random) -> str:
-    """`word` with two adjacent letters swapped (not the first): the
-    commonest typing slip, for the misspelt-surname probe."""
-    if len(word) < 4:
-        return word
-    i = rng.randrange(1, len(word) - 1)
-    return word[:i] + word[i + 1] + word[i] + word[i + 2:]
-
-
-def build_member_probes(members: list[dict], rng: random.Random) -> list[dict]:
-    """Known-item member queries: surname, full name, a typo'd surname."""
-    probes = []
-    for m in members:
-        surname = m["name"].split()[-1].lower()
-        probes += [
-            {"group": "members", "style": "surname", "target": m["id"], "query": surname},
-            {"group": "members", "style": "full name", "target": m["id"], "query": m["name"]},
-            {"group": "members", "style": "typo", "target": m["id"], "query": _transposed(surname, rng)},
-        ]
-    return probes
-
-
-def build_bill_probes(bills: list[dict], rng: random.Random) -> list[dict]:
-    """Known-item bill queries: its number as printed, its short title (or
-    title) in order, two of its title words out of order."""
-    probes = []
-    for b in bills:
-        probes.append({"group": "bills", "style": "number", "target": b["billId"], "query": b["label"]})
-        name = b["shortTitle"] or b["title"]
-        probes.append({"group": "bills", "style": "name", "target": b["billId"],
-                       "query": " ".join(name.split()[:8])})
-        words = list(dict.fromkeys(_terms(name)))
-        if len(words) >= 3:
-            pair = rng.sample(words, 2)
-            probes.append({"group": "bills", "style": "words", "target": b["billId"],
-                           "query": " ".join(pair)})
-    return probes
-
-
-def measure_groups(db, probes: list[dict]) -> dict:
-    """{(group, style): {"ranks": [...], "other": [...]}}: the target's rank
-    in its own group's shown list (None when not shown), and whether the
-    other group showed anything for the same query."""
-    out: dict = collections.defaultdict(lambda: {"ranks": [], "other": []})
-    for probe in probes:
-        _, members = member_matches(db, probe["query"])
-        _, bills = bill_matches(db, probe["query"])
-        own, other = (
-            ([m["id"] for m in members], bills) if probe["group"] == "members"
-            else ([b["billId"] for b in bills], members)
-        )
-        cell = out[(probe["group"], probe["style"])]
-        cell["ranks"].append(_rank_of(own, probe["target"]))
-        cell["other"].append(bool(other))
-    return out
-
-
-def group_noise(db, probes: list[dict]) -> dict:
-    """How often a document probe's query gets each group beside the results."""
-    shown = {"members": 0, "bills": 0}
-    for probe in probes:
-        shown["members"] += bool(member_matches(db, probe["query"])[0])
-        shown["bills"] += bool(bill_matches(db, probe["query"])[0])
-    n = len(probes) or 1
-    return {k: v / n for k, v in shown.items()}
-
-
-def _print_groups(db, member_rows, bill_rows, doc_probes, rng) -> None:
-    probes = build_member_probes(member_rows, rng) + build_bill_probes(bill_rows, rng)
-    by = measure_groups(db, probes)
-    header = (f"{'group':<9}{'style':<11}{'n':>5}{'MRR':>8}{'R@1':>8}"
-              f"{f'R@{GROUP_LIMIT}':>8}{'routed':>8}{'other':>8}")
-    print(f"Typed groups (shown: {GROUP_LIMIT} each)\n")
-    print(header)
-    print("-" * len(header))
-    for (group, style), cell in sorted(by.items()):
-        stats = _summarise(cell["ranks"])
-        routed = 1 - stats["missed"]
-        other = sum(cell["other"]) / (len(cell["other"]) or 1)
-        print(f"{group:<9}{style:<11}{stats['n']:>5}{stats['mrr']:>8.3f}{stats['r@1']:>8.3f}"
-              f"{stats['r@5']:>8.3f}{routed:>8.3f}{other:>8.3f}")
-    if doc_probes:
-        noise = group_noise(db, doc_probes)
-        print(f"\nDocument probes with a group beside the results: members {noise['members']:.3f}, "
-              f"bills {noise['bills']:.3f} (of {len(doc_probes)})")
-    print(GROUPS_HOW_TO_READ)
-
-
-GROUPS_HOW_TO_READ = """
+HOW_TO_READ = """
 `routed` is how often the right group showed the target at all; `other` how
 often the other group showed something for the same query (a surname that
 is also a bill's title word, say). Both groups sit beside the document
@@ -490,8 +392,6 @@ def main() -> int:
                         help="documents to sample as known items")
     parser.add_argument("--seed", type=int, default=20260730,
                         help="sampling seed (fixed so runs are comparable)")
-    parser.add_argument("--skip-documents", action="store_true",
-                        help="measure only the typed groups (no embedding model)")
     args = parser.parse_args()
 
     from app.database import SessionLocal
@@ -532,23 +432,6 @@ def main() -> int:
         print(f"Corpus: {total} documents | sampled {len(sample)} | "
               f"{len(probes)} probes\n")
 
-        rng = random.Random(args.seed)
-        member_rows = [
-            {"id": pid, "name": name}
-            for model in (Senator, Representative)
-            for pid, name in db.query(model.id, model.name).filter(model.is_current == True)  # noqa: E712
-        ]
-        member_rows = rng.sample(sorted(member_rows, key=lambda m: m["id"]), min(args.samples, len(member_rows)))
-        bills = get_bills_in_flight(db, per_page=100000).bills
-        bill_rows = [
-            {"billId": b.bill_id, "label": bill_label(b.bill_id) or b.bill_id,
-             "title": b.title, "shortTitle": b.short_title}
-            for b in rng.sample(sorted(bills, key=lambda b: b.bill_id), min(args.samples, len(bills)))
-        ]
-        if args.skip_documents:
-            _print_groups(db, member_rows, bill_rows, probes, rng)
-            return 0
-
         by_style = measure(db, probes)
 
         header = f"{'style':<12}{'config':<10}{'n':>6}{'MRR':>8}{'R@1':>8}{'R@5':>8}{'R@20':>8}{'missed':>9}"
@@ -572,7 +455,6 @@ def main() -> int:
               f"{held_out['noted']:.3f} were told it isn't held\n")
 
         print(HOW_TO_READ)
-        _print_groups(db, member_rows, bill_rows, probes, rng)
         return 0
     finally:
         db.close()

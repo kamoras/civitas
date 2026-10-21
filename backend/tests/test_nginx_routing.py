@@ -176,6 +176,21 @@ def test_every_cached_location_rate_limits_its_misses_and_not_its_hits():
     assert "$proxy_add_x_forwarded_for" not in internal
 
 
+def test_search_results_are_rate_limited_like_explore_search():
+    """/search runs Explore's hybrid ranking (a query encode) on every
+    request, and no page is cached, so the page itself goes through the
+    miss hop under Explore search's limit, and is still the frontend's."""
+    public, internal = _servers()
+    outer = _match(_locations(public), "/search")
+    assert outer[2] == _MISSES_HOP and "limit_req" not in outer[3] and "proxy_cache " not in outer[3]
+    assert "no_transform" in outer[3] and "security-headers.conf" in outer[3]
+    inner = _match(_locations(internal), "/search")
+    assert "limit_req zone=search_miss_limit" in inner[3]
+    assert route("/search") == "frontend_upstream"
+    # Other pages are not limited by it.
+    assert _match(_locations(public), "/searchable")[2] != _MISSES_HOP
+
+
 def test_photos_are_served_by_the_frontend_through_the_miss_hop():
     assert route("/photo/bioguide/X000001") == "frontend_upstream"
     assert route("/photo/justice/x") == "frontend_upstream"

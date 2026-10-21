@@ -180,15 +180,28 @@ def test_pages_leave_marked_no_transform():
     assert maps and any(
         '"$upstream_http_cache_control, no-transform"' in d for d in maps[0].directives
     )
+    # The api-misses server answers only the public server, whose location
+    # replaces the header on the way out (its /search, as for any page).
+    public = [
+        b for b in _walk(root)
+        if b.head == "server" and "server_name api-misses" not in b.directives
+    ]
     page_locations = [
         b
-        for b in _walk(root)
+        for server in public
+        for b in _walk(server)
         if b.head.startswith("location")
         and "proxy_pass http://$frontend_upstream" in b.directives
         and b.head
         not in ("location /_next/static/", "location /photo/", "location = /api/og")
     ]
     assert {b.head for b in page_locations} >= {"location /", "location ^~ /admin"}
+    # A public location that hops to the miss server for a page.
+    assert any(
+        b.head == "location = /search" and "proxy_pass http://api_misses" in b.directives
+        and "add_header Cache-Control $cache_control_no_transform always" in b.directives
+        for server in public for b in _walk(server)
+    )
     for b in page_locations:
         assert "proxy_hide_header Cache-Control" in b.directives, b.head
         assert (

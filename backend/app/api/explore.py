@@ -16,11 +16,9 @@ from app.api.rate_limit import (
     PublicReadLimit, UpstreamRouteLimit, WriteRateLimit, client_ip, limit_client, retry_after, spend_upstream,
 )
 from app.api.response_helpers import (
-    CACHE_TTL_DETAIL_S,
     EXPLORE_CHAMBERS,
     EXPLORE_DOC_TYPES,
     RETRY_SOON_CACHE_CONTROL,
-    cached_json,
     retry_soon_json,
 )
 from app.database import get_db, off_loop
@@ -29,7 +27,6 @@ from app.api.agencies import agency_options, children_of, descendants
 from app.models import Agency, ExploreDocument, Representative, Senator
 from app.pipeline.analyze.document_authority import congressional_record_identifiers, declared_identifiers
 from app.pipeline.fetch.fr_rulemaking import MAX_BODY_LEN
-from app.services.explore_matches import explore_matches
 from app.services.explore_coverage import coverage_windows
 from app.services.explore_keys import KEY_RE, find_by_key, public_key
 from app.services.explore_search import browse_documents, hybrid_search
@@ -222,19 +219,6 @@ async def explore_stats(db: Session = Depends(get_db)):
         },
         headers={"Cache-Control": "public, max-age=300, stale-while-revalidate=300"},
     )
-
-
-@router.get("/matches")
-def explore_matches_route(
-    _rl: PublicReadLimit,
-    q: str = Query(..., min_length=2, max_length=200, description="The search, as typed into Explore"),
-    db: Session = Depends(get_db),
-) -> JSONResponse:
-    """The sitting members and the bills a search names, offered beside
-    Explore's document results as their own groups (services/
-    explore_matches.py): never fused into the document ranking. A plain
-    def: name and title matching over the cached lists, on the threadpool."""
-    return cached_json(explore_matches(db, q), max_age=CACHE_TTL_DETAIL_S)
 
 
 async def _load_document(db: Session, doc_ref: int | str) -> ExploreDocument | None:

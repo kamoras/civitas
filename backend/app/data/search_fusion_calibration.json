@@ -1,0 +1,165 @@
+{
+  "_source": "scripts/calibrate_search_fusion.py on the live indexes (2026-10-20): fitted on half the targets' known-item probes (site search's and Explore's), measured on the other half.",
+  "params": {
+    "k": 0.5,
+    "document_weight": 0.1,
+    "strong_match": 0.5,
+    "weak_weight": 0.0
+  },
+  "structure": "gate kept: macro MRR gain 0.0400 on the fit half, standard error 0.0060",
+  "cutoff": 10,
+  "held_out": {
+    "acronym": {
+      "probes": 71,
+      "mrr_before": 1.0,
+      "mrr_after": 1.0,
+      "r1_before": 1.0,
+      "r1_after": 1.0,
+      "r10_before": 1.0,
+      "r10_after": 1.0
+    },
+    "deep": {
+      "probes": 70,
+      "mrr_before": 1.0,
+      "mrr_after": 1.0,
+      "r1_before": 1.0,
+      "r1_after": 1.0,
+      "r10_before": 1.0,
+      "r10_after": 1.0
+    },
+    "doc:crcite": {
+      "probes": 42,
+      "mrr_before": 0.0,
+      "mrr_after": 0.37,
+      "r1_before": 0.0,
+      "r1_after": 0.167,
+      "r10_before": 0.0,
+      "r10_after": 0.786
+    },
+    "doc:docket": {
+      "probes": 4,
+      "mrr_before": 0.0,
+      "mrr_after": 1.0,
+      "r1_before": 0.0,
+      "r1_after": 1.0,
+      "r10_before": 0.0,
+      "r10_after": 1.0
+    },
+    "doc:frcite": {
+      "probes": 11,
+      "mrr_before": 0.803,
+      "mrr_after": 0.803,
+      "r1_before": 0.636,
+      "r1_after": 0.636,
+      "r10_before": 1.0,
+      "r10_after": 1.0
+    },
+    "doc:frdoc": {
+      "probes": 24,
+      "mrr_before": 1.0,
+      "mrr_after": 1.0,
+      "r1_before": 1.0,
+      "r1_after": 1.0,
+      "r10_before": 1.0,
+      "r10_after": 1.0
+    },
+    "doc:identifier": {
+      "probes": 10,
+      "mrr_before": 0.2,
+      "mrr_after": 0.533,
+      "r1_before": 0.2,
+      "r1_after": 0.5,
+      "r10_before": 0.2,
+      "r10_after": 0.6
+    },
+    "doc:paraphrase": {
+      "probes": 66,
+      "mrr_before": 0.0,
+      "mrr_after": 0.663,
+      "r1_before": 0.0,
+      "r1_after": 0.53,
+      "r10_before": 0.0,
+      "r10_after": 0.909
+    },
+    "doc:rare": {
+      "probes": 66,
+      "mrr_before": 0.0,
+      "mrr_after": 0.437,
+      "r1_before": 0.0,
+      "r1_after": 0.182,
+      "r10_before": 0.0,
+      "r10_after": 0.955
+    },
+    "doc:title": {
+      "probes": 61,
+      "mrr_before": 0.526,
+      "mrr_after": 0.524,
+      "r1_before": 0.475,
+      "r1_after": 0.475,
+      "r10_before": 0.689,
+      "r10_after": 0.689
+    },
+    "document": {
+      "probes": 74,
+      "mrr_before": 0.919,
+      "mrr_after": 0.919,
+      "r1_before": 0.919,
+      "r1_after": 0.919,
+      "r10_before": 0.919,
+      "r10_after": 0.919
+    },
+    "identifier": {
+      "probes": 82,
+      "mrr_before": 1.0,
+      "mrr_after": 1.0,
+      "r1_before": 1.0,
+      "r1_after": 1.0,
+      "r10_before": 1.0,
+      "r10_after": 1.0
+    },
+    "name": {
+      "probes": 69,
+      "mrr_before": 1.0,
+      "mrr_after": 1.0,
+      "r1_before": 1.0,
+      "r1_after": 1.0,
+      "r10_before": 1.0,
+      "r10_after": 1.0
+    },
+    "page": {
+      "probes": 76,
+      "mrr_before": 1.0,
+      "mrr_after": 1.0,
+      "r1_before": 1.0,
+      "r1_after": 1.0,
+      "r10_before": 1.0,
+      "r10_after": 1.0
+    },
+    "surname": {
+      "probes": 85,
+      "mrr_before": 1.0,
+      "mrr_after": 1.0,
+      "r1_before": 1.0,
+      "r1_after": 1.0,
+      "r10_before": 1.0,
+      "r10_after": 1.0
+    },
+    "typo": {
+      "probes": 74,
+      "mrr_before": 1.0,
+      "mrr_after": 1.0,
+      "r1_before": 1.0,
+      "r1_after": 1.0,
+      "r10_before": 1.0,
+      "r10_after": 1.0
+    },
+    "site_search_types": {
+      "mrr_before": 0.99,
+      "mrr_after": 0.99
+    },
+    "document_types": {
+      "mrr_before": 0.316,
+      "mrr_after": 0.666
+    }
+  }
+}

@@ -77,6 +77,11 @@ const nextConfig = {
       // No feed is at /feed itself; the page listing them is (nginx sends
       // /feed/ there too, before Next sees it).
       { source: "/feed", destination: "/feeds", permanent: true },
+      // Explore's search page became site search's Documents filter. Next
+      // carries the query string over (q, agency, politician_id, comment,
+      // type, sort, as the old page read them); document pages
+      // (/explore/{key}) are untouched.
+      { source: "/explore", destination: "/search?tab=documents", permanent: true },
     ];
   },
   async rewrites() {

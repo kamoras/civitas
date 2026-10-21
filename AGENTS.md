@@ -63,10 +63,14 @@ locally on a single self-hosted device with zero cloud AI calls.
   Explore search; see `pipeline/lexical_index.py`
 - **Site search**: one entity index of everything with a page (`/data/site_search.db`,
   SQLite FTS5 + trigram + exact identifier keys), rebuilt by the pipeline
-  process when its sources move; the header's autocomplete and `/search`
-  read it with no model — see `app/site_search.py`
+  process when its sources move; the header's autocomplete reads it with no
+  model — see `app/site_search.py`. The `/search` results page ranks its
+  matches and Explore's hybrid document ranking in one list (reciprocal-rank
+  fusion, `site_search.fuse`), and its Documents filter is what Explore's
+  search page was (`/explore` redirects there; `/explore/{key}` document
+  pages stay)
 - **Deployment**: Docker Swarm (single-node), `docker stack deploy` for zero-downtime rolling updates, nginx (in-stack) reverse proxy with caching
-- **Branches covered**: Senate (100 senators), House (435 representatives), Presidents (historical + modern), Supreme Court (9 justices). The main navigation is by branch, in Article order: Action Center, Congress, Executive, Supreme Court, Elections, About (`SECTIONS` in `frontend/src/lib/routes.ts`), with search in the header; a person's record (`/politicians/[id]`) sits under its branch
+- **Branches covered**: Senate (100 senators), House (435 representatives), Presidents (historical + modern), Supreme Court (9 justices). The main navigation is by branch, in Article order: Action Center, Congress, Executive, Supreme Court, Elections, About (`SECTIONS` in `frontend/src/lib/routes.ts`), with search, documents included, in the header; a person's record (`/politicians/[id]`) sits under its branch
 - **News Feeds**: RSS parsing (NPR, PBS, BBC, The Hill, Politico, Roll Call) + Google Trends + Bluesky trending for Action Center; 41 per-state newsrooms for election races
 - **Action Center**: Three tabs — Today (the day's issues, what a reader can do about each, open comment periods), Ongoing (national monitors: auto-detected ongoing concerns, and those closed in the last 60 days), Archive (year-in-review timeline). Elections live on `/elections`, find-your-members on `/congress/members` (Congress › Members)
 - **Nominations**: every presidential nomination this Congress from Congress.gov (daily, `fetch/nominations.py`), with status, committee, hearings, time to confirm and each roll call that names it (`/congress/nominations`)
@@ -651,6 +655,24 @@ the index (half the entities fit, half reported) and read from
 results page: the thresholds allow no wrong jump in any probe type on the
 fit half. Rerun it when the index gains a kind or aliases.
 
+The `/search` results page is one list: site search's matches and Explore's
+hybrid document ranking fused by rank (`site_search.fuse`), since the two
+scores are on different scales. Its weights are fitted by
+`backend/scripts/calibrate_search_fusion.py` on both harnesses' known items
+at once (site search's probes and `evaluate_explore_search.py`'s document
+probes, half the targets fit, half reported) and read from
+`app/data/search_fusion_calibration.json`; no site-search probe type may
+lose more than a standard error to buy document recall. The Documents
+filter is the hybrid ranker's own UI (`/api/explore`), and
+`frontend/src/app/search/page.test.tsx` fails if either surface stops asking
+it, so the semantic channel can't be dropped by a "simplification" onto
+title matching. Rerun the fusion calibration after either harness's ranker
+changes. When it was introduced (2026-10-20, on a production copy),
+`evaluate_explore_search.py`'s table was identical before and after (the
+hybrid ranker did not change: ALL hybrid MRR 0.610, R@20 0.916), and
+through `/search` the site-search probe types held at MRR 0.990 while the
+document probe types rose from 0.316 to 0.666 (README, Site search).
+
 ### 4. Content-based party alignment
 
 A bill's party alignment comes from **how the parties actually voted on it**
@@ -1056,7 +1078,7 @@ What this rules in and out:
   That distinction — our address, not theirs — is the whole line.
 
 **What a reader searches for is never kept.** The site search
-(`/api/search`, `/api/search/suggest`, `/search`) and Explore carry the query
+(`/api/search`, `/api/search/suggest`, `/search`, its Documents filter) and `/api/explore` carry the query
 in the URL, so: nginx's access log has one format, `civitas_private`, with no
 query string and no referrer (`test_nginx_config.py`); uvicorn's access log
 drops query strings (`main.DropQueryString`); search answers are
@@ -2353,6 +2375,7 @@ the pending list).
 | Presidential nominations (daily Congress.gov sync, FJC join, list/stats/detail, roll-call links) | `backend/app/pipeline/fetch/nominations.py`, `backend/app/services/nomination_service.py`, `services/nomination_links.py`, `backend/app/api/nominations.py`, `frontend/src/app/congress/nominations/` |
 | Site search: entity index (write time), identifier parser, ranking, direct navigation, section anchors | `backend/app/site_search_index.py`, `backend/app/site_search.py`, `backend/app/api/search.py`, `backend/app/data/site_pages.json`, `backend/app/data/site_search_sections.json`, `backend/scripts/calibrate_site_search.py`, `frontend/src/components/search/`, `frontend/src/app/search/page.tsx` |
 | Explore hybrid search ranking (RRF fusion, priors, dedup, diversity) | `backend/app/services/explore_search.py` |
+| Search results page: matches and documents in one list, filter chips, the Documents filter (Explore's list and filters; `/explore` 308s here) | `backend/app/site_search.py` (`fuse`, `results`), `backend/app/api/search.py`, `backend/scripts/calibrate_search_fusion.py`, `backend/app/data/search_fusion_calibration.json`, `frontend/src/app/search/page.tsx`, `frontend/src/components/search/DocumentResults.tsx`, `DocumentFilters.tsx`, `frontend/src/lib/documentSearch.ts`, `SEARCH_DOCUMENTS_HREF` in `frontend/src/lib/routes.ts` |
 | Explore permanent addresses (`/explore/{key}` from the official identifier; old row ids 308 to it), coverage windows and "not held here" notes | `backend/app/services/explore_keys.py`, `backend/app/services/explore_coverage.py`, `frontend/src/lib/exploreHref.ts` |
 | Explore keyword index (FTS5 + BM25F) | `backend/app/pipeline/lexical_index.py` |
 | Document citation graph + PageRank authority | `backend/app/pipeline/analyze/document_authority.py` |
@@ -2452,7 +2475,22 @@ the pending list).
   a separate field. Input takes any spelling through `canonical_bill_id`.
 - **Read path must stay lightweight**: never load the embedding model or LLM on
   API read requests (GET endpoints). All ML inference happens at pipeline write
-  time. Anything a response needs that takes a model — the Action Center's
+  time. **One documented exception: document search encodes the query.**
+  Explore's semantic channel (`vector_store.search_explore_documents`, the
+  all-MiniLM-L6-v2 model already in the API process) embeds the query text
+  on `GET /api/explore`, the public `search_documents` endpoint and its MCP
+  tool, and the `/search` results page (`GET /api/search`, which fuses
+  Explore's hybrid ranking into its list). Nothing else: no document is
+  embedded and no LLM runs on these requests, and the autocomplete
+  (`/api/search/suggest`, every keystroke) stays lexical, with a test
+  (`test_site_search.py`). It costs about a second per uncached query on
+  the Pi (measured 0.94 to 1.32 s cold on `/api/explore`). `/api/explore` is
+  nginx-cached for a minute; `/api/search` is not (its answers are
+  `private`, §8), and a direct jump never pays for it. Both go through the
+  miss hop's `search_miss_limit`, `/search` as a page (`location = /search`).
+  It is allowed because describing a document in other words is the task
+  document search exists for: on 2026-10-20, 0 of 6 paraphrased queries for
+  open rules found their rule by title, 6 of 6 did in the hybrid top 10. Anything a response needs that takes a model — the Action Center's
   "new since last update" facts (`ActionIssue.new_facts`, `app/fact_diff.py`),
   the homepage feed's duplicates (`duplicate_of_id`) — is worked out when the
   pipeline writes the row and stored; `test_action_api.py` fails if serving
@@ -2708,10 +2746,14 @@ the pending list).
   route's `notFound()` discards its page's metadata; the head comes from
   the layouts above), so a section whose index page is a client component
   keeps that page's metadata in a layout inside an `(index)` route group
-  (`congress/bills/(index)`, `elections/(index)`, `explore/(index)`), and each record route has a layout setting only its
+  (`congress/bills/(index)`, `elections/(index)`), and each record route has a layout setting only its
   404's title; a not-found head has no canonical (`notFoundMetadata`).
   `app/sectionMetadata.test.ts` fails on a layout with a canonical above a
   record route.
+- `/search` is noindex except the Documents filter with nothing asked
+  (`/search?tab=documents`, what Explore's index page was): that view
+  carries its own canonical and is in the sitemap; any query or filter on it
+  is noindex again (`generateMetadata` in `app/search/page.tsx`).
 - Titles lead with what people type into a search box (member name +
   party-state, bill number, full state name); the root template appends
   " | Civitas Research" (no em dashes in site prose, 2026-10). Search-facing wording lives in `src/lib/seo.ts`, not in
@@ -2732,7 +2774,7 @@ the pending list).
   returns null only for a 404. A record route's 404 offers the next step
   for that kind of record from its segment's `not-found.tsx`
   (`components/notFound/RecordNotFound.tsx`: a member's closest names, the
-  bills list, the Action Center, Explore search, a state's ballot), never only "back home".
+  bills list, the Action Center, document search, a state's ballot), never only "back home".
 - `sitemap.xml` is rendered per request from `GET /api/sitemap` — never
   prerendered, since `next build` can't reach the backend. Add a new
   detail-page type there, or search engines have no way to find it.
@@ -2773,6 +2815,12 @@ state in the query string is exposed to them.
   (`/action?tab=issues`) for all in-app links. Bare `/action` stays fine as a
   public entry point: a cold load has no client cache to restore from. Do not
   "tidy" that query string away.
+  The same holds for `SEARCH_DOCUMENTS_HREF` (`/search?tab=documents`):
+  `tab` is what makes it the Documents filter rather than the merged list.
+  `/search` is server-rendered per request (`force-dynamic`), so its filter
+  chips and the Documents filter's form are plain navigations, not
+  replaceState; their links set `prefetch={false}`, since each prefetch of
+  `/search?q=` would be a search with a query encode.
 
 #### Empty defaults are content (2026-10)
 

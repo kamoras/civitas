@@ -46,7 +46,7 @@ describe("record 404s", () => {
       return out;
     };
     expect(hrefs(<IssueNotFound />)).toEqual(["/action?tab=issues", "/action?tab=timeline", "/"]);
-    expect(hrefs(<ExploreNotFound />)).toEqual(["/explore", "/"]);
+    expect(hrefs(<ExploreNotFound />)).toEqual(["/search?tab=documents", "/"]);
     expect(hrefs(<BillNotFound />)).toEqual(["/congress/bills", "/congress", "/"]);
     expect(hrefs(<NotFound />)).toEqual(["/"]);
   });

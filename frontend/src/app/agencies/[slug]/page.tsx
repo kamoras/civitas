@@ -7,7 +7,7 @@ import { agencyJsonLd, describeAgency } from "@/lib/seo";
 import { fetchAgency } from "@/lib/agencyServer";
 import { fiscalYearLabel, money, readOn } from "@/lib/agencies";
 import { commentPeriodToday, safeHref } from "@/lib/formatting";
-import { agencyExploreHref, agencyHref } from "@/lib/routes";
+import { agencyDocumentsHref, agencyHref } from "@/lib/routes";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
@@ -313,7 +313,7 @@ export default async function AgencyPage({ params }: PageProps) {
                     </PaperworkFold>
                     {docs.openCommentsCount >
                       docs.openComments.length + (docs.paperworkNotices?.length ?? 0) && (
-                      <Link href={`${agencyExploreHref(a.slug)}&comment=open`} className={MORE}>
+                      <Link href={`${agencyDocumentsHref(a.slug)}&comment=open`} className={MORE}>
                         [All {docs.openCommentsCount} open] →
                       </Link>
                     )}
@@ -408,7 +408,7 @@ export default async function AgencyPage({ params }: PageProps) {
             </div>
 
             {docs.total > 0 && (
-              <Link href={agencyExploreHref(a.slug)} className={`${MORE} mt-8 text-sm`}>
+              <Link href={agencyDocumentsHref(a.slug)} className={`${MORE} mt-8 text-sm`}>
                 [Search all {docs.total.toLocaleString("en-US")} of its documents in Explore] →
               </Link>
             )}

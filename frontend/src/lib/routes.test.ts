@@ -66,6 +66,9 @@ const NOT_IN_A_SECTION = new Set([
   "/feeds",
   // Reached from the header's SEARCH on every page, not from a section.
   "/search",
+  // A federal document's page: found by search (its Documents filter) and
+  // from every page that cites it; documents span all three branches.
+  "/explore/[id]",
 ]);
 
 /** Every page route under app/: route groups dropped. */
@@ -102,6 +105,7 @@ describe("SECTIONS covers the site", () => {
     const app = join(import.meta.dirname, "..", "app");
     const orphans = pageRoutes(app, app)
       .filter((r) => r.includes("["))
+      .filter((r) => !NOT_IN_A_SECTION.has(r))
       .filter((r) => currentSection(r) === null);
     expect(orphans).toEqual([]);
   });
@@ -113,7 +117,6 @@ describe("SECTIONS covers the site", () => {
       "calendar",
       "archive",
     ]);
-    expect(sectionSubpages("explore")).toEqual([]);
   });
 
   it("counts a page as in its section by path, not by prefix text", () => {
@@ -121,7 +124,7 @@ describe("SECTIONS covers the site", () => {
     expect(currentSection("/compare")).toBe("congress");
     expect(currentSection("/agencies/epa")).toBe("executive");
     expect(currentSection("/congressional")).toBe(null);
-    expect(currentSection("/explore")).toBe("explore");
+    expect(currentSection("/explore")).toBe(null);
   });
 
   it("puts every page in exactly one section: no prefix is claimed twice", () => {

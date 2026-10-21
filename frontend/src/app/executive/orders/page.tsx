@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { fetchSittingPresident } from "@/lib/presidentServer";
+import { documentsHref, SEARCH_DOCUMENTS_HREF } from "@/lib/routes";
 
 /**
  * "Executive orders" in the Executive menu: the sitting president's
@@ -12,5 +13,5 @@ import { fetchSittingPresident } from "@/lib/presidentServer";
 export default async function ExecutiveOrdersPage() {
   await connection();
   const president = await fetchSittingPresident();
-  redirect(president ? `/explore?politician_id=${encodeURIComponent(president.id)}` : "/explore");
+  redirect(president ? documentsHref({ politician_id: president.id }) : SEARCH_DOCUMENTS_HREF);
 }

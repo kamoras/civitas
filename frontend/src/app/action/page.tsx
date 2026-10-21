@@ -38,7 +38,7 @@ import {
 import type { ActionIssue, ActionIssuesResponse } from "@/types/action";
 import { countIsOfficial } from "@/lib/developing";
 import { tabControl } from "@/lib/controlStyles";
-import { issuesUrl } from "@/lib/routes";
+import { OPEN_COMMENTS_HREF, issuesUrl } from "@/lib/routes";
 import AgencyLink from "@/components/agencies/AgencyLink";
 import { exploreHref } from "@/lib/exploreHref";
 import { scrollBehavior } from "@/lib/motion";
@@ -279,7 +279,7 @@ function OpenComments() {
     <section aria-labelledby="open-comments-heading" className="mt-12">
       <h2 id="open-comments-heading" className={SECTION_HEADING}>
         <span>Open for public comment</span>
-        <Link href="/explore?comment=open" className="text-ink-lo hover:text-ink-hi">
+        <Link href={OPEN_COMMENTS_HREF} className="text-ink-lo hover:text-ink-hi">
           Every open comment period →
         </Link>
       </h2>
