@@ -1,6 +1,7 @@
 # For development or simple usage: docker compose up -d
-# For production deploys: docker stack deploy -c docker-compose.yml
-#   -c docker-compose.swarm.yml civitas (see docker-compose.swarm.yml for
+# For production deploys: ./check-and-deploy.sh, which merges this file with
+#   docker-compose.swarm.yml and stack-deploys the result as `civitas`
+#   (docs/self-hosting.md; see docker-compose.swarm.yml for
 #   what that overlay changes and why — the short version is: no more
 #   deploy.sh, Swarm's own rolling-update + healthcheck-gated rollback
 #   replaces the hand-rolled blue/green port-flip script).

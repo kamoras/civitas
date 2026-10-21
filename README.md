@@ -2265,27 +2265,38 @@ See the [Methodology page](/about) for full details and inline citations.
 
 ## Quick Start
 
+For the whole process of standing up a server (hardware, every key, the
+production Swarm setup, the first data load and how long it takes, and
+recovering a lost server), see **[docs/self-hosting.md](docs/self-hosting.md)**.
+The short version:
+
 ```bash
 # 1. Clone the repo
-git clone git@github.com:kamoras/civitas.git
+git clone https://github.com/kamoras/civitas.git
 cd civitas
 
 # 2. Create your env file from the template
 cp .env.example .env
 
-# 3. Edit .env — at minimum set your API key, admin token and contact address
+# 3. Edit .env — at minimum set your API key, both tokens and contact address
 #    DATA_GOV_API_KEY=your-key-from-api-data-gov
-#    ADMIN_TOKEN=your-secret-admin-token
+#    ADMIN_TOKEN=your-secret-admin-token            (the template's value is refused)
+#    PIPELINE_TRIGGER_TOKEN=another-secret-token    (likewise)
 #    CONTACT_EMAIL=an-address-you-read@example.org   (named in every request's User-Agent)
 nano .env
 
-# 4. Start all services
+# 4. Download the LLM's weights (about 731 MB)
+mkdir -p llama-models
+curl -fL -o llama-models/lfm2.5-1.2b-instruct-q4_k_m.gguf \
+  https://huggingface.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF/resolve/main/LFM2.5-1.2B-Instruct-Q4_K_M.gguf
+
+# 5. Start all services
 docker compose up -d
 
-# 5. Verify everything is running
+# 6. Verify everything is running
 docker compose ps
 
-# 6. Open the app
+# 7. Open the app
 #    Frontend: http://localhost:3000
 #    API docs: http://localhost:8000/docs
 ```
@@ -2408,8 +2419,9 @@ blue/green script:
 runs the nightly and hourly schedule. Pipelines therefore never share a
 Python process, or a memory limit, with the requests visitors make.
 
-`docker stack deploy -c docker-compose.yml -c docker-compose.swarm.yml
-civitas` follows this sequence, all built into Swarm rather than scripted:
+A deploy (`check-and-deploy.sh`: the two compose files merged by
+`docker compose config`, then `docker stack deploy` of the result) follows
+this sequence, all built into Swarm rather than scripted:
 1. Build the new Docker image locally, tagged with the deploying commit's
    short SHA (GHCR pull is disabled — see `AGENTS.md` "CI/CD" for why)
 2. Swarm starts a new task on the same overlay network (`update_config.order:
@@ -2627,7 +2639,8 @@ See `.env.example` for all options. Key variables:
 |---|---|---|
 | `DATA_GOV_API_KEY` | Yes | API key from api.data.gov (covers Congress.gov, FEC, GovInfo) |
 | `BLS_API_KEY` | No | Free BLS v2 registration key (data.bls.gov/registrationEngine): 500 jobs-API requests a day instead of 25 |
-| `ADMIN_TOKEN` | Yes | Bearer token for admin panel and pipeline triggers |
+| `ADMIN_TOKEN` | Yes | Bearer token for the admin panel and admin API (falls back to `PIPELINE_TRIGGER_TOKEN`) |
+| `PIPELINE_TRIGGER_TOKEN` | Yes | Bearer token for the public `/api/pipeline/trigger` routes. For both tokens, `.env.example`'s `change-me-to-a-random-token` counts as unset and is refused (`app/api/auth.py`) |
 | `CONTACT_EMAIL` | Yes | Your instance's contact address, named in the User-Agent of every request the pipeline and scripts send (`backend/app/contact.py`). Unset or malformed, requests name Civitas with no address, the SEC (whose fair-access policy requires a contact) is not fetched and raises an ops alert, and the pipeline logs a warning at start |
 | `LLM_BACKEND` | No | `llama-server` (default) or `ollama` |
 | `LLAMA_SERVER_URL` | No | llama-server URL (default: `http://llama-server:8070`, the in-stack service) |

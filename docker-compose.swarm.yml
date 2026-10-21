@@ -1,5 +1,8 @@
-# Swarm-only overlay — apply alongside the base file:
-#   docker stack deploy -c docker-compose.yml -c docker-compose.swarm.yml civitas
+# Swarm-only overlay — apply alongside the base file, merged by
+#   docker compose -f docker-compose.yml -f docker-compose.swarm.yml config
+# and that output stack-deployed as `civitas` (check-and-deploy.sh does it;
+# `docker stack deploy -c` with both files directly ignores `!reset` and
+# rejects `name:`). A new host from nothing: docs/self-hosting.md.
 #
 # What this changes and why:
 #

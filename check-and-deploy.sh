@@ -37,6 +37,15 @@ log() { echo "$(date -Iseconds) $*" >> deploy-poll.log; }
 # never retry it. Only updated on a confirmed-successful deploy, below.
 DEPLOYED_MARKER=.last-deployed-sha
 LOCAL=$(cat "$DEPLOYED_MARKER" 2>/dev/null || git rev-parse HEAD)
+# A fresh host (docs/self-hosting.md): no marker and no civitas stack yet.
+# HEAD of a fresh clone is origin/main, which would read as "already
+# deployed" and the first deploy would never happen. Only a listing that
+# succeeded counts; a docker that can't be asked keeps the HEAD fallback.
+if [[ ! -f "$DEPLOYED_MARKER" ]] \
+  && listed=$(docker service ls -q --filter label=com.docker.stack.namespace=civitas 2>/dev/null) \
+  && [[ -z "$listed" ]]; then
+  LOCAL=none
+fi
 
 git fetch origin main --quiet
 REMOTE=$(git rev-parse origin/main)
@@ -121,7 +130,14 @@ pipeline_is_busy() {
     # then on this lets the fix through (live-checked on a swarm).
     # Only a listing that succeeded counts: a `docker service ps` that
     # failed says nothing about the tasks, and must defer like the curl.
-    local tasks
+    # No civitas_pipeline service at all (a fresh host's first deploy):
+    # nothing can be running in it. Again only a listing that succeeded.
+    local tasks listed
+    if listed=$(docker service ls -q --filter label=com.docker.stack.namespace=civitas 2>/dev/null) \
+      && [[ -z "$listed" ]]; then
+      log "pipeline status unreachable and no civitas stack is deployed yet — nothing to wait for"
+      return 1
+    fi
     if docker service inspect civitas_pipeline >/dev/null 2>&1 \
       && tasks=$(docker service ps civitas_pipeline --filter desired-state=running --format '{{.CurrentState}}' 2>/dev/null) \
       && ! grep -qE '^(Running|Starting)' <<<"$tasks"; then

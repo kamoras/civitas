@@ -2281,7 +2281,7 @@ See `.env.example` for all options. Key variables:
 | Variable | Required | Description |
 |---|---|---|
 | `DATA_GOV_API_KEY` | Yes | API key from api.data.gov |
-| `ADMIN_TOKEN` | Yes | Bearer token for admin panel |
+| `ADMIN_TOKEN` | Yes | Bearer token for admin panel (`PIPELINE_TRIGGER_TOKEN` for the public trigger routes; `.env.example`'s placeholder counts as unset for both, `app/api/auth.py`) |
 | `CONTACT_EMAIL` | Yes | The instance's contact address, named in every outbound User-Agent (`app/contact.py`, read from the environment, stdlib only). Unset or malformed: User-Agents carry no address, SEC fetches refuse with an ops alert (`contact-email-unset`), and the pipeline warns at start |
 | `LLM_BACKEND` | No | `llama-server` (default) or `ollama` |
 | `LLAMA_SERVER_URL` | No | llama.cpp server URL |
@@ -2952,8 +2952,12 @@ Patterns that exist because they failed once:
 
 - **Production runs in Docker Swarm mode** (single-node — `docker swarm init`
   is a one-time host setup step, not part of any deploy script). Deploys are
-  `docker stack deploy -c docker-compose.yml -c docker-compose.swarm.yml
-  civitas` — nothing else. There is no hand-rolled blue/green script anymore
+  `docker stack deploy` of the two compose files merged by
+  `docker compose -f docker-compose.yml -f docker-compose.swarm.yml config`
+  (what `check-and-deploy.sh` runs) — nothing else. Passing both files to
+  `docker stack deploy -c … -c …` directly fails: its own merge ignores
+  `!reset` and rejects the top-level `name:`. Standing up a new host from
+  nothing: `docs/self-hosting.md`. There is no hand-rolled blue/green script anymore
   (`deploy.sh`, removed 2026-07): Swarm's own `update_config.order:
   start-first` (start the new task, health-check it, *then* stop the old one)
   and `failure_action: rollback` (auto-revert if the new task never becomes
