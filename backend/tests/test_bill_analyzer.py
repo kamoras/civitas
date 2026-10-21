@@ -1004,3 +1004,27 @@ def test_the_procedural_seed_reads_its_fitted_threshold(monkeypatch):
     expected = data["threshold"] if data["threshold"] is not None else math.inf
     assert ba.procedural_threshold() == expected
     assert "Commemorations" in ba.crs_policy_areas()
+
+
+@pytest.mark.parametrize(
+    ("stored", "threshold", "matches"),
+    [(None, math.inf, False), (0.5, 0.5, True)],
+)
+def test_the_seed_check_applies_the_stored_threshold(monkeypatch, tmp_path, stored, threshold, matches):
+    """With no threshold passed, the seed reads procedural_calibration.json
+    once: null (the fit missed the precision rule) means even a perfect
+    prototype match isn't called procedural; a number is used as written."""
+    path = tmp_path / "procedural_calibration.json"
+    path.write_text(json.dumps({"threshold": stored}))
+    monkeypatch.setattr(ba, "PROCEDURAL_CALIBRATION_PATH", path)
+    monkeypatch.setattr(ba, "_procedural_threshold_cache", [])
+    monkeypatch.setattr(ba, "_procedural_emb", None)
+    fake_model = MagicMock()
+    fake_model.encode.side_effect = [[np.array([1.0, 0.0])], [np.array([1.0, 0.0])]]
+    with patch("app.pipeline.vector_store.get_embedding_model", return_value=fake_model):
+        matched, score = _is_procedural_seed_match("Designating a week as National Example Week")
+    assert matched is matches
+    assert score == pytest.approx(1.0)
+    assert ba.procedural_threshold() == threshold
+    path.write_text(json.dumps({"threshold": 0.1}))
+    assert ba.procedural_threshold() == threshold  # read once, cached
