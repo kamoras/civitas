@@ -16,7 +16,7 @@ from app.next_cycle import deadline_event, field, new_congress
 from app.pipeline.fetch.ballot_lookup import lookup_for_state
 from app.state_ballot_scope import odd_year_elections
 from app.state_names import STATE_NAMES
-from app.special_elections import election_calendar, specials_board
+from app.special_elections import calendar_boxes, election_calendar, specials_board
 
 router = APIRouter(prefix="/elections")
 
@@ -38,8 +38,9 @@ def calendar(db: Session = Depends(get_db)):
     """Federal election dates (the FEC's), each state's voter deadlines (its
     election authority's), and the FEC's reporting deadlines, from the month
     just gone to a year ahead, each with its status on the state's clock."""
+    cal = election_calendar(db)
     return cached_json(
-        {**election_calendar(db), "season": season(db).as_json()},
+        {**cal, "boxes": calendar_boxes(cal, specials_board(db)), "season": season(db).as_json()},
         max_age=CACHE_TTL_LIST_S,
     )
 

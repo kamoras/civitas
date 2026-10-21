@@ -187,5 +187,23 @@ export interface ElectionCalendar {
     electionDates: { url: string; readOn: string | null };
     reportingDates: { url: string; readOn: string | null };
   };
+  /** The page's boxes, each line the backend's template
+   *  (special_elections.calendar_boxes). Absent from an older API. */
+  boxes?: CalendarBoxes;
   season: Season;
+}
+
+interface CalendarDateBox {
+  title: string;
+  dek: string;
+  closes: string | null;
+  daysLeft: number | null;
+  href: string | null;
+}
+
+export interface CalendarBoxes {
+  nextDeadline: (CalendarDateBox & { kicker: string }) | null;
+  registration: { count: number; days: number; dek: string };
+  nextSpecial: CalendarDateBox;
+  vacancies: { count: number; dek: string };
 }
