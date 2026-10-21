@@ -102,20 +102,11 @@ const released = (d: string) => formatUtcDate(d, undefined, "en-US");
 /** Link target for a version: "v6.23" -> "v6-23", "President v5" -> "president-v5". */
 const anchor = (v: ScoreVersion) => v.version.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 
-/** A summary's first sentence and the rest. A full stop after a capital
- *  ("U.S.") or before a lowercase word is not a sentence end.
- *  ponytail: a heuristic split; an abbreviation like "Rep." before a capital
- *  ends the line early, and every word still shows, behind More. */
-function splitFirst(text: string): [string, string] {
-  const m = /(?<=[a-z0-9%)][.!?])\s+(?=[A-Z0-9"])/.exec(text);
-  return m ? [text.slice(0, m.index), text.slice(m.index + m[0].length)] : [text, ""];
-}
-
 /** One version as a record box: its name and release date over its title,
- *  the summary's first sentence as the line, and the rest of the summary and
- *  every change behind More. Nothing is dropped. */
+ *  which is the entry's own one-line headline (scoreVersions.ts), and its
+ *  summary and every change behind More. The text is never cut at a
+ *  "sentence end", which an abbreviation ("U.S.") fakes. Nothing is dropped. */
 function Entry({ v }: { v: ScoreVersion }) {
-  const [first, rest] = v.tldr ? splitFirst(v.tldr) : ["", ""];
   return (
     <RecordBox
       id={anchor(v)}
@@ -127,12 +118,11 @@ function Entry({ v }: { v: ScoreVersion }) {
         </>
       }
       title={v.title}
-      dek={first || undefined}
       more={{
         label: v.tldr ? "what changed, and the evidence" : "what changed",
         children: (
           <div className="space-y-3">
-            {rest && <p className="text-base leading-relaxed text-ink">{rest}</p>}
+            {v.tldr && <p className="text-base leading-relaxed text-ink">{v.tldr}</p>}
             <List>
               {v.changes.map((c, i) => (
                 <Item key={i}>{c}</Item>
