@@ -48,8 +48,9 @@ export default function PresidentsAndJusticesChapter() {
           the gap.
         </Point>
         <Point>
-          Justices are not scored or ranked. How often each sided with the federal government under
-          the appointing president is shown as information, with its confidence interval.
+          A justice&apos;s page draws the record beside every sitting justice&apos;s: majority and
+          dissent, one-vote cases, opinions written, years served and agreement with each colleague,
+          and links to the president who made the appointment. No justice gets a score or a rank.
         </Point>
       </Summary>
 
@@ -164,7 +165,7 @@ export default function PresidentsAndJusticesChapter() {
         </More>
       </Section>
 
-      <Section id="justices" title="Why Supreme Court justices are not scored">
+      <Section id="justices" title="Supreme Court justices: the record, not a score">
         <P>
           {NOT_SCORED_REASON} Until October 2026 justices were scored on one question, from Epstein
           and Posner (2016): does a justice side with the federal government more often while the
@@ -189,19 +190,26 @@ export default function PresidentsAndJusticesChapter() {
           <Item label="The Court as a whole">{COURT_FINDING}</Item>
         </List>
         <P>
-          What each justice&apos;s page shows instead: the share of their votes for the federal
-          government under the appointing president and under others, and the difference with the
-          government&apos;s side of each case held fixed, with its 95% confidence interval. It is
-          information, not a score, and no justice is ranked by it. Every vote in a signed decision
-          of a case the federal government argued: Epstein and Posner&apos;s through 2014, and the
-          Supreme Court Database&apos;s after; the appointing president is whoever was in office on
-          the nomination date, from the Federal Judicial Center.
+          What each justice&apos;s page shows instead: the difference in votes for the federal
+          government under the appointing president and under others, with the government&apos;s
+          side of each case held fixed, and its 95% confidence interval, drawn beside every sitting
+          justice&apos;s. It is information, not a measure of loyalty, and no justice is ranked by
+          it. Every vote in a signed decision of a case the federal government argued: Epstein and
+          Posner&apos;s through 2014, and the Supreme Court Database&apos;s after; the appointing
+          president is whoever was in office on the nomination date, from the Federal Judicial
+          Center.
         </P>
         <P>
-          Each justice&apos;s Martin-Quinn position (where they sit, liberal to conservative, with
-          its 95% credible interval) and voting record are shown too, not scored, with every case on
-          the record listed: the side the justice took and the opinion they wrote. The record reads
-          the current term and the three before it, and each page names the terms that have decided
+          Each figure on a justice&apos;s page is drawn beside the same figure for every sitting
+          justice, with the median marked and each justice&apos;s figure in a table: the share of
+          cases in the majority, the majority share of cases decided by one vote (where each vote in
+          the majority decided the case), opinions for the Court, dissents and concurrences written,
+          years on the Court and the latest Martin-Quinn position. Agreement with each colleague and
+          every case on the record (the side taken and the opinion written) follow, and the page
+          links to the appointing president&apos;s page, which lists every Supreme Court appointment
+          that president made, from the Federal Judicial Center&apos;s directory of federal judges
+          (each given to the president in office on the nomination date). The record reads the
+          current term and the three before it, and each page names the terms that have decided
           cases, since a term that has just begun has none. The{" "}
           <Link href="/court">Court page</Link> puts the sitting justices on one line, shows how
           often each pair voted together and how the Court split term by term, and lists each

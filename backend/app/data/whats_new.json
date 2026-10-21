@@ -6,14 +6,21 @@
       "date": "2026-10-20",
       "title": "A president's term, drawn",
       "summary": "A president's page charts the elections won, approval month by month, jobs added since the inauguration and growth in each year, each beside the other presidencies.",
-      "url": "/politicians?branch=president"
+      "url": "/executive/presidents"
+    },
+    {
+      "id": "justices-beside-the-court",
+      "date": "2026-10-20",
+      "title": "Justices beside the Court",
+      "summary": "Each Supreme Court justice's page draws the voting record, opinions written, years served and agreement with each colleague beside every sitting justice, and links to the president who made the appointment.",
+      "url": "/court"
     },
     {
       "id": "presidents-record-not-scores",
       "date": "2026-10-20",
       "title": "Presidents by the record",
       "summary": "A president's page now draws approval, the economy and the historians' points among every other presidency with the same figure, with no 0 to 100 score.",
-      "url": "/politicians?branch=president"
+      "url": "/executive/presidents"
     },
     {
       "id": "member-pages-figures-not-scores",

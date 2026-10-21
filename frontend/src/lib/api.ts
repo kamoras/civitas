@@ -7,7 +7,7 @@ import {
 } from "@/types/senator";
 import type { CommentWindow } from "@/types/commentWindow";
 import type { JusticeCasePage } from "@/types/court";
-import type { JusticeLeaderboardEntry } from "@/types/justice";
+import type { AppointedJustice, JusticeLeaderboardEntry } from "@/types/justice";
 import type { ActionIssuesResponse, IssueMembers, IssueVote } from "@/types/action";
 import type { RedistrictedSeat } from "@/types/redistricting";
 import type { HouseDistrictsByCounty, PoliticianCard } from "@/types/politicians";
@@ -751,6 +751,12 @@ export async function fetchMemberPresidentialSupport(
 export async function fetchJusticeCases(id: string, page: number): Promise<JusticeCasePage> {
   const url = `${API_BASE}/justices/${encodeURIComponent(id)}/cases?page=${page}&per_page=20`;
   return cachedFetch(url, TTL.SHORT);
+}
+
+/** The stored justices a president appointed, by the date each joined. */
+export async function fetchJusticesAppointedBy(presidentId: string): Promise<AppointedJustice[]> {
+  const url = `${API_BASE}/justices/appointed-by/${encodeURIComponent(presidentId)}`;
+  return asList(await cachedFetch(url, TTL.SHORT), url);
 }
 
 export async function fetchJusticeLeaderboard(): Promise<JusticeLeaderboardEntry[]> {

@@ -5,6 +5,7 @@ import { fetchJusticeCases } from "@/lib/api";
 import { splitLabel, termsPhrase } from "@/lib/court";
 import { CaseSources } from "@/components/court/RecentDecisions";
 import type { JusticeCasePage } from "@/types/court";
+import { onThisPage } from "@/lib/onThisPage";
 
 const OPINION: Record<string, string> = {
   majority: "Wrote the opinion of the Court",
@@ -44,7 +45,11 @@ export default function JusticeCases({ justiceId }: { justiceId: string }) {
       className="flex flex-col gap-4 border border-white/25 bg-surface px-5 py-5 font-sans"
     >
       <div>
-        <h2 id="cases-heading" className="text-[19px] font-semibold text-ink-hi">
+        <h2
+          id="cases-heading"
+          {...onThisPage("Every case")}
+          className="text-[19px] font-semibold text-ink-hi"
+        >
           Every case on the record
         </h2>
         <p className="mt-1 font-mono text-xs text-ink-min">

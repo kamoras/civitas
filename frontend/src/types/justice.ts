@@ -1,6 +1,5 @@
-/** Always null since justice v3: no justice is scored, because no method
- *  yet separates loyalty to the appointing president from career timing
- *  for an individual justice. Null is "not scored", never 0. */
+/** Always null since justice v3 (no justice is scored); kept for the
+ *  API's shape, never shown. */
 export interface JusticeScore {
   loyalty: number | null;
   overall: number | null;
@@ -55,6 +54,73 @@ export interface Justice {
   /** The terms the voting record covers (those with decided cases stored),
    *  oldest first. Optional: a response cached before it shipped has none. */
   recordTerms?: number[];
+  /** What the page draws, each figure beside the sitting justices'
+   *  (backend services/justice_figures.py). Only on the profile's copy;
+   *  absent from a response cached before it shipped. */
+  figures?: JusticeFigures | null;
+}
+
+export interface JusticePeerPoint {
+  id: string;
+  name: string;
+  value: number;
+  shown: string;
+}
+
+/** One figure on the record beside every sitting justice's. Every value,
+ *  median and sentence is the API's; the page only places them. */
+export interface JusticeMeasure {
+  key: string;
+  question: string;
+  label: string;
+  /** What the figure answers and why it matters: one plain line. */
+  why: string;
+  unit: "share" | "count" | "years" | "position";
+  value: number | null;
+  shown: string | null;
+  record: number | null;
+  /** Every justice with a figure, this one included, ascending. */
+  peers: JusticePeerPoint[];
+  median: number | null;
+  medianShown: string | null;
+  below: number | null;
+  sentence: string;
+  source: { name: string; url: string };
+}
+
+export interface JusticeInterval {
+  id: string;
+  name: string;
+  estimate: number;
+  ciLow: number;
+  ciHigh: number;
+}
+
+export interface JusticeFigures {
+  appointedBy: {
+    id: string | null;
+    name: string;
+    party: string | null;
+    year: number | null;
+  } | null;
+  peers: number;
+  terms: number[];
+  measures: JusticeMeasure[];
+  appointer: { rows: JusticeInterval[]; sentence: string; throughTerm: number | null } | null;
+}
+
+/** A Supreme Court appointment a president made (GET
+ *  /api/justices/appointed-by/{id}, from the FJC directory). `id` is the
+ *  justice's page on the site, null when the site holds none. */
+export interface AppointedJustice {
+  id: string | null;
+  name: string;
+  /** "Associate Justice" or "Chief Justice", as the directory titles it. */
+  seat: string;
+  dateStart: string | null;
+  dateEnd: string | null;
+  isActive: boolean;
+  photo: string | null;
 }
 
 /** A sitting justice, listed by seniority and not ranked (justice v3). */

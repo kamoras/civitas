@@ -352,9 +352,15 @@ def _build_scorecard(branch: str, pid: str, db: Session) -> dict | None:
             p = get_president(db, pid)
             return p.model_dump(by_alias=True) if p else None
         if branch == "scotus":
+            from app.services.justice_figures import justice_figures
             from app.services.justice_service import get_justice
             j = get_justice(db, pid)
-            return j.model_dump(by_alias=True) if j else None
+            if not j:
+                return None
+            # The figures the page draws, each beside the sitting justices'.
+            figures = justice_figures(db, pid)
+            return {**j.model_dump(by_alias=True),
+                    "figures": figures.model_dump(by_alias=True) if figures else None}
     except Exception:
         # The profile still renders without its scorecard, but a failure
         # here is a bug in a service, not a missing record: say so.
