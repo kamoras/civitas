@@ -62,8 +62,9 @@ logger = logging.getLogger(__name__)
 # Denmark, Switzerland, Norway, Japan.
 PEER_COUNTRIES = ("GBR", "FRA", "DEU", "NLD", "CAN", "AUS", "SWE", "ITA", "BEL", "DNK", "CHE", "NOR", "JPN")
 US = "USA"
-# Fewest peers with a growth rate over a window before their median is used.
-_MIN_PEERS = 8
+# Fewest peers with a growth rate over a window before their median is used:
+# most of them, so the median is the peers' and not a few of theirs.
+_MIN_PEERS = len(PEER_COUNTRIES) // 2 + 1
 # The first year with a bundled level, so the first growth year the
 # convergence rate is fitted on is the next.
 _FIRST_GAP_YEAR = 1946
