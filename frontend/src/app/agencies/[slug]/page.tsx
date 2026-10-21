@@ -11,7 +11,8 @@ import { agencyDocumentsHref, agencyHref } from "@/lib/routes";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
-import TerminalTitlebar from "@/components/TerminalTitlebar";
+import BoxGrid from "@/components/shared/BoxGrid";
+import RecordBox from "@/components/shared/RecordBox";
 import AgencyDocList from "@/components/agencies/AgencyDocList";
 import PaperworkFold from "@/components/shared/PaperworkFold";
 import SourceLine from "@/components/agencies/SourceLine";
@@ -19,6 +20,7 @@ import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
 import type { AgencyDetail } from "@/types/agency";
+import type { Figure as BoxFigure } from "@/types/figure";
 
 type PageProps = { params: Promise<{ slug: string }> };
 
@@ -184,44 +186,149 @@ function BudgetBlock({ a }: { a: AgencyDetail }) {
   );
 }
 
-/** What it spends and what it is doing, as one shareable card. */
+/** The budget figure the box leads with: the reported year's budgetary
+ * resources, or the latest year USAspending has. Null where there is no
+ * figure to show (BudgetBlock words why). */
+function budgetFigure(a: AgencyDetail): BoxFigure | null {
+  const b = a.budget;
+  if (!b || !["reported", "not_yet_reported", "retired"].includes(a.budgetStatus)) return null;
+  const value = b.reported ? b.budgetAuthority : b.latest?.budgetaryResources;
+  if (value == null) return null;
+  const year = b.reported
+    ? fiscalYearLabel(b.fiscalYear, b.throughPeriod)
+    : b.latest
+      ? fiscalYearLabel(b.latest.fiscalYear, b.latest.throughPeriod)
+      : "";
+  return { type: "stat", value, text: money(value), caption: year || "budgetary resources" };
+}
+
+/** What it spends, what it is doing and who it is, in boxes ("Boxes, not
+ * blocks"): the figures first, then the Federal Register's description,
+ * quoted by its first sentence with the whole of it behind "More". */
 function Overview({ a }: { a: AgencyDetail }) {
   const docs = a.documents;
   const proposed = docs.byType["Proposed Rule"] ?? 0;
   const final = docs.byType["Final Rule"] ?? 0;
+  const about = paragraphs(a.description);
+  const budget = budgetFigure(a);
+  const docsSource = (
+    <SourceLine
+      source={a.documentsSource}
+      asOf={a.documentsAsOf}
+      detail={`documents on Civitas${a.children.length ? ", its sub-agencies' included" : ""}`}
+    />
+  );
   return (
-    <section
-      id="overview"
-      data-share-section="overview"
-      aria-labelledby="overview-heading"
-      className="mb-10 border border-white/[0.07]"
-    >
-      <TerminalTitlebar title={a.shortName ?? "Agency"} />
-      <div className="p-4">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-          <h2 id="overview-heading" className={H2}>
-            At a glance
-          </h2>
-          <ShareSectionButton label={`${a.name} at a glance`} />
-        </div>
-        <BudgetBlock a={a} />
-        <dl className="mt-5 grid grid-cols-3 gap-4 border-t border-white/[0.07] pt-4">
-          <Figure label="Open for comment" value={String(docs.openCommentsCount)} />
-          <Figure label="Proposed rules" value={proposed.toLocaleString("en-US")} />
-          <Figure label="Final rules" value={final.toLocaleString("en-US")} />
-        </dl>
-        {docs.linking && (
-          <p className="mt-3 text-xs leading-relaxed text-ink-lo">
-            Counts so far: documents stored before agencies were read are still being linked to the
-            agency that issued them ({docs.linking.linked.toLocaleString("en-US")} of{" "}
-            {docs.linking.total.toLocaleString("en-US")} linked).
-          </p>
-        )}
-        <SourceLine
-          source={a.documentsSource}
-          asOf={a.documentsAsOf}
-          detail={`documents on Civitas${a.children.length ? ", its sub-agencies' included" : ""}`}
+    <section id="overview" data-share-section="overview" className="mb-10">
+      <BoxGrid columns={3} label="At a glance" labelId="overview-heading">
+        <RecordBox
+          kicker="Budget · USAspending.gov"
+          title={budget ? "Budgetary resources" : "Budget"}
+          figure={budget}
+          more={
+            budget
+              ? { label: "obligations, outlays and each year", children: <BudgetBlock a={a} /> }
+              : null
+          }
+        >
+          {!budget && <BudgetBlock a={a} />}
+        </RecordBox>
+        <RecordBox
+          kicker="Federal Register"
+          title="Open for comment"
+          figure={{ type: "stat", value: docs.openCommentsCount, caption: "periods open" }}
+          links={
+            docs.openCommentsCount > 0
+              ? [
+                  {
+                    label: "The periods",
+                    href: "#comment-heading",
+                    ariaLabel: "Open comment periods",
+                  },
+                ]
+              : undefined
+          }
+          more={{ label: "where the counts come from", children: docsSource }}
+        >
+          {docs.linking && (
+            <p className="text-xs leading-relaxed text-ink-lo">
+              Counts so far: documents stored before agencies were read are still being linked to
+              the agency that issued them ({docs.linking.linked.toLocaleString("en-US")} of{" "}
+              {docs.linking.total.toLocaleString("en-US")} linked).
+            </p>
+          )}
+        </RecordBox>
+        <RecordBox
+          kicker="Federal Register"
+          title="Proposed rules"
+          figure={{ type: "stat", value: proposed, caption: "on Civitas" }}
+          links={
+            proposed > 0
+              ? [
+                  {
+                    label: "The newest",
+                    href: "#proposed-heading",
+                    ariaLabel: "Newest proposed rules",
+                  },
+                ]
+              : undefined
+          }
         />
+        <RecordBox
+          kicker="Federal Register"
+          title="Final rules"
+          figure={{ type: "stat", value: final, caption: "on Civitas" }}
+          links={
+            final > 0
+              ? [{ label: "The newest", href: "#final-heading", ariaLabel: "Newest final rules" }]
+              : undefined
+          }
+        />
+        {(a.descriptionLede || a.website || a.frUrl) && (
+          <RecordBox
+            id="about"
+            kicker="Its description · Federal Register"
+            title="About the agency"
+            {...(a.descriptionLede
+              ? {
+                  quote: {
+                    text: a.descriptionLede,
+                    source: "The Federal Register's agency profile",
+                  },
+                }
+              : {})}
+            links={[
+              ...(a.website ? [{ label: "Agency website", href: safeHref(a.website) || "#" }] : []),
+              ...(a.frUrl
+                ? [{ label: "On the Federal Register", href: safeHref(a.frUrl) || "#" }]
+                : []),
+            ]}
+            more={
+              about.length
+                ? {
+                    label: "the full description",
+                    children: (
+                      <>
+                        {about.map((p, i) => (
+                          <p key={i} className="mt-2 first:mt-0 max-w-3xl leading-relaxed">
+                            {p}
+                          </p>
+                        ))}
+                        <SourceLine
+                          source={a.profileSource}
+                          asOf={a.profileAsOf}
+                          detail="description and organization"
+                        />
+                      </>
+                    ),
+                  }
+                : null
+            }
+          />
+        )}
+      </BoxGrid>
+      <div className="mt-2 flex justify-end">
+        <ShareSectionButton label={`${a.name} at a glance`} />
       </div>
     </section>
   );
@@ -235,7 +342,6 @@ export default async function AgencyPage({ params }: PageProps) {
   const a = await fetchAgency(slug);
   if (!a) notFound();
   const today = commentPeriodToday();
-  const about = paragraphs(a.description);
   const docs = a.documents;
   const eos = a.executiveOrders;
   const path = agencyHref(a.slug);
@@ -286,9 +392,7 @@ export default async function AgencyPage({ params }: PageProps) {
               className="mb-8"
               eyebrow={`Federal agency${a.shortName ? ` · ${a.shortName}` : ""}`}
               title={a.name}
-            >
-              {about[0] && <p>{about[0]}</p>}
-            </PageMasthead>
+            />
             {/* Its rules and comment periods as a feed, its sub-agencies' too. */}
             <FollowFeed className="-mt-4 mb-8" subject={a.name} feed={agencyFeed(a.slug, a.name)} />
 
@@ -453,44 +557,6 @@ export default async function AgencyPage({ params }: PageProps) {
                 )}
               </section>
             )}
-
-            <section aria-labelledby="about-heading" className="mt-10">
-              <h2 id="about-heading" className={H2}>
-                About the agency
-              </h2>
-              {about.slice(1).map((p, i) => (
-                <p key={i} className="mt-2 max-w-3xl text-sm leading-relaxed text-ink">
-                  {p}
-                </p>
-              ))}
-              <p className="mt-3 flex flex-wrap gap-x-5 gap-y-1 font-mono text-xs">
-                {a.website && (
-                  <a
-                    href={safeHref(a.website) || "#"}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex min-h-6 items-center text-signal-cyan hover:text-phos"
-                  >
-                    [Agency website]
-                  </a>
-                )}
-                {a.frUrl && (
-                  <a
-                    href={safeHref(a.frUrl) || "#"}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex min-h-6 items-center text-signal-cyan hover:text-phos"
-                  >
-                    [On the Federal Register]
-                  </a>
-                )}
-              </p>
-              <SourceLine
-                source={a.profileSource}
-                asOf={a.profileAsOf}
-                detail="description and organization"
-              />
-            </section>
           </div>
         </main>
         <Footer />

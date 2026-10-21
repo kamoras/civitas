@@ -29,6 +29,7 @@ from app.pipeline import lexical_index
 from app.pipeline.fetch.agencies import FR_SOURCE, USASPENDING_SOURCE, linking_progress
 from app.pipeline.fetch.fr_rulemaking import FR_TYPE_LABELS
 from app.retractions import retraction_for_issue
+from app.sentences import lede
 from app.time_utils import comment_period_today
 from app.services.explore_keys import public_key
 
@@ -400,6 +401,8 @@ def get_agency(slug: str, db: Session = Depends(get_db)):
         "name": agency.name,
         "shortName": agency.short_name,
         "description": agency.description,
+        # The description's first sentence, quoted in the page's "About" box.
+        "descriptionLede": lede(agency.description),
         "frUrl": agency.fr_url,
         "website": agency.website,
         "parent": {"slug": parent.slug, "name": parent.name} if parent else None,

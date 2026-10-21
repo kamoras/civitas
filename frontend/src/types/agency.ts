@@ -109,6 +109,9 @@ export interface AgencyDetail {
   name: string;
   shortName: string | null;
   description: string | null;
+  /** The description's first sentence, verbatim (or its opening words and
+   *  an ellipsis), for the "About" box to quote. */
+  descriptionLede?: string | null;
   frUrl: string | null;
   website: string | null;
   parent: { slug: string; name: string } | null;
