@@ -12,7 +12,7 @@ from app.api.response_helpers import (
 from app.database import get_db
 from app.member_ids import resolve_member_id
 from app.services._scorecard_common import VOTE_PERIOD_PATTERN
-from app.peer_comparison import peer_comparison
+from app.peer_comparison import peer_comparison, with_drawing
 from app.services.holdings_service import HOLDING_CATEGORY_PATTERN, get_senator_holdings
 
 from app.services.senator_service import (
@@ -118,10 +118,11 @@ def get_senator_peers(
 ) -> JSONResponse:
     """Where the senator stands among peers on each measure (app/peer_comparison.py):
     the "Where they stand" stack's data."""
-    result = peer_comparison(db, "senate", resolve_member_id(db, senator_id), group)
+    member_id = resolve_member_id(db, senator_id)
+    result = peer_comparison(db, "senate", member_id, group)
     if result is None:
         raise HTTPException(status_code=404, detail="Senator not found")
-    return _cached_json(result, max_age=CACHE_TTL_DETAIL_S)
+    return _cached_json(with_drawing(db, member_id, result), max_age=CACHE_TTL_DETAIL_S)
 
 
 @router.get("/senators/{senator_id}/votes")

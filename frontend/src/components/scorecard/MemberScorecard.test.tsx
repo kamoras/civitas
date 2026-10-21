@@ -21,8 +21,6 @@ vi.mock("@/lib/api", () => ({
   fetchRepHoldings: vi.fn().mockResolvedValue({ available: false }),
   fetchPresidentHoldings: vi.fn(),
   fetchSenatorHoldings: vi.fn(),
-  fetchRepresentativeHistory: vi.fn().mockResolvedValue({ snapshots: [] }),
-  fetchSenatorHistory: vi.fn(),
 }));
 
 // A House member as the API served one on 2026-09-28, trimmed and renamed.

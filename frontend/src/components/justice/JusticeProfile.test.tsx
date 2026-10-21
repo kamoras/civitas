@@ -68,17 +68,43 @@ const justice: Justice = {
     measures: [majority],
     appointer: {
       rows: [
-        { id: "john_doe", name: "John Doe", estimate: -0.02, ciLow: -0.1, ciHigh: 0.06 },
+        {
+          id: "john_doe",
+          name: "John Doe",
+          estimate: -0.02,
+          ciLow: -0.1,
+          ciHigh: 0.06,
+          estimateShown: "\u22122.0",
+          intervalShown: "\u221210.0 to +6.0",
+        },
         {
           id: "jane_q_example",
           name: "Jane Q. Example",
           estimate: 0.19,
           ciLow: 0.07,
           ciHigh: 0.31,
+          estimateShown: "+19.0",
+          intervalShown: "+7.0 to +31.0",
         },
       ],
       sentence: "With the government's side held fixed, 19.2 points more often.",
       throughTerm: 2025,
+      marks: [
+        {
+          id: "john_doe",
+          label: "John Doe",
+          shown: "\u22122.0 points",
+          context: "95% interval \u221210.0 to +6.0",
+          href: "/politicians/john_doe",
+        },
+        {
+          id: "jane_q_example",
+          label: "Jane Q. Example",
+          shown: "+19.0 points",
+          context: "95% interval +7.0 to +31.0",
+          href: "/politicians/jane_q_example",
+        },
+      ],
     },
   },
 };
@@ -117,6 +143,9 @@ describe("JusticeProfile", () => {
     expect(screen.getByRole("figure", { name: /19\.2 points more often/ })).toBeInTheDocument();
     expect(screen.getByRole("cell", { name: "+7.0 to +31.0" })).toBeInTheDocument();
     expect(screen.getByText(/Not a measure of loyalty/)).toBeInTheDocument();
+    // Each row reads from the keyboard, starting at this justice.
+    const rows = screen.getByRole("group", { name: /^Each sitting justice's estimate/ });
+    expect(rows.querySelectorAll("[data-mark]")).toHaveLength(2);
   });
 
   it("links each colleague on the agreement chart", () => {

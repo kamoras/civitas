@@ -82,12 +82,18 @@ export default function DeadlineRibbon({
                 style={{ left: at(d.date), width: width(d.date, d.endDate!) }}
               />
             ) : (
+              // The tick's mark is a 24px column drawn over the bands (z-10),
+              // so a pointer within 12px of a deadline reaches it even where
+              // an early-voting band runs under it (WCAG 2.5.8); the band
+              // stays reachable beyond that.
               <span
                 key={key(d)}
                 {...{ [MARK_ATTR]: key(d) }}
-                className={`absolute top-3 h-6 w-0.5 -translate-x-1/2 ${tone(d)} ${passed ? "opacity-30" : ""}`}
+                className="absolute top-3 z-10 flex h-6 w-6 -translate-x-1/2 justify-center"
                 style={{ left: at(d.closesOn) }}
-              />
+              >
+                <span className={`h-full w-0.5 ${tone(d)} ${passed ? "opacity-30" : ""}`} />
+              </span>
             );
           })}
           <span

@@ -50,6 +50,10 @@ const DATA: ChamberMeasures = {
       direction: "higher means more of the money came from PACs",
       unit: "share",
       median: 0.2,
+      medianShown: "20%",
+      axisMax: 0.5,
+      axisStartShown: "0%",
+      axisEndShown: "50%",
       n: 3,
       source: { name: "FEC filings", url: "https://www.fec.gov/data/" },
       points: [

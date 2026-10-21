@@ -11,6 +11,8 @@ import MetricTooltip from "./MetricTooltip";
 import { asOfPhrase, formatBracket, OWNER_LABEL } from "@/lib/disclosures";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
+import ChartReadout from "@/components/shared/ChartReadout";
+import { MARK_ATTR } from "@/types/readout";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR, shareMetaAttrs } from "@/lib/shareImage";
 import { onThisPage } from "@/lib/onThisPage";
 
@@ -47,11 +49,6 @@ function formatHoldingValue(h: Holding, when: string): string {
   if (h.valueLow === null || h.valueHigh === null) return h.valueText || "Not stated";
   if (h.valueHigh === 0) return `None ${when}`;
   return formatBracket(h.valueLow, h.valueHigh, h.valueOpenEnded);
-}
-
-function formatShare(share: number): string {
-  if (share > 0 && share < 0.01) return "<1%";
-  return `${Math.round(share * 100)}%`;
 }
 
 // Donut geometry, in SVG user units.
@@ -99,69 +96,68 @@ function HoldingsDonut({
     slices.find((c) => c.category === active) ??
     slices.find((c) => c.category === selected) ??
     null;
-  const label = slices.map((c) => `${c.label} ${formatShare(c.share)}`).join(", ");
+  // Each slice names its type, share and disclosed sum (the API's words);
+  // Enter or a click lists that type's assets, as the legend does.
+  const marks = slices.flatMap((c) => (c.mark ? [c.mark] : []));
 
   let cursor = 0;
   return (
     <div className="relative shrink-0" style={{ width: SIZE, height: SIZE }}>
-      <svg
-        viewBox={`0 0 ${SIZE} ${SIZE}`}
-        width={SIZE}
-        height={SIZE}
-        role="img"
-        aria-label={`Holdings by asset type: ${label}`}
-        onMouseLeave={() => onHover(null)}
+      <ChartReadout
+        label="Holdings by asset type"
+        marks={marks}
+        labelAt="mark"
+        ring={false}
+        onActive={onHover}
+        onOpen={onSelect}
       >
-        {slices.length === 1 ? (
-          <circle
-            cx={CENTER}
-            cy={CENTER}
-            r={(OUTER_R + INNER_R) / 2}
-            fill="none"
-            stroke={chartMark(slices[0].color)}
-            strokeWidth={OUTER_R - INNER_R}
-            onMouseEnter={() => onHover(slices[0].category)}
-            onClick={() => onSelect(slices[0].category)}
-            className="cursor-pointer"
-          />
-        ) : (
-          slices.map((c) => {
-            const start = cursor;
-            cursor += c.share;
-            // Dim the rest only when the highlighted category is one of the
-            // drawn slices; a legend row with no stated value has no slice
-            // to stand out.
-            const dimmed = focus !== null && focus.category !== c.category;
-            return (
-              <path
-                key={c.category}
-                d={arcPath(start, cursor)}
-                fill={chartMark(c.color)}
-                // A 2px surface-coloured seam separates adjacent slices so
-                // identity never rests on hue alone at the boundary.
-                stroke="var(--surface)"
-                strokeWidth={2}
-                strokeLinejoin="round"
-                opacity={dimmed ? 0.35 : 1}
-                onMouseEnter={() => onHover(c.category)}
-                onClick={() => onSelect(c.category)}
-                className="cursor-pointer transition-opacity"
-              />
-            );
-          })
-        )}
-      </svg>
+        <svg viewBox={`0 0 ${SIZE} ${SIZE}`} width={SIZE} height={SIZE}>
+          {slices.length === 1 ? (
+            <circle
+              cx={CENTER}
+              cy={CENTER}
+              r={(OUTER_R + INNER_R) / 2}
+              fill="none"
+              stroke={chartMark(slices[0].color)}
+              strokeWidth={OUTER_R - INNER_R}
+              {...{ [MARK_ATTR]: slices[0].category }}
+            />
+          ) : (
+            slices.map((c) => {
+              const start = cursor;
+              cursor += c.share;
+              // Dim the rest only when the highlighted category is one of the
+              // drawn slices; a legend row with no stated value has no slice
+              // to stand out.
+              const dimmed = focus !== null && focus.category !== c.category;
+              return (
+                <path
+                  key={c.category}
+                  d={arcPath(start, cursor)}
+                  fill={chartMark(c.color)}
+                  // A 2px surface-coloured seam separates adjacent slices so
+                  // identity never rests on hue alone at the boundary.
+                  stroke="var(--surface)"
+                  strokeWidth={2}
+                  strokeLinejoin="round"
+                  opacity={dimmed ? 0.35 : 1}
+                  {...{ [MARK_ATTR]: c.category }}
+                  className="transition-opacity"
+                />
+              );
+            })
+          )}
+        </svg>
+      </ChartReadout>
       <div
         className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none px-12"
         aria-hidden="true"
       >
         {focus ? (
           <>
-            <span className="text-ink-hi text-xl font-mono">{formatShare(focus.share)}</span>
+            <span className="text-ink-hi text-xl font-mono">{focus.shareShown}</span>
             <span className="text-ink text-xs leading-tight">{focus.label}</span>
-            <span className="text-ink-min text-[11px] font-mono mt-0.5">
-              {formatBracket(focus.valueLow, focus.valueHigh, focus.openEnded, formatCurrency)}
-            </span>
+            <span className="text-ink-min text-[11px] font-mono mt-0.5">{focus.valueShown}</span>
           </>
         ) : (
           <>
@@ -180,11 +176,7 @@ function HoldingsDonut({
  * ("Undetermined"). The two are different disclosures and are named apart. */
 function legendDetail(c: HoldingCategory, when: string): string {
   const parts = [`${c.count} asset${c.count !== 1 ? "s" : ""}`];
-  parts.push(
-    c.weight > 0
-      ? formatBracket(c.valueLow, c.valueHigh, c.openEnded, formatCurrency)
-      : "not charted"
-  );
+  parts.push(c.weight > 0 ? c.valueShown : "not charted");
   if (c.zeroValueCount > 0) parts.push(`${c.zeroValueCount} none ${when}`);
   if (c.unvaluedCount > 0) parts.push(`${c.unvaluedCount} no value stated`);
   return parts.join(" · ");
@@ -238,7 +230,7 @@ function CategoryLegend({
                 <span className="block text-ink-min text-xs">{legendDetail(c, when)}</span>
               </span>
               <span className="text-ink-hi text-sm font-mono">
-                {c.weight > 0 ? formatShare(c.share) : "—"}
+                {c.weight > 0 ? c.shareShown : "—"}
               </span>
             </button>
           </li>

@@ -12,7 +12,14 @@ export interface ChartMark extends ReadoutMark {
   x?: number;
   /** The mark's centre, in px from the chart's top (axis charts). */
   y?: number;
+  /** Or its centre as a share of the chart's height, 0-100 (a chart whose
+   *  height follows the text size). */
+  yPct?: number;
 }
+
+/** A mark's centre in px from the chart's top, for an axis chart. */
+const yOf = (m: ChartMark, r: DOMRect): number | null =>
+  m.y ?? (m.yPct != null ? (m.yPct / 100) * r.height : null);
 
 /** How far, in px, the pointer may be from a mark and still pick it: a
  *  48px target for a lone mark, never under WCAG 2.5.8's 24. */
@@ -35,8 +42,9 @@ type Shape = { el: Element | null; b: Box };
  *  shape carrying its id that is on screen (a small state is drawn twice,
  *  as itself and as a box off the coast), else the first. */
 function shapesOf(m: ChartMark, box: HTMLDivElement, r: DOMRect): Shape[] {
-  if (m.x != null && m.y != null) {
-    return [{ el: null, b: { left: (m.x / 100) * r.width, top: m.y, width: 0, height: 0 } }];
+  const y = yOf(m, r);
+  if (m.x != null && y != null) {
+    return [{ el: null, b: { left: (m.x / 100) * r.width, top: y, width: 0, height: 0 } }];
   }
   const all = [...box.querySelectorAll(`[${MARK_ATTR}="${CSS.escape(m.id)}"]`)].map((el) => {
     const e = el.getBoundingClientRect();
@@ -85,6 +93,7 @@ export default function ChartReadout({
   className = "",
   onActive,
   ring = true,
+  onOpen,
   children,
 }: {
   /** The chart's accessible name: what it measures, and of whom. */
@@ -103,6 +112,9 @@ export default function ChartReadout({
   /** False for a chart that outlines the open mark itself (a map's state:
    *  a box around its bounds would mean nothing). */
   ring?: boolean;
+  /** What Enter or a click does on a mark with no page (a pie's slice
+   *  filters the list beside it). */
+  onOpen?: (id: string) => void;
   children: React.ReactNode;
 }) {
   const [active, setActiveIndex] = useState<number | null>(null);
@@ -178,10 +190,11 @@ export default function ChartReadout({
     let bd = Infinity;
     let by = Infinity;
     marks.forEach((q, i) => {
-      if (q.x != null && q.y != null) {
+      const qy = yOf(q, r);
+      if (q.x != null && qy != null) {
         // Nearest along the axis; marks within a pixel go by height.
         const dx = Math.abs((q.x / 100) * r.width - px);
-        const dy = Math.abs(q.y - py);
+        const dy = Math.abs(qy - py);
         if (dx < bd - 1 || (dx <= bd + 1 && dy < by)) {
           best = i;
           bd = Math.min(bd, dx);
@@ -249,6 +262,9 @@ export default function ChartReadout({
         if (m?.href) {
           e.preventDefault();
           link.current?.click();
+        } else if (m && onOpen) {
+          e.preventDefault();
+          onOpen(m.id);
         }
         return;
       default:
@@ -259,7 +275,7 @@ export default function ChartReadout({
     setAnnounce(words(marks[next]));
   };
 
-  const linked = marks.some((q) => q.href);
+  const linked = marks.some((q) => q.href) || onOpen != null;
   const below =
     labelAt === "mark" && place != null && place.b.top + place.b.height / 2 < place.h / 2;
   const x = place ? place.b.left + place.b.width / 2 : 0;
@@ -306,7 +322,7 @@ export default function ChartReadout({
       ref={box}
       role="group"
       aria-label={`${label.replace(/\.$/, "")}: ${marks.length} mark${marks.length === 1 ? "" : "s"}. Arrow keys move between them${
-        linked ? ", Enter opens a page" : ""
+        marks.some((q) => q.href) ? ", Enter opens a page" : onOpen ? ", Enter selects one" : ""
       }.`}
       tabIndex={0}
       className={`relative ${linked ? "cursor-pointer" : ""} focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-hi ${className}`}
@@ -322,10 +338,19 @@ export default function ChartReadout({
       onClick={(e) => {
         if (onLabel(e.target)) return;
         const i = pick(e);
-        // A click opens the mark the label names; a tap first shows it.
+        // A click opens the mark the label names; a tap first shows it. A
+        // mark with no page and an `onOpen` is acted on by a click, or a
+        // second tap.
         if (i != null && i === active && pointer.current === "mouse" && marks[i].href)
           link.current?.click();
-        else setActive(i);
+        else if (
+          i != null &&
+          onOpen &&
+          !marks[i].href &&
+          (i === active || pointer.current === "mouse")
+        )
+          onOpen(marks[i].id);
+        if (!(i != null && i === active)) setActive(i);
       }}
       onKeyDown={onKeyDown}
       onBlur={(e) => {

@@ -43,6 +43,20 @@ def split_marks(yeas: int | None, nays: int | None, href: str | None = None) -> 
     return [side("yea", "Yea", yeas), side("nay", "Nay", nays)]
 
 
+def compact_money(amount: float) -> str:
+    """A sum as the site's charts print one: "$1.2M", "$350K", "$1.0B"."""
+    sign, v = ("-" if amount < 0 else ""), abs(amount)
+    for floor, suffix, places in ((1e12, "T", 2), (1e9, "B", 1), (1e6, "M", 1), (1e3, "K", 0)):
+        if v >= floor:
+            return f"{sign}${v / floor:.{places}f}{suffix}"
+    return f"{sign}${v:,.0f}"
+
+
+def share_text(share: float) -> str:
+    """A share of a whole as printed: "34%", and "<1%" for a sliver."""
+    return "<1%" if 0 < share < 0.01 else f"{round(share * 100)}%"
+
+
 def _short(iso: str) -> str:
     d = date.fromisoformat(iso[:10])
     return f"{d:%b} {d.day}, {d.year}"

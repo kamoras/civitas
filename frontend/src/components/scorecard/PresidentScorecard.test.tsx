@@ -64,8 +64,6 @@ vi.mock("@/lib/api", () => ({
   }),
   fetchSenatorHoldings: vi.fn(),
   fetchRepHoldings: vi.fn(),
-  fetchSenatorHistory: vi.fn(),
-  fetchRepresentativeHistory: vi.fn(),
 }));
 
 // A sitting president, shaped as the API serves one.

@@ -160,3 +160,27 @@ def test_every_dot_carries_its_seat_and_place(monkeypatch):
     assert pc.peer_comparison(None, "senate", "d0")["measures"][0]["distributionSeats"][0] == "D-OR"
     points = {m["key"]: m for m in pc.chamber_measures(None, "senate")["measures"]}["smallGifts"]["points"]
     assert points[-1]["rank"] == "Highest of 5" and points[0]["rank"] == "Lowest of 5"
+
+
+def test_a_strip_is_drawn_from_the_api():
+    # The axis and table print a figure as the strip does; the right end
+    # rounds the largest figure up to a step (frontend draws nothing itself).
+    assert [pc.axis_figure("share", 0.134), pc.axis_figure("rate", 0.034), pc.axis_figure("count", 7.4)] == [
+        "13%", "3.4%", "7"]
+    assert (pc.axis_top("share", [0.07]), pc.axis_top("share", [0.33]), pc.axis_top("count", [12])) == (
+        0.08, 0.4, 15)
+    assert pc.axis_top("count", []) == 5
+
+
+def test_a_measure_over_time_reads_night_by_night_in_one_congress():
+    m = pc.BY_KEY["breaks"]
+    snaps = [("2024-12-01", {"breaks": 0.9}),  # the 118th Congress: left out
+             ("2026-03-01", {"breaks": 0.02}), ("2026-04-01", {"breaks": 0.04}), ("2026-05-01", {"breaks": 0.03})]
+    out = pc.over_time(m, snaps)
+    assert out["points"] == [{"x": 0.0, "y": 100.0}, {"x": 50.0, "y": 0.0}, {"x": 100.0, "y": 50.0}]
+    assert out["marks"][1] == {"id": "2026-04-01", "label": "Apr 1, 2026", "detail": None, "shown": "4.0%",
+                               "context": None, "href": None}
+    assert out["sentence"] == "Over time: 2.0% on Mar 1, 2026, 3.0% on May 1, 2026."
+    # Unchanged, or a measure of the last election: nothing drawn.
+    assert pc.over_time(m, snaps[1:2] * 3) is None
+    assert pc.over_time(pc.BY_KEY["pacMoney"], snaps) is None

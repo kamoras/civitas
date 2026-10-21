@@ -51,3 +51,7 @@ def test_the_chart_says_a_succession_rather_than_drawing_a_zero(db_session):
     chart = next(c for c in president_charts(db_session, "p-1")["charts"] if c["key"] == "elections")
     assert chart["caption"].startswith("Never won a presidential election: came to office by succession")
     assert not any(r["mine"] for r in chart["rows"])
+    assert chart["medianShareShown"] == "57.8%"
+    assert chart["marks"] == [{"id": "1836", "label": "1836", "detail": "John Roe",
+                               "shown": "170 of 294 electoral votes (57.8%)",
+                               "context": "popular margin +14.2 points", "href": "/politicians/p-0"}]

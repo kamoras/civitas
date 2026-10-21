@@ -2,7 +2,7 @@ import re
 from datetime import datetime
 from typing import Annotated, Any, Literal, get_args
 
-from pydantic import AliasChoices, BaseModel, BeforeValidator, ConfigDict, Field, model_validator
+from pydantic import AliasChoices, BaseModel, BeforeValidator, ConfigDict, Field, computed_field, model_validator
 
 from app.config_definitions import BILL_STAGES
 
@@ -315,6 +315,16 @@ class HoldingSchema(CamelModel):
         return self
 
 
+class ReadoutMarkSchema(CamelModel):
+    """What a chart's readout says about one mark (app/readout.py)."""
+    id: str
+    label: str
+    detail: str | None = None
+    shown: str
+    context: str | None = None
+    href: str | None = None
+
+
 class HoldingCategorySchema(CamelModel):
     """One slice of the holdings breakdown.
 
@@ -338,6 +348,11 @@ class HoldingCategorySchema(CamelModel):
     open_ended: bool
     weight: float
     share: float
+    # As printed: the share ("34%", "<1%") and the disclosed sum ("$1.2M -
+    # $3.4M", "$50.0M+"), and the slice's readout.
+    share_shown: str = ""
+    value_shown: str = ""
+    mark: ReadoutMarkSchema | None = None
 
 
 class HoldingsSchema(CamelModel):
@@ -450,10 +465,33 @@ class LobbyingMatchSchema(CamelModel):
     lobbying_checked: bool | None = None
 
 
+# A policy area's bar is drawn at least this wide (percent of its track), so
+# a weak lean still shows which side it is on. A drawing floor: the strength
+# beside it is the true figure.
+_MIN_POLICY_BAR = 4
+_SIDE = {"R": "leans Republican", "D": "leans Democratic", "bipartisan": "bipartisan"}
+
+
 class PolicyAlignmentSchema(CamelModel):
     area: str
     alignment: Literal["R", "D", "bipartisan"]
     strength: float = Field(description="How strongly, 0-1")
+
+    @computed_field(description="The strength as printed, \"63%\"")
+    @property
+    def strength_shown(self) -> str:
+        return f"{round(self.strength * 100)}%"
+
+    @computed_field(description="The bar's width, percent of its track (at least 4, so a weak lean shows)")
+    @property
+    def bar_percent(self) -> int:
+        return max(round(self.strength * 100), _MIN_POLICY_BAR)
+
+    @computed_field(description="The area's readout on the policy chart")
+    @property
+    def mark(self) -> ReadoutMarkSchema:
+        return ReadoutMarkSchema(id=self.area, label=self.area.replace("_", " ").title(),
+                                 shown=_SIDE[self.alignment], context=f"strength {self.strength_shown}")
 
 
 class PartisanDepthSchema(CamelModel):
@@ -469,6 +507,38 @@ class PartisanDepthSchema(CamelModel):
     cross_party_count: int = Field(description="Policy areas leaning to the other party")
     total_positions: int = Field(description="Policy areas with a lean")
     policy_breakdown: list[PolicyAlignmentSchema] = []
+
+    # The spectrum bar's ends are the measure's own bounds, -1 and +1: every
+    # counted vote with one party's positions in every area (frontend
+    # PlatformTracker). A lean past them (the cosponsorship prior, for a
+    # member with few votes) is drawn at the end.
+    @computed_field(description="overallLean as printed, signed with a true minus (\"+0.21\")")
+    @property
+    def lean_shown(self) -> str:
+        return f"{'\u2212' if self.overall_lean < 0 else '+'}{abs(self.overall_lean):.2f}"
+
+    @computed_field(description="The spectrum bar in words")
+    @property
+    def lean_sentence(self) -> str:
+        where = {"R": "Votes lean Republican", "D": "Votes lean Democratic",
+                 "centrist": "Votes sit at the center"}[self.overall_party]
+        return (f"{where}: {self.lean_shown}, on a scale from \u22121 (every counted vote with the "
+                f"Democrats' positions in every area) to +1 (with the Republicans').")
+
+    @computed_field(description="The lean's marker on the bar, percent from its left end")
+    @property
+    def lean_marker_percent(self) -> float:
+        return round(50 + max(-1.0, min(1.0, self.overall_lean)) * 50, 2)
+
+    @computed_field(description="The bar from the centre to the marker: its left edge, percent")
+    @property
+    def lean_bar_left(self) -> float:
+        return min(50.0, self.lean_marker_percent)
+
+    @computed_field(description="The bar from the centre to the marker: its width, percent")
+    @property
+    def lean_bar_width(self) -> float:
+        return round(abs(self.lean_marker_percent - 50), 2)
 
 
 class CampaignPromiseSchema(CamelModel):
@@ -1672,6 +1742,9 @@ class JusticeIntervalSchema(CamelModel):
     estimate: float
     ci_low: float
     ci_high: float
+    # As printed, signed points with a true minus ("+6.3", "-2.1 to +14.5").
+    estimate_shown: str = ""
+    interval_shown: str = ""
 
 
 class JusticeAppointerSchema(CamelModel):
@@ -1681,6 +1754,8 @@ class JusticeAppointerSchema(CamelModel):
     rows: list[JusticeIntervalSchema]
     sentence: str
     through_term: int | None = None
+    # One readout per row, in order: the estimate and its interval.
+    marks: list[ReadoutMarkSchema] = []
 
 
 class JusticeAppointedBySchema(CamelModel):

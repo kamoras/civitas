@@ -2649,6 +2649,12 @@ the pending list).
   owns it, never computed on the page. The drawing stays `aria-hidden`; the
   chart keeps its table, list or text beside it. Strips (`Strip.tsx`) are
   this component; a new chart uses it rather than its own pointer code.
+  A line whose height follows the text size places its points with `yPct`;
+  a mark with no page but an action (a pie slice that filters the list
+  beside it) takes `onOpen`; a chart that outlines the open mark itself (a
+  map's state) passes `ring={false}`. Where a public API schema forbids
+  extra fields, the drawing fields go on the internal route instead
+  (`peer_comparison.with_drawing`).
 - **Type** (2026-10, `src/app/fonts.ts`): Source Serif 4 600 for titles
   (`font-display`), Fira Sans 400/600 for everything else (`font-sans`; the
   long-standing `font-mono` class maps to Fira Sans too, so a label keeps its

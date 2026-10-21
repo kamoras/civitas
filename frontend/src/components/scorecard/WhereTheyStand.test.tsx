@@ -8,34 +8,6 @@ import type { PeerComparison, PeerMeasure } from "@/types/peers";
 const fetchPeerComparison = vi.fn();
 vi.mock("@/lib/api", () => ({
   fetchPeerComparison: (...a: unknown[]) => fetchPeerComparison(...a),
-  fetchSenatorHistory: vi.fn(async () => ({
-    snapshots: [
-      // The last Congress: never drawn beside this one.
-      {
-        date: "2024-06-01",
-        overallScore: 60,
-        algorithmVersion: "v7",
-        scores: {},
-        facts: { breaks: 0.5 },
-      },
-      { date: "2026-10-18", overallScore: 60, algorithmVersion: "v7", scores: {}, facts: null },
-      {
-        date: "2026-10-19",
-        overallScore: 60,
-        algorithmVersion: "v7",
-        scores: {},
-        facts: { smallGifts: 0.13, breaks: 0.01 },
-      },
-      {
-        date: "2026-10-26",
-        overallScore: 60,
-        algorithmVersion: "v7",
-        scores: {},
-        facts: { smallGifts: 0.2, breaks: 0.02 },
-      },
-    ],
-  })),
-  fetchRepresentativeHistory: vi.fn(),
 }));
 
 function measure(over: Partial<PeerMeasure>): PeerMeasure {
@@ -67,6 +39,11 @@ function measure(over: Partial<PeerMeasure>): PeerMeasure {
     sentence:
       "Gifts of $200 or less were 13% of the money. 2 of the other 2 Senate Democrats had a larger share.",
     thin: false,
+    axisMax: 0.4,
+    axisStartShown: "0%",
+    axisEndShown: "40%",
+    expectedShown: "24% seat average",
+    overTime: null,
     ...over,
   };
 }
@@ -87,6 +64,17 @@ const DATA: PeerComparison = {
       thin: true,
       word: null,
       record: 6,
+      overTime: {
+        points: [
+          { x: 0, y: 100 },
+          { x: 100, y: 0 },
+        ],
+        marks: [
+          { id: "2026-10-19", label: "Oct 19, 2026", shown: "1.0%" },
+          { id: "2026-10-26", label: "Oct 26, 2026", shown: "2.0%" },
+        ],
+        sentence: "Over time: 1.0% on Oct 19, 2026, 2.0% on Oct 26, 2026.",
+      },
     }),
   ],
   standsOut: "Money from small donors: Donors who gave $200 or less gave 13% of the money.",
@@ -124,13 +112,18 @@ describe("WhereTheyStand", () => {
       screen.getAllByText(/every Senate Democrat's figure, lowest first/)[0]
     ).toBeInTheDocument();
     expect(screen.getAllByText(/seat average$/)[0]).toBeInTheDocument();
-    // The measure over time, from the snapshots that kept it.
+    // The measure over time, as the API sends it; each night reads out.
     expect(
-      await screen.findByText(/Over time: 1\.0% on Mon, Oct 19, 2\.0% on Mon, Oct 26\./)
+      screen.getByText("Over time: 1.0% on Oct 19, 2026, 2.0% on Oct 26, 2026.")
     ).toBeInTheDocument();
-    // Funding covers the last election, so it is never drawn over time, even
-    // though its figure moved between these snapshots.
     expect(screen.getAllByText(/Over time:/)).toHaveLength(1);
+    const line = screen.getByRole("group", { name: /^Votes against the party over time: 2 marks/ });
+    line.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(screen.getByText("Oct 26, 2026: 2.0%.")).toBeInTheDocument();
+    line.blur();
+    // The axis and the table print the API's figures.
+    expect(screen.getAllByText("40%")[0]).toBeInTheDocument();
     // A thin row keeps its figure and draws no word.
     expect(
       screen.getByText(/Not enough record yet to compare \(6 party-line votes\)/)

@@ -2,7 +2,7 @@
 
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { fetchChamberMeasures } from "@/lib/api";
-import { axisMax, Dot, fmt } from "@/components/scorecard/WhereTheyStand";
+import { Dot } from "@/components/scorecard/WhereTheyStand";
 import type { ChamberMeasure } from "@/types/peers";
 import StripPoints, { partySeat, StripAxis, type StripPoint } from "@/components/shared/Strip";
 
@@ -23,13 +23,7 @@ function PairStrip({
   left: Side;
   right: Side;
 }) {
-  const max = axisMax({
-    unit: m.unit,
-    distribution: m.points.map((p) => p.value),
-    value: null,
-    expected: m.median,
-  });
-  const at = (v: number) => Math.min(100, (v / max) * 100);
+  const at = (v: number) => Math.min(100, (v / m.axisMax) * 100);
   const find = (id: string) => m.points.find((p) => p.id === id);
   const l = find(left.id);
   const r = find(right.id);
@@ -51,7 +45,7 @@ function PairStrip({
           {left.name}: <strong className="font-semibold">{l?.shown ?? "no record"}</strong> ·{" "}
           {right.name}: <strong className="font-semibold">{r?.shown ?? "no record"}</strong>
           {m.median != null && (
-            <span className="text-ink-lo"> · chamber median {fmt(m, m.median)}</span>
+            <span className="text-ink-lo"> · chamber median {m.medianShown}</span>
           )}
         </span>
       </figcaption>
@@ -96,7 +90,7 @@ function PairStrip({
           />
         )}
       </StripPoints>
-      <StripAxis start={fmt(m, 0)} end={fmt(m, max)} />
+      <StripAxis start={m.axisStartShown} end={m.axisEndShown} />
     </figure>
   );
 }

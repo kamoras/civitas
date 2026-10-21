@@ -1923,40 +1923,6 @@ export async function fetchActionIssues(date?: string): Promise<ActionIssuesResp
   );
 }
 
-export interface ScoreSnapshot {
-  date: string;
-  overallScore: number;
-  /** Scoring algorithm version that produced this snapshot (null for pre-v4.1 rows). */
-  algorithmVersion?: string | null;
-  /** Dimension name -> score. Keys differ by entity type (senator/rep:
-   * fundingIndependence/constituentAlignment/
-   * fundingDiversity/legislativeEffectiveness; president: publicMandate/
-   * effectiveness/historicalLegacy). Not shown for members; the profile
-   * reads only date and facts. */
-  scores: Record<string, number>;
-  /** The peer-comparison measures that day (backend app/measures.py), keyed
-   *  like PeerMeasure.key; null before they were kept (2026-10-19). */
-  facts?: Record<string, number | null> | null;
-}
-
-export interface ScoreHistory {
-  snapshots: ScoreSnapshot[];
-  /** The latest score's change since the earliest snapshot on the same
-   *  scoring method (and, for a member, the same Congress); null when
-   *  there is none to compare with. */
-  change?: { since: string; points: number } | null;
-}
-
-export async function fetchSenatorHistory(senatorId: string): Promise<ScoreHistory> {
-  const url = `${API_BASE}/senators/${senatorId}/history`;
-  return withShape<ScoreHistory>(await cachedFetch(url, TTL.SHORT), { lists: ["snapshots"] }, url);
-}
-
-export async function fetchRepresentativeHistory(repId: string): Promise<ScoreHistory> {
-  const url = `${API_BASE}/representatives/${repId}/history`;
-  return withShape<ScoreHistory>(await cachedFetch(url, TTL.SHORT), { lists: ["snapshots"] }, url);
-}
-
 export interface OpenCommentItem {
   id: number;
   /** The document's permanent Explore key (exploreHref). */

@@ -258,6 +258,17 @@ export default function AccessibilityPage() {
                     Tab stop the arrow keys walk (a map goes state by state, west to east and north
                     to south), and its figures are also written out beside it.
                   </P>
+                  <P>
+                    On a president&apos;s page, each month or year of a line gives its figure and
+                    the other presidencies&apos; middle half at the same point, each bar its year,
+                    and each election its winner, electoral votes and popular margin. A
+                    justice&apos;s estimates name each justice and the interval. On a member&apos;s
+                    page, each slice of the holdings pie gives its share and its disclosed sum
+                    (Enter lists those assets, as the legend does), each policy area its side and
+                    strength, and a measure over time each night&apos;s figure. A voter
+                    deadline&apos;s tick sits over the early-voting band, so pointing within 12
+                    pixels of it reaches it.
+                  </P>
                 </Box>
                 <Box
                   title="Typefaces, and why"

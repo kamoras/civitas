@@ -32,6 +32,7 @@ from app.pipeline.fetch.electoral_college import stored_elections
 from app.pipeline.fetch.historical_gdp import stored_real_gdp
 from app.pipeline.fetch.macro_series import PAYROLLS, stored_annual_series
 from app.pipeline.fetch.presidential_approval import dated_approvals, stored_approval_history
+from app.readout import mark
 from app.time_utils import utcnow
 
 # Fewest other presidencies at a point before the middle half is drawn
@@ -51,7 +52,7 @@ def _end(p: President) -> date:
 
 
 def _line_chart(me: President, mine: list[tuple[int, float]], others: dict[President, list[tuple[int, float]]],
-                fmt, x_min_span: int) -> dict:
+                fmt, x_min_span: int, x_label: str) -> dict:
     """The shared line-and-band shape: this term's points, every other
     term's points over the same span, and the others' middle half at each
     point where at least MIN_BAND of them reach it."""
@@ -81,6 +82,12 @@ def _line_chart(me: President, mine: list[tuple[int, float]], others: dict[Presi
                    "band": next((f"{fmt(b['low'])} to {fmt(b['high'])} (n={b['n']})" for b in band if b["x"] == x),
                                 None)}
                   for x, y in mine],
+        # The line's readouts, one per point of this term: its value, and
+        # the other presidencies' middle half at the same point.
+        "marks": [mark(str(x), f"{x_label} {x + 1}", fmt(y), detail=me.name,
+                       context=next((f"other presidencies' middle half {fmt(b['low'])} to {fmt(b['high'])}"
+                                     f" (n={b['n']})" for b in band if b["x"] == x), None))
+                  for x, y in mine],
     }
 
 
@@ -107,7 +114,7 @@ def _approval_chart(p: President, everyone: list[President], db: Session) -> dic
     if not mine:
         return None
     others = {o: pts for o in everyone if o.id != p.id and (pts := _monthly_approval(o, db))}
-    chart = _line_chart(p, mine, others, _pct, 47)
+    chart = _line_chart(p, mine, others, _pct, 47, "Month")
     last_x, last_y = mine[-1]
     band = next((b for b in chart["band"] if b["x"] == last_x), None)
     caption = f"Approval in month {last_x + 1} of the term: {_pct(last_y)}."
@@ -147,7 +154,7 @@ def _jobs_chart(p: President, everyone: list[President], db: Session) -> dict | 
     if len(mine) < 2:
         return None
     others = {o: pts for o in everyone if o.id != p.id and len(pts := _jobs_points(o, payrolls)) >= 2}
-    chart = _line_chart(p, mine, others, _millions, 4)
+    chart = _line_chart(p, mine, others, _millions, 4, "Year")
     last_x, last_y = mine[-1]
     band = next((b for b in chart["band"] if b["x"] == last_x), None)
     caption = f"Jobs added since the year of the inauguration, by year {last_x + 1} of the term: {_millions(last_y)}."
@@ -201,6 +208,9 @@ def _growth_chart(p: President, everyone: list[President], db: Session) -> dict 
         "caption": caption, "kind": "bars", "yFormat": "pct1",
         "bars": [{"label": str(y), "value": g, "shown": f"{g:.1f}%", "first": i == 0}
                  for i, (y, g) in enumerate(mine)],
+        "marks": [mark(str(y), str(y), f"{g:.1f}% real growth",
+                       context=_growth_context(i == 0, g, low, high))
+                  for i, (y, g) in enumerate(mine)],
         "eraBand": None if low is None else {"low": low, "median": mid, "high": high,
                                              "years": len(years), "presidencies": len(era_others)},
         "yMin": (y_min := min([g for _, g in mine] + ([low] if low is not None else []) + [0])),
@@ -210,6 +220,20 @@ def _growth_chart(p: President, everyone: list[President], db: Session) -> dict 
         "bandShown": None if low is None else f"middle half {low:.1f}% to {high:.1f}%, median {mid:.1f}%",
         "n": len(era_others),
     }
+
+
+def _growth_context(first: bool, g: float, low: float | None, high: float | None) -> str | None:
+    """Where a year of growth sits against the era's middle half, and the
+    first year's caveat."""
+    # Compared as printed (one decimal), so a year shown equal to an end of
+    # the band is never called outside it.
+    g, low, high = round(g, 1), low if low is None else round(low, 1), high if high is None else round(high, 1)
+    where = None if low is None else (
+        "above the other presidencies' middle half" if g > high
+        else "below the other presidencies' middle half" if g < low
+        else "within the other presidencies' middle half")
+    parts = [s for s in ("first year of the term" if first else None, where) if s]
+    return ", ".join(parts) or None
 
 
 def _elections_chart(p: President, db: Session) -> dict | None:
@@ -258,6 +282,16 @@ def _elections_chart(p: President, db: Session) -> dict | None:
                   "marginShown": "not tabulated" if r["popularMargin"] is None else f"{r['popularMargin']:+.1f}",
                   "mine": r["presidentId"] == p.id, "decidedByHouse": r["decidedByHouse"]} for r in rows],
         "medianShare": mid_share, "medianMargin": mid_margin,
+        "medianShareShown": f"{mid_share:.1f}%",
+        # One readout per election, both panels' columns: who won, the
+        # electoral votes, the popular margin; this presidency's first.
+        "marks": [mark(str(r["year"]), str(r["year"]), f"{r['ev']} of {r['electors']} electoral votes "
+                       f"({r['evShare']:.1f}%)", detail=r["president"],
+                       context=("no national popular vote tabulated" if r["popularMargin"] is None
+                                else f"popular margin {r['popularMargin']:+.1f} points")
+                       + (", decided by the House" if r["decidedByHouse"] else ""),
+                       href=f"/politicians/{r['presidentId']}")
+                  for r in rows],
         "yMin": min(margins + [0]), "yMax": max(margins + [0]),
         "yTop": f"{max(margins + [0]):+.0f}", "yBottom": f"{min(margins + [0]):+.0f}",
         "n": len(rows) - len(mine),

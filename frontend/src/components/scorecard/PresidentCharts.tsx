@@ -10,6 +10,8 @@ import type {
 import { onThisPage } from "@/lib/onThisPage";
 import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
+import ChartReadout from "@/components/shared/ChartReadout";
+import { MARK_ATTR } from "@/types/readout";
 
 // Drawn in a fixed box and stretched to the column: strokes keep their
 // width (non-scaling-stroke) and every label is HTML beside the drawing.
@@ -27,8 +29,11 @@ function path(points: [number, number][], x: (v: number) => number, y: (v: numbe
 
 function Axis({ c, children }: { c: PresidentChart; children: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2" aria-hidden="true">
-      <div className="flex flex-col justify-between py-0.5 text-right text-xs text-ink-min">
+    <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2">
+      <div
+        aria-hidden="true"
+        className="flex flex-col justify-between py-0.5 text-right text-xs text-ink-min"
+      >
         <span>{c.yTop}</span>
         <span>{c.yBottom}</span>
       </div>
@@ -49,69 +54,82 @@ function Lines({ c }: { c: LineChart }) {
           .map((b) => `L${x(b.x)},${y(b.low)}`)
           .join(" ")} Z`
       : null;
+  // Each point of the term, picked along the axis: its value and the other
+  // presidencies' middle half at the same point (the API's words).
+  const marks = c.marks.map((m, i) => {
+    const [px, py] = c.series.points[i];
+    return { ...m, x: (x(px) / W) * 100, yPct: (y(py) / H) * 100 };
+  });
   return (
     <>
       <Axis c={c}>
-        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="h-48 w-full">
-          {c.yMin < 0 && c.yMax > 0 && (
-            <line
-              x1={0}
-              x2={W}
-              y1={y(0)}
-              y2={y(0)}
-              stroke="var(--ink-lo)"
-              strokeWidth={1}
-              vectorEffect="non-scaling-stroke"
-            />
-          )}
-          {c.others.map((o) => (
+        <ChartReadout
+          label={`${c.title}, ${c.series.name}`}
+          marks={marks}
+          startId={marks[marks.length - 1]?.id}
+          className="h-48"
+        >
+          <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="h-48 w-full">
+            {c.yMin < 0 && c.yMax > 0 && (
+              <line
+                x1={0}
+                x2={W}
+                y1={y(0)}
+                y2={y(0)}
+                stroke="var(--ink-lo)"
+                strokeWidth={1}
+                vectorEffect="non-scaling-stroke"
+              />
+            )}
+            {c.others.map((o) => (
+              <path
+                key={o.id}
+                d={path(o.points, x, y)}
+                fill="none"
+                stroke="var(--chart-muted)"
+                strokeOpacity={0.3}
+                strokeWidth={1}
+                vectorEffect="non-scaling-stroke"
+              />
+            ))}
+            {area && <path d={area} fill="var(--chart-muted)" fillOpacity={0.18} />}
+            {band.length > 1 && (
+              <>
+                <path
+                  d={path(
+                    band.map((b) => [b.x, b.high]),
+                    x,
+                    y
+                  )}
+                  fill="none"
+                  stroke="var(--chart-muted)"
+                  strokeDasharray="5 4"
+                  strokeWidth={1.5}
+                  vectorEffect="non-scaling-stroke"
+                />
+                <path
+                  d={path(
+                    band.map((b) => [b.x, b.low]),
+                    x,
+                    y
+                  )}
+                  fill="none"
+                  stroke="var(--chart-muted)"
+                  strokeDasharray="5 4"
+                  strokeWidth={1.5}
+                  vectorEffect="non-scaling-stroke"
+                />
+              </>
+            )}
             <path
-              key={o.id}
-              d={path(o.points, x, y)}
+              d={path(c.series.points, x, y)}
               fill="none"
-              stroke="var(--chart-muted)"
-              strokeOpacity={0.3}
-              strokeWidth={1}
+              stroke="var(--ink-hi)"
+              strokeWidth={3}
               vectorEffect="non-scaling-stroke"
             />
-          ))}
-          {area && <path d={area} fill="var(--chart-muted)" fillOpacity={0.18} />}
-          {band.length > 1 && (
-            <>
-              <path
-                d={path(
-                  band.map((b) => [b.x, b.high]),
-                  x,
-                  y
-                )}
-                fill="none"
-                stroke="var(--chart-muted)"
-                strokeDasharray="5 4"
-                strokeWidth={1.5}
-                vectorEffect="non-scaling-stroke"
-              />
-              <path
-                d={path(
-                  band.map((b) => [b.x, b.low]),
-                  x,
-                  y
-                )}
-                fill="none"
-                stroke="var(--chart-muted)"
-                strokeDasharray="5 4"
-                strokeWidth={1.5}
-                vectorEffect="non-scaling-stroke"
-              />
-            </>
-          )}
-          <path
-            d={path(c.series.points, x, y)}
-            fill="none"
-            stroke="var(--ink-hi)"
-            strokeWidth={3}
-            vectorEffect="non-scaling-stroke"
-          />
-        </svg>
+          </svg>
+        </ChartReadout>
       </Axis>
       <div className="ml-10 flex justify-between text-xs text-ink-min" aria-hidden="true">
         <span>{c.xLabel} 1</span>
@@ -165,32 +183,34 @@ function Bars({ c }: { c: BarsChart }) {
   return (
     <>
       <Axis c={c}>
-        <div className="relative h-48">
-          {band && (
-            <div
-              className="absolute inset-x-0 border-y-2 border-dashed border-[var(--chart-muted)] bg-[color-mix(in_srgb,var(--chart-muted)_18%,transparent)]"
-              style={{ top: pct(band.high), bottom: `calc(100% - ${pct(band.low)})` }}
-            />
-          )}
-          <div className="absolute inset-x-0 h-px bg-ink-lo" style={{ top: pct(0) }} />
-          <div className="absolute inset-0 flex items-stretch gap-1">
-            {c.bars.map((b) => {
-              const top = Math.min(y(b.value), y(0));
-              const height = Math.abs(y(b.value) - y(0));
-              return (
-                <div key={b.label} className="relative flex-1">
-                  <div
-                    className={`absolute inset-x-0 ${b.first ? "border-2 border-ink-hi bg-transparent" : "bg-ink-hi"}`}
-                    style={{
-                      top: `${(top / H) * 100}%`,
-                      height: `${Math.max((height / H) * 100, 0.8)}%`,
-                    }}
-                  />
-                </div>
-              );
-            })}
+        <ChartReadout label={c.title} marks={c.marks} startId={c.marks[c.marks.length - 1]?.id}>
+          <div className="relative h-48">
+            {band && (
+              <div
+                className="absolute inset-x-0 border-y-2 border-dashed border-[var(--chart-muted)] bg-[color-mix(in_srgb,var(--chart-muted)_18%,transparent)]"
+                style={{ top: pct(band.high), bottom: `calc(100% - ${pct(band.low)})` }}
+              />
+            )}
+            <div className="absolute inset-x-0 h-px bg-ink-lo" style={{ top: pct(0) }} />
+            <div className="absolute inset-0 flex items-stretch gap-1">
+              {c.bars.map((b) => {
+                const top = Math.min(y(b.value), y(0));
+                const height = Math.abs(y(b.value) - y(0));
+                return (
+                  <div key={b.label} {...{ [MARK_ATTR]: b.label }} className="relative flex-1">
+                    <div
+                      className={`absolute inset-x-0 ${b.first ? "border-2 border-ink-hi bg-transparent" : "bg-ink-hi"}`}
+                      style={{
+                        top: `${(top / H) * 100}%`,
+                        height: `${Math.max((height / H) * 100, 0.8)}%`,
+                      }}
+                    />
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        </ChartReadout>
       </Axis>
       <div className="ml-10 flex gap-1 text-[11px] text-ink-min" aria-hidden="true">
         {c.bars.map((b) => (
@@ -250,58 +270,74 @@ function Elections({ c }: { c: ElectionsChart }) {
   const mark = (mine: boolean) => (mine ? "bg-ink-hi" : "bg-[var(--chart-muted)]");
   const first = c.rows[0]?.year;
   const last = c.rows[c.rows.length - 1]?.year;
+  const mineMark = c.rows.filter((r) => r.mine).pop();
   return (
     <>
-      <div aria-hidden="true" className="flex flex-col gap-1">
-        <p className="text-xs text-ink-lo">Electoral votes won, share</p>
-        <div className="relative h-24 border-b border-ink-lo">
-          <div
-            className="absolute inset-x-0 border-t-2 border-dashed border-[var(--chart-muted)]"
-            style={{ bottom: `${c.medianShare}%` }}
-          />
-          <div className="absolute inset-0 flex items-end gap-px">
-            {c.rows.map((r) => (
-              <div
-                key={r.year}
-                className={`min-w-0 flex-1 ${mark(r.mine)}`}
-                style={{ height: `${r.evShare}%` }}
-              />
-            ))}
-          </div>
-        </div>
-        <p className="mt-2 text-xs text-ink-lo">Popular vote margin, points</p>
-        <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2">
-          <div className="flex h-24 flex-col justify-between text-right text-xs text-ink-min">
-            <span>{c.yTop}</span>
-            <span>{c.yBottom}</span>
-          </div>
-          <div className="relative h-24">
-            <div className="absolute inset-x-0 h-px bg-ink-lo" style={{ top: pct(0) }} />
-            <div className="absolute inset-0 flex gap-px">
-              {c.rows.map((r) => {
-                if (r.popularMargin == null) return <div key={r.year} className="min-w-0 flex-1" />;
-                const top = Math.min(y(r.popularMargin), y(0));
-                const h = Math.abs(y(r.popularMargin) - y(0));
-                return (
-                  <div key={r.year} className="relative min-w-0 flex-1">
-                    <div
-                      className={`absolute inset-x-0 ${mark(r.mine)}`}
-                      style={{
-                        top: `${(top / H) * 100}%`,
-                        height: `${Math.max((h / H) * 100, 1)}%`,
-                      }}
-                    />
-                  </div>
-                );
-              })}
+      <div className="flex flex-col gap-1">
+        <ChartReadout
+          label={c.title}
+          marks={c.marks}
+          startId={String(mineMark?.year ?? last)}
+          className="flex flex-col gap-1"
+        >
+          <p className="text-xs text-ink-lo">Electoral votes won, share</p>
+          <div className="relative h-24 border-b border-ink-lo">
+            <div
+              className="absolute inset-x-0 border-t-2 border-dashed border-[var(--chart-muted)]"
+              style={{ bottom: `${c.medianShare}%` }}
+            />
+            <div className="absolute inset-0 flex items-end gap-px">
+              {c.rows.map((r) => (
+                <div
+                  key={r.year}
+                  {...{ [MARK_ATTR]: String(r.year) }}
+                  className={`min-w-0 flex-1 ${mark(r.mine)}`}
+                  style={{ height: `${r.evShare}%` }}
+                />
+              ))}
             </div>
           </div>
-        </div>
-        <div className="flex justify-between text-xs text-ink-min">
-          <span>{first}</span>
-          <span>{last}</span>
-        </div>
-        <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-lo">
+          <p className="mt-2 text-xs text-ink-lo">Popular vote margin, points</p>
+          <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2">
+            <div className="flex h-24 flex-col justify-between text-right text-xs text-ink-min">
+              <span>{c.yTop}</span>
+              <span>{c.yBottom}</span>
+            </div>
+            <div className="relative h-24">
+              <div className="absolute inset-x-0 h-px bg-ink-lo" style={{ top: pct(0) }} />
+              <div className="absolute inset-0 flex gap-px">
+                {c.rows.map((r) => {
+                  if (r.popularMargin == null)
+                    return <div key={r.year} className="min-w-0 flex-1" />;
+                  // The column, not just the bar, is the mark: a margin near
+                  // zero draws a sliver.
+                  const top = Math.min(y(r.popularMargin), y(0));
+                  const h = Math.abs(y(r.popularMargin) - y(0));
+                  return (
+                    <div
+                      key={r.year}
+                      {...{ [MARK_ATTR]: String(r.year) }}
+                      className="relative min-w-0 flex-1"
+                    >
+                      <div
+                        className={`absolute inset-x-0 ${mark(r.mine)}`}
+                        style={{
+                          top: `${(top / H) * 100}%`,
+                          height: `${Math.max((h / H) * 100, 1)}%`,
+                        }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          <div className="flex justify-between text-xs text-ink-min">
+            <span>{first}</span>
+            <span>{last}</span>
+          </div>
+        </ChartReadout>
+        <p aria-hidden="true" className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-lo">
           {c.rows.some((r) => r.mine) && (
             <span>
               <span className="mr-1 inline-block h-2.5 w-3 bg-ink-hi align-middle" />
@@ -314,7 +350,7 @@ function Elections({ c }: { c: ElectionsChart }) {
           </span>
           <span>
             <span className="mr-1 inline-block w-5 border-t-2 border-dashed border-[var(--chart-muted)] align-middle" />
-            median winner, {c.medianShare.toFixed(1)}%
+            median winner, {c.medianShareShown}
           </span>
         </p>
       </div>

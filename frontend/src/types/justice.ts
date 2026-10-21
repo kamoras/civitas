@@ -1,3 +1,5 @@
+import type { ReadoutMark } from "./readout";
+
 /** Always null since justice v3 (no justice is scored); kept for the
  *  API's shape, never shown. */
 export interface JusticeScore {
@@ -96,6 +98,9 @@ export interface JusticeInterval {
   estimate: number;
   ciLow: number;
   ciHigh: number;
+  /** As printed: signed points ("+6.3", "\u22122.1 to +14.5"). */
+  estimateShown: string;
+  intervalShown: string;
 }
 
 export interface JusticeFigures {
@@ -108,7 +113,13 @@ export interface JusticeFigures {
   peers: number;
   terms: number[];
   measures: JusticeMeasure[];
-  appointer: { rows: JusticeInterval[]; sentence: string; throughTerm: number | null } | null;
+  appointer: {
+    rows: JusticeInterval[];
+    sentence: string;
+    throughTerm: number | null;
+    /** One readout per row, in order. */
+    marks: ReadoutMark[];
+  } | null;
 }
 
 /** A Supreme Court appointment a president made (GET

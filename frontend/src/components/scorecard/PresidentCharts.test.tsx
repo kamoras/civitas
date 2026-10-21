@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import axe from "axe-core";
+import userEvent from "@testing-library/user-event";
 import PresidentChartsSection from "./PresidentCharts";
 import type { PresidentCharts } from "@/types/presidentCharts";
 
@@ -46,6 +47,16 @@ const data: PresidentCharts = {
         { x: 0, value: "45%", band: null },
         { x: 1, value: "40%", band: "50% to 65% (n=6)" },
       ],
+      marks: [
+        { id: "0", label: "Month 1", detail: "Jane Doe", shown: "45%" },
+        {
+          id: "1",
+          label: "Month 2",
+          detail: "Jane Doe",
+          shown: "40%",
+          context: "other presidencies' middle half 50% to 65% (n=6)",
+        },
+      ],
     },
     {
       key: "growth",
@@ -68,6 +79,15 @@ const data: PresidentCharts = {
       ],
       eraBand: { low: 2.1, median: 3.2, high: 4.6, years: 65, presidencies: 13 },
       bandShown: "middle half 2.1% to 4.6%, median 3.2%",
+      marks: [
+        {
+          id: "2009",
+          label: "2009",
+          shown: "-2.6% real growth",
+          context: "first year of the term",
+        },
+        { id: "2010", label: "2010", shown: "2.9% real growth" },
+      ],
     },
   ],
 };
@@ -123,7 +143,24 @@ describe("PresidentChartsSection", () => {
               yBottom: "-3",
               n: 1,
               medianShare: 68.6,
+              medianShareShown: "68.6%",
               medianMargin: 1.6,
+              marks: [
+                {
+                  id: "1824",
+                  label: "1824",
+                  detail: "John Roe",
+                  shown: "84 of 261 electoral votes (32.2%)",
+                  href: "/politicians/roe-6",
+                },
+                {
+                  id: "1840",
+                  label: "1840",
+                  detail: "Jane Doe",
+                  shown: "234 of 294 electoral votes (79.6%)",
+                  href: "/politicians/doe-9",
+                },
+              ],
               rows: [
                 {
                   year: 1824,
@@ -163,6 +200,31 @@ describe("PresidentChartsSection", () => {
     expect(within(fig).getByRole("link", { name: /National Archives/ })).toBeInTheDocument();
     expect(
       within(fig).getByRole("link", { name: /American Presidency Project/ })
+    ).toBeInTheDocument();
+  });
+
+  it("reads each point, bar and election from the keyboard, starting at the latest", async () => {
+    render(
+      <main>
+        <PresidentChartsSection data={data} />
+      </main>
+    );
+    const line = screen.getByRole("group", {
+      name: /^Approval through the term, Jane Doe: 2 marks/,
+    });
+    line.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(
+      within(line).getByText(
+        "Month 2, Jane Doe: 40%, other presidencies' middle half 50% to 65% (n=6)."
+      )
+    ).toBeInTheDocument();
+    const bars = screen.getByRole("group", { name: /^Growth in each year of the term: 2 marks/ });
+    expect(bars.querySelectorAll("[data-mark]")).toHaveLength(2);
+    bars.focus();
+    await userEvent.keyboard("{Home}");
+    expect(
+      within(bars).getByText("2009: -2.6% real growth, first year of the term.")
     ).toBeInTheDocument();
   });
 

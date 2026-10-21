@@ -4,31 +4,11 @@ import { useId, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useAsyncData } from "@/hooks/useAsyncData";
-import { fetchPeerComparison, fetchRepresentativeHistory, fetchSenatorHistory } from "@/lib/api";
-import type { ScoreSnapshot } from "@/lib/api";
-import { currentCongress, shortDate } from "@/lib/congress";
+import { fetchPeerComparison } from "@/lib/api";
+import ChartReadout from "@/components/shared/ChartReadout";
 import type { PeerComparison, PeerGroupKey, PeerMeasure } from "@/types/peers";
 import { onThisPage } from "@/lib/onThisPage";
 import StripPoints, { BigFigure, StripAxis, type StripPoint } from "@/components/shared/Strip";
-
-/** How each row's figure is printed on its axis and in its table: the
- *  backend's values, formatted only. */
-export function fmt(m: Pick<PeerMeasure, "unit">, v: number): string {
-  if (m.unit === "count") return String(Math.round(v));
-  const pct = v * 100;
-  return `${m.unit === "rate" && pct > 0 && pct < 10 ? pct.toFixed(1) : Math.round(pct)}%`;
-}
-
-/** The axis's top: the largest figure on the row, up to a round step, so
- *  the strip reads on the measure's own scale, never 0-100 score units. */
-export function axisMax(
-  m: Pick<PeerMeasure, "unit" | "distribution" | "value" | "expected">
-): number {
-  const top = Math.max(...m.distribution, m.value ?? 0, m.expected ?? 0);
-  if (m.unit === "count") return Math.max(5, Math.ceil(top / 5) * 5);
-  const step = top <= 0.1 ? 0.02 : 0.1;
-  return Math.max(step, Math.ceil(top / step) * step);
-}
 
 /** A round mark. Drawn as SVG, not a rounded box: the site's boxes keep
  *  hard corners, and a dot is a data mark, not a box. */
@@ -68,8 +48,7 @@ const JITTER = [10, 4, 16, 7, 13, 1, 19, 10];
 const jitterY = (i: number, size: number) => 12 + JITTER[i % JITTER.length] / 2 + size / 2;
 
 function Strip({ m, memberId }: { m: PeerMeasure; memberId: string }) {
-  const max = axisMax(m);
-  const at = (v: number) => Math.min(100, (v / max) * 100);
+  const at = (v: number) => Math.min(100, (v / m.axisMax) * 100);
   const muted = m.thin;
   const points: StripPoint[] = m.distribution.map((v, i) => {
     const id = m.distributionIds[i];
@@ -122,74 +101,50 @@ function Strip({ m, memberId }: { m: PeerMeasure; memberId: string }) {
         )}
       </StripPoints>
       <StripAxis
-        start={fmt(m, 0)}
-        end={fmt(m, max)}
+        start={m.axisStartShown}
+        end={m.axisEndShown}
         tick={
-          m.expected == null
+          m.expected == null || m.expectedShown == null
             ? null
-            : {
-                at: at(m.expected),
-                text:
-                  m.expectedBasis === "seat"
-                    ? `${fmt(m, m.expected)} seat average`
-                    : `median ${fmt(m, m.expected)}`,
-              }
+            : { at: at(m.expected), text: m.expectedShown }
         }
       />
     </div>
   );
 }
 
-/** This measure over time, from the score snapshots' facts: a line of the
- *  member's own figure, night by night, and its first and latest values.
- *  Only for a measure that covers this Congress (votes, bills): funding
- *  covers the last completed election and stays flat between elections.
- *  Only snapshots in the latest snapshot's Congress, and only once the
- *  figure has actually changed; otherwise nothing at all. */
-function OverTime({ m, snapshots }: { m: PeerMeasure; snapshots: ScoreSnapshot[] | null }) {
-  if (!snapshots || m.window !== "congress") return null;
-  const all = snapshots
-    .map((s) => ({ date: s.date, v: s.facts?.[m.key] }))
-    .filter((p): p is { date: string; v: number } => typeof p.v === "number");
-  const latest = all.length ? currentCongress(new Date(all[all.length - 1].date)) : null;
-  const points = all.filter((p) => currentCongress(new Date(p.date)) === latest);
-  const vs = points.map((p) => p.v);
-  if (new Set(vs).size < 2) return null;
-  const lo = Math.min(...vs);
-  const span = Math.max(...vs) - lo || 1;
-  const path = points
-    .map((p, i) => `${(i / (points.length - 1)) * 100},${18 - ((p.v - lo) / span) * 16}`)
-    .join(" ");
-  const first = points[0];
-  const last = points[points.length - 1];
+/** This measure over time: a line of the member's own figure, night by
+ *  night this Congress, once it has changed (the API's points and words,
+ *  peer_comparison.over_time). Each night reads on hover, tap and the
+ *  keyboard; the sentence after it gives the first and latest. */
+function OverTime({ m }: { m: PeerMeasure }) {
+  const t = m.overTime;
+  if (!t) return null;
+  const marks = t.marks.map((mk, i) => ({ ...mk, x: t.points[i].x, yPct: t.points[i].y }));
   return (
-    <p className="flex flex-wrap items-center gap-2 text-xs text-ink-lo md:col-span-3">
-      <svg viewBox="0 0 100 20" preserveAspectRatio="none" className="h-5 w-24" aria-hidden="true">
-        <polyline
-          points={path}
-          fill="none"
-          stroke="var(--ink-hi)"
-          strokeWidth="1.5"
-          vectorEffect="non-scaling-stroke"
-        />
-      </svg>
-      Over time: {fmt(m, first.v)} on {shortDate(first.date)}, {fmt(m, last.v)} on{" "}
-      {shortDate(last.date)}.
-    </p>
+    <div className="flex flex-wrap items-center gap-2 text-xs text-ink-lo md:col-span-3">
+      <ChartReadout
+        label={`${m.label} over time`}
+        marks={marks}
+        startId={marks[marks.length - 1]?.id}
+        className="h-6 w-28"
+      >
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="block h-6 w-28">
+          <polyline
+            points={t.points.map((pt) => `${pt.x},${pt.y}`).join(" ")}
+            fill="none"
+            stroke="var(--ink-hi)"
+            strokeWidth="1.5"
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
+      </ChartReadout>
+      <p>{t.sentence}</p>
+    </div>
   );
 }
 
-function Row({
-  m,
-  memberId,
-  showTable,
-  snapshots,
-}: {
-  m: PeerMeasure;
-  memberId: string;
-  showTable: boolean;
-  snapshots: ScoreSnapshot[] | null;
-}) {
+function Row({ m, memberId, showTable }: { m: PeerMeasure; memberId: string; showTable: boolean }) {
   const strong = (m.word ?? "").startsWith("well");
   const captionId = useId();
   return (
@@ -235,7 +190,7 @@ function Row({
           {m.source.name} ↗
         </a>
       </figcaption>
-      <OverTime m={m} snapshots={snapshots} />
+      <OverTime m={m} />
       <details className="group text-sm text-ink-lo md:col-span-3">
         <summary className="inline-flex min-h-6 cursor-pointer items-center gap-1 font-semibold text-ink-hi underline-offset-2 hover:underline">
           How this is measured
@@ -270,8 +225,8 @@ function Row({
             </tr>
           </thead>
           <tbody>
-            {m.distribution.map((v, i) => (
-              <tr key={m.distributionIds[i]} className="border-t border-white/10">
+            {m.distributionIds.map((id, i) => (
+              <tr key={id} className="border-t border-white/10">
                 <td className="py-1">
                   <Link
                     href={`/politicians/${m.distributionIds[i]}`}
@@ -280,7 +235,7 @@ function Row({
                     {m.distributionNames[i]}
                   </Link>
                 </td>
-                <td className="py-1 text-right">{fmt(m, v)}</td>
+                <td className="py-1 text-right">{m.distributionShown[i]}</td>
               </tr>
             ))}
           </tbody>
@@ -324,9 +279,6 @@ export default function WhereTheyStand({
     `${chamber}/${memberId}/${group}`,
     () => fetchPeerComparison(chamber, memberId, group),
     initial ? { key: `${chamber}/${memberId}/caucus`, data: initial } : undefined
-  );
-  const { data: history } = useAsyncData(`${chamber}/${memberId}/history`, () =>
-    chamber === "senate" ? fetchSenatorHistory(memberId) : fetchRepresentativeHistory(memberId)
   );
   const choose = (next: PeerGroupKey) => {
     setGroup(next);
@@ -407,12 +359,7 @@ export default function WhereTheyStand({
                     {m.question}
                   </h3>
                 )}
-                <Row
-                  m={m}
-                  memberId={memberId}
-                  showTable={showTable}
-                  snapshots={history?.snapshots ?? null}
-                />
+                <Row m={m} memberId={memberId} showTable={showTable} />
               </div>
             ))}
           </div>

@@ -66,6 +66,12 @@ def test_the_appointer_estimate_comes_with_every_interval_and_the_presidents_pag
     assert f.appointer.rows[1].ci_low == round(0.05 - 1.96 * 0.02, 4)
     assert "5.0 points more often" in f.appointer.sentence
     assert "—" not in f.appointer.sentence
+    # Printed by the API, signed points with a true minus, and each row a readout.
+    assert f.appointer.rows[0].estimate_shown == "−1.0"
+    assert f.appointer.rows[1].interval_shown == "+1.1 to +8.9"
+    assert f.appointer.marks[1].model_dump() == {
+        "id": "left", "label": f.appointer.rows[1].name, "detail": None, "shown": "+5.0 points",
+        "context": "95% interval +1.1 to +8.9", "href": "/politicians/left"}
 
 
 def _fjc(last, first, name, seat, nominated, start, until=None, nid="1"):
