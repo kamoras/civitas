@@ -286,8 +286,8 @@ class MemberLinks:
 
     def _senate_lis_ids(self, db: Session) -> dict[str, str]:
         """{senator id: LIS id} where the roll calls give one last name and
-        state to two people (resolve_senate_lis_ids): Lindsey Graham's
-        votes linked to Darline Graham's page, who took his seat."""
+        state to two people (resolve_senate_lis_ids): one senator's votes
+        linked to the page of the other senator of that surname and state."""
         people = db.query(
             RollCallPosition.member_id, RollCallPosition.first_name,
             RollCallPosition.last_name, RollCallPosition.state,

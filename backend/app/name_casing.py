@@ -98,8 +98,8 @@ _MC_RE = re.compile(r"\bMc([a-z])")
 
 
 def person_display_name(name: str | None) -> str:
-    """An FEC candidate name as a reader writes it: "GOLDMAN, CRAIG" ->
-    "Craig Goldman", "COLLINS, MICHAEL A JR" -> "Michael A Collins Jr.",
+    """An FEC candidate name as a reader writes it: "DOE, JANE" ->
+    "Jane Doe", "COLLINS, MICHAEL A JR" -> "Michael A Collins Jr.",
     "O'BRIEN, MARY" -> "Mary O'Brien". Titles are dropped and a suffix goes
     last; letters are not added or removed otherwise. A name not in
     capitals is a printing, not a filing, and is returned as it is. For

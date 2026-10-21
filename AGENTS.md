@@ -888,6 +888,12 @@ answers these before it merges:
   `scripts/frozen_clock_plugin.py`, see Testing): Jan 3 of the next odd year
   either side of noon ET, the next primary and general season, election
   night, Jan 20 after a presidential election, and a Court vacancy.
+- **No literal slips in:** `tests/test_evergreen_literals.py` fails on a
+  year (1700-2099) or a Congress number written into `app/`, and
+  `frontend/src/lib/evergreenLiterals.test.ts` on a Congress ordinal in
+  site copy, unless the allowlist names it with why (a historical fact, a
+  dated record, a number that only looks like a year). An allowance with
+  nothing left to excuse fails too.
 
 ### 7. Ballot content is quoted, never generated
 

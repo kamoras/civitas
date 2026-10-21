@@ -25,7 +25,9 @@ from app.pipeline.analyze.score_calculator import compute_overall_score, get_dis
 from app.issue_ids import from_public_id, to_public_id
 from app.ordinals import ordinal
 from app.photos import issue_photo
-from app.pipeline.fetch.congress import congress_gov_url_for_bill_id, expected_current_congress
+from app.pipeline.fetch.congress import (
+    congress_first_year, congress_for_year, congress_gov_url_for_bill_id, expected_current_congress,
+)
 from app.pipeline.transform.normalize_votes import is_housekeeping
 from app.services.bill_record import MemberLinks, parse_bill_id
 from app.services.congress_service import bill_label
@@ -1289,7 +1291,7 @@ def _upcoming_civic_events(year: int, today: date) -> list[dict]:
         if jan3 >= today:
             events.append({
                 "date": jan3.isoformat(),
-                "title": f"{ordinal((year - 1789) // 2 + 1)} Congress Convenes",
+                "title": f"{ordinal(congress_for_year(year))} Congress Convenes",
                 "description": "New session of Congress begins. Newly elected members are sworn in"
                                " and leadership elections take place.",
                 "category": "congress",
@@ -1318,17 +1320,19 @@ def _upcoming_civic_events(year: int, today: date) -> list[dict]:
 async def get_timeline(
     response: Response,
     # Bounded: the handler builds calendar dates from it, and date() refuses
-    # a year outside 1-9999 with a 500 rather than a 422.
-    year: int | None = Query(None, ge=1900, le=2100, description="Year (defaults to current)"),
+    # a year outside 1-9999 with a 500 rather than a 422. The checks against
+    # the clock and the 1st Congress are in the handler.
+    year: int | None = Query(None, description="Year (defaults to current)"),
     db: Session = Depends(get_db),
 ):
     """Return the year's timeline with hierarchical week/month/year structure."""
     # Same reasoning as the other Action Center aggregate views above.
     response.headers["Cache-Control"] = "public, max-age=300"
-    if year is None:
-        year = utcnow().date().year
-
     today = utcnow().date()
+    if year is None:
+        year = today.year
+    if not congress_first_year(1) <= year <= today.year + 1:
+        raise HTTPException(status_code=422, detail="Year out of range")
     current_year = today.year
     current_month = today.month if year == current_year else 12
     current_week_num = today.isocalendar()[1] if year == current_year else 0

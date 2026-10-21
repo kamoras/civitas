@@ -83,9 +83,12 @@ export default async function PresidentsPage() {
               <ScrollRegion label="Every president, with the historians' rank">
                 <table className="w-full border border-white/15 text-left text-sm">
                   <caption className="px-3 py-2 text-left text-sm text-ink-lo">
-                    Historians&apos; rank: C-SPAN Presidential Historians Survey (2021), their
-                    ranking by total points among {presidents[0]?.historiansRated ?? "the"} rated
-                    presidencies. A sitting or just-departed president is not yet rated.
+                    Historians&apos; rank: C-SPAN Presidential Historians Survey
+                    {presidents[0]?.historiansEdition
+                      ? ` (${presidents[0].historiansEdition})`
+                      : ""}
+                    , their ranking by total points among {presidents[0]?.historiansRated ?? "the"}{" "}
+                    rated presidencies. A sitting or just-departed president is not yet rated.
                   </caption>
                   <thead className="border-y border-white/15 font-mono text-xs text-ink-min">
                     <tr>
