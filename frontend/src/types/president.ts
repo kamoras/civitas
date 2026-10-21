@@ -1,5 +1,9 @@
 export interface President {
   id: string;
+  /** The portrait's path on this site (/photo/president/<id>), or null. */
+  photoUrl?: string | null;
+  /** The portrait's credit line and its Commons page. */
+  photoCredit?: { text: string; url: string | null } | null;
   name: string;
   party: string;
   number: number;
