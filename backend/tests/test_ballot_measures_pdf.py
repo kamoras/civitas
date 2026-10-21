@@ -16,6 +16,11 @@ from app.pipeline.fetch.ballot_measure_text import SourceBlocked
 from app.pipeline.fetch.ballot_measures_state_common import same_site
 
 
+def _page(url, text):
+    """A page as the crawl reads it: its body and where it landed."""
+    return SimpleNamespace(text=text, url=url, history=[], raise_for_status=lambda: None)
+
+
 def _fake_source(strategy="fake_strategy", **overrides):
     source = {
         "url_pattern": "https://example.com/{year}/ballot.pdf",
@@ -151,8 +156,8 @@ _CO_LANDING_HTML = """
 
 @pytest.mark.asyncio
 async def test_discover_pdf_url_matches_year_and_keyword():
-    async def fake_get(url, timeout=None):
-        return SimpleNamespace(text=_CO_LANDING_HTML, raise_for_status=lambda: None)
+    async def fake_get(url, timeout=None, **kw):
+        return _page(url, _CO_LANDING_HTML)
 
     client = SimpleNamespace(get=fake_get)
     url = await pdf.discover_pdf_url(
@@ -167,11 +172,8 @@ async def test_discover_pdf_url_excludes_primary_by_default():
     "primary") must not win — real failure this guards against: without
     the keyword filter, 2024's primary-summary link would tie on year
     alone."""
-    async def fake_get(url, timeout=None):
-        return SimpleNamespace(
-            text='<a href="https://x.com/2024-primary-summary.pdf">2024 Primary Summary</a>',
-            raise_for_status=lambda: None,
-        )
+    async def fake_get(url, timeout=None, **kw):
+        return _page(url, '<a href="https://x.com/2024-primary-summary.pdf">2024 Primary Summary</a>')
 
     client = SimpleNamespace(get=fake_get)
     url = await pdf.discover_pdf_url(client, "https://example.com", 2024)
@@ -192,8 +194,8 @@ async def test_discover_pdf_url_follows_a_link_to_find_the_pdf():
         "https://example.com/elections/ballot-guide": _CO_LANDING_HTML,
     }
 
-    async def fake_get(url, timeout=None):
-        return SimpleNamespace(text=pages[url], raise_for_status=lambda: None)
+    async def fake_get(url, timeout=None, **kw):
+        return _page(url, pages[url])
 
     client = SimpleNamespace(get=fake_get)
     url = await pdf.discover_pdf_url(client, "https://example.com/", 2024, keyword="blue")
@@ -219,9 +221,9 @@ async def test_discover_pdf_url_follows_the_start_hosts_own_subdomains():
     }
     requested = []
 
-    async def fake_get(url, timeout=None):
+    async def fake_get(url, timeout=None, **kw):
         requested.append(url)
-        return SimpleNamespace(text=pages[url], raise_for_status=lambda: None)
+        return _page(url, pages[url])
 
     client = SimpleNamespace(get=fake_get)
     url = await pdf.discover_pdf_url(client, "https://leg.colorado.gov/bluebook", 2026, keyword="blue")
@@ -248,10 +250,10 @@ async def test_discover_pdf_url_never_follows_a_link_off_the_starting_domain():
         ),
     }
 
-    async def fake_get(url, timeout=None):
+    async def fake_get(url, timeout=None, **kw):
         if url not in pages:
             raise AssertionError(f"must never fetch off-domain url: {url}")
-        return SimpleNamespace(text=pages[url], raise_for_status=lambda: None)
+        return _page(url, pages[url])
 
     client = SimpleNamespace(get=fake_get)
     # The PDF link itself is off-domain but still matches year/keyword —
@@ -274,9 +276,9 @@ async def test_discover_pdf_url_does_not_follow_unrelated_links():
     }
     fetched = []
 
-    async def fake_get(url, timeout=None):
+    async def fake_get(url, timeout=None, **kw):
         fetched.append(url)
-        return SimpleNamespace(text=pages.get(url, ""), raise_for_status=lambda: None)
+        return _page(url, pages.get(url, ""))
 
     client = SimpleNamespace(get=fake_get)
     url = await pdf.discover_pdf_url(client, "https://example.com/", 2024)
@@ -295,8 +297,8 @@ async def test_discover_pdf_url_respects_max_depth():
         "https://example.com/c": '<a href="https://example.com/d.pdf">Ballot Guide 2024</a>',
     }
 
-    async def fake_get(url, timeout=None):
-        return SimpleNamespace(text=pages.get(url, ""), raise_for_status=lambda: None)
+    async def fake_get(url, timeout=None, **kw):
+        return _page(url, pages.get(url, ""))
 
     client = SimpleNamespace(get=fake_get)
     url = await pdf.discover_pdf_url(client, "https://example.com/a", 2024, keyword="ballot", max_depth=1)
@@ -336,7 +338,7 @@ async def test_fetch_uses_discovery_when_source_has_a_landing_page(monkeypatch, 
     monkeypatch.setattr(pdf.pdfplumber, "open", lambda buf: FakePdf())
 
     fetched_urls = []
-    async def fake_get(url, timeout=None):
+    async def fake_get(url, timeout=None, **kw):
         fetched_urls.append(url)
         return SimpleNamespace(content=b"%PDF-fake", raise_for_status=lambda: None)
 
@@ -568,12 +570,12 @@ async def test_a_crawl_that_ran_out_of_budget_is_not_complete():
     """The regression: the crawl stopped at max_pages with links still
     queued and reported (None, True) — "read everything, nothing there" —
     so a document linked on a page it never opened read as not published."""
-    async def get(url, timeout=None):
+    async def get(url, timeout=None, **kw):
         n = int(url.rsplit("/", 1)[-1] or 0)
         body = f'<a href="https://example.com/ballot/{n + 1}">ballot {n + 1}</a>'
         if n == 10:
             body = '<a href="https://example.com/2026-ballot-guide.pdf">2026 ballot guide</a>'
-        return SimpleNamespace(text=body, raise_for_status=lambda: None)
+        return _page(url, body)
 
     client = SimpleNamespace(get=get)
     url, complete = await pdf.discover_pdf_url_checked(
@@ -632,15 +634,15 @@ async def test_an_undiscovered_document_is_not_yet_published_only_after_a_comple
         "strategy": "fake_strategy", "absent_until_published": True,
     })
 
-    async def page_without_the_link(url, timeout=None):
-        return SimpleNamespace(text="<a href='/other.pdf'>Something else</a>", raise_for_status=lambda: None)
+    async def page_without_the_link(url, timeout=None, **kw):
+        return _page(url, "<a href='/other.pdf'>Something else</a>")
 
     with pytest.raises(NotYetPublished):
         await pdf.fetch_state_measures_pdf(
             SimpleNamespace(get=page_without_the_link), db_session, "ZZ", 2026, "2026-11-03",
         )
 
-    async def unreachable(url, timeout=None):
+    async def unreachable(url, timeout=None, **kw):
         raise RuntimeError("connection reset")
 
     # A landing page that couldn't be read is an outage, not an absence.
@@ -757,7 +759,7 @@ async def test_a_moved_document_is_found_at_the_next_listed_address(monkeypatch,
     def client_for(statuses):
         seen = []
 
-        async def get(url, timeout=None):
+        async def get(url, timeout=None, **kw):
             seen.append(url)
             return pdf.httpx.Response(statuses[url], request=pdf.httpx.Request("GET", url), content=b"%PDF")
 
