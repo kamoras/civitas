@@ -37,6 +37,7 @@ from app.pipeline.analyze.president_scorer import (
     term_days,
 )
 from app.pipeline.fetch.cspan_historians_survey import edition_url, stored_edition
+from app.pipeline.fetch.peer_gdp import PEER_COUNTRIES
 from app.time_utils import utcnow
 
 # The word's cut points are the members' (peer_comparison.RULE), served with
@@ -162,7 +163,7 @@ _FIGURES = [
     _Figure(
         "growthVsPeers", "Growth against peer economies", "What happened to the economy during the term?",
         "Growth that was particular to the US, after the shocks every rich economy shared.",
-        "Growth per person a year, leaving out the first year, minus the median of 13 peer economies over "
+        f"Growth per person a year, leaving out the first year, minus the median of {len(PEER_COUNTRIES)} peer economies over "
         "the same years, with the part of the gap their catching up with US incomes predicts set aside.",
         "presidencies since 1947, when the peer series starts", _PEER_GDP_SOURCE,
         lambda p: peer_relative(_start_year(p), p.gdp_growth_relative),

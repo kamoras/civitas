@@ -49,6 +49,7 @@ from datetime import date
 from app.config_definitions import PRESIDENT_SCORE_WEIGHTS
 from app.pipeline.analyze.population_reference import PRESIDENT_REFERENCE
 from app.pipeline.analyze.score_bounds import clamp
+from app.pipeline.fetch.peer_gdp import PEER_COUNTRIES
 
 logger = logging.getLogger(__name__)
 
@@ -439,7 +440,7 @@ def _effectiveness_core(
         components.append(_population_zscore_component(
             "GDP growth vs. peer economies", weights["gdp"], relative, relative_stat[0], relative_stat[1],
             f"Grew {gdp_per_person:.1f}% a year per person leaving out the first year, against "
-            f"{gdp_peer_median:.1f}% in 13 other wealthy countries. Allowing for their catching up "
+            f"{gdp_peer_median:.1f}% in {len(PEER_COUNTRIES)} other wealthy countries. Allowing for their catching up "
             f"with US incomes: {_ahead(relative)}, against {_ahead(relative_stat[0])} for the typical president "
             f"since {_GDP_REGIME_SPLIT_YEAR}",
         ))
@@ -1136,7 +1137,7 @@ def _historical_legacy_core(
     if historical_legacy_score is not None and legacy:
         components.append(_population_zscore_component(
             "Historians' assessment", 1.0, historical_legacy_score, legacy[0], legacy[1],
-            f"{historical_legacy_score} points in C-SPAN's 2021 survey of historians, against "
+            f"{historical_legacy_score} points in C-SPAN's survey of historians, against "
             f"{legacy[0]:.0f} for the average president",
         ))
     return {**_blend_live_components(components), "facts": facts}

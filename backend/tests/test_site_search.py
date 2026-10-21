@@ -4,6 +4,7 @@ built from the database, the read path's lightness and its privacy."""
 
 import json
 import logging
+from dataclasses import replace
 import subprocess
 import sys
 from pathlib import Path
@@ -412,3 +413,17 @@ def test_the_default_index_path_follows_the_data_volume_redirect(db_session):
     that started the scheduler read the real /data volume."""
     assert site_search_index.refresh_index(db_session, force=True) is not None
     assert site_search_index.stored_fingerprint() is not None
+
+
+def test_the_candidate_pool_is_the_fitted_one(index):
+    """pool and enough come from the calibration (scripts/calibrate_site_search.py
+    fits them: the smallest that lose no known item's answer), not module
+    constants: a pool of one reads one candidate from each index."""
+    fitted = site_search.params()
+    assert fitted.pool >= 1 and fitted.enough >= 1
+    data = json.loads(site_search.CALIBRATION_PATH.read_text())
+    assert {"pool", "enough"} <= set(data["params"]) and "list_floor is not fitted" in data["_source"]
+    narrow = replace(fitted, pool=1, enough=1)
+    _, wide_hits = site_search.gather("john", index, None, fitted)
+    _, narrow_hits = site_search.gather("john", index, None, narrow)
+    assert len(narrow_hits) < len(wide_hits)

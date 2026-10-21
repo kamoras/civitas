@@ -29,8 +29,10 @@ tests/test_same_origin_photos.py).
 """
 import json
 import re
+from collections.abc import Collection
 from urllib.parse import urlsplit
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import ApiCache, MemberPhoto
@@ -124,6 +126,8 @@ def bioguide_photo_source(db: Session, bioguide_id: str) -> str | None:
     if not _BIOGUIDE_ID.fullmatch(bioguide_id):
         return None
     chosen = db.get(MemberPhoto, bioguide_id)
+    if chosen is not None and chosen.source_url is None:
+        return None  # neither source has a photo (members_without_photo)
     if chosen is not None and photo_source_allowed("bioguide", chosen.source_url):
         return chosen.source_url
     row = db.get(ApiCache, ("congress", member_detail_cache_key(bioguide_id)))
@@ -136,8 +140,18 @@ def bioguide_photo_source(db: Session, bioguide_id: str) -> str | None:
     return bioguide_portrait_url(bioguide_id)
 
 
-def bioguide_photo(bioguide_id: str | None) -> str | None:
-    return f"/photo/bioguide/{bioguide_id}" if bioguide_id else None
+def members_without_photo(db: Session) -> frozenset[str]:
+    """Bioguide ids the nightly check found no official photo for: neither a
+    Congress.gov depiction nor a bioguide portrait (MemberPhoto with no
+    source). Their pages show initials, with no request for a photo route
+    that could only answer 404."""
+    return frozenset(db.scalars(select(MemberPhoto.bioguide_id).where(MemberPhoto.source_url.is_(None))))
+
+
+def bioguide_photo(bioguide_id: str | None, without: Collection[str]) -> str | None:
+    """The member's photo path, or None for no id or one in `without`
+    (members_without_photo, read once per response by the caller)."""
+    return f"/photo/bioguide/{bioguide_id}" if bioguide_id and bioguide_id not in without else None
 
 
 def president_photo(president, portraits: dict[str, dict]) -> str | None:

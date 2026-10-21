@@ -23,7 +23,9 @@ export interface PeerMeasure {
   expected: number | null;
   expectedBasis: "seat" | "peer median";
   median: number | null;
-  peerGroup: { key: PeerGroupKey; label: string; n: number };
+  /** label: the group ("Senate Republicans"); labelOne: one of them
+   *  ("Senate Republican"), capitals kept. */
+  peerGroup: { key: PeerGroupKey; label: string; labelOne?: string; n: number };
   /** Every peer's figure, ascending; ids and names in the same order. */
   distribution: number[];
   distributionIds: string[];

@@ -24,7 +24,7 @@ export function formatBracket(
   openEnded: boolean,
   /** How to print one figure; full dollars by default, or a compact form
    * ("$1.2M") for sums. The open-ended rule is the same either way. */
-  fmt: (n: number) => string = (n) => `$${n.toLocaleString()}`
+  fmt: (n: number) => string = (n) => `$${n.toLocaleString("en-US")}`
 ): string {
   if (openEnded) return `${fmt(low)}+`;
   return low === high ? fmt(low) : `${fmt(low)} – ${fmt(high)}`;

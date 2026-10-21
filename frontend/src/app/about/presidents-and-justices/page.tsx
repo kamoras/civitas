@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { pageMetadata } from "@/lib/site";
-import { COURT_FINDING, JUSTICE_RESEARCH_URL, NOT_SCORED_REASON } from "@/lib/justices";
+import CourtFinding from "@/components/about/CourtFinding";
+import { JUSTICE_RESEARCH_URL, NOT_SCORED_REASON } from "@/lib/justices";
 import {
   AboutPage,
   Summary,
@@ -187,7 +188,9 @@ export default function PresidentsAndJusticesChapter() {
             of the placebo effect. Fitting the career drift directly left about 3 points, no more
             than fake windows placed elsewhere in a career produce. Neither passed.
           </Item>
-          <Item label="The Court as a whole">{COURT_FINDING}</Item>
+          <Item label="The Court as a whole">
+            <CourtFinding />
+          </Item>
         </List>
         <P>
           What each justice&apos;s page shows instead: the difference in votes for the federal

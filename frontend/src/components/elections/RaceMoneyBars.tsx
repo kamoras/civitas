@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { BallotCandidate, FundingSourceKey, FundingSources } from "@/types/election";
 import { SERIES } from "@/components/admin/charts/palette";
-import { cashOnHandDisplay, formatCurrency } from "@/lib/formatting";
+import { cashOnHandDisplay, formatCurrency, midSentence } from "@/lib/formatting";
 import { getPartyMeta } from "@/components/elections/CandidateCard";
 import {
   candidateName,
@@ -172,7 +172,7 @@ export default function RaceMoneyBars({
 
               {cash && (
                 <p className="mt-1 font-mono text-[11px] text-ink-min">
-                  {cash.label.toLowerCase()} {cash.amount}
+                  {midSentence(cash.label)} {cash.amount}
                   {c.candidateLoans
                     ? ` · lent own campaign ${formatCurrency(c.candidateLoans)}`
                     : ""}
@@ -209,8 +209,7 @@ export default function RaceMoneyBars({
                   href={`/politicians/${c.memberRecord.id}`}
                   className="mt-1.5 inline-block font-mono text-[11px] text-ink-lo hover:text-phos"
                 >
-                  {memberRecordLabel(c.memberRecord).replace(/^./, (ch) => ch.toLowerCase())} ·
-                  where this member stands →
+                  {midSentence(memberRecordLabel(c.memberRecord))} · where this member stands →
                 </Link>
               )}
             </li>
