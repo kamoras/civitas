@@ -121,18 +121,27 @@ def chamber_view(db: Session, chamber: str) -> dict | None:
     if not rows:
         return None
     congress = rows[0][0].congress
+    members = [
+        {
+            "id": m.id, "name": m.name, "party": row.party, "state": m.state,
+            "district": m.district if chamber == "house" else None,
+            "seatLean": row.seat_lean,
+            **summary(row),
+        }
+        for row, m in rows
+    ]
+    # How many members sit above, below or within reach of their seat's
+    # expected rate: the page's lead figure and sentence.
+    counts = {"more": 0, "less": 0, "within": 0, "total": 0}
+    for m in members:
+        if m["comparedWithExpected"]:
+            counts[m["comparedWithExpected"]] += 1
+            counts["total"] += 1
     return {
         "chamber": chamber,
         "congress": congress,
-        "members": [
-            {
-                "id": m.id, "name": m.name, "party": row.party, "state": m.state,
-                "district": m.district if chamber == "house" else None,
-                "seatLean": row.seat_lean,
-                **summary(row),
-            }
-            for row, m in rows
-        ],
+        "counts": counts,
+        "members": members,
         "rollCalls": [_vote_row(rc, s) for rc, s in counted_votes(db, chamber, congress)],
         "method": _method(chamber),
     }

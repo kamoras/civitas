@@ -2969,6 +2969,12 @@ not a paragraph or a box. On a ballot page the box lines are counts and
 labels only: what a measure does, what yes or no means and every deadline
 stay quoted where §7 puts them, never summarised in a box.
 
+A page whose intro was a paragraph above its figure (`/congress` in a
+recess, `/congress/nominations`, `/congress/president/*`) leads with one box
+instead: the page's figure (served by the backend: `recess.figure`, the
+nominations count, `counts` on the presidential-support view), a one-line
+line, and the intro behind "More".
+
 #### Empty defaults are content (2026-10)
 
 A default view that renders zeros or "nothing found" on an ordinary day is a

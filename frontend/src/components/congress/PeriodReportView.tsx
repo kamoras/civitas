@@ -3,6 +3,9 @@ import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
+import BoxGrid from "@/components/shared/BoxGrid";
+import RecordBox from "@/components/shared/RecordBox";
+import type { StatFigure } from "@/types/figure";
 import FollowFeed from "@/components/shared/FollowFeed";
 import { TOPIC_FEEDS } from "@/lib/site";
 import type { MonthReport, PeriodDay, PeriodReport } from "@/types/congress";
@@ -129,7 +132,7 @@ export default function PeriodReportView({
   kind: "week" | "month";
   /** /congress during a recess: the masthead says Congress is out and
    *  introduces this week as the last one with business. */
-  lead?: { title: string; body: ReactNode };
+  lead?: { title: string; body: ReactNode; figure?: StatFigure | null };
   /** The "this week" strip, rendered by the server page. */
   strip?: ReactNode;
   /** The section hub's cards (/congress only), rendered by the server page. */
@@ -167,15 +170,7 @@ export default function PeriodReportView({
             eyebrow="What happened on the floor"
             title={lead?.title ?? title}
           >
-            {lead ? (
-              <>
-                {lead.body}
-                <h2 className="mt-4 font-mono text-xs text-ink-min">{title}</h2>
-                <p className="mt-1">{report.sentence}</p>
-              </>
-            ) : (
-              <p>{report.sentence}</p>
-            )}
+            {lead ? null : <p>{report.sentence}</p>}
             {pending > 0 && (
               <p className="mt-1 font-sans text-sm text-ink-min">
                 {pending} session {pending === 1 ? "day is" : "days are"} still on the live floor
@@ -184,6 +179,22 @@ export default function PeriodReportView({
             )}
             <FollowFeed className="mt-2" subject="Congress" feed={TOPIC_FEEDS.congress} />
           </PageMasthead>
+          {/* In a recess, one box led by the days since the last business:
+              the last week of business as its title and its sentence as
+              its line, when each chamber next sits behind its More. */}
+          {lead && (
+            <BoxGrid columns={1} className="mb-6">
+              <RecordBox
+                level={2}
+                kicker="Last week of business"
+                title={title}
+                href={weekHref(report.start)}
+                dek={report.sentence}
+                figure={lead.figure ?? null}
+                more={{ label: "when Congress sits next", children: lead.body }}
+              />
+            </BoxGrid>
+          )}
           {strip}
           {hub}
           <PeriodNav
