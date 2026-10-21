@@ -1,6 +1,11 @@
 """Scores as the site shows them (app/score_display.py)."""
 
-from app.score_display import displayed_rank, displayed_score, score_spread
+from types import SimpleNamespace
+
+from app import peer_comparison as pc
+from app.race_context import funding_sources
+from app.score_display import displayed_rank, displayed_score, score_spread, shown_share
+from app.services.score_findings import add_findings, funding_finding
 
 
 def test_half_rounds_up_like_the_page():
@@ -39,16 +44,11 @@ class TestOneRoundingForShares:
     CASES = {0.195: "20%", 0.125: "13%", 0.004: "under 1%", 0.0: "0%", 0.38: "38%"}
 
     def test_half_up_and_never_a_false_zero(self):
-        from app.score_display import shown_share
 
         assert {s: shown_share(s) for s in self.CASES} == self.CASES
 
     def test_every_surface_says_the_same(self):
-        from types import SimpleNamespace
 
-        from app import peer_comparison as pc
-        from app.race_context import funding_sources
-        from app.services.score_findings import add_findings, funding_finding
 
         for share, words in self.CASES.items():
             facts = {"contributions": 1000, "pacShare": share, "smallDonorShare": share,
