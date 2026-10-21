@@ -273,7 +273,6 @@ function Overview({ a }: { a: AgencyDetail }) {
         <RecordBox
           compact
           id="about"
-          kicker="Its description · Federal Register"
           title="About the agency"
           {...(a.descriptionLede
             ? {
