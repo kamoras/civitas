@@ -39,6 +39,7 @@ from app.forecast import model
 from app.forecast import polls as wiki
 from app.forecast import training_polls
 from app.models import Race
+from app.name_casing import candidate_display_name
 from app.ops_alerts import resolve_ops_alert, send_ops_alert
 from app.ordinals import ordinal
 from app.pipeline.fetch.district_pvi import congress_for_election
@@ -199,7 +200,7 @@ def _nominee(cands: list, party: str):
 
 
 def _display_name(c) -> str:
-    return c.ballot_name or c.name
+    return candidate_display_name(c)
 
 
 def _national(rev: dict | None, as_of: date, cycle: int) -> dict:

@@ -12,11 +12,12 @@ from datetime import date, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy import and_, not_
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, object_session, selectinload
 
 from app.api.rate_limit import UpstreamRouteLimit, spend_upstream
 from app.api.response_helpers import CACHE_TTL_DETAIL_S, CACHE_TTL_LIST_S, CACHE_TTL_REFERENCE_S, cached_json, retry_soon_json
 from app.database import get_db
+from app.name_casing import candidate_display_name
 from app import district_lean
 from app.district_lean import lean_for as computed_lean_for
 from app.district_places import counties_on_lines_of, places_on_lines_of
@@ -339,6 +340,22 @@ def _coverage_item(item: RaceCoverageItem) -> dict:
     }
 
 
+def _member_name(cand: Candidate) -> str | None:
+    """The Congress.gov name of the member the crosswalk ties this FEC id
+    to, for a candidate no state has printed; None otherwise. At most one
+    small lookup per such candidate (a race's incumbent)."""
+    if cand.ballot_name or not cand.member_bioguide:
+        return None
+    db = object_session(cand)
+    if db is None:
+        return None
+    for model in (Senator, Representative):
+        row = db.query(model.name).filter(model.bioguide_id == cand.member_bioguide).first()
+        if row and row[0]:
+            return row[0]
+    return None
+
+
 def _candidate_summary(cand: Candidate, stale_incumbent_ids: frozenset[str] = frozenset()) -> dict:
     return {
         "id": cand.id,
@@ -346,6 +363,10 @@ def _candidate_summary(cand: Candidate, stale_incumbent_ids: frozenset[str] = fr
         # The state's printed ballot name when a state source has named
         # this candidate; the page prefers it and falls back to `name`.
         "ballotName": cand.ballot_name,
+        # What to show: the printed ballot name, verbatim, else the FEC
+        # name as a reader writes it ("GOLDMAN, CRAIG" -> "Craig Goldman").
+        # `name` stays the filing's, for matching and the CSV.
+        "displayName": candidate_display_name(cand, _member_name(cand)),
         # The party the state's list prints, once one has named them; the
         # FEC filing's code until then.
         "party": cand.ballot_party or cand.party,

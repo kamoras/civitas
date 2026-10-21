@@ -21,11 +21,11 @@ describe("issue link-preview card", () => {
     expect(t.photoCredit).toBe("Photo: A. Photographer/Wire");
     expect(t.sources).toBe("Sources: Outlet A, Outlet B");
     expect(t.link).toBe("civitas-research.org/issue/i0000abcd");
-    expect(t.section).toBe("ACTION CENTER");
+    expect(t.section).toBe("Action Center");
   });
 
   it("never labels a news story as federal data", () => {
-    expect(Object.values(issueCardTexts(news)).join(" ")).not.toMatch(/FEDERAL DATA/);
+    expect(Object.values(issueCardTexts(news)).join(" ")).not.toMatch(/federal data/i);
   });
 
   it("names a developing story's one record, and says it is developing", () => {
@@ -36,7 +36,7 @@ describe("issue link-preview card", () => {
       summarySource: null,
       imageCredit: null,
     });
-    expect(t.section).toBe("ACTION CENTER · DEVELOPING");
+    expect(t.section).toBe("Action Center · Developing");
     expect(t.sources).toBe("Source: Federal Register");
     expect(t.summaryCredit).toBe("");
     expect(t.photoCredit).toBe("");

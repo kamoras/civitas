@@ -346,7 +346,7 @@ class TestRosterFact:
         db_session.commit()
 
         fact = election_bluesky._roster_fact(item, race, db_session)
-        assert fact == "FEC filings list WILSON, TAMARA as a candidate in the OH-4 House race."
+        assert fact == "FEC filings list Tamara Wilson as a candidate in the OH-4 House race."
 
     def test_a_non_duplicate_id_resolves_to_itself_as_before(self, db_session):
         race = _race(db_session)
@@ -355,7 +355,7 @@ class TestRosterFact:
         db_session.commit()
 
         fact = election_bluesky._roster_fact(item, race, db_session)
-        assert fact == "FEC filings list BRENNAN, JON as a candidate in the GA Senate race."
+        assert fact == "FEC filings list Jon Brennan as a candidate in the GA Senate race."
 
     def test_no_matched_candidate_id_is_none(self, db_session):
         race = _race(db_session)
@@ -551,7 +551,7 @@ class TestGeneratePostText:
         monkeypatch.setattr(eb, "call_llm", lambda **k: {"actor": "Jon Brennan", "predicate": predicate})
         race = Race(id="2026-SEN-GA", cycle_year=2026, office="S", state="GA")
         item = RaceCoverageItem(race_id=race.id, title=f"Jon Brennan {predicate}", summary="", url="https://apnews.com/a1")
-        return eb._generate_post_text(item, race, "FEC filings list BRENNAN, JON as a candidate in the GA Senate race.")
+        return eb._generate_post_text(item, race, "FEC filings list Jon Brennan as a candidate in the GA Senate race.")
 
     def test_a_post_that_fits_is_returned_whole(self, monkeypatch):
         assert self._generate(monkeypatch, "leads the race") == "Jon Brennan leads the race."

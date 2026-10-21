@@ -14,9 +14,8 @@ industry classifier.
 import logging
 import re
 from difflib import SequenceMatcher
-from pathlib import Path
 
-from app import data_refresh
+from app.name_casing import clean_name as _clean_donor_name
 from app.pipeline.fetch.fec import (
     committee_id_of,
     committee_industry,
@@ -594,55 +593,6 @@ def merge_misspelled_employers(donor_map: dict[str, dict]) -> None:
             kept.append((key, folded))
         else:
             donor_map[into]["total"] += donor_map.pop(key).get("total") or 0
-
-
-_NAME_CASING_PATH = Path(__file__).resolve().parents[2] / "data" / "name_casing.json"
-_name_casing_cache: dict[str, str] | None = None
-
-
-def _name_casing() -> dict[str, str]:
-    """{lower-case word: its written form} for the words usage writes in
-    capitals or with an interior capital ("ucla": "UCLA"), from
-    app/data/name_casing.json (scripts/build_name_casing.py)."""
-    if _name_casing_cache is not None:  # set only to stand in for the table
-        return _name_casing_cache
-    # Rebuilt yearly from the last year's issues (data_refresh), else the
-    # bundled file.
-    forms = data_refresh.read(_NAME_CASING_PATH.name).get("forms")
-    if forms is None:
-        logger.warning("name_casing.json unreadable: donor names keep first-letter capitals only")
-    return forms or {}
-
-
-# A run of letters, and what precedes it: a run after a digit or an
-# apostrophe is the rest of a word ("21ST", "AMERICA'S"), not a word.
-_LETTER_RUN_RE = re.compile(r"(?<![A-Za-z])[A-Za-z]+")
-_APOSTROPHES = ("'", "’")
-
-
-def _clean_donor_name(name: str) -> str:
-    """The FEC prints names in capitals; show each word as it is written.
-    A word usage writes in capitals or with an interior capital takes that
-    form ("UCLA", "AFL-CIO", "McDonnell"; _name_casing), any other its
-    first letter capitalized. Words were all first-letter capitalized
-    until 2026-10, which printed "Ucla" and "Cuny" — a guess where usage
-    is on record. A name not in capitals is left as filed."""
-    if name != name.upper():
-        return name
-    forms = _name_casing()
-
-    def word(m: re.Match) -> str:
-        run = m.group(0)
-        prev = name[m.start() - 1] if m.start() else " "
-        if prev.isdigit() or prev in _APOSTROPHES:
-            return run.lower()
-        if name[m.end():m.end() + 1] in _APOSTROPHES:
-            # Part of an elided or possessive word ("INT'L", "AMERICA'S"):
-            # not the word the table describes.
-            return run.capitalize()
-        return forms.get(run.lower()) or run.capitalize()
-
-    return " ".join(_LETTER_RUN_RE.sub(word, name).split())
 
 
 def _build_industry_breakdown(

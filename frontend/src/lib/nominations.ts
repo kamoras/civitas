@@ -1,5 +1,5 @@
 import { billPageHref, rollCallHref } from "@/lib/congress";
-import type { NominationKind, NominationStatus } from "@/types/nomination";
+import type { NominationDetail, NominationKind, NominationStatus } from "@/types/nomination";
 import type { VoteRollCall } from "@/types/senator";
 
 /** A nomination's page: citations repeat in every Congress, so the address
@@ -83,4 +83,18 @@ export function voteNominationLine(rc: VoteRollCall | null | undefined): string 
   const parts = [nv.label, `Nomination ${n.citation}`, n.organization];
   if (nv.kind === "confirm") parts.push(STATUS_LABEL[n.status]);
   return parts.filter(Boolean).join(" · ");
+}
+
+/** A nomination's page heading: the nominee and the office, or how many
+ *  nominees a list names. The page's h1, title and share card. */
+export function nominationHeading(n: NominationDetail): string {
+  const first = n.nominees[0];
+  if (n.nomineeCount > 1)
+    return `${n.nomineeCount.toLocaleString()} nominees: ${[n.positionTitle, n.organization].filter(Boolean).join(", ")}`;
+  const name = first?.names[0];
+  const who = name
+    ? [name.firstName, name.middleName, name.lastName].filter(Boolean).join(" ")
+    : "";
+  const office = n.positionTitle || n.organization;
+  return who ? `${who}: ${office}` : office || n.description || `Nomination ${n.citation}`;
 }

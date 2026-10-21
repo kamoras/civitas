@@ -187,7 +187,7 @@ type DistrictRow = {
    * legislative one is a string, because "10A" and "10B" are real. */
   district: number | string | null;
   areas: string[] | null;
-  candidates: { name: string; ballotName?: string | null }[];
+  candidates: { name: string; ballotName?: string | null; displayName?: string | null }[];
 };
 
 /** Is `area` (a county, city, town or community) the place the reader
@@ -259,7 +259,8 @@ export function matchesDistrictQuery(
       (race.areas ?? []).some((a) => (wholeName ? namesArea(a, q) : searchFold(a).includes(q)))) ||
     race.candidates.some(
       (c) =>
-        q !== "" && (searchFold(c.name).includes(q) || searchFold(c.ballotName ?? "").includes(q))
+        q !== "" &&
+        [c.name, c.ballotName, c.displayName].some((n) => searchFold(n ?? "").includes(q))
     )
   );
 }
@@ -368,8 +369,28 @@ export function raisedLabel(
 
 /** A candidate's name as the state prints it on its ballot, else the
  * FEC's. The one place a page picks between them. */
-export function candidateName(c: { name: string; ballotName?: string | null }): string {
-  return c.ballotName || c.name;
+export function candidateName(c: {
+  name: string;
+  ballotName?: string | null;
+  displayName?: string | null;
+}): string {
+  // displayName is the backend's choice (app/name_casing.py): the printed
+  // ballot name verbatim, else the FEC name as written ("Craig Goldman",
+  // not "GOLDMAN, CRAIG"). An older backend or archive sends neither.
+  return c.displayName || c.ballotName || c.name;
+}
+
+/** "Texas's 12th district, U.S. House", "Alaska at large, U.S. House",
+ *  "Georgia, U.S. Senate": a race's seat, for its share card. */
+export function raceSeat(
+  race: { office: string; district: number | null },
+  stateName: string
+): string {
+  if (race.office === "S") return `${stateName}, U.S. Senate`;
+  if (!race.district) return `${stateName} at large, U.S. House`;
+  const n = race.district;
+  const suffix = n % 100 >= 11 && n % 100 <= 13 ? "th" : (["th", "st", "nd", "rd"][n % 10] ?? "th");
+  return `${stateName}'s ${n}${suffix} district, U.S. House`;
 }
 
 /** "4-year terms" — an office's regular term, worded for the office rather

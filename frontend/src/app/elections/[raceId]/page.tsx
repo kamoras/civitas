@@ -7,7 +7,7 @@ import { stateBallotHref } from "@/lib/elections";
 import { parseChamber, parseView } from "@/lib/electionMap";
 import { archivedRaceHref, electionArchiveHref, ELECTIONS_ARCHIVE_HREF } from "@/lib/routes";
 import { absoluteUrl, notFoundMetadata, pageMetadata } from "@/lib/site";
-import { describeElectionArchive } from "@/lib/seo";
+import { CARD_ALT, cardImage, describeElectionArchive } from "@/lib/seo";
 import type { ArchiveRecord } from "@/types/electionArchive";
 import type { ElectionMapResponse } from "@/types/electionMap";
 import type { MapAccountability } from "@/types/mapAccountability";
@@ -74,6 +74,7 @@ export async function generateMetadata({
     ...describeElectionArchive(cycle, record.totals.races, record.totals.measures),
     path: electionArchiveHref(cycle),
     type: "article",
+    images: cardImage(`electionArchive=${cycle}`, CARD_ALT.archive(cycle)),
   });
 }
 
@@ -103,7 +104,9 @@ export default async function ElectionsSegmentPage({
   // ballot, so the race is on its election's archive page.
   if (typeof race?.archiveCycle === "number") redirect(archivedRaceHref(race.archiveCycle, raceId));
 
-  redirect(`${stateBallotHref(state)}#race-${raceId}`);
+  // ?race= names the race to the state page's metadata, so the link (a race
+  // post's) previews as the race's own card; the page ignores it.
+  redirect(`${stateBallotHref(state)}?race=${encodeURIComponent(raceId)}#race-${raceId}`);
 }
 
 async function ArchivePage({

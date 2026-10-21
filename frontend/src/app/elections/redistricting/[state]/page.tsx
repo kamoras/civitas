@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import type { StateRedistricting } from "@/types/redistricting";
 import { fetchRecord } from "@/lib/ssrPayload";
 import { absoluteUrl, notFoundMetadata, pageMetadata } from "@/lib/site";
-import { describeStateRedistricting } from "@/lib/seo";
+import { CARD_ALT, cardImage, describeStateRedistricting } from "@/lib/seo";
 import { REDISTRICTING_HREF, redistrictingHref } from "@/lib/redistricting";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
 import SectionTabs from "@/components/layout/SectionTabs";
@@ -55,6 +55,7 @@ export async function generateMetadata({
     ),
     path,
     type: "article",
+    images: cardImage(`redistricting=${code}`, CARD_ALT.redistricting(data.stateName)),
   });
 }
 

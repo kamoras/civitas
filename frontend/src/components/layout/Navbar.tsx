@@ -4,7 +4,14 @@ import { EYEBROW } from "@/lib/typeStyles";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { SECTIONS, currentSection, sectionSubpages, type SectionKey } from "@/lib/routes";
+import {
+  SECTIONS,
+  currentSection,
+  currentTab,
+  pathOf,
+  sectionSubpages,
+  type SectionKey,
+} from "@/lib/routes";
 import { BSKY_PROFILE_URL } from "@/lib/site";
 import HeaderClearance from "./HeaderClearance";
 import RecordsBand, { RunStatusSquare } from "./RecordsBand";
@@ -44,23 +51,6 @@ function navLinkClass(active: boolean, accent: boolean | undefined, size: "sm" |
   const base = `font-mono ${size === "xs" ? "text-xs" : "text-sm"} whitespace-nowrap border-b-2 pb-0.5 transition-colors`;
   if (active) return `${base} border-ink-hi text-ink-hi`;
   return `${base} border-transparent ${accent ? "text-ink-hi hover:text-phos" : "text-ink-lo hover:text-ink-hi"}`;
-}
-
-/** The path a tab's href names, for comparing with usePathname (which never
- * carries a query string or fragment). */
-function pathOf(href: string): string {
-  return href.split(/[?#]/)[0];
-}
-
-/** A sub-page is the current page when its path is, and no other page of
- * the section shares that path (the Action Center's three tabs are one
- * path, told apart by the query string, which this can't read without
- * suspending every page). */
-function currentSubpage(section: SectionKey, href: string, pathname: string): boolean {
-  const path = pathOf(href);
-  return (
-    path === pathname && SECTIONS[section].tabs.filter((t) => pathOf(t.href) === path).length === 1
-  );
 }
 
 // Where the desktop row replaces MENU, and where it takes its full
@@ -192,7 +182,11 @@ function SectionItem({
   // `pathOf` match on the hub too: the hub is a page of the section like
   // any other here.
   const isCurrent = (h: string) =>
-    h === href ? pathname === pathOf(href) : currentSubpage(section, h, pathname);
+    h === href
+      ? pathname === pathOf(href)
+        ? "page"
+        : undefined
+      : currentTab(section, h, pathname);
   return (
     // Not positioned: the panel spans the header (the nav is its
     // containing block), not this item.
@@ -228,7 +222,7 @@ function SectionItem({
                 <li key={t.key} className="break-inside-avoid">
                   <Link
                     href={t.href}
-                    aria-current={current ? "page" : undefined}
+                    aria-current={current}
                     onClick={() => onClose()}
                     className={`flex min-h-11 items-center border-l-2 pl-3 font-sans text-sm transition-colors ${
                       current
@@ -588,12 +582,12 @@ export default function Navbar({
                         className="mb-2 border-l border-white/15 pl-3"
                       >
                         {subs.map((t) => {
-                          const current = currentSubpage(section, t.href, pathname);
+                          const current = currentTab(section, t.href, pathname);
                           return (
                             <li key={t.key}>
                               <Link
                                 href={t.href}
-                                aria-current={current ? "page" : undefined}
+                                aria-current={current}
                                 onClick={closeMenu}
                                 className={`${SUBLINK} leading-snug ${current ? "text-ink-hi" : "text-ink-lo hover:text-ink-hi"}`}
                               >

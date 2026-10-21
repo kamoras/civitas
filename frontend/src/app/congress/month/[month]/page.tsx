@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { TOPIC_FEEDS, pageMetadata } from "@/lib/site";
 import { ISO_MONTH, fetchMonth } from "@/lib/congressServer";
 import { monthLabel } from "@/lib/congress";
+import { CARD_ALT, cardImage } from "@/lib/seo";
 import PeriodReportView from "@/components/congress/PeriodReportView";
 
 export async function generateMetadata({
@@ -32,6 +33,10 @@ export async function generateMetadata({
     description: report?.sentence ?? `What the Senate and the House did in ${monthLabel(month)}.`,
     path: `/congress/month/${month}`,
     feed: TOPIC_FEEDS.congress,
+    images: cardImage(
+      `congressMonth=${month}`,
+      CARD_ALT.period(`Congress in ${monthLabel(month)}`)
+    ),
   });
 }
 

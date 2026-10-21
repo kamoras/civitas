@@ -32,7 +32,7 @@ describe("RaceDetailRedirect", () => {
 
     await expect(
       RaceDetailRedirect({ params: Promise.resolve({ raceId: "2026-HOUSE-GA-06" }) })
-    ).rejects.toThrow("REDIRECT:/elections/states/GA#race-2026-HOUSE-GA-06");
+    ).rejects.toThrow("REDIRECT:/elections/states/GA?race=2026-HOUSE-GA-06#race-2026-HOUSE-GA-06");
   });
 
   it("sends a past election's race to its place in that election's archive", async () => {
@@ -56,7 +56,7 @@ describe("RaceDetailRedirect", () => {
 
     await expect(
       RaceDetailRedirect({ params: Promise.resolve({ raceId: "2026-SEN-GA" }) })
-    ).rejects.toThrow("REDIRECT:/elections/states/GA#race-2026-SEN-GA");
+    ).rejects.toThrow("REDIRECT:/elections/states/GA?race=2026-SEN-GA#race-2026-SEN-GA");
   });
 
   it("treats a four-digit year as an election, not a race", async () => {
