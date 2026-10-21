@@ -129,7 +129,7 @@
         131,
         148
       ],
-      "reason": "Twelve race updates posted between 1 and 21 October 2026 quoted a news photo's caption as if it were the news (for example, a candidate speaking at a gathering months earlier). The captions came from the picture at the top of each article, which the feed reader took for the article's first sentence. It now leaves pictures and their captions out of an article's text, so a post is copied from the article itself (PR #PRNUM). The twelve posts are withdrawn from the Atom feeds; the stories stay on their race pages."
+      "reason": "Twelve race updates posted between 1 and 21 October 2026 quoted a news photo's caption as if it were the news (for example, a candidate speaking at a gathering months earlier). The captions came from the picture at the top of each article, which the feed reader took for the article's first sentence. It now leaves pictures and their captions out of an article's text, so a post is copied from the article itself (PR #1196). The twelve posts are withdrawn from the Atom feeds; the stories stay on their race pages."
     }
   ]
 }
