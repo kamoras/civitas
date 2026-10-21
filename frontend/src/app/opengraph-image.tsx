@@ -66,9 +66,7 @@ export default async function OgImage() {
         }}
       >
         <span style={{ fontFamily: OG_FAMILY.mono }}>{DOMAIN}</span>
-        <span style={{ fontWeight: 600, letterSpacing: "0.08em" }}>
-          AN INDEPENDENT PUBLIC RECORD
-        </span>
+        <span style={{ fontWeight: 600 }}>An independent public record</span>
       </div>
     </div>,
     { ...size, fonts: await ogFonts() }

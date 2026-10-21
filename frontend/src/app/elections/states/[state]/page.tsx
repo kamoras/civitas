@@ -2,9 +2,9 @@ import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import type { LiveResults, StateBallot } from "@/types/election";
 import { fetchRecord } from "@/lib/ssrPayload";
-import { stateBallotHref } from "@/lib/elections";
+import { raceSeat, stateBallotHref } from "@/lib/elections";
 import { absoluteUrl, notFoundMetadata, pageMetadata, stateFeed } from "@/lib/site";
-import { describeStateBallot } from "@/lib/seo";
+import { CARD_ALT, cardImage, describeStateBallot } from "@/lib/seo";
 import { pollsClosed, showsResults } from "@/lib/results";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
 import StateBallotClient from "./StateBallotClient";
@@ -71,10 +71,13 @@ async function fetchLiveStatus(
 // is the search; "CA ballot" is not.
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: Promise<{ state: string }>;
+  searchParams?: Promise<{ race?: string | string[] }>;
 }): Promise<Metadata> {
   const { state } = await params;
+  const raceId = (await searchParams)?.race;
   const code = state.toUpperCase();
   const ballot = await fetchStateBallot(code);
   // Always the upper-case code: /elections/states/ca serves the same page.
@@ -97,13 +100,22 @@ export async function generateMetadata({
     !!status?.closed,
     status?.live ?? null
   );
-  const ogImage = absoluteUrl(`/api/og?state=${code}`);
+  // A race link (/elections/<race id>, every race post) lands here with
+  // ?race=, so the link previews as that race's card; the page and its
+  // canonical are the state's.
+  const race = [...ballot.senateRaces, ...ballot.houseRaces].find((r) => r.id === raceId);
+  const images = race
+    ? cardImage(
+        `race=${encodeURIComponent(race.id)}`,
+        CARD_ALT.race(raceSeat(race, ballot.stateName ?? code))
+      )
+    : cardImage(`state=${code}`, CARD_ALT.state(ballot.stateName ?? code));
   return pageMetadata({
     title,
     description,
     path,
     type: "article",
-    images: [{ url: ogImage, width: 1200, height: 630, alt: title }],
+    images,
     feed: stateFeed(code, ballot.stateName ?? code),
   });
 }

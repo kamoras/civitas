@@ -372,6 +372,19 @@ export function candidateName(c: { name: string; ballotName?: string | null }): 
   return c.ballotName || c.name;
 }
 
+/** "Texas's 12th district, U.S. House", "Alaska at large, U.S. House",
+ *  "Georgia, U.S. Senate": a race's seat, for its share card. */
+export function raceSeat(
+  race: { office: string; district: number | null },
+  stateName: string
+): string {
+  if (race.office === "S") return `${stateName}, U.S. Senate`;
+  if (!race.district) return `${stateName} at large, U.S. House`;
+  const n = race.district;
+  const suffix = n % 100 >= 11 && n % 100 <= 13 ? "th" : (["th", "st", "nd", "rd"][n % 10] ?? "th");
+  return `${stateName}'s ${n}${suffix} district, U.S. House`;
+}
+
 /** "4-year terms" — an office's regular term, worded for the office rather
  * than the winner, since a seat filled for the rest of an unexpired term
  * runs shorter. Null when the backend has no term for it. */

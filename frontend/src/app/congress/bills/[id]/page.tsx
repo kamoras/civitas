@@ -4,7 +4,7 @@ import type { BillDetail } from "@/types/bill";
 import type { BillRecord } from "@/types/congress";
 import { fetchRecord } from "@/lib/ssrPayload";
 import { absoluteUrl, billFeed, notFoundMetadata, pageMetadata } from "@/lib/site";
-import { describeBill, legislationJsonLd } from "@/lib/seo";
+import { CARD_ALT, cardImage, describeBill, legislationJsonLd } from "@/lib/seo";
 import { fetchBillCommitteeRecord, fetchBillRecord } from "@/lib/congressServer";
 import { billCanonicalPath, currentCongress, parseCongressParam } from "@/lib/congress";
 import { ordinal } from "@/components/scorecard/format";
@@ -92,16 +92,10 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
       ...meta,
       path,
       type: "article",
-      // The bill's own card. Only a bill the site tracks has one (the card
-      // reads the stored record); any other bill keeps the site card.
-      images: [
-        {
-          url: absoluteUrl(`/api/og?bill=${detail.congress}/${detail.billId}`),
-          width: 1200,
-          height: 630,
-          alt: meta.title,
-        },
-      ],
+      images: cardImage(
+        `billPage=${detail.congress}/${detail.billId}`,
+        CARD_ALT.bill(record?.billLabel ?? detail.billId, detail.shortTitle || detail.title)
+      ),
       feed,
     });
   }
@@ -114,6 +108,11 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
       `${record!.billLabel} in the ${ordinal(record!.congress)} Congress.`,
     path,
     type: "article",
+    // The bill's own card, drawn from the same Congress.gov record.
+    images: cardImage(
+      `billPage=${record!.congress}/${record!.billId}`,
+      CARD_ALT.bill(record!.billLabel ?? billId, named || record!.billLabel || billId)
+    ),
     feed,
   });
 }

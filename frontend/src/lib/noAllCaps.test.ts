@@ -16,13 +16,11 @@ import { describe, expect, it } from "vitest";
 
 const SRC = path.resolve(__dirname, "..");
 const ALLOWED_UPPERCASE_CLASS = new Set(["lib/typeStyles.ts"]);
-// The lockup: "CIVITAS | RESEARCH" is the logotype (header, and the OG cards' copy of it).
-const LOGOTYPE_FILES = new Set([
-  "components/layout/Navbar.tsx",
-  "app/opengraph-image.tsx",
-  "app/api/og/route.tsx",
-  "lib/ogLockup.tsx",
-]);
+// The lockup: "CIVITAS | RESEARCH" is the logotype (header, and the share cards' copy
+// of it, which they take from ogLockup.tsx: their own text is scanned like a page's).
+const LOGOTYPE_FILES = new Set(["components/layout/Navbar.tsx", "lib/ogLockup.tsx"]);
+// The share cards, where labels used to be put in capitals by code rather than typed.
+const CARD_FILES = ["app/opengraph-image.tsx", "app/api/og/route.tsx"];
 
 // Acronyms and identifiers that keep their capitals. Anything else typed in
 // capitals is a word in caps.
@@ -99,5 +97,19 @@ describe("letter case", () => {
   });
   it("has no words typed in capitals", () => {
     expect(results.flatMap((r) => r.words)).toEqual([]);
+  });
+  it("puts no share-card text in capitals by code", () => {
+    const found = CARD_FILES.flatMap((rel) =>
+      fs
+        .readFileSync(path.join(SRC, rel), "utf8")
+        .split("\n")
+        .flatMap((line, i) =>
+          // A state code is an identifier, normalised before it is looked up.
+          /toUpperCase\(|textTransform/.test(line) && !/rawState\.toUpperCase\(\)/.test(line)
+            ? [`${rel}:${i + 1}: ${line.trim()}`]
+            : []
+        )
+    );
+    expect(found).toEqual([]);
   });
 });

@@ -23,9 +23,10 @@ import {
   NOMINATIONS_HREF,
   STATUS_NOTE,
   days,
+  nominationHeading,
   nominationHref,
 } from "@/lib/nominations";
-import { describeNomination } from "@/lib/seo";
+import { CARD_ALT, cardImage, describeNomination } from "@/lib/seo";
 import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import { TOPIC_FEEDS, absoluteUrl, pageMetadata } from "@/lib/site";
 import { fetchRecord } from "@/lib/ssrPayload";
@@ -53,18 +54,6 @@ async function load({ congress, pn }: Params): Promise<NominationDetail | null> 
   );
 }
 
-function heading(n: NominationDetail): string {
-  const first = n.nominees[0];
-  if (n.nomineeCount > 1)
-    return `${n.nomineeCount.toLocaleString()} nominees: ${[n.positionTitle, n.organization].filter(Boolean).join(", ")}`;
-  const name = first?.names[0];
-  const who = name
-    ? [name.firstName, name.middleName, name.lastName].filter(Boolean).join(" ")
-    : "";
-  const office = n.positionTitle || n.organization;
-  return who ? `${who}: ${office}` : office || n.description || `Nomination ${n.citation}`;
-}
-
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const p = await params;
   const n = await load(p);
@@ -76,10 +65,14 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       noindex: true,
     });
   return pageMetadata({
-    ...describeNomination(n, heading(n)),
+    ...describeNomination(n, nominationHeading(n)),
     path: nominationHref(n),
     feed: TOPIC_FEEDS.congress,
     type: "article",
+    images: cardImage(
+      `nomination=${n.congress}/${n.citation}`,
+      CARD_ALT.nomination(nominationHeading(n))
+    ),
   });
 }
 
@@ -87,7 +80,7 @@ export default async function NominationPage({ params }: PageProps) {
   const n = await load(await params);
   if (!n) notFound();
   const path = nominationHref(n);
-  const title = heading(n);
+  const title = nominationHeading(n);
   const eyebrow = `${n.citation} · ${ordinal(n.congress)} Congress · ${KIND_LABEL[n.kind]}`;
   const final = n.finalVote
     ? n.rollCalls.find(

@@ -13,7 +13,14 @@ import {
   parseVoteRef,
   recordCardKey,
   recordCardTexts,
-  scoreFooterLabel,
+  billStage,
+  parseAgencySlug,
+  parseBillPageRef,
+  parseNominationRef,
+  parseRaceId,
+  initialsOf,
+  profileCardTexts,
+  raceCardTexts,
 } from "./route";
 
 describe("formatStanding", () => {
@@ -123,13 +130,203 @@ describe("parsePoliticianId", () => {
   });
 });
 
-describe("scoreFooterLabel", () => {
-  it("names what each page holds, never a composite score", () => {
-    expect(scoreFooterLabel("senate")).toBe("WHERE THEY STAND AMONG PEERS");
-    expect(scoreFooterLabel("house")).toBe("WHERE THEY STAND AMONG PEERS");
-    expect(scoreFooterLabel("scotus")).toBe("VOTES AND DECISIONS");
-    expect(scoreFooterLabel("president")).toBe("THE PUBLIC RECORD");
-    expect(scoreFooterLabel(undefined)).toBe("THE PUBLIC RECORD");
+describe("profileCardTexts", () => {
+  it("shows a member's FEC figures, never a composite score", () => {
+    const t = profileCardTexts({
+      branch: "senate",
+      identity: { name: "A Member", party: "R", state: "IA" },
+      scorecard: {
+        funding: { totalContributions: 9_290_490, pacSharePct: 32.4, smallDonorPercentage: 25 },
+      },
+    });
+    expect(t.eyebrow).toBe("U.S. Senate");
+    expect(t.line).toBe("R-IA");
+    expect(t.tiles).toEqual([
+      { value: "$9.3M", label: "Contributions, latest election" },
+      { value: "32%", label: "From PACs" },
+      { value: "25%", label: "In gifts of $200 or less" },
+    ]);
+    expect(t.sources).toBe("FEC filings");
+  });
+
+  // Null is not zero: a figure the record lacks is left off the card.
+  it("leaves off a figure the record doesn't hold", () => {
+    const t = profileCardTexts({
+      branch: "house",
+      identity: { name: "B", party: "D", state: "AK", district: 0 },
+      scorecard: { funding: { totalContributions: null, pacSharePct: 10 } },
+    });
+    expect(t.line).toBe("D-AK-AL");
+    expect(t.tiles.map((x) => x.label)).toEqual(["From PACs"]);
+  });
+
+  it("gives a president the historians' rank with its source", () => {
+    const t = profileCardTexts(
+      {
+        branch: "president",
+        identity: {
+          name: "C",
+          party: "D",
+          number: 44,
+          termStart: "2009-01-20",
+          termEnd: "2017-01-20",
+        },
+        scorecard: { avgApproval: 47.97, eoCount: 276 },
+      },
+      { rank: 10, rated: 45 }
+    );
+    expect(t.line).toBe("44th president · 2009 to 2017");
+    expect(t.tiles).toEqual([
+      { value: "#10 of 45", label: "C-SPAN historians' rank" },
+      { value: "48%", label: "Average approval" },
+      { value: "276", label: "Executive orders" },
+    ]);
+  });
+
+  it("says a presidency the survey hasn't rated is not rated", () => {
+    const t = profileCardTexts(
+      { branch: "president", identity: { name: "D", number: 47, termStart: "2025-01-20" } },
+      { rank: null, rated: 45 }
+    );
+    expect(t.line).toBe("47th president · 2025 to present");
+    expect(t.tiles.at(-1)).toEqual({ value: "Not rated", label: "C-SPAN historians' rank" });
+  });
+
+  it("gives a justice the voting record and no score", () => {
+    const t = profileCardTexts({
+      branch: "scotus",
+      identity: { name: "E", appointingPresident: "A President", dateStart: "2022-06-30" },
+      scorecard: { casesDecided: 175, majorityPct: 71.4, authoredMajority: 16 },
+    });
+    expect(t.eyebrow).toBe("Supreme Court");
+    expect(t.line).toBe("Appointed by A President, since 2022");
+    expect(t.tiles.map((x) => x.value)).toEqual(["175", "71%", "16"]);
+  });
+});
+
+describe("initialsOf", () => {
+  it("takes the first and last names' initials", () => {
+    expect(initialsOf("Joseph R. Biden, Jr.")).toBe("JB");
+    expect(initialsOf("Barack Obama")).toBe("BO");
+    expect(initialsOf("Madonna")).toBe("M");
+  });
+});
+
+describe("raceCardTexts", () => {
+  const race = {
+    id: "2026-HOUSE-TX-12",
+    cycleYear: 2026,
+    office: "H",
+    state: "TX",
+    district: 12,
+    usualVote: { label: "R+12" },
+    candidates: [
+      {
+        name: "ROE, JANE",
+        ballotName: "Jane Roe",
+        partyGroup: "DEM",
+        confirmed: true,
+        contributions: 1000,
+      },
+      {
+        name: "DOE, JOHN",
+        partyGroup: "REP",
+        confirmed: true,
+        incumbentChallenge: "I",
+        contributions: 2_500_000,
+      },
+      { name: "FILER, UN", partyGroup: "REP", confirmed: false, contributions: 9_000_000 },
+      { name: "SMALL, PARTY", partyGroup: "LIB", partyLabel: "Libertarian Party", confirmed: true },
+    ],
+  };
+
+  it("names the seat and lists the confirmed candidates by money raised", () => {
+    const t = raceCardTexts(race);
+    expect(t.title).toBe("Texas's 12th district, U.S. House");
+    expect(t.lean).toBe("Usually votes R+12");
+    expect(t.rows.map((r) => [r.name, r.party, r.incumbent, r.money])).toEqual([
+      ["DOE, JOHN", "Republican", true, "$2.5M raised"],
+      ["Jane Roe", "Democrat", false, "$1K raised"],
+      ["SMALL, PARTY", "Libertarian Party", false, ""],
+    ]);
+  });
+
+  it("names a Senate seat and an at-large seat", () => {
+    expect(raceCardTexts({ ...race, office: "S", district: null }).title).toBe(
+      "Texas, U.S. Senate"
+    );
+    expect(raceCardTexts({ ...race, state: "AK", district: 0 }).title).toBe(
+      "Alaska at large, U.S. House"
+    );
+  });
+});
+
+describe("billStage", () => {
+  const record = (
+    stops: { key: string; label: string; status: string; detail: string | null; date?: string }[]
+  ) => ({ journey: { stops } }) as unknown as Parameters<typeof billStage>[0];
+
+  it("names the furthest stop reached, with what happened there", () => {
+    expect(
+      billStage(
+        record([
+          { key: "introduced", label: "Introduced in the House", status: "done", detail: null },
+          { key: "committee", label: "Committee", status: "current", detail: "Referred" },
+          { key: "floor", label: "House floor", status: "ahead", detail: null },
+        ])
+      )
+    ).toBe("Committee: Referred");
+    expect(
+      billStage(
+        record([
+          { key: "introduced", label: "Introduced", status: "done", detail: null },
+          { key: "president", label: "President", status: "done", detail: "Signed into law" },
+        ])
+      )
+    ).toBe("President: Signed into law");
+    expect(
+      billStage(
+        record([
+          {
+            key: "committee",
+            label: "Committee",
+            status: "current",
+            detail: "Reported by the committee",
+          },
+        ])
+      )
+    ).toBe("Reported by the committee");
+    expect(
+      billStage(
+        record([
+          {
+            key: "committee",
+            label: "Committee",
+            status: "current",
+            detail: "In committee since",
+            date: "2025-01-03",
+          },
+        ])
+      )
+    ).toBe("In committee since January 3, 2025");
+    expect(billStage(record([]))).toBe("");
+  });
+});
+
+describe("new card references", () => {
+  it("accepts only well-formed ids", () => {
+    expect(parseRaceId("2026-SEN-GA")).toBe("2026-SEN-GA");
+    expect(parseRaceId("2026-HOUSE-TX-12")).toBe("2026-HOUSE-TX-12");
+    expect(parseRaceId("../admin")).toBeNull();
+    expect(parseAgencySlug("environmental-protection-agency")).toBe(
+      "environmental-protection-agency"
+    );
+    expect(parseAgencySlug("a/b")).toBeNull();
+    expect(parseNominationRef("119/PN123-1")).toBe("119/PN123-1");
+    expect(parseNominationRef("119/PN0")).toBeNull();
+    expect(parseNominationRef("119/PN1/x")).toBeNull();
+    expect(parseBillPageRef("119/HR.1")).toEqual({ congress: 119, id: "HR.1" });
+    expect(parseBillPageRef("119/HR.1/x")).toBeNull();
   });
 });
 
@@ -150,15 +347,15 @@ describe("chamberTile", () => {
 
   it("shows a chamber's record votes when the day was recorded", () => {
     const r = report(day("final", 2), day("live", 0));
-    expect(chamberTile(r, "senate")).toEqual({ value: "2", label: "SENATE RECORD VOTES" });
-    expect(chamberTile(r, "house")).toEqual({ value: "0", label: "HOUSE RECORD VOTES" });
+    expect(chamberTile(r, "senate")).toEqual({ value: "2", label: "Senate record votes" });
+    expect(chamberTile(r, "house")).toEqual({ value: "0", label: "House record votes" });
   });
 
   // A day without a record must never read as "0 record votes".
   it("says why there is no count instead of showing zero", () => {
     const r = report(day("not_in_session", 0), day("no_record", 0));
-    expect(chamberTile(r, "senate")).toEqual({ value: "—", label: "SENATE: NOT IN SESSION" });
-    expect(chamberTile(r, "house")).toEqual({ value: "—", label: "HOUSE: NO RECORD YET" });
+    expect(chamberTile(r, "senate")).toEqual({ value: "—", label: "Senate: not in session" });
+    expect(chamberTile(r, "house")).toEqual({ value: "—", label: "House: no record yet" });
   });
 });
 
