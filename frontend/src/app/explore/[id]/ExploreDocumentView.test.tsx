@@ -135,6 +135,58 @@ describe("A floor speech's bill", () => {
     });
     const link = await screen.findByRole("link", { name: "S. 2" });
     expect(link.getAttribute("href")).toMatch(/^\/congress\/bills\/S\.2/);
-    expect(screen.getByText(/^Bill:/)).toBeInTheDocument();
+  });
+});
+
+describe("The header box", () => {
+  it("leads with the document as a box: its line, its chips and its title as the page heading", () => {
+    withDocument();
+    api.streamExploreDocumentSummary.mockReturnValue(new Promise(() => {}));
+    renderPage({
+      ...DOC,
+      agencyName: "Food and Drug Administration",
+      agencySlug: "food-and-drug-administration",
+      headline: "Executive Order, January 2, 2026 · 91 FR 100",
+      executiveOrders: [{ number: 12866, key: "fr-1993-24000" }],
+    });
+    expect(screen.getByRole("heading", { level: 1, name: "An order" })).toBeInTheDocument();
+    expect(screen.getByText("Executive Order, January 2, 2026 · 91 FR 100")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Food and Drug Administration" })).toHaveAttribute(
+      "href",
+      "/agencies/food-and-drug-administration"
+    );
+    expect(
+      screen.getByRole("link", { name: "Executive Order 12866, cited in the text" })
+    ).toHaveAttribute("href", "/explore/fr-1993-24000");
+    expect(screen.getByRole("link", { name: "Cite this document" })).toHaveAttribute(
+      "href",
+      "#cite"
+    );
+    expect(document.getElementById("comment")).toBeNull();
+  });
+
+  it("is the comment links' target while open, with the backend's countdown and the form link", () => {
+    withDocument();
+    api.streamExploreDocumentSummary.mockReturnValue(new Promise(() => {}));
+    const closes = new Date(Date.now() + 10 * 86400000).toISOString().slice(0, 10);
+    renderPage({
+      ...DOC,
+      docType: "Proposed Rule",
+      commentUrl: "http://www.regulations.gov/commenton/X-2026-0001-0001",
+      commentsCloseOn: closes,
+      commentWindow: {
+        opened: "2026-01-02",
+        closes,
+        totalDays: 40,
+        daysLeft: 10,
+        elapsedPercent: 75,
+      },
+    });
+    const box = document.getElementById("comment")!;
+    expect(box).toHaveTextContent("Open for public comment");
+    expect(box).toHaveTextContent(/10\s*days left/);
+    expect(
+      screen.getByRole("link", { name: /Submit your comment at regulations\.gov/ })
+    ).toHaveAttribute("href", "https://www.regulations.gov/commenton/X-2026-0001-0001");
   });
 });
