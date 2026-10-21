@@ -7,6 +7,9 @@ import { ABOUT_CHAPTERS, ABOUT_OVERVIEW_HREF, adjacentChapters } from "@/lib/abo
 import { REFERENCES, type RefId } from "./references";
 import OnThisPage from "@/components/shared/OnThisPage";
 import { onThisPage } from "@/lib/onThisPage";
+import BoxGrid from "@/components/shared/BoxGrid";
+import RecordBox, { type BoxLink } from "@/components/shared/RecordBox";
+import type { Figure } from "@/types/figure";
 
 /**
  * Shared frame and prose parts for the About section (see lib/aboutPages.ts
@@ -150,12 +153,15 @@ function PagerLink({
   );
 }
 
-/** Every chapter, always visible, so no page is a dead end. */
+/** Every chapter, always reachable, so no page is a dead end. On a phone
+ *  one row that scrolls sideways (eight chips wrapped to four rows took a
+ *  third of the first screen); from 640px they wrap. Each chip is a link,
+ *  so Tab scrolls the row to it. */
 function ChapterNav({ current }: { current: string }) {
   const items = [{ href: ABOUT_OVERVIEW_HREF, title: "Overview" }, ...ABOUT_CHAPTERS];
   return (
     <nav aria-label="About this site">
-      <ul className="flex flex-wrap gap-x-1 gap-y-2 font-mono text-xs">
+      <ul className="-mx-4 flex gap-x-1 overflow-x-auto px-4 pb-1 font-mono text-xs sm:mx-0 sm:flex-wrap sm:gap-y-2 sm:overflow-visible sm:px-0 sm:pb-0">
         {items.map((c) => {
           const active = c.href === current;
           return (
@@ -163,7 +169,7 @@ function ChapterNav({ current }: { current: string }) {
               <Link
                 href={c.href}
                 aria-current={active ? "page" : undefined}
-                className={`inline-block border px-2.5 py-1.5 transition-colors ${
+                className={`inline-block whitespace-nowrap border px-2.5 py-1.5 transition-colors ${
                   active
                     ? "border-signal-cyan text-signal-cyan"
                     : "border-white/[0.09] text-ink-lo hover:border-ink-min hover:text-ink-hi"
@@ -241,6 +247,57 @@ export function Sub({ title, id, children }: { title: string; id?: string; child
 
 export function P({ children }: { children: ReactNode }) {
   return <p className="text-base leading-relaxed text-ink">{children}</p>;
+}
+
+/**
+ * A section's parts as record boxes ("Boxes, not blocks", AGENTS.md): a
+ * ruled grid, one column on a phone and two from 40rem of its own width.
+ * Put `Box`es inside; a `Section` keeps its h2, so each box is an h3.
+ */
+export function Boxes({ columns = 2, children }: { columns?: 1 | 2; children: ReactNode }) {
+  return <BoxGrid columns={columns}>{children}</BoxGrid>;
+}
+
+/**
+ * One part of a chapter: a short heading, one or two plain sentences, a
+ * figure where the page states a real one, and the full text behind "More"
+ * (a native disclosure, which find-in-page still searches). The line is
+ * the site's own method writing, shortened; every fact, number and
+ * citation stays in `children`. `id` keeps an anchor other pages link to
+ * on the box itself, which stays visible with its "More" closed.
+ */
+export function Box({
+  id,
+  title,
+  dek,
+  figure,
+  links,
+  more = "the detail",
+  children,
+}: {
+  id?: string;
+  title: ReactNode;
+  dek: ReactNode;
+  figure?: Figure;
+  links?: BoxLink[];
+  /** What is behind "More:", in a few words. */
+  more?: string;
+  children?: ReactNode;
+}) {
+  return (
+    <RecordBox
+      id={id}
+      level={3}
+      compact
+      title={title}
+      dek={dek}
+      figure={figure}
+      links={links}
+      more={
+        children ? { label: more, children: <div className="space-y-3">{children}</div> } : null
+      }
+    />
+  );
 }
 
 /** A plain bulleted list inside prose. */

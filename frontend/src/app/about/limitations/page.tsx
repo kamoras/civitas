@@ -1,6 +1,16 @@
-import type { ReactNode } from "react";
 import { pageMetadata } from "@/lib/site";
-import { AboutPage, Summary, Point, Section, P, More, Cite, A } from "@/components/about/AboutPage";
+import {
+  AboutPage,
+  Summary,
+  Point,
+  Section,
+  Boxes,
+  Box,
+  P,
+  More,
+  Cite,
+  A,
+} from "@/components/about/AboutPage";
 import { countWord, fetchLiveStates } from "@/lib/liveStates";
 
 // The live-count state count below is read from the backend
@@ -15,19 +25,9 @@ export const metadata = pageMetadata({
   path: "/about/limitations",
 });
 
-/**
- * Each entry is an open problem, not a settled trade-off. When one is fixed
- * the entry is removed, not left as history — a list that keeps disclaiming
- * what the site now does stops describing the site (AGENTS.md §7).
- */
-function Limitation({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <article className="border-l-3 border-signal-amber/70 pl-4 space-y-3">
-      <h3 className="font-display text-lg font-semibold leading-snug text-ink-hi">{title}</h3>
-      {children}
-    </article>
-  );
-}
+// Each box is an open problem, not a settled trade-off. When one is fixed
+// the box is removed, not left as history: a list that keeps disclaiming
+// what the site now does stops describing the site (AGENTS.md §7).
 
 export default async function LimitationsChapter() {
   const live = await fetchLiveStates();
@@ -61,209 +61,265 @@ export default async function LimitationsChapter() {
       </Summary>
 
       <Section id="money" title="Money">
-        <Limitation title="Small-donor money is undercounted">
-          <P>
-            The small-donor share is the money the FEC reports as unitemized: gifts from donors who
-            gave $200 or less in the cycle. Conduits such as ActBlue and WinRed itemize every gift
-            they pass on, whatever its size, so small gifts made through them count as itemized and
-            are left out. A campaign that raises small money that way shows a smaller small-donor
-            share than it has, and one that itemizes every gift reports no unitemized money at all:
-            its share is marked not measured rather than counted as 0%. The FEC&apos;s
-            contributions-by-size tables would count them, but they total more than the
-            campaigns&apos; own reported individual contributions (in one Senate race checked, $72.7
-            million against $62.0 million) and are empty for some candidates, so they are not used.
-          </P>
-        </Limitation>
-        <Limitation title="Funding windows differ by chamber">
-          <P>
-            Funding covers a member&apos;s most recent completed election: six years of fundraising
-            for a senator, two for a representative. Members are compared within their own chamber,
-            but no adjustment makes six years and two years the same span. Within a chamber members
-            are measured over the same length of time, except a member with no completed election
-            yet (appointed, or seated by a special election), who is measured on the campaign still
-            in progress; across chambers the figures are best read side by side, not ranked, which
-            is why the compare page names no winner when a senator and a representative are
-            compared. Where FEC&apos;s candidate totals leave out the race that won a House seat,
-            that election is read from the campaign committee&apos;s own totals for the cycle. The
-            window itself is deliberate: a strict two-year window would leave most senators with
-            little or no fundraising to measure. FEC filings also lag donations by weeks or months.
-          </P>
-        </Limitation>
+        <Boxes>
+          <Box
+            title="Small-donor money is undercounted"
+            dek="Small gifts made through ActBlue or WinRed are itemized, so they are left out of the small-donor share. A campaign that raises money that way shows a smaller share than it has."
+            figure={{ type: "stat", value: 200, text: "$200", caption: "or less is unitemized" }}
+            more="why the FEC's size tables are not used"
+          >
+            <P>
+              The small-donor share is the money the FEC reports as unitemized: gifts from donors
+              who gave $200 or less in the cycle. Conduits such as ActBlue and WinRed itemize every
+              gift they pass on, whatever its size, so small gifts made through them count as
+              itemized and are left out. A campaign that raises small money that way shows a smaller
+              small-donor share than it has, and one that itemizes every gift reports no unitemized
+              money at all: its share is marked not measured rather than counted as 0%. The
+              FEC&apos;s contributions-by-size tables would count them, but they total more than the
+              campaigns&apos; own reported individual contributions (in one Senate race checked,
+              $72.7 million against $62.0 million) and are empty for some candidates, so they are
+              not used.
+            </P>
+          </Box>
+          <Box
+            title="Funding windows differ by chamber"
+            dek="Funding covers six years for a senator and two for a representative. Across chambers, the figures are best read side by side, not ranked."
+            figure={{ type: "stat", value: 6, text: "6 / 2", caption: "years, Senate / House" }}
+            more="new members, and filing lag"
+          >
+            <P>
+              Funding covers a member&apos;s most recent completed election: six years of
+              fundraising for a senator, two for a representative. Members are compared within their
+              own chamber, but no adjustment makes six years and two years the same span. Within a
+              chamber members are measured over the same length of time, except a member with no
+              completed election yet (appointed, or seated by a special election), who is measured
+              on the campaign still in progress; across chambers the figures are best read side by
+              side, not ranked, which is why the compare page names no winner when a senator and a
+              representative are compared. Where FEC&apos;s candidate totals leave out the race that
+              won a House seat, that election is read from the campaign committee&apos;s own totals
+              for the cycle. The window itself is deliberate: a strict two-year window would leave
+              most senators with little or no fundraising to measure. FEC filings also lag donations
+              by weeks or months.
+            </P>
+          </Box>
+        </Boxes>
       </Section>
 
       <Section id="voting" title="Voting">
-        <Limitation title="Partisan lean stands in for opinion on the issue">
-          <P>
-            What a seat &ldquo;expects&rdquo; is measured from seats that vote like it for
-            president, not from opinion on the issue in a given vote. A state&apos;s presidential
-            lean says little about, say, public-land use in Utah or water rights in Arizona.
-          </P>
-          <More label="Why we haven’t replaced it">
+        <Boxes>
+          <Box
+            title="Partisan lean stands in for opinion on the issue"
+            dek="What a seat expects is measured from seats that vote like it for president, not from opinion on the issue in a given vote."
+            more="an example, and why we haven’t replaced it"
+          >
             <P>
-              The best free alternative found, survey-based ideology estimates by state and district
-              (Tausanovitch and Warshaw), is still a single left–right score, the same kind of
-              stand-in, and several years stale. Real issue-by-issue opinion at this scale would
-              mean building multilevel regression and poststratification over raw survey data
-              in-house: a statistics pipeline, and a black box next to every other formula on these
-              pages. We chose not to trade auditability for a partial fix. Issue-level opinion data
-              remains the named next step. For where a member&apos;s record sits, voters&apos; own
-              left-right self-placement by state was tested as the expectation and predicted
-              senators&apos; positions no better than partisan lean.
+              What a seat &ldquo;expects&rdquo; is measured from seats that vote like it for
+              president, not from opinion on the issue in a given vote. A state&apos;s presidential
+              lean says little about, say, public-land use in Utah or water rights in Arizona.
             </P>
-          </More>
-        </Limitation>
-        <Limitation title="The seat, not the member’s own voters">
-          <P>
-            A member&apos;s break rate is set beside same-party members of similarly-leaning seats
-            <Cite id="canes2002" />, which avoids expecting anyone to sit at their seat&apos;s raw
-            midpoint, where no member of either party sits
-            <Cite id="bafumi2010" />. But it is one-dimensional, and members answer to their primary
-            voters and supporters as well as to the whole seat
-            <Cite id="fenno1978" />
-            <Cite id="clinton2006" />. How the member&apos;s own constituents rate them, split by
-            party, is shown on each profile (see the next item).
-          </P>
-        </Limitation>
-        <Limitation title="Heavy breaking reads the same whether it builds a coalition or burns one">
-          <P>
-            Breaking with the party about as often as the seat predicts is the pattern a
-            member&apos;s own party&apos;s primary voters reward. The wider electorate leans the
-            other way: in Senate general elections from 1990 to 2024, members who broke more than
-            their seat&apos;s norm did somewhat better
-            <Cite id="carson2010" />, and some heavy breakers keep winning by appealing to both
-            sides. A roll-call record can&apos;t tell them apart from members whose breaks cost them
-            their base. That takes approval split by party: approval of the member among the
-            Democrats, Republicans and independents they represent, from the Cooperative Election
-            Study, shown on each profile. A senator&apos;s figures agree closely from the 2022
-            survey to the 2024 one; a House district&apos;s barely agree, so for House members the
-            gap stays open.
-          </P>
-          <More label="How sharp the approval figures can be">
+            <More label="Why we haven’t replaced it">
+              <P>
+                The best free alternative found, survey-based ideology estimates by state and
+                district (Tausanovitch and Warshaw), is still a single left–right score, the same
+                kind of stand-in, and several years stale. Real issue-by-issue opinion at this scale
+                would mean building multilevel regression and poststratification over raw survey
+                data in-house: a statistics pipeline, and a black box next to every other formula on
+                these pages. We chose not to trade auditability for a partial fix. Issue-level
+                opinion data remains the named next step. For where a member&apos;s record sits,
+                voters&apos; own left-right self-placement by state was tested as the expectation
+                and predicted senators&apos; positions no better than partisan lean.
+              </P>
+            </More>
+          </Box>
+          <Box
+            title="The seat, not the member’s own voters"
+            dek="A break rate is set beside same-party members of similar seats. That is one-dimensional, and members also answer to primary voters and supporters."
+            more="the evidence"
+          >
             <P>
-              The 2024 survey asked about 60,000 respondents in October and November 2024, and a
-              profile shows a figure only for a member still in the seat the survey asked about: one
-              who has since moved to another seat or district shows none. Small groups are pulled
-              toward what a typical member of the same party gets from that group, by an amount
-              estimated from how much members actually differ
-              <Cite id="efron1975" />. The survey&apos;s size sets how sharp the House figures can
-              be: a district has about a hundred respondents with an opinion (a median of 96), so
-              most House figures come mostly from what similar members get. Democrats&apos; ratings
-              are nearly the only ones that rest mostly on the district&apos;s own respondents, for
-              about three in five Democratic members and two in five Republican ones (another
-              group&apos;s does for ten members in all), and the profile marks every figure that
-              doesn&apos;t. Senators&apos; figures mostly rest on their own state&apos;s respondents
-              (a median of 672).
+              A member&apos;s break rate is set beside same-party members of similarly-leaning seats
+              <Cite id="canes2002" />, which avoids expecting anyone to sit at their seat&apos;s raw
+              midpoint, where no member of either party sits
+              <Cite id="bafumi2010" />. But it is one-dimensional, and members answer to their
+              primary voters and supporters as well as to the whole seat
+              <Cite id="fenno1978" />
+              <Cite id="clinton2006" />. How the member&apos;s own constituents rate them, split by
+              party, is shown on each profile (see the next item).
             </P>
-          </More>
-        </Limitation>
-        <Limitation title="Some bills are labelled by content">
-          <P>
-            Where no roll call recorded how each party voted, a bill&apos;s lean comes from
-            comparing it with each party&apos;s positions in that area: for partisan depth (the lean
-            bar and its policy-area breakdown), and for the party badge on a sponsored bill with no
-            tracked roll call, or only a housekeeping one (a motion to table or recommit, say).
-            Bipartisan or cross-cutting bills can be misread. It never decides whether a member
-            broke with their party.
-          </P>
-        </Limitation>
+          </Box>
+          <Box
+            title="Heavy breaking reads the same whether it builds a coalition or burns one"
+            dek="A roll-call record can't tell breaks that win both sides from breaks that cost the base. Approval split by party helps, but for House members the gap stays open."
+            more="the evidence, and how sharp approval figures are"
+          >
+            <P>
+              Breaking with the party about as often as the seat predicts is the pattern a
+              member&apos;s own party&apos;s primary voters reward. The wider electorate leans the
+              other way: in Senate general elections from 1990 to 2024, members who broke more than
+              their seat&apos;s norm did somewhat better
+              <Cite id="carson2010" />, and some heavy breakers keep winning by appealing to both
+              sides. A roll-call record can&apos;t tell them apart from members whose breaks cost
+              them their base. That takes approval split by party: approval of the member among the
+              Democrats, Republicans and independents they represent, from the Cooperative Election
+              Study, shown on each profile. A senator&apos;s figures agree closely from the 2022
+              survey to the 2024 one; a House district&apos;s barely agree, so for House members the
+              gap stays open.
+            </P>
+            <More label="How sharp the approval figures can be">
+              <P>
+                The 2024 survey asked about 60,000 respondents in October and November 2024, and a
+                profile shows a figure only for a member still in the seat the survey asked about:
+                one who has since moved to another seat or district shows none. Small groups are
+                pulled toward what a typical member of the same party gets from that group, by an
+                amount estimated from how much members actually differ
+                <Cite id="efron1975" />. The survey&apos;s size sets how sharp the House figures can
+                be: a district has about a hundred respondents with an opinion (a median of 96), so
+                most House figures come mostly from what similar members get. Democrats&apos;
+                ratings are nearly the only ones that rest mostly on the district&apos;s own
+                respondents, for about three in five Democratic members and two in five Republican
+                ones (another group&apos;s does for ten members in all), and the profile marks every
+                figure that doesn&apos;t. Senators&apos; figures mostly rest on their own
+                state&apos;s respondents (a median of 672).
+              </P>
+            </More>
+          </Box>
+          <Box
+            title="Some bills are labelled by content"
+            dek="Where no roll call shows how each party voted, a bill's lean comes from its content. Bipartisan bills can be misread. It never decides a party break."
+            more="where content labels are used"
+          >
+            <P>
+              Where no roll call recorded how each party voted, a bill&apos;s lean comes from
+              comparing it with each party&apos;s positions in that area: for partisan depth (the
+              lean bar and its policy-area breakdown), and for the party badge on a sponsored bill
+              with no tracked roll call, or only a housekeeping one (a motion to table or recommit,
+              say). Bipartisan or cross-cutting bills can be misread. It never decides whether a
+              member broke with their party.
+            </P>
+          </Box>
+        </Boxes>
       </Section>
 
       <Section id="presidents" title="Presidents">
-        <Limitation title="Historians’ judgment carries its biases in">
-          <P>
-            The historians&apos; rank on a president&apos;s page is C-SPAN&apos;s survey, shown as
-            theirs. Historians as a field tend to favor presidents who expanded federal power, and
-            hold off rating recent presidents, so the rank carries those tendencies.
-          </P>
-        </Limitation>
-        <Limitation title="The economy isn’t only the president’s doing">
-          <P>
-            A president&apos;s page sets postwar growth beside 13 peer economies, which takes out
-            shocks the whole rich world shared, and sets aside the peers&apos; catching up with US
-            incomes. It can&apos;t take out what hit the US alone without a president causing it.
-            Jobs, unemployment and inflation aren&apos;t compared with peers: jobs are counted in
-            millions, which has no counterpart abroad, and compared with peers, unemployment
-            can&apos;t be measured consistently before the 1980s and inflation took on a strong
-            trend with era. Unemployment and inflation instead sit beside what presidents who
-            started from the same rates saw. Presidents before 1947 are compared on growth and, from
-            1939, jobs.
-          </P>
-        </Limitation>
+        <Boxes>
+          <Box
+            title="Historians’ judgment carries its biases in"
+            dek="The historians' rank on a president's page is C-SPAN's survey, shown as theirs. Historians tend to favor presidents who expanded federal power."
+            more="the other tendency"
+          >
+            <P>
+              The historians&apos; rank on a president&apos;s page is C-SPAN&apos;s survey, shown as
+              theirs. Historians as a field tend to favor presidents who expanded federal power, and
+              hold off rating recent presidents, so the rank carries those tendencies.
+            </P>
+          </Box>
+          <Box
+            title="The economy isn’t only the president’s doing"
+            dek="Growth is set beside 13 peer economies, which takes out shocks the rich world shared. It can't take out what hit the US alone."
+            figure={{ type: "stat", value: 13, caption: "peer economies" }}
+            more="jobs, unemployment, inflation, early presidents"
+          >
+            <P>
+              A president&apos;s page sets postwar growth beside 13 peer economies, which takes out
+              shocks the whole rich world shared, and sets aside the peers&apos; catching up with US
+              incomes. It can&apos;t take out what hit the US alone without a president causing it.
+              Jobs, unemployment and inflation aren&apos;t compared with peers: jobs are counted in
+              millions, which has no counterpart abroad, and compared with peers, unemployment
+              can&apos;t be measured consistently before the 1980s and inflation took on a strong
+              trend with era. Unemployment and inflation instead sit beside what presidents who
+              started from the same rates saw. Presidents before 1947 are compared on growth and,
+              from 1939, jobs.
+            </P>
+          </Box>
+        </Boxes>
       </Section>
 
       <Section id="ballot-coverage" title="Ballots">
-        <Limitation title="A state ballot page is the statewide slice">
-          <P>
-            Ballots are printed per precinct, so there&apos;s no single &ldquo;ballot&rdquo; for a
-            whole state. Pages show federal contests, statewide measures and (where a state&apos;s
-            own results or candidate list name them) statewide offices, state legislative seats and
-            judgeships. County and city offices and local measures are shown only for a small,
-            hand-picked list of towns (looked up from each town hall&apos;s address); anywhere else,
-            showing them would mean taking a home address to a lookup service, and we won&apos;t do
-            that. Every page lists what it omits for that state and links to the election office.
-            See <A href="/about/elections">Elections &amp; ballots</A>.
-          </P>
-        </Limitation>
-        <Limitation
-          title={
-            liveCount
-              ? `Live results cover ${liveCount} ${live!.length === 1 ? "state" : "states"}`
-              : "Live results cover only some states"
-          }
-        >
-          <P>
-            On election night the count is read from each state&apos;s own results site, and only{" "}
-            {liveCount
-              ? `${liveCount} ${live!.length === 1 ? "publishes" : "publish"}`
-              : "some states publish"}{" "}
-            one in a form we can read reliably. Other states&apos; pages say they have no live count
-            and link to the office that publishes it; they are left unshaded on the results map
-            rather than drawn as having no votes. A count is never called: a race
-            &ldquo;leads&rdquo; even once the state lists its count as official; Civitas calls no
-            race. See <A href="/about/elections#election-night">Elections &amp; ballots</A>.
-          </P>
-        </Limitation>
-        <Limitation title="Ballot-measure coverage is still filling in">
-          <P>
-            Measures are read only from the states themselves, each through a reader built for that
-            state&apos;s own publication, with no third-party source behind them. A few states
-            publish no official list of what they have certified, and the rest aren&apos;t read
-            automatically yet. Those pages say the state isn&apos;t covered and which of the two
-            reasons applies, as do pages where an update failed, rather than showing an empty
-            section, which would read as &ldquo;no measures&rdquo;, a different and potentially
-            damaging claim. There, the official link on every page is the complete answer.
-          </P>
-        </Limitation>
+        <Boxes>
+          <Box
+            title="A state ballot page is the statewide slice"
+            dek="Pages show federal and statewide contests and measures. Local contests appear only for a few hand-picked towns: anywhere else, it would take a home address."
+            more="what each page shows and omits"
+          >
+            <P>
+              Ballots are printed per precinct, so there&apos;s no single &ldquo;ballot&rdquo; for a
+              whole state. Pages show federal contests, statewide measures and (where a state&apos;s
+              own results or candidate list name them) statewide offices, state legislative seats
+              and judgeships. County and city offices and local measures are shown only for a small,
+              hand-picked list of towns (looked up from each town hall&apos;s address); anywhere
+              else, showing them would mean taking a home address to a lookup service, and we
+              won&apos;t do that. Every page lists what it omits for that state and links to the
+              election office. See <A href="/about/elections">Elections &amp; ballots</A>.
+            </P>
+          </Box>
+          <Box
+            title={
+              liveCount
+                ? `Live results cover ${liveCount} ${live!.length === 1 ? "state" : "states"}`
+                : "Live results cover only some states"
+            }
+            dek="Other states' pages say they have no live count and link to the office that publishes it. Civitas calls no race."
+            more="how counts are read and shown"
+          >
+            <P>
+              On election night the count is read from each state&apos;s own results site, and only{" "}
+              {liveCount
+                ? `${liveCount} ${live!.length === 1 ? "publishes" : "publish"}`
+                : "some states publish"}{" "}
+              one in a form we can read reliably. Other states&apos; pages say they have no live
+              count and link to the office that publishes it; they are left unshaded on the results
+              map rather than drawn as having no votes. A count is never called: a race
+              &ldquo;leads&rdquo; even once the state lists its count as official; Civitas calls no
+              race. See <A href="/about/elections#election-night">Elections &amp; ballots</A>.
+            </P>
+          </Box>
+          <Box
+            title="Ballot-measure coverage is still filling in"
+            dek="Measures are read only from the states themselves. A state not covered says so, and why, rather than showing an empty section."
+            more="why an empty section would mislead"
+          >
+            <P>
+              Measures are read only from the states themselves, each through a reader built for
+              that state&apos;s own publication, with no third-party source behind them. A few
+              states publish no official list of what they have certified, and the rest aren&apos;t
+              read automatically yet. Those pages say the state isn&apos;t covered and which of the
+              two reasons applies, as do pages where an update failed, rather than showing an empty
+              section, which would read as &ldquo;no measures&rdquo;, a different and potentially
+              damaging claim. There, the official link on every page is the complete answer.
+            </P>
+          </Box>
+        </Boxes>
       </Section>
 
       <Section id="news-and-data" title="News and classification">
-        <Limitation title="The news sources lean center to left">
-          <P>
-            The six newsrooms span center to lean-left under common media-bias ratings, with no
-            right-of-center outlet at present. That shapes which stories surface, even though every
-            sentence shown is quoted.
-          </P>
-        </Limitation>
-        <Limitation title="Quoting means some stories publish nothing">
-          <P>
-            The language model is small (1.2 billion parameters). If it can&apos;t locate a claim
-            that passes the word-for-word checks, the story isn&apos;t published, so some days carry
-            fewer issues than the news would justify.
-          </P>
-        </Limitation>
-        <Limitation title="Classification lacks world knowledge">
-          <P>
-            Embedding-based classification is fast and consistent, but it knows only what the text
-            says. Shell companies and deliberately obscure names can land in the wrong industry. For
-            PACs it is the last resort: a union&apos;s PAC, and a company&apos;s PAC the SEC lists,
-            take their industry from those records, and a PAC with no sponsoring organization counts
-            as political money. That last rule is right for about seven in ten of them; the rest are
-            law and accounting partnerships&apos; and physician groups&apos; PACs, whose money then
-            counts toward no industry. Trade associations and private companies have no such record,
-            and their names are still read; measured against the records, the name reading agreed
-            with them on about six PACs in ten.
-          </P>
-        </Limitation>
+        <Boxes>
+          <Box
+            title="The news sources lean center to left"
+            dek="The six newsrooms span center to lean-left under common media-bias ratings, with no right-of-center outlet at present. That shapes which stories surface, even though every sentence shown is quoted."
+            figure={{ type: "stat", value: 6, caption: "newsrooms" }}
+          />
+          <Box
+            title="Quoting means some stories publish nothing"
+            dek="The language model is small (1.2 billion parameters). If it can't locate a claim that passes the word-for-word checks, the story isn't published, so some days carry fewer issues than the news would justify."
+          />
+          <Box
+            title="Classification lacks world knowledge"
+            dek="Embedding-based classification knows only what the text says, so shell companies and obscure names can land in the wrong industry. For PACs it is the last resort."
+            more="the PAC rules, and how well they hold"
+          >
+            <P>
+              Embedding-based classification is fast and consistent, but it knows only what the text
+              says. Shell companies and deliberately obscure names can land in the wrong industry.
+              For PACs it is the last resort: a union&apos;s PAC, and a company&apos;s PAC the SEC
+              lists, take their industry from those records, and a PAC with no sponsoring
+              organization counts as political money. That last rule is right for about seven in ten
+              of them; the rest are law and accounting partnerships&apos; and physician groups&apos;
+              PACs, whose money then counts toward no industry. Trade associations and private
+              companies have no such record, and their names are still read; measured against the
+              records, the name reading agreed with them on about six PACs in ten.
+            </P>
+          </Box>
+        </Boxes>
       </Section>
 
       <P>
