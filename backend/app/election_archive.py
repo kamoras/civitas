@@ -60,7 +60,7 @@ logger = logging.getLogger(__name__)
 # The candidate fields the archive shows: who was on the ballot, as printed,
 # and in which party. Campaign-finance figures moved on after the election
 # and are the FEC's to serve; a race's own page linked them while it ran.
-CANDIDATE_FIELDS = ("id", "name", "ballotName", "party", "partyGroup", "partyLabel", "confirmed",
+CANDIDATE_FIELDS = ("id", "name", "ballotName", "displayName", "party", "partyGroup", "partyLabel", "confirmed",
                     "incumbentChallenge")
 
 

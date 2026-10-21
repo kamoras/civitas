@@ -47,6 +47,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models import Candidate, Race, RaceCoverageItem
+from app.name_casing import person_display_name
 from app import broadcast
 from app.pipeline.analyze.bluesky_utils import BSKY_MAX_CHARS, strip_hashtags
 from app.pipeline.analyze.grounding import (
@@ -194,7 +195,7 @@ def _roster_fact(item: RaceCoverageItem, race: Race, db: Session) -> str | None:
     cand = db.query(Candidate).filter(Candidate.id == resolved_id).first()
     if cand is None:
         return None
-    return f"FEC filings list {cand.name} as a candidate in {_office_label(race)}."
+    return f"FEC filings list {person_display_name(cand.name)} as a candidate in {_office_label(race)}."
 
 
 def _generate_post_text(item: RaceCoverageItem, race: Race, roster_fact: str) -> str | None:

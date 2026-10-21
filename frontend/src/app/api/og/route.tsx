@@ -1034,6 +1034,7 @@ async function fetchJson<T>(path: string, revalidate: number): Promise<T | null>
 export type OgRaceCandidate = {
   name: string;
   ballotName?: string | null;
+  displayName?: string | null;
   partyGroup?: string | null;
   partyLabel?: string | null;
   confirmed?: boolean;
