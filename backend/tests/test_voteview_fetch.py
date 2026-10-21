@@ -129,12 +129,15 @@ class TestBuildAndGates:
         assert unweighted["extremity_p90"] > 3 * base["extremity_p90"]
         assert thin["extremity_p90"] < 1.5 * base["extremity_p90"]
 
-    def test_the_scale_needs_scale_min_full_full_records(self):
-        """The section measures its own scale from SCALE_MIN_FULL full
-        records; with one fewer it has none (with_carried_scale then carries
-        the last one)."""
+    def test_the_scale_needs_enough_full_records_to_bound_its_percentile(self):
+        """The section measures its own scale once its full records hold a
+        distribution-free 95% interval for the 90th percentile (36 records);
+        with one fewer it has none (with_carried_scale then carries the last
+        one)."""
+        need = next(n for n in range(1, 1000) if voteview.quantile_bounded(n))
+        assert need == 36 and 0.9 ** 36 <= 0.025 < 0.9 ** 35
         state_pvi = score_calculator._state_pvi()
-        for full, has_scale in ((voteview.SCALE_MIN_FULL, True), (voteview.SCALE_MIN_FULL - 1, False)):
+        for full, has_scale in ((need, True), (need - 1, False)):
             rows = _synthetic_rows(state_pvi)
             for i, r in enumerate(rows):
                 r["nominate_number_of_votes"] = "500" if i < full else "5"

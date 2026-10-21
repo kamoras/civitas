@@ -127,7 +127,8 @@ function BillsPageContent() {
             title="Bills in motion"
           >
             <p>
-              Where {inMotion.toLocaleString()} bills sit in the legislative pipeline right now.
+              Where {inMotion.toLocaleString("en-US")} bills sit in the legislative pipeline right
+              now.
             </p>
             {/* Verified live (2026-08 review): this total is genuinely
                 correct — it's the pipeline breakdown below MINUS
@@ -374,7 +375,7 @@ function ReachedBillsList({
             <>
               {" "}
               <span className="font-mono tabular-nums text-ink-lo">
-                {`(${total.toLocaleString()}${filtered ? " matching the filters above" : ""})`}
+                {`(${total.toLocaleString("en-US")}${filtered ? " matching the filters above" : ""})`}
               </span>
             </>
           )}
@@ -400,7 +401,8 @@ function ReachedBillsList({
       ) : (
         <>
           <p className="mb-3 font-mono text-xs text-ink-min">
-            Showing {bills.length.toLocaleString()} of {total.toLocaleString()}, latest action first
+            Showing {bills.length.toLocaleString("en-US")} of {total.toLocaleString("en-US")},
+            latest action first
           </p>
           <div className="border border-white/[0.07] divide-y divide-white/[0.07]">
             {bills.map((bill) => (
@@ -422,7 +424,7 @@ function ReachedBillsList({
               >
                 {page > current.page
                   ? "Loading…"
-                  : `Load more (${(total - bills.length).toLocaleString()} remaining)`}
+                  : `Load more (${(total - bills.length).toLocaleString("en-US")} remaining)`}
               </button>
             </div>
           )}
@@ -622,7 +624,7 @@ function HotBillsList({
           : "Bills named in today's Action Center issues, most-named first."}
       </p>
       <p className="font-mono text-xs text-ink-min mb-3">
-        Showing {results.length.toLocaleString()} of {total.toLocaleString()} bill
+        Showing {results.length.toLocaleString("en-US")} of {total.toLocaleString("en-US")} bill
         {total !== 1 ? "s" : ""}
       </p>
       <div className="border border-white/[0.07] divide-y divide-white/[0.07]">
@@ -640,7 +642,7 @@ function HotBillsList({
           >
             {loadingMore
               ? "Loading..."
-              : `Load more (${(total - results.length).toLocaleString()} remaining)`}
+              : `Load more (${(total - results.length).toLocaleString("en-US")} remaining)`}
           </button>
         </div>
       )}

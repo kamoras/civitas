@@ -1,12 +1,15 @@
 {
-  "_source": "scripts/calibrate_site_search.py on a copy of the production database of 2026-10-08 (the agency list synced 2026-10-16; no nominations: the copy predates them) (2026-10-16): parameters fitted on half the entities' known-item probes, measured on the other half.",
+  "_source": "scripts/calibrate_site_search.py on the live index (2026-10-21): parameters fitted on half the entities' known-item probes, measured on the other half. pool and enough: the smallest on their grids that change no fit probe's answer rank against a 5,000-candidate pool; list_floor is not fitted: known-item probes say whether an answer is listed, never whether the rest of a list is junk. Ranking parameters kept from the calibration in use (--candidates-only).",
   "params": {
     "prefix_credit": 0.7,
     "fuzzy_credit": 0.7,
     "label_floor": 0.45,
     "importance_weight": 0.05,
     "direct_margin": 0.3,
-    "direct_floor": 0.6
+    "direct_floor": 0.6,
+    "list_floor": 0.3,
+    "pool": 240,
+    "enough": 5
   },
   "wrong_direct_target": 0.005,
   "wrong_direct_type_cap": 0.0,
@@ -18,59 +21,76 @@
       "wrong_direct_rate": 0.0
     },
     "deep": {
-      "probes": 409,
+      "probes": 410,
       "success_at_1": 1.0,
       "direct_hit_rate": 0.998,
       "wrong_direct_rate": 0.0
     },
     "document": {
-      "probes": 385,
-      "success_at_1": 0.974,
-      "direct_hit_rate": 0.925,
+      "probes": 395,
+      "success_at_1": 0.957,
+      "direct_hit_rate": 0.935,
       "wrong_direct_rate": 0.0
     },
     "identifier": {
-      "probes": 415,
+      "probes": 416,
       "success_at_1": 1.0,
       "direct_hit_rate": 1.0,
       "wrong_direct_rate": 0.0
     },
     "name": {
-      "probes": 395,
+      "probes": 403,
       "success_at_1": 1.0,
-      "direct_hit_rate": 0.969,
+      "direct_hit_rate": 0.967,
       "wrong_direct_rate": 0.0
     },
     "page": {
-      "probes": 75,
+      "probes": 91,
       "success_at_1": 1.0,
-      "direct_hit_rate": 0.932,
-      "wrong_direct_rate": 0.0
+      "direct_hit_rate": 0.898,
+      "wrong_direct_rate": 0.011
     },
     "prefix": {
-      "probes": 397,
+      "probes": 413,
       "success_at_8": 1.0
     },
     "surname": {
-      "probes": 292,
+      "probes": 309,
       "success_at_1": 1.0,
-      "direct_hit_rate": 0.983,
+      "direct_hit_rate": 0.976,
       "wrong_direct_rate": 0.0
     },
     "typo": {
-      "probes": 403,
-      "success_at_1": 0.998,
-      "direct_hit_rate": 0.729,
+      "probes": 406,
+      "success_at_1": 0.995,
+      "direct_hit_rate": 0.742,
       "wrong_direct_rate": 0.0
     },
     "all": {
-      "probes": 2588,
-      "direct_hit_rate": 0.932,
-      "wrong_direct_rate": 0.0
+      "probes": 2644,
+      "direct_hit_rate": 0.933,
+      "wrong_direct_rate": 0.0004
     },
     "latency_ms": {
-      "p50": 6.2,
-      "p95": 24.8
+      "p50": 8.0,
+      "p95": 39.9
     }
-  }
+  },
+  "kinds": [
+    "agency",
+    "bill",
+    "committee",
+    "district",
+    "document",
+    "issue",
+    "justice",
+    "measure",
+    "member",
+    "monitor",
+    "page",
+    "president",
+    "race",
+    "rollcall",
+    "state"
+  ]
 }

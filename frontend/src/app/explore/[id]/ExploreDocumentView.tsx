@@ -79,7 +79,14 @@ function formatCommentDate(dateStr: string): string {
   if (!dateStr) return "";
   try {
     const d = new Date(dateStr);
-    return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+    // UTC: a bare "YYYY-MM-DD" parses as UTC midnight, which a US zone read
+    // as the day before (and differently from the UTC server: React #418).
+    return d.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      timeZone: "UTC",
+    });
   } catch {
     return dateStr;
   }

@@ -1841,8 +1841,8 @@ def _mentions_full_name(
     exactly the false positives the bare-surname path is hardened against by
     _COMMON_WORD_SURNAMES. Measured against the current roster:
 
-      "reported cases" contains "ed case"    -> Rep. Ed Case (D-HI)
-      "several green energy jobs" contains "al green" -> Rep. Al Green (D-TX)
+      "reported cases" contains "ed case"    -> a sitting member's full name
+      "several green energy jobs" contains "al green" -> another's
 
     Both surnames are on the common-word stoplist, so the surname pass
     correctly refuses them — and the full-name pass then tagged the member
@@ -1850,7 +1850,7 @@ def _mentions_full_name(
 
     Anchored with lookarounds rather than \b, because \b is a *transition*
     assertion: for a name ending in a non-word character it asserts the
-    opposite of what is wanted. "Angus King Jr." ends in ".", and
+    opposite of what is wanted. "Jane Roe Jr." ends in ".", and
     r"...jr\.\b" demands a word character right after that period — which
     "Jr. voted" does not have, so every member carrying a Jr./Sr. suffix would
     silently stop matching.
@@ -2203,7 +2203,7 @@ def _surname_owned_by_other_name(text: str, match: "re.Match", member_name: str)
     is neither one of the member's own name tokens nor a title/honorific.
 
     "featuring Ferran Torres' late goal" → the "Torres" is owned by
-    "Ferran", who is not Rep. Ritchie Torres → True.
+    "Ferran", who is not the member named Torres → True.
     "Sen. Torres said" / "... change. Torres said" → False (title-prefixed
     or sentence-initial — could genuinely be the member).
     """
@@ -2224,6 +2224,61 @@ def _surname_owned_by_other_name(text: str, match: "re.Match", member_name: str)
         return False
     member_tokens = {t.lower().rstrip(".") for t in member_name.split()}
     return prev_lower not in member_tokens
+
+
+# A stretch of text whose longer words are at least this share capitalised
+# is a Title Case headline, where any word wears a capital ("Overhaul Much
+# Harder"). A convention: sentence case runs near the share of proper
+# nouns, Title Case near 1.
+TITLE_CASE_SHARE = 0.6
+# Words this long or longer count toward that share: Title Case leaves
+# "of", "the", "and" and "for" lowercase.
+_TITLE_CASE_MIN_LEN = 4
+_WORD_RE = re.compile(r"[A-Za-z][A-Za-z'’-]*")
+
+
+def ordinary_words(db: Session) -> frozenset[str]:
+    """Words the stored news prose writes in lower case (the feed articles'
+    headlines and descriptions, the issues' own lines): a surname among them
+    ("harder", "brown") is also an ordinary word, so its capital at the
+    start of a sentence or in a Title Case headline says nothing. Measured
+    from the data each call, never a typed list."""
+    texts = [f"{t} {d}" for t, d in db.query(FeedArticle.title, FeedArticle.description)]
+    texts += [f"{s or ''} {f or ''}" for s, f in db.query(ActionIssue.summary, ActionIssue.facts)]
+    return frozenset(w for t in texts for w in _LOWER_WORD_RE.findall(t))
+
+
+_LOWER_WORD_RE = re.compile(r"(?<![\w'’-])[a-z][a-z'’-]*(?![\w-])")
+
+
+def _proper_noun_mentions(text: str, word: str, ordinary: frozenset[str] = frozenset()) -> list["re.Match"]:
+    """The places `word` (a surname, as the name is written) appears in
+    `text` as a proper noun: with its capital, never case-blind ("much
+    harder" linked Rep. Harder, 2026-10). Where every word may wear a
+    capital, at the start of a sentence or inside a Title Case headline
+    ("Overhaul Much Harder"), it counts only when the stored prose never
+    writes it as an ordinary word (`ordinary`, ordinary_words) or a title
+    comes before it ("Rep. Harder", which says a person is meant)."""
+    found = []
+    for m in re.finditer(r"(?<![\w'’-])" + re.escape(word) + r"(?![\w-])", text):
+        before = text[: m.start()].rstrip()
+        prev = re.search(r"([A-Za-z]+)\.?$", before)
+        if prev and prev.group(1).lower() in _NAME_PRECEDING_TITLES:
+            found.append(m)
+            continue
+        if word.lower() not in ordinary:
+            found.append(m)
+            continue
+        if not before or before[-1] in ".!?:;\"“‘":
+            continue
+        start = max(before.rfind(c) for c in ".!?") + 1
+        stops = [i for i in (text.find(c, m.end()) for c in ".!?") if i != -1]
+        others = [w for w in _WORD_RE.findall(text[start:min(stops, default=len(text))])
+                  if len(w) >= _TITLE_CASE_MIN_LEN and w != word]
+        if others and sum(w[0].isupper() for w in others) / len(others) >= TITLE_CASE_SHARE:
+            continue
+        found.append(m)
+    return found
 
 
 def _find_related_senators(
@@ -2312,6 +2367,7 @@ def _find_related_senators(
             full_name_matched_last_names.add(s.name.split()[-1].lower())
 
     surname_holders = Counter(s.name.split()[-1].lower() for s, _ in all_members if s.name)
+    ordinary: frozenset[str] | None = None  # read once, when a surname turns up
     for s, chamber in all_members:
         if s.id in matched:
             continue
@@ -2336,9 +2392,13 @@ def _find_related_senators(
         if last_name in full_name_matched_last_names:
             continue
 
-        # Last-name-only match needs word-boundary + disambiguation
-        pattern = re.compile(r"\b" + re.escape(last_name) + r"\b", re.IGNORECASE)
-        occurrences = list(pattern.finditer(issue_text))
+        # Last-name-only match: the surname as a proper noun, then
+        # disambiguation.
+        if last_name not in issue_text_lower:  # a cheap scan before the regex
+            continue
+        if ordinary is None:
+            ordinary = ordinary_words(db)
+        occurrences = _proper_noun_mentions(issue_text, s.name.split()[-1], ordinary)
         if occurrences and all(
             _surname_owned_by_other_name(issue_text, m, s.name) for m in occurrences
         ):
@@ -2390,13 +2450,18 @@ def _find_related_officials(
     if current_president:
         last_name = current_president.name.split()[-1]
         president_patterns = [
-            last_name,
             current_president.name,
             "the president",
             "the white house",
             "executive order",
         ]
-        if any(p.lower() in text.lower() for p in president_patterns):
+        # The surname alone with its capital, anywhere, as a word or one end
+        # of a compound ("pro-X", "X-backed"; a president's surname opens a
+        # headline as often as not): a case-blind substring also read the
+        # ordinary word and any word containing it.
+        if any(p.lower() in text.lower() for p in president_patterns) or re.search(
+            r"(?<![A-Za-z])" + re.escape(last_name) + r"(?![a-z])", text
+        ):
             if not any(e["id"] == current_president.id for e in combined):
                 combined.append({
                     "id": current_president.id,
@@ -2427,7 +2492,7 @@ def _find_related_officials(
             ):
                 continue
             else:
-                occurrences = list(re.finditer(r"\b" + re.escape(last) + r"\b", text, re.IGNORECASE))
+                occurrences = _proper_noun_mentions(text, last, ordinary_words(db))
                 if not occurrences or all(_surname_owned_by_other_name(text, m, j.name) for m in occurrences):
                     continue
                 reason = "referenced in coverage"
@@ -4802,7 +4867,7 @@ def _other_senate_race_named(db, cycle: int, state: str, race_id: str, story_tex
     if not others or len(known) != len(others):
         return None
     # Leniently: a capitalised surname of theirs is enough to hold back
-    # ("Raphael Warnock leads as Perdue concedes to Brennan" is about both
+    # ("Jane Doe leads as Roe concedes to Poe" is about both
     # races). Holding back can only cost a miss.
     return any(_names_a_candidate(story_text, theirs, surname_alone=True) for theirs in known)
 

@@ -8,8 +8,8 @@ import { useSyncExternalStore } from "react";
 export const THEME_KEY = "civitas-theme";
 
 /** Applies a choice made earlier in this tab before the first paint, so the
- *  page never flashes the other theme. Inline in <head>, so it runs ahead
- *  of the stylesheet's first use. */
+ *  page never flashes the other theme. First in <body>, so it runs before any
+ *  of the page is drawn (app/layout.tsx says why not in <head>). */
 export const THEME_BOOT = `try{var t=sessionStorage.getItem("${THEME_KEY}");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}`;
 
 type Theme = "light" | "dark";
