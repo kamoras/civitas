@@ -45,6 +45,8 @@ function href(search: Search, page: number): string {
 // A markup can name twenty bills: past this many, they wait behind "More"
 // with the entry's whole text rather than filling the box with chips.
 const BILL_CHIPS = 3;
+const SOURCE_LINK =
+  "inline-flex min-h-6 items-center text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos";
 
 /**
  * One meeting or report as a box ("Boxes, not blocks"): the chamber, kind
@@ -63,16 +65,34 @@ function EntryBox({ e, meetings }: { e: CommitteeEntry; meetings: number | null 
       title={
         e.committee ?? e.report ?? (e.kind === "meeting" ? "Committee meeting" : "Committee report")
       }
-      quote={{ text: quote, source: `Daily Digest${e.pages ? `, ${e.pages}` : ""}` }}
+      quote={{
+        text: quote,
+        // The day and the bills as links in the credit line, not a row of
+        // chips: a row per box made the list longer than the paragraphs
+        // it replaced.
+        source: (
+          <>
+            Daily Digest{e.pages ? `, ${e.pages}` : ""} ·{" "}
+            <Link
+              href={dayHref(e.date)}
+              aria-label={`The day's report, ${longDate(e.date)}`}
+              className={SOURCE_LINK}
+            >
+              That day
+            </Link>
+            {bills.length <= BILL_CHIPS &&
+              bills.map((b) => (
+                <span key={b.href}>
+                  {" · "}
+                  <Link href={b.href} className={`${SOURCE_LINK} font-id`}>
+                    {b.label}
+                  </Link>
+                </span>
+              ))}
+          </>
+        ),
+      }}
       figure={meetings ? { type: "stat", value: meetings, caption: "meetings on record" } : null}
-      links={[
-        {
-          label: "That day",
-          href: dayHref(e.date),
-          ariaLabel: `The day's report, ${longDate(e.date)}`,
-        },
-        ...(bills.length > BILL_CHIPS ? [] : bills),
-      ]}
       more={
         longer
           ? {
