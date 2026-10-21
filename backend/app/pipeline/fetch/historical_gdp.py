@@ -98,6 +98,17 @@ _RECOVERY_TRIGGER_PCT = 0.97  # term-start GDP >3% below a recent peak
 _RECOVERY_LOOKBACK_YEARS = 5
 
 
+# Long enough that a stored read never counts as expired for the read path.
+_NO_EXPIRY_HOURS = 24 * 365 * 100
+
+
+def stored_real_gdp(db: Session) -> dict[int, float] | None:
+    """The last fetched {year: real GDP} series, whatever its age (the read
+    path never fetches); None when none is stored."""
+    cached = api_cache_get(db, _CACHE_TIER, _CACHE_KEY, max_age_hours=_NO_EXPIRY_HOURS)
+    return {int(y): float(v) for y, v in cached["data"].items()} if cached else None
+
+
 def _recent_peak(gdp_by_year: dict[int, float], term_start_year: int) -> tuple[int, float] | None:
     """Most recent local peak in the `_RECOVERY_LOOKBACK_YEARS` before (and
     including) term_start_year, or None if no data in that window."""

@@ -72,7 +72,14 @@ from app.pipeline.fetch.presidential_approval import (
     fetch_president_approval_history,
     recent_polls,
 )
-from app.pipeline.fetch.macro_series import CONSUMER_PRICES, UNEMPLOYMENT, fetch_annual_series, inflation_by_year
+from app.pipeline.fetch.electoral_college import fetch_elections
+from app.pipeline.fetch.macro_series import (
+    CONSUMER_PRICES,
+    PAYROLLS,
+    UNEMPLOYMENT,
+    fetch_annual_series,
+    inflation_by_year,
+)
 from app.pipeline.fetch.presidential_elections import fetch_election_margins
 from app.pipeline.fetch.voteview import fetch_house_party_distance
 from app.pipeline.fetch.presidential_roster import fetch_presidential_roster
@@ -200,6 +207,12 @@ async def run_president_pipeline(db: Session) -> dict:
         logger.info("Fetching unemployment and consumer prices (FRED/BLS)...")
         unemployment_by_year = await fetch_annual_series(client, db, UNEMPLOYMENT)
         cpi_by_year = await fetch_annual_series(client, db, CONSUMER_PRICES)
+        # Not scored: every election's electoral vote (National Archives)
+        # and popular margin, for the president page's elections chart.
+        await fetch_elections(db)
+        # Not scored: kept for the president page's jobs chart
+        # (app/president_charts.py), which reads it stored.
+        await fetch_annual_series(client, db, PAYROLLS)
         inflation_series = inflation_by_year(cpi_by_year) if cpi_by_year else None
 
         logger.info("Fetching real GDP per person, US and peer economies (World Bank)...")

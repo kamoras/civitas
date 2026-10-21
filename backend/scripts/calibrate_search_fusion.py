@@ -59,6 +59,8 @@ from sqlalchemy import text  # noqa: E402
 
 import calibrate_site_search as site_probes  # noqa: E402
 import evaluate_explore_search as doc_probes  # noqa: E402
+from app.database import SessionLocal  # noqa: E402
+from app.services.explore_search import hybrid_search  # noqa: E402
 from app.site_search import FUSION_PATH, Fusion, answer, document_url, fused_order  # noqa: E402
 from app.site_search_index import SITE_SEARCH_DB  # noqa: E402
 
@@ -114,7 +116,6 @@ def build(index: str, db, samples: int, per_type: int, seed: int) -> list[dict]:
 def gather(probes: list[dict], index: str, db) -> list[dict]:
     """Each probe's direct jump, ranked matches and hybrid documents: the
     page's whole read path, once."""
-    from app.services.explore_search import hybrid_search
 
     t0 = time.time()
     for i, p in enumerate(probes):
@@ -219,7 +220,6 @@ def main() -> None:
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
-    from app.database import SessionLocal
 
     db = SessionLocal()
     try:

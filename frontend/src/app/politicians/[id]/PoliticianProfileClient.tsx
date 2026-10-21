@@ -10,7 +10,8 @@ import BackToTop from "@/components/BackToTop";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import MemberScorecard from "@/components/scorecard/MemberScorecard";
 import PresidentScorecard from "@/components/scorecard/PresidentScorecard";
-import JusticeScorecard from "@/components/scorecard/JusticeScorecard";
+import JusticeProfile from "@/components/justice/JusticeProfile";
+import JusticesAppointed from "@/components/justice/JusticesAppointed";
 import { formerOfficeNotice } from "@/lib/officeStatus";
 import { issueDateLabel, asLabel } from "@/lib/formatting";
 import { houseSeatLabel, stateBallotHref } from "@/lib/elections";
@@ -22,6 +23,7 @@ import type { President } from "@/types/president";
 import type { Justice } from "@/types/justice";
 import type { PeerComparison } from "@/types/peers";
 import type { PresidentPeers } from "@/types/presidentPeers";
+import type { PresidentCharts } from "@/types/presidentCharts";
 import Photo from "@/components/Photo";
 import RedrawnSeatNote from "@/components/redistricting/RedrawnSeatNote";
 import SeatOnMap from "@/components/elections/SeatOnMap";
@@ -87,6 +89,7 @@ export default function PoliticianProfileClient({
   profile,
   breakdown = null,
   peers = null,
+  charts = null,
   strip,
   supportLine,
 }: {
@@ -103,6 +106,8 @@ export default function PoliticianProfileClient({
   /** Where the member stands among the caucus, or a president among the
    *  other presidencies. */
   peers?: PeerComparison | PresidentPeers | null;
+  /** A president's charts against the other presidencies. */
+  charts?: PresidentCharts | null;
 }) {
   const { identity, branch, activeIssues, governmentRecord, scorecard } = profile;
   const isMember = branch === "senate" || branch === "house";
@@ -223,12 +228,14 @@ export default function PoliticianProfileClient({
                   key={(scorecard as unknown as President).id}
                   president={scorecard as unknown as President}
                   peers={peers as PresidentPeers | null}
+                  charts={charts}
                   scoredOn={profile.scoredOn}
                   titleAs="h1"
                 />
               )}
+              {branch === "president" && <JusticesAppointed presidentId={profile.id} />}
               {branch === "scotus" && (
-                <JusticeScorecard
+                <JusticeProfile
                   key={(scorecard as unknown as Justice).id}
                   justice={scorecard as unknown as Justice}
                   titleAs="h1"

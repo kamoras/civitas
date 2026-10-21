@@ -17,7 +17,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.models import Justice, PipelineStatus, SupplementaryPipelineRun
+from app.models import Justice, JusticeAppointment, PipelineStatus, SupplementaryPipelineRun
 from app.pipeline import supplementary_pipeline
 from app.time_utils import utcnow
 
@@ -83,6 +83,11 @@ def _run(db_session, explore_result=None, justice_result=None, president_result=
         return asyncio.run(supplementary_pipeline.run_supplementary_pipeline())
 
 
+
+def _appointment() -> JusticeAppointment:
+    return JusticeAppointment(fjc_nid="1", name="Test Justice", last_key="justice", first_initial="T",
+                              seat="Associate Justice", nominated="2001-01-01", served_from="2001-02-01")
+
 class TestSupplementaryPipelineRunTracking:
     def test_creates_a_run_row_and_marks_it_completed(self, db_session):
         # Empty Justice table -> justices_missing=True -> always runs,
@@ -133,6 +138,7 @@ class TestSupplementaryPipelineRunTracking:
 
     def test_justices_skipped_outside_weekly_cadence_when_not_missing(self, db_session):
         db_session.add(Justice(id="j1", name="Test Justice", last_name="Justice", loyalty_through_term=2025))
+        db_session.add(_appointment())
         db_session.commit()
 
         # Pin "now" to a Wednesday (weekday() == 2), not Sunday (6).
@@ -144,6 +150,14 @@ class TestSupplementaryPipelineRunTracking:
         run = db_session.query(SupplementaryPipelineRun).one()
         assert run.justices_skipped is True
         assert run.justices_scored == 0
+
+    def test_justices_run_off_cadence_until_appointments_are_stored(self, db_session):
+        # The presidents' pages read the stored appointments: the night
+        # after the table is added, not the next Sunday.
+        db_session.add(Justice(id="j1", name="Test Justice", last_name="Justice", loyalty_through_term=2025))
+        db_session.commit()
+        with patch("app.pipeline.supplementary_pipeline.utcnow", return_value=datetime(2026, 7, 15)):
+            assert _run(db_session, justice_result={"justices": 9})["justices_scored"] == 9
 
     def test_justices_run_off_cadence_the_night_the_court_changes(self, db_session):
         # A confirmation or a departure: the Court's list differs from the
@@ -174,6 +188,7 @@ class TestSupplementaryPipelineRunTracking:
         db_session.add_all([
             Justice(id="j1", name="Old Row", last_name="Row", loyalty_through_term=2025, loyalty_votes_in=50),
             Justice(id="j2", name="New Justice", last_name="Justice", loyalty_through_term=2025),
+            _appointment(),
         ])
         db_session.commit()
         with patch("app.pipeline.supplementary_pipeline.utcnow", return_value=datetime(2026, 7, 15)):

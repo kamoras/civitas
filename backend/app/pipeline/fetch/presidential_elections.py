@@ -178,6 +178,24 @@ def _mandates_rows(
     return rows
 
 
+def popular_margin_by_year(html: str) -> dict[int, float]:
+    """{election year: the winner's popular-vote margin, points} from the
+    mandates table's Election and Popular Margin columns; an election
+    marked "nd" (before a national popular vote was tabulated) is left
+    out. For the president page's elections chart, not for scoring."""
+    out: dict[int, float] = {}
+    tables = lxml_html.fromstring(html).cssselect("table")
+    for row in tables[0].cssselect("tbody tr") if tables else []:
+        cells = row.cssselect("td")
+        if len(cells) < 6:
+            continue
+        year = re.search(r"\b(1[789]\d\d|20\d\d)\b", cells[1].text_content())
+        margin = _to_float(cells[3].text_content())
+        if year and margin is not None:
+            out[int(year.group(1))] = margin
+    return out
+
+
 def _fit_scales(rows) -> dict | None:
     """Least-squares maps from electoral figures onto the popular-margin
     scale, fit on rows where both exist:

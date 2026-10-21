@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.contact import BOT_USER_AGENT
 from app.http_client import make_async_client
-from app.models import Justice, President
+from app.models import Justice, JusticeAppointment, President
 from app.pipeline.analyze.justice_analyzer import analyze_justice_votes
 from app.pipeline.analyze.justice_loyalty import Estimate, Vote, estimates_by_justice, label, president_on
 from app.pipeline.fetch.justice_records import RECENT_TERMS, fetch_fjc, fetch_martin_quinn, fetch_scdb
@@ -157,6 +157,31 @@ _NAME_MATCH_MIN = 0.9
 _NAME_MATCH_MARGIN = 0.05
 
 
+_APPOINTMENT_FIELDS = ("nid", "name", "seat", "last", "first", "nominated", "from")
+
+
+def store_court_seats(db: Session, seats: list[dict] | None, presidents: list[President]) -> int | None:
+    """Replace the stored Supreme Court appointments with the FJC
+    directory's, each with the id of the president in office on its
+    nomination date (president_on over the presidents table, so a president
+    with two nonconsecutive terms gets the right presidency's id). Returns
+    how many were stored; None, keeping what is stored, when the directory
+    couldn't be read or the presidents table is empty: an outage is never
+    a Court with no appointments."""
+    rows = [a for a in seats or [] if all(a.get(k) for k in _APPOINTMENT_FIELDS)]
+    terms = [(p.id, p.term_start, p.term_end) for p in sorted(presidents, key=lambda p: p.term_start) if p.term_start]
+    if not rows or not terms:
+        return None
+    db.query(JusticeAppointment).delete()
+    db.add_all(JusticeAppointment(
+        fjc_nid=a["nid"], name=a["name"], last_key=a["last"], first_initial=a["first"], seat=a["seat"],
+        president_id=president_on(a["nominated"], terms), nominated=a["nominated"],
+        served_from=a["from"], served_until=a.get("until"),
+    ) for a in rows)
+    db.flush()
+    return len(rows)
+
+
 def _president_key(name: str) -> str:
     return " ".join(re.sub(r"[^a-z ]", " ", name.lower()).split())
 
@@ -208,6 +233,9 @@ async def run_justice_pipeline(db: Session) -> dict:
             return {"justices": 0, "votes": 0, "loyalty_unmeasured": "Oyez listed no sitting justices"}
 
         measured, unmeasured_why = await _measure_loyalty(client, db)
+        # Every appointment since 1789, for the presidents' pages; the
+        # cached read _measure_loyalty just made, so no second request.
+        fjc_seats = await fetch_fjc(client, db)
         # The record's terms: the Supreme Court Database for every term its
         # release covers, Oyez only after it. Oyez had entered the votes of
         # 13 of the 2024 term's 59 decided cases by 2026-10-08, so its
@@ -225,6 +253,8 @@ async def run_justice_pipeline(db: Session) -> dict:
 
     active_ids = {j["id"] for j in justices}
     presidents = db.query(President).all()
+    stored = store_court_seats(db, fjc_seats, presidents)
+    logger.info("Supreme Court appointments: %s", stored if stored is not None else "not read, stored ones kept")
 
     for j in justices:
         jid = j["id"]

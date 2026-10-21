@@ -17,7 +17,7 @@ from datetime import timedelta
 from app.database import SessionLocal
 from app.error_utils import record_exception
 from app.http_client import make_async_client
-from app.models import Justice, PipelineStatus, SupplementaryPipelineRun
+from app.models import Justice, JusticeAppointment, PipelineStatus, SupplementaryPipelineRun
 from app.ops_alerts import resolve_ops_alert, send_ops_alert
 from app.pipeline import lease
 from app.pipeline.justice_pipeline import court_roster_changed, run_justice_pipeline
@@ -129,7 +129,10 @@ async def run_supplementary_pipeline() -> dict:
             Justice.loyalty_through_term.is_(None)
             | (Justice.appointer_effect.is_(None) & Justice.loyalty_votes_in.is_not(None)),
         ).first() is not None
-        run_justices = justices_missing or unmeasured or utcnow().weekday() == 6
+        # Nor any Supreme Court appointment stored yet (the presidents'
+        # pages read them): the night after the table is added, not Sunday.
+        appointments_missing = db.query(JusticeAppointment.id).first() is None
+        run_justices = justices_missing or unmeasured or appointments_missing or utcnow().weekday() == 6
         if not run_justices:
             # A confirmation or a departure is picked up the night Oyez
             # lists it, not on the next weekly day (one request).

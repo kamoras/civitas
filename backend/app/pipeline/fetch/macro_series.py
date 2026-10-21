@@ -26,6 +26,9 @@ logger = logging.getLogger(__name__)
 
 UNEMPLOYMENT = "UNRATE"
 CONSUMER_PRICES = "CPIAUCSL"
+# All employees, total nonfarm (BLS CES0000000001, monthly from 1939): read
+# for the president page's jobs-since-inauguration chart.
+PAYROLLS = "PAYEMS"
 
 _URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={series}"
 _CACHE_TIER = "fred-annual-series"
@@ -71,6 +74,17 @@ async def fetch_annual_series(client: httpx.AsyncClient, db: Session, series: st
         cached = {"years": {str(y): v for y, v in years.items()}}
         api_cache_set(db, _CACHE_TIER, series, cached, normal_ttl_hours=_CACHE_TTL_HOURS)
     return {int(y): float(v) for y, v in cached["years"].items()}
+
+
+# Long enough that a stored read never counts as expired for the read path.
+_NO_EXPIRY_HOURS = 24 * 365 * 100
+
+
+def stored_annual_series(db: Session, series: str) -> dict[int, float] | None:
+    """The last fetched {year: annual average} for a series, whatever its
+    age (the read path never fetches); None when none is stored."""
+    cached = api_cache_get(db, _CACHE_TIER, series, max_age_hours=_NO_EXPIRY_HOURS)
+    return {int(y): float(v) for y, v in cached["years"].items()} if cached else None
 
 
 def inflation_by_year(cpi: dict[int, float]) -> dict[int, float]:
