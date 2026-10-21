@@ -219,8 +219,21 @@ function Overview({ a }: { a: AgencyDetail }) {
     />
   );
   return (
-    <section id="overview" data-share-section="overview" className="mb-10">
-      <BoxGrid columns={3} label="At a glance" labelId="overview-heading">
+    <section
+      id="overview"
+      data-share-section="overview"
+      aria-labelledby="overview-heading"
+      className="mb-10"
+    >
+      {/* The grid's heading row, drawn here so the share button sits beside
+          it rather than on a row of its own under the boxes. */}
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 pb-1.5">
+        <h2 id="overview-heading" className="font-display text-xl font-semibold text-ink-hi">
+          At a glance
+        </h2>
+        <ShareSectionButton label={`${a.name} at a glance`} />
+      </div>
+      <BoxGrid columns={3}>
         <RecordBox
           compact
           kicker="Budget · USAspending.gov"
@@ -282,7 +295,6 @@ function Overview({ a }: { a: AgencyDetail }) {
                   On the Federal Register
                 </BoxAnchor>
               )}
-              <ShareSectionButton label={`${a.name} at a glance`} />
             </div>
           }
           more={
