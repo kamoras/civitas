@@ -3,7 +3,6 @@
 import { membersHref } from "@/lib/routes";
 import { fade, overlay, partyMark } from "@/lib/chartColors";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import ClosingLine from "@/components/elections/ClosingLine";
 import { INLINE_LINK } from "@/lib/controlStyles";
 import SectionTabs from "@/components/layout/SectionTabs";
@@ -130,7 +129,6 @@ function ElectionCountdown({
 }
 
 export default function ElectionsPage() {
-  const router = useRouter();
   // What the server already read (elections/layout.tsx), when it could.
   const initial = useElectionsInitial();
   const hub = useElectionsHub();
@@ -291,8 +289,6 @@ export default function ElectionsPage() {
       cancelled = true;
     };
   }, [haveServerPvi]);
-
-  const goToBallot = (state: string) => router.push(stateBallotHref(state));
 
   /* `states` is indexed unguarded in three places below, and a payload without
      it takes the whole page down with "Cannot read properties of undefined" —
@@ -594,10 +590,8 @@ export default function ElectionsPage() {
 
                 <div className="px-4 pt-3">
                   <RaceMap
-                    selectedState={null}
-                    onStateClick={(state) => {
-                      if (state !== "DC") goToBallot(state);
-                    }}
+                    label="Partisan lean by state"
+                    marks={pvi.stateMarks ?? {}}
                     getFillColor={(state) =>
                       state === "DC" ? DC_FILL : pviFillColor(leanByState[state] ?? null)
                     }

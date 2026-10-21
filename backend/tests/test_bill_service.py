@@ -16,7 +16,7 @@ from app.main import app
 from app.models import ActionIssue, Representative, RepSponsoredBill, Senator, SponsoredBill
 from app.services.bill_service import (
     clear_bill_collection_cache, get_bill_detail, get_bills_in_flight, short_title_index, stage_base_rate,
-    stage_milestones,
+    stage_flow, stage_milestones,
 )
 from tests.conftest import TEST_CONGRESS
 
@@ -248,6 +248,10 @@ class TestFiltering:
         result = get_bills_in_flight(db_session, stage="ENACTED")
 
         assert result.stage_counts == {"INTRODUCED": 1, "ENACTED": 1}
+        assert {k: v.model_dump() for k, v in result.stage_flow.items()} == {
+            "INTRODUCED": {"share_text": "50%", "bar_percent": 100.0},
+            "ENACTED": {"share_text": "50%", "bar_percent": 100.0},
+        }
 
     def test_stage_counts_respect_the_non_stage_filters(self, db_session):
         # chamber/party/q DO narrow stage_counts — that's what lets the
@@ -820,3 +824,12 @@ def test_short_title_index_keeps_names_news_uses(db_session):
         db_session.add(model(bill_id=bill_id, title=title, congress=settings.CURRENT_CONGRESS, **owner))
     db_session.commit()
     assert short_title_index(db_session) == {"protect college sports act": {"S.4668", "HR.20"}}
+
+
+def test_the_funnel_draws_from_the_api():
+    flow = stage_flow({"INTRODUCED": 900, "ENACTED": 9, "VETOED": 1000, "REPORTED": 0})
+    # Shares are of every bill; widths against the fullest main-line stage
+    # (vetoed is a chip, not a bar), a nonzero bar floored at 2.
+    assert flow["INTRODUCED"] == {"shareText": "47%", "barPercent": 100.0}
+    assert flow["ENACTED"] == {"shareText": "0%", "barPercent": 2.0}
+    assert flow["REPORTED"]["barPercent"] == 0.0

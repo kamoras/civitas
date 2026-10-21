@@ -529,6 +529,12 @@ class BillInFlightSchema(CamelModel):
     mention_count: int = 0
 
 
+class StageFlowSchema(CamelModel):
+    """One stage's row in the bills funnel (bill_service.stage_flow)."""
+    share_text: str
+    bar_percent: float
+
+
 class PaginatedBillsSchema(CamelModel):
     bills: list[BillInFlightSchema]
     total: int
@@ -536,6 +542,9 @@ class PaginatedBillsSchema(CamelModel):
     per_page: int
     total_pages: int
     stage_counts: dict[str, int]
+    # The funnel's drawing per stage: share of all bills counted, and the
+    # bar's width against the fullest stage (bill_service.stage_flow).
+    stage_flow: dict[str, StageFlowSchema] = {}
     # Bills past introduction and referral among stage_counts (the "bills
     # in motion" headline).
     in_motion: int = 0
