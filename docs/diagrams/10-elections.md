@@ -245,17 +245,21 @@ page ("these are not ballot positions"); a certified ballot gets none.
 ## The page
 
 `StateBallotClient.tsx` lays the ballot out as a research tool, not a mock
-ballot: every contest is a box styled after a printed ballot (shaded header,
-the ballot's own "Vote for one"), and the order of the list is the ballot's
-order. `lib/ballotContests.ts` builds that list once from the API response;
-everything below reads it.
+ballot: every contest is a record box (`BoxGrid`, `RecordBox`; AGENTS.md
+"Boxes, not blocks") whose kicker carries the ballot's own instruction
+("Vote for one"), and the order of the boxes is the ballot's order.
+`lib/ballotContests.ts` builds that list once from the API response;
+everything below reads it. Each box's line and count come from the backend
+(`services/ballot_boxes.py`, `boxes` on the payload), as do the "This
+ballot" figures after the contests.
 
-- **Desktop**: three columns, Federal | State | Measures · local, fitting
-  about one screen. A contest's research opens in a drawer beside the ballot
-  (`ContestDrawer.tsx`), with Previous/Next through the whole list.
-- **Phone**: an index of every contest, one line each; a contest opens on its
-  own screen (the same drawer, full screen) with Previous/Next — the
-  voting-machine pattern, one contest per screen.
+- **One layout at every width**: compact boxes (the office, its line and count,
+  a race's candidates by name; money and commands behind "More") in ruled
+  columns (one on a phone,
+  two, then three, by the grid's own width). A contest's title opens its
+  research in a drawer (`ContestDrawer.tsx`), beside the ballot on a
+  computer and full screen on a phone, with Previous/Next through the whole
+  list: the voting-machine pattern, one contest per screen.
 - Declared write-ins are dropped by every certified-list source, TX included
   (`tx_civix` skips Civix `cdCandType` "WRTIN"): they are not printed.
 - **Tabs only inside a race** (`RaceResearch.tsx`: Money / Record / News, equal

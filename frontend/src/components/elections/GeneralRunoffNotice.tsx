@@ -1,5 +1,6 @@
 import { calendarDate } from "@/lib/congress";
 import type { GeneralRunoff, OtherPrimary, TopPrimary } from "@/types/election";
+import NoteLine from "./NoteLine";
 
 /** "December 12" from "YYYY-12-12", read as a calendar date (no clock). */
 function dayWords(iso: string): string {
@@ -39,16 +40,20 @@ export default function GeneralRunoffNotice({
 }) {
   if (!runoffs?.length) return null;
   return (
-    <div className="mb-6 flex flex-col gap-2" data-testid="general-runoff">
+    <div data-testid="general-runoff">
       {runoffs.map((r) => (
-        <p
+        <NoteLine
           key={`${String(r.offices)}-${r.runoffDate}`}
-          className="font-mono text-xs leading-relaxed text-ink-lo"
+          lead={
+            r.openPrimary
+              ? `In ${officeWords(r.offices)}, ${calendarDate(electionDate)} is an all-party primary.`
+              : `In ${officeWords(r.offices)}, winning takes a majority.`
+          }
         >
           {r.openPrimary
-            ? `In ${officeWords(r.offices)}, ${calendarDate(electionDate)} is an all-party primary: every candidate of every party is on one ballot. A candidate who wins a majority takes the seat; otherwise the top two meet in a runoff on ${dayWords(r.runoffDate)}.`
-            : `In ${officeWords(r.offices)}, winning takes a majority of the votes. If no one gets one, the top two meet in a runoff on ${dayWords(r.runoffDate)}.`}
-        </p>
+            ? `Every candidate of every party is on one ballot. A candidate who wins a majority takes the seat; otherwise the top two meet in a runoff on ${dayWords(r.runoffDate)}.`
+            : `If no one gets a majority of the votes, the top two meet in a runoff on ${dayWords(r.runoffDate)}.`}
+        </NoteLine>
       ))}
     </div>
   );
@@ -71,17 +76,17 @@ export function TopPrimaryNotice({
 }) {
   if (!rules?.length) return null;
   return (
-    <div className="mb-6 flex flex-col gap-2" data-testid="top-primary">
+    <div data-testid="top-primary">
       {rules.map((r) => {
         const n = COUNT_WORDS[r.advance] ?? String(r.advance);
         const scope = r.offices === "*" ? "" : `For ${officeWords(r.offices)}, `;
         return (
-          <p
+          <NoteLine
             key={`${String(r.offices)}-${r.advance}`}
-            className="font-mono text-xs leading-relaxed text-ink-lo"
+            lead={`${scope}${stateName} held a top-${n} primary, so a contest can list two candidates of one party.`}
           >
-            {`${scope}${stateName} held a top-${n} primary. Every candidate, of every party, ran on one primary ballot. The ${n} with the most votes went on to November, whatever their party. So a November contest can have more than one candidate from the same party.`}
-          </p>
+            {`Every candidate, of every party, ran on one primary ballot. The ${n} with the most votes went on to November, whatever their party. So a November contest can have more than one candidate from the same party.`}
+          </NoteLine>
         );
       })}
     </div>
@@ -102,9 +107,12 @@ export function RankedChoiceNotice({
 }) {
   if (!rankedChoice) return null;
   return (
-    <p className="mb-6 font-mono text-xs leading-relaxed text-ink-lo" data-testid="ranked-choice">
-      {`${stateName} decides its U.S. Senate and House contests by ranked-choice voting. You can rank the candidates in order of preference; ranking more than one is optional. If no one wins a majority of first choices, the last-place candidate is dropped and those ballots go to their next choice, round by round, until one candidate has a majority. The state counts those rounds after election night.`}
-    </p>
+    <NoteLine
+      testId="ranked-choice"
+      lead={`${stateName} decides its U.S. Senate and House contests by ranked-choice voting.`}
+    >
+      {`You can rank the candidates in order of preference; ranking more than one is optional. If no one wins a majority of first choices, the last-place candidate is dropped and those ballots go to their next choice, round by round, until one candidate has a majority. The state counts those rounds after election night.`}
+    </NoteLine>
   );
 }
 

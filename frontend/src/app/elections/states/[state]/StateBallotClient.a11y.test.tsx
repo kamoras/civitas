@@ -131,8 +131,8 @@ describe("ballot page accessibility", () => {
 
   it("has none with a race's research drawer open, on every tab", async () => {
     render(<StateBallotClient ballot={ballot} />);
-    const index = screen.getByRole("navigation", { name: "Contests on this ballot" });
-    await userEvent.click(within(index).getByRole("button", { name: /U\.S\. Senator/ }));
+    const index = screen.getByTestId("ballot-contests");
+    await userEvent.click(within(index).getByRole("button", { name: "U.S. Senator" }));
     const drawer = within(screen.getByRole("dialog"));
     for (const tab of ["Money", "Record", "News 1"]) {
       await userEvent.click(drawer.getByRole("tab", { name: tab }));
@@ -142,10 +142,10 @@ describe("ballot page accessibility", () => {
 
   it("has none in the House district picker and a picked district", async () => {
     render(<StateBallotClient ballot={ballot} />);
-    const index = screen.getByRole("navigation", { name: "Contests on this ballot" });
-    await userEvent.click(within(index).getByRole("button", { name: /U\.S\. Representative/ }));
+    const index = screen.getByTestId("ballot-contests");
+    await userEvent.click(within(index).getByRole("button", { name: "U.S. Representative" }));
     expect(await violations()).toEqual([]);
-    const box = screen.getByTestId("ballot-columns");
+    const box = screen.getByTestId("ballot-contests");
     await userEvent.keyboard("{Escape}");
     await userEvent.click(within(box).getByRole("button", { name: "District 2" }));
     expect(await violations()).toEqual([]);

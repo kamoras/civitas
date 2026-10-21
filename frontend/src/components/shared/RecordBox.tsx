@@ -108,7 +108,8 @@ type Line =
   | { quote: { text: string; source: ReactNode }; dek?: undefined };
 
 export type RecordBoxProps = Line & {
-  kicker: ReactNode;
+  /** A short label over the title; a compact box may go without. */
+  kicker?: ReactNode;
   mark?: string;
   tone?: BoxTone;
   title: ReactNode;
@@ -130,8 +131,15 @@ export type RecordBoxProps = Line & {
   more?: { label: string; children: ReactNode } | null;
   /** Spans the grid, with a bigger title and figure. */
   lead?: boolean;
+  /** Tighter: less padding and a narrower figure column, for a page whose
+   *  boxes are a list a reader scans (the ballot's contests). */
+  compact?: boolean;
   /** Anything else the box draws (a ladder, a share button), under the line. */
   children?: ReactNode;
+  /** What the box draws across its full width, under the line and the
+   *  figure (a list of candidates, a row of commands): beside a figure,
+   *  `children` share the text's narrower column. */
+  below?: ReactNode;
 };
 
 const RULE = "border-white/25";
@@ -152,7 +160,9 @@ export default function RecordBox(props: RecordBoxProps) {
     action,
     more,
     lead = false,
+    compact = false,
     children,
+    below,
   } = props;
   const Heading = `h${level}` as const;
   return (
@@ -161,7 +171,7 @@ export default function RecordBox(props: RecordBoxProps) {
       {...(share ? { [SHARE_SECTION_ATTR]: share } : {})}
       // The rule left of a box sits in the middle of the grid's column gap;
       // BoxGrid clips the ones left of its first column.
-      className={`@container relative min-w-0 border-b py-4 ${RULE} before:absolute before:inset-y-0 before:-left-5 before:w-px before:bg-white/25 ${
+      className={`@container relative min-w-0 border-b ${compact ? "py-2.5" : "py-4"} ${RULE} before:absolute before:inset-y-0 before:-left-5 before:w-px before:bg-white/25 ${
         lead ? "col-span-full" : ""
       }`}
     >
@@ -170,20 +180,26 @@ export default function RecordBox(props: RecordBoxProps) {
           figure
             ? lead
               ? "@min-[40rem]:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] @min-[40rem]:items-center"
-              : "@min-[20rem]:grid-cols-[minmax(0,1fr)_7rem] @min-[20rem]:items-center @min-[26rem]:grid-cols-[minmax(0,1fr)_9.5rem]"
+              : compact
+                ? "@min-[20rem]:grid-cols-[minmax(0,1fr)_5.5rem] @min-[20rem]:items-center"
+                : "@min-[20rem]:grid-cols-[minmax(0,1fr)_7rem] @min-[20rem]:items-center @min-[26rem]:grid-cols-[minmax(0,1fr)_9.5rem]"
             : ""
         }`}
       >
         <div className="min-w-0">
-          <Kicker mark={mark} tone={tone}>
-            {kicker}
-          </Kicker>
+          {kicker && (
+            <Kicker mark={mark} tone={tone}>
+              {kicker}
+            </Kicker>
+          )}
           <Heading
             {...headingAttrs}
             className={`font-display font-semibold text-ink-hi [overflow-wrap:anywhere] ${
               lead
                 ? "mb-2 text-[1.5rem] leading-tight @min-[40rem]:text-[1.875rem]"
-                : "mb-1 text-[1.1875rem] leading-snug"
+                : compact
+                  ? "mb-0.5 text-[1.0625rem] leading-snug"
+                  : "mb-1 text-[1.1875rem] leading-snug"
             }`}
           >
             {href ? (
@@ -238,8 +254,9 @@ export default function RecordBox(props: RecordBoxProps) {
           </div>
         )}
       </div>
+      {below && <div className={compact ? "mt-2" : "mt-3"}>{below}</div>}
       {more && (
-        <details className="group/more mt-3 text-sm">
+        <details className={`group/more text-sm ${compact ? "mt-1.5" : "mt-3"}`}>
           <summary
             className={`${INLINE_LINK} inline-flex min-h-6 cursor-pointer list-none items-center gap-1.5 [&::-webkit-details-marker]:hidden`}
           >

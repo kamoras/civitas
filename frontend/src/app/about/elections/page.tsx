@@ -76,10 +76,11 @@ export default async function ElectionsChapter() {
         <P>
           Each state&apos;s page at{" "}
           <span className="font-mono text-ink-hi">/elections/states/ST</span> is laid out as a
-          research tool, not a mock ballot, and never marks a choice. On a computer it sets out the
-          ballot in three columns (federal offices, state offices, then measures and local
-          contests), and opens any contest&apos;s research beside it: money raised, a member of
-          Congress&apos;s voting record, news coverage. On a phone it opens one contest per screen.
+          research tool, not a mock ballot, and never marks a choice. It sets out the ballot as
+          boxes in the ballot&apos;s order (federal offices, state offices, then measures and local
+          contests), each with a short line and a count, and opens any contest&apos;s research
+          beside it: money raised, a member of Congress&apos;s voting record, news coverage. On a
+          phone it opens one contest per screen.
         </P>
         <P>
           Candidates appear under the name their state prints on its ballot. Each contest states the

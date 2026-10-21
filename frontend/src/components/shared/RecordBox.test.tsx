@@ -100,4 +100,69 @@ describe("RecordBox", () => {
     const { container } = grid();
     expect(await violations(container)).toEqual([]);
   });
+
+  it("shows a stat's text value, a deadline's countdown and a grid under a section", async () => {
+    const { container } = render(
+      <section aria-labelledby="ballot">
+        <h2 id="ballot">Ballot research</h2>
+        <BoxGrid label="Contests" labelId="contests" labelLevel={3}>
+          <RecordBox
+            level={4}
+            kicker="Usual vote"
+            title="Connecticut leans D+8"
+            dek="Not a forecast."
+            figure={{ type: "stat", value: -8, text: "D+8", caption: "statewide lean" }}
+          />
+          <RecordBox
+            level={4}
+            kicker="Next deadline"
+            tone="deadline"
+            title="Mail ballot requests close Nov 2"
+            figure={{ type: "countdown", closes: "2026-11-02", daysLeft: 12, caption: "to apply" }}
+          />
+        </BoxGrid>
+      </section>
+    );
+    expect(screen.getByRole("heading", { level: 3, name: "Contests" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 4, name: "Connecticut leans D+8" })).toBeTruthy();
+    // The lean as the backend writes it, never the signed number.
+    expect(screen.getByRole("img", { name: "D+8 statewide lean." })).toBeTruthy();
+    expect(screen.queryByText("-8")).toBeNull();
+    // A deadline says what closes, and draws no comment period's bar.
+    expect(screen.getByRole("img", { name: "12 days left to apply." })).toBeTruthy();
+    expect(screen.getByText("days left to apply")).toBeTruthy();
+    expect(container.textContent).not.toContain("comment");
+    expect(await violations(container)).toEqual([]);
+  });
+
+  it("draws a compact box with no kicker, tighter, with a narrower figure column", () => {
+    render(
+      <RecordBox
+        compact
+        title="Statewide offices"
+        dek="5 offices on the ballot."
+        figure={{ type: "stat", value: 5, caption: "offices" }}
+      />
+    );
+    const box = screen.getByRole("heading", { name: "Statewide offices" }).closest("article")!;
+    expect(box.className).toContain("py-2.5");
+    expect(box.querySelector(".grid")!.className).toContain("_5.5rem]");
+    expect(box.textContent).toBe("Statewide offices5 offices on the ballot.5offices");
+  });
+
+  it("draws `below` across the box, after the figure, not in the text's column", () => {
+    render(
+      <RecordBox
+        kicker="Federal offices"
+        title="U.S. Senator"
+        figure={{ type: "stat", value: 4, caption: "candidates" }}
+        below={<p>Roy Cooper, Democrat</p>}
+      />
+    );
+    const row = screen.getByText("Roy Cooper, Democrat");
+    const figure = screen.getByRole("img", { name: "4 candidates." });
+    expect(figure.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // A sibling of the text-and-figure grid, so it gets the box's width.
+    expect(row.closest(".grid")).toBeNull();
+  });
 });

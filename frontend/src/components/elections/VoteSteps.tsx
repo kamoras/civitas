@@ -2,6 +2,8 @@ import type { VoteStep, VoteTask, VoterCalendar } from "@/types/election";
 import { safeHref } from "@/lib/formatting";
 import { INLINE_LINK } from "@/lib/controlStyles";
 import { countdownText } from "@/components/elections/VoterCalendar";
+import RecordFigure from "@/components/shared/RecordFigure";
+import type { CountdownFigure } from "@/types/figure";
 
 /** The verb on each step's button. No two share a label (WCAG 2.4.6). */
 export const STEP_LABEL: Record<VoteTask, string> = {
@@ -147,6 +149,21 @@ export function VoteStepsLead({
   const left = next ? countdownText(next) : null;
   const soon =
     next?.status === "open" && (next.countdown === "today" || next.countdown === "tomorrow");
+  const figure: CountdownFigure | null =
+    next?.status === "open" && next.daysLeft != null
+      ? { type: "countdown", closes: next.closesOn, daysLeft: next.daysLeft, caption: "" }
+      : null;
+  const jump = (
+    <a
+      href={hasSteps ? "#vote-steps" : "#voter-deadlines"}
+      // Inline, in the sentence: as an inline-flex box it would not wrap
+      // at 200% text on a 320px screen.
+      className="text-sm font-semibold text-ink-hi underline underline-offset-2 [overflow-wrap:anywhere] hover:text-phos"
+    >
+      {hasSteps ? "Your vote, step by step, and every deadline" : "Every voter deadline"}
+      <span aria-hidden="true">&nbsp;↓</span>
+    </a>
+  );
   return (
     <div data-testid="vote-steps-lead" className="mb-4">
       {ballotStep && ballotHref && (
@@ -168,28 +185,36 @@ export function VoteStepsLead({
           <Unconfirmed step={ballotStep} className="mt-1 text-xs text-ink-lo" />
         </div>
       )}
-      <p
-        className={`border border-white/30 border-l-4 bg-surface px-4 py-2 text-sm ${
+      {/* The next deadline in one line (#1160's form), with the days left
+          as a figure beside it: the backend's count, on the state's clock.
+          Every deadline stays quoted with its rule and source in the
+          calendar the link leads to (AGENTS.md section 7). */}
+      <div
+        className={`flex items-center gap-3 border border-white/30 border-l-4 bg-surface px-3 py-2 ${
           soon ? "border-l-signal-orange" : "border-l-ink-hi"
         }`}
       >
-        {next && (
-          <span className="text-ink-hi">
-            Next deadline: {next.sentence}
-            {left && <span className="font-semibold text-signal-amber"> · {left}</span>}.{" "}
-          </span>
+        {figure && (
+          <div className="w-16 shrink-0">
+            <RecordFigure f={figure} size="box" />
+          </div>
         )}
-        {passed && (
-          <span className="text-ink-hi">Every voter deadline for this election has passed. </span>
-        )}
-        <a
-          href={hasSteps ? "#vote-steps" : "#voter-deadlines"}
-          className="inline-flex min-h-6 items-center font-semibold text-ink-hi underline underline-offset-2 hover:text-phos"
-        >
-          {hasSteps ? "Your vote, step by step, and every deadline" : "Every voter deadline"}
-          <span aria-hidden="true">&nbsp;↓</span>
-        </a>
-      </p>
+        <p className="min-w-0 text-sm">
+          {next && (
+            <span className="text-ink-hi">
+              Next deadline: {next.sentence}
+              {!figure && left && (
+                <span className="font-semibold text-signal-amber"> · {left}</span>
+              )}
+              .{" "}
+            </span>
+          )}
+          {passed && (
+            <span className="text-ink-hi">Every voter deadline for this election has passed. </span>
+          )}
+          {jump}
+        </p>
+      </div>
     </div>
   );
 }

@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  buildBallotContests,
-  contestForHash,
-  contestHash,
-  countBallotContests,
-} from "./ballotContests";
+import { buildBallotContests, contestForHash, contestHash } from "./ballotContests";
 import type { StateBallot } from "@/types/election";
 
 function race(id: string, district: number | null) {
@@ -27,32 +22,6 @@ function ballot(overrides: Partial<StateBallot> = {}): StateBallot {
   } as unknown as StateBallot;
 }
 
-describe("countBallotContests", () => {
-  it("counts contests a voter marks, not page sections", () => {
-    // Senate + one House district. The placeholders ("State offices — not
-    // loaded yet", measures not loaded) and "News coverage" are sections.
-    const b = ballot();
-    const contests = buildBallotContests(b, false);
-    expect(contests.length).toBeGreaterThan(2);
-    expect(countBallotContests(contests, b)).toBe(2);
-  });
-
-  it("counts each statewide office, legislative chamber, court and measure", () => {
-    const b = ballot({
-      statewideCoverage: { status: "covered" },
-      statewideRaces: [{}, {}, {}],
-      stateLegRaces: [
-        { label: "State Senate", districts: [1, 2] },
-        { label: "State House", districts: [1] },
-      ],
-      judicialCoverage: { status: "covered" },
-      judicialRaces: [{}],
-      measures: [{}, {}],
-    } as unknown as Partial<StateBallot>);
-    expect(countBallotContests(buildBallotContests(b, true), b)).toBe(2 + 3 + 2 + 1 + 2);
-  });
-});
-
 describe("statewide ballot measures", () => {
   const m = (id: string, status: string) => ({ id, number: id, title: id, status });
 
@@ -63,7 +32,6 @@ describe("statewide ballot measures", () => {
     } as unknown as Partial<StateBallot>);
     const contests = buildBallotContests(b, false);
     expect(contests.find((c) => c.kind === "measures")!.subtitle).toBe("1 measure");
-    expect(countBallotContests(contests, b)).toBe(2 + 1);
   });
 
   it("never calls a dropped list that no read confirmed empty 'none'", () => {
@@ -109,7 +77,6 @@ describe("statewide seats", () => {
     const contests = buildBallotContests(b, false);
     const statewide = contests.find((c) => c.kind === "statewide")!;
     expect(statewide.subtitle).toBe("2 offices");
-    expect(countBallotContests(contests, b)).toBe(2 + 2);
   });
 
   it("counts every seat of a body every voter votes for", () => {
@@ -122,7 +89,6 @@ describe("statewide seats", () => {
     expect(contests.find((c) => c.kind === "statewide")!.subtitle).toBe(
       "1 office · from primary results"
     );
-    expect(countBallotContests(contests, b)).toBe(2 + 2);
   });
 
   it("gives no one-per-contest instruction where a contest fills two seats", () => {

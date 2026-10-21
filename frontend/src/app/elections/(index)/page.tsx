@@ -4,7 +4,6 @@ import { membersHref } from "@/lib/routes";
 import { fade, overlay, partyMark } from "@/lib/chartColors";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import StateJump from "@/components/home/StateJump";
 import ClosingLine from "@/components/elections/ClosingLine";
 import { INLINE_LINK } from "@/lib/controlStyles";
 import SectionTabs from "@/components/layout/SectionTabs";
@@ -81,8 +80,8 @@ function pviHoverColor(pvi: number | null): string {
 // election_calendar.federal_states(), read from the Senate's classes,
 // excludes it the same way) even though it's clickable on the map's SVG —
 // filtered out of both the map's click target and the state grid, which
-// list the states with federal contests.
-// By name: a phone shows each row's name, and a screen reader reads it.
+// list the states with federal contests. By name: a reader looks for
+// "Nebraska", not "NE", and a screen reader reads the name.
 const STATES = Array.from(new Set(Object.values(FIPS_TO_STATE)))
   .filter((s) => s !== "DC")
   .sort(byStateName);
@@ -460,42 +459,57 @@ export default function ElectionsPage() {
 
           {/* ── Pick a state ── First in every mode, right under the
               masthead: a voter came for one state's ballot (or, from
-              election day, its count), and on a phone the map and the
-              directory below sit screens down. An explicit, unremembered
-              choice (AGENTS.md section 8); the select doesn't take focus
-              by itself, since a phone opens its picker on focus. */}
-          <section
-            aria-labelledby="pick-state-heading"
-            className="mb-6 max-w-xl border border-white/30 bg-surface p-4"
-          >
+              election day, its count). One way to pick, the state tiles
+              (the map below is the lean picture); the header's state, when
+              set, is the first tap. An explicit, unremembered choice
+              (AGENTS.md section 8). */}
+          <section aria-labelledby="pick-state-heading" className="mb-6">
             <h2
               id="pick-state-heading"
-              className="font-display text-lg font-semibold leading-tight text-ink-hi"
+              className="flex flex-wrap items-baseline justify-between gap-x-4 border-b-2 border-ink-hi pb-1.5 font-display text-xl font-semibold text-ink-hi"
             >
-              {resultsMode ? "Your state's count and ballot" : "Your state's ballot"}
+              {resultsMode
+                ? "Pick a state for its count and ballot"
+                : "Pick a state for its ballot"}
             </h2>
-            {/* The state chosen in the header, one tap from its ballot. */}
             {yours.state && (
-              <p className="mt-1 flex flex-wrap items-center gap-x-4 text-sm text-ink-lo">
-                <span>
-                  Your state:{" "}
-                  <span className="text-ink-hi">{STATE_NAMES[yours.state] ?? yours.state}</span>
-                </span>
+              <p className="mt-2 flex flex-wrap items-center gap-x-5 text-base">
                 <Link
                   href={stateBallotHref(yours.state)}
-                  className={`inline-flex min-h-11 items-center ${INLINE_LINK}`}
+                  className={`inline-flex min-h-11 items-center font-semibold ${INLINE_LINK}`}
                 >
-                  {STATE_NAMES[yours.state] ?? yours.state}&apos;s ballot &rarr;
+                  Your state: {STATE_NAMES[yours.state] ?? yours.state} ballot &rarr;
                 </Link>
                 <Link
                   href={membersHref(yours.state)}
-                  className={`inline-flex min-h-11 items-center ${INLINE_LINK}`}
+                  className={`inline-flex min-h-11 items-center text-sm ${INLINE_LINK}`}
                 >
                   {STATE_NAMES[yours.state] ?? yours.state}&apos;s members &rarr;
                 </Link>
               </p>
             )}
-            <StateJump label="State" to="ballot" showYours={false} />
+            {/* Equal tiles, full names, in name order. The lean is only a
+                campaign figure: beside a live count it reads as a
+                prediction of it. */}
+            <ul className="mt-3 grid grid-cols-2 gap-px bg-white/[0.07] sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+              {STATES.map((state) => (
+                <li key={state} className="min-w-0">
+                  <Link
+                    href={stateBallotHref(state)}
+                    className="flex min-h-11 items-baseline justify-between gap-2 bg-surface-base px-3 py-2.5 transition-colors hover:bg-surface-raised"
+                  >
+                    <span className="min-w-0 text-sm text-ink-hi [overflow-wrap:anywhere]">
+                      {STATE_NAMES[state] ?? state}
+                    </span>
+                    {campaignMode && pvi && (
+                      <span className={`font-mono text-xs ${pviColor(leanByState[state] ?? null)}`}>
+                        {formatPvi(leanByState[state] ?? null)}
+                      </span>
+                    )}
+                  </Link>
+                </li>
+              ))}
+            </ul>
           </section>
 
           {/* Registration closing soon: one line to the calendar, which
@@ -547,7 +561,9 @@ export default function ElectionsPage() {
               {/* ── Map ── */}
               <section className="mt-6 border border-phos/20 bg-surface">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.07] px-4 py-2.5">
-                  <h2 className="font-mono text-xs text-ink-min">Click a state for its ballot</h2>
+                  <h2 className="font-mono text-xs text-ink-min">
+                    Partisan lean by state · click one for its ballot
+                  </h2>
                   <div className="flex flex-wrap items-center gap-4">
                     <span className="flex items-center gap-2 font-mono text-xs text-ink-lo">
                       <span
@@ -595,40 +611,10 @@ export default function ElectionsPage() {
                   <PviMethodologyNote meta={pvi.meta} />
                 </div>
               </section>
-
-              {/* ── Directory ── */}
-              <section className="mt-10">
-                <h2 className="flex items-baseline justify-between border-b border-white/15 pb-2 font-mono text-xs text-ink-min">
-                  <span>All states</span>
-                  <span aria-hidden="true">{STATES.length} on file</span>
-                </h2>
-                {/* Two columns of named 44px rows on a phone (mobile spec P10):
-                    a state is found by its name there, the code beside it. */}
-                <ul className="mt-3 grid grid-cols-2 gap-px bg-white/[0.07] sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8">
-                  {STATES.map((state) => (
-                    <li key={state}>
-                      <Link
-                        href={stateBallotHref(state)}
-                        className="flex min-h-11 items-center justify-between gap-2 bg-surface-base px-3 py-2.5 transition-colors hover:bg-surface-raised sm:items-baseline"
-                      >
-                        <span className="min-w-0 truncate font-mono text-sm text-ink-hi">
-                          <span className="sm:hidden">{STATE_NAMES[state] ?? state}</span>
-                          <span className="hidden sm:inline">{state}</span>
-                        </span>
-                        <span
-                          className={`font-mono text-xs ${pviColor(leanByState[state] ?? null)}`}
-                        >
-                          {formatPvi(leanByState[state] ?? null)}
-                        </span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </section>
             </>
           )}
 
-          {/* ── Reference ── After the map and the directory: useful to
+          {/* ── Reference ── After the states and the map: useful to
               know about the cycle, but not what a voter came for. The
               FEC's filing deadline is for candidates and researchers. */}
           {season?.season === "off_season" && campaignMode && (

@@ -22,6 +22,48 @@ import { getPartyMeta } from "@/components/elections/CandidateCard";
  * member going into the election reads SITTING MEMBER — MEMBER BEFORE
  * THIS ELECTION from election day on (`resultsMode`) — not INCUMBENT
  * (incumbencyLabel). */
+/** A race's candidates as one compact list of names, each with its party
+ * in words: the box's form, the money rows behind its "More". The same
+ * leaders and the same count of the rest as BallotRaceRows. */
+export function CandidateNames({
+  race,
+  newLines = false,
+  resultsMode = false,
+}: {
+  race: RaceWithCandidates;
+  newLines?: boolean;
+  resultsMode?: boolean;
+}) {
+  const redrawn = isRedrawnSeat(race, newLines);
+  const active = race.candidates.filter(isActiveCandidate);
+  if (active.length === 0)
+    return <p className="text-sm text-ink-lo">No candidates on record for this race yet.</p>;
+  const tiered = race.candidateSource === "filers" || race.candidateSource === "primary";
+  const { leaders, tail } = tiered ? tierCandidates(active) : { leaders: active, tail: [] };
+  const rows = [...leaders].sort((a, b) => (b.contributions ?? 0) - (a.contributions ?? 0));
+  return (
+    <ul className="flex flex-wrap gap-x-4 gap-y-1 text-[15px]">
+      {rows.map((c) => {
+        const party = getPartyMeta(c);
+        return (
+          <li key={c.id} className="min-w-0 [overflow-wrap:anywhere]">
+            <span className="font-semibold text-ink-hi">{candidateName(c)}</span>{" "}
+            <span className={`font-mono text-xs ${party.color}`}>{party.label}</span>
+            {c.incumbentChallenge === "I" && (
+              <span className="ml-1 font-mono text-xs text-ink-lo">
+                {incumbencyLabel("I", redrawn, c.incumbentRecord?.seat, resultsMode)}
+              </span>
+            )}
+          </li>
+        );
+      })}
+      {tail.length > 0 && (
+        <li className="font-mono text-xs text-ink-lo">+ {tail.length} more filed with the FEC</li>
+      )}
+    </ul>
+  );
+}
+
 export default function BallotRaceRows({
   race,
   newLines = false,

@@ -19,21 +19,29 @@ export interface DotsFigure {
   caption: string;
 }
 
-/** Days left in a comment period, and how much of it has gone. */
+/** Days left until a date closes: a comment period (with how much of it
+ *  has gone, drawn as a bar), or a voter deadline, which has no period to
+ *  draw and says what closes in `caption`. */
 export interface CountdownFigure {
   type: "countdown";
-  opened: string;
+  opened?: string;
   closes: string;
-  totalDays: number;
+  totalDays?: number;
   daysLeft: number;
-  elapsedPercent: number;
+  elapsedPercent?: number;
+  /** What the days are left for, after "N days left" ("to register"; ""
+   *  for nothing more, where the box's title says what closes). Without
+   *  one, a comment period's ("to comment"). */
+  caption?: string;
 }
 
-/** One counted figure and what it counts. */
+/** One counted figure and what it counts. `text`, where given, is how the
+ *  backend writes the value ("D+8" for a lean of -8), shown instead of it. */
 export interface StatFigure {
   type: "stat";
   value: number;
   caption: string;
+  text?: string;
 }
 
 export type Figure = SplitFigure | DotsFigure | CountdownFigure | StatFigure;

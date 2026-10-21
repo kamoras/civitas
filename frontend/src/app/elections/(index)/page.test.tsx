@@ -3,6 +3,7 @@ import { afterEach, beforeEach } from "vitest";
 import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import ElectionsPage from "./page";
 import { ElectionsInitialProvider, type ElectionsInitial } from "./ElectionsInitial";
+import { YOUR_STATE_KEY } from "@/hooks/useYourState";
 
 const fetchPviMap = vi.hoisted(() => vi.fn());
 const fetchLiveResults = vi.hoisted(() => vi.fn());
@@ -191,22 +192,59 @@ describe("ElectionsPage", () => {
         <ElectionsPage />
       </ElectionsInitialProvider>
     );
-    const picker = await screen.findByRole("region", { name: "Your state's ballot" });
-    const select = within(picker).getByRole("combobox", { name: "State" });
-    // Never focused by itself: a phone opens its picker on focus.
-    expect(select).not.toHaveFocus();
+    const picker = await screen.findByRole("region", { name: "Pick a state for its ballot" });
+    // One way to pick: the tiles, every state by its full name, in name
+    // order, each a link to its ballot (no select beside them).
+    expect(within(picker).queryByRole("combobox")).not.toBeInTheDocument();
+    const tiles = within(picker).getAllByRole("link");
+    // (The map module is mocked here with Georgia, New York and DC.)
+    expect(tiles).toHaveLength(2);
+    expect(tiles[0]).toHaveTextContent("Georgia");
+    expect(tiles[1]).toHaveTextContent("New York");
+    const names = tiles.map((t) => t.textContent!.replace(/[DR]\+\d+$|EVEN$|N\/A$/, ""));
+    expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
+    expect(within(picker).getByRole("link", { name: /^Georgia/ })).toHaveAttribute(
+      "href",
+      "/elections/states/GA"
+    );
+    expect(within(picker).getByRole("link", { name: /^Georgia/ })).toHaveTextContent("R+3");
     const map = await screen.findByTestId("race-map");
     const follows = (a: Node, b: Node) =>
       !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    // The map is the lean picture, under the tiles.
     expect(follows(picker, map)).toBe(true);
     // Registration closing: one line to the calendar, not a row per state.
     const line = screen.getByRole("link", { name: /Registration closes in the next 10 days/ });
     expect(line).toHaveTextContent("in 2 states, soonest tomorrow");
     expect(line).toHaveAttribute("href", "/elections/calendar");
-    expect(screen.queryByRole("link", { name: "Texas" })).not.toBeInTheDocument();
-    // The FEC's filing deadline is for candidates: after the directory.
+    expect(follows(picker, line)).toBe(true);
+    expect(follows(line, map)).toBe(true);
+    // The FEC's filing deadline is for candidates: after the map.
     const fec = screen.getByRole("region", { name: /FEC|report/i });
-    expect(follows(screen.getByText("All states"), fec)).toBe(true);
+    expect(follows(map, fec)).toBe(true);
+  });
+
+  it("makes the header's state the first tap", async () => {
+    sessionStorage.setItem(YOUR_STATE_KEY, "CT");
+    fetchPviMap.mockResolvedValue({ states: { CT: -8 }, districts: {}, cycleYear: 2026 });
+    render(
+      <ElectionsInitialProvider
+        value={{
+          pvi: { states: { CT: -8 }, districts: {}, cycleYear: 2026 } as never,
+          phase: null,
+          specials: null,
+          calendar: null,
+          renderedAt: Date.parse("2026-10-20T12:00:00Z"),
+        }}
+      >
+        <ElectionsPage />
+      </ElectionsInitialProvider>
+    );
+    const picker = await screen.findByRole("region", { name: "Pick a state for its ballot" });
+    const first = (await within(picker).findAllByRole("link"))[0];
+    expect(first).toHaveTextContent("Your state: Connecticut ballot →");
+    expect(first).toHaveAttribute("href", "/elections/states/CT");
+    sessionStorage.clear();
   });
 
   it("leads with the specials and the calendar between general elections", async () => {
@@ -424,7 +462,7 @@ describe("ElectionsPage", () => {
     fetchPviMap.mockResolvedValue({ districts: {}, cycleYear: 2026 });
     render(<ElectionsPage />);
 
-    expect(await screen.findByRole("link", { name: /GA/ })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: /^Georgia/ })).toBeInTheDocument();
     expect(screen.getByTestId("race-map")).toBeInTheDocument();
   });
 
@@ -441,7 +479,9 @@ describe("ElectionsPage", () => {
     render(<ElectionsPage />);
 
     await screen.findByTestId("race-map");
-    expect(screen.queryByRole("link", { name: /^DC/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: /^(DC|District of Columbia)/ })
+    ).not.toBeInTheDocument();
   });
 
   it("does not re-render once a second outside election night", async () => {

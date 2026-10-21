@@ -50,8 +50,11 @@ describe("VoteStepsLead", () => {
       <VoteStepsLead calendar={calendar({ next: d, items: [d] })} steps={[step("register")]} />
     );
     const lead = screen.getByTestId("vote-steps-lead");
-    expect(lead).toHaveTextContent("Next deadline: Online registration closes Oct 21 · 1 day left");
-    expect(lead.querySelector("p")!.className).toMatch(/border-l-signal-orange/);
+    // One line (#1160's form): the calendar's sentence, the days left as a
+    // figure beside it, the row marked when the deadline is a day off.
+    expect(lead).toHaveTextContent("Next deadline: Online registration closes Oct 21.");
+    const figure = within(lead).getByRole("img", { name: "1 day left." });
+    expect(figure.closest("div.border-l-signal-orange")).toBeTruthy();
     expect(within(lead).getByRole("link", { name: /step by step/ })).toHaveAttribute(
       "href",
       "#vote-steps"
@@ -141,9 +144,12 @@ describe("VoteStepsLead", () => {
     const d = deadline({ status: "closed", countdown: null, daysLeft: 0 });
     render(<VoteStepsLead calendar={calendar({ items: [d] })} steps={[]} />);
     expect(screen.getByTestId("vote-steps-lead")).toHaveTextContent(
-      "Every voter deadline for this election has passed."
+      "Every voter deadline for this election has passed"
     );
-    expect(screen.getByRole("link")).toHaveAttribute("href", "#voter-deadlines");
+    expect(screen.getByRole("link", { name: /Every voter deadline/ })).toHaveAttribute(
+      "href",
+      "#voter-deadlines"
+    );
     expect(screen.queryByTestId("ballot-lookup")).not.toBeInTheDocument();
   });
 

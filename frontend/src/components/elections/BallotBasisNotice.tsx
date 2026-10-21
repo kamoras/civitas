@@ -1,4 +1,5 @@
 import type { BallotBasis } from "@/types/election";
+import NoteLine from "./NoteLine";
 
 /**
  * Says what the candidate lists on this page actually are.
@@ -16,7 +17,9 @@ import type { BallotBasis } from "@/types/election";
  * filers for a ballot that holds about two. A voter reading that page
  * was not looking at stale data, they were being told a settled contest
  * was still open. That is the opposite of the platform's purpose, so it
- * gets the loudest treatment on the page rather than a footnote.
+ * gets the loudest treatment on the page rather than a footnote: the one
+ * note in red, above the contests (each note is one line, its full text
+ * behind "More": NoteLine).
  *
  * Deliberately not an apology and not a hedge on everything: a state
  * whose ballot IS certified says nothing at all here, because a notice
@@ -33,60 +36,56 @@ export default function BallotBasisNotice({ basis }: { basis?: BallotBasis | nul
   if (basis.supersededByPrimary) {
     const days = basis.daysSincePrimary;
     return (
-      <div
-        role="status"
-        className="mb-6 border border-signal-red/50 bg-signal-red/[0.06] p-4"
-        data-testid="ballot-superseded"
-      >
-        <p className="font-mono text-xs text-signal-red">These are not ballot positions</p>
-        <p className="mt-2 font-sans text-sm leading-relaxed text-ink-hi">
-          This state&apos;s primary was held
-          {typeof days === "number" ? ` ${days} days ago` : ""}, so its November ballot is already
-          decided, but we do not have the certified list yet.
-        </p>
-        <p className="mt-2 font-mono text-xs leading-relaxed text-ink-lo">
-          Everyone below filed with the FEC for this seat. Some of them lost their primary and will
-          not appear on your ballot. Use your state&apos;s official lookup for the real list.
-        </p>
+      <div role="status">
+        <NoteLine
+          alert
+          testId="ballot-superseded"
+          lead="These are not ballot positions: the primary is decided, the certified list isn't here yet."
+        >
+          <p>
+            This state&apos;s primary was held
+            {typeof days === "number" ? ` ${days} days ago` : ""}, so its November ballot is already
+            decided, but we do not have the certified list yet.
+          </p>
+          <p className="mt-1">
+            Everyone below filed with the FEC for this seat. Some of them lost their primary and
+            will not appear on your ballot. Use your state&apos;s official lookup for the real list.
+          </p>
+        </NoteLine>
       </div>
     );
   }
 
   if (basis.basis === "filers") {
     return (
-      <p
-        className="mb-6 font-mono text-xs leading-relaxed text-ink-min"
-        data-testid="ballot-filers"
+      <NoteLine
+        testId="ballot-filers"
+        lead="Everyone below is registered with the FEC, not on the ballot."
       >
-        Everyone below is registered with the FEC, not on the ballot: this state&apos;s primary has
-        not been held yet, and the state certifies its own ballot after it. Sorted by money raised,
-        which is the only published signal of who is running a real campaign.
-      </p>
+        This state&apos;s primary has not been held yet, and the state certifies its own ballot
+        after it. Sorted by money raised, which is the only published signal of who is running a
+        real campaign.
+      </NoteLine>
     );
   }
 
   if (basis.basis === "primary") {
     return (
-      <p
-        className="mb-6 font-mono text-xs leading-relaxed text-ink-min"
-        data-testid="ballot-primary"
-      >
-        Candidates below are on this state&apos;s primary ballot. Being on it says nothing about
-        surviving it.
-      </p>
+      <NoteLine testId="ballot-primary" lead="Candidates below are on this state's primary ballot.">
+        Being on it says nothing about surviving it.
+      </NoteLine>
     );
   }
 
   if (basis.basis === "nominees") {
     return (
-      <p
-        className="mb-6 font-mono text-xs leading-relaxed text-ink-min"
-        data-testid="ballot-nominees"
+      <NoteLine
+        testId="ballot-nominees"
+        lead="Nominees confirmed from primary results: real, and possibly incomplete."
       >
-        Nominees confirmed from primary results. A primary cannot show a nominee who never ran in
-        one (one a party convention chose, or a Libertarian, Green or independent candidate), so
-        this list is real and may be incomplete.
-      </p>
+        A primary cannot show a nominee who never ran in one (one a party convention chose, or a
+        Libertarian, Green or independent candidate), so this list is real and may be incomplete.
+      </NoteLine>
     );
   }
 
