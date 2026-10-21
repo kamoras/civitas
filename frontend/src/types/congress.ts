@@ -412,6 +412,9 @@ export interface CommitteeEntry {
   committee: string | null;
   text: string;
   pages: string;
+  /** The text's first sentence, verbatim (or its opening words and an
+   *  ellipsis), for the entry's box. Optional for an older backend. */
+  lede?: string | null;
   /** "H. Rept. 119-851"; null when the entry names none. */
   report: string | null;
   bills: { billId: string; billLabel: string }[];
