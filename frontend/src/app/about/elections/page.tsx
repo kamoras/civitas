@@ -315,15 +315,18 @@ export default async function ElectionsChapter() {
           register, see your sample ballot, find your polling place, vote early or by mail). Each
           names the site it opens and carries its deadline. Every link is the state&apos;s own page,
           found through the Secretaries of State&apos;s directory (NASS&apos;s Can I Vote) and
-          opened to check it. A sample ballot button goes to the state&apos;s lookup only where that
-          lookup says it shows one; elsewhere it goes to your county election office. Each night
-          Civitas checks that every link still opens its page; when one doesn&apos;t (the page is
-          gone, or moved to the site&apos;s homepage), that step goes to vote.gov for registering,
-          NASS&apos;s Can I Vote for the rest, or USAGov&apos;s directory for a sample ballot. Some
-          states&apos; sites turn away every automated check, though they open for a person. Civitas
-          never gets past that block, so it can&apos;t confirm those links are up: the step still
-          links the state&apos;s page, says it couldn&apos;t be checked, and gives the backup beside
-          it.
+          opened to check it. A sample ballot button goes to the state&apos;s own sample ballot
+          lookup only where the state&apos;s site says it shows one: 30 states and D.C. have one
+          (checked October 2026). In the rest, sample ballots come from each county, or each city or
+          town, so the button says that (&ldquo;Your county publishes sample ballots: find your
+          county election office&rdquo;) and opens USAGov&apos;s directory of local election
+          offices. Each night Civitas checks that every link still opens its page; when one
+          doesn&apos;t (the page is gone, or moved to the site&apos;s homepage), that step goes to
+          vote.gov for registering, NASS&apos;s Can I Vote for the rest, or USAGov&apos;s directory
+          for a sample ballot. Some states&apos; sites turn away every automated check, though they
+          open for a person. Civitas never gets past that block, so it can&apos;t confirm those
+          links are up: the step still links the state&apos;s page, says it couldn&apos;t be
+          checked, and gives the backup beside it.
         </P>
       </Section>
 

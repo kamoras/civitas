@@ -12,11 +12,22 @@ export const STEP_LABEL: Record<VoteTask, string> = {
   mail_ballot: "Vote early or by mail",
 };
 
+/** A step's label: the task's verb, except a sample ballot in a state whose
+ *  election authority publishes none statewide, which says who does and
+ *  why the button opens a directory of local offices (backend
+ *  `sample_ballot_office`). */
+export function stepLabel(step: VoteStep): string {
+  if (step.task === "sample_ballot" && !step.isStateSpecific && step.localOffice) {
+    return `Your ${step.localOffice} publishes sample ballots: find your ${step.localOffice} election office`;
+  }
+  return STEP_LABEL[step.task];
+}
+
 /** Where the step goes, printed under its label: the host, then whose
  *  page it is ("pa.gov · Pennsylvania Department of State"), or, for a
  *  fallback, the federal or national directory it is. */
 function destination(step: VoteStep): string {
-  if (step.task === "sample_ballot" && !step.isStateSpecific) {
+  if (step.task === "sample_ballot" && !step.isStateSpecific && !step.localOffice) {
     return `your county election office, through ${step.sourceName ?? "USAGov"}`;
   }
   return [step.host, step.sourceName].filter(Boolean).join(" · ");
@@ -44,7 +55,7 @@ function Unconfirmed({ step, className }: { step: VoteStep; className: string })
         target="_blank"
         rel="noopener noreferrer"
         className={INLINE_LINK}
-        aria-label={`${STEP_LABEL[step.task]} through ${step.fallback.sourceName} (opens in new tab)`}
+        aria-label={`${stepLabel(step)} through ${step.fallback.sourceName} (opens in new tab)`}
       >
         {step.fallback.host} ↗
       </a>
@@ -53,11 +64,11 @@ function Unconfirmed({ step, className }: { step: VoteStep; className: string })
 }
 
 function stepAriaLabel(step: VoteStep, deadline: string | null): string {
-  return `${STEP_LABEL[step.task]}: ${destination(step)}${step.unconfirmed ? ", unconfirmed" : ""}${deadline ? `. ${deadline}` : ""} (opens in new tab)`;
+  return `${stepLabel(step)}: ${destination(step)}${step.unconfirmed ? ", unconfirmed" : ""}${deadline ? `. ${deadline}` : ""} (opens in new tab)`;
 }
 
 function Step({ step, n }: { step: VoteStep; n: number }) {
-  const label = STEP_LABEL[step.task];
+  const label = stepLabel(step);
   const href = safeHref(step.url ?? "");
   const deadline = deadlineText(step);
   const closed = step.deadline?.status === "closed";
@@ -149,7 +160,7 @@ export function VoteStepsLead({
             className="flex min-h-11 w-full items-center gap-3 bg-phos px-4 py-2 text-surface-base hover:bg-phos-mid focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 sm:w-fit"
           >
             <span className="min-w-0 flex-1 wrap-anywhere">
-              <span className="block font-semibold">{STEP_LABEL.sample_ballot}</span>
+              <span className="block font-semibold">{stepLabel(ballotStep)}</span>
               <span className="block text-sm">Opens {destination(ballotStep)}</span>
             </span>
             <span aria-hidden="true">↗</span>

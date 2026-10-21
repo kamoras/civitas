@@ -1,7 +1,7 @@
 {
   "_source": "Each state's (and D.C.'s) own election authority: the page on its own domain, or a vendor portal it links as its official tool, for each voting task. Registration-status, polling-place and absentee pages as NASS's Can I Vote (nass.org/can-i-vote, the Secretaries of State's own directory) lists them, each opened and stored where it lands; a dead one replaced from the authority's own site. Never a third-party aggregator as a destination. The register task is not here: it is election_calendar.json's `register` (one copy of each URL), checked by the same nightly check.",
-  "_method": "Per state and task, opened through the pipeline's HTTP client with BROWSER_HEADERS (what refresh_link_verification sends), and `_checked` records what was found. A sample ballot task is listed only where the state's voter lookup says, on its own page or in its address, that it shows a sample ballot; elsewhere the step points to the voter's county election office through USAGov's directory. A page behind a bot wall keeps its official URL, marked UNVERIFIABLE, and is never worked around (AGENTS.md section 7): its step is shown as unconfirmed, with the task's fallback beside it.",
-  "_as_of": "2026-10-18",
+  "_method": "Per state and task, opened through the pipeline's HTTP client with BROWSER_HEADERS (what refresh_link_verification sends), and `_checked` records what was found. A sample ballot task is listed only where the state's voter lookup says, on its own page or in its address, that it shows a sample ballot; elsewhere the step points to the voter's local election office through USAGov's directory, and a state whose authority publishes no statewide sample ballot lookup says so: its `sample_ballot_office` names who publishes the sample ballot there (\"county\", or \"city or town\"), which the button names (\"Your county publishes sample ballots: find your county election office\"), and `_sample_ballot_checked` records what was checked and when. Every URL is on the authority's own host: a .gov host, a state.<st>.us host, or one of `official_hosts`, each the election authority's own documented domain. A page behind a bot wall keeps its official URL, marked UNVERIFIABLE, and is never worked around (AGENTS.md section 7): its step is shown as unconfirmed, with the task's fallback beside it.",
+  "_as_of": "2026-10-20",
   "_note": "A dead link on a voting step, during election week, from a link Civitas vouched for, is the worst failure this feature has. So every per-state URL is gated: a task is shown only once the liveness check (app/pipeline/fetch/ballot_lookup.py) sets `verified_at` (the page answered) or `blocked_at` (a bot wall refused the check; shown as unconfirmed, with the fallback beside it). This file never sets either. The check reads its candidate URLs from this file every run, so an edit here reaches the site on the next election run. A task unverified or missing falls back to `task_fallbacks`: NASS's Can I Vote, or USAGov's office directory for a sample ballot (vote.gov for registering, election_calendar.json's registerFallback).",
   "national_fallback": {
     "url": "https://www.usa.gov/election-office",
@@ -26,6 +26,14 @@
       "source_name": "Can I Vote (National Association of Secretaries of State)"
     }
   },
+  "official_hosts": {
+    "_note": "Hosts that are neither .gov nor state.<st>.us but are the election authority's own documented domain, each with where the authority links it. A subdomain of a listed host counts.",
+    "voterview.ar-nova.org": "Arkansas Secretary of State's VoterView, linked from sos.arkansas.gov/elections/voter-information",
+    "my.arizona.vote": "Arizona Secretary of State's voter portal, linked from azsos.gov",
+    "dcboe.org": "The District of Columbia Board of Elections' own domain (D.C. has no .gov election host)",
+    "msegov.com": "Mississippi's state e-government portal, linked from sos.ms.gov/elections-voting (Voter Registration Verification)",
+    "goelect.txelections.civixapps.com": "Texas Secretary of State's My Voter Portal, linked from votetexas.gov"
+  },
   "states": {
     "AK": {
       "source_name": "Alaska Division of Elections",
@@ -37,10 +45,10 @@
           "_checked": "Listed for this state by NASS's Can I Vote (registration status). UNVERIFIABLE: the site's bot wall refused the pipeline's client, 2026-10-18. Official URL kept; shown as unconfirmed with the fallback beside it"
         },
         "sample_ballot": {
-          "url": "https://www.elections.alaska.gov/election-polls/",
+          "url": "https://www.elections.alaska.gov/sample-ballots/",
           "verified_at": null,
           "blocked_at": null,
-          "_checked": "The state's voter lookup, whose own page offers a sample ballot. Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+          "_checked": "The Division of Elections' Sample Ballots page (\"Use the table below to find sample ballots for elections that occurred this calendar year\"), by house district. The URL listed before was its polling place page. Opened in a browser and through the pipeline's own HTTP client and headers, 2026-10-20"
         },
         "polling_place": {
           "url": "https://www.elections.alaska.gov/election-polls/",
@@ -65,6 +73,12 @@
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
         },
+        "sample_ballot": {
+          "url": "https://www.sos.alabama.gov/alabama-votes",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "The Secretary of State's voter page, which links this election's sample ballots for every county (\"View the 2026 General Election Sample Ballots\"); one tap further, since that page's address changes each election. Opened in a browser and through the pipeline's own HTTP client and headers, 2026-10-20"
+        },
         "polling_place": {
           "url": "https://myinfo.alabamavotes.gov/voterview",
           "verified_at": null,
@@ -87,6 +101,12 @@
           "verified_at": null,
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "sample_ballot": {
+          "url": "https://www.voterview.ar-nova.org/VoterView",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "VoterView, which the Secretary of State's voter-information page links for \"voter registration status, polling locations and sample ballots\". Opened in a browser and through the pipeline's own HTTP client and headers, 2026-10-20"
         },
         "polling_place": {
           "url": "https://www.voterview.ar-nova.org/VoterView",
@@ -123,7 +143,9 @@
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). UNVERIFIABLE: the site's bot wall refused the pipeline's client, 2026-10-18. Official URL kept; shown as unconfirmed with the fallback beside it"
         }
-      }
+      },
+      "sample_ballot_office": "county",
+      "_sample_ballot_checked": "Arizona: no statewide sample ballot lookup found on the state election authority's site (azsos.gov's voter pages offer registration, ballot tracking and ballot measures); each county recorder or elections department publishes sample ballots. Checked 2026-10-20"
     },
     "CA": {
       "source_name": "California Secretary of State",
@@ -175,7 +197,9 @@
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
         }
-      }
+      },
+      "sample_ballot_office": "county",
+      "_sample_ballot_checked": "Colorado: no statewide sample ballot lookup found on the state election authority's site; each county clerk mails and publishes the ballot. Checked 2026-10-20"
     },
     "CT": {
       "source_name": "Connecticut Secretary of the State",
@@ -185,6 +209,12 @@
           "verified_at": null,
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "sample_ballot": {
+          "url": "https://portal.ct.gov/sots/election-services/town-ballots/ballots",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "The Secretary of the State's town-by-town sample ballots, every town's ballot for each election, linked from its voter fact sheet (\"Town-by-Town Sample Ballots\"). Opened in a browser and through the pipeline's own HTTP client and headers, 2026-10-20"
         },
         "polling_place": {
           "url": "https://portaldir.ct.gov/sots/LookUp.aspx",
@@ -209,6 +239,12 @@
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
         },
+        "sample_ballot": {
+          "url": "https://www.dcboe.org/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "The Board of Elections' home page, which links this election's sample ballots by ward (\"Sample Ballots by Ward\"); one tap further, since that page's address changes each election and the personal ballot copy is on a vendor host. Opened in a browser and through the pipeline's own HTTP client and headers, 2026-10-20"
+        },
         "polling_place": {
           "url": "https://dcboe.org/voters/find-out-where-to-vote/vote-center-locator-tool",
           "verified_at": null,
@@ -231,6 +267,12 @@
           "verified_at": null,
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "sample_ballot": {
+          "url": "https://gis.elections.delaware.gov/apps/c10cf595f3614d9886927b7d396b2c87/explore",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "The Department of Elections' own sample ballot lookup, linked from its home page as \"Your Sample Ballot\". Opened in a browser and through the pipeline's own HTTP client and headers, 2026-10-20"
         },
         "polling_place": {
           "url": "https://ivote.de.gov/voterview",
@@ -255,12 +297,6 @@
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
         },
-        "sample_ballot": {
-          "url": "https://registration.dos.fl.gov/CheckVoterStatus",
-          "verified_at": null,
-          "blocked_at": null,
-          "_checked": "The state's voter lookup, whose own page offers a sample ballot. Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
-        },
         "polling_place": {
           "url": "https://registration.dos.fl.gov/en/CheckVoterStatus/Index",
           "verified_at": null,
@@ -273,7 +309,9 @@
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
         }
-      }
+      },
+      "sample_ballot_office": "county",
+      "_sample_ballot_checked": "Florida: no statewide sample ballot lookup found on the state election authority's site; the Division of Elections' registration lookup says \"To find your polling place, sample ballot, and vote-by-mail ballot status, check your Supervisor of Elections' website\" (it was listed here as the sample ballot lookup before). Checked 2026-10-20"
     },
     "GA": {
       "source_name": "Georgia Secretary of State",
@@ -283,6 +321,12 @@
           "verified_at": null,
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (registration status). UNVERIFIABLE: the site's bot wall refused the pipeline's client, 2026-10-18. Official URL kept; shown as unconfirmed with the fallback beside it"
+        },
+        "sample_ballot": {
+          "url": "https://mvp.sos.ga.gov/s/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "The voter's sample ballot lookup: My Voter Page, whose own page lists \"Sample ballot for the upcoming election\" among what it shows. Opened in a browser and through the pipeline's own HTTP client and headers, 2026-10-20"
         },
         "polling_place": {
           "url": "https://mvp.sos.ga.gov/s/",
@@ -302,10 +346,16 @@
       "source_name": "Hawaii Office of Elections",
       "tasks": {
         "check_registration": {
-          "url": "https://olvr.hawaii.gov/debug.aspx?aspxerrorpath=/(S(vb2rcnebimyjdjcs5q22kazp))/Default.aspx",
+          "url": "https://olvr.hawaii.gov/",
           "verified_at": null,
           "blocked_at": null,
-          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+          "_checked": "The Office of Elections' online voter registration, whose page offers \"Confirm your voter registration address\". The URL listed before was an ASP.NET error page (\"Sorry, an unexpected error has occurred\") that answered 200. Opened in a browser and through the pipeline's own HTTP client and headers, 2026-10-20"
+        },
+        "sample_ballot": {
+          "url": "https://olvr.hawaii.gov/altballotsearch3.aspx",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "The Office of Elections' ballot search (\"View Your Candidates and Ballot: View the candidates and ballot associated with your street address\"), linked from its Voting in Hawaii page; a sample ballot by address. Opened in a browser and through the pipeline's own HTTP client and headers, 2026-10-20"
         },
         "polling_place": {
           "url": "https://elections.hawaii.gov/voting/voting-in-hawaii/",
@@ -342,7 +392,9 @@
           "blocked_at": null,
           "_checked": "From the state election authority's own site (its link to this page). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
         }
-      }
+      },
+      "sample_ballot_office": "county",
+      "_sample_ballot_checked": "Iowa: no statewide sample ballot lookup found on the state election authority's site; each county auditor publishes sample ballots. Checked 2026-10-20"
     },
     "ID": {
       "source_name": "Idaho Secretary of State",
@@ -352,6 +404,12 @@
           "verified_at": null,
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "sample_ballot": {
+          "url": "https://votertools.voteidaho.gov/TEDElectionLink/VoterServices/voter/el-sample-ballot",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "The Secretary of State's personalized sample ballot (\"View Your Personalized Sample Ballot\"), linked from voteidaho.gov's general election page. Opened in a browser and through the pipeline's own HTTP client and headers, 2026-10-20"
         },
         "polling_place": {
           "url": "https://votertools.voteidaho.gov/TEDElectionLink/VoterServices/voter/where-do-I-vote",
@@ -388,7 +446,9 @@
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
         }
-      }
+      },
+      "sample_ballot_office": "county",
+      "_sample_ballot_checked": "Illinois: no statewide sample ballot lookup found on the state election authority's site; each of the state's local election authorities (county clerks and city boards) publishes sample ballots. Checked 2026-10-20"
     },
     "IN": {
       "source_name": "Indiana Election Division",
@@ -398,6 +458,12 @@
           "verified_at": null,
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "sample_ballot": {
+          "url": "https://indianavoters.in.gov/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "The Indiana Voter Portal, whose own page offers \"Who's on the ballot\" for the voter's address: the voter's sample ballot. Opened in a browser and through the pipeline's own HTTP client and headers, 2026-10-20"
         },
         "polling_place": {
           "url": "https://indianavoters.in.gov/",
@@ -417,16 +483,16 @@
       "source_name": "Kansas Secretary of State",
       "tasks": {
         "check_registration": {
-          "url": "https://myvoteinfo.voteks.org/VoterView/",
+          "url": "https://kansasvoterinfo.gov/VoterView",
           "verified_at": null,
           "blocked_at": null,
-          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+          "_checked": "VoterView at its current address, as the Secretary of State's voter-information page links it (\"Check Voter Registration\"); it offers registration, mail ballot status and polling place. Opened in a browser and through the pipeline's own HTTP client and headers, 2026-10-20"
         },
         "polling_place": {
-          "url": "https://myvoteinfo.voteks.org/VoterView",
+          "url": "https://kansasvoterinfo.gov/VoterView",
           "verified_at": null,
           "blocked_at": null,
-          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+          "_checked": "VoterView at its current address, as the Secretary of State's voter-information page links it (\"Check Voter Registration\"); it offers registration, mail ballot status and polling place. Opened in a browser and through the pipeline's own HTTP client and headers, 2026-10-20"
         },
         "mail_ballot": {
           "url": "https://sos.ks.gov/elections/voter-information.html",
@@ -434,7 +500,9 @@
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
         }
-      }
+      },
+      "sample_ballot_office": "county",
+      "_sample_ballot_checked": "Kansas: no statewide sample ballot lookup found on the state election authority's site (VoterView's page offers registration, mail ballot status and polling place, no sample ballot); each county election office publishes sample ballots. Checked 2026-10-20"
     },
     "KY": {
       "source_name": "Kentucky State Board of Elections",
@@ -474,6 +542,12 @@
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
         },
+        "sample_ballot": {
+          "url": "https://voterportal.sos.la.gov/Home/VoterLogin",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "The Voter Portal, linked from the Secretary of State's home page as \"View your sample ballot\". Opened in a browser and through the pipeline's own HTTP client and headers, 2026-10-20"
+        },
         "polling_place": {
           "url": "https://voterportal.sos.la.gov/",
           "verified_at": null,
@@ -509,7 +583,9 @@
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). UNVERIFIABLE: the site's bot wall refused the pipeline's client, 2026-10-18. Official URL kept; shown as unconfirmed with the fallback beside it"
         }
-      }
+      },
+      "sample_ballot_office": "city or town",
+      "_sample_ballot_checked": "Massachusetts: no statewide sample ballot lookup found on the state election authority's site; each city or town clerk publishes the ballot. Checked 2026-10-20"
     },
     "MD": {
       "source_name": "Maryland State Board of Elections",
@@ -561,7 +637,9 @@
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
         }
-      }
+      },
+      "sample_ballot_office": "city or town",
+      "_sample_ballot_checked": "Maine: no statewide sample ballot lookup found on the state election authority's site; each municipal clerk posts the town's ballot. Checked 2026-10-20"
     },
     "MI": {
       "source_name": "Michigan Secretary of State",
@@ -571,6 +649,12 @@
           "verified_at": null,
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (registration status). UNVERIFIABLE: the site's bot wall refused the pipeline's client, 2026-10-18. Official URL kept; shown as unconfirmed with the fallback beside it"
+        },
+        "sample_ballot": {
+          "url": "https://mvic.sos.state.mi.us/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "The Michigan Voter Information Center, which the Secretary of State's elections page lists for \"View sample ballot\". Opened in a browser and through the pipeline's own HTTP client and headers, 2026-10-20"
         },
         "polling_place": {
           "url": "https://mvic.sos.state.mi.us/Voter/index",
@@ -594,6 +678,12 @@
           "verified_at": null,
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "sample_ballot": {
+          "url": "https://myballotmn.sos.mn.gov/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "What's on My Ballot, the Secretary of State's sample ballot lookup (its page: \"View your sample ballot\"). Opened in a browser and through the pipeline's own HTTP client and headers, 2026-10-20"
         },
         "polling_place": {
           "url": "https://pollfinder.sos.mn.gov/",
@@ -630,7 +720,9 @@
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
         }
-      }
+      },
+      "sample_ballot_office": "county",
+      "_sample_ballot_checked": "Missouri: no statewide sample ballot lookup found on the state election authority's site (GoVoteMissouri's page offers polling place and the local election authority); each local election authority publishes sample ballots. Checked 2026-10-20"
     },
     "MS": {
       "source_name": "Mississippi Secretary of State",
@@ -669,6 +761,12 @@
           "verified_at": null,
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "sample_ballot": {
+          "url": "https://voterportal.mt.gov/WhereToVote.aspx",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "My Voter Information, which votemt.gov says lets a voter \"find your sample ballot and polling place\" during elections. Opened in a browser and through the pipeline's own HTTP client and headers, 2026-10-20"
         },
         "polling_place": {
           "url": "https://voterportal.mt.gov/WhereToVote.aspx",
@@ -723,10 +821,10 @@
           "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
         },
         "sample_ballot": {
-          "url": "https://vip.sos.nd.gov/PortalList.aspx",
+          "url": "https://vip.sos.nd.gov/WhereToVote.aspx?tab=AddressandVotingTimes",
           "verified_at": null,
           "blocked_at": null,
-          "_checked": "The state's voter lookup, whose own page offers a sample ballot. Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+          "_checked": "My Voting Information, whose own page lists \"My Ballot ... Sample Ballot\" among its tabs, linked from the Secretary of State's elections page (\"Find your polling place and view a sample ballot\"). The URL listed before, vip.sos.nd.gov/PortalList.aspx, now answers 200 with \"This site is no longer active\". Opened in a browser and through the pipeline's own HTTP client and headers, 2026-10-20"
         },
         "polling_place": {
           "url": "https://vip.sos.nd.gov/WhereToVote.aspx?tab=AddressandVotingTimes",
@@ -763,7 +861,9 @@
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
         }
-      }
+      },
+      "sample_ballot_office": "county",
+      "_sample_ballot_checked": "Nebraska: no statewide sample ballot lookup found on the state election authority's site (VoterView's page offers registration and polling place, no sample ballot); each county election office publishes sample ballots. Checked 2026-10-20"
     },
     "NH": {
       "source_name": "New Hampshire Secretary of State",
@@ -773,6 +873,12 @@
           "verified_at": null,
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "sample_ballot": {
+          "url": "https://www.sos.nh.gov/elections/sample-ballots",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "The state's sample ballot lookup: the Secretary of State's Sample Ballot Search, by town, for the state primary and general (its page says town and city election ballots come from the town or city clerk). Opened in a browser and through the pipeline's own HTTP client and headers, 2026-10-20"
         },
         "polling_place": {
           "url": "https://app.sos.nh.gov/captcha/challenge",
@@ -797,12 +903,6 @@
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (registration status). UNVERIFIABLE: the site's bot wall refused the pipeline's client, 2026-10-18. Official URL kept; shown as unconfirmed with the fallback beside it"
         },
-        "sample_ballot": {
-          "url": "https://www.nj.gov/state/elections/vote-polling-location.shtml",
-          "verified_at": null,
-          "blocked_at": null,
-          "_checked": "The state's voter lookup, whose own page offers a sample ballot. Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
-        },
         "polling_place": {
           "url": "https://www.nj.gov/state/elections/vote-polling-location.shtml",
           "verified_at": null,
@@ -815,28 +915,30 @@
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
         }
-      }
+      },
+      "sample_ballot_office": "county",
+      "_sample_ballot_checked": "New Jersey: no statewide sample ballot lookup found on the state election authority's site; the Division of Elections' polling place page says the sample ballot is \"sent out by your county\". Checked 2026-10-20"
     },
     "NM": {
       "source_name": "New Mexico Secretary of State",
       "tasks": {
         "check_registration": {
-          "url": "https://voterportal.servis.sos.state.nm.us/WhereToVote.aspx?AspxAutoDetectCookieSupport=1",
+          "url": "https://voterportal.servis.sos.state.nm.us/WhereToVote.aspx",
           "verified_at": null,
           "blocked_at": null,
-          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+          "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18. Stored without the ?AspxAutoDetectCookieSupport=1 the site adds when it redirects: requested with it, the page redirected to itself until the client gave up (TooManyRedirects), so the nightly check read it as dead, 2026-10-20"
         },
         "sample_ballot": {
-          "url": "https://voterportal.servis.sos.state.nm.us/WhereToVote.aspx?AspxAutoDetectCookieSupport=1",
+          "url": "https://voterportal.servis.sos.state.nm.us/WhereToVote.aspx",
           "verified_at": null,
           "blocked_at": null,
-          "_checked": "The state's voter lookup, whose own page offers a sample ballot. Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+          "_checked": "The state's voter lookup, whose own page offers a sample ballot. Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18. Stored without the ?AspxAutoDetectCookieSupport=1 the site adds when it redirects: requested with it, the page redirected to itself until the client gave up (TooManyRedirects), so the nightly check read it as dead, 2026-10-20"
         },
         "polling_place": {
-          "url": "https://voterportal.servis.sos.state.nm.us/WhereToVote.aspx?AspxAutoDetectCookieSupport=1",
+          "url": "https://voterportal.servis.sos.state.nm.us/WhereToVote.aspx",
           "verified_at": null,
           "blocked_at": null,
-          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+          "_checked": "Listed for this state by NASS's Can I Vote (polling place). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18. Stored without the ?AspxAutoDetectCookieSupport=1 the site adds when it redirects: requested with it, the page redirected to itself until the client gave up (TooManyRedirects), so the nightly check read it as dead, 2026-10-20"
         },
         "mail_ballot": {
           "url": "https://www.sos.nm.gov/voting-and-elections/absentee-and-early-voting/",
@@ -867,7 +969,9 @@
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). UNVERIFIABLE: the site's bot wall refused the pipeline's client, 2026-10-18. Official URL kept; shown as unconfirmed with the fallback beside it"
         }
-      }
+      },
+      "sample_ballot_office": "county",
+      "_sample_ballot_checked": "Nevada: no statewide sample ballot lookup found on the state election authority's site; each county clerk or registrar mails and publishes sample ballots. Checked 2026-10-20"
     },
     "NY": {
       "source_name": "New York State Board of Elections",
@@ -890,7 +994,9 @@
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
         }
-      }
+      },
+      "sample_ballot_office": "county",
+      "_sample_ballot_checked": "New York: no statewide sample ballot lookup found on the state election authority's site (the voter lookup offers registration, poll site and mail ballot); each county board of elections publishes sample ballots. Checked 2026-10-20"
     },
     "OH": {
       "source_name": "Ohio Secretary of State",
@@ -913,7 +1019,9 @@
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
         }
-      }
+      },
+      "sample_ballot_office": "county",
+      "_sample_ballot_checked": "Ohio: no statewide sample ballot lookup found on the state election authority's site (ohiosos.gov's voter pages refuse automated reads); each county board of elections publishes sample ballots. Checked 2026-10-20"
     },
     "OK": {
       "source_name": "Oklahoma State Election Board",
@@ -923,6 +1031,12 @@
           "verified_at": null,
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "sample_ballot": {
+          "url": "https://okvoterportal.okelections.gov/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "The voter's sample ballot lookup: the OK Voter Portal, which the State Election Board's page lists for \"View a Sample Ballot for Your Precinct\". Opened in a browser and through the pipeline's own HTTP client and headers, 2026-10-20"
         },
         "polling_place": {
           "url": "https://okvoterportal.okelections.gov/",
@@ -959,7 +1073,9 @@
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
         }
-      }
+      },
+      "sample_ballot_office": "county",
+      "_sample_ballot_checked": "Oregon: no statewide sample ballot lookup found on the state election authority's site (the state publishes voters' pamphlets, not ballots); each county elections office mails the ballot. Checked 2026-10-20"
     },
     "PA": {
       "source_name": "Pennsylvania Department of State",
@@ -982,7 +1098,9 @@
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
         }
-      }
+      },
+      "sample_ballot_office": "county",
+      "_sample_ballot_checked": "Pennsylvania: no statewide sample ballot lookup found on the state election authority's site; each county board of elections publishes sample ballots. Checked 2026-10-20"
     },
     "RI": {
       "source_name": "Rhode Island Secretary of State",
@@ -992,6 +1110,12 @@
           "verified_at": null,
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (registration status). UNVERIFIABLE: the site's bot wall refused the pipeline's client, 2026-10-18. Official URL kept; shown as unconfirmed with the fallback beside it"
+        },
+        "sample_ballot": {
+          "url": "https://vote.sos.ri.gov/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "The voter's sample ballot lookup: the Voter Information Center, whose own page offers \"View Sample Ballot\". Opened in a browser and through the pipeline's own HTTP client and headers, 2026-10-20"
         },
         "polling_place": {
           "url": "https://vote.sos.ri.gov/Home/PollingPlaces?ActiveFlag=2",
@@ -1045,6 +1169,12 @@
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
         },
+        "sample_ballot": {
+          "url": "https://vip.sdsos.gov/viplogin.aspx",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "The Voter Information Portal, whose own page says Primary and General sample ballots are viewable there. Opened in a browser and through the pipeline's own HTTP client and headers, 2026-10-20"
+        },
         "polling_place": {
           "url": "https://vip.sdsos.gov/VIPLogin.aspx",
           "verified_at": null,
@@ -1080,7 +1210,9 @@
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
         }
-      }
+      },
+      "sample_ballot_office": "county",
+      "_sample_ballot_checked": "Tennessee: no statewide sample ballot lookup found on the state election authority's site on its website (the voter lookup offers registration and polling place); each county election commission publishes sample ballots. Checked 2026-10-20"
     },
     "TX": {
       "source_name": "Texas Secretary of State",
@@ -1103,7 +1235,9 @@
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
         }
-      }
+      },
+      "sample_ballot_office": "county",
+      "_sample_ballot_checked": "Texas: no statewide sample ballot lookup found on the state election authority's site (VoteTexas's \"What's on the Ballot?\" lists statewide candidates in ballot order, not a voter's ballot); each county elections office publishes sample ballots. Checked 2026-10-20"
     },
     "UT": {
       "source_name": "Utah Lieutenant Governor's Office of Elections",
@@ -1126,7 +1260,9 @@
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
         }
-      }
+      },
+      "sample_ballot_office": "county",
+      "_sample_ballot_checked": "Utah: no statewide sample ballot lookup found on the state election authority's site (vote.utah.gov's lookup says how and where to vote); each county clerk mails and publishes the ballot. Checked 2026-10-20"
     },
     "VA": {
       "source_name": "Virginia Department of Elections",
@@ -1136,6 +1272,12 @@
           "verified_at": null,
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "sample_ballot": {
+          "url": "https://www.elections.virginia.gov/casting-a-ballot/polling-place-lookup/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "The Department of Elections' Polling Place and Ballot Information Lookup, whose page says it shows \"What's on your ballot for the current election\": the voter's sample ballot. Opened in a browser and through the pipeline's own HTTP client and headers, 2026-10-20"
         },
         "polling_place": {
           "url": "https://vote.elections.virginia.gov/VoterInformation/Lookup/polling",
@@ -1160,6 +1302,12 @@
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
         },
+        "sample_ballot": {
+          "url": "https://vote.vermont.gov/",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "The voter's sample ballot lookup: the Vermont Voter Portal, whose own page lists \"Sample ballots\" among what it shows. Opened in a browser and through the pipeline's own HTTP client and headers, 2026-10-20"
+        },
         "polling_place": {
           "url": "https://vote.vermont.gov/",
           "verified_at": null,
@@ -1182,6 +1330,12 @@
           "verified_at": null,
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "sample_ballot": {
+          "url": "https://voter.votewa.gov/portal2023/login.aspx",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "VoteWA, whose own page offers \"Voter Guide: What's on Your Ballot?\": the voter's own sample ballot and guide. Opened in a browser and through the pipeline's own HTTP client and headers, 2026-10-20"
         },
         "polling_place": {
           "url": "https://voter.votewa.gov/portal2023/login.aspx",
@@ -1206,6 +1360,12 @@
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
         },
+        "sample_ballot": {
+          "url": "https://myvote.wi.gov/en-us/Whats-On-My-Ballot",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "MyVote Wisconsin's What's On My Ballot: the voter's sample ballot. Opened in a browser and through the pipeline's own HTTP client and headers, 2026-10-20"
+        },
         "polling_place": {
           "url": "https://myvote.wi.gov/en-us/Find-My-Polling-Place",
           "verified_at": null,
@@ -1228,6 +1388,12 @@
           "verified_at": null,
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (registration status). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
+        },
+        "sample_ballot": {
+          "url": "https://sos.wv.gov/elections",
+          "verified_at": null,
+          "blocked_at": null,
+          "_checked": "The Secretary of State's elections page, which links this election's statewide sample ballot lookup (\"2026 General Sample Ballot Lookup\"); one tap further, since the lookup itself is on a vendor host and its link changes each election. Opened in a browser and through the pipeline's own HTTP client and headers, 2026-10-20"
         },
         "polling_place": {
           "url": "https://apps.sos.wv.gov/elections/Voter/AmIRegisteredToVote",
@@ -1264,7 +1430,9 @@
           "blocked_at": null,
           "_checked": "Listed for this state by NASS's Can I Vote (absentee and early voting). Resolved to the page (not a homepage or a challenge) through the pipeline's own HTTP client and headers, 2026-10-18"
         }
-      }
+      },
+      "sample_ballot_office": "county",
+      "_sample_ballot_checked": "Wyoming: no statewide sample ballot lookup found on the state election authority's site; each county clerk publishes sample ballots. Checked 2026-10-20"
     }
   }
 }
