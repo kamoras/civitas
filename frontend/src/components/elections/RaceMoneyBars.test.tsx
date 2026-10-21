@@ -156,17 +156,17 @@ describe("RaceMoneyBars", () => {
     const fundingSources = {
       addsUp: true,
       parts: [
-        { key: "smallDonors" as const, amount: 35, percent: 35, blocks: 7 },
-        { key: "largerDonors" as const, amount: 50, percent: 50, blocks: 10 },
-        { key: "committees" as const, amount: 15, percent: 15, blocks: 3 },
-        { key: "party" as const, amount: 0, percent: 0, blocks: 0 },
-        { key: "candidate" as const, amount: 0, percent: 0, blocks: 0 },
+        { key: "smallDonors" as const, amount: 35, share: 0.35, shown: "35%", blocks: 7 },
+        { key: "largerDonors" as const, amount: 50, share: 0.5, shown: "50%", blocks: 10 },
+        { key: "committees" as const, amount: 15, share: 0.15, shown: "15%", blocks: 3 },
+        { key: "party" as const, amount: 0, share: 0.0, shown: "0%", blocks: 0 },
+        { key: "candidate" as const, amount: 0, share: 0.0, shown: "0%", blocks: 0 },
       ],
     };
     const { container } = render(
       <RaceMoneyBars cycleYear={2026} candidates={[cand({ fundingSources })]} />
     );
-    expect(screen.getByText(/Where contributions came from/)).toBeInTheDocument();
+    expect(screen.getByText(/Where this campaign.s contributions came from/)).toBeInTheDocument();
     expect(
       screen.getByText(
         "35% from donors of $200 or less · 50% from donors of more than $200 · 15% from PACs and other committees"
@@ -178,7 +178,7 @@ describe("RaceMoneyBars", () => {
   it("gives no split when the filing's categories don't add up", () => {
     const parts = (
       ["smallDonors", "largerDonors", "committees", "party", "candidate"] as const
-    ).map((key) => ({ key, amount: 1, percent: null, blocks: null }));
+    ).map((key) => ({ key, amount: 1, share: null, shown: null, blocks: null }));
     render(
       <RaceMoneyBars
         cycleYear={2026}
@@ -186,7 +186,9 @@ describe("RaceMoneyBars", () => {
       />
     );
     expect(screen.getByText(/don't add up to its total/)).toBeInTheDocument();
-    expect(screen.queryByText(/Where contributions came from/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Where this campaign.s contributions came from/)
+    ).not.toBeInTheDocument();
   });
 
   it("dates each candidate's figures and links that election's FEC page", () => {

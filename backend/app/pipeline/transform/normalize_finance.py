@@ -205,7 +205,10 @@ def normalize_finance(
     elif small_individual <= 0:
         small_donor_percentage = None
     else:
-        small_donor_percentage = round((small_individual / contribution_base) * 100)
+        # Two decimals, not a whole percent: a share under 0.5% rounded
+        # here was stored as 0 and shown as "0%" of the money, a false
+        # claim the display rule (score_display.shown_share) exists to stop.
+        small_donor_percentage = round((small_individual / contribution_base) * 100, 2)
 
     # Build top donors: PACs first, then employer-grouped individuals
     candidate_name = (candidate or {}).get("name", "")

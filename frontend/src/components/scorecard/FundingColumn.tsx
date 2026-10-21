@@ -37,39 +37,46 @@ const DONORS_SHOWN = 5;
 const TOOLTIP =
   "Where the money for the member's most recent completed election came from, from FEC filings: the share given by PACs and the share given in gifts of $200 or less, against what is typical (for a senator, a state that size; for a representative, the House median), then the industries behind the money and the top donors. Shares are of contributions, not total receipts.";
 
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
 /** The figures behind the finding. After the finding (which states the
  *  small-gift share, or the PAC share when the filings can't say), only
  *  what it left out: the PAC share of the total. */
 function Lede({ facts, afterFinding }: { facts: FundingFacts; afterFinding: boolean }) {
   const expected = facts.smallDonorExpectedShare;
+  // The backend's words for each share (shown_share), so this line reads
+  // the same as the finding and the peer strip.
+  // Each leads a sentence ("Under 1% of ...").
+  const pac = capitalize(facts.shown?.pacShare ?? percent(facts.pacShare));
   if (afterFinding) {
     if (facts.smallDonorShare == null) return null;
     return (
       <p className="text-base leading-relaxed text-ink">
-        {percent(facts.pacShare)} of {formatCurrency(facts.contributions)} in contributions came
-        from PACs.
+        {pac} of {formatCurrency(facts.contributions)} in contributions came from PACs.
       </p>
     );
   }
   if (facts.smallDonorShare == null) {
     return (
       <p className="text-base leading-relaxed text-ink">
-        {percent(facts.pacShare)} of {formatCurrency(facts.contributions)} in contributions came
-        from PACs. The campaign itemizes every gift, so its filings can&apos;t say how much came
-        from donors giving $200 or less.
+        {pac} of {formatCurrency(facts.contributions)} in contributions came from PACs. The campaign
+        itemizes every gift, so its filings can&apos;t say how much came from donors giving $200 or
+        less.
       </p>
     );
   }
-  const small = percent(facts.smallDonorShare);
+  const small = capitalize(facts.shown?.smallDonorShare ?? percent(facts.smallDonorShare));
+  const typical =
+    expected == null ? null : (facts.shown?.smallDonorExpectedShare ?? percent(expected));
   return (
     <p className="text-base leading-relaxed text-ink">
-      {percent(facts.pacShare)} of {formatCurrency(facts.contributions)} in contributions came from
-      PACs. {small} came from donors giving $200 or less
-      {expected != null &&
+      {pac} of {formatCurrency(facts.contributions)} in contributions came from PACs. {small} came
+      from donors giving $200 or less
+      {typical != null &&
         (facts.smallDonorComparison === "house-median"
-          ? `; the House median is ${percent(expected)}.`
-          : `; about ${percent(expected)} is typical for a state this size.`)}
-      {expected == null && "."}
+          ? `; the House median is ${typical}.`
+          : `; about ${typical} is typical for a state this size.`)}
+      {typical == null && "."}
     </p>
   );
 }

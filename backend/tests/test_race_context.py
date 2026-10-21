@@ -52,7 +52,8 @@ class TestFundingSources:
         assert out["addsUp"] is True
         assert [p["key"] for p in out["parts"]] == [
             "smallDonors", "largerDonors", "committees", "party", "candidate"]
-        assert [p["percent"] for p in out["parts"]] == [15, 45, 30, 0, 10]
+        assert [p["shown"] for p in out["parts"]] == ["15%", "45%", "30%", "0%", "10%"]
+        assert [p["share"] for p in out["parts"]] == [0.15, 0.45, 0.3, 0.0, 0.1]
         assert sum(p["blocks"] for p in out["parts"]) == FUNDING_BLOCKS
         assert [p["amount"] for p in out["parts"]] == [150.0, 450.0, 300.0, 0.0, 100.0]
 
@@ -64,7 +65,7 @@ class TestFundingSources:
     def test_categories_that_dont_make_the_total_get_no_shares(self):
         out = funding_sources(_filed(contributions=5000.0))
         assert out["addsUp"] is False
-        assert all(p["percent"] is None and p["blocks"] is None for p in out["parts"])
+        assert all(p["shown"] is None and p["share"] is None and p["blocks"] is None for p in out["parts"])
         assert out["parts"][0]["amount"] == 150.0
 
     def test_a_negative_category_gets_no_shares(self):
@@ -131,7 +132,7 @@ class TestRoutes:
         body = json.loads(elections.race_detail("2026-HOUSE-CT-1", db_session).body)
         filed, unsynced = body["candidates"]
         assert filed["fundingSources"]["parts"][0] == {
-            "key": "smallDonors", "amount": 150.0, "percent": 15, "blocks": 3}
+            "key": "smallDonors", "amount": 150.0, "share": 0.15, "shown": "15%", "blocks": 3}
         assert filed["candidateLoans"] == 50.0
         assert unsynced["fundingSources"] is None
         assert body["leanContext"]["unit"] == "districts"

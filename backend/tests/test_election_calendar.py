@@ -11,14 +11,18 @@ from datetime import date
 import httpx
 import pytest
 
+from app import election_calendar
 from app.election_calendar import (
+    class_up,
     federal_states,
     next_election_day,
     next_senate_election_year,
     seats_up_for_year,
     senate_classes,
 )
+from app.pipeline.fetch import senate_classes as sc
 from app.pipeline.fetch import special_elections as se
+from app.pipeline.fetch.senate_classes import gate, parse_senate_classes, parse_senator_classes
 
 CLASS_I_STATES = senate_classes()[1]
 CLASS_II_STATES = senate_classes()[2]
@@ -122,25 +126,49 @@ class TestSenateClassesFromTheSenatesList:
     </contact_information>"""
 
     def test_parses_each_senators_class(self):
-        from app.pipeline.fetch.senate_classes import parse_senate_classes
 
         assert parse_senate_classes(self._XML) == {1: {"MD", "ZZ"}, 2: {"AK"}, 3: {"MD", "AK"}}
 
+    def test_parses_each_senators_own_class_by_bioguide(self):
+
+        xml = b"""<contact_information>
+        <member><state>MD</state><class>Class I</class><bioguide_id>X000001</bioguide_id></member>
+        <member><state>MD</state><class>Class III</class><bioguide_id>X000002</bioguide_id></member>
+        <member><state>AK</state><class>Class II</class></member>
+        </contact_information>"""
+        assert parse_senator_classes(xml) == {"X000001": 1, "X000002": 3}
+        assert parse_senator_classes(b"not xml") == {}
+
+    def test_a_senators_class_is_read_back_from_the_file(self, tmp_path, monkeypatch):
+
+        path = tmp_path / "senate_classes.json"
+        sc.write_classes({1: {"MD"}, 2: {"AK"}, 3: {"MD", "AK"}}, path, {"X000001": 1})
+        monkeypatch.setattr(election_calendar, "_CLASS_FILES", (path,))
+        election_calendar.reset_senate_classes()
+        try:
+            assert election_calendar.senator_class("X000001") == 1
+            assert election_calendar.senator_class("X999999") is None
+            assert election_calendar.senator_class(None) is None
+        finally:
+            election_calendar.reset_senate_classes()
+
+    def test_the_class_up_follows_the_six_year_rotation(self):
+
+        assert {class_up(y) for y in (2018, 2020, 2022)} == {1, 2, 3}
+        assert class_up(2020) == class_up(2026)
+        assert class_up(2027) is None
+
     def test_a_new_state_needs_no_code_change(self):
         # "ZZ" parsed above like any other state: nothing lists the states.
-        from app.pipeline.fetch.senate_classes import gate, parse_senate_classes
 
         assert gate(parse_senate_classes(self._XML)) == []
 
     def test_gates_refuse_a_list_that_lost_a_class_or_put_a_state_in_all_three(self):
-        from app.pipeline.fetch.senate_classes import gate
 
         assert gate({1: {"MD"}, 2: {"AK"}})
         assert gate({1: {"MD"}, 2: {"MD"}, 3: {"MD"}})
 
     async def test_a_vacant_seat_does_not_drop_its_state(self, tmp_path, monkeypatch):
-        from app import election_calendar
-        from app.pipeline.fetch import senate_classes as sc
 
         path = tmp_path / "senate_classes.json"
         sc.write_classes({1: {"MD", "DE"}, 2: {"AK", "DE"}, 3: {"MD", "AK"}}, path)
@@ -171,7 +199,6 @@ class TestSenateClassesFromTheSenatesList:
             assert await se._get(client, "https://www.senate.gov/x.xml") == b"<contact_information/>"
 
     async def test_an_unreadable_list_keeps_what_is_stored(self, tmp_path):
-        from app.pipeline.fetch import senate_classes as sc
 
         path = tmp_path / "senate_classes.json"
         sc.write_classes({1: {"MD"}, 2: {"AK"}, 3: {"MD", "AK"}}, path)

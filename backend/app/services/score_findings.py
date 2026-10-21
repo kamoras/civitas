@@ -14,6 +14,8 @@ constant under pipeline/ would move the analysis-code fingerprint and wipe
 the learning store (senate_pipeline._compute_analysis_code_hash).
 """
 
+from app.score_display import shown_share
+
 _PARTY_MEMBERS = {"D": "Democrats", "R": "Republicans"}
 
 # A rate within a quarter of the seat's norm reads as "about as often":
@@ -28,11 +30,7 @@ def _plural(n: int, one: str, many: str) -> str:
 
 
 def _pct(share: float) -> str:
-    """A 0-1 share as a whole percent; "under 1%" for a share that rounds
-    to zero but isn't (the scorecard's percent())."""
-    if 0 < share < 0.005:
-        return "under 1%"
-    return f"{round(share * 100)}%"
+    return shown_share(share)
 
 
 def _times(ratio: float) -> str:
@@ -146,4 +144,12 @@ def add_findings(breakdown: dict, chamber: str) -> dict:
         dimension = breakdown.get(key)
         if isinstance(dimension, dict):
             dimension["finding"] = build(dimension.get("facts"))
+    facts = (breakdown.get("fundingIndependence") or {}).get("facts")
+    if isinstance(facts, dict):
+        # Each share in the words every surface uses (shown_share), so the
+        # scorecard never rounds one itself.
+        facts["shown"] = {
+            key: None if facts.get(key) is None else shown_share(facts[key])
+            for key in ("pacShare", "smallDonorShare", "smallDonorExpectedShare")
+        }
     return breakdown

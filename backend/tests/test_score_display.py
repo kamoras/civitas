@@ -1,6 +1,11 @@
 """Scores as the site shows them (app/score_display.py)."""
 
-from app.score_display import displayed_rank, displayed_score, score_spread
+from types import SimpleNamespace
+
+from app import peer_comparison as pc
+from app.race_context import funding_sources
+from app.score_display import displayed_rank, displayed_score, score_spread, shown_share
+from app.services.score_findings import add_findings, funding_finding
 
 
 def test_half_rounds_up_like_the_page():
@@ -27,3 +32,34 @@ class TestScoreSpread:
         assert score_spread([64.6])["median"] == 65
         empty = score_spread([])
         assert empty["counts"] == [] and empty["median"] is None
+
+
+class TestOneRoundingForShares:
+    """A share reads the same on every surface: the findings sentence, the
+    peer strip and compare, the race money bars and the scorecard's own
+    figures all take their words from shown_share. 2026-10: one small-donor
+    share was stored as a whole percent before the display rule ran, and
+    shares under 0.5% read "0%" of the money."""
+
+    CASES = {0.195: "20%", 0.125: "13%", 0.004: "under 1%", 0.0: "0%", 0.38: "38%"}
+
+    def test_half_up_and_never_a_false_zero(self):
+
+        assert {s: shown_share(s) for s in self.CASES} == self.CASES
+
+    def test_every_surface_says_the_same(self):
+
+
+        for share, words in self.CASES.items():
+            facts = {"contributions": 1000, "pacShare": share, "smallDonorShare": share,
+                     "smallDonorExpectedShare": None, "smallDonorComparison": "house-median"}
+            assert funding_finding(facts) == f"Gifts of $200 or less made up {words} of the money."
+            shown = add_findings({"fundingIndependence": {"facts": dict(facts)}}, "house")
+            assert shown["fundingIndependence"]["facts"]["shown"]["smallDonorShare"] == words
+            assert pc._shown(pc.BY_KEY["smallGifts"], share, facts) == words
+            cand = SimpleNamespace(
+                contributions=1000.0, individual_unitemized_contributions=share * 1000,
+                individual_itemized_contributions=1000 - share * 1000, other_committee_contributions=0.0,
+                party_committee_contributions=0.0, candidate_contribution=0.0,
+            )
+            assert funding_sources(cand)["parts"][0]["shown"] == words

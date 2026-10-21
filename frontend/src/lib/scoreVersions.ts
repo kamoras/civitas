@@ -32,6 +32,16 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.36",
+    date: "2026-10-21",
+    title: "The small-donor share is read to two decimals",
+    tldr: "Funding Independence read a member's share of money from donors of $200 or less as a whole percent, so a share under half a percent counted, and showed, as none. It is now read to two decimals, and every page states a share by one rule, so the same figure reads the same everywhere.",
+    changes: [
+      'The share was rounded to a whole percent before the score and its chamber references read it. Now kept to two decimals; pages say "under 1%" for a share above zero that would round to 0%, where 25 members\' pages had read "0%" of the money.',
+      "Score effect, bounded from the formula (the rounding moved a share by at most half a point): Funding Independence by at most about 0.75 points, the overall score by at most about 0.25. docs/methodology/member-score/v6.36.md has the arithmetic.",
+    ],
+  },
+  {
     version: "v6.35",
     date: "2026-10-15",
     title: "A seat's expected break rate bends at swing seats only on evidence",

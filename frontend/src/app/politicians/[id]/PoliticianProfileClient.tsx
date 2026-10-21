@@ -428,12 +428,13 @@ export function OnBallotLine({ race }: { race: NonNullable<PoliticianProfile["on
   );
 }
 
-/** A House member's own seat when they aren't a confirmed nominee for it:
+/** A member's own seat when they aren't a confirmed nominee for it:
  * the seat's race is still one link away, with what the record says about
  * the member (never a reason it doesn't state, such as a lost primary). */
 export function SeatRaceLine({ race, name }: { race: SeatRace; name: string }) {
   const state = STATE_NAMES[race.state] ?? race.state;
-  const seat = houseSeatLabel(race.state, race.district ?? 0);
+  const seat =
+    race.office === "S" ? `${state} U.S. Senate` : houseSeatLabel(race.state, race.district ?? 0);
   const status =
     race.status === "unconfirmed"
       ? `Confirmed nominees aren't available for ${state} yet`
@@ -443,7 +444,7 @@ export function SeatRaceLine({ race, name }: { race: SeatRace; name: string }) {
   return (
     <div className="mb-3 border border-white/15 bg-surface px-3 py-2 text-sm text-ink">
       <p className="font-mono text-xs text-ink-lo">
-        This seat · {race.cycleYear} ballot · {seat}
+        This seat is on the {race.cycleYear} ballot · {seat}
         {race.redrawn && <span className="text-ink-min"> (New map)</span>}
       </p>
       <p className="mt-1">

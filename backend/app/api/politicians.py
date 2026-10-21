@@ -630,9 +630,10 @@ def get_politician(politician_id: str, db: Session = Depends(get_db)) -> JSONRes
         # ballot (their own seat, or another office), so "is my member up,
         # and against whom?" is one link from the profile.
         "onBallot": member_on_ballot(db, entity.bioguide_id) if branch in ("senate", "house") else None,
-        # A House member's own seat's race, and whether they are a
-        # confirmed nominee in it: a member not running keeps the link to
-        # who might replace them.
-        "seatRace": member_seat_race(db, entity.state, entity.district, entity.bioguide_id)
-        if branch == "house" else None,
+        # The member's own seat's race, and whether they are a confirmed
+        # nominee in it: a member not running keeps the link to who might
+        # replace them.
+        "seatRace": member_seat_race(db, entity.state, getattr(entity, "district", None), entity.bioguide_id,
+                                     "H" if branch == "house" else "S")
+        if branch in ("senate", "house") else None,
     })

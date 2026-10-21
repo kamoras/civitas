@@ -63,6 +63,14 @@ export interface FundingFacts {
   smallDonorShare: number | null;
   smallDonorExpectedShare: number | null;
   smallDonorComparison: "house-median" | "state-size";
+  /** Each share in the words every surface uses (backend
+   * score_display.shown_share: "20%", "under 1%"). Optional for a
+   * breakdown cached before the field existed. */
+  shown?: {
+    pacShare: string | null;
+    smallDonorShare: string | null;
+    smallDonorExpectedShare: string | null;
+  };
 }
 
 /** A vote against the party, as the chamber recorded the roll call. */

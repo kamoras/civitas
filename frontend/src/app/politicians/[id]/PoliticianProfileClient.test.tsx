@@ -124,4 +124,17 @@ describe("SeatRaceLine", () => {
     expect(screen.getByText(/New map/)).toBeTruthy();
     expect(screen.getByText(/is not the district\s+Pat Doe was elected in/)).toBeTruthy();
   });
+
+  it("names a senator's seat by its state", () => {
+    render(
+      <SeatRaceLine
+        race={{ ...race, raceId: "2026-SEN-KY", office: "S", district: null }}
+        name="Pat Doe"
+      />
+    );
+    expect(screen.getByText(/This seat is on the 2026 ballot · Kentucky U.S. Senate/)).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: /Who's running for Kentucky U.S. Senate/ })
+    ).toHaveAttribute("href", "/elections/states/KY#race-2026-SEN-KY");
+  });
 });
