@@ -146,7 +146,7 @@ export default function AgreementHeatmap({ court }: { court: Court }) {
                       row is drawn on its own. */}
                   <Link
                     href={`/politicians/${encodeURIComponent(row.id)}`}
-                    className="underline decoration-white/25 underline-offset-2 hover:text-phos"
+                    className="inline-flex min-h-6 items-center underline decoration-white/25 underline-offset-2 hover:text-phos"
                   >
                     {surname(row)}
                   </Link>

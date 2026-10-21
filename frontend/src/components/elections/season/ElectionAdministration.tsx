@@ -1,5 +1,6 @@
 import type { ElectionAdministration as Admin } from "@/types/nextCycle";
 import { safeHref } from "@/lib/formatting";
+import ScrollRegion from "@/components/shared/ScrollRegion";
 
 type RateKey = keyof Admin["national"];
 
@@ -64,7 +65,7 @@ export default function ElectionAdministration({ data }: { data: Admin | null })
         <summary className="flex min-h-11 cursor-pointer items-center font-mono text-xs text-ink-min">
           Every state
         </summary>
-        <div className="overflow-x-auto">
+        <ScrollRegion label="Every state">
           <table className="mt-1 w-full min-w-[32rem] text-left text-sm">
             <caption className="sr-only">
               Election administration by state, {data.year}, from the EAC&apos;s survey
@@ -108,7 +109,7 @@ export default function ElectionAdministration({ data }: { data: Admin | null })
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollRegion>
         <p className="mt-2 text-xs text-ink-min">
           A dash: not every election office in the state reported both counts.
         </p>

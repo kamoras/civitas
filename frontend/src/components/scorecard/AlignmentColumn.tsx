@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { fetchRepVotes, fetchSenatorVotes } from "@/lib/api";
 import { rollCallHref } from "@/lib/congress";
@@ -168,6 +168,7 @@ export default function AlignmentColumn({
   approval,
   dimension,
   onMore,
+  note = null,
 }: {
   memberId: string;
   chamber: "senate" | "house";
@@ -183,6 +184,9 @@ export default function AlignmentColumn({
   approval?: Approval | null;
   dimension: ScoreBreakdownDimension | undefined;
   onMore: () => void;
+  /** A related line shown under the rate (votes with the president's
+   *  stated positions). */
+  note?: ReactNode;
 }) {
   const facts = dimension?.facts as AlignmentFacts | undefined;
   // The breaks the score counts, served with it. Until the member's
@@ -222,6 +226,7 @@ export default function AlignmentColumn({
       {facts?.breakRate != null && facts.expectedBreakRate != null && (
         <RateScale rate={facts.breakRate} expected={facts.expectedBreakRate} name={name} />
       )}
+      {note}
 
       <Block label={`Votes against party (${total})`}>
         {total === 0 && <p className="text-sm text-ink-lo">None on record this Congress.</p>}
@@ -243,13 +248,19 @@ export default function AlignmentColumn({
             )}
           </>
         )}
-        <p className="text-xs leading-relaxed text-ink-min">
-          A break: at least 65% of one party voted one way, at most 35% of the other did, and the
-          member sided with the other party. Housekeeping votes (quorum calls, adjourning, approving
-          the Journal, the House&apos;s previous question, motions to table or to recommit, the
-          House&apos;s motion to commit) don&apos;t count.
-          {counted && " Each bill or nomination counts once, however many times it came to a vote."}
-        </p>
+        <details className="text-xs leading-relaxed text-ink-min">
+          <summary className="inline-flex min-h-6 cursor-pointer items-center text-ink-lo hover:text-phos">
+            What counts as a break
+          </summary>
+          <p className="mt-1">
+            At least 65% of one party voted one way, at most 35% of the other did, and the member
+            sided with the other party. Housekeeping votes (quorum calls, adjourning, approving the
+            Journal, the House&apos;s previous question, motions to table or to recommit, the
+            House&apos;s motion to commit) don&apos;t count.
+            {counted &&
+              " Each bill or nomination counts once, however many times it came to a vote."}
+          </p>
+        </details>
       </Block>
 
       {facts && flank.length > 0 && (

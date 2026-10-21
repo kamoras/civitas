@@ -93,7 +93,7 @@ export default function CalendarList({ cal }: { cal: ElectionCalendar }) {
   const row = (e: Row) => (
     <li
       key={e.key}
-      className="grid grid-cols-[5.5rem_1fr] gap-x-3 border-t border-white/[0.07] py-2 sm:grid-cols-[7rem_7rem_1fr_auto]"
+      className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-3 border-t border-white/[0.07] py-2 [overflow-wrap:anywhere] sm:grid-cols-[7rem_7rem_minmax(0,1fr)_auto]"
     >
       <span className="font-mono text-xs tabular-nums text-ink-hi">
         {longDate(e.date).replace(/, \d{4}$/, "")}

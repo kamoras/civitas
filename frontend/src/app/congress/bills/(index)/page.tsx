@@ -47,8 +47,13 @@ function BillsPageContent() {
   );
   const [inMotion, setInMotion] = useState(() => initial?.inMotion ?? 0);
 
-  const [mode, setMode] = useState<ViewMode>(initialQ || reached ? "all" : "hot");
-  const [stage, setStage] = useState<string | null>(null);
+  // From a bill page's "other bills still at this stage" (?stage=<code>):
+  // exactly that stage, latched at mount like ?reached=.
+  const [stage, setStage] = useState<string | null>(() => {
+    const s = searchParams.get("stage");
+    return s && ALL_STAGE_CODES.includes(s) ? s : null;
+  });
+  const [mode, setMode] = useState<ViewMode>(initialQ || reached || stage ? "all" : "hot");
   const [chamber, setChamber] = useState<ChamberFilter>("all");
   const [party, setParty] = useState<PartyFilter>("ALL");
   const [search, setSearch] = useState(initialQ);
@@ -86,18 +91,23 @@ function BillsPageContent() {
   // window.history, never router.replace: on this route the router's
   // replace can leave the address bar unchanged (AGENTS.md, "Client-side URL
   // state"), and a reload would bring the cleared filter back.
+  const dropParam = (name: string) => {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has(name)) return;
+    url.searchParams.delete(name);
+    window.history.replaceState(null, "", url);
+  };
   const clearReached = () => {
     if (!reached) return;
     setReached(null);
-    const url = new URL(window.location.href);
-    url.searchParams.delete("reached");
-    window.history.replaceState(null, "", url);
+    dropParam("reached");
   };
   // A milestone counts bills that got at least that far, a stage pick bills
   // at exactly that stage: picking one drops the other rather than showing
   // their overlap under either's name.
   const selectStage = (next: string | null) => {
     if (next) clearReached();
+    dropParam("stage");
     setStage(next);
   };
 
@@ -184,7 +194,7 @@ function BillsPageContent() {
                     key={c}
                     onClick={() => setChamber(c)}
                     aria-pressed={chamber === c}
-                    className={`font-mono text-xs px-2 py-1 border transition-colors ${
+                    className={`inline-flex min-h-6 min-w-6 items-center justify-center font-mono text-xs px-2 py-1 border transition-colors ${
                       chamber === c ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
                     }`}
                   >
@@ -203,7 +213,7 @@ function BillsPageContent() {
                     key={p}
                     onClick={() => setParty(p)}
                     aria-pressed={party === p}
-                    className={`font-mono text-xs px-2 py-1 border transition-colors ${
+                    className={`inline-flex min-h-6 min-w-6 items-center justify-center font-mono text-xs px-2 py-1 border transition-colors ${
                       party === p ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
                     }`}
                   >
@@ -216,7 +226,7 @@ function BillsPageContent() {
                 <button
                   onClick={() => {
                     clearReached();
-                    setStage(null);
+                    selectStage(null);
                     setChamber("all");
                     setParty("ALL");
                     setSearch("");

@@ -71,7 +71,7 @@ function PoliticianCardUI({ p }: { p: PoliticianCard }) {
       href={`/politicians/${p.id}`}
       className="block border border-white/[0.07] hover:border-white/15 bg-surface-base hover:bg-surface-base p-4 transition-all group"
     >
-      <div className="flex items-start gap-3">
+      <div className="flex flex-wrap items-start gap-3">
         {p.thumbnailUrl ? (
           <Photo
             src={p.thumbnailUrl}
@@ -87,7 +87,7 @@ function PoliticianCardUI({ p }: { p: PoliticianCard }) {
           <Initials name={p.name} />
         )}
 
-        <div className="flex-1 min-w-0">
+        <div className="min-w-0 flex-[1_1_10rem]">
           <div className="flex items-center gap-2 mb-0.5">
             {partyDot(p.party)}
             <span className="font-mono text-sm text-ink-hi group-hover:text-phos transition-colors truncate">
@@ -473,7 +473,7 @@ function MembersDirectoryContent() {
                     key={key}
                     onClick={() => setParty(key)}
                     aria-pressed={party === key}
-                    className={`font-mono text-xs px-2 py-1 border transition-colors ${
+                    className={`inline-flex min-h-6 min-w-6 items-center justify-center font-mono text-xs px-2 py-1 border transition-colors ${
                       party === key ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
                     }`}
                   >

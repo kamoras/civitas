@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { reachedHref } from "@/lib/congress";
+import { reachedHref, stageHref } from "@/lib/congress";
 import type { StageMilestones } from "@/types/bill";
 
 /**
@@ -61,6 +61,19 @@ export default function StageLadder({ data }: { data: StageMilestones }) {
         Share of the {data.total.toLocaleString("en-US")} bills sitting members have sponsored this
         Congress that got at least that far. Pick a step to list its bills.
       </p>
+      {data.stage && data.stageOthers != null && (
+        <p className="text-sm">
+          {/* The ladder's lists are cumulative ("Introduced" is every
+              bill); this one is the bills sitting where this one sits. */}
+          <Link
+            href={stageHref(data.stage)}
+            className="inline-block min-h-6 py-0.5 underline decoration-white/30 underline-offset-4 hover:text-phos [overflow-wrap:anywhere]"
+          >
+            Other bills still at this stage ({data.stageOthers.toLocaleString("en-US")})
+          </Link>
+          {data.stageLabel && <span className="text-ink-lo"> · {data.stageLabel}</span>}
+        </p>
+      )}
     </div>
   );
 }

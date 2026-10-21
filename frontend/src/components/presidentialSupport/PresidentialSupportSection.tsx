@@ -110,7 +110,7 @@ export default function PresidentialSupportSection({
             open={open}
             onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}
           >
-            <summary className="cursor-pointer font-mono text-xs text-ink-lo hover:text-phos">
+            <summary className="inline-flex min-h-6 cursor-pointer items-center font-mono text-xs text-ink-lo hover:text-phos">
               [The {data.votes} votes, the method and the data]
             </summary>
             <div className="mt-3 space-y-5">

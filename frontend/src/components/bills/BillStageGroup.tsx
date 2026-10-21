@@ -188,7 +188,7 @@ export default function BillStageGroup({
                 type="button"
                 onClick={() => setSort(opt.value)}
                 aria-pressed={sort === opt.value}
-                className={`font-mono text-xs px-2 py-0.5 border transition-colors ${
+                className={`inline-flex min-h-6 min-w-6 items-center justify-center font-mono text-xs px-2 py-0.5 border transition-colors ${
                   sort === opt.value ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
                 }`}
               >

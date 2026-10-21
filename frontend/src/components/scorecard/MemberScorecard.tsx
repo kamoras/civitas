@@ -67,6 +67,7 @@ export default function MemberScorecard({
   former = false,
   scoredOn = null,
   peers = null,
+  votesNote = null,
 }: {
   member: Senator;
   chamber: "senate" | "house";
@@ -83,6 +84,9 @@ export default function MemberScorecard({
   peers?: PeerComparison | null;
   /** The latest scoring run, for the methods section and its citation. */
   scoredOn?: { date: string; algorithmVersion: string | null } | null;
+  /** Votes with the president's stated positions in one line (rendered by
+   *  the server page): in the Votes column, not above the member's name. */
+  votesNote?: ReactNode;
 }) {
   const [view, setView] = useState<DrawerView | null>(null);
   const close = useCallback(() => setView(null), []);
@@ -176,6 +180,7 @@ export default function MemberScorecard({
               approval={member.constituentApproval}
               dimension={breakdown?.constituentAlignment}
               onMore={() => setView("votes")}
+              note={votesNote}
             />
             <EffectivenessColumn
               chamber={chamber}

@@ -75,7 +75,7 @@ export default function AccessibilityPage() {
                   gaps we know of are listed under &ldquo;Known gaps&rdquo;.
                 </Fact>
                 <Fact label="Last reviewed">
-                  2026-10-16: every public route, at 320, 375 and 1280 pixels wide and at 200% text
+                  2026-10-20: every public route, at 320, 375 and 1280 pixels wide and at 200% text
                   size, by keyboard and with axe-core.
                 </Fact>
               </Facts>
@@ -95,7 +95,8 @@ export default function AccessibilityPage() {
                   share dialog, the map&apos;s seat sheet and the member-page and ballot drawers
                   keep focus inside while open (Tab and Shift+Tab both wrap), close on Escape, and
                   return focus to what opened them. Map tiles are one keyboard stop per state,
-                  opened with Enter.
+                  opened with Enter. A town split between House districts lists its parts under its
+                  map as buttons, so a district can be picked without the map.
                 </Item>
                 <Item label="Long pages on a phone">
                   A member&apos;s page, a bill, a roll call, a state ballot, the Supreme Court page
@@ -123,6 +124,11 @@ export default function AccessibilityPage() {
                   themes, text on a filled cell clears 4.5:1, and letters on map tiles sit on an
                   outline in the page&apos;s colour, so they read on any tile colour. A shared
                   picture of a section is drawn in the theme you are viewing.
+                </Item>
+                <Item label="Large text">
+                  At 200% text on a 320-pixel screen no page scrolls sideways: a table too wide for
+                  the screen scrolls inside its own box, which is a named region you can reach with
+                  Tab and scroll with the arrow keys.
                 </Item>
                 <Item label="Screen readers">
                   Pages use landmarks (header, navigation, main) and headings in order. Tabs,
@@ -153,7 +159,10 @@ export default function AccessibilityPage() {
                   section, is a 44×44 target around the word, every standalone action (calling or
                   writing a member, sharing, paging, a roll call&apos;s names) is 44 pixels tall,
                   and every text box and menu is 44 pixels tall with 16-pixel text, so an iPhone
-                  doesn&apos;t zoom the page when one is tapped. Nothing needs dragging.
+                  doesn&apos;t zoom the page when one is tapped. On a phone the state map on
+                  Elections is a grid of equal tiles, each a 24-pixel target, since the real shapes
+                  of the smaller states are too small to tap. The floating back-to-top button hides
+                  while a link, control or map is under it. Nothing needs dragging.
                 </Item>
                 <Item label="Pop-up explanations">
                   A score&apos;s explanation opens on hover, focus or tap, stays open while the

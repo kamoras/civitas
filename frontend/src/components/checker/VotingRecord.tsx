@@ -127,7 +127,7 @@ function VoteFilter({
     <button
       onClick={onClick}
       aria-pressed={active}
-      className={`text-xs px-2 py-1 border font-mono transition-all ${
+      className={`inline-flex min-h-6 min-w-6 items-center justify-center text-xs px-2 py-1 border font-mono transition-all ${
         active
           ? "text-ink-hi border-white/15 bg-white/[0.03]"
           : "text-ink-min border-white/[0.07] hover:border-white/15"

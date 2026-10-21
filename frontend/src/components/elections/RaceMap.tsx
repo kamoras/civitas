@@ -6,6 +6,8 @@ import { useState } from "react";
 import { FIPS_TO_STATE } from "@/lib/stateCodes";
 import { MAP_LABEL_HALO } from "@/lib/results";
 import { ComposableMap, Geographies, Geography, useMapContext } from "react-simple-maps";
+import { STATE_TILES, TILE_COLS, TILE_ROWS } from "@/lib/electionMap";
+import ScrollRegion from "@/components/shared/ScrollRegion";
 
 // Extracted from the Action Center's old elections tab (2026-07), when it and
 // /elections both drew this map; the tab was removed in 2026-09. Coloring is
@@ -30,6 +32,10 @@ const CALLOUT_STATES = ["VT", "NH", "MA", "RI", "CT", "NJ", "DE", "MD"];
 const CALLOUT_X = 880; // Maine, the furthest-east land, ends at x≈851
 const CALLOUT_TOP = 130;
 const CALLOUT_STEP = 34;
+// Each box as tall as the step allows (2 units apart), so it is 24px from
+// a 735px-wide map up (WCAG 2.5.8); narrower, the tiles take over.
+const CALLOUT_H = 32;
+const CALLOUT_W = 56;
 
 interface RaceMapProps {
   selectedState: string | null;
@@ -72,6 +78,145 @@ export default function RaceMap({
   };
 
   return (
+    <>
+      {/* The fills' patterns, once, in an SVG that is never display:none:
+          Chrome paints no pattern whose element sits in a hidden subtree,
+          and each map is hidden at one width or the other. */}
+      {defs && (
+        <svg aria-hidden="true" width="0" height="0" className="absolute">
+          {defs}
+        </svg>
+      )}
+      <StateTiles
+        selectedState={selectedState}
+        onStateClick={onStateClick}
+        getFillColor={getFillColor}
+        getStateLabel={getStateLabel}
+      />
+      <div className="hidden sm:block">
+        <ShapeMap
+          selectedState={selectedState}
+          onStateClick={onStateClick}
+          getFillColor={getFillColor}
+          getHoverFillColor={getHoverFillColor}
+          getStateLabel={getStateLabel}
+          hoveredFips={hoveredFips}
+          setHoveredFips={setHoveredFips}
+          focusedFips={focusedFips}
+          setFocusedFips={setFocusedFips}
+          activate={activate}
+        />
+      </div>
+    </>
+  );
+}
+
+// A phone's tile: 24px at the least (WCAG 2.5.8), in viewBox units that map
+// one to one onto CSS pixels at the grid's minimum width.
+const TILE_PX = 24;
+const TILE_GAP = 2;
+const TILE_STEP = TILE_PX + TILE_GAP;
+
+/**
+ * On a phone the shapes are too small to tap (Rhode Island is 4x5 pixels,
+ * Alabama 17x27, Indiana 14x23 at 375px), so the map is a grid of equal
+ * tiles, each state roughly where it sits (STATE_TILES, the seat map's
+ * layout), every tile a 24px button. Same fills, names and clicks as the
+ * shapes; from 640px up the shapes take over. Narrower than 12 tiles
+ * (320px at 200% text), the grid scrolls in its own box.
+ */
+function StateTiles({
+  selectedState,
+  onStateClick,
+  getFillColor,
+  getStateLabel,
+}: Pick<RaceMapProps, "selectedState" | "onStateClick" | "getFillColor"> & {
+  getStateLabel: (state: string) => string;
+}) {
+  const states = new Set(Object.values(FIPS_TO_STATE));
+  const width = TILE_COLS * TILE_STEP - TILE_GAP;
+  const height = TILE_ROWS * TILE_STEP - TILE_GAP;
+  return (
+    <div className="sm:hidden">
+      <ScrollRegion label="Map of the states, as tiles">
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          className="block h-auto w-full"
+          style={{ minWidth: width }}
+        >
+          {Object.entries(STATE_TILES)
+            .filter(([st]) => states.has(st))
+            .map(([st, [col, row]]) => {
+              const selected = selectedState === st;
+              const x = col * TILE_STEP;
+              const y = row * TILE_STEP;
+              return (
+                <g
+                  key={st}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={getStateLabel(st)}
+                  onClick={() => onStateClick(st)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onStateClick(st);
+                    }
+                  }}
+                  className="cursor-pointer outline-none [&:focus-visible>rect]:stroke-[var(--phos)] [&:focus-visible>rect]:[stroke-width:2.5]"
+                >
+                  <rect
+                    x={x}
+                    y={y}
+                    width={TILE_PX}
+                    height={TILE_PX}
+                    style={{
+                      fill: selected ? "var(--signal-cyan)" : getFillColor(st, selected),
+                      stroke: selected ? "var(--phos)" : overlay(0.25),
+                      strokeWidth: 1,
+                    }}
+                  />
+                  <text
+                    x={x + TILE_PX / 2}
+                    y={y + TILE_PX / 2}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fontSize={13}
+                    fill="var(--ink-hi)"
+                    pointerEvents="none"
+                    className={`font-mono ${MAP_LABEL_HALO}`}
+                  >
+                    {st}
+                  </text>
+                </g>
+              );
+            })}
+        </svg>
+      </ScrollRegion>
+    </div>
+  );
+}
+
+function ShapeMap({
+  selectedState,
+  onStateClick,
+  getFillColor,
+  getHoverFillColor,
+  getStateLabel,
+  hoveredFips,
+  setHoveredFips,
+  focusedFips,
+  setFocusedFips,
+  activate,
+}: Omit<RaceMapProps, "getStateLabel" | "defs"> & {
+  getStateLabel: (state: string) => string;
+  hoveredFips: string | null;
+  setHoveredFips: (fips: string | null) => void;
+  focusedFips: string | null;
+  setFocusedFips: (fips: string | null) => void;
+  activate: (e: KeyboardEvent, state: string) => void;
+}) {
+  return (
     <ComposableMap
       projection="geoAlbersUsa"
       projectionConfig={{ scale: 1000 }}
@@ -79,7 +224,6 @@ export default function RaceMap({
       height={600}
       style={{ width: "100%", height: "auto" }}
     >
-      {defs}
       <Geographies geography={GEO_URL}>
         {({ geographies }) => [
           ...geographies.map((geo) => {
@@ -208,9 +352,9 @@ function SmallStateCallouts({
             />
             <rect
               x={CALLOUT_X}
-              y={y - 12}
-              width={46}
-              height={24}
+              y={y - CALLOUT_H / 2}
+              width={CALLOUT_W}
+              height={CALLOUT_H}
               fill={
                 isSelected
                   ? "var(--signal-cyan)"
@@ -222,7 +366,7 @@ function SmallStateCallouts({
               strokeWidth={isFocused ? 2.5 : 1}
             />
             <text
-              x={CALLOUT_X + 23}
+              x={CALLOUT_X + CALLOUT_W / 2}
               y={y + 5}
               textAnchor="middle"
               fontFamily="ui-monospace, monospace"

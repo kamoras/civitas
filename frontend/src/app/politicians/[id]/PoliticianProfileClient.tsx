@@ -201,7 +201,6 @@ export default function PoliticianProfileClient({
                 profile.seatRace.raceId !== profile.onBallot?.raceId && (
                   <SeatRaceLine race={profile.seatRace} name={profile.identity.name} />
                 )}
-              {supportLine}
               {isMember && (
                 // Keyed by member: moving between two profiles reuses this
                 // page, and every part of the scorecard that loads or keeps
@@ -221,6 +220,7 @@ export default function PoliticianProfileClient({
                   peers={peers as PeerComparison | null}
                   titleAs="h1"
                   former={hasLeftOffice}
+                  votesNote={supportLine}
                 />
               )}
               {branch === "president" && (

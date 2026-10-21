@@ -68,7 +68,9 @@ export default function BillJourney({
               <span aria-hidden="true" className="pt-1 lg:pt-0">
                 <Mark status={s.status} />
               </span>
-              <span className={`flex min-w-0 flex-col ${reached ? "" : "opacity-70"}`}>
+              {/* No opacity on stops ahead: it took their text to 3.4:1 (axe). Ink-lo
+                  and the hollow mark say "not yet". */}
+              <span className="flex min-w-0 flex-col">
                 <span
                   className={`text-sm font-semibold ${reached ? "text-ink-hi" : "text-ink-lo"}`}
                 >
