@@ -477,7 +477,17 @@ const boxes: NonNullable<BillRecord["boxes"]> = {
       sentence: "Passed the Senate by a recorded vote on September 24, 2026 (roll call 243).",
       text: "Passed Senate by Yea-Nay Vote. 74 - 25. Record Vote Number: 243.",
       rollCall: { chamber: "senate", number: 243, session: 2 },
-      figure: { type: "split", yeas: 74, nays: 25, yeaShare: 0.7475, caption: "Passed" },
+      figure: {
+        type: "split",
+        yeas: 74,
+        nays: 25,
+        yeaShare: 0.7475,
+        caption: "Passed",
+        marks: [
+          { id: "yea", label: "Yea", shown: "74 votes", context: "75% of the 99 voting" },
+          { id: "nay", label: "Nay", shown: "25 votes", context: "25% of the 99 voting" },
+        ],
+      },
     },
   ],
   votes: {
@@ -1035,7 +1045,7 @@ describe("bill page on a phone: the votes first", () => {
       Boolean(el.compareDocumentPosition(other) & Node.DOCUMENT_POSITION_FOLLOWING);
     const passed = screen.getByRole("heading", { name: /^Passed the Senate by a recorded vote/ });
     expect(
-      within(passed.closest("article")!).getByRole("img", { name: /74 yea to 25 nay/ })
+      within(passed.closest("article")!).getByRole("group", { name: /^74 yea to 25 nay/ })
     ).toBeTruthy();
     expect(screen.getByRole("link", { name: "1 recorded vote on this bill" })).toHaveAttribute(
       "href",

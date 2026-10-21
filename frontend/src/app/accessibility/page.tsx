@@ -235,8 +235,8 @@ export default function AccessibilityPage() {
                   }
                 />
                 <Box
-                  title="Dot strips"
-                  dek="Pointing near a dot names who it is. Each strip is one Tab stop, moved with the arrow keys, and has a table of the same figures."
+                  title="Dot strips and charts"
+                  dek="Pointing near a dot, bar or segment names what it is. Each chart is one Tab stop, moved with the arrow keys, and its figures are also written out."
                   more="pointer, touch and keyboard"
                 >
                   <P>
@@ -247,6 +247,13 @@ export default function AccessibilityPage() {
                     stop: the arrow keys move from dot to dot in order of value, Home and End go to
                     the ends, Enter opens the page, and a screen reader hears each dot as it is
                     reached. Every strip also has a table of the same figures with linked names.
+                  </P>
+                  <P>
+                    Other charts work the same way, one chart at a time: a vote&apos;s yea and nay
+                    bar names each side with its votes and share and links to who voted each way, a
+                    party&apos;s dots name each member and their vote, and a comment period&apos;s
+                    bar gives its days gone and its dates. Each is one Tab stop the arrow keys walk,
+                    and its figures are also written out beside it.
                   </P>
                 </Box>
                 <Box
