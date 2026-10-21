@@ -128,7 +128,7 @@ export default async function ExecutivePage() {
         <Navbar />
         <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
           <div className="mx-auto max-w-5xl">
-            <SectionTabs section="executive" active="overview" />
+            <SectionTabs section="executive" active={null} />
             <PageMasthead
               className="mb-8"
               eyebrow="Executive · Article II"
@@ -289,7 +289,7 @@ export default async function ExecutivePage() {
               </Panel>
             </div>
 
-            <SectionCards section="executive" current="overview" />
+            <SectionCards section="executive" />
           </div>
         </main>
         <Footer />

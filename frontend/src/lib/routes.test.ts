@@ -8,8 +8,12 @@ import {
   recordTrail,
   issuesUrl,
   monitorHref,
+  pagePaths,
   SECTIONS,
+  sectionLeaves,
   sectionSubpages,
+  tabChain,
+  type SectionPage,
 } from "./routes";
 import { ELECTION_MAP_HREF } from "./electionMap";
 import { REDISTRICTING_HREF } from "./redistricting";
@@ -44,7 +48,7 @@ describe("monitorHref", () => {
 describe("SECTIONS", () => {
   it("names the same pages as the modules that own them", () => {
     const href = (section: keyof typeof SECTIONS, key: string) =>
-      SECTIONS[section].tabs.find((t) => t.key === key)?.href;
+      sectionLeaves(section).find((t) => t.key === key)?.href;
     expect(href("elections", "map")).toBe(ELECTION_MAP_HREF);
     expect(href("elections", "redistricting")).toBe(REDISTRICTING_HREF);
     expect(href("elections", "calendar")).toBe(CALENDAR_HREF);
@@ -87,9 +91,10 @@ function pageRoutes(dir: string, root: string): string[] {
 
 describe("SECTIONS covers the site", () => {
   const sectionPaths = new Set(
-    Object.values(SECTIONS).flatMap((s) =>
-      [s.href, ...s.tabs.map((t) => t.href)].map((h) => h.split(/[?#]/)[0])
-    )
+    Object.values(SECTIONS).flatMap((s) => [
+      s.href.split(/[?#]/)[0],
+      ...s.tabs.flatMap((t: SectionPage) => pagePaths(t)),
+    ])
   );
 
   it("lists every page that isn't a record, so no page is reachable only by an inline link", () => {
@@ -112,12 +117,7 @@ describe("SECTIONS covers the site", () => {
   });
 
   it("menus leave out the hub, which their section's own link already is", () => {
-    expect(sectionSubpages("elections").map((t) => t.key)).toEqual([
-      "map",
-      "redistricting",
-      "calendar",
-      "archive",
-    ]);
+    expect(sectionSubpages("elections").map((t) => t.key)).toEqual(["map", "calendar", "archive"]);
   });
 
   it("counts a page as in its section by path, not by prefix text", () => {
@@ -152,23 +152,58 @@ describe("SECTIONS covers the site", () => {
 describe("currentTab", () => {
   const marked = (section: keyof typeof SECTIONS, pathname: string) =>
     SECTIONS[section].tabs
-      .filter((t) => t.href !== SECTIONS[section].href)
       .map((t) => [t.key, currentTab(section, t.href, pathname)])
       .filter(([, c]) => c);
 
-  it("tells Every agency and Budgets apart: each tab is its own page", () => {
+  it("marks the tab whose views a page is, and the page itself", () => {
     expect(marked("executive", "/agencies")).toEqual([["agencies", "page"]]);
-    expect(marked("executive", "/agencies/budget")).toEqual([["budget", "page"]]);
-    // An agency's page sits under the directory.
+    expect(marked("executive", "/agencies/budget")).toEqual([["agencies", "true"]]);
+    expect(marked("executive", "/compare/presidents")).toEqual([["presidents", "true"]]);
+    expect(marked("congress", "/congress/week")).toEqual([["reports", "true"]]);
+    expect(marked("congress", "/congress/month/2026-09")).toEqual([["reports", "true"]]);
+    expect(marked("congress", "/congress/president/senate")).toEqual([["reports", "true"]]);
+    expect(marked("congress", "/compare")).toEqual([["members", "true"]]);
+    expect(marked("elections", "/elections/redistricting/TX")).toEqual([["map", "true"]]);
+  });
+
+  it("marks the closest tab a page sits under, and never the hub for a page under it", () => {
+    // The measures sit under the directory's path, but are a Reports view.
+    expect(marked("congress", "/congress/members/measures")).toEqual([["reports", "true"]]);
+    expect(marked("congress", "/congress/members")).toEqual([["members", "page"]]);
+    expect(marked("congress", "/congress/bills/HR.1")).toEqual([["bills", "true"]]);
     expect(marked("executive", "/agencies/environmental-protection-agency")).toEqual([
       ["agencies", "true"],
     ]);
+    // A day's report is under the hub, which no tab claims by prefix.
+    expect(marked("congress", "/congress/2026-10-01")).toEqual([]);
+    expect(currentTab("executive", SECTIONS.executive.href, "/executive/orders")).toBeUndefined();
   });
 
-  it("marks the deepest tab a page sits under, and never the hub for a page under it", () => {
-    expect(marked("congress", "/congress/members/measures")).toEqual([["measures", "page"]]);
-    expect(marked("congress", "/congress/bills/HR.1")).toEqual([["bills", "true"]]);
-    expect(currentTab("executive", SECTIONS.executive.href, "/executive/orders")).toBeUndefined();
+  it("gives a tab with views its own page as the first view", () => {
+    const check = (p: SectionPage) => {
+      if (!p.views) return;
+      expect(p.views[0].key, p.key).toBe(p.key);
+      expect(p.views[0].href, p.key).toBe(p.href);
+      p.views.forEach(check);
+    };
+    for (const s of Object.values(SECTIONS)) s.tabs.forEach((t: SectionPage) => check(t));
+  });
+
+  it("keeps every menu to five pages or fewer", () => {
+    for (const [key, s] of Object.entries(SECTIONS))
+      if (key !== "about") expect(s.tabs.length, key).toBeLessThanOrEqual(5);
+  });
+
+  it("finds the chain down to any page", () => {
+    expect(tabChain("congress", "week").map((p) => p.label)).toEqual(["Reports", "Floor", "Week"]);
+    expect(tabChain("congress", "reports").map((p) => p.label)).toEqual([
+      "Reports",
+      "Floor",
+      "Day",
+    ]);
+    expect(tabChain("congress", "compare").map((p) => p.label)).toEqual(["Members", "Compare two"]);
+    expect(tabChain("congress", "bills").map((p) => p.label)).toEqual(["Bills"]);
+    expect(tabChain("executive", null)).toEqual([]);
   });
 
   it("marks no tab that shares its path with another (told apart by the query string)", () => {

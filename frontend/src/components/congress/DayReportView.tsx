@@ -222,7 +222,7 @@ export default function DayReportView({
           <SectionTabs section="congress" active="reports" />
           <PageMasthead
             className="mb-6"
-            eyebrow="What happened in Congress"
+            eyebrow="What happened on the floor"
             title={longDate(report.date)}
           >
             <p>{report.sentence}</p>

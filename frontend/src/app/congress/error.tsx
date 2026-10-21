@@ -16,7 +16,7 @@ export default function CongressError({ retry }: { retry: () => void }) {
       <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
         <div className="mx-auto max-w-6xl">
           <SectionTabs section="congress" active="reports" />
-          <PageMasthead eyebrow="What happened in Congress" title="Congress">
+          <PageMasthead eyebrow="What happened on the floor" title="Congress">
             <p>
               The record of Congress could not be reached just now. This is an outage on this site,
               not a day without a record. The{" "}

@@ -13,19 +13,48 @@ describe("SectionTabs", () => {
     const links = within(row).getAllByRole("link");
     expect(links.map((l) => l.textContent)).toEqual([
       "Reports",
-      "Latest week",
-      "Latest month",
       "Members",
-      "By the numbers",
-      "Compare two",
       "Bills",
       "Committees",
       "Nominations",
-      "Votes with the president",
     ]);
-    expect(links[9]).toHaveAttribute("aria-current", "page");
+    // The page is a view of Reports: the tab holds it, the view is it.
+    expect(links[0]).toHaveAttribute("aria-current", "true");
     expect(links.filter((l) => l.hasAttribute("aria-current"))).toHaveLength(1);
     for (const l of links) expect(l.className).toContain("min-h-11");
+
+    const views = nav.querySelector<HTMLElement>("[data-section-views]")!;
+    const reports = within(views).getByRole("group", { name: "Reports pages" });
+    expect(
+      within(reports)
+        .getAllByRole("link")
+        .map((l) => [l.textContent, l.getAttribute("aria-current")])
+    ).toEqual([
+      ["Floor", null],
+      ["Members", "true"],
+    ]);
+    const members = within(views).getByRole("group", { name: "Members pages" });
+    const pages = within(members).getAllByRole("link");
+    expect(pages.map((l) => l.textContent)).toEqual(["By the numbers", "Votes with the president"]);
+    expect(pages[1]).toHaveAttribute("aria-current", "page");
+    expect(pages[1]).toHaveAttribute("href", "/congress/president/house");
+    for (const l of [...within(views).getAllByRole("link")])
+      expect(l.className).toContain("min-h-11");
+  });
+
+  it("leaves the floor's Day, Week and Month to the page's own toggle", () => {
+    render(<SectionTabs section="congress" active="week" />);
+    const views = document.querySelector<HTMLElement>("[data-section-views]")!;
+    expect(within(views).getAllByRole("group")).toHaveLength(1);
+    expect(within(views).getByRole("link", { name: "Floor" })).toHaveAttribute(
+      "aria-current",
+      "true"
+    );
+  });
+
+  it("draws no view row for a tab without views", () => {
+    render(<SectionTabs section="congress" active="bills" />);
+    expect(document.querySelector("[data-section-views]")).toBeNull();
   });
 
   it("marks no tab for a page that isn't one of them", () => {
@@ -45,14 +74,8 @@ describe("SectionTabs", () => {
     expect(summary.className).toContain("min-h-11");
     expect(summary.textContent).toBe("Elections▸Seat map▾");
     const links = within(switcher).getAllByRole("link");
-    expect(links.map((l) => l.textContent)).toEqual([
-      "Ballots by state",
-      "Seat map",
-      "New House maps",
-      "Calendar",
-      "Archive",
-    ]);
-    expect(links[1]).toHaveAttribute("aria-current", "page");
+    expect(links.map((l) => l.textContent)).toEqual(["Ballots", "Seat map", "Calendar", "Archive"]);
+    expect(links[1]).toHaveAttribute("aria-current", "true");
     for (const l of links) expect(l.className).toContain("min-h-11");
   });
 

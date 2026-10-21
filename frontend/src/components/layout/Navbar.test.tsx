@@ -83,15 +83,15 @@ describe("Navbar", () => {
     fireEvent.click(button);
     expect(button).toHaveAttribute("aria-expanded", "true");
     expect(panel).toBeVisible();
-    // Every page of the section, the hub first, the current one marked.
+    // The section name (its hub), then every tab, the current one marked.
     expect(
       within(panel)
         .getAllByRole("link")
         .map((l) => l.getAttribute("href"))
-    ).toEqual(SECTIONS.elections.tabs.map((t) => t.href));
+    ).toEqual([SECTIONS.elections.href, ...SECTIONS.elections.tabs.map((t) => t.href)]);
     const seatMap = within(panel).getByRole("link", { name: /Seat map/ });
     expect(seatMap).toHaveAttribute("aria-current", "page");
-    expect(within(panel).getByRole("link", { name: "Ballots by state" })).not.toHaveAttribute(
+    expect(within(panel).getByRole("link", { name: "Ballots" })).not.toHaveAttribute(
       "aria-current"
     );
 

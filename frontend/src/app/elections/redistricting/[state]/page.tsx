@@ -7,6 +7,7 @@ import { fetchRecord } from "@/lib/ssrPayload";
 import { absoluteUrl, notFoundMetadata, pageMetadata } from "@/lib/site";
 import { CARD_ALT, cardImage, describeStateRedistricting } from "@/lib/seo";
 import { REDISTRICTING_HREF, redistrictingHref } from "@/lib/redistricting";
+import { ELECTION_MAP_HREF } from "@/lib/electionMap";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
 import SectionTabs from "@/components/layout/SectionTabs";
 import Navbar from "@/components/layout/Navbar";
@@ -74,6 +75,7 @@ export default async function StateRedistrictingPage({
         data={breadcrumbList([
           { name: "Home", url: absoluteUrl("/") },
           { name: "Elections", url: absoluteUrl("/elections") },
+          { name: "Seat map", url: absoluteUrl(ELECTION_MAP_HREF) },
           { name: "New House maps", url: absoluteUrl(REDISTRICTING_HREF) },
           { name: data.stateName, url: absoluteUrl(redistrictingHref(data.state)) },
         ])}
@@ -108,6 +110,13 @@ export default async function StateRedistrictingPage({
           <nav aria-label="Breadcrumb" className="hidden sm:block mb-6 text-sm text-ink-lo">
             <Link href="/elections" className="inline-flex min-h-6 items-center hover:text-phos">
               Elections
+            </Link>
+            {" / "}
+            <Link
+              href={ELECTION_MAP_HREF}
+              className="inline-flex min-h-6 items-center hover:text-phos"
+            >
+              Seat map
             </Link>
             {" / "}
             <Link

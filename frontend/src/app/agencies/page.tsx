@@ -5,6 +5,7 @@ import { fetchAgencyIndex } from "@/lib/agencyServer";
 import { matchAgencies } from "@/lib/agencies";
 import { EXECUTIVE_HREF, agencyHref } from "@/lib/routes";
 import Navbar from "@/components/layout/Navbar";
+import SectionTabs from "@/components/layout/SectionTabs";
 import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
 import SourceLine from "@/components/agencies/SourceLine";
@@ -128,6 +129,7 @@ export default async function AgenciesPage({
         <Navbar />
         <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
           <div className="mx-auto max-w-5xl">
+            <SectionTabs section="executive" active="agencies" />
             <PageMasthead className="mb-8" eyebrow="Executive · agencies" title="Federal agencies">
               <p>
                 The agencies that run the government day to day: what each one spends, the rules it

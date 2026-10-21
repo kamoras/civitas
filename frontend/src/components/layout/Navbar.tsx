@@ -183,11 +183,7 @@ function SectionItem({
   // `pathOf` match on the hub too: the hub is a page of the section like
   // any other here.
   const isCurrent = (h: string) =>
-    h === href
-      ? pathname === pathOf(href)
-        ? "page"
-        : undefined
-      : currentTab(section, h, pathname);
+    h === href && pathname === pathOf(href) ? "page" : currentTab(section, h, pathname);
   return (
     // Not positioned: the panel spans the header (the nav is its
     // containing block), not this item.
@@ -215,7 +211,18 @@ function SectionItem({
         className="absolute inset-x-0 top-[calc(100%+3px)] z-10 border-b-3 border-white/15 bg-surface-base"
       >
         <div className="mx-auto grid max-w-7xl grid-cols-[12rem_minmax(0,1fr)] gap-x-9 px-4 py-5 sm:px-6">
-          <p className={EYEBROW}>{label}</p>
+          {/* The section's name opens its hub: a section whose hub is no
+              tab (the Executive's) is reached from here. */}
+          <p className={EYEBROW}>
+            <Link
+              href={href}
+              aria-current={pathname === pathOf(href) ? "page" : undefined}
+              onClick={() => onClose()}
+              className="inline-flex min-h-6 items-center underline decoration-white/30 underline-offset-4 hover:text-ink-hi"
+            >
+              {label}
+            </Link>
+          </p>
           <ul className="max-w-3xl columns-2 gap-x-9 xl:columns-3">
             {tabs.map((t) => {
               const current = isCurrent(t.href);

@@ -159,21 +159,55 @@ export function membersHref(state?: string | null, branch?: "senate" | "house"):
   return q ? `${MEMBERS_HREF}?${q}` : MEMBERS_HREF;
 }
 
+/** One page of a section's navigation. A tab or view with `views` is that
+ * many pages, the first of which is its own (same key, same href). */
+export interface SectionPage {
+  key: string;
+  label: string;
+  href: string;
+  /** Its name where it stands alone (a hub card, site search), when the
+   *  label only makes sense beside its siblings ("Week"). */
+  title?: string;
+  /** Other paths that are this page (`/congress/president/senate`). */
+  match?: readonly string[];
+  views?: readonly SectionPage[];
+  /** Its views are drawn by the page itself (PeriodNav: Day, Week and
+   *  Month lead to the period of the date shown, which a fixed href can't). */
+  ownToggle?: true;
+}
+
+interface Section {
+  label: string;
+  href: string;
+  match: readonly string[];
+  tabs: readonly SectionPage[];
+}
+
 /**
  * The site's sections and each one's pages, in the order the main
- * navigation, each section's tab bar and its hub's cards list them: one table, so a page added here appears in all of
- * them. `href` is the section's hub; `match` is the paths that count as
- * being in the section (the main navigation's current-section mark).
+ * navigation, each section's tab bar and its hub's cards list them: one
+ * table, so a page added here appears in all of them. `href` is the
+ * section's hub; `match` is the paths that count as being in the section
+ * (the main navigation's current-section mark).
  *
- * Every tab is a page of its own (a link with `aria-current`, not an
- * in-page ARIA tab), and none is ever dropped for the election phase: a page
- * out of its phase (the seat map from election day on) says so itself, so
- * the tab still leads somewhere that explains. The hrefs repeat
- * `ELECTION_MAP_HREF`, `REDISTRICTING_HREF` and `presidentSupportHref("house")`
- * as literals because those modules import this one; `routes.test.ts` holds
- * them equal. "Latest week" and "Latest month" lead to the report of the
- * last week and month Congress met (app/congress/week, app/congress/month),
- * not the calendar's, so a recess never opens on an empty report.
+ * The menus list the `tabs` only, so no section names more than five pages.
+ * A tab's `views` are its other pages: a second row of the tab bar on the
+ * tab's own pages (SectionTabs). A view's own `views` are a toggle on the
+ * page (Day, Week and Month on the floor reports; By the numbers and Votes
+ * with the president). Every view keeps its own address: a page with its
+ * own path renders on the server, is linkable and sits in the sitemap, and
+ * the consolidation of the menus (2026-10) needed no redirect.
+ *
+ * Every tab and view is a page of its own (a link with `aria-current`, not
+ * an in-page ARIA tab), and none is ever dropped for the election phase: a
+ * page out of its phase (the seat map from election day on) says so itself,
+ * so the tab still leads somewhere that explains. The hrefs repeat
+ * `ELECTION_MAP_HREF`, `REDISTRICTING_HREF`, `NOMINATIONS_HREF` and
+ * `presidentSupportHref("house")` as literals because those modules import
+ * this one; `routes.test.ts` holds them equal. "Week" and "Month" lead to
+ * the report of the last week and month Congress met (app/congress/week,
+ * app/congress/month), not the calendar's, so a recess never opens on an
+ * empty report.
  */
 export const SECTIONS = {
   action: {
@@ -194,40 +228,94 @@ export const SECTIONS = {
     // section to the Navbar (recordTrail).
     match: ["/congress", "/compare", "/politicians"],
     tabs: [
-      { key: "reports", label: "Reports", href: "/congress" },
-      { key: "week", label: "Latest week", href: "/congress/week" },
-      { key: "month", label: "Latest month", href: "/congress/month" },
-      // Members first of the people pages: it is where a reader finds their
-      // own (the directory), and the measures and the pair compare it.
-      { key: "members", label: "Members", href: MEMBERS_HREF },
-      { key: "measures", label: "By the numbers", href: MEASURES_HREF },
-      { key: "compare", label: "Compare two", href: "/compare" },
+      {
+        key: "reports",
+        label: "Reports",
+        href: "/congress",
+        views: [
+          {
+            key: "reports",
+            label: "Floor",
+            href: "/congress",
+            ownToggle: true,
+            views: [
+              { key: "reports", label: "Day", href: "/congress" },
+              { key: "week", label: "Week", title: "Latest week", href: "/congress/week" },
+              { key: "month", label: "Month", title: "Latest month", href: "/congress/month" },
+            ],
+          },
+          {
+            key: "measures",
+            label: "Members",
+            title: "By the numbers",
+            href: MEASURES_HREF,
+            views: [
+              { key: "measures", label: "By the numbers", href: MEASURES_HREF },
+              // "Votes with the president", not "With the president": the
+              // page is how often members voted with the president's
+              // stated positions.
+              {
+                key: "president",
+                label: "Votes with the president",
+                href: "/congress/president/house",
+                match: ["/congress/president"],
+              },
+            ],
+          },
+        ],
+      },
+      // The directory first of the people pages: it is where a reader finds
+      // their own, and the pair compares two of them.
+      {
+        key: "members",
+        label: "Members",
+        href: MEMBERS_HREF,
+        views: [
+          { key: "members", label: "Directory", title: "Members", href: MEMBERS_HREF },
+          { key: "compare", label: "Compare two", href: "/compare" },
+        ],
+      },
       { key: "bills", label: "Bills", href: "/congress/bills" },
       { key: "committees", label: "Committees", href: "/congress/committees" },
+      // Congress's page only: the Senate confirms. The Executive hub has a
+      // card for it (SectionCards' HUB_EXTRAS), since "who did the
+      // president nominate" is looked for there too.
       { key: "nominations", label: "Nominations", href: "/congress/nominations" },
-      // "Votes with the president", not "With the president": the page is
-      // how often members voted with the president's stated positions.
-      { key: "president", label: "Votes with the president", href: "/congress/president/house" },
     ],
   },
   // Article II: the president, every president, and the agencies that
-  // carry out the law. Nominations are also Congress's page (the Senate
-  // confirms them, and the URL and section mark stay there), listed here
-  // because "who did the president nominate" is looked for here.
+  // carry out the law. The section's own link is its hub (/executive).
   executive: {
     label: "Executive",
     href: EXECUTIVE_HREF,
     match: [EXECUTIVE_HREF, "/agencies", "/compare/presidents"],
     tabs: [
-      { key: "overview", label: "Overview", href: EXECUTIVE_HREF },
       { key: "president", label: "The President", href: PRESIDENT_HREF },
-      { key: "presidents", label: "Every president", href: PRESIDENTS_HREF },
-      { key: "compare", label: "Compare presidents", href: "/compare/presidents" },
-      { key: "agencies", label: "Every agency", href: "/agencies" },
-      { key: "budget", label: "Budgets", href: AGENCY_BUDGETS_HREF },
-      { key: "comments", label: "Open comment periods", href: OPEN_COMMENTS_HREF },
+      {
+        key: "presidents",
+        label: "Every president",
+        href: PRESIDENTS_HREF,
+        views: [
+          { key: "presidents", label: "Every president", href: PRESIDENTS_HREF },
+          {
+            key: "compare",
+            label: "Compare",
+            title: "Compare presidents",
+            href: "/compare/presidents",
+          },
+        ],
+      },
+      {
+        key: "agencies",
+        label: "Agencies",
+        href: "/agencies",
+        views: [
+          { key: "agencies", label: "Every agency", title: "Agencies", href: "/agencies" },
+          { key: "budget", label: "Budgets", href: AGENCY_BUDGETS_HREF },
+        ],
+      },
       { key: "orders", label: "Executive orders", href: EXECUTIVE_ORDERS_HREF },
-      { key: "nominations", label: "Nominations", href: "/congress/nominations" },
+      { key: "comments", label: "Comment periods", href: OPEN_COMMENTS_HREF },
     ],
   },
   // Article III. Only the Supreme Court is covered, so the label says so.
@@ -242,9 +330,16 @@ export const SECTIONS = {
     href: "/elections",
     match: ["/elections"],
     tabs: [
-      { key: "ballots", label: "Ballots by state", href: "/elections" },
-      { key: "map", label: "Seat map", href: "/elections/map?chamber=senate&view=usual" },
-      { key: "redistricting", label: "New House maps", href: "/elections/redistricting" },
+      { key: "ballots", label: "Ballots", href: "/elections" },
+      {
+        key: "map",
+        label: "Seat map",
+        href: "/elections/map?chamber=senate&view=usual",
+        views: [
+          { key: "map", label: "Seat map", href: "/elections/map?chamber=senate&view=usual" },
+          { key: "redistricting", label: "New House maps", href: "/elections/redistricting" },
+        ],
+      },
       { key: "calendar", label: "Calendar", href: "/elections/calendar" },
       { key: "archive", label: "Archive", href: ELECTIONS_ARCHIVE_HREF },
     ],
@@ -258,10 +353,56 @@ export const SECTIONS = {
       ...ABOUT_CHAPTERS.map((c) => ({ key: c.href, label: c.title, href: c.href })),
     ],
   },
-} as const;
+} as const satisfies Record<string, Section>;
 
 export type SectionKey = keyof typeof SECTIONS;
-export type SectionTabKey<S extends SectionKey> = (typeof SECTIONS)[S]["tabs"][number]["key"];
+type Keys<T> = T extends { key: infer K }
+  ? K | (T extends { views: readonly (infer V)[] } ? Keys<V> : never)
+  : never;
+/** Any page's key in a section: a tab's, a view's or a view's view's. */
+export type SectionTabKey<S extends SectionKey> = Keys<(typeof SECTIONS)[S]["tabs"][number]>;
+
+/** The pages from a section's tab down to the one keyed `key`, the deepest
+ *  match first (a tab's first view shares its key): `[Reports, Floor,
+ *  Week]` for "week". Empty for null or a key the section hasn't. */
+export function tabChain(section: SectionKey, key: string | null): SectionPage[] {
+  const walk = (pages: readonly SectionPage[]): SectionPage[] => {
+    for (const p of pages) {
+      const below = p.views ? walk(p.views) : [];
+      if (below.length) return [p, ...below];
+      if (p.key === key) return [p];
+    }
+    return [];
+  };
+  return key == null ? [] : walk(SECTIONS[section].tabs);
+}
+
+/** Every page of a section once, tabs and views: what site search lists.
+ *  A view sharing its parent's href is the parent's own page, so the
+ *  parent stands for it. */
+export function sectionPages(section: SectionKey): SectionPage[] {
+  const out: SectionPage[] = [];
+  const walk = (pages: readonly SectionPage[], parent: string | null) => {
+    for (const p of pages) {
+      if (p.href !== parent) out.push(p);
+      if (p.views) walk(p.views, p.href);
+    }
+  };
+  walk(SECTIONS[section].tabs, null);
+  return out;
+}
+
+/** A section's pages one by one, every view's own page once: the hub's
+ *  cards, each named by its `title` where it has one. */
+export function sectionLeaves(section: SectionKey): SectionPage[] {
+  const leaves = (p: SectionPage): SectionPage[] => (p.views ? p.views.flatMap(leaves) : [p]);
+  return SECTIONS[section].tabs.flatMap(leaves);
+}
+
+/** Every path a tab or view stands for: its own, its `match`, its views'. */
+export function pagePaths(page: SectionPage): string[] {
+  return [pathOf(page.href), ...(page.match ?? []), ...(page.views ?? []).flatMap(pagePaths)];
+}
 
 /** A section's pages other than its hub: what its menu lists under the
  * hub's own link, so no menu names one page twice. */
@@ -299,30 +440,37 @@ export function pathOf(href: string): string {
 }
 
 /**
- * How a section's sub-page link `href` stands to `pathname`, as its
- * `aria-current`: "page" when it is the page, "true" when the page sits
- * under it (an agency's page under "Every agency", a bill under "Bills")
- * and no other tab claims a longer prefix, else undefined. Never for a tab
- * sharing its path with another (the Action Center's three tabs are one
- * path, told apart by the query string, which this can't read without
- * suspending every page), and the hub only as itself (every page of the
- * section is under it).
+ * How a section's tab `href` stands to `pathname`, as its `aria-current`:
+ * "page" when it is the page, "true" when the page is one of the tab's
+ * views (the Week report under Reports) or sits under one (an agency's page
+ * under Agencies, a bill under Bills) and no other tab claims it more
+ * closely, else undefined. Never for a tab sharing its path with another
+ * (the Action Center's three tabs are one path, told apart by the query
+ * string, which this can't read without suspending every page), and
+ * nothing counts as under the hub (every page of the section is).
  */
 export function currentTab(
   section: SectionKey,
   href: string,
   pathname: string
 ): "page" | "true" | undefined {
-  const paths = SECTIONS[section].tabs.map((t) => pathOf(t.href));
+  const { tabs, href: hub } = SECTIONS[section];
   const path = pathOf(href);
-  if (paths.filter((p) => p === path).length !== 1) return undefined;
+  const own = tabs.filter((t) => pathOf(t.href) === path);
+  if (own.length !== 1) return undefined;
   if (path === pathname) return "page";
-  if (path === pathOf(SECTIONS[section].href)) return undefined;
-  const under = (p: string) => pathname.startsWith(`${p}/`);
-  if (!under(path)) return undefined;
-  return paths.some((p) => p.length > path.length && (p === pathname || under(p)))
-    ? undefined
-    : "true";
+  // An exact path outranks any prefix, a longer prefix a shorter one.
+  const EXACT = 10_000;
+  const reach = (t: SectionPage) =>
+    Math.max(
+      -1,
+      ...pagePaths(t).map((p) =>
+        p === pathname ? EXACT : p !== pathOf(hub) && pathname.startsWith(`${p}/`) ? p.length : -1
+      )
+    );
+  const mine = reach(own[0]);
+  if (mine < 0) return undefined;
+  return tabs.some((t) => t !== own[0] && reach(t) >= mine) ? undefined : "true";
 }
 
 /** One step of a breadcrumb: a page's name and address. */

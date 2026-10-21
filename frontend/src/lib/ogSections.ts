@@ -74,18 +74,18 @@ export const SECTION_CARDS: Record<string, SectionCard> = {
     subtitle: "What is new, and every change to how members are measured, with why.",
   },
   "/compare": {
-    eyebrow: "Compare",
+    eyebrow: "Congress",
     title: "Compare members of Congress side by side",
     subtitle: "Small gifts, PAC money, party breaks and bills moved, for any two members.",
   },
   "/compare/presidents": {
-    eyebrow: "Compare",
+    eyebrow: "Executive",
     title: "Compare presidents side by side",
     subtitle: "Approval, the economy, executive orders and the historians' rank.",
   },
   "/congress": {
     eyebrow: "Congress",
-    title: "What happened in Congress",
+    title: "What happened on the floor",
     subtitle: "The Senate's and the House's day, from the official record.",
   },
   "/congress/bills": {
