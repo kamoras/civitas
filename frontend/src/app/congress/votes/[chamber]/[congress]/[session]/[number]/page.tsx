@@ -4,7 +4,7 @@ import type { VoteDetail } from "@/types/congress";
 import { fetchRollCall } from "@/lib/congressServer";
 import { CHAMBER_NAME, dayHref, longDate, rollCallHref } from "@/lib/congress";
 import { CARD_ALT, describeRollCall } from "@/lib/seo";
-import { TOPIC_FEEDS, absoluteUrl, pageMetadata } from "@/lib/site";
+import { TOPIC_FEEDS, absoluteUrl, pageMetadata, ogCardUrl } from "@/lib/site";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
 import RollCallView from "@/components/congress/RollCallView";
 
@@ -46,7 +46,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     images: [
       {
         url: absoluteUrl(
-          `/api/og?vote=${vote.chamber}/${vote.congress}/${vote.session}/${vote.number}`
+          ogCardUrl(`vote=${vote.chamber}/${vote.congress}/${vote.session}/${vote.number}`)
         ),
         width: 1200,
         height: 630,

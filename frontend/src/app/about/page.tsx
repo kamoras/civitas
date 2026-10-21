@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { pageMetadata, GITHUB_REPO_URL } from "@/lib/site";
+import { pageMetadata, GITHUB_REPO_URL, SITE_DOMAIN } from "@/lib/site";
 import { aboutPageJsonLd } from "@/lib/seo";
 import JsonLd from "@/components/seo/JsonLd";
 import { ABOUT_CHAPTERS } from "@/lib/aboutPages";
@@ -216,9 +216,9 @@ export default function AboutOverview() {
           does in six weeks.
         </P>
         <P>
-          Civitas Research (civitas-research.org) is an independent, open-source political
-          transparency project covering the U.S. federal government. It is not affiliated with any
-          other organization named Civitas, such as think tanks, university institutes or companies.
+          Civitas Research ({SITE_DOMAIN}) is an independent, open-source political transparency
+          project covering the U.S. federal government. It is not affiliated with any other
+          organization named Civitas, such as think tanks, university institutes or companies.
         </P>
         <div className="flex flex-wrap gap-2">
           <PillLink href={GITHUB_REPO_URL} external>

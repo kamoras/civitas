@@ -73,3 +73,42 @@ async def test_explore_trigger_accepts_correct_token(monkeypatch):
         result = await trigger_explore_pipeline(authorization="Bearer real-token")
     assert result["status"] == "started"
     start.assert_called_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("endpoint", [_PRESIDENTS, _JUSTICES, _EXPLORE], ids=lambda e: e[0])
+async def test_the_templates_token_is_no_token(monkeypatch, endpoint):
+    """A server that copied .env.example and never changed the token has a
+    token printed in the repository; the public trigger must refuse it as
+    unconfigured, not accept it (docs/self-hosting.md)."""
+    from app.api.auth import EXAMPLE_TOKEN
+
+    monkeypatch.setattr(settings, "PIPELINE_TRIGGER_TOKEN", EXAMPLE_TOKEN)
+    with pytest.raises(HTTPException) as exc:
+        await _trigger(*endpoint)(authorization=f"Bearer {EXAMPLE_TOKEN}")
+    assert exc.value.status_code == 503
+
+
+def test_the_templates_admin_token_is_no_token(monkeypatch):
+    from app.api.admin import require_admin
+    from app.api.auth import EXAMPLE_TOKEN
+
+    monkeypatch.setattr(settings, "ADMIN_TOKEN", EXAMPLE_TOKEN)
+    monkeypatch.setattr(settings, "PIPELINE_TRIGGER_TOKEN", EXAMPLE_TOKEN)
+    with pytest.raises(HTTPException) as exc:
+        require_admin(authorization=f"Bearer {EXAMPLE_TOKEN}")
+    assert exc.value.status_code == 503
+    # A real admin token beside the template's trigger token still works.
+    monkeypatch.setattr(settings, "ADMIN_TOKEN", "real-admin")
+    require_admin(authorization="Bearer real-admin")
+
+
+def test_env_example_ships_the_token_auth_refuses():
+    """The constant must match the template, or the guard guards nothing."""
+    from pathlib import Path
+
+    from app.api.auth import EXAMPLE_TOKEN
+
+    example = (Path(__file__).resolve().parents[2] / ".env.example").read_text()
+    assert f"ADMIN_TOKEN={EXAMPLE_TOKEN}" in example
+    assert f"PIPELINE_TRIGGER_TOKEN={EXAMPLE_TOKEN}" in example

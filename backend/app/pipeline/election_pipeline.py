@@ -79,6 +79,7 @@ from app.pipeline.fetch import (
     ballot_lookup,
     ballot_measure_pdf_sources,
     ballot_measures_pdf,
+    coverage_captions,
     senate_classes,
 )
 from app.pipeline.fetch.ballot_measure_text import NotYetPublished
@@ -1810,6 +1811,20 @@ async def run_election_pipeline(cycle: int | None = None) -> dict:
                             logger.exception("Bluesky posting failed — continuing")
                             progress.fail("bluesky_posting")
                         coverage_open.remove("bluesky_posting")
+
+                        # Older stored coverage whose summary may open with a
+                        # photo caption, re-read from its article page a
+                        # bounded number a night (fetch/coverage_captions.py).
+                        # Under the same lease: it rewrites summaries the
+                        # refresh reads. Best-effort, like posting.
+                        logger.info("--- Election: COVERAGE CAPTION RE-CHECK ---")
+                        try:
+                            await coverage_captions.recheck_stored_captions(
+                                db, deadline=lambda: time.monotonic() >= coverage_deadline,
+                            )
+                        except Exception:
+                            db.rollback()
+                            logger.exception("Coverage caption re-check failed — continuing")
             except lease.CutOff as cut:
                 db.rollback()
                 logger.warning("Election coverage/posting phases: %s — continuing", cut)

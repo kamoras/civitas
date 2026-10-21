@@ -9,6 +9,13 @@
       "url": "/congress/members/measures"
     },
     {
+      "id": "bill-page-boxes",
+      "date": "2026-10-21",
+      "title": "Bill pages in boxes",
+      "summary": "Every bill page now opens with short boxes: where the bill stands, what it does in the Congressional Research Service's words, how each chamber voted, and its history, cost and text, each with the full record one tap away.",
+      "url": "/congress/bills"
+    },
+    {
       "id": "homepage-front-page",
       "date": "2026-10-21",
       "title": "The record as a front page",

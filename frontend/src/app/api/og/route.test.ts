@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { DayReport } from "@/types/congress";
+import type { StateBallot } from "@/types/election";
 import {
+  ballotTiles,
   type RecordCard,
   chamberTile,
   formatStanding,
@@ -475,5 +477,64 @@ describe("recordCardTexts", () => {
       "Passed",
       source,
     ]);
+  });
+});
+
+describe("ballotTiles", () => {
+  type Coverage = StateBallot["measureCoverage"];
+  const coverage = (status: Coverage["status"]): Coverage => ({
+    status,
+    sourceName: null,
+    checkedAt: null,
+    lastAttemptAt: null,
+  });
+  const ballot = (over: Partial<StateBallot>): StateBallot =>
+    ({
+      cycleYear: 2026,
+      senateRaces: [],
+      houseRaces: [],
+      measures: [],
+      nextSenateElection: 2028,
+      measureCoverage: coverage("covered"),
+      ...over,
+    }) as unknown as StateBallot;
+  const race = {} as StateBallot["senateRaces"][number];
+  const measure = (status: string) => ({ status }) as StateBallot["measures"][number];
+
+  it("never shows a 0 for measures nobody has read", () => {
+    for (const status of ["not_yet_covered", "ingest_failed"] as const) {
+      const [, , m] = ballotTiles(ballot({ measureCoverage: coverage(status) }));
+      expect(m).toEqual({ value: null, label: "Measures not yet covered" });
+    }
+  });
+
+  it("says there are none only when the state's source said so", () => {
+    const [, , m] = ballotTiles(ballot({ measureCoverage: coverage("confirmed_none") }));
+    expect(m).toEqual({ value: null, label: "No statewide measures" });
+  });
+
+  it("counts measures on the ballot, not removed ones", () => {
+    const [, , m] = ballotTiles(ballot({ measures: [measure("active"), measure("removed")] }));
+    expect(m).toEqual({ value: "1", label: "Statewide ballot measure" });
+    const [, , gone] = ballotTiles(ballot({ measures: [measure("withdrawn")] }));
+    expect(gone).toEqual({ value: null, label: "No statewide measures remaining" });
+  });
+
+  it("words an empty Senate list as a sentence, and a seatless state as one", () => {
+    const [s, h] = ballotTiles(ballot({ houseRaces: [race, race] }));
+    expect(s).toEqual({ value: null, label: "No Senate race in 2026" });
+    expect(h).toEqual({ value: "2", label: "U.S. House races" });
+    expect(ballotTiles(ballot({ nextSenateElection: null }))[0].label).toBe("No U.S. Senate seat");
+    expect(ballotTiles(ballot({ senateRaces: [race] }))[0]).toEqual({
+      value: "1",
+      label: "U.S. Senate race",
+    });
+  });
+
+  it("never shows a 0 for House races", () => {
+    expect(ballotTiles(ballot({}))[1]).toEqual({
+      value: null,
+      label: "House races not listed yet",
+    });
   });
 });
