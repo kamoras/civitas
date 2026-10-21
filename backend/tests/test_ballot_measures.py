@@ -10,7 +10,9 @@ import json
 import logging
 import threading
 from datetime import datetime, timedelta
+from urllib.parse import urlsplit
 
+import httpx
 import pytest
 from fastapi import HTTPException
 
@@ -18,7 +20,7 @@ from app import ops_alerts
 from app.api import elections
 from app.models import BallotMeasure, MeasureCoverage, Race
 from app.pipeline import election_pipeline
-from app.pipeline.fetch import ballot_measure_pdf_sources, ballot_measures_pdf
+from app.pipeline.fetch import ballot_lookup, ballot_measure_pdf_sources, ballot_measures_pdf
 from app.time_utils import utcnow
 
 
@@ -355,7 +357,6 @@ def test_removed_measures_are_still_returned(db_session, freeze_utcnow):
 
 
 def test_lookup_hides_unverified_state_entry(monkeypatch):
-    from app.pipeline.fetch import ballot_lookup
 
     monkeypatch.setattr(ballot_lookup, "_cache", {
         "national_fallback": {"url": "https://nat.example", "label": "N", "source_name": "S"},
@@ -367,7 +368,6 @@ def test_lookup_hides_unverified_state_entry(monkeypatch):
 
 
 def test_lookup_uses_verified_state_entry(monkeypatch):
-    from app.pipeline.fetch import ballot_lookup
 
     monkeypatch.setattr(ballot_lookup, "_cache", {
         "national_fallback": {"url": "https://nat.example", "label": "N", "source_name": "S"},
@@ -394,7 +394,6 @@ def _stored(volume, code, task="check_registration"):
 def _link_files(monkeypatch, tmp_path, states, volume_states=None, register=None):
     """Point the link check at a bundled file holding `states` (and, when
     given, a volume copy from an earlier run holding `volume_states`)."""
-    from app.pipeline.fetch import ballot_lookup
 
     bundled, volume = tmp_path / "bundled.json", tmp_path / "volume.json"
     fallback = {"url": "https://nat.example", "label": "N", "source_name": "S"}
@@ -412,7 +411,6 @@ def _link_files(monkeypatch, tmp_path, states, volume_states=None, register=None
 def _answering(**by_url):
     """A client whose GET of each URL answers `by_url[url]` (status, final
     URL, headers, body)."""
-    import httpx
 
     class _Client:
         async def get(self, url, **kwargs):
@@ -430,9 +428,7 @@ async def test_link_check_asks_again_after_no_answer_but_never_after_an_answer()
     """A timeout or a server error is asked once more before a live page is
     hidden for the night; a 404, a refusal or a challenge is the site's
     answer and is asked once."""
-    import httpx
 
-    from app.pipeline.fetch import ballot_lookup
 
     class _Flaky:
         def __init__(self, *answers):
@@ -791,9 +787,7 @@ def test_bundled_ballot_lookups_cover_every_state_from_its_own_authority():
     the polling place and voting by mail, none shown before the link check
     has passed it, none from an aggregator; a sample ballot only where the
     file says how it knows the lookup shows one."""
-    from urllib.parse import urlsplit
 
-    from app.pipeline.fetch import ballot_lookup
     from app.state_names import STATE_NAMES
 
     data = json.loads(open(ballot_lookup._BUNDLED_PATH, encoding="utf-8").read())
@@ -837,9 +831,7 @@ def test_every_bundled_ballot_lookup_is_on_an_official_host():
     a vendor, an aggregator or a lookalike domain. A host that is neither
     .gov nor state.<st>.us must be listed in `official_hosts` with where
     the authority links it, and every listed host must still be used."""
-    from urllib.parse import urlsplit
 
-    from app.pipeline.fetch import ballot_lookup
 
     data = json.loads(open(ballot_lookup._BUNDLED_PATH, encoding="utf-8").read())
     listed = {h for h in data["official_hosts"] if not h.startswith("_")}
