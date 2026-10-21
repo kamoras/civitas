@@ -378,6 +378,14 @@ class TestHoldingsService:
         stocks = result.categories[2]
         assert (stocks.count, stocks.unvalued_count, stocks.label, stocks.open_ended) == (2, 0, "Stocks", False)
         assert stocks.color.startswith("#")
+        # Printed by the API, with each slice's readout; no slice, no readout.
+        ranch = result.categories[0]
+        assert (ranch.share_shown, ranch.value_shown) == ("96%", "$1.0M+")
+        assert (stocks.share_shown, stocks.value_shown) == ("<1%", "$1K – $15K")
+        assert ranch.mark.model_dump() == {
+            "id": "REAL_ESTATE", "label": ranch.label, "detail": None, "shown": "96% of the stated value",
+            "context": "$1.0M+, 1 asset", "href": None}
+        assert other.mark is None
         # Listed largest first; the unvalued holding last rather than dropped.
         assert [h.asset_name for h in result.holdings] == ["Ranch", "Fund", "Apple", "Sold", "Art"]
         assert result.holdings[0].value_open_ended is True

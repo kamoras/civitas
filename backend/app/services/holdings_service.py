@@ -25,7 +25,8 @@ from sqlalchemy.orm import Session
 
 from app.config_definitions import HOLDING_CATEGORIES
 from app.models import FinancialDisclosure, FinancialHolding, President, Representative, Senator
-from app.schemas import HoldingCategorySchema, HoldingSchema, HoldingsSchema, is_open_ended
+from app.readout import compact_money, share_text
+from app.schemas import HoldingCategorySchema, HoldingSchema, HoldingsSchema, ReadoutMarkSchema, is_open_ended
 from app.services.pagination import paginate_bounds
 
 # The `category` query parameter accepts exactly the category keys.
@@ -78,6 +79,11 @@ def _categories(rows: list[tuple[str, float | None, float | None, str]]) -> list
             continue
         valued = [(low, high, text) for low, high, text in brackets if low is not None and high is not None]
         weight = sum(_midpoint(low, high) for low, high, _ in valued)
+        low, high = sum(low for low, _, _ in valued), sum(high for _, high, _ in valued)
+        open_ended = any(is_open_ended(lo, hi, text) for lo, hi, text in valued)
+        share = weight / total_weight if total_weight else 0.0
+        value = (f"{compact_money(low)}+" if open_ended else compact_money(low) if low == high
+                 else f"{compact_money(low)} \u2013 {compact_money(high)}")
         categories.append(HoldingCategorySchema(
             category=key,
             label=meta["label"],
@@ -85,11 +91,17 @@ def _categories(rows: list[tuple[str, float | None, float | None, str]]) -> list
             count=len(brackets),
             unvalued_count=len(brackets) - len(valued),
             zero_value_count=sum(1 for _, high, _ in valued if high == 0),
-            value_low=sum(low for low, _, _ in valued),
-            value_high=sum(high for _, high, _ in valued),
-            open_ended=any(is_open_ended(low, high, text) for low, high, text in valued),
+            value_low=low,
+            value_high=high,
+            open_ended=open_ended,
             weight=weight,
-            share=weight / total_weight if total_weight else 0.0,
+            share=share,
+            share_shown=share_text(share),
+            value_shown=value,
+            mark=ReadoutMarkSchema(
+                id=key, label=meta["label"], shown=f"{share_text(share)} of the stated value",
+                context=f"{value}, {len(brackets)} asset{'s' if len(brackets) != 1 else ''}",
+            ) if weight > 0 else None,
         ))
     # Largest first; HOLDING_CATEGORIES' own order breaks ties (a stable sort).
     categories.sort(key=lambda c: c.weight, reverse=True)

@@ -99,7 +99,11 @@ class TestClosest:
         assert first["vote"]["number"] == close.number
         assert first["headline"] == "Decided by 1 vote in the Senate, 49–50: Rejected."
         assert first["figure"] == {"type": "split", "yeas": 49, "nays": 50, "yeaShare": 0.4949,
-                                   "caption": "Decided by 1 vote"}
+                                   "caption": "Decided by 1 vote", "marks": [
+            {"id": "yea", "label": "Yea", "detail": None, "shown": "49 votes",
+             "context": "49% of the 99 voting", "href": f"/congress/votes/senate/119/2/{close.number}#members"},
+            {"id": "nay", "label": "Nay", "detail": None, "shown": "50 votes",
+             "context": "51% of the 99 voting", "href": f"/congress/votes/senate/119/2/{close.number}#members"}]}
 
     def test_a_tie_and_the_newest_of_equal_gaps(self, db_session):
         _rc(db_session, "2026-09-28", 48, 48)
@@ -150,8 +154,14 @@ class TestLoneBreak:
         assert r["headline"] == "The only Republican to vote Yea: Pat Lone (R-AA), against 40 Republicans voting Nay."
         assert r["memberId"] == "pat-lone"
         assert (r["compareWithId"], r["compareWithName"]) == ("sam-other", "Sam Other")
+        marks = r["figure"].pop("marks")
         assert r["figure"] == {"type": "dots", "party": "R", "voting": 41,
                                "caption": "1 of 41 Republicans voted Yea"}
+        # One readout per dot, in drawing order: the 40 Nays, then the breaker.
+        assert len(marks) == 41 and len({m["id"] for m in marks}) == 41
+        assert {m["shown"] for m in marks[:-1]} == {"Voted Nay"}
+        assert marks[-1] == {"id": "pat-lone", "label": "Pat Lone", "detail": "R-AA", "shown": "Voted Yea",
+                             "context": "The only Republican to vote Yea", "href": "/politicians/pat-lone"}
         # BB has one senator on file: nobody to compare with.
         assert breaks[0]["compareWithId"] is None
 

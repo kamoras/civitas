@@ -9,6 +9,7 @@ const period = {
   totalDays: 30,
   daysLeft: 10,
   elapsedPercent: 67,
+  marks: [],
 };
 
 describe("CommentWindowBar", () => {
