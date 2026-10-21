@@ -60,6 +60,8 @@ References
 import asyncio
 import json
 import logging
+import math
+import pathlib
 import re
 
 import numpy as np
@@ -89,6 +91,31 @@ logger = logging.getLogger(__name__)
 # "COM" (generic committee) is deliberately excluded: it is ambiguous and
 # defers to the embedding classifier which can distinguish corporate
 # employee PACs from purely political PACs (see classify_donor_type_from_fec).
+# The embedding gates measured against labels the FEC's own fields supply
+# (scripts/calibrate_donor_gates.py: conduit and memo codes, entity types,
+# receipt types, the employer and occupation fields), each at the mix of
+# cases the gate meets, under the Action Center's precision rule. Applied
+# where the evidence is one-sided: the payment-processor embedding tier
+# (measured 2026-10-21: it skipped 64 real committees and no processor, so
+# it is closed and the keyword tier decides). The other gates' fits are
+# recorded beside it with why each is not applied yet (a closed gate's
+# fallback is unmeasured, or the labels miss a class of values, or the fit
+# trades one counting error for another): their thresholds below are still
+# the hand-set ones, an open item in the evergreen audit.
+GATE_CALIBRATION_PATH = pathlib.Path(__file__).resolve().parents[2] / "data" / "donor_gate_calibration.json"
+_gate_cache: dict | None = None
+
+
+def gate_threshold(gate: str) -> float:
+    """An applied gate's fitted threshold; infinity (nothing passes) when
+    its fit didn't meet the precision rule."""
+    global _gate_cache
+    if _gate_cache is None:
+        _gate_cache = json.loads(GATE_CALIBRATION_PATH.read_text())["gates"]
+    value = _gate_cache[gate]["threshold"]
+    return float(value) if value is not None else math.inf
+
+
 FEC_ENTITY_TYPE_MAP = {
     "CCM": "CandidateAffiliated",
     "CAN": "Self-Funded",
@@ -383,7 +410,7 @@ def _get_skip_prototype_embedding(prototype_key: str, prototype_text: str) -> np
     return _skip_emb_cache[prototype_key]
 
 
-def is_skip_entity(name_upper: str, threshold: float = 0.67) -> bool:
+def is_skip_entity(name_upper: str, threshold: float | None = None) -> bool:
     """Check if a donor is a payment processor via keyword or embedding similarity.
 
     First checks against a list of known payment processor names (handles the
@@ -399,6 +426,9 @@ def is_skip_entity(name_upper: str, threshold: float = 0.67) -> bool:
         if keyword in name_upper:
             return True
 
+    threshold = gate_threshold("payment_processor") if threshold is None else threshold
+    if math.isinf(threshold):
+        return False
     key = (name_upper, threshold)
     if key not in _skip_memo:
         from app.pipeline.vector_store import get_embedding_model
@@ -412,13 +442,16 @@ def is_skip_entity(name_upper: str, threshold: float = 0.67) -> bool:
     return _skip_memo[key]
 
 
-def skip_entities_batch(names_upper: list[str], threshold: float = 0.67) -> set[str]:
+def skip_entities_batch(names_upper: list[str], threshold: float | None = None) -> set[str]:
     """is_skip_entity for many names in one encode: the same keyword check
     and payment-processor prototype at the same threshold. A member's
     contribution detail lists a few hundred employers and committees, and
     one encode call per name cost ~0.1 s each (2026-10, ~40 s a member)."""
     candidates = [n for n in dict.fromkeys(names_upper) if n and len(n.strip()) >= 2]
     keyword_hits = {n for n in candidates if any(k in n for k in _KNOWN_PAYMENT_PROCESSOR_KEYWORDS)}
+    threshold = gate_threshold("payment_processor") if threshold is None else threshold
+    if math.isinf(threshold):
+        return keyword_hits
     rest = [n for n in candidates if n not in keyword_hits and (n, threshold) not in _skip_memo]
     if rest:
         from app.pipeline.vector_store import encode_normalized, get_embedding_model
