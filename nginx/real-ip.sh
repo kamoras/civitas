@@ -5,9 +5,10 @@
 # /docker-entrypoint.d/*.sh) and once at build, so the file always exists.
 #
 # REAL_IP_FROM    space-separated addresses or CIDRs of the proxy in front
-#                 of this nginx. Unset: the addresses the admin allow-list
-#                 already trusts (loopback and the private ranges), which
-#                 covers a proxy on this host or the LAN wherever it sits.
+#                 of this nginx. Unset: loopback only. A host behind a
+#                 reverse proxy must set this to that proxy's address
+#                 (production sets the Pi's own LAN address, where its host
+#                 nginx connects from).
 #                 "none": trust no one; every visitor is read from the
 #                 connection (nothing in front, or Cloudflare connecting
 #                 straight here, which needs its ranges and CF-Connecting-IP
@@ -19,7 +20,7 @@
 set -eu
 
 out=${REAL_IP_SNIPPET:-/etc/nginx/snippets/real-ip.conf}
-from=${REAL_IP_FROM:-"127.0.0.1 ::1 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16"}
+from=${REAL_IP_FROM:-"127.0.0.1 ::1"}
 header=${REAL_IP_HEADER:-X-Real-IP}
 
 case "$header" in

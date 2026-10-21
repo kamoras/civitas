@@ -2284,7 +2284,7 @@ See `.env.example` for all options. Key variables:
 | `ADMIN_TOKEN` | Yes | Bearer token for admin panel (`PIPELINE_TRIGGER_TOKEN` for the public trigger routes; `.env.example`'s placeholder counts as unset for both, `app/api/auth.py`) |
 | `CONTACT_EMAIL` | Yes | The instance's contact address, named in every outbound User-Agent (`app/contact.py`, read from the environment, stdlib only). Unset or malformed: User-Agents carry no address, SEC fetches refuse with an ops alert (`contact-email-unset`), and the pipeline warns at start |
 | `SITE_URL` | No | The site's public address. The domain is typed only in `backend/app/site_url.py` and `frontend/src/lib/site.ts` (`tests/test_site_url.py`); read `broadcast.SITE_URL` / `settings.SITE_DOMAIN` or `SITE_URL` / `SITE_DOMAIN` from `lib/site.ts`, never a literal |
-| `REAL_IP_FROM` | No | The proxy nginx trusts to name the visitor (`nginx/real-ip.sh`; default loopback and private ranges). Production can pin `192.168.0.101` for the old single-hop config |
+| `REAL_IP_FROM` | No | The proxy nginx trusts to name the visitor (`nginx/real-ip.sh`; default loopback only). Required behind a reverse proxy; production's `.env` sets `192.168.0.101`, the Pi's LAN address its host nginx connects from |
 | `LLM_BACKEND` | No | `llama-server` (default) or `ollama` |
 | `LLAMA_SERVER_URL` | No | llama.cpp server URL |
 | `DATABASE_URL` | No | SQLite path (`docker-compose.yml` sets `sqlite:////data/civitas.db`, the volume; the code default is the relative `sqlite:///data/civitas.db`) |

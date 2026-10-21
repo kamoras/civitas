@@ -126,7 +126,7 @@ is public, so the server treats it as **no token at all** and refuses it
 | `FEEDBACK_TOKEN`, `GITHUB_FEEDBACK_REPO` | A fine-grained GitHub token with Issues read and write on one repository. Point `GITHUB_FEEDBACK_REPO` at **your own** repository; the default is the upstream project's. | `/feedback` answers 503 rather than dropping submissions. |
 | `ALERT_NTFY_URL` | An ntfy topic URL (section 6). | Alerts are still logged and listed on the admin Overview; nothing reaches a phone. |
 | `SITE_URL` | Your site's public address, if not the production one (section 6). | Every link, feed, share card and canonical tag names the production site. |
-| `REAL_IP_FROM`, `REAL_IP_HEADER` | The proxy in front of nginx, Swarm only (section 6). | Loopback and private-range proxies are trusted, which fits most setups. |
+| `REAL_IP_FROM`, `REAL_IP_HEADER` | The proxy in front of nginx, Swarm only (section 6). **Required behind a reverse proxy.** | Only loopback is trusted: behind a proxy, every visitor counts as the proxy's address. |
 | `CORS_ORIGINS` | Only if a browser on another origin calls the API. | Leave empty when the site and API share an origin behind nginx (the normal case). |
 
 ### Leave at their defaults
@@ -262,7 +262,10 @@ and rolls a release back if its health check fails. See the header comment
 of `docker-compose.swarm.yml` for why each setting is what it is.
 
 Do this in a checkout that stays put (production uses the deploy user's home
-directory), with `.env` and `llama-models/` filled in as above.
+directory), with `.env` and `llama-models/` filled in as above. If a reverse
+proxy (a host-level nginx, Caddy, a tunnel) will sit in front of port 8081,
+set `REAL_IP_FROM` to its address now (section 6), or every visitor counts
+as that one address.
 
 1. **Turn on Swarm mode** (once per host):
 
@@ -474,15 +477,22 @@ editing:
    the production domain.
 2. **`REAL_IP_FROM`**: which proxy in front of nginx may tell it the
    visitor's address (in `X-Real-IP`, or `REAL_IP_HEADER`). Unset, nginx
-   trusts loopback and the private ranges (the same addresses the admin
-   panel trusts), which covers a proxy on the same host or the LAN wherever
-   it sits; production's host nginx is one. Set one address to trust exactly
-   that hop, or `none` if nothing is in front (visitors are then read from
-   the connection). If Cloudflare connects to nginx directly, set its
-   published ranges and `REAL_IP_HEADER=CF-Connecting-IP`. If this names
-   the wrong hop, every visitor looks like one address and the daily visitor
-   count collapses. `nginx/real-ip.sh` writes the setting into nginx's
-   config at every start.
+   trusts loopback only. **A host behind a reverse proxy must set
+   `REAL_IP_FROM` to that proxy's address**, as nginx sees it. Even a proxy
+   on the same machine usually counts: under Swarm, a connection to the
+   published port 8081 arrives from the host's LAN address or a Docker
+   gateway address (172.x), not from 127.0.0.1. Production's host nginx
+   proxies to the Pi's LAN address, so production's `.env` has
+   `REAL_IP_FROM=192.168.0.101`. To find yours, send one request through
+   the proxy and read the first field of the line
+   `docker service logs civitas_nginx` prints for it. Several addresses or
+   CIDRs can be listed, separated by spaces. If Cloudflare connects to
+   nginx directly, set its published ranges and
+   `REAL_IP_HEADER=CF-Connecting-IP`. With nothing in front, leave it unset
+   (or `none`). If it is missing or names the wrong hop, every visitor
+   looks like one address and the daily visitor count collapses.
+   `nginx/real-ip.sh` writes the setting into nginx's config at every
+   start.
 
 ### Cloudflare
 

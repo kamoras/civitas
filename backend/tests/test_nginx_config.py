@@ -10,7 +10,6 @@ header must include it itself. These tests read the config as text: nginx is
 not installed where the fast suite runs.
 """
 
-import ipaddress
 import os
 import subprocess
 from dataclasses import dataclass, field
@@ -329,27 +328,17 @@ def test_the_public_server_includes_the_real_ip_snippet_and_names_no_address():
     assert "RUN /docker-entrypoint.d/15-civitas-real-ip.sh" in dockerfile
 
 
-def test_by_default_a_proxy_on_the_host_or_lan_is_trusted(tmp_path):
-    """Unset, production's host nginx (on the Pi's LAN address) stays
-    trusted with no setting, and so does a new host's proxy wherever on
-    loopback or the LAN it sits; a public address never is."""
+def test_by_default_only_loopback_is_trusted(tmp_path):
+    """Unset, no address off this machine may name a visitor: a host behind a
+    reverse proxy sets REAL_IP_FROM to it (production's .env names the Pi's
+    LAN address, docs/self-hosting.md)."""
     result, snippet = _real_ip_snippet(tmp_path)
     assert result.returncode == 0, result.stderr
-    trusted = [ipaddress.ip_network(a, strict=False) for a in _trusted(snippet)]
-    for peer in ("192.168.0.101", "127.0.0.1", "172.18.0.1", "10.1.2.3", "::1"):
-        assert any(ipaddress.ip_address(peer) in net for net in trusted), peer
-    for public_peer in ("104.16.0.1", "8.8.8.8", "2606:4700::1"):
-        assert not any(ipaddress.ip_address(public_peer) in net for net in trusted), public_peer
-    assert "real_ip_header X-Real-IP" in _parse(snippet).directives
-
-
-def test_the_default_trusts_exactly_the_admin_allow_list(tmp_path):
-    """No peer may name a visitor that isn't already trusted with the admin
-    panel."""
-    _, snippet = _real_ip_snippet(tmp_path)
-    (admin,) = [b for b in _walk(_parse(CONF.read_text())) if b.head == "location ^~ /api/admin/"]
-    allowed = {d.split()[1] for d in admin.directives if d.startswith("allow ")}
-    assert set(_trusted(snippet)) == allowed
+    assert _parse(snippet).directives == [
+        "set_real_ip_from 127.0.0.1",
+        "set_real_ip_from ::1",
+        "real_ip_header X-Real-IP",
+    ]
 
 
 def test_one_address_reproduces_the_single_hop_config(tmp_path):
