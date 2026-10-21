@@ -1,3 +1,4 @@
+import NoteLine from "@/components/elections/NoteLine";
 import { chamberWord, coverageSentence, formatAsOf, leanWindowWords } from "@/lib/electionMap";
 import type { ElectionMapData } from "@/types/electionMap";
 
@@ -24,13 +25,14 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
         How this is measured
       </h2>
       <div data-testid="method-summary" className="space-y-3">
-        <p>
-          Each seat shows how it usually votes. Where both parties have a nominee, it also shows a
-          range for the vote margin: where the margin landed about 8 times in 10 in past races that
-          looked like this one. The ranges are built from past election results, the national
-          generic ballot, and this year&apos;s polls of each race.{" "}
-          {coverageSentence(c, data.chamber)}
-        </p>
+        {/* One line, the rest of the plain summary behind its More: the
+            74-word paragraph was the page's longest block. */}
+        <NoteLine lead="Each seat shows how it usually votes, and where both parties have a nominee, a range for the margin.">
+          Where both parties have a nominee, each seat also shows a range for the vote margin: where
+          the margin landed about 8 times in 10 in past races that looked like this one. The ranges
+          are built from past election results, the national generic ballot, and this year&apos;s
+          polls of each race. {coverageSentence(c, data.chamber)}
+        </NoteLine>
         <p>
           These ranges are not a call. They don&apos;t say who will take any seat, and the page
           gives no odds. Nothing here feeds any member&apos;s record on Civitas.

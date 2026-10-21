@@ -446,8 +446,14 @@ describe("election map", () => {
     expect(summary.textContent).toContain("Nothing here feeds any member");
     expect(summary.textContent).toContain("Wikipedia contributors, CC BY-SA 4.0");
     expect(summary.textContent).toContain("Silver Bulletin");
-    const details = container.querySelector("details");
-    expect(details).not.toBeNull();
+    // The summary's first paragraph is one line with the rest behind its
+    // More; the full method is the disclosure after the summary.
+    expect(within(summary).getByText(/Each seat shows how it usually votes/)).toBeInTheDocument();
+    expect(summary.querySelector("details")).not.toBeNull();
+    const details = [...container.querySelectorAll("details")].find((d) =>
+      d.textContent?.includes("Full method")
+    );
+    expect(details).toBeDefined();
     expect(details!.open).toBe(false);
     expect(details!.textContent).toContain("Held-out checks");
     expect(details!.textContent).toContain("Inputs, sources and licences");

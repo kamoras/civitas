@@ -1241,9 +1241,42 @@ export default function ElectionMap({
                 anchor="general-map"
               />
             </div>
+            {!data.pollsInRange && view !== "usual" && (
+              <p className="mt-2 font-mono text-xs text-ink-hi">
+                Fundamentals only · {data.daysToElection} days out.{" "}
+                <span className="text-ink-lo">{fundamentalsSentence(data.pollWindowDays)}</span>
+              </p>
+            )}
+            {data.stale && (
+              <p className="mt-2 font-mono text-xs text-signal-amber">
+                Not updated since {formatAsOf(data.asOf)}: the latest refreshes failed, so these
+                figures are older than usual.
+              </p>
+            )}
+            {/* The map leads at every width, the House's too: on a phone it
+                used to wait under a list of 50 states, about 11 screens
+                down. The picker and the list follow it there. */}
+            <div className="mx-auto mt-3 max-w-[38rem]" data-share-show="">
+              <TileMap
+                data={data}
+                view={view}
+                selected={selected}
+                onSelect={select}
+                onState={openState}
+              />
+            </div>
+            <div className="mt-3">
+              <Legend data={data} view={view} />
+              {view !== "usual" && (
+                <p className="mt-2 font-mono text-xs text-ink-lo">
+                  {nationalSentence(data.national)}
+                </p>
+              )}
+            </div>
             {chamber === "house" && (
               // A phone-sized tile map makes a one-seat state a small
-              // target; this picker is the same action at full size.
+              // target; this picker and the list under it are the same
+              // action at full size.
               <div className="mt-3 md:hidden" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
                 <label
                   htmlFor="house-state-picker"
@@ -1268,43 +1301,11 @@ export default function ElectionMap({
                 </select>
               </div>
             )}
-            {!data.pollsInRange && view !== "usual" && (
-              <p className="mt-2 font-mono text-xs text-ink-hi">
-                Fundamentals only · {data.daysToElection} days out.{" "}
-                <span className="text-ink-lo">{fundamentalsSentence(data.pollWindowDays)}</span>
-              </p>
-            )}
-            {data.stale && (
-              <p className="mt-2 font-mono text-xs text-signal-amber">
-                Not updated since {formatAsOf(data.asOf)}: the latest refreshes failed, so these
-                figures are older than usual.
-              </p>
-            )}
             {chamber === "house" && (
               <div className="mt-3 md:hidden" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
                 <HouseStateList data={data} view={view} onState={openState} />
               </div>
             )}
-            <div
-              className={`mx-auto mt-3 max-w-[38rem] ${chamber === "house" ? "hidden md:block" : ""}`}
-              data-share-show=""
-            >
-              <TileMap
-                data={data}
-                view={view}
-                selected={selected}
-                onSelect={select}
-                onState={openState}
-              />
-            </div>
-            <div className="mt-3">
-              <Legend data={data} view={view} />
-              {view !== "usual" && (
-                <p className="mt-2 font-mono text-xs text-ink-lo">
-                  {nationalSentence(data.national)}
-                </p>
-              )}
-            </div>
             {/* The phone's way in: the closest seats as rows, each opening
                 the same sheet as a tile. Not in the shared picture. */}
             <div className="lg:hidden" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
