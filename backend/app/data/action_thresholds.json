@@ -1,6 +1,18 @@
 {
-  "_source": "near_identical 0.92: the title similarity (similarity model) above which action_center._same_story calls two issues one story, measured by hand on 120 production issue pairs (2026-07). Not fitted: its only automatic label was the shared-names-and-numbers signature, which on 2026-10-08 called 65 issue pairs the same story when 16 were. The article-clustering cut that used to live here is calibrated against judged pairs now (cluster_pair_calibration.json).",
-  "values": {
-    "near_identical": 0.92
-  }
+ "_source": "near_identical: the title cosine (similarity model) at or above which action_center._same_story calls two issues one story. Fitted by backend/scripts/calibrate_near_identical.py (action_center.fit_near_identical_cut) on pairs the stored issues label themselves: the same source article, national monitor or bill is one story, different monitors on different days are two, other pairs left out; the lowest cosine no different-story pair reaches, plus CUT_MARGIN, with at least MIN_HARD_NEGATIVES such pairs. The refresh refits it daily. This snapshot held 1 different-story pairs, under 30, so the value in use (0.92, hand-measured on 120 pairs in 2026-07, labels not kept) stands until the data supply enough.",
+ "_as_of": "2026-10-21",
+ "values": {
+  "near_identical": 0.92
+ },
+ "near_identical": {
+  "issues": 550,
+  "labelled_pairs": 198,
+  "same_story_pairs": 197,
+  "different_story_pairs": 1,
+  "different_story_pairs_needed": 30,
+  "fitted": null,
+  "same_story_joined_at_cut": 23,
+  "different_story_joined_at_cut": 0,
+  "labels_sha256": "fc790145fcd09ccf2df568bbaffb0884a91468d75434cb4af4f301b781221256"
+ }
 }

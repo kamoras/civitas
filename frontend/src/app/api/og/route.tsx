@@ -4,6 +4,7 @@ import { NextRequest } from "next/server";
 import { OG_FAMILY, ogFonts } from "@/lib/ogFonts";
 import { OgLockup } from "@/lib/ogLockup";
 import { OG_COLOR as C } from "@/lib/ogTheme";
+import { SITE_DOMAIN } from "@/lib/site";
 import { fetchPhoto, parsePhotoPath } from "@/lib/photos";
 import { STATE_CODES, STATE_NAMES } from "@/lib/stateCodes";
 import { usableRecord } from "@/lib/ssrPayload";
@@ -52,7 +53,7 @@ const SURFACE_BASE = C.parchment;
 const HAIRLINE = C.rule;
 // The ledger-green band across the top of every card.
 const TOP_BAND = `10px solid ${C.accent}`;
-const DOMAIN = "civitas-research.org";
+const DOMAIN = SITE_DOMAIN;
 
 const PARTY_ACCENT: Record<string, string> = {
   D: C.dem,

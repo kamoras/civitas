@@ -98,7 +98,7 @@ def publish_post(
     # newline. Saves a character of the 300-char budget for content over
     # the previous "\n\n" separator, though the real gap against an
     # account like NPR is their own short-domain link shortener (n.pr,
-    # ~13 chars) vs. this platform's full civitas-research.org URL
+    # ~13 chars) vs. this platform's full site URL
     # (~45 chars) — a separate, much bigger lever this doesn't address.
     full_text = f"{text} {url}"
     if len(full_text) > BSKY_MAX_CHARS:

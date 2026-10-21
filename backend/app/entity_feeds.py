@@ -55,7 +55,7 @@ from app.services.explore_keys import public_key
 from app.services.member_positions import roll_call_member_ids, vote_word
 from app.time_utils import comment_period_today
 
-_TAG = "tag:civitas-research.org,2026:"
+_TAG = f"tag:{settings.SITE_DOMAIN},2026:"
 
 # Entries per feed (api/feed.FEED_LENGTH is the same number); each source a
 # feed merges reads at most this many, newest first.

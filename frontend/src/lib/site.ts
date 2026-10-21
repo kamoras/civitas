@@ -18,7 +18,18 @@ import { SECTION_CARDS, sectionCardAlt } from "./ogSections";
  * layout's title and canonical used to label every missing member, bill
  * and state as the directory.
  */
-export const SITE_URL = "https://civitas-research.org";
+export const SITE_URL = (
+  process.env.NEXT_PUBLIC_SITE_URL || "https://civitas-research.org"
+).replace(/\/+$/, "");
+/**
+ * SITE_URL above is the one place the frontend types the site's domain. A
+ * self-hosted copy sets SITE_URL in .env, which docker-compose.yml passes to
+ * the build as NEXT_PUBLIC_SITE_URL (inlined at build time, like every
+ * NEXT_PUBLIC_ value); unset, it is the production site. The backend reads the
+ * same .env value (backend/app/site_url.py). backend/tests/test_site_url.py
+ * fails on the domain typed anywhere else.
+ */
+export const SITE_DOMAIN = new URL(SITE_URL).host;
 /**
  * The site's name everywhere a search engine reads one: the title template,
  * og:site_name, application-name, the manifest, the WebSite and
@@ -35,9 +46,12 @@ export const SITE_NAME = "Civitas Research";
 /** The root layout's title template: every page but the homepage. */
 export const TITLE_TEMPLATE = `%s | ${SITE_NAME}`;
 /** Other names the site goes by, for WebSite/Organization `alternateName`. */
-export const SITE_ALTERNATE_NAMES = ["Civitas", "civitas-research.org"];
-/** Civitas's Bluesky account, the only social account it has. */
-export const BSKY_HANDLE = "civitas-research.org";
+export const SITE_ALTERNATE_NAMES = ["Civitas", SITE_DOMAIN];
+/** Civitas's Bluesky account, the only social account it has: its handle is
+ *  the site's domain. */
+// The Bluesky handle is the site's domain (verified by DNS). Written out
+// rather than `= SITE_DOMAIN`, which knip reads as a duplicate export.
+export const BSKY_HANDLE = new URL(SITE_URL).host;
 export const BSKY_PROFILE_URL = `https://bsky.app/profile/${BSKY_HANDLE}`;
 export const GITHUB_REPO_URL = "https://github.com/kamoras/civitas";
 
