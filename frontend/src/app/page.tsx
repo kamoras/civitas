@@ -1,8 +1,7 @@
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import Masthead from "@/components/home/Masthead";
-import RecordIndex from "@/components/home/RecordIndex";
-import OnTheRecord from "@/components/home/OnTheRecord";
+import FrontPage from "@/components/home/FrontPage";
 import ElectionNight from "@/components/home/ElectionNight";
 import HomeTasks from "@/components/home/HomeTasks";
 import JsonLd from "@/components/seo/JsonLd";
@@ -41,15 +40,14 @@ export default async function Home() {
             until the count settles): the count is the news then. */}
         <ElectionNight />
         <Masthead electionPhase={summary?.phase.phase ?? null} />
-        {/* The day's record first (its first row the day's top issue), in
-            the first screen at 1280x900 and 390x844; then the three tasks
-            a visitor comes for, with registration closing soon as one line;
-            then the week's notable votes. Where it all comes from is on
-            /about/data; the header menu is the one list of the site's
-            pages. */}
-        <RecordIndex />
+        {/* The record first, as a front page (a lead story, a second tier,
+            then Congress, Agencies and the news), its nameplate in the
+            first screen at 1280x900 and 390x844; then the three tasks a
+            visitor comes for, with registration closing soon as one line.
+            Where it all comes from is on /about/data; the header menu is
+            the one list of the site's pages. */}
+        <FrontPage />
         <HomeTasks />
-        <OnTheRecord />
       </main>
       <Footer />
     </>
