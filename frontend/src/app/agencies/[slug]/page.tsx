@@ -12,7 +12,7 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
 import BoxGrid from "@/components/shared/BoxGrid";
-import RecordBox from "@/components/shared/RecordBox";
+import RecordBox, { BoxAnchor, CHIP } from "@/components/shared/RecordBox";
 import AgencyDocList from "@/components/agencies/AgencyDocList";
 import PaperworkFold from "@/components/shared/PaperworkFold";
 import SourceLine from "@/components/agencies/SourceLine";
@@ -222,6 +222,7 @@ function Overview({ a }: { a: AgencyDetail }) {
     <section id="overview" data-share-section="overview" className="mb-10">
       <BoxGrid columns={3} label="At a glance" labelId="overview-heading">
         <RecordBox
+          compact
           kicker="Budget · USAspending.gov"
           title={budget ? "Budgetary resources" : "Budget"}
           figure={budget}
@@ -234,102 +235,79 @@ function Overview({ a }: { a: AgencyDetail }) {
           {!budget && <BudgetBlock a={a} />}
         </RecordBox>
         <RecordBox
-          kicker="Federal Register"
+          compact
+          kicker="Federal Register · on Civitas"
           title="Open for comment"
+          href={docs.openCommentsCount > 0 ? "#comment-heading" : undefined}
+          dek={`${proposed.toLocaleString("en-US")} proposed rule${proposed === 1 ? "" : "s"} · ${final.toLocaleString("en-US")} final rule${final === 1 ? "" : "s"}`}
           figure={{ type: "stat", value: docs.openCommentsCount, caption: "periods open" }}
-          links={
-            docs.openCommentsCount > 0
-              ? [
-                  {
-                    label: "The periods",
-                    href: "#comment-heading",
-                    ariaLabel: "Open comment periods",
-                  },
-                ]
-              : undefined
-          }
-          more={{ label: "where the counts come from", children: docsSource }}
-        >
-          {docs.linking && (
-            <p className="text-xs leading-relaxed text-ink-lo">
-              Counts so far: documents stored before agencies were read are still being linked to
-              the agency that issued them ({docs.linking.linked.toLocaleString("en-US")} of{" "}
-              {docs.linking.total.toLocaleString("en-US")} linked).
-            </p>
-          )}
-        </RecordBox>
-        <RecordBox
-          kicker="Federal Register"
-          title="Proposed rules"
-          figure={{ type: "stat", value: proposed, caption: "on Civitas" }}
-          links={
-            proposed > 0
-              ? [
-                  {
-                    label: "The newest",
-                    href: "#proposed-heading",
-                    ariaLabel: "Newest proposed rules",
-                  },
-                ]
-              : undefined
-          }
+          more={{
+            label: "where the counts come from",
+            children: (
+              <>
+                {docs.linking && (
+                  <p className="text-xs leading-relaxed text-ink-lo">
+                    Counts so far: documents stored before agencies were read are still being linked
+                    to the agency that issued them ({docs.linking.linked.toLocaleString("en-US")} of{" "}
+                    {docs.linking.total.toLocaleString("en-US")} linked).
+                  </p>
+                )}
+                {docsSource}
+              </>
+            ),
+          }}
         />
         <RecordBox
-          kicker="Federal Register"
-          title="Final rules"
-          figure={{ type: "stat", value: final, caption: "on Civitas" }}
-          links={
-            final > 0
-              ? [{ label: "The newest", href: "#final-heading", ariaLabel: "Newest final rules" }]
-              : undefined
+          compact
+          id="about"
+          kicker="Its description · Federal Register"
+          title="About the agency"
+          {...(a.descriptionLede
+            ? {
+                quote: {
+                  text: a.descriptionLede,
+                  source: "The Federal Register's agency profile",
+                },
+              }
+            : {})}
+          below={
+            <div className="flex flex-wrap items-center gap-2">
+              {a.website && (
+                <BoxAnchor href={safeHref(a.website) || "#"} className={CHIP}>
+                  Agency website
+                </BoxAnchor>
+              )}
+              {a.frUrl && (
+                <BoxAnchor href={safeHref(a.frUrl) || "#"} className={CHIP}>
+                  On the Federal Register
+                </BoxAnchor>
+              )}
+              <ShareSectionButton label={`${a.name} at a glance`} />
+            </div>
           }
-        />
-        {(a.descriptionLede || a.website || a.frUrl) && (
-          <RecordBox
-            id="about"
-            kicker="Its description · Federal Register"
-            title="About the agency"
-            {...(a.descriptionLede
+          more={
+            about.length
               ? {
-                  quote: {
-                    text: a.descriptionLede,
-                    source: "The Federal Register's agency profile",
-                  },
+                  label: "the full description",
+                  children: (
+                    <>
+                      {about.map((p, i) => (
+                        <p key={i} className="mt-2 first:mt-0 max-w-3xl leading-relaxed">
+                          {p}
+                        </p>
+                      ))}
+                      <SourceLine
+                        source={a.profileSource}
+                        asOf={a.profileAsOf}
+                        detail="description and organization"
+                      />
+                    </>
+                  ),
                 }
-              : {})}
-            links={[
-              ...(a.website ? [{ label: "Agency website", href: safeHref(a.website) || "#" }] : []),
-              ...(a.frUrl
-                ? [{ label: "On the Federal Register", href: safeHref(a.frUrl) || "#" }]
-                : []),
-            ]}
-            more={
-              about.length
-                ? {
-                    label: "the full description",
-                    children: (
-                      <>
-                        {about.map((p, i) => (
-                          <p key={i} className="mt-2 first:mt-0 max-w-3xl leading-relaxed">
-                            {p}
-                          </p>
-                        ))}
-                        <SourceLine
-                          source={a.profileSource}
-                          asOf={a.profileAsOf}
-                          detail="description and organization"
-                        />
-                      </>
-                    ),
-                  }
-                : null
-            }
-          />
-        )}
+              : null
+          }
+        />
       </BoxGrid>
-      <div className="mt-2 flex justify-end">
-        <ShareSectionButton label={`${a.name} at a glance`} />
-      </div>
     </section>
   );
 }
