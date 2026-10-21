@@ -49,7 +49,9 @@ export const TITLE_TEMPLATE = `%s | ${SITE_NAME}`;
 export const SITE_ALTERNATE_NAMES = ["Civitas", SITE_DOMAIN];
 /** Civitas's Bluesky account, the only social account it has: its handle is
  *  the site's domain. */
-export const BSKY_HANDLE = SITE_DOMAIN;
+// The Bluesky handle is the site's domain (verified by DNS). Written out
+// rather than `= SITE_DOMAIN`, which knip reads as a duplicate export.
+export const BSKY_HANDLE = new URL(SITE_URL).host;
 export const BSKY_PROFILE_URL = `https://bsky.app/profile/${BSKY_HANDLE}`;
 export const GITHUB_REPO_URL = "https://github.com/kamoras/civitas";
 
