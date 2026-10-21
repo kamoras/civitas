@@ -13,7 +13,9 @@ no issue cites are left out: nothing says what they are about.
 
 Threshold: the Action Center's precision rule (app/precision_rule.py), the
 grid point whose precision's exact lower 95% bound is highest, used only
-when that bound is at least 0.80; otherwise null and nothing is reposted.
+when that bound is at least 0.80; otherwise null, and the gate keeps
+running at bluesky_engagement.UNMEASURED_THRESHOLD, which the file names
+as unmeasured (`in_use`).
 held_out repeats the choice on blocks of consecutive days.
 
 Usage (network: Bluesky's public API and the outlets' short links; loads the
@@ -152,13 +154,20 @@ def main() -> None:
             "an issue cites is about that issue; it is scored as the gate scores it (best cosine, "
             "action_center._embed_texts, against the issues of its day and the day before), right when the best "
             "match cites its article. threshold: the grid point whose precision's exact lower 95% bound is "
-            f"highest, when that bound is at least {PRECISION_LOWER_BOUND}, else null (nothing is reposted). "
+            f"highest, when that bound is at least {PRECISION_LOWER_BOUND}, else null (the gate then runs at the unmeasured "
+            "in_use value). "
             f"held_out: the same choice on {FOLDS} blocks of consecutive days, each scored on the block left out."
         ),
         "_as_of": date.today().isoformat(),
         "posts_read": len(posts),
         "labelled_posts": len(labelled),
         "threshold": threshold,
+        "in_use": {"threshold": threshold if threshold is not None else be.UNMEASURED_THRESHOLD,
+                   "measured": threshold is not None,
+                   "why": None if threshold is not None else (
+                       "No fit meets the precision rule; the hand-set value the gate used before it was measured is "
+                       "kept by the user's decision (2026-10-21), unmeasured, until one does.")},
+        "at_unmeasured_threshold": summary(scores >= be.UNMEASURED_THRESHOLD, right),
         "best_bound_threshold": best,
         "at_threshold": summary(scores >= at, right),
         "all_labelled": {"best_match_right": int(right.sum()), "posts": len(right)},

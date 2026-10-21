@@ -5,8 +5,10 @@ When a major outlet's recent post matches an active Civitas action center
 issue (cosine similarity at or above engage_threshold()), we repost it and
 like it. The threshold is fitted on posts that link an article an issue
 cites (scripts/calibrate_engagement.py, app/data/engagement_calibration.json),
-under the Action Center's precision rule; when the fit can't meet the rule
-it is null and nothing is reposted.
+under the Action Center's precision rule. Until a fit meets the rule the
+gate runs at UNMEASURED_THRESHOLD, a value nobody measured, kept by the
+user's decision (2026-10-21) so reposting continues while labels are
+gathered; the data file says so beside the measurement.
 This keeps the Civitas feed active between original posts and surfaces
 relevant reporting within the civic transparency context.
 
@@ -35,13 +37,23 @@ CALIBRATION_PATH = pathlib.Path(__file__).resolve().parents[2] / "data" / "engag
 _calibration_cache: dict | None = None
 
 
+# NOT A FITTED VALUE. The hand-set cosine the gate used before it was
+# measured ("set conservatively"), kept by the user's decision (2026-10-21)
+# while no fitted threshold meets the precision rule: on 79-82 labelled
+# posts the best bound was 0.77, at 0.85 (engagement_calibration.json), and
+# that precision is an upper bound, since posts about no issue can't be
+# labelled. A fit that meets the rule replaces it with no code change.
+UNMEASURED_THRESHOLD = 0.78
+
+
 def engage_threshold() -> float | None:
-    """The fitted cosine (module docstring), or None: no repost."""
+    """The fitted cosine when a fit meets the precision rule, else the
+    unmeasured one in use (UNMEASURED_THRESHOLD)."""
     global _calibration_cache
     if _calibration_cache is None:
         _calibration_cache = json.loads(CALIBRATION_PATH.read_text())
     value = _calibration_cache.get("threshold")
-    return float(value) if value is not None else None
+    return float(value) if value is not None else UNMEASURED_THRESHOLD
 
 # Hard cap on reposts per pipeline run (runs hourly) — keeps the feed human-paced
 MAX_REPOSTS_PER_RUN = 3
@@ -97,9 +109,6 @@ def engage_with_news_posts(db: Session) -> None:
     if not active_issues:
         return
     threshold = engage_threshold()
-    if threshold is None:
-        logger.info("Bluesky engagement: no fitted threshold meets the precision rule; nothing is reposted")
-        return
 
     from app.pipeline.analyze.action_center import _embed_texts
 

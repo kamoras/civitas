@@ -21,32 +21,16 @@ def test_the_bundled_calibration_says_where_it_came_from():
     assert data["labelled_posts"] == len(data["labels"])
     t = data["threshold"]
     assert t is None or data["at_threshold"]["precision_exact_lower"] >= PRECISION_LOWER_BOUND
+    # What the gate runs at, and whether anyone measured it, is stated beside the fit.
+    assert data["in_use"]["measured"] is (t is not None)
+    assert data["in_use"]["threshold"] == (t if t is not None else be.UNMEASURED_THRESHOLD)
 
 
-def test_no_threshold_means_no_repost(monkeypatch):
+def test_without_a_fit_the_gate_runs_at_the_unmeasured_value(monkeypatch):
     monkeypatch.setattr(be, "_calibration_cache", {"threshold": None})
-    assert be.engage_threshold() is None
+    assert be.engage_threshold() == be.UNMEASURED_THRESHOLD
     monkeypatch.setattr(be, "_calibration_cache", {"threshold": 0.85})
     assert be.engage_threshold() == 0.85
-
-
-def test_the_gate_stops_before_reposting_without_a_threshold(monkeypatch):
-    monkeypatch.setattr(be.settings, "BSKY_HANDLE", "civitas.test", raising=False)
-    monkeypatch.setattr(be.settings, "BSKY_APP_PASSWORD", "x", raising=False)
-    monkeypatch.setattr(be, "_calibration_cache", {"threshold": None})
-
-    class Query:
-        def filter(self, *a):
-            return self
-
-        def all(self):
-            return [object()]
-
-    class Db:
-        def query(self, *a):
-            return Query()
-
-    be.engage_with_news_posts(Db())  # returns before any login or feed read
 
 
 def test_an_article_is_keyed_without_scheme_query_or_trailing_slash():
