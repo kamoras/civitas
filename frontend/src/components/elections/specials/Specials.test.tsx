@@ -268,7 +268,7 @@ describe("the calendar", () => {
     expect(screen.getByText("Voter deadlines in 2 states")).toBeTruthy();
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "TX" } });
     expect(screen.queryByText(/Virginia: U.S. Senate/)).toBeNull();
-    expect(screen.getByText(/april quarterly/)).toBeTruthy();
+    expect(screen.getByText(/April quarterly/)).toBeTruthy();
     expect(screen.getByText("Texas: Registration closes Oct 5")).toBeTruthy();
     expect(screen.queryByText(/Virginia: Registration/)).toBeNull();
     expect(screen.getByText(/Passed in the last month \(1\)/)).toBeTruthy();

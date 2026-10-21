@@ -18,6 +18,13 @@ def court(db: Session = Depends(get_db)):
     return cached_json(court_service.court(db), max_age=CACHE_TTL_LIST_S)
 
 
+@router.get("/finding")
+def finding():
+    """The Court-level finding on votes under the appointing president
+    (app/data/court_finding.json); null when it can't be read."""
+    return cached_json(court_service.appointer_finding(), max_age=CACHE_TTL_LIST_S)
+
+
 @router.get("/decisions")
 def decisions(
     page: int = Query(1, ge=1),

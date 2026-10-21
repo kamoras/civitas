@@ -69,6 +69,7 @@ from app.pipeline.fetch.fr_rulemaking import RULE_DOC_TYPES
 from app.pipeline.fetch.news_feeds import NEWS_FEEDS
 from app.pipeline.transform.normalize_votes import MAJORITY_LEADER_TITLES, is_housekeeping
 from app.services import congress_service as cs
+from app.services.bill_service import short_title
 from app.services.bill_record import MemberLinks
 from app.services.congress_service import amendment_fields, bill_label, week_bounds
 from app.services.explore_keys import public_key
@@ -86,11 +87,6 @@ _TTL_S = 300
 COLUMN_ITEMS = 3
 # Stories read for the news: enough for the lead, the tier and a full column.
 NEWS_STORIES = COLUMN_ITEMS + 2
-
-# A party needs this many members voting Yea or Nay before one dissenter
-# is "the only one". With three voting, one of them is a third of the
-# party, not a lone break.
-LONE_BREAK_MIN_VOTING = 10
 
 # The two parties a lone break is read against. Independents are left out:
 # each caucuses with a party, and "the only independent" is not a break.
@@ -219,15 +215,22 @@ def _lone_breaks(db: Session, votes: list[RollCall]) -> list[dict]:
             if party in newest:
                 continue
             sides = defaultdict(list)
+            members = 0
             for p in positions[rc.id]:
+                if p.party != party:
+                    continue
+                members += 1
                 side = _side(p.position)
-                if p.party == party and side:
+                if side:
                     sides[side].append(p)
             voting = len(sides["yea"]) + len(sides["nay"])
-            if voting < LONE_BREAK_MIN_VOTING:
-                continue
             lone = [s for s in ("yea", "nay") if len(sides[s]) == 1]
-            if not lone:
+            # A break with the party, not with a handful of attendees: the
+            # rest voting the other way must be most of the party's members
+            # on the roll (not voting and present included). With three
+            # voting, one is a third of those voting, and the roll says
+            # nothing of the party.
+            if not lone or 2 * (voting - 1) <= members:
                 continue
             breaker = sides[lone[0]][0]
             href = (links.page(bioguide=breaker.member_id) if rc.chamber == "house"
@@ -285,15 +288,24 @@ def _week_votes(db: Session, week: tuple[date, date] | None) -> list[RollCall]:
     ).all()
 
 
+def _law_name(law: dict) -> str | None:
+    """Congress.gov's title when it is a short title, as written."""
+    name = " ".join((law.get("name") or "").split()).rstrip(".")
+    return name if short_title(name) else None
+
+
 def _laws(db: Session, since: date, today: date) -> list[dict]:
     laws = cs.became_law(db, since, today)
     figure = {"type": "stat", "value": len(laws),
               "caption": f"{'law' if len(laws) == 1 else 'laws'} enacted since {since:%B} {since.day}"}
     return [{
         "kind": "law", "column": "congress", "date": law["date"],
-        "headline": f"{law['billLabel'] or law['billId']} became law",
-        # Congress.gov's title and the action as recorded.
-        "dek": law["name"], "action": law["text"],
+        # The name news uses for the law leads where the title is one
+        # ("... Act"), its number beneath; an official long title ("A bill
+        # to amend ...") stays beneath a numbered headline.
+        "headline": f"{_law_name(law) or law['billLabel'] or law['billId']} became law",
+        "dek": (law["billLabel"] or law["billId"]) if _law_name(law) else law["name"],
+        "action": law["text"],
         "billId": law["billId"], "billLabel": law["billLabel"], "congress": law["congress"],
         "figure": figure,
     } for law in sorted(laws, key=lambda b: (b["date"], b["billId"]), reverse=True)]

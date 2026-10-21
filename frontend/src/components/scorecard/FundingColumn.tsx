@@ -14,7 +14,9 @@ const DONOR_KIND: Record<string, string> = {
   PAC: "PAC",
   SuperPAC: "super PAC",
   "Org/Employees": "employees",
-  "Party/Ideological": "party or ideological",
+  // Plainer than the classifier's label: a party committee or a
+  // political group (NRSC, a super PAC's affiliate, an issue group).
+  "Party/Ideological": "party or political group",
   Individual: "individual",
 };
 

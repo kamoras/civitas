@@ -25,7 +25,7 @@ function formatItemTime(item: RaceCoverageItem): { timeLabel: string; isRecent: 
   if (!published) return { timeLabel: "", isRecent: false };
   const ageMs = Date.now() - published.getTime();
   return {
-    timeLabel: published.toLocaleString(undefined, {
+    timeLabel: published.toLocaleString("en-US", {
       month: "short",
       day: "numeric",
       hour: "numeric",
