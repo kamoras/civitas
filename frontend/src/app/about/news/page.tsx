@@ -192,13 +192,13 @@ export default function NewsChapter() {
           publication date. It carries a note that broader coverage hasn&apos;t confirmed it yet,
           and isn&apos;t posted anywhere else until press coverage does. A vote the news already
           covers isn&apos;t drafted, and a draft gives way once the reporting on its bill appears:
-          it leaves the Action Center, and the homepage&apos;s record of recent issues lists the
-          reporting in its place. A draft that leaves the Action Center without coverage confirming
-          it, its vote or rule having aged past the window, isn&apos;t part of that record either:
-          its own page stays up for two weeks, marked{" "}
-          <strong className="text-ink-hi">Not confirmed</strong>. That record lists one issue per
-          ongoing story the site follows (the newest), beside the story itself, so two days of one
-          story don&apos;t fill it.
+          it leaves the Action Center, and the homepage&apos;s news column lists the reporting in
+          its place. A draft that leaves the Action Center without coverage confirming it, its vote
+          or rule having aged past the window, isn&apos;t part of that record either: its own page
+          stays up for two weeks, marked <strong className="text-ink-hi">Not confirmed</strong>.
+          That column lists one issue per ongoing story the site follows (the newest, tagged as an
+          ongoing story, with the story&apos;s other days of the last two named beside it), so two
+          days of one story don&apos;t fill it.
         </P>
         <P>
           Each issue ends with what you can do about it, built from the record and never advocacy

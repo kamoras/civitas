@@ -655,7 +655,7 @@ def _period_sentence(totals: dict) -> str:
 _SIGNED_RE = re.compile(r"^signed by (?:the )?president\b", re.IGNORECASE)
 
 
-def _became_law(db: Session, start: date, end: date) -> list[dict]:
+def became_law(db: Session, start: date, end: date) -> list[dict]:
     """Bills that became law in the period: Congress.gov's list of the
     Congress's laws, each on the day it became law (bill_refresh.sync_laws),
     and a bill signed in the period whose law number isn't on that list yet,
@@ -732,7 +732,7 @@ def period_report(db: Session, start: date, end: date) -> dict:
         "passedOneChamber": one,
         "closestVotes": [_vote(v, shaped.get(v.id)) for v in closest],
         "votes": [_vote(v, shaped.get(v.id)) for v in sorted(p["votes"], key=lambda v: (v.date, v.chamber, v.number))],
-        "becameLaw": _became_law(db, start, end),
+        "becameLaw": became_law(db, start, end),
         "syncedAt": (last_run(db) or {}).get("finishedAt"),
     }
 
