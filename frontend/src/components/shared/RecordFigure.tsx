@@ -141,7 +141,7 @@ function Countdown({ f, size }: { f: CountdownFigure; size: FigureSize }) {
       {...(bare ? { role: "img", "aria-label": `${daysLeftWords(f)}.` } : {})}
     >
       <div
-        className={`font-display font-semibold leading-none text-signal-amber ${
+        className={`whitespace-nowrap font-display font-semibold leading-none text-signal-amber ${
           size === "lead" ? VALUE.tier : VALUE[size]
         }`}
       >
