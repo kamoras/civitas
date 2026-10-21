@@ -15,8 +15,9 @@ import {
   fetchRepresentativesByState,
   fetchStates,
   fetchRepStates,
+  fetchPoliticianSuggestions,
 } from "@/lib/api";
-import type { StateInfo, RepStateInfo } from "@/lib/api";
+import type { StateInfo, RepStateInfo, PoliticianSuggestion } from "@/lib/api";
 import type { Senator } from "@/types/senator";
 import { formatCurrency } from "@/lib/formatting";
 import { PARTY_COLORS } from "@/lib/partyStyles";
@@ -456,6 +457,32 @@ function comparePath(left: Senator, right: Senator, lCh: Chamber, rCh: Chamber):
   return `/compare?${params}`;
 }
 
+/**
+ * The member a shared link names, on the chamber it names and else the
+ * other: a link written without a chamber (or with the wrong one) defaults
+ * to the Senate, where a representative's id answers 404, which left the
+ * pickers where the comparison should be. Null when neither chamber has
+ * the id (the API resolves a renamed member's old id itself).
+ */
+async function loadLinkedMember(
+  id: string,
+  named: string | null
+): Promise<{ member: Senator; chamber: Chamber } | null> {
+  const first: Chamber = named === "house" ? "house" : "senate";
+  const order: Chamber[] = first === "house" ? ["house", "senate"] : ["senate", "house"];
+  for (const ch of order) {
+    try {
+      const member = await (ch === "house" ? fetchRepresentative : fetchSenator)(id);
+      if (member) return { member, chamber: ch };
+    } catch {
+      // Not on this chamber: try the other.
+    }
+  }
+  return null;
+}
+
+type Unresolved = { side: "left" | "right"; id: string; closest: PoliticianSuggestion[] };
+
 // The masthead's line, sent with the server's fallback too (PageFallback).
 const COMPARE_EYEBROW = "Compare · two legislators, side by side";
 const COMPARE_TITLE = "Compare legislators";
@@ -489,42 +516,47 @@ function ComparePageInner() {
   const [hydrating, setHydrating] = useState(() =>
     Boolean(searchParams.get("leftId") || searchParams.get("rightId"))
   );
+  // A linked id that matched no member in either chamber, with the closest
+  // addresses on the record (the member 404's list), so a dead link says
+  // so instead of quietly showing the pickers.
+  const [unresolved, setUnresolved] = useState<Unresolved[]>([]);
   // Hydrate from URL params on mount (only when sides are not already set)
   useEffect(() => {
-    const leftId = searchParams.get("leftId");
-    const rightId = searchParams.get("rightId");
-    const leftCh = (searchParams.get("leftChamber") ?? "senate") as Chamber;
-    const rightCh = (searchParams.get("rightChamber") ?? "senate") as Chamber;
+    const sides = [
+      {
+        side: "left" as const,
+        id: searchParams.get("leftId"),
+        ch: searchParams.get("leftChamber"),
+      },
+      {
+        side: "right" as const,
+        id: searchParams.get("rightId"),
+        ch: searchParams.get("rightChamber"),
+      },
+    ];
+    if (!sides.some((s) => s.id)) return;
 
-    if (!leftId && !rightId) return;
-
-    const promises: Promise<void>[] = [];
-
-    if (leftId) {
-      const fetchFn = leftCh === "house" ? fetchRepresentative : fetchSenator;
-      promises.push(
-        fetchFn(leftId)
-          .then((senator) => {
-            setLeftSenator(senator);
-            setLeftChamber(leftCh);
-          })
-          .catch(() => {})
-      );
-    }
-
-    if (rightId) {
-      const fetchFn = rightCh === "house" ? fetchRepresentative : fetchSenator;
-      promises.push(
-        fetchFn(rightId)
-          .then((senator) => {
-            setRightSenator(senator);
-            setRightChamber(rightCh);
-          })
-          .catch(() => {})
-      );
-    }
-
-    Promise.all(promises).finally(() => setHydrating(false));
+    const misses: Unresolved[] = [];
+    Promise.all(
+      sides.map(async ({ side, id, ch }) => {
+        if (!id) return;
+        const found = await loadLinkedMember(id, ch);
+        if (found) {
+          (side === "left" ? setLeftSenator : setRightSenator)(found.member);
+          (side === "left" ? setLeftChamber : setRightChamber)(found.chamber);
+          return;
+        }
+        const closest = await fetchPoliticianSuggestions(id.slice(0, 80)).catch(() => []);
+        misses.push({
+          side,
+          id,
+          closest: closest.filter((p) => p.role === "Senator" || p.role === "Representative"),
+        });
+      })
+    ).finally(() => {
+      setUnresolved(misses);
+      setHydrating(false);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // intentionally run once on mount
 
@@ -618,6 +650,45 @@ function ComparePageInner() {
             {COMPARE_LEDE}
           </PageMasthead>
 
+          {unresolved.map((u) => (
+            <div
+              key={u.side}
+              role="status"
+              className="mb-4 border-l-2 border-signal-amber pl-3 text-sm"
+            >
+              <p className="text-ink">
+                The link&rsquo;s {u.side} member, <span className="font-id">{u.id}</span>, matched
+                no one in the Senate or the House.
+                {u.closest.length > 0 && " Closest addresses on the record:"}
+              </p>
+              {u.closest.length > 0 && (
+                <ul className="mt-2 flex flex-wrap gap-2">
+                  {u.closest.map((p) => (
+                    <li key={p.id}>
+                      <button
+                        type="button"
+                        className="inline-flex min-h-8 items-center border border-ink-hi/60 px-2.5 text-ink-hi hover:border-phos hover:text-phos"
+                        onClick={async () => {
+                          const found = await loadLinkedMember(
+                            p.id,
+                            p.role === "Representative" ? "house" : "senate"
+                          );
+                          if (!found) return;
+                          setUnresolved((all) => all.filter((x) => x.side !== u.side));
+                          if (u.side === "left") handleLeft(found.member, found.chamber);
+                          else handleRight(found.member, found.chamber);
+                          setPresetVersion((v) => v + 1);
+                        }}
+                      >
+                        {p.name}
+                        {p.party && p.state ? ` (${p.party}-${p.state})` : ""}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))}
           <ComparePresets chosen={chosen} onPair={handlePair} />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
