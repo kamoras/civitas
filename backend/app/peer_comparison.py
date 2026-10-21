@@ -32,7 +32,7 @@ from app.measures import BY_KEY, MEASURES, Measure, alignment_facts, bill_facts,
 from app.models import Representative, Senator
 from app.pipeline.analyze.score_calculator import ALGORITHM_VERSION, _seat_pvi
 from app.score_keeping import load_breakdown
-from app.score_display import thin_dimensions
+from app.score_display import shown_share, thin_dimensions
 from app.services.representative_service import get_representative_score_breakdown
 from app.services.senator_service import get_senator_score_breakdown
 
@@ -145,7 +145,7 @@ def peer_word(pct: float, gap_sd: float | None) -> str:
 
 def _shown(measure: Measure, value: float, facts: dict) -> str:
     if measure.unit == "share":
-        return "under 1%" if 0 < value < 0.005 else f"{round(value * 100)}%"
+        return shown_share(value)
     if measure.key == "breaks":
         a = alignment_facts(facts)
         return f"{a.get('breaks', 0):,} of {a.get('partyVotes', 0):,}"

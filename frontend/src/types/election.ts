@@ -69,12 +69,19 @@ export type FundingSourceKey =
 
 export interface FundingSources {
   /** False: the filing's categories don't add up to its total, so no
-   * share is given (each part's percent and blocks are null). */
+   * share is given (each part's share, shown and blocks are null). */
   addsUp: boolean;
-  /** Always all five, in this order. `percent` adds up to 100 and
-   * `blocks` to 20 across the parts (largest remainder), both computed by
-   * the backend. */
-  parts: { key: FundingSourceKey; amount: number; percent: number | null; blocks: number | null }[];
+  /** Always all five, in this order. `shown` is the share in the words
+   * every surface uses (backend score_display.shown_share: "20%", "under
+   * 1%"), so the same figures read the same here as on a profile; only
+   * `blocks` are apportioned to add up to 20 (largest remainder). */
+  parts: {
+    key: FundingSourceKey;
+    amount: number;
+    share: number | null;
+    shown: string | null;
+    blocks: number | null;
+  }[];
 }
 
 /** Where a seat's lean sits among every seat of its kind (backend

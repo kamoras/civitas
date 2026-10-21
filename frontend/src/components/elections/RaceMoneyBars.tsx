@@ -54,7 +54,7 @@ function FundingLegend() {
   return (
     <div className="mb-1 border-b border-white/[0.07] pb-3">
       <p className="font-mono text-[11px] text-ink-min">
-        Where contributions came from · 1 block = 5%
+        Where this campaign&apos;s contributions came from · 1 block = 5%
       </p>
       <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-ink-lo">
         {Object.entries(FUNDING).map(([key, f]) => (
@@ -79,7 +79,7 @@ function FundingStrip({ sources }: { sources: FundingSources }) {
       </p>
     );
   }
-  const shown = sources.parts.filter((p) => (p.percent ?? 0) > 0);
+  const shown = sources.parts.filter((p) => (p.share ?? 0) > 0);
   return (
     <div className="mt-2">
       <div className="flex gap-[2px]" aria-hidden="true">
@@ -94,7 +94,7 @@ function FundingStrip({ sources }: { sources: FundingSources }) {
         )}
       </div>
       <p className="mt-1 text-[12px] leading-snug text-ink-lo">
-        {shown.map((p) => `${p.percent}% from ${FUNDING[p.key].label}`).join(" · ")}
+        {shown.map((p) => `${p.shown} from ${FUNDING[p.key].label}`).join(" · ")}
       </p>
     </div>
   );

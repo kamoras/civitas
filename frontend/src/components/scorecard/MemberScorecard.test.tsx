@@ -271,6 +271,25 @@ describe("MemberScorecard", () => {
     ).toBeInTheDocument();
   });
 
+  it("states each share in the backend's words, as every other surface does", async () => {
+    const fi = breakdown.fundingIndependence;
+    renderCard({
+      ...breakdown,
+      fundingIndependence: {
+        ...fi,
+        facts: {
+          ...fi.facts,
+          shown: { pacShare: "under 1%", smallDonorShare: "20%", smallDonorExpectedShare: "6%" },
+        },
+      },
+    } as RepresentationScoreBreakdown);
+    expect(
+      screen.getByText(
+        /Under 1% of \$1\.2M in contributions came from PACs\. 20% came from donors giving \$200 or less; the House median is 6%\./
+      )
+    ).toBeInTheDocument();
+  });
+
   it("lists every vote against party with the chamber's own tallies", async () => {
     renderCard();
     expect(fetchRepVotes).toHaveBeenCalledWith(

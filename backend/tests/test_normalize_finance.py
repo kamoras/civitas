@@ -204,7 +204,7 @@ class TestNormalizeFinance:
         )
         assert result["totalRaised"] == 1_200_000  # 2024 once, not the 2018 race
         assert result["totalFromPACs"] == 120_000
-        assert result["smallDonorPercentage"] == round(400_000 / 1_200_000 * 100)
+        assert result["smallDonorPercentage"] == round(400_000 / 1_200_000 * 100, 2)
 
     def test_in_progress_negative_committee_does_not_replace_the_completed_election(self):
         # A just-opened next-cycle committee can have genuinely negative
