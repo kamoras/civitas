@@ -26,7 +26,8 @@ export default function PresidentsAndJusticesChapter() {
       href="/about/presidents-and-justices"
       eyebrow="Methodology · executive & judicial"
       title="Presidents & justices"
-      lede={
+      lede={<p>No president or justice gets a score.</p>}
+      intro={
         <p>
           A president&apos;s page shows the record: approval polls and the economy, each beside past
           presidencies, and the historians&apos; own rank. Civitas gives no president a score.

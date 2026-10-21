@@ -75,4 +75,27 @@ describe("AboutPage contents", () => {
     render(chapter(3));
     expect(screen.queryByRole("navigation", { name: "On this page" })).toBeNull();
   });
+
+  it("keeps the full introduction behind the summary's More, the lede one line", () => {
+    render(
+      <AboutPage
+        href="/about/scores"
+        eyebrow="e"
+        title="t"
+        lede={<p>One line.</p>}
+        intro={<p>The whole introduction.</p>}
+      >
+        <Summary>
+          <Point>short</Point>
+        </Summary>
+      </AboutPage>
+    );
+    const summary = screen.getByRole("heading", { name: "The short version" }).closest("section")!;
+    const more = within(summary)
+      .getByText(/More: the chapter.s introduction/)
+      .closest("details")!;
+    expect(more.open).toBe(false);
+    expect(within(more).getByText("The whole introduction.")).toBeInTheDocument();
+    expect(screen.getByText("One line.")).toBeInTheDocument();
+  });
 });

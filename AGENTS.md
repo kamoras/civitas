@@ -2704,7 +2704,10 @@ the pending list).
   `AboutPage`: that is how its "On this page" list finds them (four or
   more), so a part wrapped in a fragment or another component drops out of
   it. A new score gets a plain line in `/about/scores`' short version,
-  held to a Flesch-Kincaid grade of 8 or below.
+  held to a Flesch-Kincaid grade of 8 or below. Its `lede` is one line
+  (about 40 characters, one line on a phone); the full introduction goes
+  in `intro`, which `AboutPage` puts behind a "More" at the foot of "The
+  short version".
 - A member page's money, votes and bills columns each lead with its `finding`
   (one template sentence from the breakdown API, `services/score_findings.py`,
   outside `pipeline/` so its wording never moves the analysis-code
