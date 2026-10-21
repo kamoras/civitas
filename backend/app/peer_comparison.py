@@ -152,13 +152,18 @@ def _shown(measure: Measure, value: float, facts: dict) -> str:
     return f"{int(value):,} of {bill_facts(facts).get('bills', 0):,}"
 
 
-def _group_label(chamber: str, group: str, caucus: str, members: list[dict]) -> str:
+def _group_label(chamber: str, group: str, caucus: str, members: list[dict]) -> tuple[str, str]:
+    """The group's name, plural ("Senate Republicans") and for one member
+    ("Senate Republican"), so a caption can read "every Senate Republican's
+    figure" with its capitals kept."""
     house = chamber == "house"
     if group == "chamber":
-        return "representatives" if house else "senators"
+        return ("representatives", "representative") if house else ("senators", "senator")
     plural = _PARTY_PLURAL.get(caucus, "members")
     independents = any(m["party"] not in ("D", "R") for m in members)
-    return f"{'House' if house else 'Senate'} {plural}{' and independents' if independents else ''}"
+    chamber_word = "House" if house else "Senate"
+    return (f"{chamber_word} {plural}{' and independents' if independents else ''}",
+            f"{chamber_word} {plural[:-1]}{' or independent' if independents else ''}")
 
 
 # Template sentences, about grade 8 and subjectless (never a pronoun):
@@ -181,7 +186,7 @@ def _row(measure: Measure, me: dict, peers: list[dict], chamber: str, group: str
     names = {p["id"]: p["name"] for p in peers}
     pairs = [(p["id"], measure.value(p["facts"])) for p in peers]
     pairs = sorted([(i, v) for i, v in pairs if v is not None], key=lambda x: x[1])
-    label = _group_label(chamber, group, me["caucus"], peers)
+    label, label_one = _group_label(chamber, group, me["caucus"], peers)
     values = [v for _, v in pairs]
     record = measure.record(facts)
     median = statistics.median(values) if values else None
@@ -201,7 +206,7 @@ def _row(measure: Measure, me: dict, peers: list[dict], chamber: str, group: str
         "expected": expected,
         "expectedBasis": basis,
         "median": median,
-        "peerGroup": {"key": group, "label": label, "n": len(values)},
+        "peerGroup": {"key": group, "label": label, "labelOne": label_one, "n": len(values)},
         "distribution": values,
         "distributionIds": [i for i, _ in pairs],
         "distributionNames": [names[i] for i, _ in pairs],
@@ -228,7 +233,11 @@ def _row(measure: Measure, me: dict, peers: list[dict], chamber: str, group: str
     row.update({
         "percentile": round(pct, 1),
         "word": None if thin else peer_word(pct, gap),
-        "sentence": f"{fact} {n_side:,} of the other {len(others):,} {label} {verb}.",
+        # "with a figure" when some peers have none for this measure (no FEC
+        # contributions, say), so two rows' different counts read as what
+        # they are, not as two different groups.
+        "sentence": (f"{fact} {n_side:,} of the other {len(others):,} {label}"
+                     f"{' with a figure' if len(values) < len(peers) else ''} {verb}."),
         "thin": thin,
         "gapSd": None if gap is None else round(gap, 2),
     })

@@ -133,8 +133,8 @@ export function TrendPostsDashboard({ token }: { token: string }) {
               life.p25 == null || life.p75 == null ? NOT_MEASURED : `${life.p25}–${life.p75} h`
             }
           />
-          <StatTile label="Topics ended" value={life.ended.toLocaleString()} />
-          <StatTile label="Topics seen" value={life.topics.toLocaleString()} />
+          <StatTile label="Topics ended" value={life.ended.toLocaleString("en-US")} />
+          <StatTile label="Topics seen" value={life.topics.toLocaleString("en-US")} />
         </div>
       </Panel>
 
@@ -199,7 +199,9 @@ export function TrendPostsDashboard({ token }: { token: string }) {
               {decisions.map(([decision, n]) => (
                 <div key={decision} className="border border-white/[0.07] p-3 min-w-0">
                   <dt className="text-xs font-mono text-ink-lo">{decision}</dt>
-                  <dd className="mt-1 font-mono text-xl text-ink-hi">{n.toLocaleString()}</dd>
+                  <dd className="mt-1 font-mono text-xl text-ink-hi">
+                    {n.toLocaleString("en-US")}
+                  </dd>
                 </div>
               ))}
             </dl>

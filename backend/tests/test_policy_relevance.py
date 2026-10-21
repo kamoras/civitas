@@ -137,6 +137,7 @@ def fake_embed(monkeypatch):
                      [0.3, 1.0, 0.0], [0.0, 1.0, 0.3], [-0.3, 1.0, 0.0]], dtype=np.float32)
     seed /= np.linalg.norm(seed, axis=1, keepdims=True)
     monkeypatch.setattr(pr, "_seed_reference", lambda: (seed, np.array([1.0, 1.0, 1.0, 0.0, 0.0, 0.0])))
+    monkeypatch.setattr(pr, "seed_rows", lambda: [("seed", 1)] * 3 + [("seed", 0)] * 3)
     return embed
 
 
@@ -160,23 +161,26 @@ def test_judge_keeps_by_vote_and_stores_every_article_with_its_label(db_session,
     assert rows[named.url].names_official and rows[politics.url].kept and not rows[world.url].kept
 
 
-def test_the_store_replaces_the_seed_once_both_labels_are_plentiful(db_session, fake_embed, freeze_utcnow,
-                                                                    monkeypatch):
+def test_the_store_replaces_the_seed_once_it_holds_as_many_of_each_label(db_session, fake_embed, freeze_utcnow):
+    """No count is typed: the store takes over once it holds at least the
+    seed's number of articles of each label, and not before."""
     freeze_utcnow(datetime(2028, 3, 1, 12))
-    monkeypatch.setattr(pr, "MIN_CLASS_ROWS", 1)
+    seed = [label for _, label in pr.seed_rows()]
+    pos, neg = sum(seed), len(seed) - sum(seed)
     vec = fake_embed(["Senate", "Football"])
-    for i, label in enumerate([1, 1, 0, 0]):
+    for i, label in enumerate([1] * pos + [0] * neg):
         db_session.add(FeedArticle(url=f"https://example.org/s{i}", source_name="O", text="t", names_official=False,
                                    label=label, kept=False, embedding=vec[0 if label else 1].tobytes(),
                                    model=pr._MODEL, seen_at=datetime(2028, 2, 28)))
     db_session.commit()
+    assert pr.reference(db_session)[2] == 0
+    # One positive short (the one being judged is not its own reference): the seed joins.
     vectors, labels, seeded = pr.reference(db_session, exclude_urls=["https://example.org/s0"])
-    assert seeded == 0 and len(labels) == 3  # the article being judged is not its own reference
+    assert seeded == len(seed) and len(labels) == pos + neg - 1 + len(seed)
 
 
-def test_old_and_other_model_rows_leave_the_reference(db_session, fake_embed, freeze_utcnow, monkeypatch):
+def test_old_and_other_model_rows_leave_the_reference(db_session, fake_embed, freeze_utcnow):
     freeze_utcnow(datetime(2028, 3, 1, 12))
-    monkeypatch.setattr(pr, "MIN_CLASS_ROWS", 1)
     vec = fake_embed(["Senate"])[0].tobytes()
     db_session.add_all([
         FeedArticle(url="https://example.org/old", source_name="O", text="t", names_official=False, label=1,

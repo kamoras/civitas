@@ -687,7 +687,7 @@ def _trending_ids_for(issues: list[ActionIssue], db_visits: Session) -> set[str]
         logger.warning("Trending lookup failed (visits DB unavailable) — no issues flagged trending")
         return set()
     view_counts = {pid: count for pid, count in rows}
-    return compute_trending_issue_ids(view_counts)
+    return compute_trending_issue_ids(view_counts, live=len(public_ids))
 
 
 # Runs to look back through for one that wrote issues: two days of hourly
@@ -842,6 +842,17 @@ async def get_recent_action_issues(
     per national monitor (_one_per_monitor).
     """
     response.headers["Cache-Control"] = f"public, max-age={_ACTION_ISSUES_CACHE_TTL_S}"
+    issues = _one_per_monitor(recent_issues(db), db)[:limit]
+    member_facts = _current_member_facts(
+        db, set().union(*(_issue_member_ids(i) for i in issues)),
+    )
+    return {"issues": [_build_issue_response(i, db, member_facts=member_facts) for i in issues]}
+
+
+def recent_issues(db: Session) -> list[ActionIssue]:
+    """The recent record's pool, newest day first and each day in rank
+    order, with near-identical duplicates left out (_hidden_as_duplicate):
+    what /issues/recent and the homepage's front page (api/notable.py) read."""
     pool = (
         db.query(ActionIssue)
         .filter(NOT_RETIRED_DRAFT)
@@ -850,14 +861,14 @@ async def get_recent_action_issues(
         .all()
     )
     by_id = {p.id: p for p in pool}
-    issues = _one_per_monitor([i for i in pool if not _hidden_as_duplicate(i, by_id)], db)[:limit]
-    member_facts = _current_member_facts(
-        db, set().union(*(_issue_member_ids(i) for i in issues)),
-    )
-    return {"issues": [_build_issue_response(i, db, member_facts=member_facts) for i in issues]}
+    return [i for i in pool if not _hidden_as_duplicate(i, by_id)]
 
 
 def _one_per_monitor(issues: list[ActionIssue], db: Session) -> list[ActionIssue]:
+    return [kept for kept, _, _ in monitor_groups(issues, db)]
+
+
+def monitor_groups(issues: list[ActionIssue], db: Session) -> list[tuple[ActionIssue, set[str], list[ActionIssue]]]:
     """The newest issue of each national monitor's story, in order; issues
     of no monitor are all kept. The homepage record also lists the monitor
     itself, so an older development stays one click away.
@@ -879,13 +890,16 @@ def _one_per_monitor(issues: list[ActionIssue], db: Session) -> list[ActionIssue
         .filter(MonitorUpdate.article_title.in_(sorted({i.title for i in issues})))
     ):
         linked.setdefault(title, set()).add(slug)
-    kept, seen = [], set()
+    kept: list[tuple[ActionIssue, set[str], list[ActionIssue]]] = []
+    owner: dict[str, int] = {}
     for issue in issues:
         slugs = set(_parse_json_field(issue.related_monitor_slugs or "[]")) | linked.get(issue.title, set())
-        if slugs & seen:
+        hit = next((owner[s] for s in slugs if s in owner), None)
+        if hit is not None:
+            kept[hit][2].append(issue)
             continue
-        seen |= slugs
-        kept.append(issue)
+        owner.update(dict.fromkeys(slugs, len(kept)))
+        kept.append((issue, slugs, []))
     return kept
 
 

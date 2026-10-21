@@ -470,7 +470,7 @@ function PhaseTimings({ token }: { token: string }) {
                         {run.rateLimitSources.map((s) => (
                           <div key={s.source} className="flex justify-between gap-3">
                             <span className="text-ink-min text-xs font-mono truncate">
-                              {s.source} · {s.requests.toLocaleString()} req
+                              {s.source} · {s.requests.toLocaleString("en-US")} req
                             </span>
                             <span className="text-ink-min text-xs font-mono tabular-nums shrink-0">
                               {formatDuration(s.blockedSeconds)}
@@ -684,18 +684,18 @@ export function PipelinesDashboard({
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile
           label={`Runs in ${shownRange}d`}
-          value={trend ? finished.length.toLocaleString() : "—"}
+          value={trend ? finished.length.toLocaleString("en-US") : "—"}
           note={trendFailed && !trend ? "couldn't load" : "all pipelines, finished"}
         />
         <StatTile
           label="Failed"
-          value={trend ? failed.toLocaleString() : "—"}
+          value={trend ? failed.toLocaleString("en-US") : "—"}
           tone={failed > 0 ? "text-signal-magenta" : "text-ink-hi"}
           note={finished.length ? `${Math.round((failed / finished.length) * 100)}% of runs` : "—"}
         />
         <StatTile
           label="Partial"
-          value={trend ? partial.toLocaleString() : "—"}
+          value={trend ? partial.toLocaleString("en-US") : "—"}
           tone={partial > 0 ? "text-signal-amber" : "text-ink-hi"}
           note="finished with some members failed"
         />

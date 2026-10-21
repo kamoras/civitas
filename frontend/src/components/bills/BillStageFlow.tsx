@@ -58,7 +58,7 @@ export default function BillStageFlow({
               type="button"
               onClick={() => onSelectStage(isActive ? null : code)}
               aria-pressed={isActive}
-              title={`${info?.name ?? code}: ${count.toLocaleString()} bill${count === 1 ? "" : "s"} (${share}% of all bills tracked)`}
+              title={`${info?.name ?? code}: ${count.toLocaleString("en-US")} bill${count === 1 ? "" : "s"} (${share}% of all bills tracked)`}
               className={`group -mx-2 flex flex-wrap items-center gap-x-3 gap-y-1 border-l-2 px-2 py-1.5 text-left transition-colors ${
                 isActive ? `bg-white/5 ${style.rule}` : "border-l-transparent hover:bg-white/[0.03]"
               }`}
@@ -95,7 +95,7 @@ export default function BillStageFlow({
                   to render at most four digits. Giving the 32px back to the
                   bar matters at 390px, where the bar was down to 55px. */}
               <span className="w-12 shrink-0 text-right font-mono text-xs tabular-nums text-ink sm:w-24">
-                {count.toLocaleString()}
+                {count.toLocaleString("en-US")}
                 <span className="hidden sm:inline text-ink-min"> · {share}%</span>
               </span>
             </button>

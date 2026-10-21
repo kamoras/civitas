@@ -59,7 +59,7 @@ function RateScale({ rate, expected, name }: { rate: number; expected: number; n
   return (
     <div
       role="img"
-      aria-label={`${name} breaks with the party on ${percentOneDecimal(rate)} of party-line votes; the norm for similar seats is ${percentOneDecimal(expected)}`}
+      aria-label={`${name} breaks with the party on ${percentOneDecimal(rate)} of party-line votes; the average for similar seats is ${percentOneDecimal(expected)}`}
     >
       <div className="relative h-8" aria-hidden="true">
         <span className="absolute inset-x-0 top-[15px] h-0.5 bg-white/[0.14]" />

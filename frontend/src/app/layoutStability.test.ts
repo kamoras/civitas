@@ -46,6 +46,16 @@ describe("layout stability", () => {
     expect(offenders).toEqual([]);
   });
 
+  it("renders no <head> element of its own", () => {
+    // React suspends on a head whose children's chunk hasn't streamed yet and
+    // replays it, entering its hydration scope twice: <body> then hydrates
+    // against the head's first child (React #418, 2026-10; app/layout.tsx).
+    const offenders = sourceFiles(SRC).filter((file) =>
+      /^\s*<head[\s>]/m.test(readFileSync(file, "utf8"))
+    );
+    expect(offenders).toEqual([]);
+  });
+
   it("lays out page columns with fr tracks, never a 12-column grid", () => {
     // A 12-column grid has eleven gaps; at a doubled text size the rem gaps
     // alone (11 x 4.5rem for gap-9) are wider than a 768 px screen, so the

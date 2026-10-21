@@ -1,6 +1,6 @@
 import type { DayStatus, ElectionCalendar } from "@/types/specials";
 import type { RegisterLink } from "@/types/election";
-import { formatUtcDate, safeHref } from "@/lib/formatting";
+import { formatUtcDate, midSentence, safeHref } from "@/lib/formatting";
 
 /** How an election day's status reads on the page (the status itself is
  * the backend's, counted on the state's clock). */
@@ -64,7 +64,7 @@ export function calendarEntries(cal: ElectionCalendar): CalendarEntry[] {
       date: f.date,
       state: null,
       tag: "FEC report" as const,
-      text: `Campaign finance reports due: ${f.label.toLowerCase()}${f.reportYear ? ` (${f.reportYear})` : ""}`,
+      text: `Campaign finance reports due: ${midSentence(f.label)}${f.reportYear ? ` (${f.reportYear})` : ""}`,
       status: f.status === "held" ? "Passed" : f.status === "due_today" ? "Due today" : "Upcoming",
       passed: f.status === "held",
     })),

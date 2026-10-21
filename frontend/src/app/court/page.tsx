@@ -11,7 +11,7 @@ import CourtLine from "@/components/court/CourtLine";
 import DecisionLineups from "@/components/court/DecisionLineups";
 import RecentDecisions from "@/components/court/RecentDecisions";
 import { courtLead, currentTermLine, COURT_HREF, COURT_SOURCES } from "@/lib/court";
-import { COURT_FINDING } from "@/lib/justices";
+import { courtFinding } from "@/lib/justices";
 import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import { absoluteUrl, pageMetadata } from "@/lib/site";
 import { fetchRecord } from "@/lib/ssrPayload";
@@ -192,10 +192,10 @@ export default async function CourtPage({ searchParams }: { searchParams: Promis
               </p>
               <p>
                 <strong className="text-ink-hi">Votes under the appointing president.</strong>{" "}
-                {COURT_FINDING} Each justice&apos;s own estimate is on their page, beside every
-                sitting justice&apos;s, as information, not a measure of loyalty: a justice&apos;s
-                years under the appointing president are always the first, and windows of the same
-                length later in a career produce differences about as large.{" "}
+                {courtFinding(court.appointerFinding)} Each justice&apos;s own estimate is on their
+                page, beside every sitting justice&apos;s, as information, not a measure of loyalty:
+                a justice&apos;s years under the appointing president are always the first, and
+                windows of the same length later in a career produce differences about as large.{" "}
                 <Link href="/about/presidents-and-justices#justices" className={LINK}>
                   How justices are covered
                 </Link>

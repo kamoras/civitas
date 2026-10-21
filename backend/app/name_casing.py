@@ -39,6 +39,7 @@ def name_casing() -> dict[str, str]:
 # apostrophe is the rest of a word ("21ST", "AMERICA'S"), not a word.
 _LETTER_RUN_RE = re.compile(r"(?<![A-Za-z])[A-Za-z]+")
 _APOSTROPHES = ("'", "’")
+_VOWEL_RE = re.compile(r"[AEIOUYaeiouy]")
 
 
 def clean_name(name: str, forms: dict[str, str] | None = None) -> str:
@@ -62,7 +63,12 @@ def clean_name(name: str, forms: dict[str, str] | None = None) -> str:
             # Part of an elided or possessive word ("INT'L", "AMERICA'S"):
             # not the word the table describes.
             return run.capitalize()
-        return forms.get(run.lower()) or run.capitalize()
+        if form := forms.get(run.lower()):
+            return form
+        # Three or more letters with no vowel can't be said as a word, so
+        # they are initials ("NRSC", "DSCC"): kept in capitals where usage
+        # has no record of them. "Nrsc" was printed until 2026-10.
+        return run if len(run) >= 3 and not _VOWEL_RE.search(run) else run.capitalize()
 
     return " ".join(_LETTER_RUN_RE.sub(word, name).split())
 
