@@ -53,7 +53,7 @@ hardcoded here, so that update is a config edit, not a code change.
 
 Because that id has no cycle of its own baked into the URL, this module
 refuses to serve it for any cycle but the one it was verified against —
-`YEAR` below — rather than silently re-confirming 2026's winners against a
+`ecode_cycle` beside the id in the config — rather than silently re-confirming its winners against a
 LATER cycle's real FEC candidates on nothing but a surname match (a repeat
 incumbent is exactly who could coincidentally "confirm" a false positive
 in a later cycle).
@@ -91,9 +91,15 @@ from app.pipeline.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
 
-# The only cycle ecode=1001300 (see below) is verified to mean — see the
-# module docstring for why an off-cycle call refuses rather than reuses it.
-YEAR = 2026
+
+
+def _special_cycle(source: dict) -> int | None:
+    """The one cycle the configured special-primary page id was verified
+    for (`ecode_cycle` beside `ecode` in the config): the id names one
+    election and carries no date of its own, so it is read for that cycle
+    only (module docstring). None when the config names no such page."""
+    cycle = source.get("ecode_cycle")
+    return int(cycle) if source.get("ecode") and cycle else None
 
 _HEADERS = BROWSER_HEADERS
 _rate_limiter = RateLimiter(rps=1.0)
@@ -452,11 +458,12 @@ async def fetch_confirmed_candidates(
     want_statewide = bool(source.get("statewide_offices"))
     want_senate = bool(spec.get("read_senate"))
 
-    # See module docstring — ecode=1001300 names one specific 2026
-    # election with no date of its own; reusing it for any other cycle
-    # would confirm that cycle's candidates off a stale surname match
-    # rather than that cycle's real result.
-    contests = await _special_primary(client, year, source) if year == YEAR else {}
+    # See module docstring — the ecode names one specific election with no
+    # date of its own; reusing it for any other cycle would confirm that
+    # cycle's candidates off a stale surname match rather than that
+    # cycle's real result.
+    special = year == _special_cycle(source)
+    contests = await _special_primary(client, year, source) if special else {}
     if contests is None:
         return None
 
@@ -484,7 +491,7 @@ async def fetch_confirmed_candidates(
         if record:
             results.append(record)
 
-    if year == YEAR and not results:
+    if special and not results:
         logger.warning("AL special primary results yielded no confirmed nominees")
         return None
 
@@ -492,7 +499,7 @@ async def fetch_confirmed_candidates(
     # whose special primary was just read, only when the config names the
     # redistricted districts, and never one of those.
     house_excluded = None
-    if spec.get("read_house") and year == YEAR and spec.get("special_primary_districts"):
+    if spec.get("read_house") and special and spec.get("special_primary_districts"):
         house_excluded = special_primary_districts(contests, spec.get("special_primary_districts"))
 
     if want_statewide or want_senate or house_excluded is not None:

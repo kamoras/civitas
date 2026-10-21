@@ -18,6 +18,8 @@ import {
   SITE_NAME,
   SITE_URL,
   absoluteUrl,
+  ICON_PATH,
+  ogCardUrl,
 } from "@/lib/site";
 import { billCanonicalPath, calendarDate, voteResult, voteTally } from "./congress";
 
@@ -230,7 +232,7 @@ export function siteJsonLd() {
       url: `${SITE_URL}/`,
       // A raster logo at least 112px square (Google's Organization logo
       // guidelines): the 192px app icon, not the 32-unit SVG favicon.
-      logo: absoluteUrl("/apple-icon.png"),
+      logo: absoluteUrl(ICON_PATH),
       description:
         "An independent, open-source public record of the U.S. government: who funds Congress and the president, how they vote, and the source document behind every number.",
       sameAs: [BSKY_PROFILE_URL, GITHUB_REPO_URL],
@@ -261,7 +263,7 @@ export function articleJsonLd(issue: ActionIssue) {
     description: issue.summary,
     url,
     mainEntityOfPage: url,
-    image: absoluteUrl(`/api/og?issue=${issue.publicId}`),
+    image: absoluteUrl(ogCardUrl(`issue=${issue.publicId}`)),
     datePublished: issue.firstSurfaced || issue.date,
     dateModified: issue.date,
     // Named in full as well as by @id: the Organization node itself is
@@ -458,7 +460,7 @@ export function describeMembersDirectory(): { title: string; description: string
 /** The chamber measure by measure (`/congress/members/measures`). */
 export function describeMeasures(): { title: string; description: string } {
   return {
-    title: "Congress, Measure by Measure: Small Gifts, PAC Money, Party Breaks, Bills",
+    title: "Congress by the Numbers: Small Gifts, PAC Money, Party Breaks, Bills for Every Member",
     description:
       "Every senator and representative on four measures from FEC filings, roll calls and Congress.gov, side by side, with no rank and no score.",
   };
@@ -601,5 +603,5 @@ export const CARD_ALT = {
 
 /** A record card's og:image entry: `/api/og?<query>`, 1200 by 630. */
 export function cardImage(query: string, alt: string) {
-  return [{ url: absoluteUrl(`/api/og?${query}`), width: 1200, height: 630, alt }];
+  return [{ url: absoluteUrl(ogCardUrl(query)), width: 1200, height: 630, alt }];
 }

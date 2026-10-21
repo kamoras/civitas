@@ -109,8 +109,22 @@ class TestAdvancementRates:
         assert rates["majority"] == 0.2 and rates["minority"] == 0.1
         assert rates["pooled"] == 0.15
 
-    def test_too_few_advanced_bills_keeps_the_previous_rates(self):
-        assert _measure_advancement_rates(self._members(40, 5), (120, "D")) is None
+    def test_an_unmeasurable_ratio_keeps_the_previous_rates(self):
+        # No minority bill advanced: the ratio the baseline reads is undefined.
+        assert _measure_advancement_rates(self._members(40, 0), (120, "D")) is None
+
+    def test_a_less_precise_measurement_than_the_previous_keeps_it(self):
+        """No count is typed: early in a Congress the last Congress's full
+        count stands until this one's log ratio is as precise."""
+        full = _measure_advancement_rates(self._members(400, 200, n=2000), (120, "D"))
+        early = self._members(4, 2, n=20)
+        assert _measure_advancement_rates(early, (120, "D"), previous=full) is None
+        assert _measure_advancement_rates(early, (120, "D")) is not None  # nothing better on file
+        later = self._members(600, 300, n=3000)
+        assert _measure_advancement_rates(later, (120, "D"), previous=full)["n_bills"] == 6000
+        # A stored reference from before the counts were kept has no measurable precision.
+        old = {"majority": 0.2, "minority": 0.1, "pooled": 0.15, "n_bills": 4000}
+        assert _measure_advancement_rates(early, (120, "D"), previous=old) is not None
 
     def test_only_the_ratio_matters_for_the_baseline(self):
         rates = {"majority": 0.2, "minority": 0.1, "pooled": 0.15}

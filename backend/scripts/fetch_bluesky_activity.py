@@ -42,12 +42,16 @@ from zoneinfo import ZoneInfo
 
 import websockets
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
+from app.site_url import SITE_DOMAIN  # noqa: E402
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUTPUT = ROOT / "app" / "data" / "bluesky_post_windows.json"
 
 JETSTREAM = "wss://jetstream2.us-east.bsky.network/subscribe"
 APPVIEW = "https://public.api.bsky.app/xrpc"
-ACCOUNT = "civitas-research.org"
+ACCOUNT = SITE_DOMAIN  # the account's Bluesky handle is the site's domain
 EASTERN = ZoneInfo("America/New_York")
 
 # Jetstream keeps about 36 hours; asking for more just starts at its oldest.

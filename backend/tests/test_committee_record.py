@@ -67,6 +67,16 @@ def test_a_bill_finds_every_meeting_and_report_naming_it_in_its_congress(events)
     assert committee_record.search(events, bill="S.465", congress=118)["total"] == 1
 
 
+def test_a_bills_entries_are_counted_in_one_templated_line(events):
+    assert committee_record.search(events, bill="S.1254", congress=119)["headline"] == (
+        "1 committee meeting in the Daily Digest names S. 1254")
+    assert committee_record.search(events, bill="HR.10238")["headline"] == (
+        "1 report in the Daily Digest names H.R. 10238")
+    assert committee_record.search(events, bill="S.9999")["headline"] == (
+        "No committee meeting or report in the Daily Digest names S. 9999")
+    assert committee_record.search(events, q="Nicaragua")["headline"] is None
+
+
 def test_a_typed_bill_number_is_read_as_the_bill(events):
     for typed in ("S. 465", "s.465"):
         found = committee_record.search(events, q=typed, congress=119)

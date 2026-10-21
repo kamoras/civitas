@@ -187,6 +187,39 @@ class TestIngestRaceCoverage:
         assert item.matched_candidate_id == "S6GA001"
         assert item.match_basis == "surname_context"
 
+    async def test_an_article_read_again_keeps_its_current_text(self, db_session):
+        """A summary stored with a photo caption first (the feed parser's
+        reading before 2026-10-21) is replaced when the article is read
+        again, and scored again; it is not stored twice."""
+        _race(db_session, "2026-SEN-GA", "GA")
+        _candidate(db_session, "S6GA001", "2026-SEN-GA", "BRENNAN, JON")
+        db_session.commit()
+        url = "https://georgiarecorder.com/2026/10/20/brennan/"
+        db_session.add(RaceCoverageItem(
+            race_id="2026-SEN-GA", source_type="news", source_name="Georgia Recorder",
+            title="Brennan leads in Georgia Senate race", url=url,
+            summary="Jon Brennan speaks at a rally. (Photo by A. Photographer) Polling shows a tight contest.",
+            fetched_at=datetime(2026, 10, 20), relevance=0.9,
+        ))
+        db_session.commit()
+
+        article = NewsArticle(
+            title="Brennan leads in Georgia Senate race", url=url,
+            source_name="Georgia Recorder", summary="Polling shows a tight contest.",
+        )
+        rescored = []
+        with patch.object(election_coverage, "fetch_news_articles", return_value=[article]), \
+                patch.object(election_coverage, "score_unscored_items", return_value=0), \
+                patch.object(election_coverage, "score_items", lambda db, rows: rescored.extend(rows) or 0):
+            assert await election_coverage.ingest_race_coverage(db_session) == 0
+
+        item = db_session.query(RaceCoverageItem).one()
+        assert item.summary == "Polling shows a tight contest."
+        assert rescored == [item]
+        # Its old score stands until the new one lands: never off the page.
+        assert item.relevance == 0.9
+        assert item.caption_checked_at is not None
+
     async def test_short_surname_never_matches(self, db_session):
         """A 3-char-or-shorter surname (e.g. "OZ") is too likely to match
         unrelated text — must not be used as a matching pattern at all."""

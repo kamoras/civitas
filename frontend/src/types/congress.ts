@@ -1,4 +1,5 @@
 import type { NominationVote } from "@/types/nomination";
+import type { BoxTone, Figure } from "@/types/figure";
 import type { StageMilestone } from "@/types/bill";
 /** The Congress reports (backend/app/services/congress_service.py) and a
  * bill's record (backend/app/services/bill_record.py). Every count and
@@ -358,6 +359,44 @@ export interface BillRecord {
   /** Whether the votes, floor debate and Record days (Digest and committee
    * entries) are held for the bill's Congress. Optional for an older backend. */
   coverage?: { votes: CoveragePart; floor: CoveragePart; digest: CoveragePart };
+  /** Each part's one templated line for the page's boxes (backend
+   * bill_boxes.py). Optional for an older backend. */
+  boxes?: BillBoxes;
+}
+
+/** A box's backend line: a template filled from the record's stored fields. */
+export interface BillBoxLine {
+  headline: string;
+  dek?: string | null;
+  figure: Figure | null;
+}
+
+export interface BillBoxes {
+  /** Where the bill is, and its path in one line. */
+  status: (BillBoxLine & { kicker: string; tone: BoxTone }) | null;
+  /** The CRS summary's first sentence, verbatim, credited. */
+  summary: { text: string; words: number; source: string } | null;
+  /** Each chamber's decision, with the roll call's split where it is held. */
+  passage: (BillBoxLine & {
+    chamber: Chamber;
+    date: string;
+    kicker: string;
+    /** The full templated sentence and the action, verbatim. */
+    sentence: string;
+    text: string;
+    rollCall: {
+      chamber: string;
+      number: number;
+      session: number;
+      sourceUrl?: string | null;
+    } | null;
+  })[];
+  votes: (BillBoxLine & { results: { label: string; count: number }[] }) | null;
+  history: (BillBoxLine & { latest: { date: string | null; text: string } | null }) | null;
+  cost: BillBoxLine | null;
+  text: BillBoxLine | null;
+  sponsor: { dek: string | null };
+  floor: { headline: string; figure: Figure | null } | null;
 }
 
 /** A committee meeting or a report filed on a measure, as the Daily Digest
@@ -386,6 +425,9 @@ export interface CommitteeRecordPage {
   totalPages: number;
   /** The bill the search was read as, when it was one. */
   bill: { billId: string; billLabel: string } | null;
+  /** For a bill: what the Digest holds on it, as one templated line.
+   * Optional for an older backend. */
+  headline?: string | null;
 }
 
 export interface CommitteeSummary {
@@ -407,6 +449,8 @@ export interface BillPassage {
   methodMeaning: string | null;
   /** The backend's plain sentence ("Passed the Senate by unanimous consent on ..."). */
   sentence: string;
+  /** Its first clause, undated. Optional for an older backend. */
+  headline?: string;
   /** The action, verbatim. */
   text: string;
   rollCall: { chamber: string; number: number; session: number; sourceUrl?: string | null } | null;

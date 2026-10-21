@@ -265,10 +265,22 @@ def _position_column(rows: list[dict]) -> tuple[str, str]:
     return POSITION_COLUMNS[-1]
 
 
-# Full records the saturation scale needs: below it (early in a Congress)
-# the chamber's last scale is carried. The same floor as the old
-# all-member quantile's (40).
-SCALE_MIN_FULL = 40
+# The saturation scale is the 90th percentile of full records' extremity.
+# It is measured only when the records can bound it: a distribution-free
+# 95% interval for a quantile q from n values needs q**n <= 2.5% (the
+# interval's upper end is an order statistic, which must exist), 36 records
+# for the 90th percentile. Fewer (early in a Congress), and the chamber's
+# last scale is carried. Derived from the quantile and the conventional
+# 95%, not typed (it was 40).
+SCALE_QUANTILE = 0.9
+SCALE_CONFIDENCE = 0.95
+
+
+def quantile_bounded(n: int, q: float = SCALE_QUANTILE, level: float = SCALE_CONFIDENCE) -> bool:
+    """Whether n values hold a distribution-free `level` interval for the
+    q-quantile (both ends inside the sample's order statistics)."""
+    tail = (1 - level) / 2
+    return n > 0 and q ** n <= tail and (1 - q) ** n <= tail
 
 
 def _vote_count(row: dict) -> int | None:
@@ -384,7 +396,8 @@ def build_chamber_ideal_points(
     extremities (reliability's reference_votes or more, which count in
     full): a thin record's noise would widen it, and scaling it by the
     weights would cancel them whenever every record is equally thin. With
-    fewer than SCALE_MIN_FULL full records (early in a Congress) it is None
+    fewer full records than bound its 90th percentile (quantile_bounded;
+    early in a Congress) it is None
     and refresh_member_ideal_points carries the chamber's last scale.
 
     A member Voteview lists twice in one Congress (a party switch during it,
@@ -466,7 +479,7 @@ def build_chamber_ideal_points(
                 extremities.append(abs(-residual if party == "D" else residual))
 
     extremity_p90 = (
-        round(statistics.quantiles(extremities, n=10)[8], 4) if len(extremities) >= SCALE_MIN_FULL else None
+        round(statistics.quantiles(extremities, n=10)[8], 4) if quantile_bounded(len(extremities)) else None
     )
 
     if unresolved_seats:

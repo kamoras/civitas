@@ -185,7 +185,7 @@ const BLURBS: Record<string, Record<string, string>> = {
     month: "What each chamber did in the last month Congress met",
     members: "Every senator and representative, found by state, town or name",
     measures: "Each chamber's members side by side on four plain measures",
-    compare: "Two members' records side by side, measure by measure",
+    compare: "Two members' records side by side",
     bills: "Every bill sitting members sponsored, by how far it has got",
     committees: "Each committee's members, leaders and meetings",
     nominations: "Every presidential nomination this Congress and how far it has got",
