@@ -132,5 +132,19 @@ def search(
         "perPage": per_page,
         "totalPages": total_pages,
         "bill": {"billId": bill, "billLabel": bill_label(bill)} if bill else None,
+        # For a bill: what the Digest holds on it, as one templated line
+        # (the bill page's "In committee" box).
+        "headline": _bill_headline(rows, bill) if bill else None,
     }
+
+
+def _bill_headline(rows: list[CongressEvent], bill: str) -> str:
+    meetings = sum(1 for e in rows if e.kind == KINDS["meeting"])
+    reports = len(rows) - meetings
+    label = bill_label(bill)
+    if not rows:
+        return f"No committee meeting or report in the Daily Digest names {label}"
+    parts = [f"{n:,} {word if n == 1 else word + 's'}"
+             for n, word in ((meetings, "committee meeting"), (reports, "report")) if n]
+    return f"{' and '.join(parts)} in the Daily Digest {'names' if len(rows) == 1 else 'name'} {label}"
 
