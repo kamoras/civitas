@@ -8,7 +8,7 @@ import type { PresidentCharts } from "@/types/presidentCharts";
 import { fetchRecord } from "@/lib/ssrPayload";
 import { absoluteUrl, memberFeed, notFoundMetadata, pageMetadata } from "@/lib/site";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
-import { describeProfile, personJsonLd } from "@/lib/seo";
+import { CARD_ALT, cardImage, describeProfile, personJsonLd } from "@/lib/seo";
 import { recordTrail } from "@/lib/routes";
 import ThisWeekStrip from "@/components/shared/ThisWeekStrip";
 import PresidentialSupportLine from "@/components/presidentialSupport/PresidentialSupportLine";
@@ -100,13 +100,12 @@ export async function generateMetadata({
   // redirects there (below), and is never a second page.
   const path = `/politicians/${encodeURIComponent(profile.id)}`;
   const { title, description } = describeProfile(profile);
-  const ogImage = absoluteUrl(`/api/og?politician=${encodeURIComponent(profile.id)}`);
   return pageMetadata({
     title,
     description,
     path,
     type: "profile",
-    images: [{ url: ogImage, width: 1200, height: 630, alt: profile.identity.name }],
+    images: cardImage(`politician=${encodeURIComponent(profile.id)}`, CARD_ALT.profile(profile)),
     // A member of Congress has a feed of their own; a president or justice
     // has none.
     feed:

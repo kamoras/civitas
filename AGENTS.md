@@ -2343,7 +2343,7 @@ the pending list).
 | Party alignment (content-based) + partisan depth | `backend/app/pipeline/analyze/party_platform.py` |
 | Caucus: the House Clerk's recorded caucus, else inference (votes + cosponsorship) | `backend/app/pipeline/fetch/house_clerk.py` (`parse_caucuses`), `backend/app/pipeline/transform/normalize_votes.py` |
 | Committee seats and leadership titles (congress-legislators; the Clerk's list decides the House posts it names) | `backend/app/pipeline/fetch/committee_leadership.py`, `backend/app/pipeline/fetch/house_leadership.py` |
-| Donor name casing (learned from Federal Register prose) | `backend/app/pipeline/transform/normalize_finance.py` (`_clean_donor_name`), `backend/scripts/build_name_casing.py`, `backend/app/data/name_casing.json` |
+| Name casing learned from Federal Register prose: donor names, and a candidate's shown name (`displayName`: the printed ballot name verbatim, else the crosswalked member's Congress.gov name, else the FEC's "LAST, FIRST" as written; the stored FEC name is untouched) | `backend/app/name_casing.py` (`clean_name`, `person_display_name`, `candidate_display_name`), `backend/scripts/build_name_casing.py`, `backend/app/data/name_casing.json` |
 | kNN classifier + inverse-freq balancing | `backend/app/pipeline/analyze/nn_classifier.py` |
 | Sponsorship analysis (PageRank leadership + SVD ideology) | `backend/app/pipeline/analyze/sponsorship_analysis.py` |
 | Multi-word last name extraction + vote matching | `backend/app/pipeline/transform/normalize_members.py` |

@@ -1,16 +1,31 @@
-import { restatesTitle } from "@/lib/formatting";
+import { formatCurrency, restatesTitle } from "@/lib/formatting";
 import { ImageResponse } from "next/og";
 import { NextRequest } from "next/server";
 import { OG_FAMILY, ogFonts } from "@/lib/ogFonts";
 import { OgLockup } from "@/lib/ogLockup";
 import { OG_COLOR as C } from "@/lib/ogTheme";
 import { fetchPhoto, parsePhotoPath } from "@/lib/photos";
-import { STATE_CODES } from "@/lib/stateCodes";
+import { STATE_CODES, STATE_NAMES } from "@/lib/stateCodes";
 import { usableRecord } from "@/lib/ssrPayload";
-import { ISO_DATE, fetchDay, fetchWeek } from "@/lib/congressServer";
-import { calendarDate, longDate } from "@/lib/congress";
-import type { Chamber, ChamberStatus, DayReport, PeriodReport } from "@/types/congress";
+import {
+  ISO_DATE,
+  ISO_MONTH,
+  fetchBillRecord,
+  fetchDay,
+  fetchMonth,
+  fetchWeek,
+} from "@/lib/congressServer";
+import { calendarDate, longDate, monthLabel } from "@/lib/congress";
+import { fetchAgency } from "@/lib/agencyServer";
+import { candidateName, raceSeat } from "@/lib/elections";
+import { CITATION, KIND_LABEL, STATUS_LABEL, nominationHeading } from "@/lib/nominations";
+import { type SectionCard, SECTION_CARDS } from "@/lib/ogSections";
+import { agencyBudget } from "@/lib/seo";
+import type { BillRecord, Chamber, ChamberStatus, DayReport, PeriodReport } from "@/types/congress";
 import type { StateBallot } from "@/types/election";
+import type { ArchiveRecord } from "@/types/electionArchive";
+import type { NominationDetail } from "@/types/nomination";
+import type { StateRedistricting } from "@/types/redistricting";
 
 export const runtime = "nodejs";
 
@@ -100,9 +115,7 @@ function Header({ section, date }: { section: string; date?: string }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 28, marginBottom: 44 }}>
       <OgLockup size={24} />
-      <span style={{ color: INK_LO, fontSize: 20, fontWeight: 600, letterSpacing: 3 }}>
-        {section}
-      </span>
+      <span style={{ color: INK_LO, fontSize: 22, fontWeight: 600 }}>{section}</span>
       {date && <span style={{ marginLeft: "auto", color: INK_LO, fontSize: 22 }}>{date}</span>}
     </div>
   );
@@ -120,9 +133,7 @@ function Footer({ label }: { label: string }) {
       }}
     >
       <span style={{ color: INK_LO, fontSize: 22, fontFamily: OG_FAMILY.mono }}>{DOMAIN}</span>
-      <span style={{ color: INK_LO, fontSize: 20, fontWeight: 600, letterSpacing: 2 }}>
-        {label}
-      </span>
+      <span style={{ color: INK_LO, fontSize: 20, fontWeight: 600 }}>{label}</span>
     </div>
   );
 }
@@ -165,13 +176,13 @@ export function issueCardTexts(issue: OgIssue | null) {
     // The summary is a source's own words (post_composer), so it is quoted
     // as theirs, as the issue page does.
     summaryCredit: summary && issue?.summarySource ? `Quoted from ${issue.summarySource}` : "",
-    section: issue?.status === "developing" ? "ACTION CENTER · DEVELOPING" : "ACTION CENTER",
+    section: issue?.status === "developing" ? "Action Center · Developing" : "Action Center",
     date: issue?.date ? calendarDate(issue.date) : "",
     photoCredit: issue?.imageCredit ? `Photo: ${issue.imageCredit}` : "",
     link: issue?.publicId ? `${DOMAIN}/issue/${issue.publicId}` : DOMAIN,
     sources: named
       ? `${names.length === 1 ? "Source" : "Sources"}: ${named}${more > 0 ? ` and ${more} more` : ""}`
-      : "PUBLIC RECORDS",
+      : "Public records",
   };
 }
 
@@ -284,28 +295,153 @@ export function formatStanding(identity: OgPoliticianIdentity | undefined): stri
   return "";
 }
 
-// What each page holds, since no card carries a score: members of Congress
-// against their peers, a president's public record (approval, the economy,
-// the historians' rank; no 0-100 score since 2026-10), a justice's votes.
-export function scoreFooterLabel(branch: string | undefined): string {
-  // No composite score on any card (redesign 2026-10): what the page holds.
-  if (branch === "senate" || branch === "house") return "WHERE THEY STAND AMONG PEERS";
-  return branch === "scotus" ? "VOTES AND DECISIONS" : "THE PUBLIC RECORD";
+export type OgProfile = {
+  id?: string;
+  branch?: string;
+  identity?: OgPoliticianIdentity & {
+    number?: number;
+    termStart?: string;
+    termEnd?: string | null;
+    appointingPresident?: string;
+    dateStart?: string;
+  };
+  scorecard?: {
+    funding?: {
+      totalContributions?: number | null;
+      pacSharePct?: number | null;
+      smallDonorPercentage?: number | null;
+    } | null;
+    avgApproval?: number | null;
+    eoCount?: number | null;
+    casesDecided?: number | null;
+    majorityPct?: number | null;
+    authoredMajority?: number | null;
+  } | null;
+};
+
+/** The historians' rank of one presidency, from /api/presidents. */
+export type OgHistoriansRank = { rank: number | null; rated: number | null };
+
+export type Tile = { value: string; label: string };
+
+const pct = (v: number) => `${Math.round(v)}%`;
+
+const BRANCH_EYEBROW: Record<string, string> = {
+  senate: "U.S. Senate",
+  house: "U.S. House",
+  president: "President",
+  scotus: "Supreme Court",
+};
+
+function ordinalNumber(n: number): string {
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
+  return `${n}${["th", "st", "nd", "rd"][n % 10] ?? "th"}`;
 }
 
-async function politicianImage(
-  profile: {
-    branch?: string;
-    identity?: OgPoliticianIdentity;
-  } | null
-) {
+/** Everything the profile card says besides the photo: the eyebrow, the
+ *  line under the name, the figures and the sources they come from. Never
+ *  a 0-100 score (retired 2026-10): the figures are the record's own, as
+ *  the profile page shows them. A figure the record doesn't hold is left
+ *  off, never drawn as zero. */
+export function profileCardTexts(profile: OgProfile | null, historians?: OgHistoriansRank | null) {
+  const branch = profile?.branch ?? "";
   const identity = profile?.identity;
-  const name = identity?.name ?? "Civitas Research";
-  const party = identity?.party ?? "";
-  const accent = PARTY_ACCENT[party] ?? INK_HI;
-  const standing = formatStanding(identity);
-  const section = identity?.role?.toUpperCase() ?? "PUBLIC RECORD";
-  const footerLabel = scoreFooterLabel(profile?.branch);
+  const sc = profile?.scorecard;
+  const tiles: Tile[] = [];
+  let line = formatStanding(identity);
+  let sources = "The public record";
+  if (branch === "senate" || branch === "house") {
+    const f = sc?.funding;
+    if (f?.totalContributions != null)
+      tiles.push({
+        value: formatCurrency(f.totalContributions),
+        label: "Contributions, latest election",
+      });
+    if (f?.pacSharePct != null) tiles.push({ value: pct(f.pacSharePct), label: "From PACs" });
+    if (f?.smallDonorPercentage != null)
+      tiles.push({ value: pct(f.smallDonorPercentage), label: "In gifts of $200 or less" });
+    if (tiles.length) sources = "FEC filings";
+  } else if (branch === "president") {
+    const start = identity?.termStart?.slice(0, 4);
+    const end = identity?.termEnd ? identity.termEnd.slice(0, 4) : "present";
+    line = [
+      identity?.number ? `${ordinalNumber(identity.number)} president` : "",
+      start ? `${start} to ${end}` : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    if (historians?.rank != null && historians.rated)
+      tiles.push({
+        value: `#${historians.rank} of ${historians.rated}`,
+        label: "C-SPAN historians' rank",
+      });
+    if (sc?.avgApproval != null)
+      tiles.push({ value: pct(sc.avgApproval), label: "Average approval" });
+    if (sc?.eoCount != null) tiles.push({ value: String(sc.eoCount), label: "Executive orders" });
+    // The survey rates only completed terms: said last, not led with.
+    if (historians?.rank == null && historians?.rated)
+      tiles.push({ value: "Not rated", label: "C-SPAN historians' rank" });
+    sources = "C-SPAN · American Presidency Project · Federal Register";
+  } else if (branch === "scotus") {
+    line = [
+      identity?.appointingPresident ? `Appointed by ${identity.appointingPresident}` : "",
+      identity?.dateStart ? `since ${identity.dateStart.slice(0, 4)}` : "",
+    ]
+      .filter(Boolean)
+      .join(", ");
+    if (sc?.casesDecided != null)
+      tiles.push({ value: String(sc.casesDecided), label: "Cases decided" });
+    if (sc?.majorityPct != null)
+      tiles.push({ value: pct(sc.majorityPct), label: "In the majority" });
+    if (sc?.authoredMajority != null)
+      tiles.push({ value: String(sc.authoredMajority), label: "Majority opinions written" });
+    sources = "Supreme Court Database · Oyez";
+  }
+  return {
+    eyebrow: BRANCH_EYEBROW[branch] ?? "Public record",
+    name: identity?.name ?? "Civitas Research",
+    line,
+    tiles,
+    sources,
+  };
+}
+
+async function fetchHistoriansRank(id: string): Promise<OgHistoriansRank | null> {
+  try {
+    const res = await fetch(`${BACKEND}/api/presidents`, { next: { revalidate: 3600 } });
+    if (!res.ok) return null;
+    const list = (await res.json()) as {
+      id: string;
+      historiansRank: number | null;
+      historiansRated: number | null;
+    }[];
+    const p = list.find((x) => x.id === id);
+    return p ? { rank: p.historiansRank, rated: p.historiansRated } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** "Joseph R. Biden, Jr." -> "JB": first and last name's initials, suffixes
+ *  and middle initials passed over. */
+export function initialsOf(name: string): string {
+  const words = name
+    .replace(/,.*$/, "")
+    .split(/\s+/)
+    .filter((w) => w && !/^[A-Z]\.$/.test(w));
+  if (!words.length) return "";
+  const first = words[0][0];
+  const last = words.length > 1 ? words[words.length - 1][0] : "";
+  return `${first}${last}`;
+}
+
+async function politicianImage(profile: OgProfile | null) {
+  const identity = profile?.identity;
+  const historians =
+    profile?.branch === "president" && profile.id ? await fetchHistoriansRank(profile.id) : null;
+  const t = profileCardTexts(profile, historians);
+  const accent = PARTY_ACCENT[identity?.party ?? ""] ?? INK_HI;
 
   const photoDataUri = identity?.thumbnailUrl
     ? await fetchPhotoAsDataUri(identity.thumbnailUrl)
@@ -324,52 +460,70 @@ async function politicianImage(
         borderTop: TOP_BAND,
       }}
     >
-      <Header section={section} />
-      <div style={{ display: "flex", alignItems: "center", gap: 48, flex: 1 }}>
-        {photoDataUri && (
+      <Header section={t.eyebrow} />
+      <div style={{ display: "flex", alignItems: "center", gap: 48, flex: 1, marginBottom: 32 }}>
+        {photoDataUri ? (
           // satori renders this tree standalone at request time; next/image's
           // client-side optimization runtime doesn't apply here.
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={photoDataUri}
-            alt={name}
-            width={280}
-            height={280}
+            alt=""
+            width={250}
+            height={300}
             style={{
               objectFit: "cover",
               objectPosition: "center 25%",
               border: `2px solid ${accent}`,
             }}
           />
+        ) : (
+          // No portrait (none on record, or it couldn't be fetched): the
+          // initials box the profile header shows in its place.
+          <div
+            style={{
+              display: "flex",
+              width: 250,
+              height: 300,
+              alignItems: "center",
+              justifyContent: "center",
+              border: `2px solid ${accent}`,
+              background: C.paper,
+              color: accent,
+              fontSize: 84,
+              fontWeight: 600,
+            }}
+          >
+            {initialsOf(t.name)}
+          </div>
         )}
-        <div style={{ display: "flex", flexDirection: "column" }}>
+        <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
           <div
             style={{
               color: INK_HI,
-              fontSize: 56,
+              fontSize: t.name.length > 24 ? 46 : 56,
               fontFamily: OG_FAMILY.serif,
               fontWeight: 600,
-              lineHeight: 1.15,
+              lineHeight: 1.1,
             }}
           >
-            {name}
+            {t.name}
           </div>
-          {standing && (
-            <div
-              style={{
-                color: accent,
-                fontSize: 30,
-                fontWeight: 600,
-                marginTop: 12,
-                letterSpacing: 2,
-              }}
-            >
-              {standing}
+          {t.line && (
+            <div style={{ color: accent, fontSize: 28, fontWeight: 600, marginTop: 10 }}>
+              {t.line}
+            </div>
+          )}
+          {t.tiles.length > 0 && (
+            <div style={{ display: "flex", gap: 16, marginTop: 32 }}>
+              {t.tiles.map((tile) => (
+                <StatTile key={tile.label} value={tile.value} label={tile.label} />
+              ))}
             </div>
           )}
         </div>
       </div>
-      <Footer label={footerLabel} />
+      <Footer label={t.sources} />
     </div>,
     {
       width: 1200,
@@ -447,10 +601,10 @@ function StatTile({ value, label }: { value: string; label: string }) {
         border: `2px solid ${HAIRLINE}`,
       }}
     >
-      <span style={{ color: INK_HI, fontSize: 44, fontWeight: 600 }}>{value}</span>
-      <span
-        style={{ color: INK_LO, fontSize: 19, fontWeight: 600, letterSpacing: 1, marginTop: 8 }}
-      >
+      <span style={{ color: INK_HI, fontSize: value.length > 7 ? 34 : 44, fontWeight: 600 }}>
+        {value}
+      </span>
+      <span style={{ color: INK_LO, fontSize: 20, fontWeight: 600, marginTop: 8, lineHeight: 1.3 }}>
         {label}
       </span>
     </div>
@@ -518,13 +672,11 @@ async function tileCard({
   );
 }
 
-const SENATE_LABEL = "U.S. SENATE RACE";
-const HOUSE_LABEL = "U.S. HOUSE RACES";
-const MEASURES_LABEL = "BALLOT MEASURES";
+const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
 async function electionImage(ballot: StateBallot | null, code: string) {
-  const section = "ELECTIONS";
-  const footerLabel = "FEDERAL & STATEWIDE BALLOT";
+  const section = "Elections";
+  const footerLabel = "Federal and statewide ballot";
 
   // A failed/unavailable fetch must never render as "this state has zero
   // races and zero measures" — that's a specific, false claim, not an
@@ -538,39 +690,41 @@ async function electionImage(ballot: StateBallot | null, code: string) {
   if (!ballot) {
     return genericCard({
       section,
-      title: `${code} | Civitas Elections`,
+      title: `${STATE_NAMES[code] ?? code}: the ballot`,
       description: "Federal contests and statewide ballot measures.",
       footerLabel,
     });
   }
 
-  const title = `${code} Ballot ${ballot.cycleYear}`;
-  const description = `Votes ${ballot.electionDate}`;
-  const senateCount = String(ballot.senateRaces.length);
-  const houseCount = String(ballot.houseRaces.length);
-  const measureCount = String(ballot.measures.length);
+  const title = `${ballot.stateName ?? STATE_NAMES[code] ?? code} ballot, ${ballot.cycleYear}`;
+  const description = ISO_DATE.test(ballot.electionDate)
+    ? `Election day: ${calendarDate(ballot.electionDate)}`
+    : `Election day: ${ballot.electionDate}`;
+  const senate = ballot.senateRaces.length;
+  const house = ballot.houseRaces.length;
+  const measures = ballot.measures.length;
 
   return tileCard({
     section,
     title,
     description,
     tiles: [
-      { value: senateCount, label: SENATE_LABEL },
-      { value: houseCount, label: HOUSE_LABEL },
-      { value: measureCount, label: MEASURES_LABEL },
+      { value: String(senate), label: plural(senate, "U.S. Senate race", "U.S. Senate races") },
+      { value: String(house), label: plural(house, "U.S. House race", "U.S. House races") },
+      { value: String(measures), label: plural(measures, "Ballot measure", "Ballot measures") },
     ],
     footerLabel,
   });
 }
 
-const CHAMBER_NAME: Record<Chamber, string> = { senate: "SENATE", house: "HOUSE" };
+const CHAMBER_NAME: Record<Chamber, string> = { senate: "Senate", house: "House" };
 
 // What a chamber's tile says when its day has no counts to show: the day
 // page's own distinction, so a day without a record never reads as zero.
 const NO_COUNT_LABEL: Partial<Record<ChamberStatus, string>> = {
-  not_in_session: "NOT IN SESSION",
-  no_record: "NO RECORD YET",
-  no_record_published: "NO RECORD PUBLISHED",
+  not_in_session: "not in session",
+  no_record: "no record yet",
+  no_record_published: "no record published",
 };
 
 export function chamberTile(report: DayReport, chamber: Chamber): { value: string; label: string } {
@@ -578,7 +732,7 @@ export function chamberTile(report: DayReport, chamber: Chamber): { value: strin
   const none = NO_COUNT_LABEL[day.status];
   return none
     ? { value: "—", label: `${CHAMBER_NAME[chamber]}: ${none}` }
-    : { value: String(day.counts.recordVotes), label: `${CHAMBER_NAME[chamber]} RECORD VOTES` };
+    : { value: String(day.counts.recordVotes), label: `${CHAMBER_NAME[chamber]} record votes` };
 }
 
 function summaryLine(sentence: string): string {
@@ -596,8 +750,8 @@ async function tryFetch<T>(fetcher: () => Promise<T | null>): Promise<T | null> 
 }
 
 async function congressDayImage(date: string) {
-  const section = "CONGRESS";
-  const footerLabel = "CONGRESSIONAL RECORD";
+  const section = "Congress";
+  const footerLabel = "Congressional Record";
   const report = await tryFetch(() => fetchDay(date));
   if (!report) {
     return genericCard({
@@ -616,29 +770,50 @@ async function congressDayImage(date: string) {
   });
 }
 
-async function congressWeekImage(date: string) {
-  const section = "CONGRESS";
-  const footerLabel = "CONGRESSIONAL RECORD";
-  const report: PeriodReport | null = await tryFetch(() => fetchWeek(date));
+// A week's or a month's report: the same three tiles.
+async function congressPeriodImage(
+  title: string,
+  fetcher: () => Promise<PeriodReport | null>,
+  fallbackSpan: string
+) {
+  const section = "Congress";
+  const footerLabel = "Congressional Record";
+  const report = await tryFetch(fetcher);
   if (!report) {
     return genericCard({
       section,
-      title: `Congress, week of ${longDate(date).replace(/^\w+, /, "")}`,
-      description: "What the Senate and the House did, from the official record.",
+      title,
+      description: `What the Senate and the House did ${fallbackSpan}, from the official record.`,
       footerLabel,
     });
   }
   return tileCard({
     section,
-    title: `Congress, week of ${longDate(report.start).replace(/^\w+, /, "")}`,
+    title,
     description: summaryLine(report.sentence),
     tiles: [
-      { value: String(report.totals.senate.recordVotes), label: "SENATE RECORD VOTES" },
-      { value: String(report.totals.house.recordVotes), label: "HOUSE RECORD VOTES" },
-      { value: String(report.becameLaw.length), label: "BECAME LAW" },
+      { value: String(report.totals.senate.recordVotes), label: "Senate record votes" },
+      { value: String(report.totals.house.recordVotes), label: "House record votes" },
+      { value: String(report.becameLaw.length), label: "Became law" },
     ],
     footerLabel,
   });
+}
+
+function congressWeekImage(date: string) {
+  return congressPeriodImage(
+    `Congress, week of ${longDate(date).replace(/^\w+, /, "")}`,
+    () => fetchWeek(date),
+    "that week"
+  );
+}
+
+function congressMonthImage(month: string) {
+  return congressPeriodImage(
+    `Congress in ${monthLabel(month)}`,
+    () => fetchMonth(month),
+    "that month"
+  );
 }
 
 // One official record (a roll call, a bill, a congressional-record event, a
@@ -743,12 +918,11 @@ async function recordCardImage(card: RecordCard) {
           color: INK_LO,
           fontSize: 22,
           fontWeight: 600,
-          letterSpacing: 2,
           marginBottom: 28,
         }}
       >
         <span>{card.eyebrow}</span>
-        {date && <span style={{ color: INK_LO, fontWeight: 400, letterSpacing: 0 }}>{date}</span>}
+        {date && <span style={{ color: INK_LO, fontWeight: 400 }}>{date}</span>}
       </div>
       <div style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: "center" }}>
         {card.headline && (
@@ -837,6 +1011,404 @@ async function recordCardImage(card: RecordCard) {
   );
 }
 
+// A section page's card (lib/ogSections.ts): its own words, from the list
+// only, never from the query string.
+function sectionImage(card: SectionCard) {
+  return genericCard({
+    section: card.eyebrow,
+    title: card.title,
+    description: card.subtitle,
+    footerLabel: "An independent public record",
+  });
+}
+
+async function fetchJson<T>(path: string, revalidate: number): Promise<T | null> {
+  try {
+    const res = await fetch(`${BACKEND}${path}`, { next: { revalidate } });
+    return res.ok ? ((await res.json()) as T) : null;
+  } catch {
+    return null;
+  }
+}
+
+export type OgRaceCandidate = {
+  name: string;
+  ballotName?: string | null;
+  displayName?: string | null;
+  partyGroup?: string | null;
+  partyLabel?: string | null;
+  confirmed?: boolean;
+  incumbentChallenge?: string | null;
+  contributions?: number | null;
+};
+
+export type OgRace = {
+  id: string;
+  cycleYear: number;
+  office: string;
+  state: string;
+  district: number | null;
+  isSpecial?: boolean;
+  usualVote?: { label?: string | null } | null;
+  candidateSource?: string;
+  candidates: OgRaceCandidate[];
+};
+
+const PARTY_GROUP: Record<string, { word: string; accent: string }> = {
+  DEM: { word: "Democrat", accent: C.dem },
+  REP: { word: "Republican", accent: C.rep },
+};
+const MAX_RACE_ROWS = 4;
+
+/** What the race card says: the seat, its usual vote, and up to four
+ *  candidates (the confirmed ones when the state has named them), each with
+ *  the contributions the FEC reports. A candidate with no FEC total shows
+ *  none, never $0. */
+export function raceCardTexts(race: OgRace) {
+  const state = STATE_NAMES[race.state] ?? race.state;
+  const seat = raceSeat(race, state);
+  const confirmed = race.candidates.filter((c) => c.confirmed);
+  const pool = confirmed.length ? confirmed : race.candidates;
+  const rows = [...pool]
+    .sort((a, b) => (b.contributions ?? -1) - (a.contributions ?? -1))
+    .slice(0, MAX_RACE_ROWS)
+    .map((c) => {
+      const party = PARTY_GROUP[c.partyGroup ?? ""];
+      return {
+        name: candidateName(c),
+        party: party?.word ?? c.partyLabel ?? "",
+        accent: party?.accent ?? INK_LO,
+        incumbent: c.incumbentChallenge === "I",
+        money: c.contributions != null ? `${formatCurrency(c.contributions)} raised` : "",
+      };
+    });
+  const more = pool.length - rows.length;
+  return {
+    eyebrow: `Elections · ${race.cycleYear}${race.isSpecial ? " · Special election" : ""}`,
+    title: seat,
+    lean: race.usualVote?.label ? `Usually votes ${race.usualVote.label}` : "",
+    rows,
+    more: more > 0 ? `and ${more} more` : "",
+    // Who is listed comes from the state until it names no one; before
+    // that the race lists the FEC's filers (candidateSource "filers").
+    footer:
+      race.candidateSource === "filers"
+        ? "Candidates and money: FEC filings"
+        : rows.some((r) => r.money)
+          ? "Candidates: state sources · Money: FEC"
+          : "Candidates: state sources",
+  };
+}
+
+async function raceImage(race: OgRace) {
+  const t = raceCardTexts(race);
+  return new ImageResponse(
+    <div
+      style={{
+        width: 1200,
+        height: 630,
+        background: SURFACE_BASE,
+        display: "flex",
+        flexDirection: "column",
+        padding: "60px 72px",
+        fontFamily: OG_FAMILY.sans,
+        borderTop: TOP_BAND,
+      }}
+    >
+      <Header section={t.eyebrow} />
+      <div style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: "center" }}>
+        <div
+          style={{
+            color: INK_HI,
+            fontSize: t.title.length > 36 ? 44 : 52,
+            fontFamily: OG_FAMILY.serif,
+            fontWeight: 600,
+            lineHeight: 1.15,
+          }}
+        >
+          {t.title}
+        </div>
+        {t.lean && <div style={{ color: INK, fontSize: 26, marginTop: 10 }}>{t.lean}</div>}
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 28 }}>
+          {t.rows.map((r) => (
+            <div
+              key={r.name}
+              style={{
+                display: "flex",
+                alignItems: "baseline",
+                gap: 18,
+                fontSize: 28,
+                borderLeft: `6px solid ${r.accent}`,
+                paddingLeft: 16,
+              }}
+            >
+              <span style={{ color: INK_HI, fontWeight: 600 }}>{r.name}</span>
+              <span style={{ color: r.accent, fontSize: 22, fontWeight: 600 }}>
+                {r.party}
+                {r.incumbent ? " · Incumbent" : ""}
+              </span>
+              {r.money && (
+                <span style={{ marginLeft: "auto", color: INK_LO, fontSize: 22 }}>{r.money}</span>
+              )}
+            </div>
+          ))}
+          {t.more && <div style={{ color: INK_LO, fontSize: 20 }}>{t.more}</div>}
+        </div>
+      </div>
+      <Footer label={t.footer} />
+    </div>,
+    { width: 1200, height: 630, headers: OG_HEADERS, fonts: await ogFonts() }
+  );
+}
+
+async function agencyImage(slug: string) {
+  const a = await tryFetch(() => fetchAgency(slug));
+  if (!a) {
+    return genericCard({
+      section: "Agencies",
+      title: "Federal agencies",
+      description: "What each agency spends, the rules it proposes and when you can comment.",
+      footerLabel: "Federal Register · USAspending.gov",
+    });
+  }
+  const budget = agencyBudget(a);
+  const tiles: Tile[] = [];
+  if (budget)
+    tiles.push({
+      value: formatCurrency(budget.amount),
+      label: budget.fiscalYear
+        ? `Budgetary resources, FY${budget.fiscalYear}`
+        : "Budgetary resources",
+    });
+  tiles.push({
+    value: a.documents.total.toLocaleString("en-US"),
+    label: "Federal Register documents",
+  });
+  tiles.push({
+    value: String(a.documents.openCommentsCount),
+    label: plural(a.documents.openCommentsCount, "Comment period open", "Comment periods open"),
+  });
+  return tileCard({
+    section: a.parent ? `Agencies · Part of the ${a.parent.name}` : "Agencies",
+    title: a.shortName && a.shortName !== a.name ? `${a.name} (${a.shortName})` : a.name,
+    description: "Its budget, its rules and when you can comment.",
+    tiles,
+    footerLabel: budget ? "Federal Register · USAspending.gov" : "Federal Register",
+  });
+}
+
+async function nominationImage(ref: string) {
+  const n = await fetchJson<NominationDetail>(`/api/nominations/${ref}`, 600);
+  if (!n?.citation) {
+    return genericCard({
+      section: "Nominations",
+      title: "Presidential nominations",
+      description: "Every nomination before the Senate, and how long each took.",
+      footerLabel: "Congress.gov",
+    });
+  }
+  const final = n.finalVote
+    ? n.rollCalls.find(
+        (rc) => rc.session === n.finalVote!.session && rc.number === n.finalVote!.number
+      )
+    : undefined;
+  const tiles: Tile[] = [
+    {
+      value: STATUS_LABEL[n.status],
+      label: n.statusDate ? calendarDate(n.statusDate) : `Received ${calendarDate(n.receivedDate)}`,
+    },
+  ];
+  if (n.status === "confirmed" && n.daysToConfirm != null)
+    tiles.push({ value: String(n.daysToConfirm), label: "Days from nomination" });
+  if (final) tiles.push({ value: `${final.yeas} to ${final.nays}`, label: final.label });
+  return tileCard({
+    section: `Nominations · ${n.citation} · ${KIND_LABEL[n.kind]}`,
+    title: nominationHeading(n),
+    description: `Received ${calendarDate(n.receivedDate)}`,
+    tiles,
+    footerLabel: "Congress.gov",
+  });
+}
+
+async function redistrictingImage(code: string) {
+  const d = await fetchJson<StateRedistricting>(`/api/elections/redistricting/${code}`, 300);
+  const name = STATE_NAMES[code] ?? code;
+  if (!d?.summary) {
+    return genericCard({
+      section: "Elections · New maps",
+      title: `${name}'s congressional map`,
+      description: "What changed in each district, from the enacted map and Census blocks.",
+      footerLabel: "Census blocks · Enacted maps",
+    });
+  }
+  return tileCard({
+    section: "Elections · New maps",
+    title: `${d.stateName}'s new congressional map, ${d.cycle}`,
+    description: "Where each district's residents lived before, and how each lean moved.",
+    tiles: [
+      { value: String(d.summary.seats), label: "U.S. House districts" },
+      { value: String(d.summary.unchangedSeats), label: "Kept the same lines" },
+      {
+        value: `${d.summary.residentsMovedPct}%`,
+        label: "Of residents in a district built mostly from another",
+      },
+    ],
+    footerLabel: "Census blocks · Enacted maps",
+  });
+}
+
+async function electionArchiveImage(cycle: number) {
+  const r = await fetchJson<ArchiveRecord>(`/api/elections/archive/${cycle}`, 300);
+  if (!r?.totals) {
+    return genericCard({
+      section: "Elections · Archive",
+      title: `The ${cycle} general election`,
+      description: "Each race's count as its state reported it, and the ballot it was on.",
+      footerLabel: "State election offices",
+    });
+  }
+  return tileCard({
+    section: "Elections · Archive",
+    title: `The ${cycle} general election`,
+    description: "The count as each state reported it, and the ballot it was on. No race called.",
+    tiles: [
+      { value: String(r.totals.races), label: "Senate and House races" },
+      { value: String(r.totals.measures), label: "Statewide ballot measures" },
+    ],
+    footerLabel: "State election offices",
+  });
+}
+
+const STOP_MARK: Record<string, string> = {
+  done: C.accent,
+  current: C.amber,
+  failed: C.red,
+};
+
+/** Where the bill stands: its furthest stop that happened (done, current or
+ *  failed), worded as the bill page's ladder words it. */
+export function billStage(record: BillRecord): string {
+  const stops = record.journey?.stops ?? [];
+  const reached = stops.filter((s) => s.status === "current" || s.status === "failed");
+  const stop = reached.at(-1) ?? stops.filter((s) => s.status === "done").at(-1);
+  if (!stop) return "";
+  // "Reported by the committee" says where it is; "Passed" needs "House floor".
+  if (!stop.detail) return stop.label;
+  // The ladder dates a bill still in committee in its detail ("In committee
+  // since", BillJourney.tsx).
+  const detail =
+    stop.key === "committee" && stop.status === "current" && stop.date
+      ? `${stop.detail} ${calendarDate(stop.date)}`
+      : stop.detail;
+  return detail.toLowerCase().includes(stop.label.toLowerCase())
+    ? detail
+    : `${stop.label}: ${detail}`;
+}
+
+async function billImage(id: string, congress: number) {
+  const { record } = await fetchBillRecord(id, congress);
+  if (!record) {
+    return genericCard({
+      section: "Congress · Bills",
+      title: id.replace(".", ". "),
+      description: "Where the bill stands, who sponsors it and every action, from Congress.gov.",
+      footerLabel: "Congress.gov",
+    });
+  }
+  const label = record.billLabel ?? record.billId;
+  const named = record.shortTitle || record.title || "";
+  const stage = billStage(record);
+  const stops = record.journey?.stops ?? [];
+  return new ImageResponse(
+    <div
+      style={{
+        width: 1200,
+        height: 630,
+        background: SURFACE_BASE,
+        display: "flex",
+        flexDirection: "column",
+        padding: "60px 72px",
+        fontFamily: OG_FAMILY.sans,
+        borderTop: TOP_BAND,
+      }}
+    >
+      <Header section={`${label} · ${ordinalNumber(record.congress)} Congress`} />
+      <div style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: "center" }}>
+        <div
+          style={{
+            color: INK_HI,
+            fontSize: named.length > 110 ? 36 : named.length > 60 ? 44 : 54,
+            fontFamily: OG_FAMILY.serif,
+            fontWeight: 600,
+            lineHeight: 1.15,
+          }}
+        >
+          {named.length > 180 ? `${named.slice(0, 177)}…` : named || label}
+        </div>
+        {stage && (
+          <div
+            style={{ color: INK, fontSize: 28, marginTop: 20 }}
+          >{`Where it stands: ${stage}`}</div>
+        )}
+        {stops.length > 0 && (
+          <div style={{ display: "flex", gap: 8, marginTop: 28 }}>
+            {stops.map((s) => (
+              <div
+                key={s.key}
+                style={{ display: "flex", flexDirection: "column", flex: 1, gap: 8 }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    height: 12,
+                    background: STOP_MARK[s.status] ?? C.hairline,
+                  }}
+                />
+                <span
+                  style={{
+                    color: s.status === "ahead" || s.status === "skipped" ? INK_MIN : INK_HI,
+                    fontSize: 17,
+                    lineHeight: 1.2,
+                  }}
+                >
+                  {s.label}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <Footer label="Congress.gov" />
+    </div>,
+    { width: 1200, height: 630, headers: OG_HEADERS, fonts: await ogFonts() }
+  );
+}
+
+// `race=<cycle>-<office>-<ST>[-<district>]`, as backend race ids are
+// written ("2026-SEN-GA", "2026-HOUSE-TX-12").
+export function parseRaceId(raw: string | null): string | null {
+  return raw && /^\d{4}-[A-Z]{3,5}-[A-Z]{2}(-[A-Z0-9]{1,8}){0,2}$/.test(raw) ? raw : null;
+}
+
+// `agency=<slug>`: a Federal Register agency slug.
+export function parseAgencySlug(raw: string | null): string | null {
+  return raw && /^[a-z0-9-]{1,120}$/.test(raw) ? raw : null;
+}
+
+// `nomination=<congress>/<citation>` ("119/PN123", "119/PN123-1").
+export function parseNominationRef(raw: string | null): string | null {
+  const [congress, citation, ...rest] = (raw ?? "").split("/");
+  return !rest.length && /^[1-9]\d{1,2}$/.test(congress) && CITATION.test(citation ?? "")
+    ? `${congress}/${citation}`
+    : null;
+}
+
+// `billPage=<congress>/<BILLID>`, the bill page's own card.
+export function parseBillPageRef(raw: string | null): { congress: number; id: string } | null {
+  const m = raw?.match(/^(\d{2,3})\/([A-Za-z]{1,8}\.\d{1,5})$/);
+  return m ? { congress: Number(m[1]), id: m[2] } : null;
+}
+
 // `vote=<chamber>/<congress>/<session>/<number>` -> "senate/119/2/123".
 export function parseVoteRef(raw: string | null): string | null {
   return raw && /^(senate|house)\/\d{1,3}\/\d\/\d{1,5}$/.test(raw) ? raw : null;
@@ -906,6 +1478,7 @@ export function parsePoliticianId(rawId: string | null): string | null {
 }
 
 export async function GET(req: NextRequest) {
+  const q = req.nextUrl.searchParams;
   const politicianId = parsePoliticianId(req.nextUrl.searchParams.get("politician"));
   if (politicianId) {
     const profile = await fetchPolitician(politicianId);
@@ -923,10 +1496,10 @@ export async function GET(req: NextRequest) {
     const card = await fetchRecordCard(recordKey, req.nextUrl.searchParams.get("title") !== "0");
     if (card) return recordCardImage(card);
     return genericCard({
-      section: "PUBLIC RECORD",
+      section: "Public record",
       title: "Civitas Research",
       description: "The official record, in its own words.",
-      footerLabel: "PUBLIC FEDERAL DATA",
+      footerLabel: "Public federal records",
     });
   }
 
@@ -935,6 +1508,35 @@ export async function GET(req: NextRequest) {
 
   const congressWeek = parseCongressDate(req.nextUrl.searchParams.get("congressWeek"));
   if (congressWeek) return congressWeekImage(congressWeek);
+
+  const congressMonth = q.get("congressMonth");
+  if (congressMonth && ISO_MONTH.test(congressMonth)) return congressMonthImage(congressMonth);
+
+  const section = SECTION_CARDS[q.get("page") ?? ""];
+  if (section) return sectionImage(section);
+
+  const raceId = parseRaceId(q.get("race"));
+  if (raceId) {
+    const race = await fetchJson<OgRace>(`/api/elections/races/${raceId}`, 120);
+    if (race?.candidates) return raceImage(race);
+    const code = parseStateCode(raceId.split("-")[2]);
+    if (code) return electionImage(await fetchStateBallot(code), code);
+  }
+
+  const agency = parseAgencySlug(q.get("agency"));
+  if (agency) return agencyImage(agency);
+
+  const nomination = parseNominationRef(q.get("nomination"));
+  if (nomination) return nominationImage(nomination);
+
+  const redrawn = parseStateCode(q.get("redistricting"));
+  if (redrawn) return redistrictingImage(redrawn);
+
+  const cycle = q.get("electionArchive");
+  if (cycle && /^\d{4}$/.test(cycle)) return electionArchiveImage(Number(cycle));
+
+  const bill = parseBillPageRef(q.get("billPage"));
+  if (bill) return billImage(bill.id, bill.congress);
 
   const issueId = parseIssueId(req.nextUrl.searchParams.get("issue"));
   const issue = issueId ? await fetchIssue(issueId) : null;

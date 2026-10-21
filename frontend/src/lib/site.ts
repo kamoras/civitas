@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SECTION_CARDS, sectionCardAlt } from "./ogSections";
 
 /**
  * The site's public origin and name, for everything a search engine or a
@@ -145,6 +146,25 @@ export const DEFAULT_OG_IMAGE: OgImage = {
 };
 
 /**
+ * The card a page shares when it passes none of its own: its section card
+ * (lib/ogSections.ts) when it has one, else the site card. Record pages pass
+ * their record's card.
+ */
+export function defaultOgImages(path: string): OgImage[] {
+  const card = SECTION_CARDS[path];
+  return card
+    ? [
+        {
+          url: `/api/og?page=${encodeURIComponent(path)}`,
+          width: 1200,
+          height: 630,
+          alt: sectionCardAlt(card),
+        },
+      ]
+    : [DEFAULT_OG_IMAGE];
+}
+
+/**
  * Everything a route needs a search engine / unfurler to read, in one shape.
  *
  * Next merges metadata SHALLOWLY per top-level key: a route that sets
@@ -155,7 +175,8 @@ export const DEFAULT_OG_IMAGE: OgImage = {
  * `title` is the page's own title; the root layout's template appends
  * " | Civitas Research". Pass `absoluteTitle` to opt out (the homepage).
  *
- * `images` defaults to the site card. It has to be explicit: the root
+ * `images` defaults to the page's section card, else the site card
+ * (`defaultOgImages`). It has to be explicit: the root
  * `opengraph-image` file is NOT inherited by a route that sets `openGraph`
  * itself (verified against `next build` — /about, /action and every bill
  * page rendered with no og:image at all).
@@ -164,7 +185,7 @@ export function pageMetadata({
   title,
   description,
   path,
-  images = [DEFAULT_OG_IMAGE],
+  images,
   type = "website",
   absoluteTitle = false,
   noindex = false,
@@ -183,6 +204,7 @@ export function pageMetadata({
 }): Metadata {
   const fullTitle = absoluteTitle ? title : TITLE_TEMPLATE.replace("%s", () => title);
   const desc = metaDescription(description);
+  images ??= defaultOgImages(path);
   return {
     title: absoluteTitle ? { absolute: title } : title,
     description: desc,

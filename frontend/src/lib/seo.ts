@@ -491,6 +491,18 @@ export function describeAgencyIndex(): { title: string; description: string } {
   };
 }
 
+/** An agency's budgetary resources as USAspending reports them: this
+ *  fiscal year's once reported, else the latest year's; null when none. */
+export function agencyBudget(
+  a: AgencyDetail
+): { amount: number; fiscalYear: number | null } | null {
+  if (a.budget?.reported && a.budget.budgetAuthority != null)
+    return { amount: a.budget.budgetAuthority, fiscalYear: a.budget.fiscalYear };
+  if (a.budget?.latest?.budgetaryResources != null)
+    return { amount: a.budget.latest.budgetaryResources, fiscalYear: a.budget.latest.fiscalYear };
+  return null;
+}
+
 /** Every agency's budget, largest first (/agencies/budget). */
 export function describeAgencyBudgets(): { title: string; description: string } {
   return {
@@ -503,12 +515,11 @@ export function describeAgencyBudgets(): { title: string; description: string } 
 /** One agency: "Environmental Protection Agency (EPA): budget, rules and comment periods". */
 export function describeAgency(a: AgencyDetail): { title: string; description: string } {
   const name = a.shortName && a.shortName !== a.name ? `${a.name} (${a.shortName})` : a.name;
+  const budget = agencyBudget(a);
   const parts = [
-    a.budget?.reported && a.budget.budgetAuthority != null
-      ? `${formatCurrency(a.budget.budgetAuthority)} in budgetary resources in FY${a.budget.fiscalYear}`
-      : a.budget?.latest?.budgetaryResources != null
-        ? `${formatCurrency(a.budget.latest.budgetaryResources)} in budgetary resources in FY${a.budget.latest.fiscalYear}`
-        : null,
+    budget
+      ? `${formatCurrency(budget.amount)} in budgetary resources in FY${budget.fiscalYear}`
+      : null,
     a.documents.openCommentsCount > 0
       ? `${a.documents.openCommentsCount} open comment period${a.documents.openCommentsCount === 1 ? "" : "s"}`
       : null,
@@ -549,3 +560,46 @@ export function agencyJsonLd(a: AgencyDetail) {
 export const DOCUMENTS_TITLE = "Search Congressional Records, Floor Speeches & Executive Orders";
 export const DOCUMENTS_DESCRIPTION =
   "Search floor speeches, executive orders, federal rules, and Supreme Court opinions by topic or by exact name, number or quoted phrase: all from public federal records.";
+/**
+ * `og:image:alt` for the record cards app/api/og draws: what each card
+ * shows, so a reader who can't see the picture is told what it holds.
+ * Each names the card's figures by what they are, not their values (the
+ * card reads its record when it is drawn, the page when it is rendered).
+ */
+export const CARD_ALT = {
+  profile(p: PoliticianProfile): string {
+    const { name, party, state } = p.identity;
+    if (p.branch === "senate" || p.branch === "house")
+      return `${name} (${party}-${state}), ${p.branch === "senate" ? "U.S. Senate" : "U.S. House"}: photo, contributions in the latest election, the share from PACs and the share in gifts of $200 or less, from FEC filings.`;
+    if (p.branch === "president")
+      return `${name}, president: years in office, the C-SPAN historians' rank, average approval and executive orders.`;
+    return `${name}, Supreme Court: photo, appointing president, cases decided, the share in the majority and majority opinions written.`;
+  },
+  bill: (label: string, title: string) =>
+    `${label}: ${title}. The bill's stage and each step of its path through Congress, from Congress.gov.`,
+  state: (stateName: string) =>
+    `${stateName}'s ballot: election day and the number of U.S. Senate races, U.S. House races and statewide ballot measures.`,
+  issue: (title: string) =>
+    `Action Center: ${title}. The story's date, its sources and a summary in their own words.`,
+  race: (seat: string) =>
+    `${seat}: the seat's usual vote and its candidates, with what each has raised, from state sources and the FEC.`,
+  agency: (name: string) =>
+    `${name}: budgetary resources, Federal Register documents and open comment periods.`,
+  nomination: (heading: string) =>
+    `${heading}: the nomination's status, when it was received and the Senate's vote.`,
+  redistricting: (stateName: string) =>
+    `${stateName}'s new congressional map: its districts, how many kept their lines and the share of residents moved.`,
+  archive: (cycle: number) =>
+    `The ${cycle} general election: the number of Senate and House races and statewide ballot measures recorded.`,
+  day: (title: string) =>
+    `${title}: the day in a sentence and each chamber's record votes, or why there were none.`,
+  vote: (title: string) => `${title}: the result and each party's votes on each side.`,
+  document: (title: string) => `${title}: who issued it, the document type and its date.`,
+  period: (title: string) =>
+    `${title}: what the Senate and the House did, with each chamber's record votes and the bills that became law.`,
+};
+
+/** A record card's og:image entry: `/api/og?<query>`, 1200 by 630. */
+export function cardImage(query: string, alt: string) {
+  return [{ url: absoluteUrl(`/api/og?${query}`), width: 1200, height: 630, alt }];
+}

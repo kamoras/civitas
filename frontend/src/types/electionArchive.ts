@@ -49,6 +49,8 @@ export interface ArchivedCandidate {
   name: string;
   /** As the state printed it; the FEC's `name` otherwise. */
   ballotName: string | null;
+  /** Absent from an archive written before it existed. */
+  displayName?: string | null;
   party: string;
   partyGroup: string | null;
   partyLabel: string | null;
