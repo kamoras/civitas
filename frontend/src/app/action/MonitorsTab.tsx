@@ -167,7 +167,7 @@ function MonitorRow({
       : null,
     monitor.closedOn
       ? `Tracked ${shortDate(monitor.createdAt)} – ${shortDate(last || monitor.createdAt)} · closed ${shortDate(monitor.closedOn)}`
-      : null,
+      : `Tracked since ${shortDate(monitor.createdAt)}`,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -221,9 +221,6 @@ function MonitorRow({
                 {description}
               </p>
             )}
-            <p className="mt-2 font-mono text-xs text-ink-min">
-              Tracking since {shortDate(monitor.createdAt)}
-            </p>
             <FollowFeed
               className="mt-2"
               subject="this monitor"
