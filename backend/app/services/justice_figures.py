@@ -20,6 +20,7 @@ from datetime import date
 from sqlalchemy.orm import Session, selectinload
 
 from app.models import Justice, JusticeAppointment, President
+from app.ordinals import HIGHEST, RIGHTMOST, rank_shown
 from app.photos import justice_photo
 from app.schemas import (
     JusticeAppointedBySchema,
@@ -89,8 +90,13 @@ def _measure(
     """One figure for `subject` beside every peer's: the peers ascending,
     the median, and how many of the others sit below the subject."""
     have = {jid: v for jid, v in values.items() if v is not None}
+    ascending = sorted(v for v, _ in have.values())
+    # The hover label's place: left-right for a position, else highest.
+    rank_words = RIGHTMOST if unit == "position" else HIGHEST
     peers = sorted(
-        (JusticePeerPointSchema(id=jid, name=names[jid], value=v, shown=s) for jid, (v, s) in have.items()),
+        (JusticePeerPointSchema(id=jid, name=names[jid], value=v, shown=s,
+                                rank=rank_shown(v, ascending, rank_words))
+         for jid, (v, s) in have.items()),
         key=lambda p: (p.value, p.name),
     )
     mine = have.get(subject.id)

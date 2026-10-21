@@ -2,6 +2,7 @@ import Link from "next/link";
 import { onThisPage } from "@/lib/onThisPage";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { Dot } from "@/components/scorecard/WhereTheyStand";
+import StripPoints, { BigFigure, StripAxis, type StripPoint } from "@/components/shared/Strip";
 import { overlay } from "@/lib/chartColors";
 import { termsPhrase } from "@/lib/court";
 import { SHARE_SECTION_ATTR, shareMetaAttrs } from "@/lib/shareImage";
@@ -32,10 +33,27 @@ function axisLabel(m: JusticeMeasure, v: number): string {
 
 function Strip({ m, justiceId }: { m: JusticeMeasure; justiceId: string }) {
   const [lo, hi] = stripDomain(m);
-  const at = (v: number) => `${((Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo)) * 100}%`;
+  const at = (v: number) => ((Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo)) * 100;
+  const others = m.peers.filter((p) => p.id !== justiceId);
+  const top = (i: number) => 12 + JITTER[i % JITTER.length] / 2;
+  const points: StripPoint[] = m.peers.map((p) => ({
+    id: p.id,
+    name: p.name,
+    shown: p.shown,
+    rank: p.rank,
+    href: `/politicians/${encodeURIComponent(p.id)}`,
+    x: at(p.value),
+    y: p.id === justiceId ? 22 : top(others.indexOf(p)) + 4,
+  }));
   return (
-    <div className="min-w-0" aria-hidden="true">
-      <div className="relative mx-2 h-10">
+    <div className="min-w-0 px-2">
+      {/* The table below is the full text form of this strip. */}
+      <StripPoints
+        label={`${m.label}, sitting justices`}
+        points={points}
+        startId={justiceId}
+        className="h-10"
+      >
         <div className="absolute inset-x-0 top-[22px] h-px" style={{ background: overlay(0.4) }} />
         {m.unit === "position" && (
           <span
@@ -46,36 +64,37 @@ function Strip({ m, justiceId }: { m: JusticeMeasure; justiceId: string }) {
         {m.median != null && (
           <span
             className="absolute top-1 h-8 -translate-x-1/2 border-l-2 border-dashed border-ink-hi"
-            style={{ left: at(m.median) }}
+            style={{ left: `${at(m.median)}%` }}
           />
         )}
-        {m.peers
-          .filter((p) => p.id !== justiceId)
-          .map((p, i) => (
-            <Dot
-              key={p.id}
-              size={8}
-              fill="var(--chart-muted)"
-              title={`${p.name}: ${p.shown}`}
-              className="absolute -translate-x-1/2"
-              style={{ left: at(p.value), top: `${12 + JITTER[i % JITTER.length] / 2}px` }}
-            />
-          ))}
+        {others.map((p, i) => (
+          <Dot
+            key={p.id}
+            size={8}
+            fill="var(--chart-muted)"
+            className="absolute -translate-x-1/2"
+            style={{ left: `${at(p.value)}%`, top: `${top(i)}px` }}
+          />
+        ))}
         {m.value != null && (
           <Dot
             size={14}
             fill="var(--ink-hi)"
             ring="var(--phos)"
             className="absolute top-[15px] -translate-x-1/2"
-            style={{ left: at(m.value) }}
+            style={{ left: `${at(m.value)}%` }}
           />
         )}
-      </div>
-      <div className="flex flex-wrap justify-between gap-x-2 text-xs text-ink-min">
-        <span>{axisLabel(m, lo)}</span>
-        {m.medianShown && <span className="font-semibold text-ink-lo">median {m.medianShown}</span>}
-        <span>{axisLabel(m, hi)}</span>
-      </div>
+      </StripPoints>
+      <StripAxis
+        start={axisLabel(m, lo)}
+        end={axisLabel(m, hi)}
+        tick={
+          m.median != null && m.medianShown
+            ? { at: at(m.median), text: `median ${m.medianShown}` }
+            : null
+        }
+      />
     </div>
   );
 }
@@ -88,9 +107,10 @@ function Row({ m, justiceId }: { m: JusticeMeasure; justiceId: string }) {
     >
       <div>
         <div className="text-[13px] font-semibold text-ink-lo">{m.label}</div>
-        <p className="text-[28px] font-semibold leading-tight text-ink-hi">
-          {m.shown ?? "No record"}
-        </p>
+        <BigFigure
+          shown={m.shown}
+          className="text-[28px] font-semibold leading-tight text-ink-hi"
+        />
       </div>
       <div className="min-w-0">
         <p className="mb-1 text-sm text-ink">{m.why}</p>

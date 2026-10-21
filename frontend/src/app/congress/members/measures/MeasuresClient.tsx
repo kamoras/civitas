@@ -9,6 +9,7 @@ import { axisMax, fmt } from "@/components/scorecard/WhereTheyStand";
 import { STATE_NAMES, byStateName } from "@/lib/stateCodes";
 import type { ChamberMeasure, ChamberMeasures, ChamberMember, ChamberPoint } from "@/types/peers";
 import ScrollRegion from "@/components/shared/ScrollRegion";
+import StripPoints, { partySeat, StripAxis, type StripPoint } from "@/components/shared/Strip";
 
 const PARTY_FILL: Record<string, string> = {
   D: "var(--dem-blue)",
@@ -35,11 +36,6 @@ function Mark({ party, size = 7 }: { party: string; size?: number }) {
 
 const JITTER = [10, 4, 16, 7, 13, 1, 19, 10, 6, 14];
 
-function seatName(p: { state: string; district: number | null }, house: boolean): string {
-  if (!house) return p.state;
-  return `${p.state}-${p.district == null || p.district === 0 ? "AL" : p.district}`;
-}
-
 function Callout({
   title,
   points,
@@ -63,7 +59,7 @@ function Callout({
               {p.name}
             </Link>{" "}
             <span className="text-ink-lo">
-              {p.party}-{seatName(p, house)} · {p.shown}
+              {partySeat(p, house)} · {p.shown}
             </span>
           </li>
         ))}
@@ -79,7 +75,19 @@ function ChamberStrip({ m, house }: { m: ChamberMeasure; house: boolean }) {
     value: null,
     expected: m.median,
   });
-  const at = (v: number) => `${Math.min(100, (v / max) * 100)}%`;
+  const at = (v: number) => Math.min(100, (v / max) * 100);
+  // A mark is 7px; its centre is 3.5px below its jittered top.
+  const top = (i: number) => 14 + JITTER[i % JITTER.length];
+  const points: StripPoint[] = m.points.map((p, i) => ({
+    id: p.id,
+    name: p.name,
+    detail: partySeat(p, house),
+    shown: p.shown,
+    rank: p.rank,
+    href: `/politicians/${p.id}`,
+    x: at(p.value),
+    y: top(i) + 3.5,
+  }));
   return (
     <section
       aria-labelledby={`m-${m.key}`}
@@ -103,14 +111,18 @@ function ChamberStrip({ m, house }: { m: ChamberMeasure; house: boolean }) {
         </p>
       </div>
       <p className="max-w-prose text-sm text-ink">{m.why}</p>
-      <div aria-hidden="true" className="relative mt-2 h-14">
+      {/* The table below is the full text form of these strips. */}
+      <StripPoints
+        label={`${m.label}, every ${house ? "representative" : "senator"}`}
+        points={points}
+        className="mt-2 h-14"
+      >
         <div className="absolute inset-x-0 top-[30px] h-px bg-white/40" />
         {m.points.map((p, i) => (
           <span
             key={p.id}
-            title={`${p.name} (${p.party}-${seatName(p, house)}): ${p.shown}`}
-            className="absolute -translate-x-1/2"
-            style={{ left: at(p.value), top: `${14 + JITTER[i % JITTER.length]}px` }}
+            className="absolute flex -translate-x-1/2"
+            style={{ left: `${at(p.value)}%`, top: `${top(i)}px` }}
           >
             <Mark party={p.party} />
           </span>
@@ -118,14 +130,11 @@ function ChamberStrip({ m, house }: { m: ChamberMeasure; house: boolean }) {
         {m.median != null && (
           <span
             className="absolute top-1 h-12 -translate-x-1/2 border-l-2 border-ink-hi"
-            style={{ left: at(m.median) }}
+            style={{ left: `${at(m.median)}%` }}
           />
         )}
-      </div>
-      <div aria-hidden="true" className="flex justify-between text-xs text-ink-min">
-        <span>{fmt(m, 0)}</span>
-        <span>{fmt(m, max)}</span>
-      </div>
+      </StripPoints>
+      <StripAxis start={fmt(m, 0)} end={fmt(m, max)} />
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Callout title="Furthest above expected" points={m.mostAbove} house={house} />
         <Callout title="Furthest below expected" points={m.mostBelow} house={house} />
@@ -169,7 +178,8 @@ function sortValue(m: ChamberMember, key: SortKey): string | number | null {
   return m[key];
 }
 
-const SELECT = "min-h-11 border border-white/40 bg-surface px-2 text-base text-ink-hi";
+// max-w-full: at 200% text the seat-lean options are wider than a phone.
+const SELECT = "min-h-11 max-w-full border border-white/40 bg-surface px-2 text-base text-ink-hi";
 
 function FactTable({ members, house }: { members: ChamberMember[]; house: boolean }) {
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "name", dir: 1 });
@@ -209,7 +219,7 @@ function FactTable({ members, house }: { members: ChamberMember[]; house: boolea
         Alphabetical by default. Sort by any column: a sort is a fact, not a rank.
       </p>
       <div className="mt-3 flex flex-wrap gap-3">
-        <label className="flex flex-col text-sm text-ink-lo">
+        <label className="flex min-w-0 max-w-full flex-col text-sm text-ink-lo">
           State
           <select value={state} onChange={(e) => setState(e.target.value)} className={SELECT}>
             <option value="">Every state</option>
@@ -220,7 +230,7 @@ function FactTable({ members, house }: { members: ChamberMember[]; house: boolea
             ))}
           </select>
         </label>
-        <label className="flex flex-col text-sm text-ink-lo">
+        <label className="flex min-w-0 max-w-full flex-col text-sm text-ink-lo">
           Party
           <select value={party} onChange={(e) => setParty(e.target.value)} className={SELECT}>
             <option value="">Every party</option>
@@ -230,7 +240,7 @@ function FactTable({ members, house }: { members: ChamberMember[]; house: boolea
           </select>
         </label>
         {house && (
-          <label className="flex flex-col text-sm text-ink-lo">
+          <label className="flex min-w-0 max-w-full flex-col text-sm text-ink-lo">
             Seat lean (Cook PVI)
             <select value={lean} onChange={(e) => setLean(e.target.value)} className={SELECT}>
               <option value="">Every seat</option>
@@ -292,9 +302,7 @@ function FactTable({ members, house }: { members: ChamberMember[]; house: boolea
                     {m.name}
                   </Link>
                 </td>
-                <td className="px-3 py-1.5 text-ink-lo">
-                  {m.party}-{seatName(m, house)}
-                </td>
+                <td className="px-3 py-1.5 text-ink-lo">{partySeat(m, house)}</td>
                 <td className="px-3 py-1.5 text-right">
                   {m.partyVotes == null ? "—" : `${m.breaks ?? 0} / ${m.partyVotes}`}
                 </td>

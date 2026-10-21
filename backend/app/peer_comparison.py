@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session
 
 from app.measures import BY_KEY, MEASURES, Measure, alignment_facts, bill_facts, past_committee
 from app.models import Representative, Senator
+from app.ordinals import rank_shown
 from app.pipeline.analyze.score_calculator import ALGORITHM_VERSION, _seat_pvi
 from app.score_keeping import load_breakdown
 from app.score_display import shown_share, thin_dimensions
@@ -103,6 +104,13 @@ def chamber_rows(db: Session, chamber: str) -> list[dict]:
         })
     _cache[chamber] = (key, time.monotonic(), rows)
     return rows
+
+
+def seat_label(r: dict, chamber: str) -> str:
+    """Party and seat as the site prints them: "D-CA", "R-TX-5", "R-WY-AL"."""
+    if chamber != "house":
+        return f"{r['party']}-{r['state']}"
+    return f"{r['party']}-{r['state']}-{r['district'] or 'AL'}"
 
 
 def _confidence(member) -> dict:
@@ -183,7 +191,7 @@ _LESS = {"smallGifts": "had a smaller share", "pacMoney": "took a smaller share"
 def _row(measure: Measure, me: dict, peers: list[dict], chamber: str, group: str) -> dict:
     facts = me["facts"]
     value = measure.value(facts)
-    names = {p["id"]: p["name"] for p in peers}
+    by_id = {p["id"]: p for p in peers}
     pairs = [(p["id"], measure.value(p["facts"])) for p in peers]
     pairs = sorted([(i, v) for i, v in pairs if v is not None], key=lambda x: x[1])
     label, label_one = _group_label(chamber, group, me["caucus"], peers)
@@ -209,7 +217,13 @@ def _row(measure: Measure, me: dict, peers: list[dict], chamber: str, group: str
         "peerGroup": {"key": group, "label": label, "labelOne": label_one, "n": len(values)},
         "distribution": values,
         "distributionIds": [i for i, _ in pairs],
-        "distributionNames": [names[i] for i, _ in pairs],
+        "distributionNames": [by_id[i]["name"] for i, _ in pairs],
+        # For the strip's hover label: each figure as printed ("2 of 480"),
+        # party and seat ("D-CA", "R-TX-5"), and the place among these peers
+        # ("3rd highest of 47").
+        "distributionShown": [_shown(measure, v, by_id[i]["facts"]) for i, v in pairs],
+        "distributionSeats": [seat_label(by_id[i], chamber) for i, _ in pairs],
+        "distributionRanks": [rank_shown(v, values) for _, v in pairs],
         "record": record,
         "source": measure.source,
         "percentile": None,
@@ -264,7 +278,10 @@ def chamber_measures(db: Session, chamber: str) -> dict:
     rank: a sort is a fact, a rank a verdict). Per measure: every member's
     figure, the median, and the three members furthest above and below the
     figure expected for them (their seat's where the scorer has one, else
-    the chamber median), as names with figures. Per member: the plain
+    the chamber median), as names with figures. Each point carries its place
+    on that one measure's strip ("3rd highest of 100") for the hover label:
+    a position on one figure, never an order of members by a judgment, and
+    nothing on the page is sorted by it. Per member: the plain
     facts for the table, and, in the House, the seat's Cook PVI (positive
     leans Republican) for the seat-lean filter."""
     rows = chamber_rows(db, chamber)
@@ -280,7 +297,8 @@ def chamber_measures(db: Session, chamber: str) -> dict:
             expected = seat if seat is not None else median
             return {"id": r["id"], "name": r["name"], "party": r["party"], "state": r["state"],
                     "district": r["district"], "value": v, "shown": _shown(m, v, r["facts"]),
-                    "expected": expected, "gap": None if expected is None else v - expected}
+                    "expected": expected, "gap": None if expected is None else v - expected,
+                    "rank": rank_shown(v, values)}
 
         entries = [entry(r, v) for r, v in points]
         ranked = sorted((e for e in entries if e["gap"] is not None), key=lambda e: e["gap"])

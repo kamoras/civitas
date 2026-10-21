@@ -18,6 +18,7 @@ const point = (id: string, name: string, party: string, value: number) => ({
   shown: `${Math.round(value * 100)}%`,
   expected: 0.2,
   gap: value - 0.2,
+  rank: value === 0.5 ? "Highest of 3" : value === 0.1 ? "Lowest of 3" : "2nd highest of 3",
 });
 
 const member = (id: string, name: string, party: string, state: string, pac: number) => ({

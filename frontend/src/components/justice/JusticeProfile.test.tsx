@@ -6,9 +6,15 @@ import { stripDomain } from "./JusticeFigures";
 import type { Justice, JusticeMeasure } from "@/types/justice";
 
 const peers = [
-  { id: "john_doe", name: "John Doe", value: 0.7, shown: "70%" },
-  { id: "jane_q_example", name: "Jane Q. Example", value: 0.83, shown: "83%" },
-  { id: "richard_r_roe", name: "Richard R. Roe", value: 0.9, shown: "90%" },
+  { id: "john_doe", name: "John Doe", value: 0.7, shown: "70%", rank: "Lowest of 3" },
+  {
+    id: "jane_q_example",
+    name: "Jane Q. Example",
+    value: 0.83,
+    shown: "83%",
+    rank: "2nd highest of 3",
+  },
+  { id: "richard_r_roe", name: "Richard R. Roe", value: 0.9, shown: "90%", rank: "Highest of 3" },
 ];
 
 const majority: JusticeMeasure = {

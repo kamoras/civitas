@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from sqlalchemy.orm import Session
 
 from app.models import President
+from app.ordinals import rank_shown
 from app.peer_comparison import percentile, peer_word
 from app.pipeline.analyze.president_scorer import (
     FULL_TERM_DAYS,
@@ -66,6 +67,16 @@ def _years(p: President) -> float:
 
 def _start_year(p: President) -> int | None:
     return int(p.term_start[:4]) if p.term_start else None
+
+
+def term_years(p: President) -> str | None:
+    """The term's years as a hover label prints them: "1933–1945", "since 2025"."""
+    start = _start_year(p)
+    if start is None:
+        return None
+    if p.is_current or not p.term_end:
+        return f"since {start}"
+    return f"{start}–{p.term_end[:4]}"
 
 
 def _full_term(p: President) -> bool:
@@ -263,6 +274,11 @@ def _row(fig: _Figure, p: President, everyone: list[President]) -> dict | None:
         "distributionShown": [fig.shown(v) for v in others],
         "distributionIds": [o.id for o, _ in pairs],
         "distributionNames": [o.name for o, _ in pairs],
+        # For the strip's hover label: each presidency's years and its place
+        # among every presidency on the row, this one included.
+        "distributionYears": [term_years(o) for o, _ in pairs],
+        "distributionRanks": [rank_shown(v, values) for v in others],
+        "rank": rank_shown(value, values),
         "percentile": round(pct, 1),
         "word": None if thin else peer_word(pct, gap).replace("peers", "other presidencies"),
         "sentence": f"{fig.fact.format(shown=shown, moved=_moved(value))} {n_side:,} of the other {len(others):,} presidencies {verb}.",
@@ -314,6 +330,7 @@ def president_peers(db: Session, president_id: str) -> dict | None:
             r["source"] = {"name": f"C-SPAN survey, {edition}", "url": survey}
     return {
         "rule": RULE,
+        "years": term_years(p),
         "measures": rows,
         "standsOut": stands_out,
         "standsOutWhy": why,

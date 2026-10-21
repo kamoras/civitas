@@ -24,6 +24,11 @@ export interface PresidentPeerMeasure {
   distributionShown: string[];
   distributionIds: string[];
   distributionNames: string[];
+  /** Each presidency's years ("1933–1945") and place among all on the row, same order. */
+  distributionYears: (string | null)[];
+  distributionRanks: string[];
+  /** This presidency's place on the row ("3rd highest of 15"). */
+  rank: string;
   percentile: number;
   /** The members' rule's word ("above other presidencies"); null when too few peers. */
   word: string | null;
@@ -32,6 +37,8 @@ export interface PresidentPeerMeasure {
 }
 
 export interface PresidentPeers {
+  /** The term's years ("1933–1945", "since 2025"). */
+  years: string | null;
   rule: { wellOutside: number[]; outside: number[]; wellGapSd: number; minPeers: number };
   measures: PresidentPeerMeasure[];
   standsOut: string;
