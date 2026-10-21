@@ -183,4 +183,10 @@ def test_a_measure_over_time_reads_night_by_night_in_one_congress():
     assert out["sentence"] == "Over time: 2.0% on Mar 1, 2026, 3.0% on May 1, 2026."
     # Unchanged, or a measure of the last election: nothing drawn.
     assert pc.over_time(m, snaps[1:2] * 3) is None
-    assert pc.over_time(pc.BY_KEY["pacMoney"], snaps) is None
+    # Funding is per election, never nightly: no line for either funding
+    # measure, whatever the snapshots hold.
+    funding = [("2026-03-01", {"pacMoney": 0.1, "smallGifts": 0.2}),
+               ("2026-04-01", {"pacMoney": 0.3, "smallGifts": 0.4})]
+    assert pc.over_time(pc.BY_KEY["pacMoney"], funding) is None
+    assert pc.over_time(pc.BY_KEY["smallGifts"], funding) is None
+    assert pc.over_time(m, []) is None
