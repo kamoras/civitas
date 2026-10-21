@@ -402,8 +402,12 @@ The correct pattern, established by `_district_pvi()` /
    through `data_refresh.read(name)` (refreshed copy, else the bundled one,
    re-read when either changes, from either process); the bundled file in
    git stays the pre-first-refresh fallback and the reproducible baseline,
-   and committing a regenerated one is still how a method change ships. A
-   script the job runs takes an output path and reads no `/data` copy of
+   and committing a regenerated one is still how a method change ships.
+   The refreshed copy keeps serving until the job reruns, so each install
+   records the bundled copy's hash (`_refreshed.bundled`) and a file whose
+   bundled copy has changed since is refreshed the next day
+   (`bundled_moved`; 2026-10-19's House fit through 2024 otherwise waited a
+   week behind the 2026-10-18 refit). A script the job runs takes an output path and reads no `/data` copy of
    its own output. Files a script can't regenerate unattended — a new
    survey whose question ids change, a model-selection refit that is a
    method decision, a source behind research-only dependencies, a source
