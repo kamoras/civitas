@@ -22,7 +22,7 @@ import pytest
 from app.pipeline.fetch import state_candidates_al as al
 
 _FIXTURE = (Path(__file__).parent / "fixtures_al_special_primary_results.html").read_text()
-_SOURCE = {"ecode": 1001300}
+_SOURCE = {"ecode": 1001300, "ecode_cycle": 2026}
 
 
 class TestContestResultsParser:

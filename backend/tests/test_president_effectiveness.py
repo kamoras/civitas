@@ -73,9 +73,10 @@ def test_reference_measures_each_new_stat_from_the_population():
     ]
     ref = compute_president_reference(rows)
     assert ref["gdp_growth_prewar"]["n"] == 15  # 1800..1940
-    # 1950-2030 is only nine presidencies: below the minimum, so it is left
-    # out and the caller keeps the last persisted value.
-    assert "gdp_growth_postwar" not in ref
+    # 1950-2030 is nine presidencies: measured (no count is typed); the
+    # caller keeps a persisted value only if it was measured on more
+    # (keep_fuller).
+    assert ref["gdp_growth_postwar"]["n"] == 9
     assert ref["jobs_per_year"]["n"] == 24
     assert "gdp_growth_relative" not in ref  # no peer figures given
 

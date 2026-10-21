@@ -1,6 +1,10 @@
 import path from "path";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
+import { assetVersions } from "./scripts/assetVersions.mjs";
+
+// The card and icon versions next.config.mjs sets at build (site.ts ogCardUrl).
+const versions = assetVersions();
 
 export default defineConfig({
   plugins: [react()],
@@ -27,7 +31,11 @@ export default defineConfig({
       boundary for the early-morning pipeline timestamps this app displays, so
       a mis-parse changes the rendered DAY and not just the hour.
     */
-    env: { TZ: "America/Los_Angeles" },
+    env: {
+      TZ: "America/Los_Angeles",
+      OG_CARD_VERSION: versions.ogCard,
+      ICON_VERSION: versions.icon,
+    },
     environment: "jsdom",
     setupFiles: ["./vitest.setup.ts"],
     globals: true,

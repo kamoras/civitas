@@ -200,8 +200,8 @@ export const SECTIONS = {
       // Members first of the people pages: it is where a reader finds their
       // own (the directory), and the measures and the pair compare it.
       { key: "members", label: "Members", href: MEMBERS_HREF },
-      { key: "measures", label: "Measure by measure", href: MEASURES_HREF },
-      { key: "compare", label: "Compare members", href: "/compare" },
+      { key: "measures", label: "By the numbers", href: MEASURES_HREF },
+      { key: "compare", label: "Compare two", href: "/compare" },
       { key: "bills", label: "Bills", href: "/congress/bills" },
       { key: "committees", label: "Committees", href: "/congress/committees" },
       { key: "nominations", label: "Nominations", href: "/congress/nominations" },

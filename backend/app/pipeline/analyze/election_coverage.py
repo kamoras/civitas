@@ -69,6 +69,7 @@ from app.pipeline.fetch.news_feeds import (
     fetch_state_news_articles,
 )
 from app.pipeline.run_tracker import PipelineRunTracker
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -342,13 +343,32 @@ def _to_naive_utc(dt: datetime | None) -> datetime | None:
     return dt
 
 
-def _already_ingested(db: Session, race_id: str, url: str) -> bool:
+def _already_ingested(db: Session, race_id: str, url: str) -> RaceCoverageItem | None:
+    """The stored item for this race and URL, if any."""
     return (
-        db.query(RaceCoverageItem.id)
+        db.query(RaceCoverageItem)
         .filter(RaceCoverageItem.race_id == race_id, RaceCoverageItem.url == url)
         .first()
-        is not None
     )
+
+
+def _refresh_summary(item: RaceCoverageItem, summary: str | None) -> bool:
+    """An article read again keeps the source's text as it reads now: a
+    stored summary that differs (the publisher edited it, or the feed
+    parser's reading of it changed: a photo caption was read as the first
+    sentence until 2026-10-21, news_feeds._FIGURE_ELEMENTS) is replaced.
+    True when it was, for the caller to rescore it; it keeps its old score
+    until then, so it never drops off its race page in between. Only while
+    the article is still in its feed. Read by today's parser, it is
+    verified caption-free either way (older items are checked by
+    fetch/coverage_captions.py)."""
+    if not summary:
+        return False
+    item.caption_checked_at = utcnow()
+    if item.summary == summary:
+        return False
+    item.summary = summary
+    return True
 
 
 def _title_key(title: str | None) -> str:
@@ -531,7 +551,8 @@ def vacuous_corroboration_clause(db: Session):
 
 
 def _store_if_new(
-    db: Session, race_id: str, seen: set[tuple[str, str]], **fields,
+    db: Session, race_id: str, seen: set[tuple[str, str]],
+    refreshed: list[RaceCoverageItem] | None = None, **fields,
 ) -> bool:
     """Store one coverage item, skipping anything already ingested.
 
@@ -551,7 +572,12 @@ def _store_if_new(
     only because Bluesky search had been returning nothing at all.
     """
     url_key = ("url", race_id, fields["url"])
-    if url_key in seen or _already_ingested(db, race_id, fields["url"]):
+    if url_key in seen:
+        return False
+    stored = _already_ingested(db, race_id, fields["url"])
+    if stored is not None:
+        if _refresh_summary(stored, fields.get("summary")) and refreshed is not None:
+            refreshed.append(stored)
         return False
     # Same story, different outlet — see _drop_syndicated_reprints. `seen`
     # is primed with every stored (race, title) before the pass starts,
@@ -562,7 +588,8 @@ def _store_if_new(
             return False
         seen.add(title_key)
     seen.add(url_key)
-    db.add(RaceCoverageItem(race_id=race_id, **fields))
+    # Read by a parser that drops photo captions (news_feeds._FIGURE_ELEMENTS).
+    db.add(RaceCoverageItem(race_id=race_id, caption_checked_at=utcnow(), **fields))
     return True
 
 
@@ -587,6 +614,7 @@ async def ingest_race_coverage(db: Session) -> int:
     # has just scanned the table anyway, so the per-article syndication
     # check costs no query of its own.
     seen: set[tuple[str, str, str]] = _drop_syndicated_reprints(db)
+    refreshed: list[RaceCoverageItem] = []  # stored items whose text changed
 
     # ── News: the national feeds the Action Center already fetched
     # (cheap/idempotent), PLUS the per-state political outlets.
@@ -606,7 +634,7 @@ async def ingest_race_coverage(db: Session) -> int:
             continue
         matcher, basis = resolved
         if _store_if_new(
-            db, matcher.race_id, seen,
+            db, matcher.race_id, seen, refreshed,
             source_type="news", source_name=article.source_name,
             title=(article.title or "")[:500], url=article.url,
             summary=article.summary,
@@ -617,6 +645,7 @@ async def ingest_race_coverage(db: Session) -> int:
 
     db.commit()
     score_unscored_items(db)
+    score_items(db, refreshed)
     return ingested
 
 
@@ -635,17 +664,23 @@ def score_unscored_items(db: Session, batch: int = 500) -> int:
     campaign advocacy — a feed gated on relevance alone would carry
     "Elect <candidate> to Congress!" as race coverage.
     """
-    from app.pipeline.analyze.grounding import electioneering_language
-    from app.pipeline.analyze.race_relevance import (
-        item_text, race_descriptor, score_pairs,
-    )
-
     rows = (
         db.query(RaceCoverageItem)
         .filter(RaceCoverageItem.relevance.is_(None))
         .limit(batch)
         .all()
     )
+    return score_items(db, rows)
+
+
+def score_items(db: Session, rows: list[RaceCoverageItem]) -> int:
+    """Score `rows` (relevance and has_advocacy) and commit; an item keeps
+    whatever it had when scoring fails. Returns how many were scored."""
+    from app.pipeline.analyze.grounding import electioneering_language
+    from app.pipeline.analyze.race_relevance import (
+        item_text, race_descriptor, score_pairs,
+    )
+
     if not rows:
         return 0
     races = {r.id: r for r in db.query(Race).filter(

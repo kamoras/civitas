@@ -454,6 +454,54 @@ const record: BillRecord = {
   unavailable: ["cosponsors"],
 };
 
+const boxes: NonNullable<BillRecord["boxes"]> = {
+  status: {
+    kicker: "Where it is · Senate floor",
+    tone: "neutral",
+    headline: "Senate floor: Passed, September 24, 2026",
+    dek: "Introduced June 2, 2026. Passed the Senate September 24, 2026. Next: House floor.",
+    figure: { type: "stat", value: 3, caption: "of 6 steps taken" },
+  },
+  summary: {
+    text: "This bill establishes requirements for NIL agreements.",
+    words: 12,
+    source: "Congressional Research Service, Reported to Senate, June 24, 2026",
+  },
+  passage: [
+    {
+      chamber: "senate",
+      date: "2026-09-24",
+      kicker: "Senate roll call 243 · September 24, 2026",
+      headline: "Passed the Senate by a recorded vote, 74 to 25",
+      dek: "Republicans 49 yea, 3 nay.",
+      sentence: "Passed the Senate by a recorded vote on September 24, 2026 (roll call 243).",
+      text: "Passed Senate by Yea-Nay Vote. 74 - 25. Record Vote Number: 243.",
+      rollCall: { chamber: "senate", number: 243, session: 2 },
+      figure: { type: "split", yeas: 74, nays: 25, yeaShare: 0.7475, caption: "Passed" },
+    },
+  ],
+  votes: {
+    headline: "1 recorded vote on this bill",
+    dek: "1 carried and 0 failed.",
+    results: [{ label: "Cloture Motion Agreed to", count: 1 }],
+    figure: { type: "stat", value: 1, caption: "roll call" },
+  },
+  history: {
+    headline: "1 action on September 24, 2026",
+    dek: "By Congress.gov's action type: floor 1.",
+    latest: { date: "2026-09-24", text: "The committee substitute tabled by Voice Vote." },
+    figure: { type: "stat", value: 1, caption: "action" },
+  },
+  cost: null,
+  text: {
+    headline: "1 text version published",
+    dek: "Latest: Reported to Senate, June 24, 2026.",
+    figure: { type: "stat", value: 1, caption: "version" },
+  },
+  sponsor: { dek: "Introduced June 2, 2026. Policy area: Sports and Recreation." },
+  floor: null,
+};
+
 const detail: VoteDetail = {
   ...vote({}),
   parties: record.votes[0].parties,
@@ -701,11 +749,11 @@ describe("bill page", () => {
     ).toBeTruthy();
     expect(screen.getByText("Civitas's record of Congress starts January 3, 2087.")).toBeTruthy();
     expect(screen.queryByText(/No committee meeting or report/)).toBeNull();
-    expect(screen.getAllByText("not held").length).toBe(3);
+    expect(screen.getAllByText("not held").length).toBe(1);
+    expect(screen.getAllByText("Not held for this Congress").length).toBe(2);
     // Congress.gov gave no title here: the h1 is the bill's number, never empty.
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("H.R. 2");
     expect(screen.queryByText(/Speeches are matched by the bill number/)).toBeNull();
-    expect(screen.getByText(/Not held for this Congress/)).toBeTruthy();
   });
 
   it("a part Congress.gov didn't return is not counted or called unpublished", () => {
@@ -802,7 +850,7 @@ describe("bill page", () => {
       <BillPageView
         billId="S.4668"
         canonicalPath="/congress/bills/S.4668"
-        record={record}
+        record={{ ...record, boxes }}
         detail={null}
         stageName={null}
       />
@@ -847,7 +895,7 @@ describe("bill page layers", () => {
       <BillPageView
         billId="S.4668"
         canonicalPath="/congress/bills/S.4668"
-        record={record}
+        record={{ ...record, boxes }}
         detail={
           {
             billId: "S.4668",
@@ -873,10 +921,14 @@ describe("bill page layers", () => {
         stageName="Passed Chamber"
       />
     );
-    const header = screen.getByRole("heading", { level: 1 }).parentElement!;
-    // The CRS's own sentence, under the title, attributed and dated.
-    expect(within(header).getByText(record.summary!.paragraphs[1])).toBeTruthy();
-    expect(within(header).getByText("This bill")).toBeTruthy();
+    // The CRS's own sentence, quoted in its box and credited.
+    const summary = screen.getByRole("heading", { name: "What it does" }).closest("article")!;
+    expect(within(summary).getByText(`“${record.summary!.paragraphs[1]}”`)).toBeTruthy();
+    expect(
+      within(summary).getByText(/^Congressional Research Service, Reported to Senate/)
+    ).toBeTruthy();
+    // How far it got, among this Congress's bills, in a box of its own.
+    expect(screen.getByText("This bill").closest("article")).toBeTruthy();
     // From the header and from the page's own menu.
     const toSources = screen.getAllByRole("link", { name: "Data & citation" });
     expect(toSources.map((a) => a.getAttribute("href"))).toEqual(["#sources", "#sources"]);
@@ -908,35 +960,29 @@ describe("bill page: a long summary and the page's sections", () => {
     },
   };
 
-  it("keeps the title line and first paragraph open, the rest behind one disclosure", () => {
+  it("quotes the first sentence and keeps the whole summary behind one disclosure", () => {
     render(
       <BillPageView
         billId="S.4668"
         canonicalPath="/congress/bills/S.4668"
-        record={long}
+        record={{
+          ...long,
+          boxes: {
+            ...boxes,
+            summary: { ...boxes.summary!, text: "This bill does the first thing.", words: 640 },
+          },
+        }}
         detail={null}
         stageName={null}
       />
     );
-    const section = screen.getByRole("heading", { name: "Summary" }).closest("section")!;
-    const toggle = within(section).getByText(/^Read the full CRS summary \(\d[\d,]* words\)$/);
+    const box = screen.getByRole("heading", { name: "What it does" }).closest("article")!;
+    expect(within(box).getByText("“This bill does the first thing.”")).toBeTruthy();
+    const toggle = within(box).getByText("More: the full summary, 640 words");
     const details = toggle.closest("details")!;
     expect(details.open).toBe(false);
-    expect(within(section).getByText("One Big Act").closest("details")).toBeNull();
-    expect(within(details).getByText(/^Section 0 does/)).toBeTruthy();
-  });
-
-  it("prints a short summary whole", () => {
-    render(
-      <BillPageView
-        billId="S.4668"
-        canonicalPath="/congress/bills/S.4668"
-        record={record}
-        detail={null}
-        stageName={null}
-      />
-    );
-    expect(screen.queryByText(/Read the full CRS summary/)).toBeNull();
+    expect(within(details).getByText("One Big Act")).toBeTruthy();
+    expect(within(details).getByText(/^Section 29 does/)).toBeTruthy();
   });
 
   it("lists the page's sections under the title, the votes with their count", () => {
@@ -973,13 +1019,13 @@ describe("bill page on a phone: the votes first", () => {
     })),
   };
 
-  it("puts Votes before the facts box and the summary, and the strip after the record", () => {
+  it("leads with each chamber's vote as a box, every vote after the boxes, the strip after", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => detail }));
     render(
       <BillPageView
         billId="S.4668"
         canonicalPath="/congress/bills/S.4668"
-        record={record}
+        record={{ ...record, boxes }}
         detail={null}
         stageName={null}
         strip={<p>This week strip</p>}
@@ -987,14 +1033,17 @@ describe("bill page on a phone: the votes first", () => {
     );
     const follows = (el: Element, other: Element) =>
       Boolean(el.compareDocumentPosition(other) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const passed = screen.getByRole("heading", { name: /^Passed the Senate by a recorded vote/ });
+    expect(
+      within(passed.closest("article")!).getByRole("img", { name: /74 yea to 25 nay/ })
+    ).toBeTruthy();
+    expect(screen.getByRole("link", { name: "1 recorded vote on this bill" })).toHaveAttribute(
+      "href",
+      "#votes"
+    );
     const votes = screen.getByRole("heading", { name: /^Votes/ });
-    const facts = screen.getByRole("complementary", { name: "Sponsor and facts" });
-    const summary = screen.getByRole("heading", { name: "Summary" });
-    expect(follows(votes, facts)).toBe(true);
-    expect(follows(facts, summary)).toBe(true);
-    expect(follows(summary, screen.getByText("This week strip"))).toBe(true);
-    // The overview's shared picture leaves the votes out (they have their own).
-    expect(votes.closest("[data-share-exclude]")).toBeTruthy();
+    expect(follows(passed, votes)).toBe(true);
+    expect(follows(votes, screen.getByText("This week strip"))).toBe(true);
     expect(votes.closest("[data-share-section]")!.getAttribute("data-share-section")).toBe("votes");
   });
 

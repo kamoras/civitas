@@ -10,6 +10,11 @@ from fastapi.testclient import TestClient
 from app.api import feed as feed_api
 from app.database import get_db
 from app.models import BroadcastPost
+from app.site_assets import _versions, versioned_card
+
+# The content versions every card and icon URL carries (app/site_assets.py).
+CARD_V = _versions()["ogCard"]
+ICON_V = _versions()["icon"]
 
 A = "{http://www.w3.org/2005/Atom}"
 M = "{http://search.yahoo.com/mrss/}"
@@ -47,7 +52,7 @@ def test_an_empty_feed_is_still_a_valid_feed(client):
     assert root.findtext(f"{A}title") == "Civitas Research"
     assert root.findtext(f"{A}updated") == "2026-09-29T00:00:00Z"
     assert root.findtext(f"{A}author/{A}name") == "Civitas Research"
-    assert root.findtext(f"{A}icon") == "https://civitas-research.org/apple-icon.png"  # PNG: Discord can't draw SVG
+    assert root.findtext(f"{A}icon") == f"https://civitas-research.org/apple-icon.png?v={ICON_V}"  # PNG: Discord can't draw SVG
     assert root.find(f"{A}link[@rel='self']").get("href") == "https://civitas-research.org/feed.xml"
     assert root.findall(f"{A}entry") == []
 
@@ -173,22 +178,25 @@ def test_an_entry_carries_the_pages_card_like_the_bluesky_post(client, db_sessio
         card_image="https://civitas-research.org/api/og?state=GA",
         card_image_alt="Georgia Ballot 2026", card_description="What's on the 2026 Georgia ballot.",
     )
+    # Stored before versioning; served at the current card design, a new URL
+    # for readers that cache a picture by its URL (Discord).
+    card = f"https://civitas-research.org/api/og?state=GA&v={CARD_V}"
     entry = _feed(client.get("/api/feed/all.xml")).find(f"{A}entry")
     assert entry.findtext(f"{A}summary") == "What's on the 2026 Georgia ballot."
     html = entry.findtext(f"{A}content")
     assert html == (
         '<p><a href="https://civitas-research.org/elections/states/GA#race-2026-SEN-GA">'
-        '<img src="https://civitas-research.org/api/og?state=GA" alt="Georgia Ballot 2026"></a></p>'
+        f'<img src="https://civitas-research.org/api/og?state=GA&amp;v={CARD_V}" alt="Georgia Ballot 2026"></a></p>'
         "<p>Brennan leads in new polling.</p><p>The race is rated a toss-up.</p>"
         '<p><a href="https://civitas-research.org/elections/states/GA#race-2026-SEN-GA">Read on Civitas Research</a></p>'
         '<p>Source: <a href="https://www.ajc.com/politics/poll-brennan/">ajc.com</a></p>'
     )
     links = {link.get("rel"): link.get("href") for link in entry.findall(f"{A}link")}
-    assert links["enclosure"] == "https://civitas-research.org/api/og?state=GA"
+    assert links["enclosure"] == card
     assert links["related"] == "https://www.ajc.com/politics/poll-brennan/"
-    assert entry.find(f"{M}thumbnail").get("url") == "https://civitas-research.org/api/og?state=GA"
+    assert entry.find(f"{M}thumbnail").get("url") == card
     media = entry.find(f"{M}content")
-    assert (media.get("url"), media.get("medium")) == ("https://civitas-research.org/api/og?state=GA", "image")
+    assert (media.get("url"), media.get("medium")) == (card, "image")
     assert media.findtext(f"{M}description") == "Georgia Ballot 2026"
 
 
@@ -200,3 +208,17 @@ def test_a_post_whose_page_has_no_card_yet_has_no_picture(client, db_session):
         assert entry.find(f"{A}link[@rel='enclosure']") is None
         assert "<img" not in entry.findtext(f"{A}content")
         assert entry.find(f"{A}summary") is None
+
+
+def test_only_the_sites_cards_are_versioned_and_an_old_version_is_replaced():
+    site = "https://civitas-research.org/api/og"
+    assert versioned_card(f"{site}?state=MT&v=old") == f"{site}?state=MT&v={CARD_V}"
+    assert versioned_card(f"{site}?vote=senate/119/2/1") == f"{site}?vote=senate/119/2/1&v={CARD_V}"
+    # Encoding kept as the page wrote it; the site card is a card too.
+    assert versioned_card(f"{site}?page=%2Felections") == f"{site}?page=%2Felections&v={CARD_V}"
+    assert (versioned_card("https://civitas-research.org/opengraph-image")
+            == f"https://civitas-research.org/opengraph-image?v={CARD_V}")
+    # Anyone else's picture, and the site's other paths, are left alone.
+    assert versioned_card("https://example.com/api/og?state=MT") == "https://example.com/api/og?state=MT"
+    assert versioned_card("https://civitas-research.org/photo/issue/1") == "https://civitas-research.org/photo/issue/1"
+    assert versioned_card(None) is None

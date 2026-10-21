@@ -12,6 +12,11 @@ COPY civitas.conf /etc/nginx/conf.d/civitas.conf
 # Included by civitas.conf at server level and in every location that sets
 # a header of its own (see the file for why).
 COPY security-headers.conf /etc/nginx/snippets/security-headers.conf
+# Which proxy may name the visitor (REAL_IP_FROM / REAL_IP_HEADER): written at
+# every start by the image's entrypoint, and once here so the included file
+# exists even when nginx is started some other way.
+COPY --chmod=755 real-ip.sh /docker-entrypoint.d/15-civitas-real-ip.sh
+RUN /docker-entrypoint.d/15-civitas-real-ip.sh
 
 EXPOSE 8081
 

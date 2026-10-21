@@ -48,7 +48,7 @@ export function PartyBar({ split }: { split: PartySplit }) {
   );
   if (noSplit) {
     return (
-      <div className="grid grid-cols-[7rem_minmax(0,1fr)] items-baseline gap-x-3 text-sm">
+      <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-baseline gap-x-3 text-sm">
         <span aria-hidden="true" className="text-ink">
           {party}
         </span>
@@ -57,7 +57,7 @@ export function PartyBar({ split }: { split: PartySplit }) {
     );
   }
   return (
-    <div className="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1 text-sm sm:grid-cols-[7rem_minmax(0,1fr)_minmax(0,10rem)]">
+    <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-center gap-x-3 gap-y-1 text-sm sm:grid-cols-[minmax(0,7rem)_minmax(0,1fr)_minmax(0,10rem)]">
       <span aria-hidden="true" className="text-ink">
         {party}
       </span>
@@ -184,7 +184,7 @@ export default function VoteMembers({
             onChange={(e) => setState(e.target.value)}
             // Capped at the column: a 10rem floor ran past an iPhone SE at 200%
             // text (WCAG 1.4.10).
-            className="min-h-11 min-w-[min(10rem,100%)] max-w-full border border-white/20 bg-surface-base px-2 font-sans text-sm tracking-normal text-ink"
+            className="min-h-11 w-40 max-w-full border border-white/20 bg-surface-base px-2 font-sans text-sm tracking-normal text-ink"
           >
             <option value="">All states</option>
             {states.map((s) => (

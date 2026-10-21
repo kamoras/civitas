@@ -42,6 +42,7 @@ from app.pipeline.analyze.president_scorer import (
     compute_president_overall_score,
     approval_by_group,
     compute_president_reference,
+    keep_fuller,
     congress_of_year,
     macro_reference,
     macro_window,
@@ -487,7 +488,7 @@ async def run_president_pipeline(db: Session) -> dict:
             ]))
         }
     previous = PRESIDENT_REFERENCE.load().get("presidents") or {}
-    reference = PRESIDENT_REFERENCE.with_live("presidents", {**previous, **measured}).get("presidents")
+    reference = PRESIDENT_REFERENCE.with_live("presidents", keep_fuller(previous, measured)).get("presidents")
     logger.info("President reference: %s", reference)
 
     for president, live, term_years in to_score:

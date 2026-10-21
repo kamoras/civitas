@@ -299,6 +299,19 @@ _HTML_BLOCK_RE = re.compile(
     r"<br\s*/?>|</?(?:p|div|li|ul|ol|h[1-6]|blockquote)\b[^>]*>",
     re.IGNORECASE,
 )
+# A picture and its caption are not the article's text. WordPress feeds
+# (every States Newsroom outlet) open content:encoded with the featured
+# image as <figure><img><figcaption>caption</figcaption></figure>, so the
+# caption became the summary's first sentence, and a race post copied it as
+# the news: "<candidate> speaks to Montana Democrats during a gathering
+# ... during the summer of 2026" (post 148, 2026-10-21). Told by the
+# markup, never by the caption's wording: the element and everything in it
+# goes, and an unclosed one (a source cut mid-figure) goes to the end.
+_FIGURE_ELEMENTS = frozenset({"figure", "figcaption"})
+_HTML_FIGURE_RE = re.compile(
+    r"<(figure|figcaption)\b[^>]*>.*?(?:</\1\s*>|$)",
+    re.IGNORECASE | re.DOTALL,
+)
 # A tag name (or "!" for comments/doctypes) must follow the "<", so a
 # less-than sign used as prose survives: "<[^>]*>" would swallow the middle
 # of "the margin was < 6 > the forecast" as if it were markup.
@@ -371,6 +384,11 @@ def _extract_body_text(el: Element | None) -> str:
             parts.append(node.text)
         for child in node:
             name = _local_name(child.tag)
+            if name in _FIGURE_ELEMENTS:
+                # A picture's caption, not the body (_FIGURE_ELEMENTS).
+                if child.tail:
+                    parts.append(child.tail)
+                continue
             if not name:
                 # A comment or processing instruction. Its text is markup,
                 # not content ("<!-- tracking beacon -->"), so only the tail
@@ -414,6 +432,7 @@ def _strip_html(raw: str) -> str:
     # still holds "&lt;p&gt;" here — stripping first would leave literal
     # tag text in the summary that no later stage knows to remove.
     text = unescape(raw)
+    text = _HTML_FIGURE_RE.sub(_BLOCK_SEP, text)
     text = _HTML_BLOCK_RE.sub(_BLOCK_SEP, text)
     text = _HTML_TAG_RE.sub("", text)
     text = _DANGLING_TAG_RE.sub("", text)

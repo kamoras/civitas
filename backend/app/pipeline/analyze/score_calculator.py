@@ -198,7 +198,7 @@ logger = logging.getLogger(__name__)
 # public changelog) in sync, and add a decision record for the new version
 # under docs/methodology/member-score/ — that is where the reasons go, not
 # here.
-ALGORITHM_VERSION = "v6.36"
+ALGORITHM_VERSION = "v6.37"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
 # use identical score_* column names, so one map covers both entity types.
@@ -3362,19 +3362,33 @@ def _les_member_baseline(
     ) / len(sponsored_bills)
 
 
-# Fewest advanced bills in EACH of the majority and minority groups before
-# their rates are trusted; early in a congress there are few, and the
-# previous rates are kept instead.
-_MIN_ADVANCED_BILLS_PER_STATUS = 20
+def _log_ratio_se(rates: dict | None) -> float | None:
+    """The standard error of log(majority rate / minority rate), the one
+    quantity the baseline reads (_advancement_baseline: only the ratio
+    matters), by the delta method: sqrt((1 - p1)/x1 + (1 - p2)/x2) for x
+    advanced bills of n. None when a group has no advanced bill (the ratio
+    is undefined) or the counts weren't recorded."""
+    try:
+        groups = [(rates[f"advanced_{g}"], rates[f"n_{g}"]) for g in ("majority", "minority")]
+    except (KeyError, TypeError):
+        return None
+    if any(x <= 0 or n <= 0 for x, n in groups):
+        return None
+    return math.sqrt(sum((1 - x / n) / x for x, n in groups))
 
 
 def _measure_advancement_rates(
     members: list[tuple[list[dict], str | None]], current: tuple[int, str] | None,
+    previous: dict | None = None,
 ) -> dict | None:
     """Share of sponsored bills that advanced past referral (stage >= 2:
     committee action or further) for majority- vs minority-party sponsors
-    in this chamber, plus the pooled rate. None when either group has too
-    few advanced bills to measure."""
+    in this chamber, plus the pooled rate. None, keeping `previous`, when
+    the ratio the baseline reads can't be measured (a group with no
+    advanced bill) or is measured less precisely than `previous` measured
+    it (a larger standard error of the log ratio): early in a Congress,
+    the last Congress's full count stands until this one's is as good. No
+    count of bills is typed (it was 20 per group)."""
     counts = {"majority": [0, 0], "minority": [0, 0]}  # [advanced, total]
     for bills, party in members:
         if party not in ("D", "R"):
@@ -3387,16 +3401,23 @@ def _measure_advancement_rates(
             c[1] += 1
             if _les_bill_stage(b) >= 2:
                 c[0] += 1
-    if any(adv < _MIN_ADVANCED_BILLS_PER_STATUS for adv, _ in counts.values()):
-        return None
     adv = sum(a for a, _ in counts.values())
     total = sum(t for _, t in counts.values())
-    return {
-        "majority": round(counts["majority"][0] / counts["majority"][1], 6),
-        "minority": round(counts["minority"][0] / counts["minority"][1], 6),
-        "pooled": round(adv / total, 6),
+    measured = {
+        "majority": round(counts["majority"][0] / counts["majority"][1], 6) if counts["majority"][1] else None,
+        "minority": round(counts["minority"][0] / counts["minority"][1], 6) if counts["minority"][1] else None,
+        "pooled": round(adv / total, 6) if total else None,
         "n_bills": total,
+        **{f"advanced_{g}": a for g, (a, _) in counts.items()},
+        **{f"n_{g}": n for g, (_, n) in counts.items()},
     }
+    se = _log_ratio_se(measured)
+    if se is None:
+        return None
+    before = _log_ratio_se(previous)
+    if before is not None and se > before:
+        return None
+    return measured
 
 
 def compute_les_reference(
@@ -3414,7 +3435,7 @@ def compute_les_reference(
     reference rather than scoring against noise.
     """
     current = (congress, majority) if majority else None
-    rates = _measure_advancement_rates(members, current) or previous_rates
+    rates = _measure_advancement_rates(members, current, previous_rates) or previous_rates
     # The chamber's weighted total at each stage, over every member's bills
     # (V&W's denominators). N is the whole chamber, not only members with
     # substantive bills, so the chamber — not its sponsors — averages 1.0.

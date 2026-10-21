@@ -61,6 +61,8 @@ GATES = {
     "committee_routing": ("committee_routing_calibration.json", "issues routed to a committee"),
     "member_photo": ("member_photo_calibration.json", "members switched to the bioguide portrait"),
     "roll_call_links": ("roll_call_link_calibration.json", "stories linked to a related vote in Congress"),
+    "near_identical": ("action_thresholds.json", "issue pairs joined as one story by their titles alone"),
+    "engagement": ("engagement_calibration.json", "outlet posts reposted as matching an issue"),
 }
 
 

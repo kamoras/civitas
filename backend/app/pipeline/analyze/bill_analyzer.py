@@ -58,7 +58,10 @@ References
   Analysis of Roll Call Data. APSR, 98(2).
 """
 
+import json
 import logging
+import math
+import pathlib
 import re
 from typing import Any
 
@@ -298,7 +301,33 @@ EMBEDDING_CONFIDENCE_THRESHOLD = 0.70
 MIN_SEED_CORPUS_SHARE_FOR_KNN_TRUST = 0.03
 
 
-def _is_procedural_seed_match(text: str, threshold: float = 0.74) -> tuple[bool, float]:
+_DATA_DIR = pathlib.Path(__file__).resolve().parents[2] / "data"
+# The procedural seed's threshold, fitted on the Congressional Research
+# Service's own policy areas (scripts/calibrate_procedural.py: Commemorations
+# against areas that name a policy subject) under the Action Center's
+# precision rule; null when no threshold meets it, and the seed check then
+# never fires. It replaced 0.74, set by hand from a score distribution.
+PROCEDURAL_CALIBRATION_PATH = _DATA_DIR / "procedural_calibration.json"
+# CRS policy areas mapped to this taxonomy, for the calibration scripts'
+# labels (a vocabulary translation; nothing here classifies by it).
+CRS_POLICY_AREAS_PATH = _DATA_DIR / "crs_policy_areas.json"
+_procedural_threshold_cache: list = []
+
+
+def crs_policy_areas() -> dict[str, list[str]]:
+    return json.loads(CRS_POLICY_AREAS_PATH.read_text())["areas"]
+
+
+def procedural_threshold() -> float:
+    """The fitted procedural-seed threshold; infinity when the fit missed
+    the precision rule (nothing is called procedural by the seed)."""
+    if not _procedural_threshold_cache:
+        value = json.loads(PROCEDURAL_CALIBRATION_PATH.read_text())["threshold"]
+        _procedural_threshold_cache.append(float(value) if value is not None else math.inf)
+    return _procedural_threshold_cache[0]
+
+
+def _is_procedural_seed_match(text: str, threshold: float | None = None) -> tuple[bool, float]:
     """Check if text is procedural via embedding similarity to the procedural prototype.
 
     Uses cosine similarity (Reimers & Gurevych 2019) instead of keyword
@@ -334,7 +363,7 @@ def _is_procedural_seed_match(text: str, threshold: float = 0.74) -> tuple[bool,
         query_emb = query_emb / norm
 
     score = float(np.dot(query_emb, _procedural_emb))
-    return score >= threshold, score
+    return score >= (procedural_threshold() if threshold is None else threshold), score
 
 
 def classify_policy_area(

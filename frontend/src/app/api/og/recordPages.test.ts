@@ -46,7 +46,9 @@ describe("record pages' og:image", () => {
     const meta = await voteMeta({
       params: Promise.resolve({ chamber: "house", congress: "119", session: "2", number: "314" }),
     });
-    expect(images(meta)).toEqual([expect.stringMatching(/\/api\/og\?vote=house\/119\/2\/314$/)]);
+    expect(images(meta)).toEqual([
+      expect.stringMatching(/\/api\/og\?vote=house\/119\/2\/314&v=\w+$/),
+    ]);
   });
 
   it("a tracked bill shares as its bill card", async () => {
@@ -56,7 +58,9 @@ describe("record pages' og:image", () => {
       params: Promise.resolve({ id: "S.2403" }),
       searchParams: Promise.resolve({}),
     });
-    expect(images(meta)).toEqual([expect.stringMatching(/\/api\/og\?billPage=119\/S\.2403$/)]);
+    expect(images(meta)).toEqual([
+      expect.stringMatching(/\/api\/og\?billPage=119\/S\.2403&v=\w+$/),
+    ]);
   });
 
   it("a bill the site doesn't track shares as its bill card too, from Congress.gov", async () => {
@@ -69,7 +73,7 @@ describe("record pages' og:image", () => {
       params: Promise.resolve({ id: "S.9" }),
       searchParams: Promise.resolve({}),
     });
-    expect(images(meta)).toEqual([expect.stringMatching(/\/api\/og\?billPage=119\/S\.9$/)]);
+    expect(images(meta)).toEqual([expect.stringMatching(/\/api\/og\?billPage=119\/S\.9&v=\w+$/)]);
   });
 
   it("an Explore document shares as its document card", async () => {
@@ -78,6 +82,6 @@ describe("record pages' og:image", () => {
       params: Promise.resolve({ id: "19799" }),
       searchParams: Promise.resolve({}),
     });
-    expect(images(meta)).toEqual([expect.stringMatching(/\/api\/og\?explore=19799$/)]);
+    expect(images(meta)).toEqual([expect.stringMatching(/\/api\/og\?explore=19799&v=\w+$/)]);
   });
 });

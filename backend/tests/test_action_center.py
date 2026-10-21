@@ -397,6 +397,63 @@ class TestCutRefit:
         assert ac.cluster_calibration()["threshold"] == bundled
 
 
+class TestNearIdenticalCut:
+    """The near-identical title cut is fitted on pairs the stored issues
+    label themselves, and left out where they don't decide."""
+
+    @staticmethod
+    def _issue(day, urls=(), monitors=(), bills=(), title="t"):
+        from types import SimpleNamespace
+        return SimpleNamespace(date=day, title=title, source_urls=json.dumps(list(urls)),
+                               related_monitor_slugs=json.dumps(list(monitors)),
+                               related_bill_ids=json.dumps([{"id": b} for b in bills]))
+
+    def test_only_what_the_data_decides_is_labelled(self):
+        issues = [
+            self._issue("2028-03-01", urls=["u1"]),
+            self._issue("2028-03-02", urls=["u1"]),            # same article: one story
+            self._issue("2028-03-01", monitors=["iran"]),
+            self._issue("2028-03-02", monitors=["trade"]),     # other monitor, other day: two stories
+            self._issue("2028-03-02", monitors=["iran"]),      # same monitor: one story
+            self._issue("2028-03-01", bills=["HR.1"]),
+            self._issue("2028-03-02", bills=["HR.1"]),         # same bill: one story
+            self._issue("2028-03-01"),                         # decides nothing
+            self._issue("2028-03-09", urls=["u1"]),            # past the rematch window
+        ]
+        pairs = {(i, j): same for i, j, same in ac.near_identical_pairs(issues)}
+        assert pairs[(0, 1)] is True and pairs[(2, 4)] is True and pairs[(5, 6)] is True
+        assert pairs[(2, 3)] is False and (3, 4) not in pairs  # different monitors, same day: undecided
+        assert not any(7 in key or 8 in key for key in pairs)
+        # Different monitors on the SAME day are not labelled: one day's two monitors can share a story.
+        same_day = [self._issue("2028-03-01", monitors=["a"]), self._issue("2028-03-01", monitors=["b"])]
+        assert ac.near_identical_pairs(same_day) == []
+
+    def test_the_fit_is_the_lowest_cut_no_different_story_pair_reaches(self, monkeypatch):
+        issues = [self._issue(f"2028-03-0{1 + i % 2}", monitors=[f"m{i}"]) for i in range(12)]
+        monkeypatch.setattr(ac, "_embed_texts_sim", lambda texts: np.eye(len(texts)))
+        fitted = ac.fit_near_identical_cut(issues)
+        assert fitted["negatives"] == 36 >= ac.MIN_HARD_NEGATIVES  # 6 x 6 across the two days
+        assert fitted["fitted"] == 0.01 and fitted["threshold"] == round(0.01 + ac.CUT_MARGIN, 2)
+
+    def test_too_few_different_story_pairs_keeps_the_cut_in_use(self, monkeypatch):
+        issues = [self._issue("2028-03-01", monitors=["a"]), self._issue("2028-03-02", monitors=["b"])]
+        assert ac.fit_near_identical_cut(issues) is None
+        monkeypatch.setattr(ac, "_cuts_cache", {})
+        monkeypatch.setattr(ac, "api_cache_get", lambda *a, **k: None)
+        bundled = json.loads(ac._NEAR_IDENTICAL_PATH.read_text())
+        assert ac.near_identical_cut() == bundled["values"]["near_identical"]
+        assert bundled["near_identical"]["labels_sha256"] and "calibrate_near_identical.py" in bundled["_source"]
+
+    def test_a_refit_is_used_at_once(self, db_session, freeze_utcnow, monkeypatch):
+        monkeypatch.setattr(ac, "_cuts_cache", {})
+        monkeypatch.setattr(ac, "fit_cluster_cut", lambda a: None)
+        monkeypatch.setattr(ac, "fit_restatement_cut", lambda i: None)
+        monkeypatch.setattr(ac, "fit_near_identical_cut", lambda rows: {"threshold": 0.83})
+        freeze_utcnow(datetime(2028, 3, 1, 9))
+        ac.refit_cuts(db_session)
+        assert ac.near_identical_cut() == 0.83
+
+
 class TestRankClusters:
     """2026-08 quality audit: MAX_ISSUES was lowered as a capacity choice,
     not a calibrated one — the combined score has no absolute floor to
