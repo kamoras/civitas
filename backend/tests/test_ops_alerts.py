@@ -635,3 +635,23 @@ def test_newest_presidential_signer_reads_the_newest_signing(monkeypatch):
 
     monkeypatch.setattr(ops_alerts.httpx, "get", down)
     assert ops_alerts.newest_presidential_signer() is None
+
+
+def test_v1_fields_alive_past_their_sunset_alert(freeze_utcnow):
+    """The deprecated 0-100 fields (and the unmeasured transforms that feed
+    them) are deleted with v1: an alert once the sunset passes with any of
+    them still served, nothing before it or once they are gone."""
+    sunset = date.fromisoformat(ops_alerts.schemas.API_V1_SUNSET)
+    assert ops_alerts.deprecated_api_fields()  # v1 still carries them today
+    with patch.object(ops_alerts, "send_ops_alert") as send, patch.object(ops_alerts, "resolve_ops_alert") as resolve:
+        freeze_utcnow(datetime.combine(sunset, datetime.min.time()) + timedelta(hours=12))
+        ops_alerts.check_api_v1_sunset()
+        send.assert_not_called()
+        resolve.assert_called_once_with("api-v1-sunset")
+        freeze_utcnow(datetime.combine(sunset, datetime.min.time()) + timedelta(days=1, hours=12))
+        ops_alerts.check_api_v1_sunset()
+        assert send.call_args.kwargs["condition"] == "api-v1-sunset"
+        assert "score_calculator" in send.call_args.args[1]
+        with patch.object(ops_alerts, "deprecated_api_fields", return_value=[]):
+            ops_alerts.check_api_v1_sunset()
+        assert resolve.call_args.args == ("api-v1-sunset",)

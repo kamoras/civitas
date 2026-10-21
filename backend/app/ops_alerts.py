@@ -28,7 +28,9 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 
 import httpx
+from pydantic import BaseModel
 
+from app import schemas
 from app.config import settings
 from app.database import SessionLocal
 from app.election_calendar import federal_states
@@ -590,6 +592,40 @@ def check_feedback_token_expiration() -> None:
             dedupe_key=f"feedback-token-expiring-{expiration}",
             condition="feedback-token-expiring",
         )
+
+
+def deprecated_api_fields() -> list[str]:
+    """Every public API v1 field marked deprecated (json_schema_extra
+    {"deprecated": True}), as "Schema.field"."""
+    found = []
+    for name, model in vars(schemas).items():
+        if isinstance(model, type) and issubclass(model, BaseModel) and model.__module__ == schemas.__name__:
+            found += [f"{name}.{field}" for field, info in model.model_fields.items()
+                      if (info.json_schema_extra or {}).get("deprecated") is True]
+    return sorted(found)
+
+
+def check_api_v1_sunset() -> None:
+    """Alert once public API v1's sunset (schemas.API_V1_SUNSET) has passed
+    while its deprecated fields are still served. They are the only reason
+    the 0-100 transforms behind them exist (score_calculator's saturation
+    SDs, breadth and participation weights; president_scorer's saturation
+    and economy weights; services/score_trends): numbers nobody measured,
+    kept only for the dated promise, and deleted with v1."""
+    fields = deprecated_api_fields()
+    if utcnow().date() <= date.fromisoformat(schemas.API_V1_SUNSET) or not fields:
+        resolve_ops_alert("api-v1-sunset")
+        return
+    send_ops_alert(
+        "Public API v1's deprecated fields outlived their sunset",
+        f"Public API v1 was to drop its deprecated fields on {schemas.API_V1_SUNSET}; {len(fields)} are still served "
+        f"({', '.join(fields[:8])}{', ...' if len(fields) > 8 else ''}). Remove them, and with them the 0-100 "
+        f"transforms that exist only to feed them (score_calculator's saturation SDs, breadth and participation "
+        f"weights; president_scorer's saturation and economy weights; services/score_trends): picked numbers "
+        f"kept only for the dated promise.",
+        dedupe_key=f"api-v1-sunset-{len(fields)}",
+        condition="api-v1-sunset",
+    )
 
 
 def check_state_pvi_staleness() -> None:

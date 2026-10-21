@@ -48,7 +48,7 @@ from scipy.stats import spearmanr
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from app.contact import BOT_USER_AGENT  # noqa: E402
-from app.pipeline.analyze.justice_loyalty import MIN_VOTES_EACH_SIDE, Estimate  # noqa: E402
+from app.pipeline.analyze.justice_loyalty import Estimate, measurable  # noqa: E402
 
 # The Supreme Court Database release read: its file name carries it, and
 # court_finding.json records it so the data refresh job can tell when a
@@ -245,15 +245,17 @@ def loyalty(P: pd.DataFrame) -> pd.DataFrame:
 
 def _per_justice(P: pd.DataFrame, formula: str, coef: str, side_in, side_out) -> pd.DataFrame:
     """Each justice's `coef` from `formula` (OLS, HC1), shrunk and scored
-    with the pipeline's own code (justice_loyalty): measurable with
-    MIN_VOTES_EACH_SIDE votes on each side, the sides being the masks
-    side_in(g) and side_out(g)."""
+    with the pipeline's own code (justice_loyalty): measurable as the
+    pipeline judges it (justice_loyalty.measurable), the sides being the
+    masks side_in(g) and side_out(g)."""
     est, n = {}, {}
     for j, g in P.groupby("justiceName"):
         n[j] = (int(side_in(g).sum()), int(side_out(g).sum()))
-        if min(n[j]) < MIN_VOTES_EACH_SIDE:
+        if not min(n[j]):
             continue
         f = smf.ols(formula, g).fit(cov_type="HC1")
+        if not measurable(float(f.bse[coef]), float(f.get_influence().hat_matrix_diag.max())):
+            continue
         est[j] = Estimate(raw=float(f.params[coef]), se=float(f.bse[coef]), votes_in=n[j][0], votes_out=n[j][1],
                           rate_in=float(g.y[side_in(g)].mean()), rate_out=float(g.y[side_out(g)].mean()))
     shrunk, mu, tau = shrink(est)
