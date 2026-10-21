@@ -1689,6 +1689,22 @@ smear proficiency testing remote", ...), the results page found 0 before
 and all 6 after (ranks 1, 1, 1, 2, 3 and 10); the three exact titles and
 the FR document number still go straight to their documents.
 
+**Each result is a box (2026-10).** The results page lists each match as a
+compact record box (`BoxGrid` / `RecordBox`, one column on a phone and two
+from 40rem): its kind as the kicker on the merged list, its name linked, and
+the index's context line (type, issuer, date). A document's own words around
+the query sit behind its "More" (`snippet` on each document item: Explore's
+keyword excerpt with the matches marked, else its summary, verbatim). Once
+something is asked the page's standing line folds behind "More about this
+page" on a phone, and the filter chips are one row that scrolls sideways.
+Measured on an iPhone SE (375 px) with the density audit's method, main
+against this change on a local `next build` over the same database copy:
+the first result moved up from 1.12 to 0.91 screens ("tariffs"), 1.16 to
+0.94 ("medicaid") and 1.52 to 1.34 ("warren", under a close call), and the
+first screen's prose fell from 34% to 21%. The pages are longer (6.4 to 8.3
+screens for "tariffs"): each box is a line taller than the old row, and the
+documents' "More" is new.
+
 **Straight to the page.** Enter on a query that clearly names one page goes
 there (`GET /search?q=` answers with a redirect, so it works without
 JavaScript, and the autocomplete highlights that match first): an

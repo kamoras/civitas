@@ -4,13 +4,15 @@ import { redirect } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
+import BoxGrid from "@/components/shared/BoxGrid";
+import RecordBox from "@/components/shared/RecordBox";
 import SearchCombobox from "@/components/search/SearchCombobox";
 import DocumentResults, { IndexCounts } from "@/components/search/DocumentResults";
 import { pageMetadata } from "@/lib/site";
 import { documentQuery, exploreParams, asksForDocuments } from "@/lib/documentSearch";
 import { documentsHref, SEARCH_DOCUMENTS_HREF } from "@/lib/routes";
 import { DOCUMENTS_DESCRIPTION, DOCUMENTS_TITLE } from "@/lib/seo";
-import type { ExploreResponse, ExploreStats } from "@/lib/api";
+import { splitHighlights, type ExploreResponse, type ExploreStats } from "@/lib/api";
 import type { SearchItem, SearchResults } from "@/types/search";
 
 // Per request, and the backend answer is never put in Next's data cache:
@@ -61,6 +63,12 @@ const DOCUMENTS_LEDE = (
   <>
     Floor speeches, executive orders, federal rules and Supreme Court opinions, searched by topic or
     by exact name, number or &ldquo;quoted phrase&rdquo;. Many rules are open for public comment.
+  </>
+);
+const SEARCH_LEDE = (
+  <>
+    One box for everything Civitas keeps: members, bills, roll calls, agencies, committees,
+    districts, races, ballot measures, issues, nominations, documents and the site&apos;s own pages.
   </>
 );
 // Links back to /search never prefetch: each prefetch would be a search,
@@ -141,8 +149,11 @@ function Chips({ q, tab, data }: { q: string; tab: string; data: SearchResults |
     { tab: DOCUMENTS, label: "Documents" },
   ];
   return (
+    // On a phone one row that scrolls sideways (six chips wrapped to three
+    // rows and pushed the first result off the first screen); from 640px
+    // they wrap. Each chip is a link, so Tab scrolls the row to it.
     <nav aria-label="Filter the results" className="mt-6">
-      <ul className="flex flex-wrap gap-2">
+      <ul className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
         {chips.map((c) => {
           const current = c.tab === tab;
           return (
@@ -151,7 +162,7 @@ function Chips({ q, tab, data }: { q: string; tab: string; data: SearchResults |
                 prefetch={false}
                 href={chipHref(q, c.tab)}
                 aria-current={current ? "page" : undefined}
-                className={`inline-flex min-h-11 items-center gap-2 border px-3 font-mono text-xs ${current ? CHIP_ON : CHIP_OFF}`}
+                className={`inline-flex min-h-11 items-center gap-2 whitespace-nowrap border px-3 font-mono text-xs ${current ? CHIP_ON : CHIP_OFF}`}
               >
                 {c.label}
                 {c.count !== undefined && c.count > 0 && (
@@ -166,20 +177,54 @@ function Chips({ q, tab, data }: { q: string; tab: string; data: SearchResults |
   );
 }
 
-function ItemLink({ item, showGroup = false }: { item: SearchItem; showGroup?: boolean }) {
+/** A document's own words, its query matches marked (never set as HTML). */
+function Snippet({ text }: { text: string }) {
   return (
-    <Link
+    <p className="font-sans leading-relaxed">
+      {splitHighlights(text).map((seg, i) =>
+        seg.match ? (
+          <mark key={i} className="bg-phos/10 px-0.5 text-ink-hi underline decoration-phos">
+            {seg.text}
+          </mark>
+        ) : (
+          <span key={i}>{seg.text}</span>
+        )
+      )}
+    </p>
+  );
+}
+
+/** One result as a compact record box: its kind as the kicker (on the
+ * merged list, where kinds are mixed), its name as the linked title, the
+ * index's context line (template fields: type, issuer, date) as its line,
+ * and a document's own words around the query behind "More". */
+function ResultBox({ item, showGroup = false }: { item: SearchItem; showGroup?: boolean }) {
+  return (
+    <RecordBox
+      compact
+      level={3}
+      kicker={showGroup ? item.group : undefined}
+      title={item.label}
       href={item.url}
-      className="group flex min-h-11 flex-col justify-center gap-0.5 border-b border-white/15 py-2 hover:bg-white/[0.04]"
-    >
-      <span className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-        <span className="font-sans text-base font-semibold text-ink-hi underline decoration-ink-min underline-offset-4 group-hover:decoration-ink-hi">
-          {item.label}
-        </span>
-        {showGroup && <span className="font-mono text-xs text-ink-lo">{item.group}</span>}
-      </span>
-      {item.context && <span className="font-mono text-xs text-ink-min">{item.context}</span>}
-    </Link>
+      dek={item.context || undefined}
+      more={
+        item.snippet
+          ? { label: "the document's words", children: <Snippet text={item.snippet} /> }
+          : null
+      }
+    />
+  );
+}
+
+/** Result boxes in the record's ruled columns: one on a phone, two from
+ * 40rem of the list's own width. */
+function ResultGrid({ items, showGroup }: { items: SearchItem[]; showGroup?: boolean }) {
+  return (
+    <BoxGrid columns={2}>
+      {items.map((item) => (
+        <ResultBox key={item.url} item={item} showGroup={showGroup} />
+      ))}
+    </BoxGrid>
   );
 }
 
@@ -272,10 +317,14 @@ export default async function SearchPage({ searchParams }: { searchParams: Param
       <Navbar />
       <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
         <div className="mx-auto max-w-4xl">
-          <PageMasthead eyebrow="The whole record" title="Search">
-            One box for everything Civitas keeps: members, bills, roll calls, agencies, committees,
-            districts, races, ballot measures, issues, nominations, documents and the site&apos;s
-            own pages.
+          {/* Folded on a phone once something is asked, so the results
+              start on the first screen (as the Documents filter does). */}
+          <PageMasthead
+            eyebrow="The whole record"
+            title="Search"
+            more={q ? SEARCH_LEDE : undefined}
+          >
+            {q ? null : SEARCH_LEDE}
           </PageMasthead>
 
           <div className="mt-6">
@@ -322,9 +371,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Param
                     Close call. Which one did you mean?
                   </h2>
                   <div className="mt-2">
-                    {data.alternatives.map((a) => (
-                      <ItemLink key={a.url} item={a} showGroup />
-                    ))}
+                    <ResultGrid items={data.alternatives} showGroup />
                   </div>
                 </section>
               )}
@@ -343,7 +390,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Param
               <section aria-labelledby="results-heading">
                 <h2
                   id="results-heading"
-                  className="flex flex-wrap items-baseline justify-between gap-2 border-b-2 border-ink-lo pb-1 font-mono text-xs text-ink-hi"
+                  className="flex flex-wrap items-baseline justify-between gap-2 pb-1 font-mono text-xs text-ink-hi"
                 >
                   <span>
                     {total === 0
@@ -356,11 +403,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Param
                     <span className="text-ink-lo">showing the first {shown.length}</span>
                   )}
                 </h2>
-                <div>
-                  {shown.map((item) => (
-                    <ItemLink key={item.url} item={item} showGroup={!tab} />
-                  ))}
-                </div>
+                <ResultGrid items={shown} showGroup={!tab} />
                 {!tab && data.kinds.some((k) => k.kind === "document") && (
                   <Link
                     prefetch={false}
@@ -378,9 +421,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Param
                     <>
                       <p className="font-mono text-sm text-ink-hi">Closest by spelling:</p>
                       <div className="mt-2">
-                        {data.near.map((a) => (
-                          <ItemLink key={a.url} item={a} showGroup />
-                        ))}
+                        <ResultGrid items={data.near} showGroup />
                       </div>
                     </>
                   ) : (

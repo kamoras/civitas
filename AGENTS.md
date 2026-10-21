@@ -2969,6 +2969,10 @@ not a paragraph or a box. On a ballot page the box lines are counts and
 labels only: what a measure does, what yes or no means and every deadline
 stay quoted where §7 puts them, never summarised in a box.
 
+Site search's results (`/search?q=`) are compact boxes: the kind as the
+kicker, the index's context line as the line, and a document's `snippet`
+(its own words around the query, matches marked) behind "More".
+
 #### Empty defaults are content (2026-10)
 
 A default view that renders zeros or "nothing found" on an ordinary day is a
