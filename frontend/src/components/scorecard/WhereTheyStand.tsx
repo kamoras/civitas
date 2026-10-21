@@ -9,6 +9,7 @@ import type { ScoreSnapshot } from "@/lib/api";
 import { currentCongress, shortDate } from "@/lib/congress";
 import type { PeerComparison, PeerGroupKey, PeerMeasure } from "@/types/peers";
 import { onThisPage } from "@/lib/onThisPage";
+import StripPoints, { BigFigure, StripAxis, type StripPoint } from "@/components/shared/Strip";
 
 /** How each row's figure is printed on its axis and in its table: the
  *  backend's values, formatted only. */
@@ -37,19 +38,16 @@ export function Dot({
   ring,
   className = "",
   style,
-  title,
 }: {
   size: number;
   fill: string;
   ring?: string;
   className?: string;
   style?: React.CSSProperties;
-  title?: string;
 }) {
   const r = size / 2;
   return (
     <svg width={size} height={size} className={className} style={style}>
-      {title && <title>{title}</title>}
       <circle
         cx={r}
         cy={r}
@@ -66,19 +64,35 @@ export function Dot({
  *  countable without moving (a beeswarm pressed into 20px). */
 const JITTER = [10, 4, 16, 7, 13, 1, 19, 10];
 
-function Strip({ m, name }: { m: PeerMeasure; name: string }) {
+/** A small mark's centre in the band: its jittered top plus its radius. */
+const jitterY = (i: number, size: number) => 12 + JITTER[i % JITTER.length] / 2 + size / 2;
+
+function Strip({ m, memberId }: { m: PeerMeasure; memberId: string }) {
   const max = axisMax(m);
-  const at = (v: number) => `${Math.min(100, (v / max) * 100)}%`;
+  const at = (v: number) => Math.min(100, (v / max) * 100);
   const muted = m.thin;
-  // The tick's label sits under the tick, but near either end it is pinned
-  // to that end and takes the end label's place, so it never runs off the
-  // strip or over the 0 (a 1.5% expected break rate did both).
-  const tick = m.expected == null ? null : Math.min(100, (m.expected / max) * 100);
-  const edge = tick == null ? null : tick < 15 ? "start" : tick > 85 ? "end" : null;
+  const points: StripPoint[] = m.distribution.map((v, i) => {
+    const id = m.distributionIds[i];
+    return {
+      id,
+      name: m.distributionNames[i],
+      detail: m.distributionSeats[i],
+      shown: m.distributionShown[i],
+      rank: m.distributionRanks[i],
+      href: `/politicians/${id}`,
+      x: at(v),
+      y: id === memberId ? 22 : jitterY(i, 6),
+    };
+  });
   return (
     <div className="min-w-0">
-      {/* The table below is the accessible form of this strip. */}
-      <div aria-hidden="true" className="relative h-10">
+      {/* The table below is the full text form of this strip. */}
+      <StripPoints
+        label={`${m.label}, ${m.peerGroup.label}`}
+        points={points}
+        startId={memberId}
+        className="h-10"
+      >
         <div className="absolute inset-x-0 top-[22px] h-px bg-white/40" />
         {m.distribution.map((v, i) => (
           <Dot
@@ -87,15 +101,14 @@ function Strip({ m, name }: { m: PeerMeasure; name: string }) {
             fill={
               muted ? "color-mix(in srgb, var(--overlay) 25%, transparent)" : "var(--chart-muted)"
             }
-            title={`${m.distributionNames[i]}: ${fmt(m, v)}`}
             className="absolute -translate-x-1/2"
-            style={{ left: at(v), top: `${12 + JITTER[i % JITTER.length] / 2}px` }}
+            style={{ left: `${at(v)}%`, top: `${jitterY(i, 0)}px` }}
           />
         ))}
         {m.expected != null && (
           <span
             className="absolute top-1 h-8 -translate-x-1/2 border-l-2 border-dashed border-ink-hi"
-            style={{ left: at(m.expected) }}
+            style={{ left: `${at(m.expected)}%` }}
           />
         )}
         {m.value != null && (
@@ -103,32 +116,26 @@ function Strip({ m, name }: { m: PeerMeasure; name: string }) {
             size={14}
             fill="var(--ink-hi)"
             ring="var(--phos)"
-            title={`${name}: ${m.shown}`}
             className="absolute top-[15px] -translate-x-1/2"
-            style={{ left: at(m.value) }}
+            style={{ left: `${at(m.value)}%` }}
           />
         )}
-      </div>
-      <div className="relative flex h-5 justify-between text-xs text-ink-min" aria-hidden="true">
-        <span className={edge === "start" ? "invisible" : ""}>{fmt(m, 0)}</span>
-        {m.expected != null && (
-          <span
-            className={`absolute font-semibold whitespace-nowrap text-ink-lo ${edge ? "" : "-translate-x-1/2"}`}
-            style={
-              edge === "start"
-                ? { left: 0 }
-                : edge === "end"
-                  ? { right: 0 }
-                  : { left: at(m.expected) }
-            }
-          >
-            {m.expectedBasis === "seat"
-              ? `${fmt(m, m.expected)} seat average`
-              : `median ${fmt(m, m.expected)}`}
-          </span>
-        )}
-        <span className={edge === "end" ? "invisible" : ""}>{fmt(m, max)}</span>
-      </div>
+      </StripPoints>
+      <StripAxis
+        start={fmt(m, 0)}
+        end={fmt(m, max)}
+        tick={
+          m.expected == null
+            ? null
+            : {
+                at: at(m.expected),
+                text:
+                  m.expectedBasis === "seat"
+                    ? `${fmt(m, m.expected)} seat average`
+                    : `median ${fmt(m, m.expected)}`,
+              }
+        }
+      />
     </div>
   );
 }
@@ -174,12 +181,12 @@ function OverTime({ m, snapshots }: { m: PeerMeasure; snapshots: ScoreSnapshot[]
 
 function Row({
   m,
-  name,
+  memberId,
   showTable,
   snapshots,
 }: {
   m: PeerMeasure;
-  name: string;
+  memberId: string;
   showTable: boolean;
   snapshots: ScoreSnapshot[] | null;
 }) {
@@ -193,9 +200,10 @@ function Row({
       <div className="flex items-baseline justify-between gap-3 md:block">
         <div>
           <div className="text-[13px] font-semibold text-ink-lo">{m.label}</div>
-          <p className="text-[28px] font-semibold leading-tight text-ink-hi sm:text-[32px]">
-            {m.shown ?? "No record"}
-          </p>
+          <BigFigure
+            shown={m.shown}
+            className="text-[28px] font-semibold leading-tight text-ink-hi sm:text-[32px]"
+          />
         </div>
         <p
           className={`text-right text-[13px] font-semibold md:hidden ${strong ? "text-signal-orange" : "text-ink-lo"}`}
@@ -205,7 +213,7 @@ function Row({
       </div>
       <div className="min-w-0">
         <p className="mb-1 text-sm text-ink">{m.why}</p>
-        <Strip m={m} name={name} />
+        <Strip m={m} memberId={memberId} />
       </div>
       <p
         className={`hidden self-center text-[13px] font-semibold md:block ${strong ? "text-signal-orange" : "text-ink-lo"}`}
@@ -401,7 +409,7 @@ export default function WhereTheyStand({
                 )}
                 <Row
                   m={m}
-                  name={name}
+                  memberId={memberId}
                   showTable={showTable}
                   snapshots={history?.snapshots ?? null}
                 />

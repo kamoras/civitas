@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import Field, PrivateAttr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.site_url import DEFAULT_SITE_URL, domain_of
 from app.time_utils import congress_in_session
 
 
@@ -189,6 +190,10 @@ class Settings(BaseSettings):
     # only, for the scripts that run on a bare python3); declared here so a
     # .env that sets it isn't refused as an unknown key.
     CONTACT_EMAIL: str = ""
+    # The site's public address: every link the backend writes (posts,
+    # feeds, the public API's siteUrl, record cards) starts with it. Default
+    # and rules in app.site_url; a self-hosted copy sets SITE_URL in .env.
+    SITE_URL: str = DEFAULT_SITE_URL
     ALERT_NTFY_URL: str = ""    # e.g. https://ntfy.sh/<private-topic>
     PIPELINE_OVERRUN_ALERT_HOURS: float = 8.0
     # How long a nightly pipeline may go with no SUCCESSFUL completion
@@ -210,6 +215,11 @@ class Settings(BaseSettings):
     @property
     def current_congress_pinned(self) -> bool:
         return self._current_congress_pinned
+
+    @property
+    def SITE_DOMAIN(self) -> str:  # noqa: N802 (reads like the settings it derives from)
+        """SITE_URL's host: "example.org" for "https://example.org"."""
+        return domain_of(self.SITE_URL)
 
     def __getattribute__(self, name):
         # A pipeline run's held Congress (scoring_congress) answers for

@@ -537,6 +537,67 @@ class TestFullTextPreferredOverTeaser:
         assert entry.summary == "The committee will vote Thursday."
 
 
+class TestPhotoCaptionsAreNotTheBody:
+    """A WordPress feed's content:encoded opens with the featured image as
+    <figure><img><figcaption>…</figcaption></figure>. The caption is not the
+    article's text: read as its first sentence, it became a race post
+    (post 148: a candidate "speaks to Montana Democrats during a gathering
+    ... during the summer of 2026"). Told by the markup, not the wording."""
+
+    # The shape Daily Montanan's feed served on 2026-10-21 (names changed).
+    STATES_NEWSROOM_ITEM = """<?xml version="1.0"?>
+        <rss xmlns:content="http://purl.org/rss/1.0/modules/content/">
+          <channel><item>
+            <title>Jane Roe wants to be the fighter in D.C.</title>
+            <link>https://example.com/roe</link>
+            <description><![CDATA[Jane Roe's quest to win a U.S. Senate seat as a newcomer doesn't sound impossible to a former governor. [&#8230;]]]></description>
+            <content:encoded><![CDATA[<figure><img width="1024" src="https://example.com/roe.jpg" class="attachment-large size-large wp-post-image" alt="" /><figcaption><p style="font-size:12px;">Jane Roe speaks to Montana Democrats during a gathering in Billings during the summer. (Photo by A. Photographer for the Example Ledger)</p></figcaption></figure><p class="wp-block-paragraph">Jane Roe's quest to win a U.S. Senate seat as a newcomer doesn't sound impossible to a former governor.</p>
+<figure class="wp-block-image"><img src="https://example.com/2.jpg"/><figcaption>A second photo mid-article.</figcaption></figure>
+<p class="wp-block-paragraph">The former governor endorsed Roe after the primary.</p>]]></content:encoded>
+          </item></channel>
+        </rss>"""
+
+    def test_featured_image_caption_is_dropped_from_the_summary(self):
+        article = _parse_rss_feed(self.STATES_NEWSROOM_ITEM.encode(), "Example Ledger", keep_old=True)[0]
+        assert article.summary == (
+            "Jane Roe's quest to win a U.S. Senate seat as a newcomer doesn't sound "
+            "impossible to a former governor. The former governor endorsed Roe after the primary."
+        )
+        assert "Photo by" not in article.summary
+        assert "speaks to Montana Democrats" not in article.summary
+        assert "second photo" not in article.summary
+
+    def test_caption_only_body_falls_back_to_the_description(self):
+        article = _parse_rss_feed(
+            """<?xml version="1.0"?>
+            <rss xmlns:content="http://purl.org/rss/1.0/modules/content/">
+              <channel><item>
+                <title>Roe rallies supporters</title>
+                <link>https://example.com/roe2</link>
+                <description>Roe told supporters she would hold town halls in every county.</description>
+                <content:encoded><![CDATA[<figure><img src="https://example.com/x.jpg"/><figcaption>Roe at a rally.</figcaption></figure>]]></content:encoded>
+              </item></channel>
+            </rss>""".encode(),
+            "Test",
+            keep_old=True,
+        )[0]
+        assert article.summary == "Roe told supporters she would hold town halls in every county."
+
+    def test_a_figure_cut_off_by_the_source_takes_nothing_after_it(self):
+        assert _strip_html("<p>Lede sentence.</p><figure><img src='x'/><figcaption>Cut capt") == "Lede sentence."
+
+    def test_atom_xhtml_content_skips_figure_elements(self):
+        el = ElementTree.fromstring(
+            '<content xmlns="http://www.w3.org/1999/xhtml"><figure><img src="x"/>'
+            "<figcaption>A caption.</figcaption></figure><p>The lede.</p></content>"
+        )
+        assert _extract_body_text(el) == "The lede."
+
+    def test_prose_mentioning_a_figure_is_kept(self):
+        """Only the markup counts: the word in a sentence is prose."""
+        assert _strip_html("<p>The figure caption read: none.</p>") == "The figure caption read: none."
+
+
 def _feed_response(xml: bytes) -> MagicMock:
     resp = MagicMock()
     resp.content = xml

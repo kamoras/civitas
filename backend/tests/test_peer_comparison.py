@@ -2,6 +2,7 @@
 percentile, the word's rule, the sentence, and the peer group."""
 
 from app import peer_comparison as pc
+from app.ordinals import RIGHTMOST, rank_shown
 
 
 def _member(mid, caucus="D", party=None, small=0.2, pac=0.1, breaks=0, votes=100, stages=(5, 1, 1, 0, 0),
@@ -132,3 +133,30 @@ def test_every_strip_says_what_it_answers_and_why(monkeypatch):
         assert not ({"better", "worse", "good", "bad"} & set(m["why"].lower().replace(";", " ").split()))
     assert out["standsOut"] == "Close to peers on every measure."
     assert out["standsOutWhy"] == pc.NONE_STANDS_OUT_WHY
+
+
+def test_rank_words_share_a_place_on_ties():
+    v = [1, 2, 2, 3, 5]
+    assert [rank_shown(x, v) for x in v] == ["Lowest of 5", "Tied for 3rd highest of 5",
+                                             "Tied for 3rd highest of 5", "2nd highest of 5", "Highest of 5"]
+    assert rank_shown(4, [4, 4]) == "Tied for highest of 2"
+    assert rank_shown(0.3, [-1, 0.3, 2], RIGHTMOST) == "2nd from the right of 3"
+
+
+def test_every_dot_carries_its_seat_and_place(monkeypatch):
+    """The strips' hover labels: each peer's party and seat and place on the
+    row, computed here so the page only prints them."""
+    rows = [_member(f"d{i}", small=i / 40) for i in range(5)]
+    rows[4]["district"] = 5
+    rows[3]["district"] = 0
+    _rows(monkeypatch, rows)
+    small = {m["key"]: m for m in pc.peer_comparison(None, "house", "d0")["measures"]}["smallGifts"]
+    assert small["distributionSeats"][-2:] == ["D-OR-AL", "D-OR-5"]
+    assert small["distributionShown"][-1] == "10%"
+    breaks = {m["key"]: m for m in pc.peer_comparison(None, "house", "d0")["measures"]}["breaks"]
+    assert breaks["distributionShown"][0] == "0 of 100"
+    assert small["distributionRanks"] == ["Lowest of 5", "4th highest of 5", "3rd highest of 5",
+                                          "2nd highest of 5", "Highest of 5"]
+    assert pc.peer_comparison(None, "senate", "d0")["measures"][0]["distributionSeats"][0] == "D-OR"
+    points = {m["key"]: m for m in pc.chamber_measures(None, "senate")["measures"]}["smallGifts"]["points"]
+    assert points[-1]["rank"] == "Highest of 5" and points[0]["rank"] == "Lowest of 5"

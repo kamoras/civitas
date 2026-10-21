@@ -421,6 +421,12 @@ def test_a_failed_try_is_retried_within_a_week_whatever_the_cadence():
         kept_fine = dr.Context("name_casing.json", {}, date(2026, 10, 26), datetime(2026, 10, 18))
         assert not failed.tried_within(365)
         assert kept_fine.tried_within(365)
+    # A try that finished at 18:48 is a week old at the 15:40 run a week on,
+    # and a day old at the next day's (2026-10-18's heavy refreshes).
+    with patch.object(dr, "utcnow", return_value=datetime(2026, 10, 25, 15, 40)):
+        assert not dr.Context("x.json", {}, date(2026, 10, 25), datetime(2026, 10, 18, 18, 48), True).tried_within(7)
+        assert not dr.Context("x.json", {}, date(2026, 10, 25), datetime(2026, 10, 24, 18, 48)).tried_within(1)
+        assert dr.Context("x.json", {}, date(2026, 10, 25), datetime(2026, 10, 25, 9, 0)).tried_within(1)
 
 
 def test_the_last_try_remembers_a_kept_outcome(db_session):
@@ -450,3 +456,23 @@ def test_a_search_calibration_alerts_on_a_kind_its_fit_never_saw(monkeypatch):
     assert "records no kinds" in check(_ctx("site_search_calibration.json", {"params": {}}))
     monkeypatch.setattr(dr.site_search, "index_kinds", lambda: None)
     assert check(_ctx("site_search_calibration.json", {"kinds": []})) is None
+
+
+def test_a_shipped_regeneration_is_refreshed_the_next_day(alerts, tmp_path):
+    # 2026-10-19: #1113 committed the House fit through 2024, and the map
+    # kept serving the refit of 2026-10-18 (through 2022) from /data.
+    (tmp_path / "t_ship.json").write_text(json.dumps({"v": 1}))
+    spec = dr.DataFile("t_ship.json", command=lambda ctx: _writer({"v": 2}), due=lambda ctx: False)
+    with patch.object(dr, "BUNDLED", tmp_path), patch.object(dr, "_record_try"), \
+         patch.object(dr, "_last_try", return_value=(None, False)):
+        assert dr.refresh_one(spec, _ctx("t_ship.json")) == "refreshed"
+        assert dr.read("t_ship.json")["_refreshed"]["bundled"] == dr.content_sha256({"v": 1})
+        assert dr.run_refreshes([spec]) == {"t_ship.json": "current"}  # nothing shipped since
+        (tmp_path / "t_ship.json").write_text(json.dumps({"v": 3}))  # a commit regenerates it
+        assert dr.bundled_moved("t_ship.json", dr.read("t_ship.json"))
+        # The same content as in use: nothing installed, but now measured
+        # against what shipped, so it is not refreshed again every day.
+        assert dr.run_refreshes([spec]) == {"t_ship.json": "unchanged"}
+        assert not dr.bundled_moved("t_ship.json", dr.read("t_ship.json"))
+    # A copy installed before the record existed is not told apart.
+    assert not dr.bundled_moved("t_ship.json", {"v": 2, "_refreshed": {"at": "2026-10-18T18:48:52"}})

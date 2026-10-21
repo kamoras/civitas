@@ -7,6 +7,8 @@ Tests the tiered classification strategy:
 4. kNN fallback
 """
 
+import json
+import numpy as np
 import pytest
 from unittest.mock import patch
 
@@ -500,3 +502,52 @@ class TestSkipNamesBatch:
         assert classify_skip_names_batch([]) == set()
         assert classify_employer_skips_batch([]) == set()
         assert classify_transfer_memos_batch([]) == set()
+
+
+
+def test_the_payment_processor_tier_reads_its_fitted_gate(monkeypatch):
+    """Measured on FEC conduit and memo codes (scripts/calibrate_donor_gates.py),
+    the embedding tier skipped real committees and no processor: closed, it
+    never runs the model, and the keyword tier still decides."""
+    dc = donor_classifier_ai
+    data = json.loads(dc.GATE_CALIBRATION_PATH.read_text())
+    assert data["gates"]["payment_processor"]["applied"] is True and data["labels_sha256"]["payment_processor"]
+    assert all(g.get("applied") is False and g["not_applied_because"]
+               for name, g in data["gates"].items() if name != "payment_processor")
+    monkeypatch.setattr(dc, "_gate_cache", {"payment_processor": {"threshold": None}})
+    monkeypatch.setattr(dc, "_skip_memo", {})
+    assert dc.is_skip_entity("NATIONAL ASSOCIATION OF REALTORS PAC") is False
+    assert dc.is_skip_entity("ACTBLUE") is True
+    assert dc.skip_entities_batch(["ACTBLUE", "WINRED", "ACME CORP"]) == {"ACTBLUE", "WINRED"}
+
+
+def test_an_open_payment_processor_gate_runs_the_model_at_its_fitted_threshold(monkeypatch, tmp_path):
+    """A fitted number (not null) reopens the embedding tier at that number,
+    for one name and for a batch alike."""
+    dc = donor_classifier_ai
+    path = tmp_path / "donor_gate_calibration.json"
+    path.write_text(json.dumps({"gates": {"payment_processor": {"threshold": 0.9}}}))
+    monkeypatch.setattr(dc, "GATE_CALIBRATION_PATH", path)
+    monkeypatch.setattr(dc, "_gate_cache", None)
+    monkeypatch.setattr(dc, "_skip_memo", {})
+    assert dc.gate_threshold("payment_processor") == 0.9
+
+    proto = np.array([1.0, 0.0])
+    vectors = {"PAYCO": np.array([1.0, 0.0]), "ACME CORP": np.array([0.6, 0.8])}  # cosine 1.0 and 0.6
+
+    class FakeModel:
+        def encode(self, names, show_progress_bar=False):
+            return [vectors[n] for n in names]
+
+    monkeypatch.setattr(dc, "_get_skip_prototype_embedding", lambda key, text: proto)
+    with (
+        patch("app.pipeline.vector_store.get_embedding_model", return_value=FakeModel()),
+        patch(
+            "app.pipeline.vector_store.encode_normalized",
+            side_effect=lambda model, names: np.array([vectors[n] for n in names]),
+        ),
+    ):
+        assert dc.is_skip_entity("PAYCO") is True
+        assert dc.is_skip_entity("ACME CORP") is False
+        monkeypatch.setattr(dc, "_skip_memo", {})
+        assert dc.skip_entities_batch(["ACTBLUE", "PAYCO", "ACME CORP"]) == {"ACTBLUE", "PAYCO"}

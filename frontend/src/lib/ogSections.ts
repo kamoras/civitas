@@ -105,7 +105,7 @@ export const SECTION_CARDS: Record<string, SectionCard> = {
   },
   "/congress/members/measures": {
     eyebrow: "Congress",
-    title: "Congress, measure by measure",
+    title: "Congress by the numbers",
     subtitle: "Small gifts, PAC money, party breaks and bills, side by side, with no rank.",
   },
   "/congress/nominations": {

@@ -1,16 +1,28 @@
 """Unit tests for bluesky_poster helpers.
 
 All tests are fast (no LLM, no network) — they exercise _is_near_duplicate and
-_validate_facts which are pure functions with no external dependencies.
+_validate_facts. The near-duplicate check is given a bag-of-words encoder in
+place of the similarity model, at the restatement cut in use.
 """
 
+import re
+from collections import Counter
 
+import numpy as np
 import pytest
 
 from unittest.mock import patch
 
+from app.pipeline.analyze import claims
 from app.pipeline.analyze.bluesky_poster import _is_near_duplicate
 from app.pipeline.analyze.grounding import validate_facts as _validate_facts
+
+
+def _bag_of_words(texts):
+    words = [Counter(re.findall(r"[a-z0-9]+", t.lower())) for t in texts]
+    vocab = sorted(set().union(*words))
+    m = np.array([[w[v] for v in vocab] for w in words], dtype=float)
+    return m / np.maximum(np.linalg.norm(m, axis=1, keepdims=True), 1e-9)
 
 
 # ---------------------------------------------------------------------------
@@ -27,9 +39,14 @@ class TestIsNearDuplicate:
                 True, id="identical_text_is_duplicate",
             ),
             pytest.param(
-                "On Thursday the Senate passed the funding bill by a 68-32 vote.",
-                ["The Senate passed the funding bill on a 68-32 vote Thursday."],
-                True, id="reworded_same_story_is_duplicate",
+                "Yesterday: The Senate passed the funding bill on a 68-32 vote.",
+                ["The Senate passed the funding bill on a 68-32 vote."],
+                True, id="the_date_prefix_is_not_part_of_the_claim",
+            ),
+            pytest.param(
+                "The Senate passed the funding bill on a 68-32 vote Thursday.",
+                ["Thursday the Senate passed the funding bill on a 68-32 vote."],
+                True, id="reworded_same_claim_is_duplicate",
             ),
             pytest.param(
                 "The Senate passed the funding bill on a 68-32 vote.",
@@ -57,7 +74,13 @@ class TestIsNearDuplicate:
         ],
     )
     def test_is_near_duplicate(self, candidate, priors, expected):
-        assert _is_near_duplicate(candidate, priors) is expected
+        assert claims.restatement_calibration()["threshold"]  # the data-fitted cut, not a typed one
+        assert _is_near_duplicate(candidate, priors, encode=_bag_of_words) is expected
+
+    def test_a_scoring_failure_keeps_the_post(self):
+        def broken(texts):
+            raise RuntimeError("no model")
+        assert _is_near_duplicate("A new claim.", ["Another claim."], encode=broken) is False
 
 
 # ---------------------------------------------------------------------------

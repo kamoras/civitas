@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from app import data_refresh
 from app.models import ExploreDocument, Justice, JusticeVote
+from app.ordinals import RIGHTMOST, rank_shown
 from app.photos import justice_photo
 from app.services.explore_keys import public_key
 from app.time_utils import utcnow
@@ -225,6 +226,10 @@ def court(db: Session, recent: int = 10) -> dict:
     # confirmed) after, by seniority.
     rows.sort(key=lambda r: (r["mq"] is None, r["mq"]["position"] if r["mq"] else 0, r["dateStart"] or ""))
     placed = [r["id"] for r in rows if r["mq"]]
+    # Each placed justice's place on the line, for the strip's hover label.
+    ascending = [r["mq"]["position"] for r in rows if r["mq"]]
+    for r in rows:
+        r["rank"] = rank_shown(r["mq"]["position"], ascending, RIGHTMOST) if r["mq"] else None
     median = [placed[len(placed) // 2]] if len(placed) % 2 else placed[len(placed) // 2 - 1:len(placed) // 2 + 1]
 
     sitting = [r["id"] for r in rows]

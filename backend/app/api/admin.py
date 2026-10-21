@@ -17,6 +17,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app import background, database, net_stats, ops_alerts, pipeline_chain
+from app.api.auth import configured_token
 from app.api.elections import ballot_state_codes
 from app.api.pipeline import _is_pipeline_running
 from app.api.pipeline_runner import run_pipeline_in_thread
@@ -100,7 +101,7 @@ router = APIRouter(prefix="/admin")
 
 
 def _get_admin_token() -> str:
-    return settings.ADMIN_TOKEN or settings.PIPELINE_TRIGGER_TOKEN
+    return configured_token(settings.ADMIN_TOKEN) or configured_token(settings.PIPELINE_TRIGGER_TOKEN)
 
 
 def require_admin(authorization: str | None = Header(default=None)) -> None:

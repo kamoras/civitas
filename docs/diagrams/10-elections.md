@@ -484,8 +484,9 @@ links to its election office, never as a state where nothing has happened.
   stored count that a state's read no longer lists (`_dropped_races`; the
   page tags it NOT IN LATEST READ). In the 14 days before election day a
   daily job reads every covered state's staged feed as the sync will,
-  storing nothing, and alerts on no count, a refused one, or a race with no
-  contest (`live_results/readiness.py`). A walled feed is never worked
+  storing nothing, and raises one alert a day naming each state with no
+  count, a refused one, or a race with no contest, with its reason
+  (`live_results/readiness.py`). A walled feed is never worked
   around, and a ranked-choice state (Maine, Alaska) is never read live: its
   election-night count is first choices only.
 - Civitas never calls a race. A count is "leading" — "not final" until the

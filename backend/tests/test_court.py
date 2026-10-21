@@ -67,6 +67,8 @@ def test_the_line_orders_by_position_and_marks_the_median(db_session):
     assert [j["id"] for j in c["justices"]] == ALL
     assert c["mqTerm"] == 2024 and c["median"] == ["middle"]
     assert c["justices"][0]["mq"] == {"term": 2024, "position": -2.0, "low": -2.5, "high": -1.5}
+    assert c["justices"][0]["rank"] == "Furthest left of 5"
+    assert c["justices"][-1]["rank"] == "Furthest right of 5"
 
 
 def test_a_justice_without_a_position_for_the_term_is_listed_after_the_line(db_session):

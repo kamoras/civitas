@@ -23,6 +23,8 @@ export interface CourtJustice {
   photo: string | null;
   /** Null for a justice with no position for `mqTerm` (newly confirmed). */
   mq: CourtPosition | null;
+  /** The place on the line ("Furthest left of 9"); null with no position. */
+  rank: string | null;
 }
 
 /** One pair of sitting justices: the cases both decided and how many of

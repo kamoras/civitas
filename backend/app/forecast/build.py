@@ -589,13 +589,34 @@ def check_training_staleness() -> None:
     if not behind:
         resolve_ops_alert(TRAINING_CONDITION)
         return
-    lines = [f"{chamber.capitalize()} (fit stops at {year}): " + "; ".join(_coverage_line(chamber, docs[chamber], due))
+    lines = [f"{chamber.capitalize()} (fit stops at {year}): "
+             + "; ".join(_shipped_line(TRAINING_FILES[chamber], docs[chamber], due)
+                         or _coverage_line(chamber, docs[chamber], due))
              for chamber, year in sorted(behind.items())]
-    send_ops_alert("Election map: fits are a cycle behind",
-                   f"The {due} general election's certified results are official, but the election map's fits "
-                   f"do not include it. " + " ".join(f"{line}." for line in lines) + " The map keeps the last "
-                   "fit and names its cycles; each chamber refits on its own once its inputs are there.",
-                   dedupe_key=f"{TRAINING_CONDITION}-{due}", condition=TRAINING_CONDITION)
+    body = (f"The {due} general election's certified results are official, but the election map's fits "
+            f"do not include it. " + " ".join(f"{line}." for line in lines) + " The map keeps the last "
+            "fit and names its cycles; each chamber refits on its own once its inputs are there.")
+    # Keyed on what it says: a changed reason replaces the open alert.
+    send_ops_alert("Election map: fits are a cycle behind", body,
+                   dedupe_key=f"{TRAINING_CONDITION}-{due}-{data_refresh.content_sha256({'b': lines})[:12]}",
+                   condition=TRAINING_CONDITION)
+
+
+def _shipped_line(name: str, doc: dict, due: int) -> list[str]:
+    """When the fit shipped with the code already reaches `due` and the
+    copy in use is an older refit (2026-10-19: #1113 shipped the House fit
+    through 2024 from the Clerk's statistics; the map kept the refit of the
+    day before, through 2022): say that, not that a source is missing."""
+    try:
+        bundled = json.loads((data_refresh.BUNDLED / name).read_text())
+    except (OSError, ValueError):
+        return []
+    if max((r["year"] for r in bundled.get("races") or []), default=0) < due:
+        return []
+    refreshed = (doc.get("_refreshed") or {}).get("at") or "an earlier refit"
+    return [f"the fit shipped with the code (app/data/{name}) includes {due}, but the copy in use is the refit "
+            f"of {refreshed}, which predates it; the next automatic refit (app/data_refresh.py, "
+            "forecast_model.json) installs it"]
 
 
 def run_refresh() -> None:

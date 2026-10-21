@@ -14,7 +14,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:a11y": "node scripts/axe-routes.mjs"
+    "test:a11y": "node scripts/axe-routes.mjs",
+    "asset-versions": "node scripts/assetVersions.mjs"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.3.3",
