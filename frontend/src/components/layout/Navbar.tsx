@@ -16,6 +16,7 @@ import { BSKY_PROFILE_URL } from "@/lib/site";
 import HeaderClearance from "./HeaderClearance";
 import RecordsBand, { RunStatusSquare } from "./RecordsBand";
 import SiteSearch from "@/components/search/SiteSearch";
+import ThemeToggle from "./ThemeToggle";
 import YourStatePicker from "./YourStatePicker";
 
 // The main navigation is the SECTIONS table (lib/routes.ts): each section's
@@ -396,7 +397,14 @@ export default function Navbar({
           /politicians) and never ran again, so at 200% text their wrapped
           header covered the page's first lines. */}
       <HeaderClearance />
-      <RecordsBand aside={<YourStatePicker />} />
+      <RecordsBand
+        aside={
+          <div className="flex items-center gap-4">
+            <YourStatePicker />
+            <ThemeToggle className="min-h-6 text-sm" />
+          </div>
+        }
+      />
       {/* The skip link is the root layout's, ahead of everything: a second
           one here cost keyboard users an extra Tab on every page. */}
       <nav aria-label="Main navigation" className="relative border-b-3 border-white/15">
@@ -604,6 +612,11 @@ export default function Navbar({
             </ul>
             <div className="border-b border-white/[0.07] py-3">
               <YourStatePicker size="lg" onNavigate={closeMenu} />
+            </div>
+            {/* Light or dark, at the top of every page (a reader asked for it
+                here rather than in the footer). */}
+            <div className="border-b border-white/[0.07] py-2 text-sm">
+              <ThemeToggle />
             </div>
             <a
               href={BSKY_PROFILE_URL}

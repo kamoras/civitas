@@ -45,7 +45,8 @@ from sqlalchemy.orm import Session
 from app import broadcast
 from app.issue_ids import to_public_id
 from app.models import ActionIssue
-from app.pipeline.analyze import action_metrics
+from app.pipeline import vector_store
+from app.pipeline.analyze import action_metrics, claims
 from app.pipeline.analyze.bluesky_utils import strip_hashtags
 from app.time_utils import utcnow
 
@@ -66,45 +67,49 @@ def _eastern_day_start(now: datetime) -> datetime:
     eastern = now.replace(tzinfo=timezone.utc).astimezone(_US_EAST)
     return eastern.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc).replace(tzinfo=None)
 
-# A repost whose body shares at least this fraction of its words with an
-# already-published post is treated as a near-duplicate and suppressed. Set
-# high enough that a genuine development (a new vote, a resolution, a fresh
-# number) still introduces enough new vocabulary to clear the bar, but low
-# enough to catch the same facts reworded. The failure directions are
-# asymmetric and both tolerable: a missed duplicate posts exactly as it did
-# before this guard existed, and a false positive suppresses one update
-# (logged, so it's observable) — the user asked us to err against repeats.
-_NEAR_DUP_JACCARD = 0.65
-
-_WORD_RE = re.compile(r"[a-z0-9]+")
-
-
-def _post_word_set(text: str) -> set[str]:
-    """Lowercased alphanumeric word set for near-duplicate comparison."""
-    return set(_WORD_RE.findall((text or "").lower()))
+# A post is a near-duplicate of one already published in the last few days
+# when it restates it: the same claim, or one the claim restatement cut says
+# reports the same fact (claims.restatement_calibration: the similarity-model
+# cosine the Action Center refits daily on its own published issues, from
+# pairs the data says are two facts, plus a stated margin). Posts are
+# verbatim claims (_compose_new_post), so the claims' own measure is the
+# right one. It replaced a word-set Jaccard of 0.65, a number set by hand.
+# A failure to score keeps the post: a missed duplicate posts as it would
+# have before this guard existed.
+_DATE_PREFIX = re.compile(r"^(?:Yesterday|On [A-Z][a-z]+ \d{1,2}): ")
 
 
-def _is_near_duplicate(candidate: str, prior_texts: list[str]) -> bool:
-    """True if ``candidate`` reads as essentially the same post as any of
-    ``prior_texts``, by word-set Jaccard overlap.
+def _claim_of(text: str) -> str:
+    """A post's claim, without the date prefix _staleness_prefix adds."""
+    return _DATE_PREFIX.sub("", (text or "").strip())
+
+
+def _is_near_duplicate(candidate: str, prior_texts: list[str], encode=None) -> bool:
+    """True if ``candidate`` restates any of ``prior_texts`` (comment above).
+    `encode` maps texts to unit vectors; the similarity model by default.
 
     Reposts fire whenever a topic gets a newer-dated article (the pipeline
     resets bsky_posted_at upstream), but ongoing coverage of one story often
-    carries the same title/summary/facts day to day, so the generated post
-    says the same thing again. Comparing against what we actually published
+    carries the same title/summary/facts day to day, so the post would say
+    the same thing again. Comparing against what we actually published
     catches that regardless of which row or run it came from.
     """
-    cand = _post_word_set(candidate)
-    if not cand:
+    claim = _claim_of(candidate)
+    priors = [p for p in (_claim_of(t) for t in prior_texts) if p]
+    if not claim or not priors:
         return False
-    for prior in prior_texts:
-        other = _post_word_set(prior)
-        if not other:
-            continue
-        overlap = len(cand & other) / len(cand | other)
-        if overlap >= _NEAR_DUP_JACCARD:
-            return True
-    return False
+    if claim in priors:
+        return True
+    try:
+        if encode is None:
+            def encode(texts):
+                return vector_store.encode_normalized(vector_store.get_similarity_model(), texts)
+        vectors = encode([claim, *priors])
+        threshold = claims.restatement_calibration()["threshold"]
+    except Exception:
+        logger.exception("Near-duplicate check failed; the post is kept")
+        return False
+    return any(float(vectors[0] @ v) >= threshold for v in vectors[1:])
 
 
 def _staleness_prefix(article_date: str | None, today: str) -> str:

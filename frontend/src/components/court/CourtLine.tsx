@@ -4,6 +4,7 @@ import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { SHARE_SECTION_ATTR, shareMetaAttrs } from "@/lib/shareImage";
 import { axisAt, positionDomain, signedPosition, surname } from "@/lib/court";
 import { onThisPage } from "@/lib/onThisPage";
+import StripPoints from "@/components/shared/Strip";
 
 const MQ_SOURCE = "Martin-Quinn scores (Martin and Quinn 2002), mqscores.wustl.edu";
 
@@ -54,8 +55,20 @@ export default function CourtLine({ court }: { court: Court }) {
 
           {/* The one line: every justice's estimate as a tick, the median
               marked. Drawn only; the table below states every figure. */}
-          <div aria-hidden="true" className="px-2 pt-2">
-            <div className="relative h-10">
+          <div className="px-2 pt-2">
+            <StripPoints
+              label="Martin-Quinn positions, sitting justices"
+              points={placed.map((j) => ({
+                id: j.id,
+                name: j.name,
+                shown: signedPosition(j.mq!.position),
+                rank: j.rank ?? "",
+                href: `/politicians/${encodeURIComponent(j.id)}`,
+                x: axisAt(j.mq!.position, lo, hi),
+                y: 22,
+              }))}
+              className="h-10"
+            >
               <span className="absolute inset-x-0 top-5 h-px bg-white/30" />
               <span className="absolute top-2 h-7 w-px bg-white/40" style={{ left: zero }} />
               {placed.map((j) => (
@@ -69,8 +82,8 @@ export default function CourtLine({ court }: { court: Court }) {
                   style={{ left: at(j.mq!.position) }}
                 />
               ))}
-            </div>
-            <div className="flex justify-between font-mono text-xs text-ink-min">
+            </StripPoints>
+            <div aria-hidden="true" className="flex justify-between font-mono text-xs text-ink-min">
               <span>&larr; liberal</span>
               <span>conservative &rarr;</span>
             </div>

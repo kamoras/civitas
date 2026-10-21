@@ -30,6 +30,11 @@ export interface PeerMeasure {
   distribution: number[];
   distributionIds: string[];
   distributionNames: string[];
+  /** Each figure as printed ("2 of 480"), same order. */
+  distributionShown: string[];
+  /** Party and seat ("D-CA", "R-TX-5") and place on the row ("3rd highest of 47"), same order. */
+  distributionSeats: string[];
+  distributionRanks: string[];
   record: number | null;
   source: { name: string; url: string };
   percentile: number | null;
@@ -58,6 +63,8 @@ export interface ChamberPoint {
   shown: string;
   expected: number | null;
   gap: number | null;
+  /** The place on this measure's strip ("3rd highest of 100"), for its hover label. */
+  rank: string;
 }
 
 export interface ChamberMeasure {

@@ -1,0 +1,21 @@
+{
+ "_source": "A vocabulary translation, not a classification: each of the Congressional Research Service's policy areas (the `policyArea` Congress.gov gives every bill; the list at https://www.congress.gov/help/field-values/policy-area) mapped to the bill classifier's taxonomy categories (pipeline/analyze/bill_analyzer.POLICY_TAXONOMY) that name the same subject. An area whose bills the taxonomy splits lists every category it can be (Health: HEALTHCARE or ABORTION; Crime and Law Enforcement: JUSTICE or GUNS). An area the taxonomy has no subject for, or that mixes procedural and substantive bills (Congress: chamber rules beside ethics and stock-trading bills; Government Operations and Politics), maps to nothing and labels no bill. Read by the calibration scripts as labels (scripts/calibrate_procedural.py); nothing in classification reads it.",
+ "areas": {
+  "Health": ["HEALTHCARE", "ABORTION"],
+  "Armed Forces and National Security": ["DEFENSE"],
+  "International Affairs": ["FOREIGN_POLICY"],
+  "Taxation": ["TAXES"],
+  "Crime and Law Enforcement": ["JUSTICE", "GUNS"],
+  "Education": ["EDUCATION"],
+  "Finance and Financial Sector": ["FINANCIAL"],
+  "Immigration": ["IMMIGRATION"],
+  "Energy": ["ENERGY"],
+  "Labor and Employment": ["LABOR"],
+  "Science, Technology, Communications": ["TECH"],
+  "Environmental Protection": ["ENVIRONMENT"],
+  "Foreign Trade and International Finance": ["TRADE"],
+  "Economics and Public Finance": ["ECONOMY"],
+  "Social Welfare": ["WELFARE"],
+  "Commemorations": ["PROCEDURAL"]
+ }
+}

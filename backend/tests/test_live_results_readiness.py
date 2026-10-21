@@ -81,10 +81,30 @@ class TestReadiness:
         assert problems["NE"].endswith("none for 2026-SEN-NE (a label the reader can't parse, or a contest not "
                                        "staged yet)")
         assert "2026-HOUSE-VA-2" in problems["VA"]
-        assert resolved == ["results-readiness-ND"]
-        by_state = {s.split(": ")[1]: kw for s, _, kw in sent}
-        assert by_state["NM"] == {"dedupe_key": "results-readiness-NM-2026-11-03-2026-10-25",
-                                  "condition": "results-readiness-NM"}
+        # One alert for the day, every state not ready named with its reason.
+        [(subject, body, kw)] = sent
+        assert subject == "Live results not ready: 6 of 7 states (AR, GA, MT, NE, NM, VA)"
+        assert kw == {"dedupe_key": "results-readiness-2026-11-03-2026-10-25", "condition": "results-readiness"}
+        for state, problem in problems.items():
+            assert f"\n- {state}: {problem}" in body
+        assert body.endswith("\nReady: ND.")
+        # The per-state conditions of the alerts before 2026-10 are cleared.
+        assert sorted(resolved) == sorted(f"results-readiness-{s}" for s in reads)
+
+    async def test_a_general_staged_before_its_contests_says_so(self, db_session, alerts, reads):
+        reads.update({"NM": _count()})
+        problems = await readiness.check_feed_readiness(db_session, None, DAY, date(2026, 10, 25))
+        assert problems == {"NM": "its feed serves the general but lists no federal contest yet (staged before "
+                                  "its contests)"}
+
+    async def test_every_state_ready_clears_the_alert(self, db_session, alerts, reads):
+        reads.update({"ND": _count(ContestCount(office="H", district=None, candidates=[("A", "R", 0)]))})
+        db_session.add(Race(id="2026-HOUSE-ND-0", cycle_year=2026, office="H", state="ND", district=0))
+        db_session.flush()
+        assert await readiness.check_feed_readiness(db_session, None, DAY, date(2026, 10, 25)) == {}
+        sent, resolved = alerts
+        assert sent == []
+        assert resolved == ["results-readiness-ND", "results-readiness"]
 
 
 class TestPollClose:

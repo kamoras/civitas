@@ -77,6 +77,7 @@ from app.pipeline.analyze.trend_relevance import (
 from app.pipeline.fetch.trending import BSKY_TRENDS_LIMIT, BlueskyTrend, fetch_bluesky_trends
 from app.services.bill_record import bill_label
 from app.services.record_cards import CHAMBER_NAMES, EVENT_SOURCE, RecordCard, card_for_key, og_query
+from app.site_assets import og_card_url
 from app.time_utils import COMMENT_DEADLINE_TZ, utcnow
 
 logger = logging.getLogger(__name__)
@@ -292,7 +293,7 @@ class Draft:
     @property
     def image_url(self) -> str | None:
         q = og_query(self.ev.record.key, self.show_title) if self.card else None
-        return f"{broadcast.SITE_URL}/api/og?{q}" if q else None
+        return og_card_url(q) if q else None
 
     @property
     def alt_text(self) -> str | None:

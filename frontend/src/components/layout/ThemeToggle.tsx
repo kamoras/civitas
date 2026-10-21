@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 
-/** The per-tab key the footer's choice is kept under. sessionStorage only:
+/** The per-tab key the header's choice is kept under. sessionStorage only:
  *  it lasts for this tab and is never a record of the visitor (AGENTS.md
  *  section 8). */
 export const THEME_KEY = "civitas-theme";
@@ -36,7 +36,7 @@ function subscribe(onChange: () => void): () => void {
  * Light (the default) or dark, overriding the system preference for this
  * tab. A button whose label names the theme it switches to.
  */
-export default function ThemeToggle() {
+export default function ThemeToggle({ className = "" }: { className?: string }) {
   // Null on the server: the system preference is only known in the browser.
   const theme = useSyncExternalStore<Theme | null>(subscribe, current, () => null);
   if (!theme) return null;
@@ -53,7 +53,7 @@ export default function ThemeToggle() {
         }
         window.dispatchEvent(new Event(CHANGED));
       }}
-      className="inline-flex min-h-11 items-center text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-ink-hi"
+      className={`inline-flex items-center text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-ink-hi ${className || "min-h-11"}`}
     >
       {next === "dark" ? "Dark theme" : "Light theme"}
     </button>

@@ -65,6 +65,8 @@ export interface JusticePeerPoint {
   name: string;
   value: number;
   shown: string;
+  /** The place on the row ("2nd highest of 9", "Furthest left of 9"). */
+  rank: string;
 }
 
 /** One figure on the record beside every sitting justice's. Every value,

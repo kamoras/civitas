@@ -11,6 +11,7 @@ export function justice(id: string, position: number | null): CourtJustice {
     appointingParty: null,
     dateStart: "2010-01-01",
     photo: null,
+    rank: position === null ? null : `Place of ${id}`,
     mq:
       position === null
         ? null

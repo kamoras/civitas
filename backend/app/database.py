@@ -1137,6 +1137,11 @@ RESET_KEEPS = frozenset({
     # parties involved) and the trend observations their lifetimes come
     # from: history a re-ingest can't rebuild, since the trends are gone.
     "trend_candidates", "trend_observations",
+    # The outlet posts the repost gate scored, with their resolved links:
+    # the labels its daily refit accumulates (bluesky_engagement.refit).
+    # The gate scores a post only within a day of posting, so wiped, they
+    # would not come back.
+    "outlet_post_links",
     # LLM generations captured as fine-tuning data, accumulated over months.
     "llm_generation_samples",
     # Run history. ops_alerts.check_pipeline_staleness reads a pipeline with

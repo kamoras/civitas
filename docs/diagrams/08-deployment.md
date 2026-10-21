@@ -65,7 +65,8 @@ sequenceDiagram
     Cron->>Cron: poll for new commits
     Cron->>Cron: build image, tag with short SHA
     Note over Cron: built locally — GHCR pull is disabled
-    Cron->>Swarm: docker stack deploy -c compose -c swarm
+    Cron->>Cron: docker compose config (merge compose + swarm)
+    Cron->>Swarm: docker stack deploy -c merged file
 
     Swarm->>New: start new task (update_config.order: start-first)
     Note over Old,New: both running — no gap in service

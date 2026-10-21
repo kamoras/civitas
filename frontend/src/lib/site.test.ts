@@ -56,7 +56,7 @@ describe("pageMetadata", () => {
   it("gives a section page its own card, described in its alt text", () => {
     const m = pageMetadata({ title: "t", description: "d", path: "/elections/calendar" });
     const [image] = m.openGraph?.images as { url: string; alt: string }[];
-    expect(image.url).toBe("/api/og?page=%2Felections%2Fcalendar");
+    expect(image.url).toBe(`/api/og?page=%2Felections%2Fcalendar&v=${process.env.OG_CARD_VERSION}`);
     expect(image.alt).toMatch(/^Elections: Election calendar\. /);
     expect(m.twitter?.images).toEqual(m.openGraph?.images);
   });

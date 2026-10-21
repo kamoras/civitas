@@ -51,7 +51,15 @@ def readiness_due(election_day: date, today: date) -> bool:
     return 0 < (election_day - today).days <= READINESS_DAYS
 
 
-def _condition(state: str) -> str:
+# One alert a day for every state not ready, its reasons in the body: a
+# condition per state put eleven near-identical alerts on the panel on
+# 2026-10-20, most of them the honest "not staged yet".
+CONDITION = "results-readiness"
+
+
+def legacy_condition(state: str) -> str:
+    """The per-state condition alerts used until 2026-10; every check
+    resolves them, so none stays open on the panel."""
     return f"results-readiness-{state}"
 
 
@@ -71,6 +79,10 @@ async def state_readiness(db: Session, client: httpx.AsyncClient, state: str, el
         # it shows nothing held that day (a failed read raises instead).
         return (f"its results site lists no election on {election_day.isoformat()} yet: the general is not "
                 "staged, or the source entry reads a list the state no longer updates")
+    if not count.contests:
+        # New Mexico's staged general, 2026-10-21: its date and type, no
+        # contest loaded yet.
+        return "its feed serves the general but lists no federal contest yet (staged before its contests)"
     matched = set()
     for contest in count.contests:
         race = _contest_race(db, election_day.year, state, contest) if contest_is_sane(contest) else None
@@ -91,21 +103,29 @@ async def state_readiness(db: Session, client: httpx.AsyncClient, state: str, el
 async def check_feed_readiness(
     db: Session, client: httpx.AsyncClient, election_day: date, today: date,
 ) -> dict[str, str]:
-    """Read every covered state; alert on each problem (once per state a
-    day, superseded by the next day's), clear the alert of a state that is
-    ready again. Returns {state: problem}."""
+    """Read every covered state; one alert a day naming each state that
+    isn't ready with its reason (superseded by the next day's), cleared once
+    every state is ready. Returns {state: problem}."""
+    states = sorted(live_results_states())
     problems: dict[str, str] = {}
-    for state in sorted(live_results_states()):
+    for state in states:
         problem = await state_readiness(db, client, state, election_day)
-        if problem is None:
-            resolve_ops_alert(_condition(state))
-            continue
-        problems[state] = problem
-        send_ops_alert(
-            f"Live results not ready: {state}",
-            f"{state} {problem}. Election day is {election_day.isoformat()}; fix the source entry or reader "
-            "before polls close, or the state shows no count that night.",
-            dedupe_key=f"results-readiness-{state}-{election_day.isoformat()}-{today.isoformat()}",
-            condition=_condition(state),
-        )
+        if problem is not None:
+            problems[state] = problem
+    for state in states:
+        resolve_ops_alert(legacy_condition(state))
+    if not problems:
+        resolve_ops_alert(CONDITION)
+        return problems
+    ready = [s for s in states if s not in problems]
+    send_ops_alert(
+        f"Live results not ready: {len(problems)} of {len(states)} states ({', '.join(problems)})",
+        f"Election day is {election_day.isoformat()}. Each state is read exactly as election night's sync "
+        "will read it; fix a source entry or reader before polls close, or that state shows no count that "
+        "night. A general not staged yet is the honest state of a feed until the state stages it.\n"
+        + "\n".join(f"- {state}: {problem}" for state, problem in problems.items())
+        + (f"\nReady: {', '.join(ready)}." if ready else ""),
+        dedupe_key=f"{CONDITION}-{election_day.isoformat()}-{today.isoformat()}",
+        condition=CONDITION,
+    )
     return problems

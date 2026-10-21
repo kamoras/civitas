@@ -32,6 +32,18 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "v6.37",
+    date: "2026-10-21",
+    title: "Two hand-set classifier checks measured and closed",
+    tldr: "The check that set ceremonial bills aside, and the one that dropped donors resembling payment processors, used thresholds set by hand. Measured against the Congressional Research Service's policy areas and the FEC's own receipts, both mostly fired on the wrong cases, so both are closed.",
+    changes: [
+      "Procedural bills: labelled by the policy area CRS assigns every bill, the check set aside 15% of substantive bills (5,930 of 39,401) and was 4% precise; no threshold reaches the Action Center's precision bar, so bills are classified by the policy classifier like any other (docs/methodology/member-score/v6.37.md).",
+      "Payment processors: labelled by the FEC's conduit and memo codes, the embedding tier skipped 64 real committees and no processor; the keyword tier (ActBlue, WinRed, Anedot) still decides.",
+      "Four other donor checks are measured and recorded with the reason each is not applied yet; their thresholds are unchanged.",
+      "Not replayed: partisan depth moves where a member's votes include bills the check had set aside, and funding scores where a member's donors include a committee the processor tier had skipped.",
+    ],
+  },
+  {
     version: "v6.36",
     date: "2026-10-21",
     title: "The small-donor share is read to two decimals",
