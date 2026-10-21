@@ -491,6 +491,15 @@ export function describeAgencyIndex(): { title: string; description: string } {
   };
 }
 
+/** Every agency's budget, largest first (/agencies/budget). */
+export function describeAgencyBudgets(): { title: string; description: string } {
+  return {
+    title: "Federal agency budgets: where the money goes",
+    description:
+      "How much each federal agency can commit this fiscal year, largest first: budgetary resources from USAspending.gov, with each agency's share of the total and a link to its page.",
+  };
+}
+
 /** One agency: "Environmental Protection Agency (EPA): budget, rules and comment periods". */
 export function describeAgency(a: AgencyDetail): { title: string; description: string } {
   const name = a.shortName && a.shortName !== a.name ? `${a.name} (${a.shortName})` : a.name;
