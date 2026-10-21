@@ -216,7 +216,7 @@ export function siteJsonLd() {
         "@type": "SearchAction",
         target: {
           "@type": "EntryPoint",
-          urlTemplate: `${SITE_URL}/explore?q={search_term_string}`,
+          urlTemplate: `${SITE_URL}/search?q={search_term_string}`,
         },
         "query-input": "required name=search_term_string",
       },
@@ -555,6 +555,11 @@ export function agencyJsonLd(a: AgencyDetail) {
   };
 }
 
+/** Site search's Documents filter with nothing asked (/search?tab=documents):
+ * the standing page Explore's index was, and its wording. */
+export const DOCUMENTS_TITLE = "Search Congressional Records, Floor Speeches & Executive Orders";
+export const DOCUMENTS_DESCRIPTION =
+  "Search floor speeches, executive orders, federal rules, and Supreme Court opinions by topic or by exact name, number or quoted phrase: all from public federal records.";
 /**
  * `og:image:alt` for the record cards app/api/og draws: what each card
  * shows, so a reader who can't see the picture is told what it holds.

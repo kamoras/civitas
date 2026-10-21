@@ -18,6 +18,7 @@ import {
 import { stateFromPoint } from "@/lib/stateFromPoint";
 import { districtAreaLabel, placeName, placesNamed, stateBallotHref } from "@/lib/elections";
 import { STATE_NAMES } from "@/lib/stateCodes";
+import { MAP_LABEL_HALO } from "@/lib/results";
 
 /** What a found location or a tapped part of a town settles. */
 export interface FoundDistricts extends DistrictsAtPoint {
@@ -280,9 +281,14 @@ const VIEW_W = 320;
 // Grid used to find a point inside each part for its number, and to say
 // which roads cross it.
 const LABEL_GRID = 40;
-const MAX_ROAD_LABELS = 6;
-// Viewbox units (the map is VIEW_W wide) between two road labels.
-const LABEL_GAP = 40;
+const MAX_ROAD_LABELS = 5;
+// Road labels in viewbox units (the map is VIEW_W wide): 12 units is about
+// 15px on the widest figure (max-w-md). On a phone the figure is narrower
+// and labels would fall under 13px, so they are drawn from 640px up only;
+// the parts list names each part's roads in text at every width.
+const ROAD_LABEL_SIZE = 12;
+// Viewbox units between two road labels.
+const LABEL_GAP = 60;
 
 interface Part {
   district: number;
@@ -529,10 +535,10 @@ function TownMap({
             key={r.name}
             x={r.at[0]}
             y={r.at[1]}
-            fontSize={8}
+            fontSize={ROAD_LABEL_SIZE}
             fill="var(--ink-lo)"
             pointerEvents="none"
-            className="font-mono"
+            className={`hidden font-mono sm:inline ${MAP_LABEL_HALO}`}
           >
             {r.name}
           </text>
@@ -560,7 +566,7 @@ function TownMap({
         {label}, drawn from the Census Bureau&apos;s district and town lines. Tap your part, or pick
         it below.
       </figcaption>
-      <ul className="mt-2 space-y-1">
+      <ul className="mt-2 space-y-1" aria-label={`Parts of ${label}`}>
         {view.parts.map((p, i) => {
           const others = otherPlaces(p.district);
           return (

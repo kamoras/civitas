@@ -10,6 +10,7 @@ import { monitorHref } from "@/lib/routes";
 import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import { absoluteUrl } from "@/lib/site";
 import type { IssueVote } from "@/types/action";
+import ScrollRegion from "@/components/shared/ScrollRegion";
 
 /**
  * A monitor's "On the record": the roll calls in Congress matched to its
@@ -212,7 +213,7 @@ export default function OnTheRecord({
           <summary className="inline-flex min-h-[32px] cursor-pointer items-center font-mono text-xs text-phos-mid hover:text-phos">
             [ Every vote as a table ]
           </summary>
-          <div className="overflow-x-auto">
+          <ScrollRegion label="Every vote as a table">
             <table className="mt-2 w-full text-left text-[13px] text-ink">
               <caption className="sr-only">Related votes in Congress, oldest first</caption>
               <thead className="font-mono text-xs text-ink-min">
@@ -262,7 +263,7 @@ export default function OnTheRecord({
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollRegion>
         </details>
       </section>
     </ShareSubjectProvider>

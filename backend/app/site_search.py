@@ -4,8 +4,10 @@ page) that holds it.
 Reads the entity index `app/site_search_index.py` writes, and Explore's own
 keyword index for document titles. Lexical only: an identifier parser, FTS5
 prefix matching, trigram matching for typos, and a deterministic score. No
-model and no LLM on this path (AGENTS.md, "Read path must stay
-lightweight").
+model and no LLM in this module (AGENTS.md, "Read path must stay
+lightweight"): the autocomplete is this alone. The results page (`results`)
+also fuses in Explore's hybrid document ranking, which its caller runs
+(api/search.py) and hands in, by rank (`fuse`).
 
 Score = match + importance_weight * importance, where match is 1.0 for an
 exact identifier (a bill number, a district code, a nomination, an FR
@@ -41,7 +43,6 @@ from sqlalchemy import text
 from app.pipeline.analyze.document_authority import (
     _EO_ABBR_RE, _EO_RE, _EO_TITLE_RE, _FR_CITE_RE, _FR_DOC_RE, _PROC_RE, _RIN_RE, _normalize_rin,
 )
-from app.pipeline.lexical_index import build_match_expression
 from app.services.bill_record import canonical_bill_id
 from app.services.congress_service import bill_label
 from app.site_search_index import KIND_GROUPS, SITE_SEARCH_DB, district_code, normalize
@@ -441,46 +442,120 @@ def suggest(raw: str, db=None, limit: int = 8, path: str | None = None) -> dict:
     }
 
 
-def _explore_count(db, raw: str) -> int | None:
-    expr = build_match_expression(raw)
-    if db is None or not expr:
-        return None
+# ── Results page: entities and documents in one list ─────────────
+
+FUSION_PATH = _DATA / "search_fusion_calibration.json"
+
+
+@dataclass(frozen=True)
+class Fusion:
+    """Reciprocal-rank fusion (Cormack, Clarke & Buettcher 2009) of the
+    two ranked lists the results page has: this module's matches and
+    Explore's hybrid document ranking. Their scores are on different
+    scales (a name match here, a fused RRF score there), so only ranks are
+    combined: score = entity_weight(match) / (k + entity rank) +
+    document_weight / (k + document rank), where entity_weight is 1 for a
+    match of at least `strong_match` and `weak_weight` below it. Fitted on
+    known items, held out (scripts/calibrate_search_fusion.py)."""
+    k: float = 60.0
+    document_weight: float = 1.0
+    strong_match: float = 0.0
+    weak_weight: float = 1.0
+
+
+@lru_cache(maxsize=1)
+def fusion() -> Fusion:
+    """The fitted fusion (scripts/calibrate_search_fusion.py), or the
+    defaults above (plain RRF) before it has run."""
     try:
-        return db.execute(text(
-            "SELECT count(*) FROM (SELECT rowid FROM explore_fts WHERE explore_fts MATCH :m LIMIT 1001)"
-        ), {"m": expr}).scalar()
-    except Exception:
-        db.rollback()
-        return None
+        fitted = json.loads(FUSION_PATH.read_text())["params"]
+    except (OSError, ValueError, KeyError):
+        return Fusion()
+    return Fusion(**{k: float(v) for k, v in fitted.items() if k in Fusion.__dataclass_fields__})
 
 
-def results(raw: str, db=None, path: str | None = None, per_group: int = 10) -> dict:
-    """The /search page: every match grouped by kind (each group's count
-    and its first `per_group`), Explore's own count for the words, the page
-    a confident query goes to, the two to four pages a near miss could
-    have meant, and the nearest names when nothing matched."""
+def document_url(doc_id: int | str) -> str:
+    """An Explore document's address as this index stores it (its row id:
+    the page redirects to the permanent key)."""
+    return f"/explore/{doc_id}"
+
+
+def _document_context(doc: dict, today: str) -> str:
+    who = doc.get("agencyName") or doc.get("politicianName") or doc.get("chamber") or ""
+    parts = [doc.get("docType") or "Document", who, doc.get("date") or ""]
+    closes = doc.get("commentsCloseOn") or ""
+    if doc.get("commentUrl") and closes >= today:
+        parts.append(f"comments close {closes}")
+    return " · ".join(p for p in parts if p)
+
+
+def fused_order(ranked: list[Hit], documents: list[dict], f: Fusion) -> tuple[list[str], dict[str, dict]]:
+    """The fused order, as each page's address in this index (a document
+    by its row id, `document_url`), and each address's public item."""
+    score: dict[str, float] = {}
+    item: dict[str, dict] = {}
+    for r, h in enumerate(ranked, start=1):
+        w = 1.0 if h.match >= f.strong_match else f.weak_weight
+        score[h.url] = score.get(h.url, 0.0) + w / (f.k + r)
+        item.setdefault(h.url, h.public())
+    today = comment_period_today()
+    for r, doc in enumerate(documents, start=1):
+        url = document_url(doc["id"])
+        score[url] = score.get(url, 0.0) + f.document_weight / (f.k + r)
+        item[url] = {"kind": "document", "group": KIND_GROUPS["document"], "label": doc.get("title") or "",
+                     "context": _document_context(doc, today),
+                     "url": document_url(quote(doc.get("key") or str(doc["id"]), safe=""))}
+    return sorted(score, key=lambda u: (-score[u], item[u]["label"])), item
+
+
+def fuse(ranked: list[Hit], documents: list[dict], f: Fusion | None = None) -> list[dict]:
+    """One list, best first: the matches `ranked` (best first) and the
+    hybrid ranker's `documents` (best first), each page once. A document
+    both lists hold scores in both. Each item is a Hit's public shape; a
+    document takes its permanent address (`key`) when the hybrid list had
+    it."""
+    order, item = fused_order(ranked, documents, f or fusion())
+    return [item[u] for u in order]
+
+
+def results(raw: str, db=None, path: str | None = None, documents=None, limit: int = 100) -> dict:
+    """The /search page: the page a confident query goes to, or one list
+    of matches and documents ranked together (`fuse`), with each kind's
+    count for the filter chips, the two to four pages a near miss could
+    have meant, and the nearest names when nothing matched.
+
+    `documents(raw)` returns Explore's hybrid search for the words
+    (hybrid_search's answer), or None when it couldn't answer. It is called only
+    when no page is clearly meant: a direct jump never pays for encoding
+    the query."""
     raw = (raw or "")[:QUERY_MAX]
     a = answer(raw, path, db)
-    groups: dict[str, list[Hit]] = {}
-    for h in a.ranked:
-        groups.setdefault(h.kind, []).append(h)
     p = params()
+    found: dict | None = {"results": [], "semanticUnavailable": False}
+    if a.direct is None and documents is not None and normalize(raw):
+        found = documents(raw)
+    items = fuse(a.ranked, found["results"] if found else [])[:limit]
+    counts: dict[str, int] = {}
+    for it in items:
+        counts[it["kind"]] = counts.get(it["kind"], 0) + 1
     # A close call: a match good enough to jump to, but with one to three
     # others too near it. More than that is a list, not a close call.
     near_top = [h for h in a.ranked if a.ranked[0].score - h.score < p.direct_margin] if a.ranked else []
     close = ([h.public() for h in near_top]
              if a.direct is None and a.ranked and a.ranked[0].match >= p.direct_floor and 2 <= len(near_top) <= 4
              else [])
-    near = _nearest(raw, path) if not a.ranked and normalize(raw) else []
+    near = _nearest(raw, path) if not items and normalize(raw) else []
     return {
         "query": raw,
         "direct": a.direct.url if a.direct else None,
-        "groups": [
-            {"kind": kind, "label": KIND_GROUPS.get(kind, kind), "count": len(hits),
-             "items": [h.public() for h in hits[:per_group]]}
-            for kind, hits in groups.items()
-        ],
-        "explore": {"count": _explore_count(db, raw), "url": f"/explore?q={quote(raw)}"},
+        "items": items,
+        "kinds": [{"kind": k, "label": KIND_GROUPS.get(k, k), "count": n} for k, n in counts.items()],
+        # The documents' half didn't answer (the vector and keyword indexes
+        # both unready, or the search failed): the list is matches only.
+        "documentsUnavailable": found is None,
+        # The documents were found by their words alone: the meaning-based
+        # index is rebuilding after a data refresh.
+        "documentsPartial": bool(found and found["semanticUnavailable"]),
         "alternatives": close,
         "near": near,
     }

@@ -4,7 +4,7 @@ import FollowFeed from "@/components/shared/FollowFeed";
 import { memberFeed } from "@/lib/site";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
-import { membersHref, recordTrail } from "@/lib/routes";
+import { documentsHref, membersHref, recordTrail } from "@/lib/routes";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
@@ -201,7 +201,6 @@ export default function PoliticianProfileClient({
                 profile.seatRace.raceId !== profile.onBallot?.raceId && (
                   <SeatRaceLine race={profile.seatRace} name={profile.identity.name} />
                 )}
-              {supportLine}
               {isMember && (
                 // Keyed by member: moving between two profiles reuses this
                 // page, and every part of the scorecard that loads or keeps
@@ -221,6 +220,7 @@ export default function PoliticianProfileClient({
                   peers={peers as PeerComparison | null}
                   titleAs="h1"
                   former={hasLeftOffice}
+                  votesNote={supportLine}
                 />
               )}
               {branch === "president" && (
@@ -322,7 +322,7 @@ export default function PoliticianProfileClient({
               ))}
               {governmentRecord.totalDocs > 5 && (
                 <Link
-                  href={`/explore?politician_id=${profile.id}`}
+                  href={documentsHref({ politician_id: profile.id })}
                   className={`mt-3 block font-mono text-ink-min transition-colors hover:text-phos ${LONG_LABEL}`}
                 >
                   View all {governmentRecord.totalDocs} documents →

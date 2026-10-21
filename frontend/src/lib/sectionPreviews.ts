@@ -172,6 +172,50 @@ const PREVIEWS: Record<string, Record<string, (f: SectionFigures) => Preview | n
   },
 };
 
+/**
+ * What each hub card's page holds, in a line: shown when the page has no
+ * live figure (or the figures couldn't be read), so no card says only
+ * "open the page". Fixed descriptions, true in any season: no year, no
+ * Congress number, no name.
+ */
+const BLURBS: Record<string, Record<string, string>> = {
+  congress: {
+    reports: "What Congress did, day by day, with each chamber's votes",
+    week: "What each chamber did in the last week Congress met",
+    month: "What each chamber did in the last month Congress met",
+    members: "Every senator and representative, found by state, town or name",
+    measures: "Each chamber's members side by side on four plain measures",
+    compare: "Two members' records side by side, measure by measure",
+    bills: "Every bill sitting members sponsored, by how far it has got",
+    committees: "Each committee's members, leaders and meetings",
+    nominations: "Every presidential nomination this Congress and how far it has got",
+    president: "How often members voted the way the president said to",
+  },
+  executive: {
+    overview: "The president, the agencies and the documents they issue",
+    president: "The sitting president's record, documents and nominations",
+    presidents: "Every president, with the historians' rank and each term's record",
+    compare: "Two presidencies side by side",
+    agencies: "Every agency the Federal Register lists, with its budget and documents",
+    budget: "Where the money goes, agency by agency, from USAspending.gov",
+    comments: "Federal rules and notices taking public comments now",
+    orders: "The sitting president's executive orders and proclamations, newest first",
+    nominations: "Every presidential nomination this Congress and how far it has got",
+  },
+  elections: {
+    ballots: "Every state's ballot: federal contests and statewide measures, quoted",
+    map: "Every Senate and House seat by its usual vote, with poll ranges",
+    redistricting: "What changed on the new House maps, district by district",
+    calendar: "Primaries, filing deadlines and election days ahead",
+    archive: "Past elections as recorded, the map's ranges checked against the count",
+  },
+};
+
+/** A hub card's fixed description, or null for a page without one. */
+export function sectionBlurb(section: string, tab: string): string | null {
+  return BLURBS[section]?.[tab] ?? null;
+}
+
 /** The figure for one section page, or null when the page has none or
  * the figures couldn't be read. */
 export function sectionPreview(

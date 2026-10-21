@@ -14,9 +14,10 @@ const VERDICT = {
 } as const;
 
 /**
- * The member's votes with the president's stated positions in one line at the
- * top of the profile, linking down to the section with the evidence (about
- * eight phone screens below, under the scorecard).
+ * The member's votes with the president's stated positions in one line, in
+ * the profile's Votes column (above the member's name it pushed the name and
+ * the "where they stand" strips down), linking down to the section with the
+ * evidence.
  *
  * Rendered on the server, in the first HTML: fetched in the browser it arrived
  * after the scorecard had painted and pushed it down (layout shift 0.08 on a
@@ -41,7 +42,7 @@ export default async function PresidentialSupportLine({ memberId }: { memberId: 
     // Written in sentence case with the count set bright: on a phone it reads
     // as a sentence (it was three lines of 12px caps), and caps from 640px up.
     <p
-      className={`mb-3 border border-white/15 bg-surface px-3 py-2 font-mono text-ink-lo ${labelCase(LEAD)}`}
+      className={`border border-white/15 bg-surface px-3 py-2 font-mono text-ink-lo ${labelCase(LEAD)}`}
     >
       {LEAD}:{" "}
       <span className="text-ink-hi">

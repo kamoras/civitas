@@ -6,6 +6,7 @@ import { absoluteUrl } from "@/lib/site";
 import { ordinal } from "@/components/scorecard/format";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
+import ScrollRegion from "@/components/shared/ScrollRegion";
 
 const CAL_SOURCE = "Congressional Record (Daily Digest); Senate and House roll calls";
 const PIPE_SOURCE = "Congress.gov bill status, for every bill sitting members sponsored";
@@ -139,7 +140,7 @@ function SittingCalendar({ cal }: { cal: Glance["calendar"] }) {
         <summary className="min-h-6 cursor-pointer text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos">
           The calendar as a table
         </summary>
-        <div className="mt-2 overflow-x-auto">
+        <ScrollRegion label="The calendar as a table" className="mt-2">
           <table className="w-full text-left font-mono text-xs tabular-nums">
             <caption className="sr-only">Days in session and record votes by month</caption>
             <thead className="text-ink-min">
@@ -180,7 +181,7 @@ function SittingCalendar({ cal }: { cal: Glance["calendar"] }) {
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollRegion>
       </details>
     </section>
   );
@@ -216,7 +217,10 @@ function BillPipeline({ pipe, asOf }: { pipe: NonNullable<Glance["pipeline"]>; a
         <tbody>
           {pipe.milestones.map((m) => (
             <tr key={m.label} className="border-t border-white/[0.07] align-middle">
-              <th scope="row" className="w-[42%] py-1 pr-3 text-left font-normal text-ink">
+              <th
+                scope="row"
+                className="w-[42%] py-1 pr-3 text-left font-normal text-ink [overflow-wrap:anywhere]"
+              >
                 {/* The label and its bar are one link to the very bills the
                     row counts (GET /api/bills?reached=, the same rule as
                     these counts), so the target is the row's height. */}

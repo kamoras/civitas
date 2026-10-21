@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { SECTIONS, type SectionKey } from "@/lib/routes";
 import { absoluteUrl } from "@/lib/site";
-import { leadOrder, sectionPreview, seasonLead } from "@/lib/sectionPreviews";
+import { leadOrder, sectionBlurb, sectionPreview, seasonLead } from "@/lib/sectionPreviews";
 import { shareMetaAttrs } from "@/lib/shareImage";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
@@ -114,8 +114,9 @@ export default async function SectionCards({
                     </span>
                   </p>
                 ) : (
-                  <p className="mt-2 text-sm leading-snug text-ink-min">
-                    {figures ? "Open the page" : "Live figure unavailable right now"}
+                  <p className="mt-2 text-sm leading-snug text-ink-lo">
+                    {sectionBlurb(section, t.key) ??
+                      (figures ? "Open the page" : "Live figure unavailable right now")}
                   </p>
                 )}
               </li>

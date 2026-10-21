@@ -57,9 +57,33 @@ export function agencyHref(slug: string): string {
   return `/agencies/${encodeURIComponent(slug)}`;
 }
 
-/** Explore, filtered to an agency's documents (its sub-agencies' included). */
-export function agencyExploreHref(slug: string): string {
-  return `/explore?agency=${encodeURIComponent(slug)}`;
+/**
+ * Site search's Documents filter: Explore's hybrid ranking of every federal
+ * document, with its own filters (`/search?tab=documents`). `/explore`
+ * redirects here (308), but in-app links name the tab, for the same reason
+ * as ACTION_CENTER_HREF: `tab` is what makes this the documents list rather
+ * than the merged one, and a bare `/search` lands on the merged list.
+ * Extra filters are appended with `&` (documentsHref).
+ */
+export const SEARCH_DOCUMENTS_HREF = "/search?tab=documents";
+
+/** The Documents filter with Explore's own parameters: `q`, `agency` (a
+ *  Federal Register slug), `politician_id`, `comment=open`, `type` (a
+ *  document type) and `sort` (`relevance` or `date`). */
+export function documentsHref(params: Record<string, string | undefined> = {}): string {
+  const extra = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v) extra.set(k, v);
+  const rest = extra.toString();
+  return rest ? `${SEARCH_DOCUMENTS_HREF}&${rest}` : SEARCH_DOCUMENTS_HREF;
+}
+
+/** Every document open for public comment, rules first. */
+export const OPEN_COMMENTS_HREF = documentsHref({ comment: "open" });
+
+/** The Documents filter, limited to an agency's documents (its
+ *  sub-agencies' included). */
+export function agencyDocumentsHref(slug: string): string {
+  return documentsHref({ agency: slug });
 }
 
 /** Special elections, vacant seats and every federal election date and
@@ -201,7 +225,7 @@ export const SECTIONS = {
       { key: "compare", label: "Compare presidents", href: "/compare/presidents" },
       { key: "agencies", label: "Every agency", href: "/agencies" },
       { key: "budget", label: "Budgets", href: AGENCY_BUDGETS_HREF },
-      { key: "comments", label: "Open comment periods", href: "/explore?comment=open" },
+      { key: "comments", label: "Open comment periods", href: OPEN_COMMENTS_HREF },
       { key: "orders", label: "Executive orders", href: EXECUTIVE_ORDERS_HREF },
       { key: "nominations", label: "Nominations", href: "/congress/nominations" },
     ],
@@ -224,12 +248,6 @@ export const SECTIONS = {
       { key: "calendar", label: "Calendar", href: "/elections/calendar" },
       { key: "archive", label: "Archive", href: ELECTIONS_ARCHIVE_HREF },
     ],
-  },
-  explore: {
-    label: "Explore",
-    href: "/explore",
-    match: ["/explore"],
-    tabs: [{ key: "search", label: "Search the record", href: "/explore" }],
   },
   about: {
     label: "About",

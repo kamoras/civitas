@@ -115,7 +115,7 @@ function SenatorSelector({
         <button
           onClick={() => handleChamberToggle("senate")}
           aria-pressed={chamber === "senate"}
-          className={`font-mono text-xs px-2 py-1 border transition-colors ${
+          className={`inline-flex min-h-6 min-w-6 items-center justify-center font-mono text-xs px-2 py-1 border transition-colors ${
             chamber === "senate" ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
           }`}
         >
@@ -124,7 +124,7 @@ function SenatorSelector({
         <button
           onClick={() => handleChamberToggle("house")}
           aria-pressed={chamber === "house"}
-          className={`font-mono text-xs px-2 py-1 border transition-colors ${
+          className={`inline-flex min-h-6 min-w-6 items-center justify-center font-mono text-xs px-2 py-1 border transition-colors ${
             chamber === "house" ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
           }`}
         >

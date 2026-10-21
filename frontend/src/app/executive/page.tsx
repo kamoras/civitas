@@ -12,6 +12,7 @@ import {
   AGENCY_BUDGETS_HREF,
   EXECUTIVE_HREF,
   EXECUTIVE_ORDERS_HREF,
+  OPEN_COMMENTS_HREF,
   PRESIDENTS_HREF,
 } from "@/lib/routes";
 import { ordinal } from "@/components/scorecard/format";
@@ -200,7 +201,7 @@ export default async function ExecutivePage() {
               <Panel
                 id="comments"
                 title="Open for your comment"
-                more={{ href: "/explore?comment=open", label: "Every open comment period" }}
+                more={{ href: OPEN_COMMENTS_HREF, label: "Every open comment period" }}
               >
                 {!comments ? (
                   <Unavailable what="The comment periods" />

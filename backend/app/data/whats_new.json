@@ -9,6 +9,20 @@
       "url": "/elections"
     },
     {
+      "id": "bill-same-stage-list",
+      "date": "2026-10-20",
+      "title": "Bills at the same stage",
+      "summary": "A bill's page now links the other bills sitting at exactly the same stage, with a count, beside the steps every bill has passed.",
+      "url": "/congress/bills"
+    },
+    {
+      "id": "search-everything-one-list",
+      "date": "2026-10-20",
+      "title": "One search for members, bills and documents",
+      "summary": "Site search ranks members, bills, agencies, pages and federal documents in one list, finds a document by what it is about as well as by its title, and keeps every document filter under its Documents chip.",
+      "url": "/search"
+    },
+    {
       "id": "agency-budgets-page",
       "date": "2026-10-20",
       "title": "A page for agency budgets",
@@ -167,7 +181,7 @@
       "date": "2026-10-17",
       "title": "Comment periods lead with rules",
       "summary": "Agency pages and Explore list proposed and final rules first, fold paperwork renewals apart, and show each abstract's first sentence and the days left.",
-      "url": "/explore?comment=open"
+      "url": "/search?tab=documents&comment=open"
     },
     {
       "id": "supreme-court-page",
@@ -181,7 +195,7 @@
       "date": "2026-10-17",
       "title": "Permanent document links that cite the source",
       "summary": "Each Explore document has a permanent address from its official identifier, cites the body that issued it, and is found first by its docket or Record page.",
-      "url": "/explore"
+      "url": "/search?tab=documents"
     },
     {
       "id": "member-seat-race",

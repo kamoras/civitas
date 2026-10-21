@@ -1,6 +1,7 @@
 import type { Donor } from "@/types/senator";
 import { formatCurrency } from "@/lib/formatting";
 import { fecCommitteeSearchUrl } from "@/lib/sources";
+import ScrollRegion from "@/components/shared/ScrollRegion";
 
 // PAC analyses that restate the donation rather than saying anything about
 // the PAC — shown nowhere.
@@ -32,7 +33,7 @@ function DonorType({ donor }: { donor: Donor }) {
 export default function TopDonorsTable({ donors }: { donors: Donor[] }) {
   if (donors.length === 0) return null;
   return (
-    <div className="overflow-x-auto">
+    <ScrollRegion label="Top donors">
       <table className="w-full text-sm">
         <caption className="mb-2 text-left font-mono text-xs text-ink-min">
           Top donors · fec.gov
@@ -109,6 +110,6 @@ export default function TopDonorsTable({ donors }: { donors: Donor[] }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </ScrollRegion>
   );
 }

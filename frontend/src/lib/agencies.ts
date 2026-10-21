@@ -50,7 +50,11 @@ function words(s: string): string[] {
  * ("EPA", "IRS"), then its name exactly, then every typed word starting a
  * word of its name or short name ("forest" finds the Forest Service). A
  * match inside a word does not count: "epa" is in "Department", and a
- * substring search put the EPA sixth of 28. Ties keep the given order. */
+ * substring search put the EPA sixth of 28. Among word matches the closer
+ * match leads: more typed words matched whole, then the larger share of the
+ * name the typed words make up ("education" puts the Education Department,
+ * half its name, ahead of a foundation whose eight-word name merely
+ * contains it; alphabetical order had it third). Ties keep the given order. */
 export function matchAgencies<T extends { name: string; shortName: string | null }>(
   agencies: T[],
   q: string
@@ -58,17 +62,24 @@ export function matchAgencies<T extends { name: string; shortName: string | null
   const typed = words(q);
   if (!typed.length) return [];
   const whole = typed.join(" ");
-  const rank = (a: T): number => {
+  const score = (a: T): [number, number, number] | null => {
     const short = words(a.shortName ?? "").join(" ");
-    if (short && short === whole) return 0;
+    if (short && short === whole) return [0, 0, 0];
     const name = words(a.name);
-    if (name.join(" ") === whole) return 1;
+    if (name.join(" ") === whole) return [1, 0, 0];
     const pool = [...name, ...words(a.shortName ?? "")];
-    return typed.every((t) => pool.some((w) => w.startsWith(t))) ? 2 : -1;
+    if (!typed.every((t) => pool.some((w) => w.startsWith(t)))) return null;
+    const exact = typed.filter((t) => pool.includes(t)).length;
+    const content = name.filter((w) => !FILLER.has(w));
+    const covered = content.filter((w) => typed.some((t) => w.startsWith(t))).length;
+    return [2, -exact, -covered / Math.max(content.length, 1)];
   };
   return agencies
-    .map((a, i) => ({ a, i, r: rank(a) }))
-    .filter((x) => x.r >= 0)
-    .sort((x, y) => x.r - y.r || x.i - y.i)
+    .map((a, i) => ({ a, i, s: score(a) }))
+    .filter((x): x is { a: T; i: number; s: [number, number, number] } => x.s !== null)
+    .sort((x, y) => x.s[0] - y.s[0] || x.s[1] - y.s[1] || x.s[2] - y.s[2] || x.i - y.i)
     .map((x) => x.a);
 }
+
+// Words that don't make a name longer for the share above.
+const FILLER = new Set(["of", "the", "and", "for", "on", "in"]);

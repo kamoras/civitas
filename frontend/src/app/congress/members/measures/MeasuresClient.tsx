@@ -8,6 +8,7 @@ import Footer from "@/components/layout/Footer";
 import { axisMax, fmt } from "@/components/scorecard/WhereTheyStand";
 import { STATE_NAMES } from "@/lib/stateCodes";
 import type { ChamberMeasure, ChamberMeasures, ChamberMember, ChamberPoint } from "@/types/peers";
+import ScrollRegion from "@/components/shared/ScrollRegion";
 
 const PARTY_FILL: Record<string, string> = {
   D: "var(--dem-blue)",
@@ -242,7 +243,10 @@ function FactTable({ members, house }: { members: ChamberMember[]; house: boolea
       <p className="mt-2 text-sm text-ink-lo" aria-live="polite">
         {shown.length} of {members.length} members
       </p>
-      <div className="mt-2 overflow-x-auto border border-white/25 bg-surface">
+      <ScrollRegion
+        label="Every member, measure by measure"
+        className="mt-2 border border-white/25 bg-surface"
+      >
         <table className="w-full min-w-[44rem] text-sm">
           <thead>
             <tr className="border-b border-white/25 text-left">
@@ -300,7 +304,7 @@ function FactTable({ members, house }: { members: ChamberMember[]; house: boolea
             ))}
           </tbody>
         </table>
-      </div>
+      </ScrollRegion>
     </section>
   );
 }
@@ -341,7 +345,7 @@ export default function MeasuresClient({
             No rank and no overall score: each member page shows where that member stands among
             colleagues in the same party.
           </p>
-          <nav aria-label="Chamber" className="mt-4 flex">
+          <nav aria-label="Chamber" className="mt-4 flex flex-wrap">
             {(["senate", "house"] as const).map((c) => (
               <Link
                 key={c}

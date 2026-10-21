@@ -13,22 +13,61 @@
         "http://localhost:3000/bills",
         "http://localhost:3000/leaderboard",
         "http://localhost:3000/action",
-        "http://localhost:3000/explore",
+        "http://localhost:3000/search?tab=documents",
+        "http://localhost:3000/search?q=tariffs",
         "http://localhost:3000/compare",
         "http://localhost:3000/changelog",
         "http://localhost:3000/feeds",
         "http://localhost:3000/developers"
       ],
       "settings": {
-        "onlyCategories": ["accessibility", "seo"],
+        "onlyCategories": [
+          "accessibility",
+          "seo"
+        ],
         "chromeFlags": "--no-sandbox --headless=new"
       }
     },
     "assert": {
-      "assertions": {
-        "categories:accessibility": ["error", { "minScore": 1 }],
-        "categories:seo": ["error", { "minScore": 1 }]
-      }
+      "assertMatrix": [
+        {
+          "matchingUrlPattern": "^(?!.*/search\\?q=).*$",
+          "assertions": {
+            "categories:accessibility": [
+              "error",
+              {
+                "minScore": 1
+              }
+            ],
+            "categories:seo": [
+              "error",
+              {
+                "minScore": 1
+              }
+            ]
+          }
+        },
+        {
+          "matchingUrlPattern": ".*/search\\?q=.*",
+          "assertions": {
+            "categories:accessibility": [
+              "error",
+              {
+                "minScore": 1
+              }
+            ],
+            "is-crawlable": "off",
+            "document-title": "error",
+            "meta-description": "error",
+            "http-status-code": "error",
+            "link-text": "error",
+            "crawlable-anchors": "error",
+            "hreflang": "error",
+            "canonical": "error",
+            "image-alt": "error"
+          }
+        }
+      ]
     },
     "upload": {
       "target": "filesystem",

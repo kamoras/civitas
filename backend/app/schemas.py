@@ -587,6 +587,12 @@ class StageMilestonesSchema(CamelModel):
     total: int
     milestones: list[StageMilestoneSchema]
     reached: int
+    # This bill's exact stage, its name, and the other bills at exactly it
+    # (GET /api/bills?stage=<stage> less this one); None once it is law or
+    # vetoed.
+    stage: str | None = None
+    stage_label: str | None = None
+    stage_others: int | None = None
 
 
 class BillDetailSchema(BillInFlightSchema):

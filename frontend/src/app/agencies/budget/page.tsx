@@ -39,6 +39,10 @@ export default async function AgencyBudgetsPage() {
   const shown = budget?.agencies.filter((r) => r.reported).slice(0, BARS_SHOWN) ?? [];
   const rest = budget?.agencies.filter((r) => !shown.includes(r)) ?? [];
   const unreported = budget ? budget.agencies.length - budget.reportedCount : 0;
+  // Counted apart so the disclosure adds up with the text above it (the
+  // largest N plus these = the agencies that reported).
+  const restReported = rest.filter((r) => r.reported).length;
+  const restUnreported = rest.length - restReported;
 
   return (
     <ShareSubjectProvider
@@ -115,7 +119,8 @@ export default async function AgencyBudgetsPage() {
                   {rest.length > 0 && (
                     <details className="mt-3" data-share-exclude>
                       <summary className="inline-flex min-h-6 cursor-pointer items-center font-mono text-xs text-ink-lo hover:text-phos">
-                        [Every other agency: {rest.length}]
+                        [The other {restReported} that reported
+                        {restUnreported > 0 ? `, and ${restUnreported} not reported yet` : ""}]
                       </summary>
                       <div className="mt-2">
                         <BudgetBars rows={rest} />
@@ -130,13 +135,13 @@ export default async function AgencyBudgetsPage() {
                   {budget.unmatched.length > 0 && (
                     <details className="mt-2" data-share-exclude>
                       <summary className="inline-flex min-h-6 cursor-pointer items-center font-mono text-xs text-ink-min hover:text-phos">
-                        {budget.unmatched.length} not linked: no Federal Register agency&apos;s name
-                        matched
+                        [Budgets without an agency page here: {budget.unmatched.length}]
                       </summary>
                       <p className="mt-2 max-w-2xl text-xs leading-relaxed text-ink-lo">
-                        USAspending.gov and the Federal Register name agencies differently, so
-                        Civitas pairs them by name and leaves a pair it is unsure of unlinked rather
-                        than guess: {budget.unmatched.join("; ")}.
+                        Agency pages come from the Federal Register&apos;s list, which names some
+                        agencies differently from USAspending.gov. Where the two names don&apos;t
+                        clearly match, the budget is shown without a link rather than on the wrong
+                        agency&apos;s page: {budget.unmatched.join("; ")}.
                       </p>
                     </details>
                   )}

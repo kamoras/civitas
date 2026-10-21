@@ -18,19 +18,25 @@ export interface SearchSuggestions {
   unavailable?: boolean;
 }
 
-export interface SearchGroup {
+/** A kind's count in the results, for its filter chip. */
+export interface SearchKind {
   kind: string;
   label: string;
   count: number;
-  items: SearchItem[];
 }
 
-/** GET /api/search */
+/** GET /api/search: one list, members, bills, agencies, pages and the
+ *  rest ranked together with Explore's documents (backend
+ *  app/site_search.fuse). */
 export interface SearchResults {
   query: string;
   direct: string | null;
-  groups: SearchGroup[];
-  explore: { count: number | null; url: string };
+  items: SearchItem[];
+  kinds: SearchKind[];
+  /** The documents' half didn't answer: the list is matches only. */
+  documentsUnavailable?: boolean;
+  /** Documents found by their words alone (the meaning index rebuilding). */
+  documentsPartial?: boolean;
   /** Close calls beside the top match ("did you mean"). */
   alternatives: SearchItem[];
   /** The closest names by spelling, when nothing matched. */

@@ -1,3 +1,4 @@
+import { SEARCH_DOCUMENTS_HREF } from "@/lib/routes";
 import RecordNotFound from "@/components/notFound/RecordNotFound";
 import ExploreOfficialSource from "@/components/notFound/ExploreOfficialSource";
 
@@ -10,7 +11,9 @@ export default function ExploreNotFound() {
     <RecordNotFound
       label="No document at this address"
       message="No speech, rule, presidential action or opinion has this address."
-      steps={[{ href: "/explore", label: "Search every document by words, topic or citation" }]}
+      steps={[
+        { href: SEARCH_DOCUMENTS_HREF, label: "Search every document by words, topic or citation" },
+      ]}
     >
       <ExploreOfficialSource />
     </RecordNotFound>

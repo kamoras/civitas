@@ -73,7 +73,7 @@ KIND_GROUPS = {
     "issue": "Action Center issues",
     "monitor": "Ongoing stories",
     "nomination": "Nominations",
-    "document": "Explore documents",
+    "document": "Documents",
 }
 
 _NON_ALNUM = re.compile(r"[^0-9a-z]+")

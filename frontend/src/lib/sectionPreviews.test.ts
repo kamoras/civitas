@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { leadOrder, sectionPreview, seasonLead } from "./sectionPreviews";
+import { leadOrder, sectionBlurb, sectionPreview, seasonLead } from "./sectionPreviews";
 import { SECTIONS } from "./routes";
 import type { SectionFigures } from "@/types/sections";
 
@@ -136,6 +136,16 @@ describe("sectionPreview", () => {
         expect(sectionPreview(FIGURES, section, t)).not.toBeNull();
       }
     }
+  });
+});
+
+describe("sectionBlurb", () => {
+  // A hub card with no live figure says what its page holds, never only
+  // "Open the page" (the agencies hub showed that on five cards).
+  it("describes every page of every hub that shows cards", () => {
+    for (const section of ["congress", "executive", "elections"] as const)
+      for (const t of SECTIONS[section].tabs)
+        expect(sectionBlurb(section, t.key), `${section}.${t.key}`).toBeTruthy();
   });
 });
 

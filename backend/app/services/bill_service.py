@@ -409,7 +409,7 @@ def get_bill_detail(db: Session, bill_id: str, congress: int | None = None) -> B
         party_leaning=sp.party_leaning,
         related_issues=related,
         stage_base_rate=stage_base_rate(db, sp.stage or BillStage.INTRODUCED, sp.congress),
-        stage_milestones=stage_milestones(db, sp.stage or BillStage.INTRODUCED, sp.congress),
+        stage_milestones=stage_milestones(db, sp.stage or BillStage.INTRODUCED, sp.congress, sp.bill_id),
     )
 
 
@@ -671,7 +671,7 @@ def _reached(rows: list[_Row], at: str) -> list[_Row]:
     return [r for r in rows if _reach(r.bill.stage) >= need]
 
 
-def stage_milestones(db: Session, stage: str, congress: int) -> dict | None:
+def stage_milestones(db: Session, stage: str, congress: int, bill_id: str | None = None) -> dict | None:
     """How far this Congress's bills have got, and this one: for each
     milestone, how many of the bills sitting members sponsored this
     Congress have reached it (the same population and stage order as
@@ -679,7 +679,12 @@ def stage_milestones(db: Session, stage: str, congress: int) -> dict | None:
     (`reached`, an index into `milestones`). A vetoed bill reached its
     presentment and no further, so it counts as having passed both
     chambers. None for another Congress's bill, whose stage the counts
-    don't describe."""
+    don't describe.
+
+    `stageOthers` counts the other bills at exactly this bill's stage, the
+    list GET /api/bills?stage=<stage> gives less this bill (the ladder's
+    milestones are cumulative: "Introduced" lists every bill); None once
+    the bill's outcome is known, since none is "still" there."""
     if congress != settings.CURRENT_CONGRESS:
         return None
     rows = _this_congress(_collect_bills(db), congress)
@@ -693,7 +698,11 @@ def stage_milestones(db: Session, stage: str, congress: int) -> dict | None:
         milestones.append({"label": label, "stage": str(at), "bills": n, "share": round(n / total, 4),
                            "shareText": _pct(n, total)})
     reached = max(i for i, (_, at, _) in enumerate(_MILESTONES) if here >= BILL_STAGES[at]["order"])
-    return {"total": total, "milestones": milestones, "reached": reached}
+    final = stage in (BillStage.ENACTED, BillStage.VETOED)
+    me = (bill_id or "").upper()
+    others = None if final else sum(1 for r in rows if r.bill.stage == stage and r.bill.bill_id.upper() != me)
+    return {"total": total, "milestones": milestones, "reached": reached, "stage": stage,
+            "stageLabel": BILL_STAGES.get(stage, {}).get("name", stage), "stageOthers": others}
 
 
 # A bill title that reads as a short title: "... Act" (a year suffix, "of

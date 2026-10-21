@@ -80,6 +80,13 @@ export function reachedHref(stage: string): string {
   return `/congress/bills?reached=${encodeURIComponent(stage)}`;
 }
 
+/** The bills list holding this Congress's bills at exactly a stage (a
+ * bill's current stage, BillStageFlow's pick), not every bill that got at
+ * least that far. */
+export function stageHref(stage: string): string {
+  return `/congress/bills?stage=${encodeURIComponent(stage)}`;
+}
+
 /** The site's page for one roll call: the question, the result, each
  * party's split and every member's position. Every roll call has one,
  * whether or not it was on a bill (a nomination, a procedural motion). */
