@@ -23,7 +23,9 @@ A link that could not be resolved (a 429, a timeout) is unlabelled too.
 Threshold: the Action Center's precision rule (app/precision_rule.py) in
 its LOWEST_PASSING variant (bluesky_engagement.PRECISION_VARIANT): the
 lowest grid point whose precision's exact lower 95% bound is at least 0.80,
-the most reposts the bar allows; otherwise null, and the gate keeps
+the most reposts the bar allows, adopted only when it is at or below the
+threshold in use (bluesky_engagement.adopted: a fit may not cut volume; a
+higher passing fit is written as `not_adopted`, with its volume); otherwise null, and the gate keeps
 running at bluesky_engagement.UNMEASURED_THRESHOLD, which the file names
 as unmeasured (`in_use`). The labels are kept with their scores, and the
 gate's daily refit (bluesky_engagement.refit) pools them with the posts it
@@ -172,7 +174,8 @@ def main() -> None:
     known = np.array([x is not None for x in label])
     right = np.array([bool(x) for x in label])
     scores, correct, ldays = best[known], right[known], days[known]
-    threshold, best_t = choose(scores, correct, be.GRID, be.PRECISION_VARIANT)
+    fitted, best_t = choose(scores, correct, be.GRID, be.PRECISION_VARIANT)
+    threshold = be.adopted(fitted)
     at = threshold if threshold is not None else best_t
     weeks = ((date.fromisoformat(last) - date.fromisoformat(first)).days + 1) / 7
 
@@ -216,13 +219,18 @@ def main() -> None:
                    "measured": threshold is not None,
                    "why": None if threshold is not None else (
                        "No fit meets the precision rule; the hand-set value the gate used before it was measured is "
-                       "kept by the user's decision (2026-10-21), unmeasured, until one does.")},
+                       "kept by the user's decision (2026-10-21), unmeasured, until one does.") if fitted is None else (
+                       "The passing fit (not_adopted) would cut reposts; a fit may not cut volume (the owner's "
+                       "decision, 2026-10-21), so the hand-set value stays, unmeasured.")},
         "at_unmeasured_threshold": summary(scores >= be.UNMEASURED_THRESHOLD, correct),
         "best_bound_threshold": best_t,
         "at_threshold": summary(scores >= at, correct),
         "all_labelled": {"best_match_right": int(correct.sum()), "posts": int(len(correct))},
         "volume": {"unmeasured": volume(be.UNMEASURED_THRESHOLD), "best_bound": volume(best_t),
                    **({"threshold": volume(threshold)} if threshold is not None else {})},
+        **({"not_adopted": {"threshold": fitted, "why": "above the threshold in use: fewer reposts",
+                            "at_threshold": summary(scores >= fitted, correct), "volume": volume(fitted)}}
+           if fitted is not None and threshold is None else {}),
         "held_out": held_out(scores, correct, ldays, be.GRID, FOLDS, be.PRECISION_VARIANT),
         "uncited_same_outlet": {**uncited, "issues_citing_an_outlet": outlet_issues["citing"],
                                 "of_which_cite_two_or_more_of_its_articles": outlet_issues["citing_two_or_more"]},

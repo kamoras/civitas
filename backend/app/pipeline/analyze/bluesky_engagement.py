@@ -116,6 +116,19 @@ def bundled_fit() -> dict:
     return json.loads(CALIBRATION_PATH.read_text())
 
 
+# A fit is adopted only when it keeps or raises today's volume (the owner's
+# decision, 2026-10-21: "keep the existing repost mechanism until you can
+# find a sustainable way to replace it"): a fitted threshold at or below
+# UNMEASURED_THRESHOLD replaces it with a measured precision; a higher one
+# (fewer reposts) is recorded as `not_adopted`, with its precision and
+# volume, so the trade is visible, and the gate stays at the unmeasured
+# value.
+def adopted(fitted: float | None) -> float | None:
+    """The fitted threshold if adopting it keeps or raises volume (at or
+    below UNMEASURED_THRESHOLD), else None."""
+    return fitted if fitted is not None and fitted <= UNMEASURED_THRESHOLD else None
+
+
 def engage_threshold(fit: dict) -> float:
     """The fitted cosine when the fit meets the precision rule, else the
     unmeasured one in use (UNMEASURED_THRESHOLD)."""
@@ -158,7 +171,8 @@ def resolve_pending(db: Session, client: httpx.Client) -> int:
 def refit(db: Session) -> dict:
     """The bundled labels pooled with every recorded post its link labels (a
     recorded post replaces a bundled one with the same uri), and the
-    threshold the precision rule chooses on them (null when none meets it)."""
+    threshold the precision rule chooses on them, adopted only under
+    adopted(); a passing fit that would cut volume is kept as not_adopted."""
     pooled = {uri: (sim, link_label(matched, citing)) for uri, _, matched, citing, sim in bundled_fit()["labels"]}
     rows = db.query(OutletPostLink).filter(OutletPostLink.article.is_not(None)).all()
     live = {r.uri: json.loads(r.live_issue_ids or "[]") for r in rows}
@@ -175,12 +189,28 @@ def refit(db: Session) -> dict:
     labelled = [v for v in pooled.values() if v[1] is not None]
     scores = np.array([s for s, _ in labelled], float)
     correct = np.array([bool(c) for _, c in labelled], bool)
-    threshold, best = choose(scores, correct, GRID, PRECISION_VARIANT)
-    return {"date": utcnow().date().isoformat(), "precision_rule": PRECISION_VARIANT,
-            "threshold": threshold, "best_bound_threshold": best,
-            "at_threshold": summary(scores >= (threshold if threshold is not None else best), correct),
-            "labelled_posts": len(labelled), "recorded_labelled": len(recorded),
-            "recorded_labels_sha256": labels_sha256(recorded)}
+    fitted, best = choose(scores, correct, GRID, PRECISION_VARIANT)
+    threshold = adopted(fitted)
+    fit = {"date": utcnow().date().isoformat(), "precision_rule": PRECISION_VARIANT,
+           "threshold": threshold, "best_bound_threshold": best,
+           "at_threshold": summary(scores >= (threshold if threshold is not None else best), correct),
+           "labelled_posts": len(labelled), "recorded_labelled": len(recorded),
+           "recorded_labels_sha256": labels_sha256(recorded)}
+    if fitted is not None and threshold is None:
+        fit["not_adopted"] = {"threshold": fitted, "why": "above the threshold in use: fewer reposts",
+                              "at_threshold": summary(scores >= fitted, correct),
+                              "reposts_per_week": _weekly(rows, fitted),
+                              "reposts_per_week_in_use": _weekly(rows, UNMEASURED_THRESHOLD)}
+    return fit
+
+
+def _weekly(rows, t: float) -> float | None:
+    """Recorded posts a week scoring at least t (before the per-run cap)."""
+    times = [r.posted_at or r.recorded_at for r in rows]
+    if not times:
+        return None
+    weeks = max((max(times) - min(times)).total_seconds() / 604800, 1)
+    return round(sum(r.best_sim >= t for r in rows) / weeks, 1)
 
 
 def current_fit(db: Session) -> dict:

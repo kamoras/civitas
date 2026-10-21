@@ -30,6 +30,7 @@ def test_the_bundled_calibration_says_where_it_came_from():
     assert data["precision_rule"] == be.PRECISION_VARIANT == LOWEST_PASSING
     t = data["threshold"]
     assert t is None or data["at_threshold"]["precision_exact_lower"] >= PRECISION_LOWER_BOUND
+    assert t is None or t <= be.UNMEASURED_THRESHOLD  # an adopted fit never cuts volume
     # What the gate runs at, and whether anyone measured it, is stated beside the fit.
     assert data["in_use"]["measured"] is (t is not None)
     assert data["in_use"]["threshold"] == (t if t is not None else be.UNMEASURED_THRESHOLD)
@@ -53,6 +54,26 @@ def test_a_post_is_labelled_only_when_a_live_issue_cites_its_article():
     assert be.link_label(1, [1, 2]) is True
     assert be.link_label(1, [2]) is False  # another story's coverage
     assert be.link_label(1, []) is None  # nothing says what it is about
+
+
+def test_a_fit_is_adopted_only_when_it_keeps_or_raises_volume():
+    assert be.adopted(None) is None
+    assert be.adopted(be.UNMEASURED_THRESHOLD) == be.UNMEASURED_THRESHOLD
+    assert be.adopted(0.70) == 0.70  # more reposts, measured
+    assert be.adopted(0.85) is None  # fewer reposts: the gate stays put
+
+
+def test_a_passing_fit_that_would_cut_volume_is_recorded_not_adopted(db_session, monkeypatch):
+    # 40 right at 0.9 and 20 wrong at 0.8: only thresholds above 0.8 pass.
+    labels = [[f"at://r{i}", "x.org/a", 1, [1], 0.9] for i in range(40)]
+    labels += [[f"at://w{i}", "x.org/b", 1, [2], 0.8] for i in range(20)]
+    monkeypatch.setattr(be, "bundled_fit", lambda: {"labels": labels})
+    fit = be.refit(db_session)
+    assert fit["threshold"] is None
+    assert be.engage_threshold(fit) == be.UNMEASURED_THRESHOLD
+    assert fit["not_adopted"]["threshold"] > be.UNMEASURED_THRESHOLD
+    assert fit["not_adopted"]["at_threshold"]["precision"] == 1.0
+    assert fit["not_adopted"]["reposts_per_week"] is None  # no recorded posts yet
 
 
 def test_a_rate_limit_or_server_error_leaves_a_link_unresolved():
