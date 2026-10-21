@@ -4,11 +4,13 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import type { President } from "@/types/president";
 import type { PresidentPeers } from "@/types/presidentPeers";
+import type { PresidentCharts } from "@/types/presidentCharts";
 import { fetchPresidentStockTrades } from "@/lib/api";
 import { SectionHeadingLevelProvider } from "@/components/shared/CollapsibleSection";
 import Holdings from "@/components/checker/Holdings";
 import StockTrades from "@/components/checker/StockTrades";
 import PresidentStanding from "./PresidentStanding";
+import PresidentChartsSection from "./PresidentCharts";
 import ScorecardDrawer from "./ScorecardDrawer";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
@@ -29,11 +31,14 @@ const LINK = "font-mono text-[13px] text-ink-lo underline underline-offset-2 hov
 export default function PresidentScorecard({
   president,
   peers,
+  charts = null,
   titleAs: Title = "h1",
   scoredOn = null,
 }: {
   president: President;
   peers: PresidentPeers | null;
+  /** The term drawn against the other presidencies (GET /charts). */
+  charts?: PresidentCharts | null;
   titleAs?: "h1" | "h2";
   /** The latest pipeline run: what a shared image's figures are as of. */
   scoredOn?: { date: string } | null;
@@ -167,6 +172,8 @@ export default function PresidentScorecard({
               The comparison with other presidents could not be loaded.
             </p>
           )}
+
+          {charts && <PresidentChartsSection data={charts} />}
 
           {/* Only the sitting president's annual report is read; a former
               president's page shows nothing here rather than an empty panel. */}

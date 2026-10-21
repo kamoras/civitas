@@ -4,6 +4,7 @@ import type { PoliticianProfile } from "@/types/politicians";
 import type { RepresentationScoreBreakdown } from "@/types/scoreBreakdown";
 import type { PeerComparison } from "@/types/peers";
 import type { PresidentPeers } from "@/types/presidentPeers";
+import type { PresidentCharts } from "@/types/presidentCharts";
 import { fetchRecord } from "@/lib/ssrPayload";
 import { absoluteUrl, memberFeed, notFoundMetadata, pageMetadata } from "@/lib/site";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
@@ -70,6 +71,19 @@ async function fetchPeers(
   }
 }
 
+/** A president's charts; null on any failure (the page then draws none). */
+async function fetchCharts(branch: string, id: string): Promise<PresidentCharts | null> {
+  if (branch !== "president") return null;
+  try {
+    const res = await fetch(`${BACKEND}/api/presidents/${encodeURIComponent(id)}/charts`, {
+      next: { revalidate: 120 },
+    });
+    return res.ok ? ((await res.json()) as PresidentCharts) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function generateMetadata({
   params,
 }: {
@@ -115,9 +129,10 @@ export default async function PoliticianProfilePage({
   // backend answers the old id with the member under their current id):
   // a permanent redirect, so links and search engines move to the new URL.
   if (profile.id !== id) permanentRedirect(`/politicians/${encodeURIComponent(profile.id)}`);
-  const [breakdown, peers] = await Promise.all([
+  const [breakdown, peers, charts] = await Promise.all([
     fetchBreakdown(profile.branch, id),
     fetchPeers(profile.branch, id),
+    fetchCharts(profile.branch, id),
   ]);
 
   return (
@@ -142,6 +157,7 @@ export default async function PoliticianProfilePage({
         profile={profile}
         breakdown={breakdown}
         peers={peers}
+        charts={charts}
         strip={<ThisWeekStrip variant="compact" />}
         supportLine={
           profile.branch === "senate" || profile.branch === "house" ? (
