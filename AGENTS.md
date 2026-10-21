@@ -2969,6 +2969,11 @@ not a paragraph or a box. On a ballot page the box lines are counts and
 labels only: what a measure does, what yes or no means and every deadline
 stay quoted where §7 puts them, never summarised in a box.
 
+The executive hub (`/executive`) is four boxes, each led by a figure the
+backend counts (the president's documents on record, the open comment
+periods and budget total from `GET /api/sections`, the pending
+nominations), its list behind "More".
+
 #### Empty defaults are content (2026-10)
 
 A default view that renders zeros or "nothing found" on an ordinary day is a
