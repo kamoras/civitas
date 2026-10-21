@@ -1999,6 +1999,29 @@ class RollCallLinkLabel(Base):
     recorded_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
 
+class OutletPostLink(Base):
+    """What the outlet-repost gate saw for each news outlet post it scored
+    (pipeline/analyze/bluesky_engagement.py), with the article the post
+    links once resolved through the outlet's shortener: a data-supplied
+    label for the gate's daily refit, kept so labels accumulate past the
+    60-day api_cache prune."""
+    __tablename__ = "outlet_post_links"
+
+    uri: Mapped[str] = mapped_column(String, primary_key=True)
+    outlet: Mapped[str] = mapped_column(String, nullable=False)
+    posted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # The link card's address as posted, and the article it resolves to
+    # (bluesky_engagement.article_key); article stays NULL until resolved.
+    link: Mapped[str | None] = mapped_column(Text, nullable=True)
+    article: Mapped[str | None] = mapped_column(Text, nullable=True)
+    resolve_tries: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    # The best cosine, the issue it matched and the ids of every live issue.
+    best_sim: Mapped[float] = mapped_column(Float, nullable=False)
+    issue_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    live_issue_ids: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    recorded_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class MonitorUpdate(Base):
     """A dated development in a monitored national concern, sourced from articles."""
     __tablename__ = "monitor_updates"
