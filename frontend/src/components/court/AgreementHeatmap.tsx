@@ -7,6 +7,7 @@ import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import { heatColor, heatDomain, pairLookup, surname, termsPhrase } from "@/lib/court";
 import { onThisPage } from "@/lib/onThisPage";
+import { More } from "@/components/shared/RecordBox";
 
 /**
  * How often each pair of sitting justices voted the same way: a grid in
@@ -105,11 +106,16 @@ export default function AgreementHeatmap({ court }: { court: Court }) {
           Share of cases both decided the same way · {termsPhrase(court.record.terms)}
         </p>
       </div>
-      <p className="max-w-prose text-base leading-relaxed text-ink">
-        Each square is one pair of justices: the percentage of the cases both took part in where
-        they were on the same side. Justices are in the same order as the line above, so justices
-        who vote alike sit in blocks.
+      <p className="max-w-prose text-base text-ink">
+        Each square is one pair: how often both were on the same side.
       </p>
+      <More label="how agreement is counted" className="mt-0">
+        <p className="leading-relaxed">
+          Each square is one pair of justices: the percentage of the cases both took part in where
+          they were on the same side. Justices are in the same order as the line above, so justices
+          who vote alike sit in blocks.
+        </p>
+      </More>
 
       <div className="overflow-x-auto p-2">
         <table

@@ -5,6 +5,7 @@ import { SHARE_SECTION_ATTR, shareMetaAttrs } from "@/lib/shareImage";
 import { axisAt, positionDomain, signedPosition, surname } from "@/lib/court";
 import { onThisPage } from "@/lib/onThisPage";
 import StripPoints from "@/components/shared/Strip";
+import { More } from "@/components/shared/RecordBox";
 
 const MQ_SOURCE = "Martin-Quinn scores (Martin and Quinn 2002), mqscores.wustl.edu";
 
@@ -47,10 +48,8 @@ export default function CourtLine({ court }: { court: Court }) {
         </p>
       ) : (
         <>
-          <p className="max-w-prose text-base leading-relaxed text-ink">
-            Each justice&apos;s position is estimated from how they voted beside the others, case by
-            case. Left is more liberal, right more conservative. The justice in the middle is the
-            median: on a split Court, the vote a five-justice majority usually needs.
+          <p className="max-w-prose text-base text-ink">
+            Left is more liberal, right more conservative; the median justice is marked.
           </p>
 
           {/* The one line: every justice's estimate as a tick, the median
@@ -184,12 +183,19 @@ export default function CourtLine({ court }: { court: Court }) {
               published.
             </p>
           )}
-          <p className="text-sm leading-relaxed text-ink-lo">
-            An estimate, not a measurement: the interval is where the position lies with 95%
-            probability under Martin and Quinn&apos;s model, which lets each justice&apos;s position
-            move from term to term. Positions compare justices with one another; 0 is not a neutral
-            point in law.
-          </p>
+          <More label="how the line is estimated" className="mt-0">
+            <p className="leading-relaxed">
+              Each justice&apos;s position is estimated from how they voted beside the others, case
+              by case. The justice in the middle is the median: on a split Court, the vote a
+              five-justice majority usually needs.
+            </p>
+            <p className="mt-2 leading-relaxed">
+              An estimate, not a measurement: the interval is where the position lies with 95%
+              probability under Martin and Quinn&apos;s model, which lets each justice&apos;s
+              position move from term to term. Positions compare justices with one another; 0 is not
+              a neutral point in law.
+            </p>
+          </More>
         </>
       )}
       <div className="flex justify-end">
