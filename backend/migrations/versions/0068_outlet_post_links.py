@@ -9,16 +9,16 @@ until the next hourly refresh.
 Additive only (one new table), so the previous image runs unchanged
 against the migrated schema.
 
-Revision ID: 0067
-Revises: 0066
+Revision ID: 0068
+Revises: 0067
 Create Date: 2026-10-21
 """
 from alembic import op
 import sqlalchemy as sa
 
 
-revision = '0067'
-down_revision = '0066'
+revision = '0068'
+down_revision = '0067'
 branch_labels = None
 depends_on = None
 
