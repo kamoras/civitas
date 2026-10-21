@@ -53,13 +53,6 @@ _DATA = Path(__file__).parent / "data"
 CALIBRATION_PATH = _DATA / "site_search_calibration.json"
 SECTIONS_PATH = _DATA / "site_search_sections.json"
 
-# A name matching less than this much of the query is not listed at all.
-# Below it the "matches" are a shared short word ("of", a state's code).
-LIST_FLOOR = 0.3
-# Candidates read from each index before scoring: enough that the best name
-# is always among them (an FTS5 bm25 order is close to ours), few enough to
-# score in a few milliseconds.
-_POOL = 120
 # Long enough for a pasted Federal Register title.
 QUERY_MAX = 300
 
@@ -70,12 +63,25 @@ _STATE_BY_NAME = {normalize(n): c for c, n in STATE_NAMES.items()}
 
 @dataclass(frozen=True)
 class Params:
+    """Fitted by scripts/calibrate_site_search.py; these defaults are the
+    pre-calibration fallback only. pool: candidates read from each FTS
+    index; enough: candidates after which the broader queries aren't tried
+    (each the smallest that loses no known item's answer against a far
+    larger one). list_floor: a name matching less of the query is not
+    listed. Not fitted: known-item probes say whether an answer is listed,
+    never whether the rest of a list is junk (AGENTS.md 3b), and fitted to
+    them it rose to 0.45 and hid a member typed by the first quarter of the
+    name; it stays the stated 0.3, below which the matches are a shared
+    short word."""
     prefix_credit: float = 0.8
     fuzzy_credit: float = 0.7
     label_floor: float = 0.6
     importance_weight: float = 0.15
     direct_margin: float = 0.2
     direct_floor: float = 0.85
+    list_floor: float = 0.3
+    pool: float = 120
+    enough: float = 20
 
 
 @lru_cache(maxsize=1)
@@ -272,7 +278,7 @@ def index_kinds(path: str | None = None) -> set[str] | None:
         conn.close()
 
 
-def _candidates(conn: sqlite3.Connection, raw: str, q: str) -> tuple[dict[int, Hit], set[int]]:
+def _candidates(conn: sqlite3.Connection, raw: str, q: str, p: Params) -> tuple[dict[int, Hit], set[int]]:
     rows: dict[int, tuple] = {}
     key_ids: set[int] = set()
     keys = identifier_keys(raw)
@@ -289,14 +295,14 @@ def _candidates(conn: sqlite3.Connection, raw: str, q: str) -> tuple[dict[int, H
         for expr in exprs:
             ids += [r[0] for r in conn.execute(
                 "SELECT rowid FROM entity_fts WHERE entity_fts MATCH ? ORDER BY bm25(entity_fts) LIMIT ?",
-                (expr, _POOL))]
-            if len(ids) >= 20:
+                (expr, int(p.pool)))]
+            if len(ids) >= int(p.enough):
                 break
         grams = _trigrams(q)
-        if grams and len(ids) < 20:
+        if grams and len(ids) < int(p.enough):
             ids += [r[0] for r in conn.execute(
                 "SELECT rowid FROM entity_tri WHERE entity_tri MATCH ? ORDER BY bm25(entity_tri) LIMIT ?",
-                (" OR ".join(_fts_phrase(g, False) for g in grams), _POOL))]
+                (" OR ".join(_fts_phrase(g, False) for g in grams), int(p.pool)))]
     ids = list(dict.fromkeys(ids))
     if ids:
         marks = ",".join("?" * len(ids))
@@ -336,7 +342,7 @@ def _documents(db, q: str) -> list[Hit]:
     return out
 
 
-def gather(raw: str, path: str | None = None, db=None) -> tuple[str, list[Hit]]:
+def gather(raw: str, path: str | None = None, db=None, p: Params | None = None) -> tuple[str, list[Hit]]:
     """The normalized query and every candidate for it, unscored: an exact
     identifier's entity marked `exact`."""
     q = normalize((raw or "")[:QUERY_MAX])
@@ -344,7 +350,7 @@ def gather(raw: str, path: str | None = None, db=None) -> tuple[str, list[Hit]]:
         return q, []
     conn = _connect(path or SITE_SEARCH_DB)
     try:
-        hits, key_ids = _candidates(conn, raw[:QUERY_MAX], q)
+        hits, key_ids = _candidates(conn, raw[:QUERY_MAX], q, p or params())
     finally:
         conn.close()
     for eid in key_ids & hits.keys():
@@ -376,14 +382,15 @@ def score(q: str, hits: list[Hit], p: Params) -> list[Hit]:
         _ratio.cache_clear()
     best: dict[str, Hit] = {}
     for h in sorted(hits, key=lambda h: (-h.score, h.label)):
-        if h.match >= LIST_FLOOR and h.url not in best:
+        if h.match >= p.list_floor and h.url not in best:
             best[h.url] = h
     return list(best.values())
 
 
 def rank(raw: str, path: str | None = None, db=None, p: Params | None = None) -> list[Hit]:
     """Every listed match for `raw`, best first, one per page."""
-    return score(*gather(raw, path, db), p or params())
+    p = p or params()
+    return score(*gather(raw, path, db, p), p)
 
 
 # A match this good is the query itself (an identifier, or a name equal to
@@ -587,7 +594,7 @@ def _nearest(raw: str, path: str | None) -> list[dict]:
         rows = conn.execute(
             "SELECT e.kind, e.label, e.context, e.url, e.importance, e.names FROM entity_tri t "
             "JOIN entity e ON e.id = t.rowid WHERE entity_tri MATCH ? ORDER BY bm25(entity_tri) LIMIT ?",
-            (" OR ".join(_fts_phrase(g, False) for g in grams), _POOL),
+            (" OR ".join(_fts_phrase(g, False) for g in grams), int(params().pool)),
         ).fetchall()
     finally:
         conn.close()
