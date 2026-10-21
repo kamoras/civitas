@@ -54,6 +54,15 @@ form ("November 3, 2026"); none there yet is NotYetPublished (the
 directive comes out in August). ohiosos.gov answered this environment's
 httpx client (the pipeline's) with 200 and curl with an Akamai
 "Website Maintenance" 403 — the reverse of most sites here.
+
+From 2026-10-21 the whole of www.ohiosos.gov (every page, the directive
+PDFs under /assets/, robots.txt) answers Cloudflare's challenge (403,
+cf-mitigated: challenge) to the pipeline's client too. That is a wall
+(§7): the state reads as ingest_failed naming it, the measures read on
+2026-10-20 stay on the page, and nothing tries to get past it. There is
+no county copy to fall back on: the county boards post their own precinct
+ballots, not the Secretary's sample ballot this reader verifies page by
+page, so Ohio has no `republished_by` entry.
 """
 
 import io

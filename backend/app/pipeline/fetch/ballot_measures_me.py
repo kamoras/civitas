@@ -49,7 +49,14 @@ official source yet says whether 2026 has any: the one citizen
 initiative that qualified (school sports/facilities) had its petition
 invalidated, affirmed by the Maine Supreme Judicial Court on 2026-07-10
 with a federal challenge pending, and the people's veto of the
-supplemental budget was abandoned before its signature deadline. A
+supplemental budget was abandoned before its signature deadline.
+
+Rechecked 2026-10-21, 13 days out: still no guide and no ballot-order
+announcement, and no Secretary of State page says the November 3 ballot
+has no question either (the upcoming-elections page, the 60-day election
+update, the absentee release and application, and the citizen-initiative
+page are all silent). With no official statement of "none" to read, the
+reader stays at not yet covered and the late-cycle notice stands. A
 missing guide is never read as "none" — and it is "not yet published"
 only when every Secretary of State page was actually read; a page that
 couldn't be fetched is a failure (None), not an absence.
