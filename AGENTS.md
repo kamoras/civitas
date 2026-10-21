@@ -2607,7 +2607,7 @@ the pending list).
 - **Two themes, one set of classes** (2026-10). The palette is CSS custom
   properties in `src/app/globals.css`, one `THEME` block per theme: "register
   paper" (light, the default) and "night register" (warm dark, by
-  `prefers-color-scheme` or the footer's per-tab `ThemeToggle`, sessionStorage
+  `prefers-color-scheme` or the header's per-tab `ThemeToggle` (the band on desktop, the menu on a phone), sessionStorage
   only per §8). Tailwind's colours point at them, and `white` is the overlay
   (ink on paper, white on carbon), so `border-white/15` is a hairline in both.
   Never write a hex in a component: use a token or a `var(--…)`.
