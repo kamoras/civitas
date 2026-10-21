@@ -9,7 +9,7 @@ import json
 from functools import lru_cache
 from pathlib import Path
 
-from app.state_names import STATE_NAMES
+from app.state_names import STATE_NAMES, by_state_name
 
 _PATH = Path(__file__).resolve().parent / "data" / "eavs.json"
 
@@ -50,7 +50,7 @@ def administration() -> dict | None:
     if survey is None:
         return None
     states = []
-    for st, entry in survey["states"].items():
+    for st, entry in sorted(survey["states"].items(), key=lambda kv: by_state_name(kv[0])):
         if st not in STATE_NAMES:  # the states and DC; the territories have no electors or voting seat
             continue
         states.append({

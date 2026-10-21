@@ -28,6 +28,19 @@ def test_percentile_is_mid_rank():
     assert pc.percentile(1, [1, 1, 2, 3]) == 25
 
 
+def test_a_count_short_of_the_group_says_with_a_figure(monkeypatch):
+    """Two rows count different peers when some have no figure for one of
+    them (no FEC contributions); the sentence says so."""
+    peers = [_member(f"r{i}", caucus="R", pac=0.1 + i / 100) for i in range(25)]
+    peers[0]["facts"]["fundingIndependence"]["contributions"] = 0
+    me = _member("me", caucus="R", pac=0.5)
+    _rows(monkeypatch, peers + [me])
+    by = {m["key"]: m for m in pc.peer_comparison(None, "house", "me")["measures"]}
+    assert by["pacMoney"]["sentence"].endswith("of the other 24 House Republicans with a figure took a smaller share.")
+    assert "with a figure" not in by["breaks"]["sentence"]
+    assert by["breaks"]["peerGroup"]["labelOne"] == "House Republican"
+
+
 def test_word_rule():
     assert pc.peer_word(95, 1.5) == "well above peers"
     assert pc.peer_word(95, 0.5) == "above peers"  # outside the deciles, but close to expected
@@ -44,7 +57,8 @@ def test_rows_against_the_caucus_with_template_sentences(monkeypatch):
     out = pc.peer_comparison(None, "senate", "me")
     by = {m["key"]: m for m in out["measures"]}
     small = by["smallGifts"]
-    assert small["peerGroup"] == {"key": "caucus", "label": "Senate Democrats and independents", "n": 32}
+    assert small["peerGroup"] == {"key": "caucus", "label": "Senate Democrats and independents",
+                                  "labelOne": "Senate Democrat or independent", "n": 32}
     assert small["expected"] == 0.25 and small["expectedBasis"] == "seat"
     assert small["word"] == "well below peers"
     assert small["sentence"] == ("Donors who gave $200 or less gave 5% of the money. 31 of the other 31 "

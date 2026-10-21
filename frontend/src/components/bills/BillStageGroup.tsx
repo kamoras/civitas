@@ -171,7 +171,7 @@ export default function BillStageGroup({
         <span className="w-2 h-2 shrink-0" style={{ backgroundColor: color }} />
         <span className="font-mono text-xs text-ink flex-1">{stageInfo?.name ?? stageCode}</span>
         <span className="font-mono text-xs tabular-nums text-ink-min">
-          {total === null ? "…" : total.toLocaleString()}
+          {total === null ? "…" : total.toLocaleString("en-US")}
         </span>
       </button>
 
@@ -212,7 +212,7 @@ export default function BillStageGroup({
                   onClick={loadMore}
                   className="border border-white/[0.07] px-3 py-1.5 font-mono text-xs text-ink-lo transition-colors hover:border-white/15 hover:text-phos"
                 >
-                  Load more ({((total ?? 0) - bills.length).toLocaleString()} remaining)
+                  Load more ({((total ?? 0) - bills.length).toLocaleString("en-US")} remaining)
                 </button>
               </div>
             )}

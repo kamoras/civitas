@@ -62,10 +62,16 @@ export default function RootLayout({
   return (
     // data-theme is set by THEME_BOOT before hydration when this tab chose a
     // theme, so React is told the attribute may differ from the server's.
+    //
+    // No <head> element here (2026-10). The flight payload sends a head's
+    // children as a lazy reference; when that chunk hadn't arrived as
+    // hydration reached <head>, React suspended there and replayed the
+    // head, entering its hydration scope twice, so <body> was hydrated
+    // against the head's first child: React error #418 on a share of loads
+    // of every page, through Cloudflare's streaming. React makes the head
+    // itself for the hoisted metadata, and the theme script runs first
+    // thing in <body>, still before anything is painted.
     <html lang="en" suppressHydrationWarning>
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
-      </head>
       {/*
         `font-sans` (Fira Sans) governs every element that does not name a
         font itself, which is most of the site's prose. It was `font-mono`
@@ -85,6 +91,7 @@ export default function RootLayout({
         className="font-sans"
         style={fontVariables}
       >
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
         <ConfigProvider>
           <a
             href="#main-content"
