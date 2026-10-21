@@ -103,6 +103,9 @@ const approval: PresidentPeerMeasure = {
   distributionShown: ["45.1%", "49.2%", "60.3%"],
   distributionIds: ["roe-40", "poe-41", "moe-42"],
   distributionNames: ["John Roe", "Ann Poe", "Max Moe"],
+  distributionYears: ["1953–1961", "1961–1963", "1963–1969"],
+  distributionRanks: ["3rd highest of 4", "2nd highest of 4", "Highest of 4"],
+  rank: "Lowest of 4",
   percentile: 12.5,
   word: "well below other presidencies",
   sentence:
@@ -112,6 +115,7 @@ const approval: PresidentPeerMeasure = {
 
 const peers: PresidentPeers = {
   rule: { wellOutside: [10, 90], outside: [25, 75], wellGapSd: 1, minPeers: 10 },
+  years: "since 2025",
   measures: [approval],
   standsOut: `Average approval: ${approval.sentence}`,
   standsOutWhy: "Picked by rule.",

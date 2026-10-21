@@ -4,6 +4,7 @@ import { useAsyncData } from "@/hooks/useAsyncData";
 import { fetchChamberMeasures } from "@/lib/api";
 import { axisMax, Dot, fmt } from "@/components/scorecard/WhereTheyStand";
 import type { ChamberMeasure } from "@/types/peers";
+import StripPoints, { partySeat, StripAxis, type StripPoint } from "@/components/shared/Strip";
 
 type Side = { id: string; name: string };
 
@@ -11,17 +12,37 @@ const JITTER = [10, 4, 16, 7, 13, 1, 19, 10];
 
 /** One measure, the whole chamber as faint dots and the two members as a
  *  filled and an outlined marker, each named in the caption. */
-function PairStrip({ m, left, right }: { m: ChamberMeasure; left: Side; right: Side }) {
+function PairStrip({
+  m,
+  chamber,
+  left,
+  right,
+}: {
+  m: ChamberMeasure;
+  chamber: "senate" | "house";
+  left: Side;
+  right: Side;
+}) {
   const max = axisMax({
     unit: m.unit,
     distribution: m.points.map((p) => p.value),
     value: null,
     expected: m.median,
   });
-  const at = (v: number) => `${Math.min(100, (v / max) * 100)}%`;
+  const at = (v: number) => Math.min(100, (v / max) * 100);
   const find = (id: string) => m.points.find((p) => p.id === id);
   const l = find(left.id);
   const r = find(right.id);
+  const points: StripPoint[] = m.points.map((p, i) => ({
+    id: p.id,
+    name: p.name,
+    detail: partySeat(p, chamber === "house"),
+    shown: p.shown,
+    rank: p.rank,
+    href: `/politicians/${p.id}`,
+    x: at(p.value),
+    y: p === l || p === r ? 22 : 12 + JITTER[i % JITTER.length] / 2 + 2.5,
+  }));
   return (
     <figure className="border-t border-white/25 px-4 py-4 first:border-t-0">
       <figcaption className="flex flex-wrap items-baseline justify-between gap-2">
@@ -34,22 +55,26 @@ function PairStrip({ m, left, right }: { m: ChamberMeasure; left: Side; right: S
           )}
         </span>
       </figcaption>
-      <div aria-hidden="true" className="relative mt-2 h-10">
+      <StripPoints
+        label={`${m.label}, every ${chamber === "house" ? "representative" : "senator"}`}
+        points={points}
+        startId={left.id}
+        className="mt-2 h-10"
+      >
         <div className="absolute inset-x-0 top-[22px] h-px bg-white/40" />
         {m.points.map((p, i) => (
           <Dot
             key={p.id}
             size={5}
             fill="var(--chart-muted)"
-            title={`${p.name}: ${p.shown}`}
             className="absolute -translate-x-1/2"
-            style={{ left: at(p.value), top: `${12 + JITTER[i % JITTER.length] / 2}px` }}
+            style={{ left: `${at(p.value)}%`, top: `${12 + JITTER[i % JITTER.length] / 2}px` }}
           />
         ))}
         {m.median != null && (
           <span
             className="absolute top-1 h-8 -translate-x-1/2 border-l-2 border-ink-hi"
-            style={{ left: at(m.median) }}
+            style={{ left: `${at(m.median)}%` }}
           />
         )}
         {l && (
@@ -57,9 +82,8 @@ function PairStrip({ m, left, right }: { m: ChamberMeasure; left: Side; right: S
             size={14}
             fill="var(--ink-hi)"
             ring="var(--phos)"
-            title={`${left.name}: ${l.shown}`}
             className="absolute top-[15px] -translate-x-1/2"
-            style={{ left: at(l.value) }}
+            style={{ left: `${at(l.value)}%` }}
           />
         )}
         {r && (
@@ -67,16 +91,12 @@ function PairStrip({ m, left, right }: { m: ChamberMeasure; left: Side; right: S
             size={14}
             fill="var(--surface)"
             ring="var(--ink-hi)"
-            title={`${right.name}: ${r.shown}`}
             className="absolute top-[15px] -translate-x-1/2"
-            style={{ left: at(r.value) }}
+            style={{ left: `${at(r.value)}%` }}
           />
         )}
-      </div>
-      <div aria-hidden="true" className="flex justify-between text-xs text-ink-min">
-        <span>{fmt(m, 0)}</span>
-        <span>{fmt(m, max)}</span>
-      </div>
+      </StripPoints>
+      <StripAxis start={fmt(m, 0)} end={fmt(m, max)} />
     </figure>
   );
 }
@@ -126,7 +146,7 @@ export default function PairStrips({
         <span>│ chamber median</span>
       </p>
       {data.measures.map((m) => (
-        <PairStrip key={m.key} m={m} left={left} right={right} />
+        <PairStrip key={m.key} m={m} chamber={chamber} left={left} right={right} />
       ))}
     </div>
   );

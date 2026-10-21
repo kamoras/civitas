@@ -6,6 +6,7 @@ import type { PresidentPeerMeasure, PresidentPeers } from "@/types/presidentPeer
 import { onThisPage } from "@/lib/onThisPage";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
+import StripPoints, { BigFigure, StripAxis, type StripPoint } from "@/components/shared/Strip";
 import { Dot } from "./WhereTheyStand";
 
 const JITTER = [10, 4, 16, 7, 13, 1, 19, 10];
@@ -13,12 +14,12 @@ const JITTER = [10, 4, 16, 7, 13, 1, 19, 10];
 /** One figure among the other presidencies on its own scale: a dot per
  *  presidency, this one ringed, the expected figure as a dashed tick. The
  *  axis spans the figures on the row; every figure is the backend's. */
-function Strip({ m, name }: { m: PresidentPeerMeasure; name: string }) {
+function Strip({ m, me }: { m: PresidentPeerMeasure; me: Self }) {
   const all = [...m.distribution, m.value, ...(m.expected == null ? [] : [m.expected])];
   const lo = Math.min(...all);
   const hi = Math.max(...all);
   const pad = (hi - lo || 1) * 0.06;
-  const at = (v: number) => `${((v - lo + pad) / (hi - lo + 2 * pad)) * 100}%`;
+  const at = (v: number) => ((v - lo + pad) / (hi - lo + 2 * pad)) * 100;
   // End labels: the lowest and highest figures on the row, as the API printed them.
   const shown = [...m.distributionShown, m.shown];
   const values = [...m.distribution, m.value];
@@ -26,57 +27,78 @@ function Strip({ m, name }: { m: PresidentPeerMeasure; name: string }) {
     shown[values.indexOf(Math.min(...values))],
     shown[values.indexOf(Math.max(...values))],
   ];
+  const points: StripPoint[] = [
+    ...m.distribution.map((v, i) => ({
+      id: m.distributionIds[i],
+      name: m.distributionNames[i],
+      detail: m.distributionYears[i],
+      shown: m.distributionShown[i],
+      rank: m.distributionRanks[i],
+      href: `/politicians/${m.distributionIds[i]}`,
+      x: at(v),
+      y: 12 + JITTER[i % JITTER.length] / 2 + 3,
+    })),
+    {
+      id: me.id,
+      name: me.name,
+      detail: me.years,
+      shown: m.shown,
+      rank: m.rank,
+      href: `/politicians/${me.id}`,
+      x: at(m.value),
+      y: 22,
+    },
+  ];
   return (
     <div className="min-w-0">
-      {/* The table below is the accessible form of this strip. */}
-      <div aria-hidden="true" className="relative h-10">
+      {/* The table below is the full text form of this strip. */}
+      <StripPoints
+        label={`${m.label}, ${m.peerGroup.label}`}
+        points={points}
+        startId={me.id}
+        className="h-10"
+      >
         <div className="absolute inset-x-0 top-[22px] h-px bg-white/40" />
         {m.distribution.map((v, i) => (
           <Dot
             key={m.distributionIds[i]}
             size={6}
             fill="var(--chart-muted)"
-            title={`${m.distributionNames[i]}: ${m.distributionShown[i]}`}
             className="absolute -translate-x-1/2"
-            style={{ left: at(v), top: `${12 + JITTER[i % JITTER.length] / 2}px` }}
+            style={{ left: `${at(v)}%`, top: `${12 + JITTER[i % JITTER.length] / 2}px` }}
           />
         ))}
         {m.expected != null && (
           <span
             className="absolute top-1 h-8 -translate-x-1/2 border-l-2 border-dashed border-ink-hi"
-            style={{ left: at(m.expected) }}
+            style={{ left: `${at(m.expected)}%` }}
           />
         )}
         <Dot
           size={14}
           fill="var(--ink-hi)"
           ring="var(--phos)"
-          title={`${name}: ${m.shown}`}
           className="absolute top-[15px] -translate-x-1/2"
-          style={{ left: at(m.value) }}
+          style={{ left: `${at(m.value)}%` }}
         />
-      </div>
-      <div
-        className="flex flex-wrap justify-between gap-x-3 text-xs text-ink-min"
-        aria-hidden="true"
-      >
-        <span>{ends[0]}</span>
-        {m.expectedShown && <span className="font-semibold text-ink-lo">{m.expectedShown}</span>}
-        <span>{ends[1]}</span>
-      </div>
+      </StripPoints>
+      <StripAxis
+        start={ends[0]}
+        end={ends[1]}
+        tick={
+          m.expected != null && m.expectedShown
+            ? { at: at(m.expected), text: m.expectedShown }
+            : null
+        }
+      />
     </div>
   );
 }
 
-function Row({
-  m,
-  name,
-  showTable,
-}: {
-  m: PresidentPeerMeasure;
-  name: string;
-  showTable: boolean;
-}) {
+/** The page's own presidency, for its mark's label. */
+type Self = { id: string; name: string; years: string | null };
+
+function Row({ m, me, showTable }: { m: PresidentPeerMeasure; me: Self; showTable: boolean }) {
   const strong = (m.word ?? "").startsWith("well");
   const captionId = useId();
   const word = m.thin ? null : m.word;
@@ -88,9 +110,10 @@ function Row({
       <div className="flex items-baseline justify-between gap-3 md:block">
         <div>
           <p className="text-[13px] font-semibold text-ink-lo">{m.label}</p>
-          <p className="text-2xl font-semibold leading-tight text-ink-hi sm:text-[28px]">
-            {m.shown}
-          </p>
+          <BigFigure
+            shown={m.shown}
+            className="text-2xl font-semibold leading-tight text-ink-hi sm:text-[28px]"
+          />
         </div>
         {word && (
           <p
@@ -102,7 +125,7 @@ function Row({
       </div>
       <div className="min-w-0">
         <p className="mb-1 text-sm text-ink">{m.why}</p>
-        <Strip m={m} name={name} />
+        <Strip m={m} me={me} />
       </div>
       <p
         className={`hidden self-center text-[13px] font-semibold md:block ${strong ? "text-signal-orange" : "text-ink-lo"}`}
@@ -177,12 +200,15 @@ function Row({
  * app/president_peers.py); this only places them.
  */
 export default function PresidentStanding({
+  presidentId,
   name,
   peers,
 }: {
+  presidentId: string;
   name: string;
   peers: PresidentPeers;
 }) {
+  const me = { id: presidentId, name, years: peers.years };
   const [showTable, setShowTable] = useState(false);
   const { measures } = peers;
   const [lo, hi] = peers.rule.outside;
@@ -223,7 +249,7 @@ export default function PresidentStanding({
                   {m.question}
                 </h3>
               )}
-              <Row m={m} name={name} showTable={showTable} />
+              <Row m={m} me={me} showTable={showTable} />
             </div>
           ))}
         </div>

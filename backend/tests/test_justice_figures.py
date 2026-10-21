@@ -44,6 +44,9 @@ def test_each_figure_sits_beside_every_sitting_justices(db_session, freeze_utcno
     assert maj.below == 2 and "in dissent in 0%" in maj.sentence
     # Three justices share the top figure.
     assert "Tied for highest of the 5 sitting justices" in maj.sentence
+    # Each dot's place for the strip's hover label; a position is left-right.
+    assert maj.peers[-1].rank == "Tied for highest of 5"
+    assert by["position"].peers[0].rank == "Furthest left of 5"
     # One-vote cases: each vote in the 3-2 majority decided it.
     assert by["decisive"].shown == "1 of 1" and by["decisive"].record == 1
     assert by["authoredMajority"].value == 2

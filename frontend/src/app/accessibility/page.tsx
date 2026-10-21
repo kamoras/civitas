@@ -168,6 +168,15 @@ export default function AccessibilityPage() {
                   A score&apos;s explanation opens on hover, focus or tap, stays open while the
                   pointer moves onto it, and closes with Escape wherever focus is.
                 </Item>
+                <Item label="Dot strips">
+                  On a strip with a dot per member, president or justice, pointing near a dot names
+                  who it is, with the figure and its place on the row; the nearest dot is picked, so
+                  no exact aim is needed, and a click opens that page. On a phone a tap shows the
+                  label and a tap on the label opens the page. Each strip is one Tab stop: the arrow
+                  keys move from dot to dot in order of value, Home and End go to the ends, Enter
+                  opens the page, and a screen reader hears each dot as it is reached. Every strip
+                  also has a table of the same figures with linked names.
+                </Item>
               </List>
               <More label="Typefaces, and why">
                 <P>

@@ -192,7 +192,7 @@ export default function PresidentScorecard({
           </header>
 
           {peers ? (
-            <PresidentStanding name={president.name} peers={peers} />
+            <PresidentStanding presidentId={president.id} name={president.name} peers={peers} />
           ) : (
             <p className="text-sm text-ink-lo">
               The comparison with other presidents could not be loaded.

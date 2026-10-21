@@ -1260,6 +1260,12 @@ class PublicPeerMeasureSchema(_PublicModel):
     distribution: list[float] = Field(description="Every peer's figure, the member's included, ascending")
     distribution_ids: list[str] = Field(description="The member id behind each distribution value, same order")
     distribution_names: list[str] = Field(description="The member's name behind each distribution value, same order")
+    distribution_shown: list[str] = Field(description='Each distribution value as the page prints it ("13%", '
+                                                      '"2 of 480"), same order')
+    distribution_seats: list[str] = Field(description='Party and seat behind each distribution value ("D-CA", '
+                                                      '"R-TX-5"), same order')
+    distribution_ranks: list[str] = Field(description='Each distribution value\'s place among the peers ("3rd '
+                                                      'highest of 47", "Tied for lowest of 433"), same order')
     record: int | None = Field(description="How much record backs the figure (party-line votes for breaks, bills "
                                            "sponsored for bills moved, 1 when there are contributions)")
     source: PublicPeerSourceSchema
@@ -1617,6 +1623,9 @@ class JusticePeerPointSchema(CamelModel):
     name: str
     value: float
     shown: str
+    # The place among the justices on the row ("2nd highest of 9", "Furthest
+    # left of 9"), for the strip's hover label.
+    rank: str
 
 
 class JusticeSourceSchema(CamelModel):

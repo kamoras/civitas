@@ -31,6 +31,12 @@ def test_each_figure_is_set_among_the_other_presidencies_with_a_word(db_session)
     # No score anywhere in what the page draws.
     assert "score" not in row and "overall" not in out
     assert out["historians"]["rank"] == 1 and out["historians"]["rated"] == 12
+    # The strip's hover labels: each presidency's years and its place among
+    # every presidency on the row, this one included.
+    assert row["rank"] == "Highest of 12"
+    assert row["distributionRanks"][0] == "Lowest of 12" and row["distributionRanks"][-1] == "2nd highest of 12"
+    assert row["distributionYears"][0] == "1944–1948"
+    assert out["years"] == "1988–1992"
 
 
 def test_no_word_below_the_peer_floor(db_session):
