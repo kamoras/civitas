@@ -21,6 +21,7 @@ import type {
   CoverageCell,
   MapAccountability as Data,
 } from "@/types/mapAccountability";
+import ScrollRegion from "@/components/shared/ScrollRegion";
 
 const CHAMBERS: MapChamberKey[] = ["senate", "house"];
 const CHAMBER_NAME: Record<MapChamberKey, string> = { senate: "Senate", house: "House" };
@@ -177,43 +178,47 @@ function ChamberCheck({ name, c }: { name: string; c: ChamberAccountability }) {
         </p>
       )}
       {c.byBasis.length > 0 && (
-        <table className="w-full text-left text-sm">
-          <caption className="sr-only">{name} ranges checked, by what each range rested on</caption>
-          <thead className="font-mono text-[11px] text-ink-min">
-            <tr>
-              <th scope="col" className="py-1 pr-3 font-normal">
-                Range basis
-              </th>
-              <th scope="col" className="py-1 pr-3 text-right font-normal">
-                Checked
-              </th>
-              <th scope="col" className="py-1 pr-3 text-right font-normal">
-                Inside 80%
-              </th>
-              <th scope="col" className="py-1 text-right font-normal">
-                Inside 95%
-              </th>
-            </tr>
-          </thead>
-          <tbody className="font-mono tabular-nums">
-            {c.byBasis.map((b) => (
-              <tr key={b.basis} className="border-t border-white/[0.07]">
-                <th scope="row" className="py-1.5 pr-3 font-sans font-normal text-ink">
-                  {b.label}
+        <ScrollRegion label={`${name} ranges checked`}>
+          <table className="w-full text-left text-sm">
+            <caption className="sr-only">
+              {name} ranges checked, by what each range rested on
+            </caption>
+            <thead className="font-mono text-[11px] text-ink-min">
+              <tr>
+                <th scope="col" className="py-1 pr-3 font-normal">
+                  Range basis
                 </th>
-                <td className="py-1.5 pr-3 text-right text-ink-lo">
-                  {b.graded} of {b.ranged}
-                </td>
-                <td className="py-1.5 pr-3 text-right text-ink-hi">
-                  {b.graded ? `${b.held80} · ${pct(b.share80)}` : "n/a"}
-                </td>
-                <td className="py-1.5 text-right text-ink-hi">
-                  {b.graded ? `${b.held95} · ${pct(b.share95)}` : "n/a"}
-                </td>
+                <th scope="col" className="py-1 pr-3 text-right font-normal">
+                  Checked
+                </th>
+                <th scope="col" className="py-1 pr-3 text-right font-normal">
+                  Inside 80%
+                </th>
+                <th scope="col" className="py-1 text-right font-normal">
+                  Inside 95%
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="font-mono tabular-nums">
+              {c.byBasis.map((b) => (
+                <tr key={b.basis} className="border-t border-white/[0.07]">
+                  <th scope="row" className="py-1.5 pr-3 font-sans font-normal text-ink">
+                    {b.label}
+                  </th>
+                  <td className="py-1.5 pr-3 text-right text-ink-lo">
+                    {b.graded} of {b.ranged}
+                  </td>
+                  <td className="py-1.5 pr-3 text-right text-ink-hi">
+                    {b.graded ? `${b.held80} · ${pct(b.share80)}` : "n/a"}
+                  </td>
+                  <td className="py-1.5 text-right text-ink-hi">
+                    {b.graded ? `${b.held95} · ${pct(b.share95)}` : "n/a"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </ScrollRegion>
       )}
       <div>
         <h4 className="font-mono text-[11px] text-ink-min">
@@ -395,7 +400,7 @@ function SwingTable({ seats }: { seats: AccountabilitySeat[] }) {
       <summary className="inline-flex min-h-11 cursor-pointer items-center font-mono text-xs text-ink-lo hover:text-ink-hi">
         Table · {rows.length} seats, largest swing first
       </summary>
-      <div className="overflow-x-auto">
+      <ScrollRegion label="Every seat, largest swing first">
         <table className="w-full min-w-[30rem] text-left text-sm">
           <thead className="font-mono text-[11px] text-ink-min">
             <tr>
@@ -428,7 +433,7 @@ function SwingTable({ seats }: { seats: AccountabilitySeat[] }) {
             ))}
           </tbody>
         </table>
-      </div>
+      </ScrollRegion>
     </details>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useState, type ReactNode } from "react";
 import { Holding, HoldingCategory, Holdings as HoldingsData } from "@/types/senator";
 import { fetchPresidentHoldings, fetchRepHoldings, fetchSenatorHoldings } from "@/lib/api";
 import { formatCurrency } from "@/lib/formatting";
@@ -284,6 +284,7 @@ export default function Holdings({
 }: HoldingsProps) {
   const [hovered, setHovered] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
+  const listId = useId();
   // `requested` is the category most recently asked for — what a click
   // toggles against, so a second click on a row whose request is still in
   // flight clears it rather than asking for it again.
@@ -348,7 +349,9 @@ export default function Holdings({
       href={data.sourceUrl}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-ink-lo hover:text-phos transition-colors"
+      // nowrap: a link split over two lines has one bounding box spanning
+      // both, which axe read as covering the [?] before it (target-size).
+      className="whitespace-nowrap text-ink-lo hover:text-phos transition-colors"
     >
       View filing ↗
     </a>
@@ -406,7 +409,9 @@ export default function Holdings({
             onSelect={selectCategory}
           />
         </div>
-        <p className="text-xs text-ink-min mt-3">
+        {/* leading-6: the [?] is a 24px box on a 16px line, and on a
+            wrapped line it overlapped "View filing" (axe target-size). */}
+        <p className="mt-3 text-xs leading-6 text-ink-min">
           Disclosed value{" "}
           {formatBracket(data.totalLow, data.totalHigh, data.totalOpenEnded, formatCurrency)} across{" "}
           {data.holdingsCount} asset{data.holdingsCount !== 1 ? "s" : ""}
@@ -530,7 +535,27 @@ export default function Holdings({
             {chart}
             {notes}
           </div>
-          {hasList && <div className="min-w-0 lg:-mt-4">{list}</div>}
+          {hasList && (
+            <div className="min-w-0 lg:-mt-4">
+              {/* On a phone the list (five assets a page, with a pager) was
+                  half a screen of a page about ten screens long: it opens on
+                  request there. From lg up it fills the column beside the
+                  chart. Picking a slice opens it (selectCategory). */}
+              <button
+                type="button"
+                aria-expanded={listOpen}
+                aria-controls={listId}
+                onClick={() => setListOpen((o) => !o)}
+                {...{ [SHARE_EXCLUDE_ATTR]: "" }}
+                className="inline-flex min-h-11 items-center font-mono text-xs text-ink-lo hover:text-phos lg:hidden"
+              >
+                [{listOpen ? "Hide" : "Show"} all {data.holdingsCount} holdings]
+              </button>
+              <div id={listId} className={listOpen ? "" : "hidden lg:block"}>
+                {list}
+              </div>
+            </div>
+          )}
         </div>
       </section>
     );

@@ -89,4 +89,10 @@ export interface StageMilestones {
   milestones: StageMilestone[];
   /** The furthest milestone this bill has reached: an index into `milestones`. */
   reached: number;
+  /** This bill's exact stage code and its name. */
+  stage?: string | null;
+  stageLabel?: string | null;
+  /** Other bills at exactly that stage (/congress/bills?stage=<stage> less
+   * this one); null once the bill is law or vetoed. */
+  stageOthers?: number | null;
 }

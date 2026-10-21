@@ -23,6 +23,7 @@ import {
   seatLabel,
 } from "@/lib/presidentialSupport";
 import type { ChamberSupport, ChamberSupportMember } from "@/types/presidentialSupport";
+import ScrollRegion from "@/components/shared/ScrollRegion";
 
 type SortKey = "name" | "difference" | "rate";
 
@@ -208,7 +209,7 @@ export default function ChamberView({ view }: { view: ChamberSupport }) {
                 </button>
               ))}
             </div>
-            <div className="mt-3 overflow-x-auto">
+            <ScrollRegion label="Members, as a table" className="mt-3">
               <table className="w-full border-collapse font-mono text-xs text-ink-lo">
                 <thead>
                   <tr className="border-b border-white/[0.09] text-left text-ink-min">
@@ -249,7 +250,7 @@ export default function ChamberView({ view }: { view: ChamberSupport }) {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollRegion>
           </section>
 
           <section aria-labelledby="ps-votes">

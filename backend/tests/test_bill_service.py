@@ -442,6 +442,16 @@ class TestStageMilestones:
             ("Passed one chamber", 6, "6%"), ("Passed both chambers", 3, "3%"), ("Became law", 1, "1%")]
         assert m["reached"] == 2
 
+    def test_other_bills_at_this_stage_are_the_stage_list_less_this_bill(self, congress):
+        m = stage_milestones(congress, "IN_COMMITTEE", CURRENT, "s.81")
+        listed = get_bills_in_flight(congress, stage="IN_COMMITTEE", per_page=100)
+        assert (m["stage"], m["stageLabel"], m["stageOthers"]) == ("IN_COMMITTEE", "In Committee", 7)
+        assert listed.total == m["stageOthers"] + 1
+        # A bill the list doesn't hold (no sitting sponsor) is not subtracted.
+        assert stage_milestones(congress, "IN_COMMITTEE", CURRENT, "HR.1")["stageOthers"] == 8
+        # Law and a veto are outcomes, not a stage a bill is still at.
+        assert stage_milestones(congress, "ENACTED", CURRENT, "S.99")["stageOthers"] is None
+
     def test_a_vetoed_bill_passed_both_chambers_and_another_congress_has_none(self, congress):
         assert stage_milestones(congress, "VETOED", CURRENT)["reached"] == 3
         assert stage_milestones(congress, "ENACTED", CURRENT)["reached"] == 4

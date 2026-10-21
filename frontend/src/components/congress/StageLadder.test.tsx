@@ -59,4 +59,28 @@ describe("StageLadder", () => {
     const r = await axe.run(document.body, { rules: { "color-contrast": { enabled: false } } });
     expect(r.violations.map((v) => v.id)).toEqual([]);
   });
+
+  // The steps are cumulative ("Introduced" lists every bill), so a bill in
+  // committee also links the bills at exactly its stage, counted by the API.
+  it("links the other bills at exactly this bill's stage", () => {
+    render(
+      <StageLadder
+        data={{
+          ...data,
+          reached: 0,
+          stage: "IN_COMMITTEE",
+          stageLabel: "In Committee",
+          stageOthers: 804,
+        }}
+      />
+    );
+    const link = screen.getByRole("link", { name: "Other bills still at this stage (804)" });
+    expect(link).toHaveAttribute("href", "/congress/bills?stage=IN_COMMITTEE");
+    expect(screen.getByText(/In Committee/)).toBeInTheDocument();
+  });
+
+  it("offers no such link once the outcome is known", () => {
+    render(<StageLadder data={{ ...data, reached: 4, stage: "ENACTED", stageOthers: null }} />);
+    expect(screen.queryByText(/Other bills still/)).not.toBeInTheDocument();
+  });
 });

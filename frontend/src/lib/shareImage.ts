@@ -259,6 +259,72 @@ function fitText(ctx: CanvasRenderingContext2D, text: string, max: number): stri
   return `${cut.trimEnd()}…`;
 }
 
+/**
+ * The capture copies every element's computed size onto its clone, so a
+ * box sized by its text keeps the one-line height it had on the page. Text
+ * in the picture measures a little wider than on the page, so a label that
+ * just fit ("Goldman Sachs employees") wraps there and its second line ran
+ * over the next row. Each element the page sizes by its content in a
+ * dimension (no class or inline style setting it) is marked here and given
+ * back its automatic size in that dimension in the clone, so the picture
+ * lays it out itself. (`min-w-0` only lets a box shrink: not a size.)
+ */
+const FLOW_ATTR = "data-share-flow";
+const SIZES_HEIGHT = /(^|\s)([\w-]+:)*-?(h|size|min-h|max-h|aspect)-/;
+const SIZES_WIDTH = /(^|\s)([\w-]+:)*-?(w|size|max-w|basis|aspect|min-w-(?!0(\s|$)))/;
+const FLOW_SLACK = 0.25;
+
+function markFlowing(section: HTMLElement): HTMLElement[] {
+  const out: HTMLElement[] = [];
+  for (const el of section.querySelectorAll<HTMLElement>("*")) {
+    if (!(el instanceof HTMLElement)) continue;
+    const cls = el.getAttribute("class") ?? "";
+    const free = [
+      !el.style.height && !SIZES_HEIGHT.test(cls) ? "h" : "",
+      !el.style.width && !SIZES_WIDTH.test(cls) ? "w" : "",
+    ].join("");
+    if (!free) continue;
+    el.setAttribute(FLOW_ATTR, free);
+    out.push(el);
+  }
+  return out;
+}
+
+function letFlow(clone: Node): void {
+  if (!(clone instanceof HTMLElement) || !clone.hasAttribute(FLOW_ATTR)) return;
+  const free = clone.getAttribute(FLOW_ATTR) ?? "";
+  clone.removeAttribute(FLOW_ATTR);
+  // The computed size is copied twice, physical and logical.
+  if (free.includes("w")) for (const p of ["width", "inline-size"]) clone.style.removeProperty(p);
+  if (free.includes("h")) for (const p of ["height", "block-size"]) clone.style.removeProperty(p);
+}
+
+/** The canvas without the rows of plain background under the section. */
+export function trimBottom(canvas: HTMLCanvasElement, background: string): HTMLCanvasElement {
+  const ctx = canvas.getContext("2d");
+  if (!ctx || !canvas.width || !canvas.height) return canvas;
+  // The background as a canvas draws it, whatever CSS colour syntax it is.
+  const probe = document.createElement("canvas").getContext("2d");
+  if (!probe) return canvas;
+  probe.fillStyle = background;
+  probe.fillRect(0, 0, 1, 1);
+  const [r, g, b] = probe.getImageData(0, 0, 1, 1).data;
+  const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  let last = canvas.height - 1;
+  const differs = (i: number) =>
+    Math.abs(data[i] - r) > 3 || Math.abs(data[i + 1] - g) > 3 || Math.abs(data[i + 2] - b) > 3;
+  rows: for (; last > 0; last--) {
+    const row = last * canvas.width * 4;
+    for (let x = 0; x < canvas.width; x++) if (differs(row + x * 4)) break rows;
+  }
+  if (last >= canvas.height - 1) return canvas;
+  const out = document.createElement("canvas");
+  out.width = canvas.width;
+  out.height = last + 1;
+  out.getContext("2d")?.drawImage(canvas, 0, 0);
+  return out;
+}
+
 function captureDate(now: Date): string {
   return now.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
@@ -295,8 +361,12 @@ export async function captureSection(
     document.fonts.load(`16px ${mono}`),
   ]).catch(() => {});
 
-  const release = () => section.removeAttribute(CAPTURING_ATTR);
   section.setAttribute(CAPTURING_ATTR, "");
+  const flowing = markFlowing(section);
+  const release = () => {
+    section.removeAttribute(CAPTURING_ATTR);
+    for (const el of flowing) el.removeAttribute(FLOW_ATTR);
+  };
   let shot: HTMLCanvasElement;
   let scale: number;
   try {
@@ -304,18 +374,30 @@ export async function captureSection(
     scale = captureScale(box.width, box.height, window.devicePixelRatio || 1);
     shot = await domToCanvas(section, {
       scale,
+      // Room for text that wraps where the page's didn't (the picture's
+      // text measures a little wider); the blank left under the section
+      // is trimmed below.
+      height: Math.ceil(box.height * (1 + FLOW_SLACK)),
       // modern-screenshot waits for every <img> in the section to load —
       // excluded ones too — for up to 30s by default; a publisher's photo
       // still hanging on a card shouldn't hold up a picture it isn't in.
       timeout: 8000,
       backgroundColor: surfaceBase,
-      onCloneNode: release,
+      onCloneEachNode: letFlow,
+      onCloneNode: (root) => {
+        // The section as tall as its content, not the measured box, so a
+        // wrapped line pushes what follows down rather than over it.
+        if (root instanceof HTMLElement)
+          for (const p of ["height", "block-size"]) root.style.setProperty(p, "auto", "important");
+        release();
+      },
       filter: (node) => !(node instanceof Element && node.hasAttribute(SHARE_EXCLUDE_ATTR)),
       fetchFn: captureImageData,
     });
   } finally {
     release();
   }
+  shot = trimBottom(shot, surfaceBase);
 
   const pad = 20 * scale;
   const innerW = shot.width;

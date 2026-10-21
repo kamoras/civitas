@@ -35,4 +35,22 @@ describe("matchAgencies", () => {
     expect(matchAgencies(LIST, "dep")).toHaveLength(4);
     expect(matchAgencies(LIST, "  ")).toEqual([]);
   });
+
+  it("puts the closest match first, not the alphabetically first", () => {
+    const list = [
+      A("Barry M. Goldwater Scholarship and Excellence in Education Foundation"),
+      A("Cooperative State Research, Education, and Extension Service"),
+      A("Education Department"),
+      A("National Education Goals Panel"),
+    ];
+    expect(matchAgencies(list, "Education")[0].name).toBe("Education Department");
+    expect(matchAgencies(list, "educ")).toHaveLength(4);
+    // A whole word beats a prefix of a longer one.
+    expect(
+      matchAgencies(
+        [A("Laboratory Accreditation Office"), A("Labor Statistics Bureau")],
+        "labor"
+      )[0].name
+    ).toBe("Labor Statistics Bureau");
+  });
 });

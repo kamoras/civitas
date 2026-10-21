@@ -21,6 +21,7 @@ import {
 import { PeriodNav } from "./CongressNav";
 import SectionTabs from "@/components/layout/SectionTabs";
 import { Empty, Figure, FigureGroup, Section, TallyText, VoteRow } from "./ReportParts";
+import ScrollRegion from "@/components/shared/ScrollRegion";
 
 function chamberCell(day: PeriodDay, chamber: "senate" | "house") {
   const c = day[chamber];
@@ -46,7 +47,7 @@ function chamberCell(day: PeriodDay, chamber: "senate" | "house") {
 
 function DayStrip({ days }: { days: PeriodDay[] }) {
   return (
-    <div className="overflow-x-auto">
+    <ScrollRegion label="Day by day">
       <ol className="grid min-w-[40rem] grid-cols-7 gap-2">
         {days.map((d) => {
           const met = d.senate.inSession || d.house.inSession;
@@ -72,7 +73,7 @@ function DayStrip({ days }: { days: PeriodDay[] }) {
           );
         })}
       </ol>
-    </div>
+    </ScrollRegion>
   );
 }
 

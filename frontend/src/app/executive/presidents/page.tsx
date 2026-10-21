@@ -13,6 +13,7 @@ import PageMasthead from "@/components/layout/PageMasthead";
 import SectionTabs from "@/components/layout/SectionTabs";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
 import type { President } from "@/types/president";
+import ScrollRegion from "@/components/shared/ScrollRegion";
 
 export const metadata: Metadata = pageMetadata({ ...describePresidents(), path: PRESIDENTS_HREF });
 
@@ -76,47 +77,50 @@ export default async function PresidentsPage() {
                 No president is on record yet: the roster hasn&apos;t been read.
               </p>
             ) : (
-              // Three columns, so the table fits a phone with no sideways
-              // scroll: the number and party sit under the name.
-              <table className="w-full border border-white/15 text-left text-sm">
-                <caption className="px-3 py-2 text-left text-sm text-ink-lo">
-                  Historians&apos; rank: C-SPAN Presidential Historians Survey (2021), their ranking
-                  by total points among {presidents[0]?.historiansRated ?? "the"} rated
-                  presidencies. A sitting or just-departed president is not yet rated.
-                </caption>
-                <thead className="border-y border-white/15 font-mono text-xs text-ink-min">
-                  <tr>
-                    <th scope="col" className="px-3 py-2 font-normal">
-                      President
-                    </th>
-                    <th scope="col" className="px-3 py-2 font-normal">
-                      In office
-                    </th>
-                    <th scope="col" className="px-3 py-2 font-normal">
-                      Historians&apos; rank
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {presidents.map((p) => (
-                    <tr key={p.id} className="border-b border-white/[0.07] last:border-0">
-                      <th scope="row" className="px-3 py-2 font-normal">
-                        <Link
-                          href={`/politicians/${encodeURIComponent(p.id)}`}
-                          className={`inline-flex min-h-11 items-center ${LINK}`}
-                        >
-                          {p.name}
-                        </Link>
-                        <span className="block text-xs text-ink-lo">
-                          {ordinal(p.number)} · {presidentParty(p.party).label}
-                        </span>
+              // Three columns, so the table fits a phone: the number and party
+              // sit under the name. At 200% text it can't, so it scrolls in
+              // its own box rather than widening the page (WCAG 1.4.10).
+              <ScrollRegion label="Every president, with the historians' rank">
+                <table className="w-full border border-white/15 text-left text-sm">
+                  <caption className="px-3 py-2 text-left text-sm text-ink-lo">
+                    Historians&apos; rank: C-SPAN Presidential Historians Survey (2021), their
+                    ranking by total points among {presidents[0]?.historiansRated ?? "the"} rated
+                    presidencies. A sitting or just-departed president is not yet rated.
+                  </caption>
+                  <thead className="border-y border-white/15 font-mono text-xs text-ink-min">
+                    <tr>
+                      <th scope="col" className="px-3 py-2 font-normal">
+                        President
                       </th>
-                      <td className="px-3 py-2 tabular-nums text-ink">{term(p)}</td>
-                      <td className="px-3 py-2 tabular-nums text-ink">{rank(p)}</td>
+                      <th scope="col" className="px-3 py-2 font-normal">
+                        In office
+                      </th>
+                      <th scope="col" className="px-3 py-2 font-normal">
+                        Historians&apos; rank
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {presidents.map((p) => (
+                      <tr key={p.id} className="border-b border-white/[0.07] last:border-0">
+                        <th scope="row" className="px-3 py-2 font-normal">
+                          <Link
+                            href={`/politicians/${encodeURIComponent(p.id)}`}
+                            className={`inline-flex min-h-11 items-center ${LINK}`}
+                          >
+                            {p.name}
+                          </Link>
+                          <span className="block text-xs text-ink-lo">
+                            {ordinal(p.number)} · {presidentParty(p.party).label}
+                          </span>
+                        </th>
+                        <td className="px-3 py-2 tabular-nums text-ink">{term(p)}</td>
+                        <td className="px-3 py-2 tabular-nums text-ink">{rank(p)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </ScrollRegion>
             )}
           </div>
         </main>

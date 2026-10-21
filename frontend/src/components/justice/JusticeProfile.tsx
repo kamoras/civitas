@@ -176,7 +176,7 @@ export default function JusticeProfile({
                       >
                         {name}
                       </Link>
-                      <span className="flex min-w-32 flex-1 items-center gap-3">
+                      <span className="flex min-w-0 flex-[1_1_8rem] items-center gap-3">
                         <span className="h-2 flex-1 bg-[var(--chart-faint)]" aria-hidden="true">
                           <span className="block h-full bg-ink-lo" style={{ width: `${share}%` }} />
                         </span>

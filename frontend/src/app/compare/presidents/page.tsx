@@ -12,6 +12,7 @@ import type {
   PresidentScoreBreakdown,
   PublicMandateFacts,
 } from "@/types/scoreBreakdown";
+import ScrollRegion from "@/components/shared/ScrollRegion";
 
 export const metadata = pageMetadata({
   title: "Compare Presidents Side by Side",
@@ -212,7 +213,7 @@ function ComparisonTable({ left, right }: { left: Side; right: Side }) {
       </tr>
     ));
   return (
-    <div className="panel overflow-x-auto">
+    <ScrollRegion label="The two presidencies compared" className="panel">
       <table className="w-full text-sm">
         <caption className="sr-only">
           {left.president.name} and {right.president.name} compared
@@ -229,7 +230,7 @@ function ComparisonTable({ left, right }: { left: Side; right: Side }) {
           {body(FACT_ROWS)}
         </tbody>
       </table>
-    </div>
+    </ScrollRegion>
   );
 }
 

@@ -270,6 +270,17 @@ function suite(theme: keyof typeof THEMES) {
     });
   });
 
+  describe(`${theme}: a search match (<mark>, globals.css)`, () => {
+    it(`ink-hi on --highlight clears ${AA}:1, and the highlight is opaque`, () => {
+      const hl = THEMES[theme]["--highlight"];
+      // Opaque, so no card it sits in can lower the ratio (the old
+      // bg-signal-cyan/20 wash measured 4.34:1 inside a sunk card).
+      expect(hl).toMatch(/^#[0-9a-f]{6}$/i);
+      expect(ratio(rgb(TOKENS["ink-hi"]), rgb(hl))).toBeGreaterThanOrEqual(AA);
+      expect(CSS).toMatch(/\bmark \{\s*background: var\(--highlight\);\s*color: var\(--ink-hi\);/);
+    });
+  });
+
   describe(`${theme}: party hues inside their own tinted badge`, () => {
     for (const hue of ["dem-blue", "rep-red", "ind-purple"]) {
       it(`${hue} clears ${AA}:1 on a 10% wash of itself`, () => {

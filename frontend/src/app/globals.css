@@ -21,6 +21,9 @@
   --surface-base: #f5efe2; /* parchment: the page */
   --surface: #fbf8f1; /* paper: a box on the page */
   --surface-raised: #ece4d3; /* sunk: a wash, a selected row */
+  /* A search match inside a snippet (<mark>), opaque so its ratio with
+     --ink-hi holds on any card it sits in (wcagContrast.test.ts). */
+  --highlight: #ecdc8f;
   --ink-hi: #1e1a15; /* 15.1:1 on parchment: headings, figures */
   --ink: #362f27; /* body prose */
   --ink-lo: #4a4238; /* 8.6:1: secondary text */
@@ -116,6 +119,11 @@
   --header-height: 5.375rem;
 }
 
+mark {
+  background: var(--highlight);
+  color: var(--ink-hi);
+}
+
 /* Under 56rem (the MENU layout) the records band folds into a status square
    beside the wordmark, so the header is the 51px bar alone (mobile spec P8). */
 @media (max-width: 55.99rem) {
@@ -141,6 +149,7 @@ html[data-header-hidden] {
     --surface-base: #14120f; /* carbon */
     --surface: #1d1a16;
     --surface-raised: #24201b;
+    --highlight: #4a4220;
     --ink-hi: #f4efe6;
     --ink: #e2dacd;
     --ink-lo: #cfc6b6;
@@ -198,6 +207,7 @@ html[data-header-hidden] {
   --surface-base: #14120f; /* carbon */
   --surface: #1d1a16;
   --surface-raised: #24201b;
+  --highlight: #4a4220;
   --ink-hi: #f4efe6;
   --ink: #e2dacd;
   --ink-lo: #cfc6b6;

@@ -56,7 +56,10 @@ function Strip({ m, name }: { m: PresidentPeerMeasure; name: string }) {
           style={{ left: at(m.value) }}
         />
       </div>
-      <div className="flex justify-between gap-3 text-xs text-ink-min" aria-hidden="true">
+      <div
+        className="flex flex-wrap justify-between gap-x-3 text-xs text-ink-min"
+        aria-hidden="true"
+      >
         <span>{ends[0]}</span>
         {m.expectedShown && <span className="font-semibold text-ink-lo">{m.expectedShown}</span>}
         <span>{ends[1]}</span>
