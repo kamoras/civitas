@@ -24,7 +24,7 @@
     {"label": "Every president", "href": "/executive/presidents", "section": "Executive", "aliases": ["presidents", "all presidents", "past presidents", "historians rank"]},
     {"label": "Compare presidents", "href": "/compare/presidents", "section": "Executive", "aliases": []},
     {"label": "Every agency", "href": "/agencies", "section": "Executive", "aliases": ["agencies", "federal agencies", "agency directory", "departments"]},
-    {"label": "Budgets", "href": "/agencies#budget", "section": "Executive", "aliases": ["agency budgets", "federal budget", "spending"]},
+    {"label": "Budgets", "href": "/agencies/budget", "section": "Executive", "aliases": ["agency budgets", "federal budget", "spending"]},
     {"label": "Open comment periods", "href": "/search?tab=documents&comment=open", "section": "Executive", "aliases": ["public comment", "comment periods", "comment on a rule"]},
     {"label": "Executive orders", "href": "/executive/orders", "section": "Executive", "aliases": ["executive order", "proclamations", "presidential actions", "presidential documents"]},
     {"label": "Nominations", "href": "/congress/nominations", "section": "Executive", "aliases": []},

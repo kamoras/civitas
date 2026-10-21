@@ -9,6 +9,7 @@ import { exploreHref } from "@/lib/exploreHref";
 import { calendarDate } from "@/lib/congress";
 import { NOMINATIONS_HREF, nominationHref } from "@/lib/nominations";
 import {
+  AGENCY_BUDGETS_HREF,
   EXECUTIVE_HREF,
   EXECUTIVE_ORDERS_HREF,
   OPEN_COMMENTS_HREF,
@@ -228,7 +229,7 @@ export default async function ExecutivePage() {
               <Panel
                 id="agencies"
                 title="The largest agencies"
-                more={{ href: "/agencies#budget", label: "Every agency's budget" }}
+                more={{ href: AGENCY_BUDGETS_HREF, label: "Every agency's budget" }}
               >
                 {!agencies ? (
                   <Unavailable what="The agency budgets" />
