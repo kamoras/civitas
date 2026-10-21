@@ -2429,7 +2429,7 @@ the pending list).
 | SEO: per-route metadata, canonicals, JSON-LD, sitemap | `frontend/src/lib/site.ts`, `frontend/src/lib/seo.ts`, `frontend/src/app/sitemap.ts`, `backend/app/api/sitemap.py` |
 | Frontend types | `frontend/src/types/` |
 | Metric explanations (tooltips on all scorecard metrics) | `frontend/src/components/checker/MetricTooltip.tsx` |
-| Record boxes ("Boxes, not blocks": ruled grid, box, figures shared with the homepage) and the bill and state ballot pages built from them | `frontend/src/components/shared/BoxGrid.tsx`, `RecordBox.tsx`, `RecordFigure.tsx`, `frontend/src/types/figure.ts`, `frontend/src/components/congress/BillPageView.tsx`, `frontend/src/app/elections/states/[state]/StateBallotClient.tsx`; the bill page's lines from `backend/app/services/bill_boxes.py` (`boxes` on `GET /api/bills/{id}/record`) and `committee_record.search`'s `headline`; the ballot page's from `backend/app/services/ballot_boxes.py` (`boxes` on `GET /api/elections/states/{state}`); the Action Center's Today tab (`frontend/src/app/action/page.tsx` `IssueBox`, `OpenComments`; buttons from `issueCommands` in `IssueEnrichment.tsx`); `/environmental` from `backend/app/environmental.py` and `app/data/environmental.json` (`GET /api/environmental`) |
+| Record boxes ("Boxes, not blocks": ruled grid, box, figures shared with the homepage) and the bill and state ballot pages built from them | `frontend/src/components/shared/BoxGrid.tsx`, `RecordBox.tsx`, `RecordFigure.tsx`, `frontend/src/types/figure.ts`, `frontend/src/components/congress/BillPageView.tsx`, `frontend/src/app/elections/states/[state]/StateBallotClient.tsx`; the bill page's lines from `backend/app/services/bill_boxes.py` (`boxes` on `GET /api/bills/{id}/record`) and `committee_record.search`'s `headline`; the ballot page's from `backend/app/services/ballot_boxes.py` (`boxes` on `GET /api/elections/states/{state}`); the Action Center's Today tab (`frontend/src/app/action/page.tsx` `IssueBox`, `OpenComments`; buttons from `issueCommands` in `IssueEnrichment.tsx`); `/environmental` from `backend/app/environmental.py`, `backend/app/environmental_sampler.py` (daily, `/data/environmental_runtime.json`) and `app/data/environmental.json` (`GET /api/environmental`; eGRID staleness in `data_refresh`) |
 | Detail pages' two layers: where a member stands among peers, methods ledger, bill stage ladder and sources, "cite this", held and thin-data marks | `frontend/src/components/scorecard/WhereTheyStand.tsx`, `MethodsLedger.tsx`, `HeldScore.tsx`, `frontend/src/components/congress/StageLadder.tsx`, `BillSources.tsx`, `frontend/src/components/shared/CiteThis.tsx` (a government document or record cites its issuer: `frontend/src/lib/citedSources.ts`); data from `api/politicians.py` (`_chamber_field`, `_scored_on`) and `bill_service.stage_milestones` |
 | Action Center issue parts (shared with `/issue/[id]`: meta, tags, "What you can do", coverage, sources) | `frontend/src/components/action/IssueEnrichment.tsx` |
 | Where a member stands among peers (per-measure figure, expected, percentile, word by a fixed rule, template sentence) | `backend/app/peer_comparison.py`, `GET /api/{senators,representatives}/{id}/peers`, public breakdown `peerComparison` |
@@ -2881,9 +2881,14 @@ state ballot page (`StateBallotClient.tsx`, lines from
 its commands as buttons, the rest behind "More"; each open comment period a
 box with the backend's `commentWindow` as its countdown) and
 `/environmental` (each figure a stat box from `GET /api/environmental`,
-`app/environmental.py` over `app/data/environmental.json`, where every
-figure carries its source and date and the worked-out ones are computed)
-follow; a new record page, or a rebuilt one,
+`app/environmental.py`: the machine read from `/proc`, the models' sizes
+read from the llama.cpp server and the embedding models' files by
+`app/environmental_sampler.py`, the pipelines' hours from their run
+records; only what the site can't read sits in `app/data/environmental.json`,
+each figure with its source and date, and `data_refresh` alerts on a newer
+eGRID edition. The Pi's power can't be sampled: no container can reach
+`/dev/vcio`, so it stays a dated reading and the whole-machine figure a
+labelled assumption) follow; a new record page, or a rebuilt one,
 should use the pair rather than a new card. What the pair already takes, so
 a page doesn't grow its own: `below` for what spans the box under the line
 and the figure (a race's candidates, a row of commands; `children` share

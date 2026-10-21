@@ -25,10 +25,12 @@ interface Sourced {
   date: string;
 }
 
-/** GET /api/environmental (backend app/environmental.py): every figure is
- *  measured on the production machine, read from a named public source, or
- *  labelled as an assumption, each with its source and date; the worked-out
- *  ones and every box line are the backend's. */
+/** GET /api/environmental (backend app/environmental.py). The machine, the
+ *  models' sizes and the pipelines' hours are read by the site itself; what
+ *  it can't read is a dated measurement, a published figure or a labelled
+ *  assumption, each with its source and date. The worked-out figures and
+ *  every box line are the backend's; a figure not read has no figure and
+ *  says so. */
 interface Environmental {
   reviewed: string;
   boxes: {
@@ -36,8 +38,8 @@ interface Environmental {
     kicker: string;
     title: string;
     dek: string;
-    figure: StatFigure;
-    source: string;
+    figure: StatFigure | null;
+    source: string | null;
   }[];
   figures: {
     boardPower: Sourced & {
@@ -47,18 +49,20 @@ interface Environmental {
       readings: number;
       intervalSeconds: number;
       window: string;
+      _whyNotSampled: string;
     };
     assumedWatts: Sourced & { watts: number };
     grid: Sourced & { lbCo2ePerMWh: number; edition: string };
-    hardware: Sourced & { model: string; method: string };
-    models: {
-      llm: Sourced & { name: string; parameters: number; quantisation: string; method: string };
-      embedding: (Sourced & { name: string; use: string; parameters: number; method: string })[];
-    };
   };
+  machine: (Sourced & { model: string | null; cores: number; memoryGiB: number }) | null;
+  models: {
+    llm?: { name: string; parameters: number; bytes: number; type: string | null; readAt: string };
+    embedding?: Record<string, { parameters: number; use: string; readAt: string }>;
+  } | null;
 }
 
-const day = (iso: string) => formatUtcDate(iso, { month: "long", day: "numeric", year: "numeric" });
+const day = (iso: string) =>
+  formatUtcDate(iso.slice(0, 10), { month: "long", day: "numeric", year: "numeric" });
 
 /** The method and caveats behind each box's "More", from the same fields. */
 function moreFor(id: string, e: Environmental): { label: string; children: ReactNode } | null {
@@ -80,33 +84,47 @@ function moreFor(id: string, e: Environmental): { label: string; children: React
               projects. We count all of its power against Civitas rather than try to split it.
             </P>
             <P>
-              The machine reports itself as a {e.figures.hardware.model} (read from{" "}
-              {e.figures.hardware.method}, {day(e.figures.hardware.date)}).
+              The model, cores and memory are read from this server&apos;s own{" "}
+              <code>/proc/cpuinfo</code> and <code>/proc/meminfo</code> each time the page is built.
             </P>
           </>
         ),
       };
     case "models": {
-      const { llm, embedding } = e.figures.models;
+      const llm = e.models?.llm;
+      const embedding = Object.entries(e.models?.embedding ?? {});
+      if (!llm) return null;
       return {
         label: "each model",
         children: (
           <List>
             <Item label={llm.name}>
-              {llm.parameters.toLocaleString("en-US")} parameters, run {llm.quantisation}. Finds
-              claims in news articles and writes a few short, labelled summaries. {llm.method},{" "}
-              {day(llm.date)}.
+              {llm.parameters.toLocaleString("en-US")} parameters
+              {llm.type ? `, ${llm.type}` : ""}. Finds claims in news articles and writes a few
+              short, labelled summaries. Read from the llama.cpp server&apos;s own model metadata (
+              <code>/v1/models</code>), {day(llm.readAt)}.
             </Item>
-            {embedding.map((m) => (
-              <Item key={m.name} label={m.name}>
-                {m.parameters.toLocaleString("en-US")} parameters, for {m.use}. {m.method},{" "}
-                {day(m.date)}.
+            {embedding.map(([name, m]) => (
+              <Item key={name} label={name}>
+                {m.parameters.toLocaleString("en-US")} parameters, for {m.use}. Counted from the
+                model file&apos;s tensor shapes, {day(m.readAt)}.
               </Item>
             ))}
           </List>
         ),
       };
     }
+    case "pipelines":
+      return {
+        label: "how this is counted",
+        children: (
+          <P>
+            From the run records of all five nightly pipelines (Senate, supplementary, House, stock
+            trades, election): the hours on each of the last seven whole days that any of them was
+            running, two at once counted once.
+          </P>
+        ),
+      };
     case "board":
       return {
         label: "how the board was measured",
@@ -125,6 +143,7 @@ function moreFor(id: string, e: Environmental): { label: string; children: React
               from the USB ports or the PCIe slot, and the loss in converting the supply&apos;s 5
               volts, is outside it.
             </P>
+            <P>Why this isn&apos;t measured all the time: {bp._whyNotSampled}</P>
           </>
         ),
       };
@@ -212,9 +231,9 @@ export default async function EnvironmentalPage() {
                 title={b.title}
                 dek={b.dek}
                 figure={b.figure}
-                more={moreFor(b.id, env)}
+                more={b.figure ? moreFor(b.id, env) : null}
               >
-                <p className="text-sm text-ink-min">Source: {b.source}.</p>
+                {b.source && <p className="text-sm text-ink-min">Source: {b.source}.</p>}
               </RecordBox>
             ))}
             <RecordBox

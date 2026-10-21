@@ -29,6 +29,7 @@ from app.pipeline.analyze.congress_bluesky import post_congress_lookahead, post_
 from app.time_utils import utcnow
 from app import calibration_drift
 from app import data_refresh
+from app import environmental_sampler
 from app.background import WritesHeld, start_writer
 from app.broadcast import deliver_pending, refresh_engagement
 from app.pipeline.analyze.trend_poster import run_trend_posts
@@ -876,6 +877,20 @@ def _agency_sync() -> None:
     _start_job(run_agency_sync, name="agency-sync")
 
 
+def _environmental_sample() -> None:
+    """The models' sizes for /environmental (app/environmental_sampler.py),
+    read from the language-model server and the embedding models' files.
+    Daily and once at start; it reads two small things and writes one
+    file, so it takes no lease and never waits on a pipeline."""
+    def _run():
+        try:
+            environmental_sampler.sample()
+        except Exception:
+            logger.exception("Environmental sample failed")
+
+    _start_job(_run, name="environmental-sample")
+
+
 def _nominations_sync() -> None:
     """Congress.gov's nominations (pipeline/fetch/nominations.py): daily,
     outside the nightly chain, and skipped while any of its pipelines runs —
@@ -1023,6 +1038,17 @@ def start_scheduler() -> None:
         _agency_sync,
         CronTrigger(minute="30", timezone="UTC"),
         id="agency_sync",
+        replace_existing=True,
+        next_run_time=datetime.now(timezone.utc),
+    )
+
+    # /environmental's model sizes — daily at 06:20, when the nightly chain
+    # has usually loaded both embedding models into this container's cache,
+    # and once at start.
+    scheduler.add_job(
+        _environmental_sample,
+        CronTrigger(hour="6", minute="20", timezone="UTC"),
+        id="environmental_sample",
         replace_existing=True,
         next_run_time=datetime.now(timezone.utc),
     )

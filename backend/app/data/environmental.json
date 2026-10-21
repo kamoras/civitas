@@ -1,45 +1,7 @@
 {
-  "_source": "What running Civitas costs, for /environmental (app/environmental.py). Each figure is measured on the production machine, read from a named public source, or labelled as an assumption, and carries its source and date. Figures worked out from these (energy a year, carbon, the comparisons) are computed in app/environmental.py, never typed. Re-measure before changing a number; the method for each is beside it.",
-  "_contract": "Each figure set has `source` (a short credit, shown under its box) and `date` (ISO, when measured or published); `method`, where present, is how it was read, shown behind the box's More. Add a figure here with both, never in the page.",
+  "_source": "What running Civitas costs that the site can't read for itself, for /environmental (app/environmental.py). The machine, the models' sizes and the pipelines' hours are read by the site (app/environmental.py, app/environmental_sampler.py), never typed here. What stays here is a dated measurement, a published figure or a labelled assumption, each with its source and date; everything worked out from them is computed in app/environmental.py. data_refresh alerts when EPA publishes an eGRID edition newer than `grid.edition`.",
+  "_contract": "Each figure set has `source` (a short credit, shown under its box) and `date` (ISO, when measured or published). Add a figure here only if the site can't read it, with both.",
   "reviewed": "2026-10-21",
-  "hardware": {
-    "model": "Raspberry Pi 5 Model B Rev 1.1",
-    "memoryKiB": 16607536,
-    "cores": 4,
-    "core": "Cortex-A76",
-    "source": "The production machine's own report",
-    "date": "2026-10-21",
-    "method": "/proc/device-tree/model, /proc/meminfo, nproc and lscpu on the production machine"
-  },
-  "models": {
-    "llm": {
-      "name": "LFM2.5-1.2B-Instruct",
-      "parameters": 1170340608,
-      "quantisation": "Q4_K_M (4-bit)",
-      "fileBytes": 730895168,
-      "source": "Liquid AI's model card; the production server's model file",
-      "date": "2026-10-21",
-      "method": "Parameters: the safetensors total on the model's Hugging Face card. File: ls -l on the quantised file the production llama.cpp server loads"
-    },
-    "embedding": [
-      {
-        "name": "Snowflake arctic-embed-xs",
-        "use": "classification",
-        "parameters": 22565376,
-        "source": "Snowflake's model card",
-        "date": "2026-10-21",
-        "method": "The safetensors total on the model's Hugging Face card"
-      },
-      {
-        "name": "all-MiniLM-L6-v2",
-        "use": "search and similarity",
-        "parameters": 22713728,
-        "source": "sentence-transformers' model card",
-        "date": "2026-10-21",
-        "method": "The safetensors total on the model's Hugging Face card"
-      }
-    ]
-  },
   "boardPower": {
     "meanWatts": 3.3,
     "medianWatts": 3.1,
@@ -49,28 +11,21 @@
     "intervalSeconds": 15,
     "window": "05:01 to 05:22 UTC, while the Senate pipeline ran",
     "source": "The Pi's power chip (vcgencmd pmic_read_adc)",
-    "date": "2026-09-29"
+    "date": "2026-09-29",
+    "_whyNotSampled": "The Pi 5's power is read from its PMIC over the firmware mailbox (/dev/vcio, crw------- root:root on the host). No container is given it: the services run unprivileged with no devices (docker inspect, 2026-10-21: Privileged=false, Devices=[]), Swarm services can't be given a device, and the only hwmon sensors a container sees are cpu_thermal, nvme, rp1_adc, pwmfan and rpi_volt, none of them power. So this is one dated reading, and the whole-machine figure stays an assumption."
   },
   "assumedWatts": {
     "watts": 7,
     "source": "Our assumption, set above the board's measured peak",
     "date": "2026-09-29"
   },
-  "pipelines": {
-    "days": 8,
-    "minHours": 4,
-    "maxHours": 20,
-    "meanHours": 10.5,
-    "through": "2026-09-28",
-    "source": "Pipeline run records in the production database",
-    "date": "2026-09-28"
-  },
   "llmUse": {
     "requests": 160,
     "hours": 24,
     "meanSeconds": 11,
     "source": "The llama.cpp server's request log",
-    "date": "2026-09-29"
+    "date": "2026-09-29",
+    "_whyNotSampled": "The llama.cpp server runs without --metrics (GET /metrics answers 501) and the Action Center keeps no count of its model calls, so this is one day's reading of the server's request log."
   },
   "grid": {
     "lbCo2ePerMWh": 770.9,
