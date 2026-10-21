@@ -20,24 +20,42 @@ const HIT_PX = 24;
 /** Marks PageUp and PageDown move by, for a chart of 435. */
 const PAGE = 10;
 
+// One sentence: a part that ends in its own full stop loses it inside.
+const bare = (s: string) => s.replace(/\.$/, "");
 const words = (m: ReadoutMark) =>
-  `${m.label}${m.detail ? `, ${m.detail}` : ""}: ${m.shown}${m.context ? `, ${m.context}` : ""}.`;
+  `${bare(m.label)}${m.detail ? `, ${bare(m.detail)}` : ""}: ${
+    m.context ? `${bare(m.shown)}, ${bare(m.context)}` : bare(m.shown)
+  }.`;
 
 type Box = { left: number; top: number; width: number; height: number };
 
-/** Where a mark sits in the chart, in px from its top left. */
-function placeOf(
-  m: ChartMark,
-  box: HTMLDivElement,
-  r: DOMRect
-): { el: Element | null; b: Box } | null {
+type Shape = { el: Element | null; b: Box };
+
+/** Where a mark is drawn in the chart, in px from its top left: every
+ *  shape carrying its id that is on screen (a small state is drawn twice,
+ *  as itself and as a box off the coast), else the first. */
+function shapesOf(m: ChartMark, box: HTMLDivElement, r: DOMRect): Shape[] {
   if (m.x != null && m.y != null) {
-    return { el: null, b: { left: (m.x / 100) * r.width, top: m.y, width: 0, height: 0 } };
+    return [{ el: null, b: { left: (m.x / 100) * r.width, top: m.y, width: 0, height: 0 } }];
   }
-  const el = box.querySelector(`[${MARK_ATTR}="${CSS.escape(m.id)}"]`);
-  if (!el) return null;
-  const e = el.getBoundingClientRect();
-  return { el, b: { left: e.left - r.left, top: e.top - r.top, width: e.width, height: e.height } };
+  const all = [...box.querySelectorAll(`[${MARK_ATTR}="${CSS.escape(m.id)}"]`)].map((el) => {
+    const e = el.getBoundingClientRect();
+    return {
+      el,
+      b: { left: e.left - r.left, top: e.top - r.top, width: e.width, height: e.height },
+    };
+  });
+  const shown = all.filter((s) => s.b.width > 0 || s.b.height > 0);
+  return shown.length ? shown : all.slice(0, 1);
+}
+
+/** The shape a mark's label points at: its largest on screen. */
+function placeOf(m: ChartMark, box: HTMLDivElement, r: DOMRect): Shape | null {
+  const shapes = shapesOf(m, box, r);
+  return shapes.reduce<Shape | null>(
+    (best, s) => (best && best.b.width * best.b.height >= s.b.width * s.b.height ? best : s),
+    null
+  );
 }
 
 /**
@@ -66,6 +84,7 @@ export default function ChartReadout({
   labelAt = "top",
   className = "",
   onActive,
+  ring = true,
   children,
 }: {
   /** The chart's accessible name: what it measures, and of whom. */
@@ -81,6 +100,9 @@ export default function ChartReadout({
   className?: string;
   /** The open mark's id, for a chart that draws its own highlight. */
   onActive?: (id: string | null) => void;
+  /** False for a chart that outlines the open mark itself (a map's state:
+   *  a box around its bounds would mean nothing). */
+  ring?: boolean;
   children: React.ReactNode;
 }) {
   const [active, setActiveIndex] = useState<number | null>(null);
@@ -146,6 +168,12 @@ export default function ChartReadout({
     const r = box.current!.getBoundingClientRect();
     const px = e.clientX - r.left;
     const py = e.clientY - r.top;
+    // On a drawn shape: that one, exactly (a state's outline, not its box).
+    const on = (e.target as Element).closest?.(`[${MARK_ATTR}]`);
+    if (on && box.current!.contains(on)) {
+      const i = marks.findIndex((q) => q.id === on.getAttribute(MARK_ATTR));
+      if (i >= 0) return i;
+    }
     let best: number | null = null;
     let bd = Infinity;
     let by = Infinity;
@@ -161,16 +189,18 @@ export default function ChartReadout({
         }
         return;
       }
-      // By shape: inside it is 0, else the gap to its edge.
-      const at = placeOf(q, box.current!, r);
-      if (!at) return;
-      const { left, top, width, height } = at.b;
-      const dx = Math.max(left - px, 0, px - left - width);
-      const dy = Math.max(top - py, 0, py - top - height);
-      const d = Math.hypot(dx, dy);
-      if (d < bd) {
-        best = i;
-        bd = d;
+      // Near a shape: the gap to its box's edge, 0 inside; among boxes the
+      // pointer is inside, the smallest (the mark drawn there, likeliest).
+      for (const { b } of shapesOf(q, box.current!, r)) {
+        const dx = Math.max(b.left - px, 0, px - b.left - b.width);
+        const dy = Math.max(b.top - py, 0, py - b.top - b.height);
+        const d = Math.hypot(dx, dy);
+        const area = b.width * b.height;
+        if (d < bd || (d === 0 && bd === 0 && area < by)) {
+          best = i;
+          bd = d;
+          by = area;
+        }
       }
     });
     return bd <= HIT_PX ? best : null;
@@ -275,7 +305,7 @@ export default function ChartReadout({
     <div
       ref={box}
       role="group"
-      aria-label={`${label}: ${marks.length} mark${marks.length === 1 ? "" : "s"}. Arrow keys move between them${
+      aria-label={`${label.replace(/\.$/, "")}: ${marks.length} mark${marks.length === 1 ? "" : "s"}. Arrow keys move between them${
         linked ? ", Enter opens a page" : ""
       }.`}
       tabIndex={0}
@@ -305,7 +335,7 @@ export default function ChartReadout({
       <div aria-hidden="true">{children}</div>
       {m && place && (
         <>
-          {place.circle ? (
+          {!ring ? null : place.circle ? (
             <svg
               aria-hidden="true"
               width={22}

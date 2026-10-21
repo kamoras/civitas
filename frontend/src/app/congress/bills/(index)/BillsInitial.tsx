@@ -8,6 +8,7 @@ import { createContext, useContext } from "react";
  * throttled phone, 2026-10-14). */
 export interface BillsInitial {
   stageCounts: Record<string, number>;
+  stageFlow: Record<string, { shareText: string; barPercent: number }>;
   inMotion: number;
 }
 

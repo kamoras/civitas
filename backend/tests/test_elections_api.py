@@ -799,3 +799,18 @@ class TestPhaseCacheLifetime:
                     patch("app.api.elections.election_today", return_value=day):
                 response = elections.list_races(db_session)
             assert f"max-age={ttl}," in response.headers["Cache-Control"]
+
+
+def test_the_lean_map_names_each_state_and_its_place():
+    marks = elections.state_lean_marks(
+        {"AA": 8, "BB": 3, "CC": -5, "DD": 0, "DC": -40},
+        {"AA": "Aland", "BB": "Bland", "CC": "Cland", "DD": "Dland", "EE": "Eland", "DC": "District of Columbia"},
+        {"AA", "BB", "CC", "DD", "EE"},
+    )
+    assert marks["BB"] == {"id": "BB", "label": "Bland", "detail": None, "shown": "R+3",
+                           "context": "the 2nd most Republican of the 4 states", "href": "/elections/states/BB"}
+    assert marks["CC"]["context"] == "the most Democratic of the 4 states"
+    assert marks["AA"]["context"] == "the most Republican of the 4 states"
+    assert marks["DD"]["shown"] == "EVEN"
+    assert marks["EE"]["shown"] == "no lean on file" and marks["EE"]["href"] == "/elections/states/EE"
+    assert marks["DC"]["href"] is None and marks["DC"]["shown"] == "no voting member of Congress"
