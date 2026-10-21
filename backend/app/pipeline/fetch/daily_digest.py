@@ -362,7 +362,7 @@ def _events_from_items(kind: str, items: list[dict], merge_details: bool, needs_
 def _last_sentence(heading: str) -> str:
     """A measure's name from a heading that a typesetting slip ran on from
     the paragraph before ("... was agreed to yesterday, March 6th.
-    Censuring Representative Al Green of Texas", 2025-03-06)."""
+    Censuring Representative [name] of [state]", 2025-03-06)."""
     return re.split(r"(?<=[a-z]{2}\.)\s+", heading)[-1]
 
 

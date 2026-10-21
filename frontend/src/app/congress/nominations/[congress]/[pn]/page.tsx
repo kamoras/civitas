@@ -274,7 +274,7 @@ export default async function NominationPage({ params }: PageProps) {
             {names.length > 1 && (
               <section aria-labelledby="nominees" className="flex flex-col gap-3">
                 <h2 id="nominees" className="font-display text-2xl font-semibold text-ink-hi">
-                  The {n.nomineeCount.toLocaleString()} nominees
+                  The {n.nomineeCount.toLocaleString("en-US")} nominees
                 </h2>
                 {n.nominees[0]?.introText && (
                   <p className="text-sm text-ink-lo">{n.nominees[0].introText}</p>
@@ -283,7 +283,7 @@ export default async function NominationPage({ params }: PageProps) {
                 {names.length > SHOWN_NAMES && (
                   <details>
                     <summary className="cursor-pointer font-mono text-xs text-ink-lo hover:text-phos">
-                      [The other {(names.length - SHOWN_NAMES).toLocaleString()}]
+                      [The other {(names.length - SHOWN_NAMES).toLocaleString("en-US")}]
                     </summary>
                     <NameList names={names.slice(SHOWN_NAMES)} />
                   </details>

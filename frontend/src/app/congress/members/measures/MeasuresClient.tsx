@@ -6,7 +6,7 @@ import Navbar from "@/components/layout/Navbar";
 import { MEASURES_HREF } from "@/lib/routes";
 import Footer from "@/components/layout/Footer";
 import { axisMax, fmt } from "@/components/scorecard/WhereTheyStand";
-import { STATE_NAMES } from "@/lib/stateCodes";
+import { STATE_NAMES, byStateName } from "@/lib/stateCodes";
 import type { ChamberMeasure, ChamberMeasures, ChamberMember, ChamberPoint } from "@/types/peers";
 import ScrollRegion from "@/components/shared/ScrollRegion";
 
@@ -176,7 +176,10 @@ function FactTable({ members, house }: { members: ChamberMember[]; house: boolea
   const [state, setState] = useState("");
   const [party, setParty] = useState("");
   const [lean, setLean] = useState("");
-  const states = useMemo(() => [...new Set(members.map((m) => m.state))].sort(), [members]);
+  const states = useMemo(
+    () => [...new Set(members.map((m) => m.state))].sort(byStateName),
+    [members]
+  );
   const shown = useMemo(() => {
     const band = LEANS.find((l) => l.key === lean);
     const rows = members.filter(

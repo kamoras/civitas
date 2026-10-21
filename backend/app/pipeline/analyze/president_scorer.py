@@ -49,6 +49,7 @@ from datetime import date
 from app.config_definitions import PRESIDENT_SCORE_WEIGHTS
 from app.pipeline.analyze.population_reference import PRESIDENT_REFERENCE
 from app.pipeline.analyze.score_bounds import clamp
+from app.pipeline.fetch.peer_gdp import PEER_COUNTRIES
 
 logger = logging.getLogger(__name__)
 
@@ -439,7 +440,7 @@ def _effectiveness_core(
         components.append(_population_zscore_component(
             "GDP growth vs. peer economies", weights["gdp"], relative, relative_stat[0], relative_stat[1],
             f"Grew {gdp_per_person:.1f}% a year per person leaving out the first year, against "
-            f"{gdp_peer_median:.1f}% in 13 other wealthy countries. Allowing for their catching up "
+            f"{gdp_peer_median:.1f}% in {len(PEER_COUNTRIES)} other wealthy countries. Allowing for their catching up "
             f"with US incomes: {_ahead(relative)}, against {_ahead(relative_stat[0])} for the typical president "
             f"since {_GDP_REGIME_SPLIT_YEAR}",
         ))
@@ -589,19 +590,38 @@ def _macro_reference(reference: dict | None, president_id: str | None) -> dict:
 # election in their own right have neither approval nor margin data; Public
 # Mandate is excluded for them (see compute_president_overall_score).
 
-# Fewest presidents with a value before its population mean/stdev is
-# trusted; below it the last persisted value is kept for that stat.
-_MIN_PRESIDENT_REFERENCE_N = 10
+# No count of presidents is typed (it was 10). A stat needs what its
+# arithmetic needs (two values for a standard deviation, three for a line
+# and the spread around it), and a run never replaces a persisted stat
+# with one measured on fewer presidencies (keep_fuller): the population
+# only grows, a presidency at a time, so fewer values is a source this run
+# couldn't read, and the standard error of a mean at a given spread grows
+# as the count falls. Comparing standard errors directly would freeze the
+# reference whenever a new presidency widened the spread.
+_MIN_FIT_POINTS = 3
 
 
-def _mean_stdev(values: list[float], min_n: int = _MIN_PRESIDENT_REFERENCE_N) -> dict | None:
-    if len(values) < min_n:
+def _mean_stdev(values: list[float]) -> dict | None:
+    if len(values) < 2:
         return None
     return {
         "mean": round(statistics.mean(values), 4),
         "stdev": round(statistics.stdev(values), 4),
         "n": len(values),
     }
+
+
+def keep_fuller(previous: dict, measured: dict) -> dict:
+    """The reference to persist: this run's stats, except where the
+    persisted one was measured on more presidencies ("n"): the population
+    only grows, so a stat on fewer is a source this run couldn't read."""
+    merged = {**previous, **measured}
+    for key, stat in measured.items():
+        old = previous.get(key)
+        if (isinstance(stat, dict) and isinstance(old, dict)
+                and isinstance(stat.get("n"), int) and isinstance(old.get("n"), int) and stat["n"] < old["n"]):
+            merged[key] = old
+    return merged
 
 
 def compute_president_reference(presidents: list[dict]) -> dict:
@@ -712,7 +732,7 @@ def approval_window(series: list[tuple[date, float]], days: int | None = None) -
 def fit_trend_on_start(points: list[tuple[float, float]]) -> dict | None:
     """Least-squares fit of approval trend on starting approval over
     (start, trend) pairs, with the residual standard deviation the trend
-    is z-scored by. None below _MIN_PRESIDENT_REFERENCE_N presidencies.
+    is z-scored by. None below _MIN_FIT_POINTS presidencies.
 
     Approval is bounded, and a president who starts high has far further
     to fall: across the 14 completed polling-era presidencies, the starting
@@ -723,7 +743,7 @@ def fit_trend_on_start(points: list[tuple[float, float]]) -> dict | None:
     record predicts from their starting point is regression adjustment
     for that baseline, the standard treatment of a change score whose
     room to move depends on where it starts."""
-    if len(points) < _MIN_PRESIDENT_REFERENCE_N:
+    if len(points) < _MIN_FIT_POINTS:
         return None
     xs = [x for x, _ in points]
     ys = [y for _, y in points]
@@ -846,8 +866,8 @@ def partisan_reference(points: list[tuple[float, dict[str, float]]]) -> dict | N
     """From (polarization, {"own", "opp", "ind"} approval) per presidency:
     each group's Theil-Sen fit on polarization, and the mean and standard
     deviation of the presidencies' approval_vs_era, which a president's own
-    is z-scored by. None below _MIN_PRESIDENT_REFERENCE_N presidencies."""
-    if len(points) < _MIN_PRESIDENT_REFERENCE_N:
+    is z-scored by. None below _MIN_FIT_POINTS presidencies."""
+    if len(points) < _MIN_FIT_POINTS:
         return None
     fits = {}
     for g in APPROVAL_GROUPS:
@@ -1117,7 +1137,7 @@ def _historical_legacy_core(
     if historical_legacy_score is not None and legacy:
         components.append(_population_zscore_component(
             "Historians' assessment", 1.0, historical_legacy_score, legacy[0], legacy[1],
-            f"{historical_legacy_score} points in C-SPAN's 2021 survey of historians, against "
+            f"{historical_legacy_score} points in C-SPAN's survey of historians, against "
             f"{legacy[0]:.0f} for the average president",
         ))
     return {**_blend_live_components(components), "facts": facts}

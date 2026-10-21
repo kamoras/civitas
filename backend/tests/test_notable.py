@@ -155,12 +155,27 @@ class TestLoneBreak:
         # BB has one senator on file: nobody to compare with.
         assert breaks[0]["compareWithId"] is None
 
-    def test_too_few_voting_is_not_a_lone_break(self, db_session):
+    def test_a_break_with_a_few_attendees_is_not_a_break_with_the_party(self, db_session):
+        """The rest voting the other way must be most of the party's members
+        on the roll: eight of the party's forty-nine is a handful, not the
+        party."""
         _senators(db_session)
         rc = _rc(db_session, "2026-09-30", 10, 10)
-        _party_votes(db_session, rc, "R", 0, nt.LONE_BREAK_MIN_VOTING - 2, lone=("Lone", "AA", "Yea"))
+        _party_votes(db_session, rc, "R", 0, 8, lone=("Lone", "AA", "Yea"))
+        for i in range(40):
+            db_session.add(RollCallPosition(roll_call_id=rc.id, member_id=f"Rx{i}", last_name=f"RX{i}",
+                                            party="R", state="ZZ", position="Not Voting"))
         db_session.commit()
         assert _breaks(db_session, date(2026, 10, 2)) == []
+
+    def test_a_small_party_present_in_full_can_break(self, db_session):
+        """No count is typed: two of a three-member party against the third
+        is the party against one of its own."""
+        _senators(db_session)
+        rc = _rc(db_session, "2026-09-30", 10, 10)
+        _party_votes(db_session, rc, "R", 0, 2, lone=("Lone", "AA", "Yea"))
+        db_session.commit()
+        assert [b["memberId"] for b in _breaks(db_session, date(2026, 10, 2))] == ["pat-lone"]
 
     def test_the_majority_leaders_reconsider_switch_is_not_a_break(self, db_session):
         _senators(db_session)
@@ -328,3 +343,11 @@ def test_the_endpoint_reads_the_eastern_clock(db_session, freeze_utcnow):
     assert r.headers["cache-control"].startswith("public, max-age=300")
     body = r.json()
     assert body["asOf"] == "2026-10-21" and body["lead"]["kind"] == "closest"
+
+
+def test_a_law_with_a_short_title_leads_with_its_name():
+    named = {"name": "Example Fisheries Enforcement Act of 2026", "billLabel": "S. 9", "billId": "S.9"}
+    assert nt._law_name(named) == "Example Fisheries Enforcement Act of 2026"
+    # An official long title is not a name news uses: the number leads.
+    long = {"name": "A bill to amend title 46 to improve example enforcement.", "billLabel": "H.R. 9", "billId": "HR.9"}
+    assert nt._law_name(long) is None

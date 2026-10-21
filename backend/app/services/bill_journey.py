@@ -178,8 +178,9 @@ def _sentence(verb: str, action: dict, method: str | None, two_thirds: bool) -> 
 def passage(actions: list[dict]) -> list[dict]:
     """How each chamber decided the bill, oldest first: {chamber, kind
     ("passed" | "failed" | "agreed"), date, method, twoThirds, methodTerm
-    and methodMeaning (the glossary's line on the method), sentence, text
-    (the action, verbatim), rollCall}."""
+    and methodMeaning (the glossary's line on the method), sentence,
+    headline (its first clause, undated), text (the action, verbatim),
+    rollCall}."""
     out = []
     for a in reversed(actions):
         codes = set(a["codes"])
@@ -199,6 +200,9 @@ def passage(actions: list[dict]) -> list[dict]:
             "chamber": chamber, "kind": kind, "date": a["date"], "method": method, "twoThirds": two_thirds,
             "methodTerm": explained.get("term"), "methodMeaning": explained.get("meaning"),
             "sentence": _sentence(verb, a, method, two_thirds), "text": a["text"],
+            # The sentence's first clause, undated: a box's title.
+            "headline": (f"{verb} {_METHOD_PHRASE[method][0]}" if method in _METHOD_PHRASE else verb)
+            + (", under suspension of the rules" if two_thirds else ""),
             "rollCall": a["rollCalls"][0] if a["rollCalls"] else None,
         })
     return out

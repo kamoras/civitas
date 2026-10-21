@@ -16,6 +16,7 @@ from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
+from app import data_refresh
 from app.models import ExploreDocument, Justice, JusticeVote
 from app.photos import justice_photo
 from app.services.explore_keys import public_key
@@ -247,5 +248,23 @@ def court(db: Session, recent: int = 10) -> dict:
         "agreement": _agreement(sitting, cases),
         "lineups": _lineups(cases),
         "decisions": decisions(db, 1, recent),
+        "appointerFinding": appointer_finding(),
     }
+
+
+FINDING_FILE = "court_finding.json"
+_FINDING_KEYS = ("estimate", "low", "high", "firstTerm", "lastTerm", "justices", "draws", "excludesZero",
+                 "scdbRelease")
+
+
+def appointer_finding() -> dict | None:
+    """The Court-level finding on votes under the appointing president, as
+    scripts/research_justice_loyalty.py --write-finding computed it into
+    app/data/court_finding.json (shares: 0.025 is 2.5 points), with its
+    source. None when the file can't be read: the page then says nothing
+    rather than a number from nowhere."""
+    doc = data_refresh.read(FINDING_FILE)
+    if not all(k in doc for k in _FINDING_KEYS):
+        return None
+    return {**{k: doc[k] for k in _FINDING_KEYS}, "source": doc.get("_source")}
 

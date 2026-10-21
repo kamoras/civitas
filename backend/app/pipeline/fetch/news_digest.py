@@ -282,7 +282,7 @@ def _item_entities(item: str, forced_capital: bool) -> set[str]:
 # blurb keeps referring back to it, so a single story's title covers most
 # of its own items; a briefing's title can cover at most the one item it
 # leads with. Without this, any single story whose blurb hands off between
-# actors reads as a list ("Sen. Chuck Grassley released the transcript
+# actors reads as a list ("Sen. Jane Roe released the transcript
 # Thursday. The FBI declined to comment. House Judiciary Democrats called
 # for hearings." — three sentences, three disjoint entity sets, one story).
 _DIGEST_MAX_TITLE_COVERED_ITEMS = 1

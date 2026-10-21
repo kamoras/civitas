@@ -284,7 +284,7 @@ export function ServiceHealth({ d }: { d: AdminDashboard | null }) {
         <span className="flex items-center gap-2 text-right">
           <StatusDot ok={d?.system.vectorDb?.status === "ok"} />
           {d?.system.vectorDb?.status === "ok"
-            ? `${(d?.system.vectorDb?.totalVectors ?? 0).toLocaleString()} vectors / ${formatBytes(d?.system.vectorDb?.sizeBytes ?? 0)}`
+            ? `${(d?.system.vectorDb?.totalVectors ?? 0).toLocaleString("en-US")} vectors / ${formatBytes(d?.system.vectorDb?.sizeBytes ?? 0)}`
             : "Unavailable"}
         </span>
       </div>

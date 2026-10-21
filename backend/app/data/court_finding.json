@@ -1,0 +1,12 @@
+{
+ "_source": "backend/scripts/research_justice_loyalty.py --write-finding, section 8: the appointer effect pooled over every justice (Epstein & Posner's hand-coded votes through 2014, the Supreme Court Database 2026 Release 01 after), less the placebo window at the same point in a career, with a 95% bootstrap interval over justices (docs/research/justice-scores.md).",
+ "scdbRelease": "2026_01",
+ "estimate": 0.0246,
+ "low": -0.0066,
+ "high": 0.0562,
+ "draws": 200,
+ "firstTerm": 1937,
+ "lastTerm": 2025,
+ "justices": 43,
+ "excludesZero": false
+}

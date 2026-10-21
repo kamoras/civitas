@@ -179,7 +179,6 @@ PIPELINE_STEPS = [
 MAX_SIGNIFICANT_BILLS = 100
 RECENT_RC_COUNT_PER_SESSION = 100
 RECENT_RC_SESSIONS = 2
-MIN_CONGRESS_FOR_BILL_TITLES = 116
 
 
 
@@ -1522,7 +1521,6 @@ async def run_senate_pipeline(
             # classifier. The official title from the titles endpoint
             # (e.g., "A bill to prevent the purchase of ammunition...")
             # provides the semantic content needed for accurate classification.
-            min_congress_for_titles = MIN_CONGRESS_FOR_BILL_TITLES
             short_title_bills: dict[str, tuple[int, str, int]] = {}
             for sp_bills in sponsored_map.values():
                 for sp in sp_bills:
@@ -1533,7 +1531,7 @@ async def run_senate_pipeline(
                     if (
                         title and len(title) < 50
                         and bill_type and bill_number
-                        and congress >= min_congress_for_titles
+                        and congress
                     ):
                         bid = f"{bill_type}.{bill_number}"
                         if bid not in short_title_bills:
