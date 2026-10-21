@@ -1,5 +1,6 @@
 import Link from "next/link";
-import CommentWindowBar from "@/components/shared/CommentWindowBar";
+import BoxGrid from "@/components/shared/BoxGrid";
+import RecordBox from "@/components/shared/RecordBox";
 import PaperworkFold from "@/components/shared/PaperworkFold";
 import DocumentFilters from "@/components/search/DocumentFilters";
 import {
@@ -9,8 +10,8 @@ import {
   type ExploreResult,
   type ExploreStats,
 } from "@/lib/api";
-import { commentDaysLeft, formatUtcDate, isCommentPeriodOpen } from "@/lib/formatting";
-import { chamberColor, chamberBg, chamberLabel } from "@/lib/chamber";
+import { formatUtcDate, isCommentPeriodOpen } from "@/lib/formatting";
+import { chamberLabel } from "@/lib/chamber";
 import { exploreHref } from "@/lib/exploreHref";
 import { documentsHref } from "@/lib/routes";
 import { DOCUMENT_LIMIT, asksForDocuments, type DocumentQuery } from "@/lib/documentSearch";
@@ -39,7 +40,7 @@ function Snippet({ text }: { text: string }) {
   const segments = splitHighlights(text);
   if (segments.length === 0) return null;
   return (
-    <p className="mb-3 line-clamp-3 font-sans text-xs leading-relaxed text-ink-lo">
+    <p className="mb-1 line-clamp-3 font-sans text-sm leading-relaxed text-ink-lo">
       {segments.map((segment, i) =>
         segment.match ? (
           // Ink on a light wash, underlined: the ledger green over a tinted card
@@ -59,77 +60,81 @@ function Snippet({ text }: { text: string }) {
   );
 }
 
+/**
+ * One document as a box ("Boxes, not blocks"): its agency or chamber, type
+ * and date over the title; where a comment period is open, the days left
+ * as its figure and "Comment" as its command; for a search, the passage
+ * that matched (the document's own words, terms marked); and the agency's
+ * abstract, whole, behind "More".
+ */
 export function DocumentCard({ result, query }: { result: ExploreResult; query: string }) {
   const detailHref = query
     ? `${exploreHref(result)}?q=${encodeURIComponent(query)}`
     : exploreHref(result);
   const commentOpen = !!result.commentUrl && isCommentPeriodOpen(result.commentsCloseOn);
-  const remaining = commentOpen ? commentDaysLeft(result.commentsCloseOn) : 0;
+  const source =
+    result.chamber === "Regulatory" && result.agencyName
+      ? result.agencyName
+      : chamberLabel(result.chamber);
+  // The keyword channel's excerpt says why a document came back; a
+  // semantic-only result's "snippet" is its summary, kept for "More".
+  const passage =
+    query && result.snippet && result.snippet !== result.summary ? result.snippet : "";
+  const meta = [
+    result.politicianName,
+    (result.citedByCount ?? 0) > 0 ? `Cited by ${result.citedByCount}` : "",
+    (result.duplicateCount ?? 0) > 0
+      ? `+${result.duplicateCount} duplicate${result.duplicateCount !== 1 ? "s" : ""}`
+      : "",
+  ].filter(Boolean);
   return (
-    <div className={`border ${chamberBg(result.chamber)}`}>
-      <Link href={detailHref} className="block p-4 hover:brightness-125">
-        <div className="mb-2 flex flex-wrap items-start justify-between gap-x-3">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <span className={`font-mono text-xs ${chamberColor(result.chamber)}`}>
-              {result.chamber === "Regulatory" && result.agencyName
-                ? result.agencyName
-                : chamberLabel(result.chamber)}
-            </span>
-            <span className="text-xs text-ink-min">|</span>
-            <span className="text-xs text-ink-lo">{result.docType || "Document"}</span>
-            {commentOpen && (
-              <span className="border border-phos/60 bg-phos/10 px-1.5 py-0.5 font-mono text-xs text-ink-hi">
-                Open for comment
-              </span>
-            )}
-          </div>
-          {result.date && (
-            <span className="ml-auto shrink-0 text-xs text-ink-min">{formatDate(result.date)}</span>
-          )}
-        </div>
-        <h3 className="mb-2 text-sm font-semibold leading-snug text-ink-hi">{result.title}</h3>
-        {/* The keyword channel's excerpt around the matched terms says why a
-            document came back; a semantic-only result keeps its summary. */}
-        <Snippet text={result.snippet || result.summary} />
-        {commentOpen && result.commentWindow && (
-          <CommentWindowBar period={result.commentWindow} className="mb-2" />
-        )}
-        <div className="flex items-center justify-between">
-          <div className="flex flex-wrap items-center gap-3">
-            {result.politicianName && (
-              <span className="text-xs text-ink-lo">{result.politicianName}</span>
-            )}
-            {(result.citedByCount ?? 0) > 0 && (
-              <span
-                className="font-mono text-xs text-ink-min"
-                title="Other federal documents in this index that cite this one"
-              >
-                Cited by {result.citedByCount}
-              </span>
-            )}
-            {(result.duplicateCount ?? 0) > 0 && (
-              <span
-                className="font-mono text-xs text-ink-min"
-                title="Near-identical copies of this document collapsed into this result"
-              >
-                +{result.duplicateCount} duplicate{result.duplicateCount !== 1 ? "s" : ""}
-              </span>
-            )}
-          </div>
-          <span className="font-mono text-xs text-ink-lo">View details →</span>
-        </div>
-      </Link>
-      {commentOpen && (
-        <Link
-          href={detailHref + "#comment"}
-          className="mx-3 mb-3 flex min-h-11 items-center justify-center gap-2 border border-signal-cyan/40 px-4 py-2 font-mono text-xs text-signal-cyan hover:bg-signal-cyan/10 hover:text-phos"
-        >
-          <span aria-hidden="true">✎</span>
-          Submit your comment ·{" "}
-          {remaining === 0 ? "closes today" : `${remaining} day${remaining !== 1 ? "s" : ""} left`}
-        </Link>
+    <RecordBox
+      compact
+      tone={commentOpen ? "deadline" : "neutral"}
+      kicker={[source, result.docType || "Document", result.date ? formatDate(result.date) : ""]
+        .filter(Boolean)
+        .join(" · ")}
+      title={result.title}
+      href={detailHref}
+      figure={
+        commentOpen && result.commentWindow ? { type: "countdown", ...result.commentWindow } : null
+      }
+      action={
+        commentOpen
+          ? {
+              label: "Comment",
+              href: `${detailHref}#comment`,
+              ariaLabel: `Comment on ${result.title}`,
+            }
+          : undefined
+      }
+      more={
+        result.summary
+          ? {
+              label: result.chamber === "Regulatory" ? "the agency's summary" : "the summary",
+              children: (
+                <figure>
+                  <blockquote>
+                    <p className="leading-relaxed">{result.summary}</p>
+                  </blockquote>
+                  <figcaption className="mt-1 text-ink-min">
+                    {result.chamber === "Regulatory"
+                      ? `${result.agencyName ? `${result.agencyName}, in the` : "The"} Federal Register`
+                      : result.source || source}
+                  </figcaption>
+                </figure>
+              ),
+            }
+          : null
+      }
+    >
+      {(passage || meta.length > 0) && (
+        <>
+          {passage && <Snippet text={passage} />}
+          {meta.length > 0 && <p className="font-mono text-xs text-ink-min">{meta.join(" · ")}</p>}
+        </>
       )}
-    </div>
+    </RecordBox>
   );
 }
 
@@ -361,18 +366,18 @@ export default function DocumentResults({
               )}
               <span className="ml-2 text-ink-min">· sorted by {sortedBy}</span>
             </h2>
-            <div className="space-y-3">
+            <BoxGrid columns={2}>
               {results.map((r) => (
                 <DocumentCard key={r.id} result={r} query={q} />
               ))}
-            </div>
+            </BoxGrid>
             {resp?.paperwork && (
               <PaperworkFold count={resp.paperwork.count} shown={resp.paperwork.results.length}>
-                <div className="mt-3 space-y-3">
+                <BoxGrid columns={2} className="mt-3">
                   {resp.paperwork.results.map((r) => (
                     <DocumentCard key={r.id} result={r} query={q} />
                   ))}
-                </div>
+                </BoxGrid>
               </PaperworkFold>
             )}
           </section>
