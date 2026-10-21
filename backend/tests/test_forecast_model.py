@@ -725,7 +725,7 @@ def test_fits_a_cycle_behind_raise_an_ops_alert_until_refitted(freeze_utcnow, mo
     # The day the next general after the fits' newest is certified.
     freeze_utcnow(datetime(min(newest, house_newest) + 3, 1, 3, 12, 0))
     build.check_training_staleness()
-    assert sent and sent[0][0] == f"{build.TRAINING_CONDITION}-{min(newest, house_newest) + 2}"
+    assert sent and sent[0][0].startswith(f"{build.TRAINING_CONDITION}-{min(newest, house_newest) + 2}-")
     # Refitted on that election: resolved.
     due = min(newest, house_newest) + 2
     monkeypatch.setattr(build.data_refresh, "read", lambda name: {"races": [{"year": due}]})
@@ -742,6 +742,22 @@ def _staleness_alert(monkeypatch, freeze_utcnow, docs: dict, due: int) -> str:
     build.check_training_staleness()
     (body,) = sent
     return body
+
+
+def test_the_staleness_alert_says_when_the_shipped_fit_already_has_it(freeze_utcnow, monkeypatch, tmp_path):
+    """2026-10-19: #1113 shipped the House fit through 2024; the copy in use
+    was the refit of the day before, through 2022."""
+    (tmp_path / "forecast_house_training.json").write_text(json.dumps({"races": [{"year": 2024}]}))
+    monkeypatch.setattr(build.data_refresh, "BUNDLED", tmp_path)
+    docs = {
+        "forecast_training.json": {"races": [{"year": 2024}]},
+        "forecast_house_training.json": {"races": [{"year": 2022}], "_coverage": {"results": [2022]},
+                                         "_refreshed": {"at": "2026-10-18T18:48:52"}},
+    }
+    body = _staleness_alert(monkeypatch, freeze_utcnow, docs, 2024)
+    assert ("House (fit stops at 2022): the fit shipped with the code (app/data/forecast_house_training.json) "
+            "includes 2024, but the copy in use is the refit of 2026-10-18T18:48:52, which predates it") in body
+    assert "no refit has read" not in body
 
 
 def test_the_staleness_alert_names_each_missing_input(freeze_utcnow, monkeypatch):
