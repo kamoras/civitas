@@ -14,6 +14,7 @@ import re
 from collections import Counter
 from datetime import date
 
+from app.readout import split_marks, vote_page
 from app.services.bill_journey import long_date
 
 _CHAMBER = {"house": "House", "senate": "Senate"}
@@ -170,6 +171,7 @@ def _passage(record: dict) -> list[dict]:
                 "type": "split", "yeas": vote["yeas"], "nays": vote["nays"],
                 "yeaShare": round(vote["yeas"] / total, 4) if total else 0,
                 "caption": "Tie broken" if tie else (vote.get("resultLabel") or vote["result"]),
+                "marks": split_marks(vote["yeas"], vote["nays"], vote_page(vote)),
             }
         out.append(box)
     return out

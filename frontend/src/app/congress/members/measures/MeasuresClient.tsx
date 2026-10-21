@@ -6,7 +6,6 @@ import Navbar from "@/components/layout/Navbar";
 import SectionTabs from "@/components/layout/SectionTabs";
 import { MEASURES_HREF } from "@/lib/routes";
 import Footer from "@/components/layout/Footer";
-import { axisMax, fmt } from "@/components/scorecard/WhereTheyStand";
 import { STATE_NAMES, byStateName } from "@/lib/stateCodes";
 import type { ChamberMeasure, ChamberMeasures, ChamberMember, ChamberPoint } from "@/types/peers";
 import ScrollRegion from "@/components/shared/ScrollRegion";
@@ -70,13 +69,7 @@ function Callout({
 }
 
 function ChamberStrip({ m, house }: { m: ChamberMeasure; house: boolean }) {
-  const max = axisMax({
-    unit: m.unit,
-    distribution: m.points.map((p) => p.value),
-    value: null,
-    expected: m.median,
-  });
-  const at = (v: number) => Math.min(100, (v / max) * 100);
+  const at = (v: number) => Math.min(100, (v / m.axisMax) * 100);
   // A mark is 7px; its centre is 3.5px below its jittered top.
   const top = (i: number) => 14 + JITTER[i % JITTER.length];
   const points: StripPoint[] = m.points.map((p, i) => ({
@@ -99,7 +92,7 @@ function ChamberStrip({ m, house }: { m: ChamberMeasure; house: boolean }) {
           {m.label}
         </h2>
         <p className="text-sm text-ink-lo">
-          {m.median != null && <>Median {fmt(m, m.median)} · </>}
+          {m.median != null && <>Median {m.medianShown} · </>}
           {m.n} members ·{" "}
           <a
             href={m.source.url}
@@ -135,7 +128,7 @@ function ChamberStrip({ m, house }: { m: ChamberMeasure; house: boolean }) {
           />
         )}
       </StripPoints>
-      <StripAxis start={fmt(m, 0)} end={fmt(m, max)} />
+      <StripAxis start={m.axisStartShown} end={m.axisEndShown} />
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Callout title="Furthest above expected" points={m.mostAbove} house={house} />
         <Callout title="Furthest below expected" points={m.mostBelow} house={house} />

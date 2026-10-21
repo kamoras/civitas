@@ -13,6 +13,7 @@ from collections import Counter
 from app.district_lean import lean_label
 from app.election_calendar import federal_states
 from app.models import Candidate
+from app.readout import mark
 from app.score_display import shown_share
 
 # The FEC totals row's categories of `contributions`, which add up to it:
@@ -96,7 +97,9 @@ def lean_context(
     further each way; `same` those with the identical figure. `distribution`
     is every seat's lean against the nation, one entry per figure, most
     Democratic first (with its label, written as the map writes it), and
-    `seatLean` this seat's figure in it: the page draws them on one axis."""
+    `seatLean` this seat's figure in it: the page draws them on one axis.
+    `marks` are the axis's readouts, one per figure: how many seats have it
+    and which ones."""
     if pvi is None:
         return None
     if office == "S":
@@ -120,7 +123,34 @@ def lean_context(
         "distribution": [
             {"lean": v, "label": lean_label(v), "count": n} for v, n in sorted(Counter(values).items())
         ],
+        "marks": _lean_marks(table, unit, pvi),
     }
+
+
+# Seats a lean column's readout names before it says "and N more".
+_NAMED_SEATS = 6
+
+
+def _seat_name(key: str) -> str:
+    """A district key as the site writes it ("CA-12", "WY-AL"); a state as is."""
+    state, _, number = key.partition("-")
+    return f"{state}-{number if number != '0' else 'AL'}" if number else state
+
+
+def _lean_marks(table: dict[str, int], unit: str, pvi: int) -> list[dict]:
+    by_lean: dict[int, list[str]] = {}
+    for key, v in table.items():
+        by_lean.setdefault(v, []).append(_seat_name(key))
+    one = unit[:-1]
+    out = []
+    for v, seats in sorted(by_lean.items()):
+        seats.sort()
+        more = len(seats) - _NAMED_SEATS
+        names = ", ".join(seats[:_NAMED_SEATS]) + (f" and {more} more" if more > 0 else "")
+        context = f"this seat's figure: {names}" if v == pvi else names
+        out.append(mark(str(v), lean_label(v), f"{len(seats)} {one if len(seats) == 1 else unit}",
+                        context=context))
+    return out
 
 
 # The state CSV's columns, in order. Every figure as filed with the FEC, and

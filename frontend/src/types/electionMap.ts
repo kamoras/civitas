@@ -1,3 +1,5 @@
+import type { MapView } from "@/lib/electionMap";
+import type { ReadoutMark } from "./readout";
 /** GET /api/elections/map (backend app/forecast/build.py). Margins are the
  * Republican minus the Democratic share of the two-party vote, in points:
  * negative leans Democratic. No field is a chance of anyone winning. */
@@ -236,6 +238,8 @@ export interface ElectionMapResponse {
       calibration: ChamberCalibration;
       model: ChamberModel;
       seats: MapSeat[];
+      /** Each state's readout on the tile map, by view, then state. */
+      stateMarks?: StateMarks;
     }
   >;
   /** Both chambers' names; `chambers` holds only the one asked for (?chamber=). */
@@ -265,7 +269,12 @@ export interface ElectionMapData {
     polls: PollLicence;
   };
   seats: MapSeat[];
+  /** Each state's readout on the tile map, by view, then state (the API's
+   *  words: api/election_map.state_marks). */
+  stateMarks: StateMarks;
 }
+
+export type StateMarks = Record<MapView, Record<string, ReadoutMark>>;
 
 /** GET /api/elections/map/seats: one seat of the map in a line, for the
  * pages that link to it (a state's ballot, a member's profile). Every

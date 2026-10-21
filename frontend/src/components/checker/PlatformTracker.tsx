@@ -3,6 +3,8 @@ import { PartisanDepth } from "@/types/senator";
 import { usePolicyLabel } from "@/hooks/useConfig";
 import CollapsibleSection from "../shared/CollapsibleSection";
 import MetricTooltip from "./MetricTooltip";
+import ChartReadout from "../shared/ChartReadout";
+import { MARK_ATTR } from "@/types/readout";
 
 interface PlatformTrackerProps {
   partisanDepth: PartisanDepth | null;
@@ -16,18 +18,9 @@ const DEPTH_STYLES = {
   "cross-cutting": { text: "text-signal-cyan", label: "Cross-cutting" },
 };
 
-// The spectrum bar's ends. A member's vote lean is the mean over policy areas
-// of (R-aligned - D-aligned) / counted Yea and Nay votes, each vote's side
-// taken from how its bill compares with each party's positions in that area (party_platform.py
-// _alignments_from_votes), so it lies within +/-1: an end would mean every
-// counted vote went the way of one party's positions in every area. That is
-// the measure's own bound, not a calibration. (A member with few votes is
-// blended toward a cosponsorship prior, an extrapolated line that could in
-// principle pass +/-1; the bar draws that at the end.) The bar used to divide
-// by 0.15, the saturation point of the embedding margins campaign promises
-// were once scored on, which pinned most members at an end once leans moved
-// to the vote scale (leans observed in 2026-07 ran from -0.30 to +0.43).
-const LEAN_EXTENT = 1;
+// The spectrum bar's ends are the measure's own bounds, -1 and +1 (every
+// counted vote with one party's positions in every area); the API places the
+// marker and the fill (PartisanDepthSchema) and says it in words.
 
 function PolicyLabel({ area }: { area: string }) {
   const label = usePolicyLabel(area);
@@ -42,8 +35,7 @@ function PartisanDepthPanel({
   senatorParty: string;
 }) {
   const depthStyle = DEPTH_STYLES[depth.depth];
-  const leanPct = Math.min((Math.abs(depth.overallLean) / LEAN_EXTENT) * 100, 100);
-  const leanDirection = depth.overallLean > 0 ? "R" : depth.overallLean < 0 ? "D" : "center";
+  const leanDirection = depth.overallParty === "R" ? "R" : "D";
 
   const matchesParty = depth.overallParty === senatorParty;
   const oppositeParty = senatorParty === "R" ? "D" : "R";
@@ -71,21 +63,22 @@ function PartisanDepthPanel({
             `bg-blue-500/40` against a solid `bg-signal-red`, so identical
             magnitudes rendered as a heavier bar on the Republican side of a
             chart whose only job is to compare the two. */}
-        <div className="relative h-3 bg-white/[0.03] border border-white/[0.07]">
+        <div
+          role="img"
+          aria-label={depth.leanSentence}
+          className="relative h-3 bg-white/[0.03] border border-white/[0.07]"
+        >
           <div className="absolute top-0 bottom-0 left-1/2 w-px bg-phos" />
           <div
             className={`absolute top-0 bottom-0 ${leanDirection === "R" ? "bg-signal-red" : "bg-dem-blue"}`}
-            style={{
-              left: leanDirection === "R" ? "50%" : `${50 - leanPct / 2}%`,
-              width: `${leanPct / 2}%`,
-            }}
+            style={{ left: `${depth.leanBarLeft}%`, width: `${depth.leanBarWidth}%` }}
           />
           {/* The 2px inset keeps the 4px marker inside the track at either
               end; the clamp also guards a lean outside +/-1. */}
           <div
             className="absolute top-0 bottom-0 w-1 bg-phos"
             style={{
-              left: `clamp(2px, ${50 + (depth.overallLean / LEAN_EXTENT) * 50}%, calc(100% - 2px))`,
+              left: `clamp(2px, ${depth.leanMarkerPercent}%, calc(100% - 2px))`,
               transform: "translateX(-50%)",
             }}
           />
@@ -167,33 +160,63 @@ function PartisanDepthPanel({
 
       {/* Per-policy breakdown */}
       {depth.policyBreakdown.length > 0 && (
-        <div className="space-y-1">
+        <div>
           <div className="text-xs text-ink-min font-mono mb-1">Voting record by policy area</div>
-          {depth.policyBreakdown.map((p, i) => {
-            const barWidth = Math.round(p.strength * 100);
-            const isR = p.alignment === "R";
-            const isD = p.alignment === "D";
-            return (
-              <div key={i} className="flex items-center gap-2 text-xs">
-                {/* w-28: the longest policy area, FOREIGN POLICY, is 101px and
-                    was cut to "FOREIGN POL…" in w-24 at every width. */}
-                <span className="w-28 shrink-0 text-ink-lo truncate">
-                  <PolicyLabel area={p.area} />
-                </span>
-                <div className="flex-1 h-2 bg-white/[0.03] border border-white/[0.07] relative">
-                  <div
-                    className={`absolute top-0 bottom-0 ${isR ? "bg-signal-red right-0" : isD ? "bg-dem-blue left-0" : "bg-ind-purple left-1/2 -translate-x-1/2"}`}
-                    style={{ width: `${Math.max(barWidth, 4)}%` }}
-                  />
-                </div>
-                <span
-                  className={`w-5 text-xs font-mono ${isR ? "text-signal-red" : isD ? "text-dem-blue" : "text-ind-purple"}`}
+          {/* Each area names its side and strength (the API's words). */}
+          <ChartReadout
+            label="Voting record by policy area"
+            marks={depth.policyBreakdown.map((p) => p.mark)}
+            labelAt="mark"
+            className="space-y-1"
+          >
+            {depth.policyBreakdown.map((p) => {
+              const isR = p.alignment === "R";
+              const isD = p.alignment === "D";
+              return (
+                <div
+                  key={p.area}
+                  {...{ [MARK_ATTR]: p.area }}
+                  className="flex items-center gap-2 text-xs"
                 >
-                  {p.alignment === "bipartisan" ? "BP" : p.alignment}
-                </span>
-              </div>
-            );
-          })}
+                  {/* w-28: the longest policy area, FOREIGN POLICY, is 101px and
+                    was cut to "FOREIGN POL…" in w-24 at every width. */}
+                  <span className="w-28 shrink-0 text-ink-lo truncate">
+                    <PolicyLabel area={p.area} />
+                  </span>
+                  <div className="flex-1 h-2 bg-white/[0.03] border border-white/[0.07] relative">
+                    <div
+                      className={`absolute top-0 bottom-0 ${isR ? "bg-signal-red right-0" : isD ? "bg-dem-blue left-0" : "bg-ind-purple left-1/2 -translate-x-1/2"}`}
+                      style={{ width: `${p.barPercent}%` }}
+                    />
+                  </div>
+                  <span
+                    className={`w-5 text-xs font-mono ${isR ? "text-signal-red" : isD ? "text-dem-blue" : "text-ind-purple"}`}
+                  >
+                    {p.alignment === "bipartisan" ? "BP" : p.alignment}
+                  </span>
+                </div>
+              );
+            })}
+          </ChartReadout>
+          <table className="sr-only">
+            <caption>Voting record by policy area</caption>
+            <thead>
+              <tr>
+                <th scope="col">Policy area</th>
+                <th scope="col">Side</th>
+                <th scope="col">Strength</th>
+              </tr>
+            </thead>
+            <tbody>
+              {depth.policyBreakdown.map((p) => (
+                <tr key={p.area}>
+                  <th scope="row">{p.mark.label}</th>
+                  <td>{p.mark.shown}</td>
+                  <td>{p.strengthShown}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

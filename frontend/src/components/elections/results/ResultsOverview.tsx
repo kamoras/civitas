@@ -3,9 +3,9 @@
 import { asLabel } from "@/lib/formatting";
 import { fade, overlay, partyMark } from "@/lib/chartColors";
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import RaceMap from "@/components/elections/RaceMap";
+import { STATE_NAMES } from "@/lib/stateCodes";
 import LiveUpdates from "@/components/elections/results/LiveUpdates";
 import { useMapTextures } from "@/components/elections/results/MapTextures";
 import {
@@ -148,7 +148,6 @@ export default function ResultsOverview({
    * REFRESHED, and every count on the map carries the not-live stripe. */
   refreshFailed?: boolean;
 }) {
-  const router = useRouter();
   const [chamber, setChamber] = useState<"S" | "H">("S");
   const live = useMemo(() => new Set(results.liveStates), [results.liveStates]);
   const senateStates = useMemo(() => new Set(results.senateStates), [results.senateStates]);
@@ -263,6 +262,21 @@ export default function ResultsOverview({
       : s.label;
   };
 
+  // Each state's readout. Its words are the live count's, as this page last
+  // read it and whether it could refresh (state only the page knows), so it
+  // is put together here from the count's own labels; no figure is computed.
+  const stateMarks = Object.fromEntries(
+    [...states, "DC"].map((st) => [
+      st,
+      {
+        id: st,
+        label: STATE_NAMES[st] ?? st,
+        shown: st === "DC" ? "no voting member of Congress" : label(st),
+        href: st === "DC" ? null : `/elections/states/${st}`,
+      },
+    ])
+  );
+
   // Covered states first (they have something to show), then the rest.
   const directory = [...states].sort(
     (a, b) => Number(live.has(b)) - Number(live.has(a)) || a.localeCompare(b)
@@ -346,13 +360,10 @@ export default function ResultsOverview({
           </div>
           <div className="px-4 pt-3">
             <RaceMap
-              selectedState={null}
-              onStateClick={(state) => {
-                if (state !== "DC") router.push(`/elections/states/${state}`);
-              }}
+              label={`Who leads each state's ${chamber === "S" ? "Senate" : "House"} count`}
+              marks={stateMarks}
               getFillColor={(state) => fill(state)}
               getHoverFillColor={(state) => (state === "DC" ? DC_FILL : fill(state))}
-              getStateLabel={label}
               defs={defs}
             />
           </div>

@@ -22,20 +22,24 @@ queries, no model.
 
 import json
 import logging
+import math
 import statistics
 import time
+from datetime import date, datetime
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.measures import BY_KEY, MEASURES, Measure, alignment_facts, bill_facts, past_committee
-from app.models import Representative, Senator
+from app.models import Representative, ScoreSnapshot, Senator
 from app.ordinals import rank_shown
 from app.pipeline.analyze.score_calculator import ALGORITHM_VERSION, _seat_pvi
+from app.readout import mark
 from app.score_keeping import load_breakdown
 from app.score_display import shown_share, thin_dimensions
 from app.services.representative_service import get_representative_score_breakdown
 from app.services.senator_service import get_senator_score_breakdown
+from app.time_utils import congress_in_session
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +164,85 @@ def _shown(measure: Measure, value: float, facts: dict) -> str:
     return f"{int(value):,} of {bill_facts(facts).get('bills', 0):,}"
 
 
+def axis_figure(unit: str, value: float) -> str:
+    """A figure as a strip's axis, tick and table print it: a count whole,
+    a share as a whole percent, a rate under 10% to one decimal."""
+    if unit == "count":
+        return f"{round(value):,}"
+    pct = value * 100
+    return f"{pct:.1f}%" if unit == "rate" and 0 < pct < 10 else f"{round(pct)}%"
+
+
+def axis_top(unit: str, values: list[float]) -> float:
+    """A strip's right end: the largest figure on it, up to a round step, so
+    the strip reads on the measure's own scale."""
+    top = max(values, default=0)
+    if unit == "count":
+        return max(5, math.ceil(top / 5) * 5)
+    step = 0.02 if top <= 0.1 else 0.1
+    return round(max(step, math.ceil(round(top / step, 9)) * step), 4)
+
+
+def _axis(unit: str, values: list[float]) -> dict:
+    top = axis_top(unit, values)
+    return {"axisMax": top, "axisStartShown": axis_figure(unit, 0), "axisEndShown": axis_figure(unit, top)}
+
+
+def _short_day(iso: str) -> str:
+    d = date.fromisoformat(iso[:10])
+    return f"{d:%b} {d.day}, {d.year}"
+
+
+def _congress_of(day: str) -> int:
+    # A snapshot's day at noon Eastern (17:00 UTC): the Congress in office.
+    return congress_in_session(datetime.fromisoformat(f"{day[:10]}T17:00:00"))
+
+
+def over_time(measure: Measure, snapshots: list[tuple[str, dict]]) -> dict | None:
+    """The measure night by night, for a measure that covers this Congress:
+    the member's own figure in each snapshot of the latest snapshot's
+    Congress, once it has changed at all. Each point placed (0-100 across
+    and down) and with its readout; None otherwise (funding covers the last
+    completed election and stays flat between elections)."""
+    if measure.window != "congress":
+        return None
+    points = [(day, f[measure.key]) for day, f in snapshots if isinstance(f.get(measure.key), (int, float))]
+    if not points:
+        return None
+    latest = _congress_of(points[-1][0])
+    points = [(day, v) for day, v in points if _congress_of(day) == latest]
+    values = [v for _, v in points]
+    if len(set(values)) < 2:
+        return None
+    lo, span = min(values), (max(values) - min(values)) or 1
+    last = len(points) - 1
+    first_day, first_v = points[0]
+    last_day, last_v = points[-1]
+    return {
+        "points": [{"x": round(100 * i / last, 2), "y": round(100 - 100 * (v - lo) / span, 2)}
+                   for i, (_, v) in enumerate(points)],
+        "marks": [mark(day, _short_day(day), axis_figure(measure.unit, v)) for day, v in points],
+        "sentence": (f"Over time: {axis_figure(measure.unit, first_v)} on {_short_day(first_day)}, "
+                     f"{axis_figure(measure.unit, last_v)} on {_short_day(last_day)}."),
+    }
+
+
+def _snapshots(db: Session, member_id: str) -> list[tuple[str, dict]]:
+    rows = db.query(ScoreSnapshot.date, ScoreSnapshot.facts).filter(
+        ScoreSnapshot.entity_id == member_id,
+        ScoreSnapshot.entity_type.in_(("senator", "representative")),
+    ).order_by(ScoreSnapshot.date).all()
+    out = []
+    for day, raw in rows:
+        try:
+            facts = json.loads(raw or "null")
+        except ValueError:
+            continue
+        if isinstance(facts, dict):
+            out.append((day, facts))
+    return out
+
+
 def _group_label(chamber: str, group: str, caucus: str, members: list[dict]) -> tuple[str, str]:
     """The group's name, plural ("Senate Republicans") and for one member
     ("Senate Republican"), so a caption can read "every Senate Republican's
@@ -213,6 +296,7 @@ def _row(measure: Measure, me: dict, peers: list[dict], chamber: str, group: str
         "shown": None if value is None else _shown(measure, value, facts),
         "expected": expected,
         "expectedBasis": basis,
+
         "median": median,
         "peerGroup": {"key": group, "label": label, "labelOne": label_one, "n": len(values)},
         "distribution": values,
@@ -273,6 +357,22 @@ def peer_comparison(db: Session, chamber: str, member_id: str, group: str = "cau
     return {"group": group, "rule": RULE, "measures": measures, "standsOut": line, "standsOutWhy": reason}
 
 
+def with_drawing(db: Session, member_id: str, result: dict) -> dict:
+    """The profile's strips drawn from the API (the internal /peers route;
+    the public API's peerComparison keeps its documented shape): each row's
+    axis ends, the tick's label, and the measure over time with a readout
+    per night."""
+    history = _snapshots(db, member_id)
+    for m, row in zip(MEASURES, result["measures"]):
+        expected, unit = row["expected"], m.unit
+        row["expectedShown"] = None if expected is None else (
+            f"{axis_figure(unit, expected)} seat average" if row["expectedBasis"] == "seat"
+            else f"median {axis_figure(unit, expected)}")
+        row.update(_axis(unit, row["distribution"] + [v for v in (row["value"], expected) if v is not None]))
+        row["overTime"] = over_time(m, history)
+    return result
+
+
 def chamber_measures(db: Session, chamber: str) -> dict:
     """The whole chamber, measure by measure, for the measures page (no
     rank: a sort is a fact, a rank a verdict). Per measure: every member's
@@ -306,6 +406,8 @@ def chamber_measures(db: Session, chamber: str) -> dict:
             "key": m.key, "label": m.label, "question": m.question, "why": m.why,
             "direction": m.direction, "unit": m.unit,
             "median": median, "n": len(entries), "source": m.source,
+            "medianShown": None if median is None else axis_figure(m.unit, median),
+            **_axis(m.unit, values + ([median] if median is not None else [])),
             "points": sorted(entries, key=lambda e: e["value"]),
             "mostAbove": [e for e in reversed(ranked[-3:]) if e["gap"] > 0],
             "mostBelow": [e for e in ranked[:3] if e["gap"] < 0],
