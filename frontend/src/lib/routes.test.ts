@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   CALENDAR_HREF,
   currentSection,
+  currentTab,
   recordTrail,
   issuesUrl,
   monitorHref,
@@ -142,6 +143,38 @@ describe("SECTIONS covers the site", () => {
     for (const [key, s] of Object.entries(SECTIONS)) {
       for (const p of s.match) expect(currentSection(`${p}/x`), p).toBe(key);
     }
+  });
+});
+
+describe("currentTab", () => {
+  const marked = (section: keyof typeof SECTIONS, pathname: string) =>
+    SECTIONS[section].tabs
+      .filter((t) => t.href !== SECTIONS[section].href)
+      .map((t) => [t.key, currentTab(section, t.href, pathname)])
+      .filter(([, c]) => c);
+
+  it("tells Every agency and Budgets apart: each tab is its own page", () => {
+    expect(marked("executive", "/agencies")).toEqual([["agencies", "page"]]);
+    expect(marked("executive", "/agencies/budget")).toEqual([["budget", "page"]]);
+    // An agency's page sits under the directory.
+    expect(marked("executive", "/agencies/environmental-protection-agency")).toEqual([
+      ["agencies", "true"],
+    ]);
+  });
+
+  it("marks the deepest tab a page sits under, and never the hub for a page under it", () => {
+    expect(marked("congress", "/congress/members/measures")).toEqual([["measures", "page"]]);
+    expect(marked("congress", "/congress/bills/HR.1")).toEqual([["bills", "true"]]);
+    expect(currentTab("executive", SECTIONS.executive.href, "/executive/orders")).toBeUndefined();
+  });
+
+  it("marks no tab that shares its path with another (told apart by the query string)", () => {
+    expect(marked("action", "/action")).toEqual([]);
+  });
+
+  it("gives every tab its own path or a query string, never a fragment of another page", () => {
+    for (const s of Object.values(SECTIONS))
+      for (const t of s.tabs) expect(t.href.includes("#"), t.href).toBe(false);
   });
 });
 
