@@ -74,7 +74,7 @@ from app.time_utils import COMMENT_DEADLINE_TZ, utcnow
 
 logger = logging.getLogger(__name__)
 
-SITE_URL = "https://civitas-research.org"
+SITE_URL = settings.SITE_URL.rstrip("/")
 
 # What each kind of post is, in a reader's words. Keys are stored in
 # BroadcastPost.kind.

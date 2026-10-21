@@ -892,6 +892,12 @@ answers these before it merges:
   `scripts/frozen_clock_plugin.py`, see Testing): Jan 3 of the next odd year
   either side of noon ET, the next primary and general season, election
   night, Jan 20 after a presidential election, and a Court vacancy.
+- **No literal slips in:** `tests/test_evergreen_literals.py` fails on a
+  year (1700-2099) or a Congress number written into `app/`, and
+  `frontend/src/lib/evergreenLiterals.test.ts` on a Congress ordinal in
+  site copy, unless the allowlist names it with why (a historical fact, a
+  dated record, a number that only looks like a year). An allowance with
+  nothing left to excuse fails too.
 
 ### 7. Ballot content is quoted, never generated
 
@@ -1637,7 +1643,19 @@ Feed descriptions are **stripped of HTML** as they are parsed
 policy-relevance embedding (which sees only the first 200 characters, all of
 it markup for an image-led item), the LLM prompt, and the digest detector
 below. Block tags become `"; "` so item boundaries survive, and the
-500-character cap measures prose rather than tags.
+500-character cap measures prose rather than tags. A picture is not prose:
+`<figure>` and `<figcaption>` go with everything in them
+(`news_feeds._FIGURE_ELEMENTS`). WordPress feeds open content:encoded with
+the lead photo's caption, and until 2026-10-21 that caption was read as the
+article's first sentence: 632 of 2,522 stored race-coverage summaries led
+with one, and twelve race posts quoted a caption as the news (withdrawn,
+`retractions.json`). An article read again replaces its stored summary
+(`election_coverage._refresh_summary`), and older items are re-read from
+their article pages by the Election run, at most 400 a night
+(`fetch/coverage_captions.py`): a summary opening with the page's own
+`<figcaption>` or JSON-LD image caption gets the page's description, and
+`RaceCoverageItem.caption_checked_at` marks it verified. A page that can't
+be read is never counted clean.
 
 Each feed's publication times are kept for 60 days
 (`ops_alerts.check_source_freshness`), and a feed silent for a day past its
@@ -1880,8 +1898,13 @@ wrong number on election night is worse than none:
   general in 2026; and on 2026-10-12 New Mexico's and Montana's results hosts
   sent their current-election page to their Secretary of State's landing page
   (Montana's says results come "after 8:00 on November 3"), where in 2024 both
-  served the staged general a month ahead. Those two will alert daily until
-  their hosts serve the general — the honest state of the feed.
+  served the staged general a month ahead. New Mexico's general stayed
+  staged under its own id (eid=2917, 2026-10-21), found from the ids the
+  state's own results page for the year links (`general_eid_discovery`,
+  each page taken only on its own type and date); Montana's will be named
+  until its host serves the general — the honest state of the feed. The
+  check raises one alert a day listing every state not ready with its
+  reason (condition `results-readiness`), not one per state.
 - A race the state's feed stops listing mid-count (a renamed contest, one set
   aside as impossible) keeps its last count, tagged NOT IN LATEST READ on the
   page (`inLatestRead`), and pages someone (`sync._dropped_races`): the
@@ -2289,8 +2312,10 @@ See `.env.example` for all options. Key variables:
 | Variable | Required | Description |
 |---|---|---|
 | `DATA_GOV_API_KEY` | Yes | API key from api.data.gov |
-| `ADMIN_TOKEN` | Yes | Bearer token for admin panel |
+| `ADMIN_TOKEN` | Yes | Bearer token for admin panel (`PIPELINE_TRIGGER_TOKEN` for the public trigger routes; `.env.example`'s placeholder counts as unset for both, `app/api/auth.py`) |
 | `CONTACT_EMAIL` | Yes | The instance's contact address, named in every outbound User-Agent (`app/contact.py`, read from the environment, stdlib only). Unset or malformed: User-Agents carry no address, SEC fetches refuse with an ops alert (`contact-email-unset`), and the pipeline warns at start |
+| `SITE_URL` | No | The site's public address. The domain is typed only in `backend/app/site_url.py` and `frontend/src/lib/site.ts` (`tests/test_site_url.py`); read `broadcast.SITE_URL` / `settings.SITE_DOMAIN` or `SITE_URL` / `SITE_DOMAIN` from `lib/site.ts`, never a literal |
+| `REAL_IP_FROM` | No | The proxy nginx trusts to name the visitor (`nginx/real-ip.sh`; default loopback only). Required behind a reverse proxy; production's `.env` sets `192.168.0.101`, the Pi's LAN address its host nginx connects from |
 | `LLM_BACKEND` | No | `llama-server` (default) or `ollama` |
 | `LLAMA_SERVER_URL` | No | llama.cpp server URL |
 | `DATABASE_URL` | No | SQLite path (`docker-compose.yml` sets `sqlite:////data/civitas.db`, the volume; the code default is the relative `sqlite:///data/civitas.db`) |
@@ -2427,6 +2452,7 @@ the pending list).
 | SEO: per-route metadata, canonicals, JSON-LD, sitemap | `frontend/src/lib/site.ts`, `frontend/src/lib/seo.ts`, `frontend/src/app/sitemap.ts`, `backend/app/api/sitemap.py` |
 | Frontend types | `frontend/src/types/` |
 | Metric explanations (tooltips on all scorecard metrics) | `frontend/src/components/checker/MetricTooltip.tsx` |
+| Record boxes ("Boxes, not blocks": ruled grid, box, figures shared with the homepage) and the bill page built from them | `frontend/src/components/shared/BoxGrid.tsx`, `RecordBox.tsx`, `RecordFigure.tsx`, `frontend/src/types/figure.ts`, `frontend/src/components/congress/BillPageView.tsx`; the bill page's lines from `backend/app/services/bill_boxes.py` (`boxes` on `GET /api/bills/{id}/record`) and `committee_record.search`'s `headline` |
 | Detail pages' two layers: where a member stands among peers, methods ledger, bill stage ladder and sources, "cite this", held and thin-data marks | `frontend/src/components/scorecard/WhereTheyStand.tsx`, `MethodsLedger.tsx`, `HeldScore.tsx`, `frontend/src/components/congress/StageLadder.tsx`, `BillSources.tsx`, `frontend/src/components/shared/CiteThis.tsx` (a government document or record cites its issuer: `frontend/src/lib/citedSources.ts`); data from `api/politicians.py` (`_chamber_field`, `_scored_on`) and `bill_service.stage_milestones` |
 | Action Center issue parts (shared with `/issue/[id]`: meta, tags, "What you can do", coverage, sources) | `frontend/src/components/action/IssueEnrichment.tsx` |
 | Where a member stands among peers (per-measure figure, expected, percentile, word by a fixed rule, template sentence) | `backend/app/peer_comparison.py`, `GET /api/{senators,representatives}/{id}/peers`, public breakdown `peerComparison` |
@@ -2590,7 +2616,7 @@ the pending list).
 - **Two themes, one set of classes** (2026-10). The palette is CSS custom
   properties in `src/app/globals.css`, one `THEME` block per theme: "register
   paper" (light, the default) and "night register" (warm dark, by
-  `prefers-color-scheme` or the footer's per-tab `ThemeToggle`, sessionStorage
+  `prefers-color-scheme` or the header's per-tab `ThemeToggle` (the band on desktop, the menu on a phone), sessionStorage
   only per §8). Tailwind's colours point at them, and `white` is the overlay
   (ink on paper, white on carbon), so `border-white/15` is a hairline in both.
   Never write a hex in a component: use a token or a `var(--…)`.
@@ -2761,6 +2787,16 @@ the pending list).
   merges metadata *shallowly*: a route that sets `openGraph` at all drops its
   parent's og:site_name, og:url and — verified under `next build` — the root
   `opengraph-image` too, which is why the helper always supplies an image.
+- **Every card and icon URL carries its design's version** (`?v=`, a hash of
+  the files that draw it, `frontend/scripts/assetVersions.mjs`): build one
+  with `ogCardUrl()` / `ICON_PATH` (`src/lib/site.ts`) on the frontend and
+  `app/site_assets.py` on the backend, which also re-versions stored card
+  URLs as the feeds serve them. Feed readers and chat proxies cache a
+  picture by URL for good: after the 2026-10 rebrand Discord showed the old
+  icon and old dark cards beside new posts. The backend reads the hash from
+  `app/data/asset_versions.json`; after changing a card or icon file run
+  `npm run asset-versions` (`src/lib/assetVersions.test.ts` fails until
+  then). nginx's cache key includes the query, and the route reads no `v`.
 - **Canonicals are per route, never on the root layout** (it would be
   inherited by every page and declare the whole site a duplicate of the
   homepage). A section layout's canonical is inherited the same way, so a
@@ -2849,6 +2885,30 @@ state in the query string is exposed to them.
   chips and the Documents filter's form are plain navigations, not
   replaceState; their links set `prefetch={false}`, since each prefetch of
   `/search?q=` would be a search with a query encode.
+
+#### Boxes, not blocks (2026-10)
+
+A record page leads with boxes, not paragraphs: `BoxGrid` and `RecordBox`
+(`src/components/shared/`), the homepage front page's vocabulary as one
+component pair. A box is a kicker, a title, **one** line, an optional figure
+(`RecordFigure`: stat, split, dots, countdown, the same union and drawing the
+front page uses), chips, and a "More" that keeps the full text in a native
+`<details>`. Nothing is dropped to make a page short: what a box's line
+doesn't say goes behind its "More". The grid is ruled in columns and reflows
+by its own width (one column under 40rem, two, then three at 62rem; container
+queries, so a side column or 200% text reflows too).
+
+The line follows one rule, the same as §7's: it is either `dek`, a
+**template the backend filled from stored fields** (dates, counts, the
+source's own labels; the bill page's come from `services/bill_boxes.py`), or
+`quote`, the **source's own words, credited** (`{ text, source }`: the bill
+page quotes the CRS summary's first sentence). Never model text, never a
+paraphrase written in the component, and never a count the frontend worked
+out: a count in a box is a field the backend served (backend owns
+calculations). A box whose content is a list (the days in the daily
+reports, related issues) takes a fixed label for a title, not a sentence.
+The bill page (`BillPageView.tsx`) is the first page built this way; a new
+record page, or a rebuilt one, should use the pair rather than a new card.
 
 #### Empty defaults are content (2026-10)
 
@@ -2974,8 +3034,12 @@ Patterns that exist because they failed once:
 
 - **Production runs in Docker Swarm mode** (single-node — `docker swarm init`
   is a one-time host setup step, not part of any deploy script). Deploys are
-  `docker stack deploy -c docker-compose.yml -c docker-compose.swarm.yml
-  civitas` — nothing else. There is no hand-rolled blue/green script anymore
+  `docker stack deploy` of the two compose files merged by
+  `docker compose -f docker-compose.yml -f docker-compose.swarm.yml config`
+  (what `check-and-deploy.sh` runs) — nothing else. Passing both files to
+  `docker stack deploy -c … -c …` directly fails: its own merge ignores
+  `!reset` and rejects the top-level `name:`. Standing up a new host from
+  nothing: `docs/self-hosting.md`. There is no hand-rolled blue/green script anymore
   (`deploy.sh`, removed 2026-07): Swarm's own `update_config.order:
   start-first` (start the new task, health-check it, *then* stop the old one)
   and `failure_action: rollback` (auto-revert if the new task never becomes

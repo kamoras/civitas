@@ -88,11 +88,6 @@ COLUMN_ITEMS = 3
 # Stories read for the news: enough for the lead, the tier and a full column.
 NEWS_STORIES = COLUMN_ITEMS + 2
 
-# A party needs this many members voting Yea or Nay before one dissenter
-# is "the only one". With three voting, one of them is a third of the
-# party, not a lone break.
-LONE_BREAK_MIN_VOTING = 10
-
 # The two parties a lone break is read against. Independents are left out:
 # each caucuses with a party, and "the only independent" is not a break.
 _PARTY_NOUN = {"D": "Democrat", "R": "Republican"}
@@ -220,15 +215,22 @@ def _lone_breaks(db: Session, votes: list[RollCall]) -> list[dict]:
             if party in newest:
                 continue
             sides = defaultdict(list)
+            members = 0
             for p in positions[rc.id]:
+                if p.party != party:
+                    continue
+                members += 1
                 side = _side(p.position)
-                if p.party == party and side:
+                if side:
                     sides[side].append(p)
             voting = len(sides["yea"]) + len(sides["nay"])
-            if voting < LONE_BREAK_MIN_VOTING:
-                continue
             lone = [s for s in ("yea", "nay") if len(sides[s]) == 1]
-            if not lone:
+            # A break with the party, not with a handful of attendees: the
+            # rest voting the other way must be most of the party's members
+            # on the roll (not voting and present included). With three
+            # voting, one is a third of those voting, and the roll says
+            # nothing of the party.
+            if not lone or 2 * (voting - 1) <= members:
                 continue
             breaker = sides[lone[0]][0]
             href = (links.page(bioguide=breaker.member_id) if rc.chamber == "house"

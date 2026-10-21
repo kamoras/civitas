@@ -4,6 +4,7 @@ import math
 import statistics
 
 from app.pipeline.fetch.peer_gdp import (
+    _MIN_PEERS,
     PEER_COUNTRIES,
     US,
     annual_growth,
@@ -73,7 +74,7 @@ def test_each_year_comes_from_one_source():
 
 
 def test_too_few_peers_or_no_us_figures_is_none():
-    wb = economies(3.0, [2.0] * 7)
+    wb = economies(3.0, [2.0] * (_MIN_PEERS - 1))  # fewer than most of the peers
     levels = {c: {1960: 100.0} for c in wb}
     assert peer_relative_growth(1981, 1985, wb, levels, rate=0.0) is None
     full = economies(1.0, [1.0] * 13)

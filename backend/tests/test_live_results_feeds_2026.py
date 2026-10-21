@@ -326,7 +326,13 @@ class TestNotStagedIsNotUnreadable:
             asked.append(kw.get("follow_redirects"))
             return SimpleNamespace(status_code=302, headers={"location": location}, text="")
 
+        async def index(*a, **kw):
+            return "<p>this year's results page, linking no election yet</p>"
+
         monkeypatch.setattr(http_utils, "fetch_with_retry", redirect)
+        # New Mexico's entry then looks for the general by id (general_eid_discovery).
+        monkeypatch.setattr(totalvote, "fetch_text_with_retry", index)
+        totalvote._general_eid_misses.clear()
         source = election_results.live_source(source_for_state(state))
         assert await totalvote.fetch_general_results(None, DAY, state, source) is None
         assert asked == [False]
