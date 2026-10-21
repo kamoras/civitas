@@ -13,7 +13,7 @@ import httpx
 
 from app.models import ActionIssue, OutletPostLink
 from app.pipeline.analyze import bluesky_engagement as be
-from app.precision_rule import PRECISION_LOWER_BOUND
+from app.precision_rule import LOWEST_PASSING, PRECISION_LOWER_BOUND
 
 _SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "calibrate_engagement.py"
 _spec = importlib.util.spec_from_file_location("calibrate_engagement", _SCRIPT)
@@ -26,6 +26,8 @@ def test_the_bundled_calibration_says_where_it_came_from():
     assert "calibrate_engagement.py" in data["_source"]
     assert data["labels_sha256"] == be.labels_sha256(data["labels"])
     assert data["labelled_posts"] == len(data["labels"])
+    # The file names the precision-rule variant it was fitted under, the one the gate's refit uses.
+    assert data["precision_rule"] == be.PRECISION_VARIANT == LOWEST_PASSING
     t = data["threshold"]
     assert t is None or data["at_threshold"]["precision_exact_lower"] >= PRECISION_LOWER_BOUND
     # What the gate runs at, and whether anyone measured it, is stated beside the fit.
@@ -106,6 +108,7 @@ def test_the_refit_pools_the_bundled_labels_with_recorded_posts(db_session, monk
     db_session.commit()
     fit = be.refit(db_session)
     assert fit["labelled_posts"] == 3 and fit["recorded_labelled"] == 2
+    assert fit["precision_rule"] == be.PRECISION_VARIANT
     # Three labelled posts can't give a bound of 0.80: the gate stays unmeasured.
     assert fit["threshold"] is None
     assert be.engage_threshold(fit) == be.UNMEASURED_THRESHOLD

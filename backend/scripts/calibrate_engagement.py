@@ -20,9 +20,10 @@ resolved through the outlet's shortener:
   more of its articles on one story in 9 of 208 cases.)
 A link that could not be resolved (a 429, a timeout) is unlabelled too.
 
-Threshold: the Action Center's precision rule (app/precision_rule.py), the
-grid point whose precision's exact lower 95% bound is highest, used only
-when that bound is at least 0.80; otherwise null, and the gate keeps
+Threshold: the Action Center's precision rule (app/precision_rule.py) in
+its LOWEST_PASSING variant (bluesky_engagement.PRECISION_VARIANT): the
+lowest grid point whose precision's exact lower 95% bound is at least 0.80,
+the most reposts the bar allows; otherwise null, and the gate keeps
 running at bluesky_engagement.UNMEASURED_THRESHOLD, which the file names
 as unmeasured (`in_use`). The labels are kept with their scores, and the
 gate's daily refit (bluesky_engagement.refit) pools them with the posts it
@@ -171,7 +172,7 @@ def main() -> None:
     known = np.array([x is not None for x in label])
     right = np.array([bool(x) for x in label])
     scores, correct, ldays = best[known], right[known], days[known]
-    threshold, best_t = choose(scores, correct, be.GRID)
+    threshold, best_t = choose(scores, correct, be.GRID, be.PRECISION_VARIANT)
     at = threshold if threshold is not None else best_t
     weeks = ((date.fromisoformat(last) - date.fromisoformat(first)).days + 1) / 7
 
@@ -198,8 +199,9 @@ def main() -> None:
             "gate scores it (best cosine, action_center._embed_texts, against the issues of its day and the day "
             "before) and labelled by the article it links, resolved through the outlet's shortener: right when the "
             "matched issue cites it, wrong when another live issue cites it, unlabelled otherwise. threshold: the "
-            "grid point whose precision's exact lower 95% bound is highest, when that bound is at least "
-            f"{PRECISION_LOWER_BOUND}, else null (the gate then runs at the unmeasured in_use value). held_out: the "
+            "precision rule's variant named in precision_rule (lowest_passing: the lowest grid point whose "
+            f"precision's exact lower 95% bound is at least {PRECISION_LOWER_BOUND}), else null (the gate then runs "
+            "at the unmeasured in_use value). held_out: the "
             f"same choice on {FOLDS} blocks of consecutive days, each scored on the block left out. volume: reposts "
             "a week before the per-run cap, every post scored; coverage: the share of them the links label."
         ),
@@ -208,6 +210,7 @@ def main() -> None:
         "posts_scored": len(scored),
         "links_unresolved": sum(1 for p in posts if p["link"] and p["article"] is None),
         "labelled_posts": len(labels),
+        "precision_rule": be.PRECISION_VARIANT,
         "threshold": threshold,
         "in_use": {"threshold": threshold if threshold is not None else be.UNMEASURED_THRESHOLD,
                    "measured": threshold is not None,
@@ -218,8 +221,9 @@ def main() -> None:
         "best_bound_threshold": best_t,
         "at_threshold": summary(scores >= at, correct),
         "all_labelled": {"best_match_right": int(correct.sum()), "posts": int(len(correct))},
-        "volume": {"unmeasured": volume(be.UNMEASURED_THRESHOLD), "best_bound": volume(at)},
-        "held_out": held_out(scores, correct, ldays, be.GRID, FOLDS),
+        "volume": {"unmeasured": volume(be.UNMEASURED_THRESHOLD), "best_bound": volume(best_t),
+                   **({"threshold": volume(threshold)} if threshold is not None else {})},
+        "held_out": held_out(scores, correct, ldays, be.GRID, FOLDS, be.PRECISION_VARIANT),
         "uncited_same_outlet": {**uncited, "issues_citing_an_outlet": outlet_issues["citing"],
                                 "of_which_cite_two_or_more_of_its_articles": outlet_issues["citing_two_or_more"]},
         "labels_sha256": be.labels_sha256(sorted_labels),

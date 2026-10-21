@@ -40,7 +40,7 @@ from app.config import settings
 from app.contact import BOT_USER_AGENT
 from app.models import ActionIssue, ApiCache, OutletPostLink
 from app.pipeline.cache import api_cache_get, api_cache_set
-from app.precision_rule import choose, summary
+from app.precision_rule import LOWEST_PASSING, choose, summary
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -53,6 +53,12 @@ CALIBRATION_PATH = pathlib.Path(__file__).resolve().parents[2] / "data" / "engag
 # engagement_calibration.json). A refit that meets the rule replaces it with
 # no code change.
 UNMEASURED_THRESHOLD = 0.78
+
+# Which threshold the precision rule picks among those that clear its bar:
+# the lowest, the most reposts the bar allows (app/precision_rule.py; the
+# owner's decision, 2026-10-21: the best-bound choice cut reposts from about
+# 37 a week to 9).
+PRECISION_VARIANT = LOWEST_PASSING
 
 # The cosines a fit may choose from, in the gate's units.
 GRID = [round(0.30 + 0.01 * i, 2) for i in range(67)]
@@ -169,8 +175,9 @@ def refit(db: Session) -> dict:
     labelled = [v for v in pooled.values() if v[1] is not None]
     scores = np.array([s for s, _ in labelled], float)
     correct = np.array([bool(c) for _, c in labelled], bool)
-    threshold, best = choose(scores, correct, GRID)
-    return {"date": utcnow().date().isoformat(), "threshold": threshold, "best_bound_threshold": best,
+    threshold, best = choose(scores, correct, GRID, PRECISION_VARIANT)
+    return {"date": utcnow().date().isoformat(), "precision_rule": PRECISION_VARIANT,
+            "threshold": threshold, "best_bound_threshold": best,
             "at_threshold": summary(scores >= (threshold if threshold is not None else best), correct),
             "labelled_posts": len(labelled), "recorded_labelled": len(recorded),
             "recorded_labels_sha256": labels_sha256(recorded)}
