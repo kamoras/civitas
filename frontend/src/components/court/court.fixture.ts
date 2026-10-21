@@ -32,6 +32,7 @@ export function court(over: Partial<Court> = {}): Court {
       terms: [2024, 2025],
     },
     currentTerm: { term: 2026, decided: 0 },
+    appointerFinding: null,
     agreement: [
       { a: "Ames", b: "Brook", agree: 3, both: 4, share: 75 },
       { a: "Ames", b: "Cole", agree: 2, both: 4, share: 50 },

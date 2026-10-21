@@ -52,7 +52,7 @@ from app.live_results.sync import redrawn_states
 from app.models import BallotMeasure, ElectionArchive, LiveResultRead, Race, RaceResult
 from app.ops_alerts import send_ops_alert
 from app.pipeline.fetch.election_results import live_results_states, ranked_choice_states
-from app.state_names import STATE_NAMES
+from app.state_names import STATE_NAMES, by_state_name
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -137,7 +137,7 @@ def build_record(db: Session, election_day: date) -> dict:
     measures = sorted(db.query(BallotMeasure).filter(BallotMeasure.election_date == day).all(),
                       key=lambda m: (m.state, _measure_order(m)))
     contests = {st: c for st in sorted(ballot_state_codes()) if (c := state_contests(db, st, cycle))}
-    states = sorted({r["state"] for r in out_races} | {m.state for m in measures} | set(contests))
+    states = sorted({r["state"] for r in out_races} | {m.state for m in measures} | set(contests), key=by_state_name)
     return {
         "cycle": cycle,
         "electionDay": day,

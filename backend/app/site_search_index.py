@@ -107,7 +107,7 @@ _SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
 
 def surname(name: str) -> str | None:
     """A person's last name as written ("Joseph R. Biden, Jr." -> "Biden",
-    "Alexandria Ocasio-Cortez" -> "Ocasio-Cortez"): the name a person is
+    "Jane Doe-Roe" -> "Doe-Roe"): the name a person is
     referred to by alone, so it is one of their names in the index. Two
     people of one surname are then two exact answers, and neither is jumped
     to (site_search.is_direct)."""

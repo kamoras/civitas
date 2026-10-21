@@ -471,7 +471,7 @@ def _locate_assertion(actor: str, predicate: str, source: str) -> tuple[str, re.
         # A period inside the gap means the predicate belongs to the
         # NEXT sentence, whose subject is somebody else. One inside a
         # parenthetical doesn't end anything: "Sen. Jane Roe (D-Conn.)
-        # said" and "Sen. Elizabeth Warren (Mass.) on Wednesday blasted"
+        # said" and "Sen. Jane Doe (Mass.) on Wednesday blasted"
         # are one sentence each, and the house style of the outlets most
         # of this coverage comes from. 20 of 160 rejected claims in a live
         # sample (2026-10-11..15) were lost to that dot alone.

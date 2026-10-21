@@ -364,7 +364,7 @@ def _candidate_summary(cand: Candidate, stale_incumbent_ids: frozenset[str] = fr
         # this candidate; the page prefers it and falls back to `name`.
         "ballotName": cand.ballot_name,
         # What to show: the printed ballot name, verbatim, else the FEC
-        # name as a reader writes it ("GOLDMAN, CRAIG" -> "Craig Goldman").
+        # name as a reader writes it ("DOE, JANE" -> "Jane Doe").
         # `name` stays the filing's, for matching and the CSV.
         "displayName": candidate_display_name(cand, _member_name(cand)),
         # The party the state's list prints, once one has named them; the

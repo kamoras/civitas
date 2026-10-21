@@ -45,6 +45,7 @@ import httpx
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app import data_refresh
 from app.database import SessionLocal
 from app.http_client import DEFAULT_FETCH_TIMEOUT_S, make_async_client
 from app.models import Agency, AgencyBudget, ExploreDocument
@@ -82,16 +83,14 @@ LINK_PER_RUN = 500
 RESERVED_SLUGS = frozenset({"budget"})
 
 CROSSWALK_PATH = pathlib.Path(__file__).resolve().parents[2] / "data" / "agency_crosswalk.json"
-_crosswalk_cache: dict | None = None
 
 
 def crosswalk_calibration() -> dict:
     """app/data/agency_crosswalk.json (scripts/calibrate_agency_crosswalk.py):
-    the name-similarity threshold and the evidence it was chosen on."""
-    global _crosswalk_cache
-    if _crosswalk_cache is None:
-        _crosswalk_cache = json.loads(CROSSWALK_PATH.read_text())
-    return _crosswalk_cache
+    the name-similarity threshold and the evidence it was chosen on. The
+    copy refreshed monthly on the data volume (app/data_refresh.py) when
+    there is one, else the bundled file."""
+    return data_refresh.read(CROSSWALK_PATH.name)
 
 
 # ── Fetch ────────────────────────────────────────────────────────

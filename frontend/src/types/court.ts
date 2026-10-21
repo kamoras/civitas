@@ -67,6 +67,23 @@ export interface CourtDecisionPage {
   decisions: CourtDecision[];
 }
 
+/** The Court-level finding on votes under the appointing president
+ *  (GET /api/court/finding, app/data/court_finding.json from
+ *  scripts/research_justice_loyalty.py): shares, 0.025 is 2.5 points. */
+export interface AppointerFinding {
+  estimate: number;
+  low: number;
+  high: number;
+  firstTerm: number;
+  lastTerm: number;
+  justices: number;
+  draws: number;
+  /** Whether the 95% interval leaves out no effect, decided by the backend. */
+  excludesZero: boolean;
+  scdbRelease: string;
+  source: string | null;
+}
+
 export interface Court {
   /** Sitting justices, left to right by `mq`; those without one last. */
   justices: CourtJustice[];
@@ -93,6 +110,7 @@ export interface Court {
     terms: { term: number; cases: number; counts: Record<string, number> }[];
   };
   decisions: CourtDecisionPage;
+  appointerFinding: AppointerFinding | null;
 }
 
 /** One case on a justice's page. */

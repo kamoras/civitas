@@ -6,7 +6,7 @@ import type { PartySplit, VoteMember } from "@/types/congress";
 import { PARTY_COLORS, PARTY_PLURAL } from "@/lib/partyStyles";
 import { houseSeatLabel } from "@/lib/elections";
 import { useYourState } from "@/hooks/useYourState";
-import { STATE_NAMES } from "@/lib/stateCodes";
+import { STATE_NAMES, byStateName } from "@/lib/stateCodes";
 
 const PARTY_NAME = PARTY_PLURAL;
 const BUCKETS: { key: VoteMember["bucket"]; label: string; tone: string }[] = [
@@ -48,7 +48,7 @@ export function PartyBar({ split }: { split: PartySplit }) {
   );
   if (noSplit) {
     return (
-      <div className="grid grid-cols-[7rem_minmax(0,1fr)] items-baseline gap-x-3 text-sm">
+      <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-baseline gap-x-3 text-sm">
         <span aria-hidden="true" className="text-ink">
           {party}
         </span>
@@ -57,7 +57,7 @@ export function PartyBar({ split }: { split: PartySplit }) {
     );
   }
   return (
-    <div className="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1 text-sm sm:grid-cols-[7rem_minmax(0,1fr)_minmax(0,10rem)]">
+    <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-center gap-x-3 gap-y-1 text-sm sm:grid-cols-[minmax(0,7rem)_minmax(0,1fr)_minmax(0,10rem)]">
       <span aria-hidden="true" className="text-ink">
         {party}
       </span>
@@ -93,7 +93,10 @@ export default function VoteMembers({
   const yours = useYourState().state;
   const listId = useId();
   const named = showAll || state !== "";
-  const states = useMemo(() => [...new Set(members.map((m) => m.state))].sort(), [members]);
+  const states = useMemo(
+    () => [...new Set(members.map((m) => m.state))].sort(byStateName),
+    [members]
+  );
   // One state's House members in district order, so a reader who knows
   // their district finds their member without reading every name.
   const shown = members
@@ -179,12 +182,14 @@ export default function VoteMembers({
           <select
             value={state}
             onChange={(e) => setState(e.target.value)}
-            className="min-h-11 min-w-40 border border-white/20 bg-surface-base px-2 font-sans text-sm tracking-normal text-ink"
+            // Capped at the column: a 10rem floor ran past an iPhone SE at 200%
+            // text (WCAG 1.4.10).
+            className="min-h-11 w-40 max-w-full border border-white/20 bg-surface-base px-2 font-sans text-sm tracking-normal text-ink"
           >
             <option value="">All states</option>
             {states.map((s) => (
               <option key={s} value={s}>
-                {s}
+                {STATE_NAMES[s] ?? s}
               </option>
             ))}
           </select>

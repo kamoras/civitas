@@ -888,6 +888,12 @@ answers these before it merges:
   `scripts/frozen_clock_plugin.py`, see Testing): Jan 3 of the next odd year
   either side of noon ET, the next primary and general season, election
   night, Jan 20 after a presidential election, and a Court vacancy.
+- **No literal slips in:** `tests/test_evergreen_literals.py` fails on a
+  year (1700-2099) or a Congress number written into `app/`, and
+  `frontend/src/lib/evergreenLiterals.test.ts` on a Congress ordinal in
+  site copy, unless the allowlist names it with why (a historical fact, a
+  dated record, a number that only looks like a year). An allowance with
+  nothing left to excuse fails too.
 
 ### 7. Ballot content is quoted, never generated
 
@@ -1233,6 +1239,10 @@ pipeline. The model is YuNet from the OpenCV Zoo (MIT), vendored in
 `app/data/`; source and hash are in the calibration file. The endpoint reads
 the stored choice, and a member without one (a departed
 bill sponsor, or before the first run) gets the depiction-first rule. A
+member neither source has a photo of (a new member, before Congress.gov
+or bioguide posts one) is stored with no source, and every response that
+names the member sends no photo path (`photos.members_without_photo`), so
+the page shows initials instead of asking for a route that can only 404. A
 depiction is used only on Congress.gov's `/img/member/` path and only with
 the attribution Congress.gov gives it; one without falls back to bioguide,
 so the credit on `/about/data#privacy` stays true. Many
@@ -2357,7 +2367,7 @@ the pending list).
 | A president among the other presidencies (strips, words; no score) | `backend/app/president_peers.py`, `frontend/src/components/scorecard/PresidentStanding.tsx` |
 | A president's term charted against the others (approval, jobs, growth) | `backend/app/president_charts.py`, `frontend/src/components/scorecard/PresidentCharts.tsx` |
 | Justice record and appointer estimate (not scored, justice v3) | `backend/app/pipeline/justice_pipeline.py`, `backend/app/pipeline/analyze/justice_loyalty.py` |
-| The Court page (`/court`: Martin-Quinn line, agreement grid, splits by term, decision lineups) and each justice's case list | `backend/app/services/court_service.py`, `backend/app/api/court.py`, `frontend/src/app/court/page.tsx`, `frontend/src/components/court/`, `frontend/src/components/scorecard/JusticeCases.tsx` |
+| The Court page (`/court`: Martin-Quinn line, agreement grid, splits by term, decision lineups) and each justice's case list | `backend/app/services/court_service.py`, `backend/app/api/court.py`, `frontend/src/app/court/page.tsx`, `frontend/src/components/court/`, `frontend/src/components/scorecard/JusticeCases.tsx`; the Court-level appointer finding is generated, `app/data/court_finding.json` from `scripts/research_justice_loyalty.py --write-finding` (`GET /api/court/finding`) |
 | A justice's page (no score: each figure beside every sitting justice's, the appointing president linked, the appointer estimate as every justice's interval) and a president's "Justices appointed" | `backend/app/services/justice_figures.py`, `frontend/src/components/justice/`, `GET /api/justices/appointed-by/{president_id}` (every appointment since 1789: `JusticeAppointment`, stored from the FJC directory by `justice_pipeline.store_court_seats`) |
 | Election cycle pipeline (candidates, financials, ballot measures, coverage) | `backend/app/pipeline/election_pipeline.py` |
 | What shapes a race (seat lean among all seats, FEC contribution categories, state CSV; descriptive, no forecast) | `backend/app/race_context.py`, `frontend/src/components/elections/ballot/RaceContext.tsx`, `RaceMoneyBars.tsx` |
@@ -2421,6 +2431,7 @@ the pending list).
 | SEO: per-route metadata, canonicals, JSON-LD, sitemap | `frontend/src/lib/site.ts`, `frontend/src/lib/seo.ts`, `frontend/src/app/sitemap.ts`, `backend/app/api/sitemap.py` |
 | Frontend types | `frontend/src/types/` |
 | Metric explanations (tooltips on all scorecard metrics) | `frontend/src/components/checker/MetricTooltip.tsx` |
+| Record boxes ("Boxes, not blocks": ruled grid, box, figures shared with the homepage) and the bill page built from them | `frontend/src/components/shared/BoxGrid.tsx`, `RecordBox.tsx`, `RecordFigure.tsx`, `frontend/src/types/figure.ts`, `frontend/src/components/congress/BillPageView.tsx`; the bill page's lines from `backend/app/services/bill_boxes.py` (`boxes` on `GET /api/bills/{id}/record`) and `committee_record.search`'s `headline` |
 | Detail pages' two layers: where a member stands among peers, methods ledger, bill stage ladder and sources, "cite this", held and thin-data marks | `frontend/src/components/scorecard/WhereTheyStand.tsx`, `MethodsLedger.tsx`, `HeldScore.tsx`, `frontend/src/components/congress/StageLadder.tsx`, `BillSources.tsx`, `frontend/src/components/shared/CiteThis.tsx` (a government document or record cites its issuer: `frontend/src/lib/citedSources.ts`); data from `api/politicians.py` (`_chamber_field`, `_scored_on`) and `bill_service.stage_milestones` |
 | Action Center issue parts (shared with `/issue/[id]`: meta, tags, "What you can do", coverage, sources) | `frontend/src/components/action/IssueEnrichment.tsx` |
 | Where a member stands among peers (per-measure figure, expected, percentile, word by a fixed rule, template sentence) | `backend/app/peer_comparison.py`, `GET /api/{senators,representatives}/{id}/peers`, public breakdown `peerComparison` |
@@ -2662,6 +2673,20 @@ the pending list).
 - The "this week" strip (`components/shared/ThisWeekStrip.tsx`) is an async
   server component; a client page gets it as a `strip` prop from its server
   `page.tsx`, never by fetching it on the client.
+- **What the server renders, the browser must render identically** (React
+  #418, 2026-10). Every `toLocale*String` names its locale ("en-US"), and a
+  date that is a calendar day is formatted in UTC (`formatUtcDate`);
+  `lib/localeStable.test.ts` holds it. The root layout renders no `<head>`
+  of its own: the flight payload sends a head's children as a lazy chunk,
+  and when it hadn't streamed in yet React suspended on the head, replayed
+  it and hydrated `<body>` against the head's first child, on a share of
+  loads of every page behind Cloudflare. The theme script is the body's
+  first child instead (`layoutStability.test.ts`).
+- A label lowered to sit mid-sentence goes through `midSentence`
+  (`lib/formatting.ts`), which keeps House, Senate, Congress, the parties,
+  months and state names capitalised; a bare `toLowerCase()` printed
+  "senate data run failed". A list shown by state name is sorted by name
+  (`byStateName`, `app/state_names.by_state_name`), not by postal code.
 - Every page's `<main>` is `id="main-content"`: the skip link targets it, and
   `globals.css` gives it `min-height: 100vh` so the footer never paints in the
   first screen while a client-fetched page loads and then jumps away (CLS
@@ -2829,6 +2854,30 @@ state in the query string is exposed to them.
   chips and the Documents filter's form are plain navigations, not
   replaceState; their links set `prefetch={false}`, since each prefetch of
   `/search?q=` would be a search with a query encode.
+
+#### Boxes, not blocks (2026-10)
+
+A record page leads with boxes, not paragraphs: `BoxGrid` and `RecordBox`
+(`src/components/shared/`), the homepage front page's vocabulary as one
+component pair. A box is a kicker, a title, **one** line, an optional figure
+(`RecordFigure`: stat, split, dots, countdown, the same union and drawing the
+front page uses), chips, and a "More" that keeps the full text in a native
+`<details>`. Nothing is dropped to make a page short: what a box's line
+doesn't say goes behind its "More". The grid is ruled in columns and reflows
+by its own width (one column under 40rem, two, then three at 62rem; container
+queries, so a side column or 200% text reflows too).
+
+The line follows one rule, the same as §7's: it is either `dek`, a
+**template the backend filled from stored fields** (dates, counts, the
+source's own labels; the bill page's come from `services/bill_boxes.py`), or
+`quote`, the **source's own words, credited** (`{ text, source }`: the bill
+page quotes the CRS summary's first sentence). Never model text, never a
+paraphrase written in the component, and never a count the frontend worked
+out: a count in a box is a field the backend served (backend owns
+calculations). A box whose content is a list (the days in the daily
+reports, related issues) takes a fixed label for a title, not a sentence.
+The bill page (`BillPageView.tsx`) is the first page built this way; a new
+record page, or a rebuilt one, should use the pair rather than a new card.
 
 #### Empty defaults are content (2026-10)
 
