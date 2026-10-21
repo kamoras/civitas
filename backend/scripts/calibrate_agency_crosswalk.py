@@ -13,10 +13,11 @@ Youden's J (true-positive rate less false-positive rate) over those pairs,
 placed midway between the two observed scores that bound the best interval.
 
 Two requests, both public: the Register's agency list and USAspending's
-toptier list. Rerun when either list changes enough to matter (a
-reorganization, a new agency) and commit the refreshed JSON.
+toptier list. app/data_refresh.py reruns it monthly, into a candidate it
+gates (a reorganization or a new agency moves the labels with it); the
+bundled file is the fallback before the first refresh.
 
-    python backend/scripts/calibrate_agency_crosswalk.py
+    python backend/scripts/calibrate_agency_crosswalk.py [OUT]
 """
 
 import asyncio
@@ -77,6 +78,7 @@ def youden_threshold(positives: list[float], negatives: list[float]) -> tuple[fl
 
 
 async def main() -> None:
+    out_path = Path(sys.argv[1]) if len(sys.argv) > 1 else CROSSWALK_PATH
     async with make_async_client() as client:
         fr = await fetch_fr_agencies(client)
         toptier = await fetch_toptier_agencies(client)
@@ -111,7 +113,7 @@ async def main() -> None:
         "unmatched": sorted(t["agency_name"] for t in toptier if t["toptier_code"] not in matches),
         "labels": sorted(labels, key=lambda r: r["score"]),
     }
-    CROSSWALK_PATH.write_text(json.dumps(out, indent=1) + "\n")
+    out_path.write_text(json.dumps(out, indent=1) + "\n")
     print(f"threshold {threshold} (J {j}); {tp}/{len(positives)} positives and "
           f"{fp}/{len(negatives)} negatives at or above; {len(matches)}/{len(toptier)} matched")
 

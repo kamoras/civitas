@@ -5,10 +5,9 @@ state where every jurisdiction reported both counts a rate divides; a
 state that reported in part shows its counts with how many reported,
 never a rate over the part."""
 
-import json
-from functools import lru_cache
 from pathlib import Path
 
+from app import data_refresh
 from app.state_names import STATE_NAMES
 
 _PATH = Path(__file__).resolve().parent / "data" / "eavs.json"
@@ -23,12 +22,10 @@ RATES = (
 )
 
 
-@lru_cache(maxsize=1)
 def _survey() -> dict | None:
-    try:
-        return json.loads(_PATH.read_text())
-    except (OSError, ValueError):
-        return None
+    # The refreshed copy on the data volume when there is one (monthly,
+    # app/data_refresh.py), else the bundled file; None when neither reads.
+    return data_refresh.read(_PATH.name) or None
 
 
 def _complete(entry: dict, code: str) -> bool:

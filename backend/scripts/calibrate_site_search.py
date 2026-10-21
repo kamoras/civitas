@@ -66,7 +66,7 @@ sys.path.insert(0, str(ROOT))
 from sqlalchemy import create_engine, text  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
-from app.site_search import CALIBRATION_PATH, Params, answer, gather, is_direct, score  # noqa: E402
+from app.site_search import CALIBRATION_PATH, Params, answer, gather, index_kinds, is_direct, score  # noqa: E402
 from app.site_search_index import SITE_SEARCH_DB, normalize  # noqa: E402
 
 # Wrong jumps allowed on the fit half: 0.5% of all probes, and none in any
@@ -322,6 +322,7 @@ def main() -> None:
         "wrong_direct_target": WRONG_DIRECT_TARGET,
         "wrong_direct_type_cap": WRONG_DIRECT_TYPE_CAP,
         "held_out": report,
+        "kinds": sorted(index_kinds(args.index) or ()),
     }
     print(json.dumps(out, indent=2))
     if not args.dry_run:
