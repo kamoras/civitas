@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { IssueTags, WhatYouCanDo } from "./IssueEnrichment";
+import { IssueTags, WhatYouCanDo, issueCommands } from "./IssueEnrichment";
 import { callScript, recordLine } from "./ContactYourMembers";
 import RelatedVotes from "./RelatedVotes";
 import type { ActionIssue, IssueMembers } from "@/types/action";
@@ -530,5 +530,39 @@ describe("callScript", () => {
     expect(
       screen.getByText(/I would like to know where Sen. Ann Ash stands on it/)
     ).toBeInTheDocument();
+  });
+});
+
+describe("issueCommands (the buttons on an issue's box)", () => {
+  it("calls a named member with a phone, writes to one without, and comments while open", () => {
+    const base = {
+      party: "D",
+      overallScore: null,
+      leadershipScore: null,
+      chamber: "senate" as const,
+    };
+    const cmds = issueCommands(
+      issue({
+        relatedSenators: [
+          { ...base, id: "S1", name: "Ann Ash", state: "VT", officePhone: "(202) 224-0001" },
+          { ...base, id: "S2", name: "Bo Birch", state: "VT", contactFormUrl: "https://b.gov/c" },
+        ],
+        actions: [
+          {
+            text: "Comment by Oct 30",
+            type: "comment_period",
+            docId: 9,
+            closesOn: "2026-10-30",
+          },
+          { text: "Closed", type: "comment_period", docId: 10, closesOn: "2026-09-01" },
+        ],
+      } as unknown as Partial<ActionIssue>),
+      "2026-10-01"
+    );
+    expect(cmds.map((c) => [c.label, c.href, c.tap])).toEqual([
+      ["Call Sen. Ann Ash", "tel:2022240001", "call"],
+      ["Write to Sen. Bo Birch", "https://b.gov/c", "write"],
+      ["Comment by Oct 30", "/explore/9#comment", "comment"],
+    ]);
   });
 });

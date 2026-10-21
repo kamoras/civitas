@@ -28,6 +28,11 @@ export const TONE: Record<BoxTone, string> = {
   neutral: "text-ink-lo",
 };
 
+/** One command, set by weight, not a fill: the palette keeps fills off
+ *  commands. A 32px target. */
+export const ACTION =
+  "inline-flex min-h-8 items-center border-2 border-ink-hi px-3 text-sm font-semibold text-ink-hi hover:border-phos hover:text-phos";
+
 /** A bordered command, the front page's chip, a 32px target. */
 export const CHIP =
   "inline-flex min-h-8 items-center border border-ink-hi/60 px-2.5 text-sm text-ink-hi hover:border-phos hover:text-phos";
@@ -127,8 +132,14 @@ export type RecordBoxProps = Line & {
   links?: BoxLink[];
   /** One command (call, comment, see a sample ballot). */
   action?: BoxLink;
-  /** The full text, behind "More: <label>". */
-  more?: { label: string; children: ReactNode } | null;
+  /** The full text, behind "More: <label>". `open` opens it on arrival
+   *  (a deep link); `onToggle` hears the reader open or close it. */
+  more?: {
+    label: string;
+    children: ReactNode;
+    open?: boolean;
+    onToggle?: (open: boolean) => void;
+  } | null;
   /** Spans the grid, with a bigger title and figure. */
   lead?: boolean;
   /** Tighter: less padding and a narrower figure column, for a page whose
@@ -226,12 +237,7 @@ export default function RecordBox(props: RecordBoxProps) {
           {(links?.length || action) && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {action && (
-                <BoxAnchor
-                  href={action.href}
-                  ariaLabel={action.ariaLabel}
-                  // Weight, not a fill: the palette keeps fills off commands.
-                  className="inline-flex min-h-8 items-center border-2 border-ink-hi px-3 text-sm font-semibold text-ink-hi hover:border-phos hover:text-phos"
-                >
+                <BoxAnchor href={action.href} ariaLabel={action.ariaLabel} className={ACTION}>
                   {action.label}
                 </BoxAnchor>
               )}
@@ -256,7 +262,11 @@ export default function RecordBox(props: RecordBoxProps) {
       </div>
       {below && <div className={compact ? "mt-2" : "mt-3"}>{below}</div>}
       {more && (
-        <details className={`group/more text-sm ${compact ? "mt-1.5" : "mt-3"}`}>
+        <details
+          open={more.open}
+          onToggle={more.onToggle && ((e) => more.onToggle!(e.currentTarget.open))}
+          className={`group/more text-sm ${compact ? "mt-1.5" : "mt-3"}`}
+        >
           <summary
             className={`${INLINE_LINK} inline-flex min-h-6 cursor-pointer list-none items-center gap-1.5 [&::-webkit-details-marker]:hidden`}
           >

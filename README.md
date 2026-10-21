@@ -2609,7 +2609,7 @@ civitas/
 │   │   │                     #   + statewide measures), race/candidate detail
 │   │   ├── congress/members/ # Find your members (Senate, House; state, town, county)
 │   │   │   └── measures/     #   The chamber measure by measure (replaced the leaderboard)
-│   │   ├── environmental/    # Environmental policy tracking
+│   │   ├── environmental/    # What running the site costs (boxes from GET /api/environmental)
 │   │   ├── accessibility/    # Accessibility statement
 │   │   ├── feedback/         # On-site feedback form -> files a GitHub issue
 │   │   ├── changelog/        # Scoring-algorithm version history

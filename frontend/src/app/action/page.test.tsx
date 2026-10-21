@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import ActionPage from "./page";
-import { fetchActionIssues } from "@/lib/api";
+import { fetchActionIssues, fetchOpenComments } from "@/lib/api";
 import type { ActionIssue } from "@/types/action";
 
 /* The tab bar writes every tab's URL through the History API, the issues
@@ -150,11 +150,11 @@ describe("a seat-flip issue's developing disclosure", () => {
   async function disclosures() {
     window.history.replaceState(null, "", "/action?tab=issues");
     render(<ActionPage />);
-    await userEvent.click(await screen.findByRole("button", { name: /race b/ }));
-    return screen.getAllByText(/broader news coverage has not yet confirmed/);
+    // Every box shows its disclosure, without opening its "More".
+    return screen.findAllByText(/broader news coverage has not yet confirmed/);
   }
 
-  it("says an official count is official, on the hero and on an expanded card", async () => {
+  it("says an official count is official, on the top issue and on the next", async () => {
     serveCount(true);
     const shown = await disclosures();
     expect(shown).toHaveLength(2);
@@ -188,8 +188,8 @@ describe("the list beside the top issue", () => {
       })) as unknown as typeof fetchActionIssues);
     window.history.replaceState(null, "", "/action?tab=issues");
     render(<ActionPage />);
-    expect(await screen.findByRole("heading", { name: /^More issues/ })).toHaveTextContent(
-      /^More issues1$/
+    expect(await screen.findByRole("heading", { level: 2, name: /^Issues/ })).toHaveTextContent(
+      /^Issues$/
     );
   });
 });
@@ -212,5 +212,74 @@ describe("the masthead's freshness line", () => {
     expect(line.textContent).toMatch(
       /^Checked \d{1,2}:\d{2}.* · stories updated [A-Z][a-z]{2} \d{1,2}, /
     );
+  });
+});
+
+describe("issue boxes", () => {
+  function serve() {
+    vi.mocked(fetchActionIssues).mockImplementation((() =>
+      Promise.resolve({
+        date: LATEST,
+        availableDates: DATES,
+        generatedAt: `${LATEST}T12:00:00Z`,
+        issues: [issueFor(LATEST, "a"), issueFor(LATEST, "b")],
+      })) as unknown as typeof fetchActionIssues);
+  }
+
+  it("opens and scrolls to the box a deep link names, and only that one", async () => {
+    serve();
+    window.history.replaceState(null, "", "/action?tab=issues&issue=pub-b-latest");
+    render(<ActionPage />);
+    const box = (await screen.findByRole("heading", { name: /Issue b/ })).closest("article")!;
+    expect(box.querySelector("details")!.open).toBe(true);
+    const top = screen.getByRole("heading", { name: /Issue a/ }).closest("article")!;
+    expect(top.querySelector("details")!.open).toBe(false);
+    await vi.waitFor(() => expect(scrolls).toHaveBeenCalled());
+  });
+
+  it("writes ?issue= when a reader opens a box's More", async () => {
+    serve();
+    window.history.replaceState(null, "", "/action?tab=issues");
+    render(<ActionPage />);
+    const box = (await screen.findByRole("heading", { name: /Issue b/ })).closest("article")!;
+    await userEvent.click(box.querySelector("summary")!);
+    await vi.waitFor(() => expect(window.location.search).toContain("issue=pub-b-latest"));
+  });
+
+  it("draws an open comment period as a box with a countdown and the abstract behind More", async () => {
+    serve();
+    vi.mocked(fetchOpenComments).mockResolvedValue([
+      {
+        id: 7,
+        key: "2026-12345",
+        title: "Optional Practical Training Fees",
+        firstSentence: "This rule proposes new fees.",
+        summary: "This rule proposes new fees for Optional Practical Training.",
+        commentWindow: {
+          opened: "2026-09-01",
+          closes: "2026-11-09",
+          totalDays: 69,
+          daysLeft: 19,
+          elapsedPercent: 72,
+        },
+        agencyName: "Homeland Security Department",
+        agencySlug: null,
+        commentsCloseOn: "2026-11-09",
+        commentUrl: "https://www.regulations.gov/x",
+        docType: "proposed_rule",
+        date: "2026-09-01",
+      },
+    ]);
+    window.history.replaceState(null, "", "/action?tab=issues");
+    render(<ActionPage />);
+    const box = (
+      await screen.findByRole("heading", { name: "Optional Practical Training Fees" })
+    ).closest("article")!;
+    expect(box.querySelector('[role="img"]')).not.toBeNull();
+    expect(box.textContent).toMatch(/19/);
+    expect(
+      screen.getByRole("link", { name: "Comment on Optional Practical Training Fees" })
+    ).toBeInTheDocument();
+    expect(box.querySelector("details")!.textContent).toMatch(/new fees for Optional/);
   });
 });

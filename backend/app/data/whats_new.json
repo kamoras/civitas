@@ -2,6 +2,13 @@
   "_contract": "One entry per user-facing feature, newest first; writing it is part of shipping the feature (AGENTS.md, 'What gets posted'). The same entry is the /changelog 'New on the site' list, the What's new feed and a Bluesky post (app/whats_new.py). id: a stable slug, never reused (it is the post's subject, so changing it posts again). date: the UTC day the feature reached main (git log --date=format-local:%Y-%m-%d with TZ=UTC). title: a name, no trailing period. summary: one plain sentence that stays true: no named politicians, no pronouns, no em dashes, no emoji, no year or Congress number. url: the page's path on the site. tests/test_whats_new.py checks each entry and that the post fits.",
   "entries": [
     {
+      "id": "action-center-boxes",
+      "date": "2026-10-21",
+      "title": "Today's issues in boxes",
+      "summary": "Each issue in the Action Center is now a box with the outlet's headline, the ongoing story it belongs to and its actions as buttons, and each open comment period shows its days left, with the full record one tap away.",
+      "url": "/action"
+    },
+    {
       "id": "ballot-page-boxes",
       "date": "2026-10-21",
       "title": "Ballot pages in boxes",
