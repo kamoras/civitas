@@ -286,11 +286,11 @@ def test_became_law_from_the_law_list_and_the_bills_just_signed(db_session):
         db_session.add(SponsoredBill(senator_id="s1", bill_id=bill_id, title="A bill", congress=119, is_law=True,
                                      latest_action=action, latest_action_date=day, bill_type=bill_id.split(".")[0]))
     db_session.commit()
-    week = cs._became_law(db_session, date(2025, 12, 29), date(2026, 1, 4))
+    week = cs.became_law(db_session, date(2025, 12, 29), date(2026, 1, 4))
     assert [(b["billId"], b["date"]) for b in week] == [("HR.1043", "2025-12-29"), ("S.550", "2025-12-30"), ("S.766", "2025-12-31")]
     assert week[0]["text"] == "Became Public Law No: 119-68."
     # HR.1043 is not listed again in February under its later action.
-    assert cs._became_law(db_session, date(2026, 2, 9), date(2026, 2, 15)) == []
+    assert cs.became_law(db_session, date(2026, 2, 9), date(2026, 2, 15)) == []
 
 
 def test_bill_days_are_of_the_bills_congress(week_of_sept_21):

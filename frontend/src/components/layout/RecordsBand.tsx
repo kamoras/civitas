@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import { fetchPipelineStatus } from "@/lib/api";
 import type { PipelineStatus } from "@/lib/api";
-import { parseUtc, asLabel } from "@/lib/formatting";
+import { parseUtc, asLabel, midSentence } from "@/lib/formatting";
 
 /**
  * The document header band that sits above every page.
@@ -330,8 +330,8 @@ export function RunStatusSquare() {
   const words = !loaded
     ? "Reading run status"
     : state.complete
-      ? `${filedAt ? `Filed ${filedAt}, ` : ""}${state.label.toLowerCase()}`
-      : `${state.label.toLowerCase()}${state.everyName ? ` (${state.everyName})` : ""}, ${status?.linksCompleted ?? 0} of ${status?.links?.length ?? 0} filed`;
+      ? `${filedAt ? `Filed ${filedAt}, ` : ""}${midSentence(state.label)}`
+      : `${midSentence(state.label)}${state.everyName ? ` (${state.everyName})` : ""}, ${status?.linksCompleted ?? 0} of ${status?.links?.length ?? 0} filed`;
   const tone = !loaded
     ? "border-ink-min"
     : state.complete

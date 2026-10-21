@@ -68,7 +68,7 @@ function DataInventory({ data }: { data: Record<string, number> }) {
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between mb-1">
         <span className="font-mono text-xs text-ink-min">Total records</span>
-        <span className="font-mono text-sm text-ink-hi">{total.toLocaleString()}</span>
+        <span className="font-mono text-sm text-ink-hi">{total.toLocaleString("en-US")}</span>
       </div>
       {INVENTORY_SECTIONS.map((section) => {
         const sectionTotal = section.keys.reduce((s, { key }) => s + (data[key] ?? 0), 0);
@@ -78,7 +78,7 @@ function DataInventory({ data }: { data: Record<string, number> }) {
             <div className="flex items-center gap-2 mb-2">
               <span className="font-mono text-xs text-ind-purple">{section.label}</span>
               <span className="text-xs font-mono text-ink-min">
-                {sectionTotal.toLocaleString()}
+                {sectionTotal.toLocaleString("en-US")}
               </span>
               <div className="flex-1 border-t border-white/[0.07]" />
             </div>
@@ -86,7 +86,7 @@ function DataInventory({ data }: { data: Record<string, number> }) {
               {section.keys.map(({ key, label }) => (
                 <div key={key} className="border border-white/[0.07] p-2.5 text-center">
                   <div className="text-base font-mono text-ink-hi">
-                    {(data[key] ?? 0).toLocaleString()}
+                    {(data[key] ?? 0).toLocaleString("en-US")}
                   </div>
                   <div className="text-xs font-mono text-ink-lo mt-0.5">{label}</div>
                 </div>
@@ -181,7 +181,7 @@ export function DataDashboard({ d }: { d: AdminDashboard | null }) {
                           <div className="flex justify-between items-center mb-2">
                             <span className="text-xs font-mono text-ink-hi">{col.name}</span>
                             <span className="text-xs font-mono text-signal-cyan">
-                              {col.count.toLocaleString()}
+                              {col.count.toLocaleString("en-US")}
                             </span>
                           </div>
                           <div
@@ -217,7 +217,7 @@ export function DataDashboard({ d }: { d: AdminDashboard | null }) {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <div className="border border-white/[0.07] p-3 text-center">
                       <div className="text-lg font-mono text-ink-hi">
-                        {(d.system.vectorDb.totalVectors ?? 0).toLocaleString()}
+                        {(d.system.vectorDb.totalVectors ?? 0).toLocaleString("en-US")}
                       </div>
                       <div className="text-xs font-mono text-ink-lo">Total vectors</div>
                     </div>
@@ -251,7 +251,7 @@ export function DataDashboard({ d }: { d: AdminDashboard | null }) {
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                       <div className="border border-white/[0.07] p-3 text-center">
                         <div className="text-lg font-mono text-ink-hi">
-                          {d.system.vectorDb.learningStore.totalEntries.toLocaleString()}
+                          {d.system.vectorDb.learningStore.totalEntries.toLocaleString("en-US")}
                         </div>
                         <div className="text-xs font-mono text-ink-lo">Classifications</div>
                       </div>
@@ -292,7 +292,7 @@ export function DataDashboard({ d }: { d: AdminDashboard | null }) {
                                   <div className="flex justify-between text-xs font-mono mb-0.5">
                                     <span className="text-ink">{source}</span>
                                     <span className="text-ink-lo">
-                                      {(count as number).toLocaleString()} ({pct}%)
+                                      {(count as number).toLocaleString("en-US")} ({pct}%)
                                     </span>
                                   </div>
                                   <div
@@ -326,7 +326,7 @@ export function DataDashboard({ d }: { d: AdminDashboard | null }) {
                                   <div className="flex justify-between text-xs font-mono mb-0.5">
                                     <span className="text-ink">{type}</span>
                                     <span className="text-ink-lo">
-                                      {(count as number).toLocaleString()} ({pct}%)
+                                      {(count as number).toLocaleString("en-US")} ({pct}%)
                                     </span>
                                   </div>
                                   <div

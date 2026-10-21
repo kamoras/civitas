@@ -55,32 +55,32 @@ export function ApiDashboard({ token }: { token: string }) {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <StatTile
           label="API requests today"
-          value={today ? today.http.toLocaleString() : "—"}
+          value={today ? today.http.toLocaleString("en-US") : "—"}
           note={totals ? `${formatCompact(totals.http)} in ${range}d` : undefined}
         />
         <StatTile
           label="MCP tool calls today"
-          value={today ? today.mcp.toLocaleString() : "—"}
+          value={today ? today.mcp.toLocaleString("en-US") : "—"}
           note={totals ? `${formatCompact(totals.mcp)} in ${range}d` : undefined}
         />
         <StatTile
           label="MCP connections today"
-          value={today ? today.mcpConnections.toLocaleString() : "—"}
+          value={today ? today.mcpConnections.toLocaleString("en-US") : "—"}
           note="tool listings, one per client session"
         />
         <StatTile
           label="Rejected today"
-          value={today ? today.rejected.toLocaleString() : "—"}
+          value={today ? today.rejected.toLocaleString("en-US") : "—"}
           note={
             today
-              ? `invalid requests and unknown ids; ${today.rateLimited.toLocaleString()} rate-limited`
+              ? `invalid requests and unknown ids; ${today.rateLimited.toLocaleString("en-US")} rate-limited`
               : undefined
           }
           tone={today && today.rejected + today.rateLimited > 0 ? "text-signal-amber" : undefined}
         />
         <StatTile
           label="Server errors today"
-          value={today ? today.serverErrors.toLocaleString() : "—"}
+          value={today ? today.serverErrors.toLocaleString("en-US") : "—"}
           note={totals ? `${formatCompact(totals.serverErrors)} in ${range}d (5xx)` : undefined}
           tone={today && today.serverErrors > 0 ? "text-signal-red" : undefined}
         />
@@ -100,7 +100,7 @@ export function ApiDashboard({ token }: { token: string }) {
               values: days.map((d) => d.mcp),
             },
           ]}
-          formatValue={(v) => v.toLocaleString()}
+          formatValue={(v) => v.toLocaleString("en-US")}
           formatTick={formatCompact}
           stale={loadedRange !== range}
           emptyMessage={usage ? "No API requests in this range." : "Loading…"}
@@ -145,19 +145,19 @@ export function ApiDashboard({ token }: { token: string }) {
                       {e.endpoint}
                     </th>
                     <td className="text-right py-1 pr-3 tabular-nums text-ink-hi">
-                      {e.http.toLocaleString()}
+                      {e.http.toLocaleString("en-US")}
                     </td>
                     <td className="text-right py-1 pr-3 tabular-nums text-ink-hi">
-                      {e.mcp.toLocaleString()}
+                      {e.mcp.toLocaleString("en-US")}
                     </td>
                     <td className="text-right py-1 pr-3 tabular-nums text-ink-lo">
-                      {e.rateLimited.toLocaleString()}
+                      {e.rateLimited.toLocaleString("en-US")}
                     </td>
                     <td className="text-right py-1 pr-3 tabular-nums text-ink-lo">
-                      {e.rejected.toLocaleString()}
+                      {e.rejected.toLocaleString("en-US")}
                     </td>
                     <td className="text-right py-1 tabular-nums text-ink-lo">
-                      {e.serverErrors.toLocaleString()}
+                      {e.serverErrors.toLocaleString("en-US")}
                     </td>
                   </tr>
                 ))}
@@ -204,7 +204,7 @@ export function ApiDashboard({ token }: { token: string }) {
                     <td className="text-left py-1 pr-3 text-ink-hi">{r.parameter}</td>
                     <td className="text-left py-1 pr-3 text-ink-lo">{r.reason}</td>
                     <td className="text-right py-1 tabular-nums text-ink-hi">
-                      {r.count.toLocaleString()}
+                      {r.count.toLocaleString("en-US")}
                     </td>
                   </tr>
                 ))}

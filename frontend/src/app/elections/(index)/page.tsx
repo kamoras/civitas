@@ -45,7 +45,7 @@ import { describeInterval, useLiveResults } from "@/hooks/useLiveResults";
 import type { PviMap } from "@/types/election";
 import { useElectionsHub, useElectionsInitial } from "./ElectionsInitial";
 import { useYourState } from "@/hooks/useYourState";
-import { STATE_NAMES } from "@/lib/stateCodes";
+import { STATE_NAMES, byStateName } from "@/lib/stateCodes";
 
 /*
   Second page onto the records palette, after the homepage. Same recipe:
@@ -82,9 +82,10 @@ function pviHoverColor(pvi: number | null): string {
 // excludes it the same way) even though it's clickable on the map's SVG —
 // filtered out of both the map's click target and the state grid, which
 // list the states with federal contests.
+// By name: a phone shows each row's name, and a screen reader reads it.
 const STATES = Array.from(new Set(Object.values(FIPS_TO_STATE)))
   .filter((s) => s !== "DC")
-  .sort();
+  .sort(byStateName);
 
 /** Whole days from `asOf`'s calendar date to `isoDate`, counted on the
  * Eastern calendar, as election day is: the server renders the countdown

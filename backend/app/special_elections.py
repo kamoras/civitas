@@ -35,7 +35,7 @@ from app.models import BroadcastPost, FecReportingDeadline, FederalElectionDate,
 from app.pipeline.analyze.score_calculator import get_state_pvi_map
 from app.pipeline.fetch.election_results import live_results_states
 from app.pipeline.fetch.poll_close import last_poll_close, state_zone
-from app.state_names import STATE_NAMES
+from app.state_names import STATE_NAMES, by_state_name
 from app.time_utils import EASTERN, congress_in_session, utcnow
 from app.voter_calendar import CLOSED, CLOSING_SOON_DAYS, calendar_for_state, registration_closing
 
@@ -325,7 +325,7 @@ def election_calendar(db: Session, now: datetime | None = None) -> dict:
     # Every state and DC, for the state filter: a state whose deadlines
     # couldn't be read is still listed, and says so, never left out.
     states = []
-    for state in sorted(STATE_NAMES):
+    for state in sorted(STATE_NAMES, key=by_state_name):
         cal = calendar_for_state(state, election.election_day, now)
         states.append({"state": state, "stateName": STATE_NAMES[state],
                        "deadlinesRead": bool(cal and cal["items"] and not cal["unread"]),

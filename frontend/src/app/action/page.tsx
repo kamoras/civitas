@@ -410,8 +410,8 @@ function clockTime(iso: string | undefined): string {
   if (!d || Number.isNaN(d.getTime())) return "";
   const time: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit" };
   return d.toDateString() === new Date().toDateString()
-    ? d.toLocaleString(undefined, time)
-    : d.toLocaleString(undefined, { month: "short", day: "numeric", ...time });
+    ? d.toLocaleString("en-US", time)
+    : d.toLocaleString("en-US", { month: "short", day: "numeric", ...time });
 }
 
 /** Previous/next day and the refresh time, in the masthead's aside slot. */

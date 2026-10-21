@@ -113,17 +113,19 @@ export function TrafficDashboard({ token }: { token: string }) {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile
           label="Confirmed visitors today"
-          value={today?.confirmedVisitors != null ? today.confirmedVisitors.toLocaleString() : "—"}
+          value={
+            today?.confirmedVisitors != null ? today.confirmedVisitors.toLocaleString("en-US") : "—"
+          }
           note={`browsers that ran the page they opened; ${formatCompact(confirmedTotal)} in ${range}d`}
         />
         <StatTile
           label="First-paint loads today"
-          value={today ? today.firstPaintLoads.toLocaleString() : "—"}
+          value={today ? today.firstPaintLoads.toLocaleString("en-US") : "—"}
           note={`cold loads a browser painted in view; ${formatCompact(paintedTotal)} in ${range}d`}
         />
         <StatTile
           label="Page views today"
-          value={today ? today.pageViews.toLocaleString() : "—"}
+          value={today ? today.pageViews.toLocaleString("en-US") : "—"}
           note={`pages confirmed visitors opened (crawlers too before Oct 11); ${formatCompact(viewsTotal)} in ${range}d`}
         />
         <StatTile
@@ -133,7 +135,7 @@ export function TrafficDashboard({ token }: { token: string }) {
               ? formatMs(ltDays[ltDays.length - 1].load.p75 as number)
               : "—"
           }
-          note={`${(ltDays[ltDays.length - 1]?.load.samples ?? 0).toLocaleString()} loads measured`}
+          note={`${(ltDays[ltDays.length - 1]?.load.samples ?? 0).toLocaleString("en-US")} loads measured`}
         />
       </div>
 
@@ -159,12 +161,12 @@ export function TrafficDashboard({ token }: { token: string }) {
                 values: days.map((d) => d.firstPaintLoads),
               },
             ]}
-            formatValue={(v) => v.toLocaleString()}
+            formatValue={(v) => v.toLocaleString("en-US")}
             formatTick={formatCompact}
             stale={stale}
             headline={
               today?.confirmedVisitors != null ? (
-                <span className="text-lg">{today.confirmedVisitors.toLocaleString()}</span>
+                <span className="text-lg">{today.confirmedVisitors.toLocaleString("en-US")}</span>
               ) : undefined
             }
             emptyMessage={emptyText(
@@ -185,12 +187,12 @@ export function TrafficDashboard({ token }: { token: string }) {
                 values: days.map((d) => d.pageViews),
               },
             ]}
-            formatValue={(v) => v.toLocaleString()}
+            formatValue={(v) => v.toLocaleString("en-US")}
             formatTick={formatCompact}
             stale={stale}
             headline={
               today ? (
-                <span className="text-lg">{today.pageViews.toLocaleString()}</span>
+                <span className="text-lg">{today.pageViews.toLocaleString("en-US")}</span>
               ) : undefined
             }
             emptyMessage={emptyText(
@@ -209,7 +211,7 @@ export function TrafficDashboard({ token }: { token: string }) {
         </div>
         <LineChart
           title={`${metricInfo.label}: P50 / P75 / P95 per day`}
-          subtitle={`${ltSamples.toLocaleString()} cold page loads measured in ${range}d; days with none are gaps`}
+          subtitle={`${ltSamples.toLocaleString("en-US")} cold page loads measured in ${range}d; days with none are gaps`}
           xLabels={ltDays.map((d) => formatDay(d.date))}
           series={[
             {
@@ -286,7 +288,7 @@ export function TrafficDashboard({ token }: { token: string }) {
                         {p.p95 != null ? formatMs(p.p95) : "—"}
                       </td>
                       <td className="text-right py-1 tabular-nums text-ink-lo">
-                        {p.samples.toLocaleString()}
+                        {p.samples.toLocaleString("en-US")}
                       </td>
                     </tr>
                   ))}

@@ -1229,6 +1229,7 @@ class PublicPeerGroupSchema(_PublicModel):
                                                           "member's party (independents with theirs); chamber: "
                                                           "every serving member")
     label: str = Field(description='The group as the page names it ("Senate Democrats and independents")')
+    label_one: str = Field(description='One member of the group ("Senate Democrat or independent")')
     n: int = Field(description="Members in the group with a figure for this measure, the member included")
 
 
@@ -1249,8 +1250,10 @@ class PublicPeerMeasureSchema(_PublicModel):
     unit: Literal["share", "rate", "count"] = Field(description="share and rate are 0-1; count is bills")
     value: float | None = Field(description="The member's figure; null when the record has none")
     shown: str | None = Field(description='The figure as the page prints it ("13%", "0 of 493", "9 of 89")')
-    expected: float | None = Field(description="The figure expected: the scorer's seat-adjusted reference where it "
-                                               "has one, else the peer median (expectedBasis)")
+    expected: float | None = Field(description="The seat's average: the scorer's seat-adjusted reference where it "
+                                               "has one (a mean over members of the party in seats like this one, "
+                                               "so a few frequent breakers can put it above most members), else the "
+                                               "peer median (expectedBasis)")
     expected_basis: Literal["seat", "peer median"]
     median: float | None = Field(description="The peer group's median")
     peer_group: PublicPeerGroupSchema
