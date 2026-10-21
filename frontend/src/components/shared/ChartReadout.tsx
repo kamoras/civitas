@@ -29,7 +29,9 @@ const PAGE = 10;
 
 // One sentence: a part that ends in its own full stop loses it inside.
 const bare = (s: string) => s.replace(/\.$/, "");
-const words = (m: ReadoutMark) =>
+/** A mark's readout as one sentence: what the live region reads, and the
+ *  name a list item takes for the same mark. */
+export const readoutWords = (m: ReadoutMark) =>
   `${bare(m.label)}${m.detail ? `, ${bare(m.detail)}` : ""}: ${
     m.context ? `${bare(m.shown)}, ${bare(m.context)}` : bare(m.shown)
   }.`;
@@ -272,7 +274,7 @@ export default function ChartReadout({
     }
     e.preventDefault();
     setActive(next);
-    setAnnounce(words(marks[next]));
+    setAnnounce(readoutWords(marks[next]));
   };
 
   const linked = marks.some((q) => q.href) || onOpen != null;

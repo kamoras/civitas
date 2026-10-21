@@ -22,6 +22,8 @@ import type {
   MapAccountability as Data,
 } from "@/types/mapAccountability";
 import ScrollRegion from "@/components/shared/ScrollRegion";
+import ChartReadout from "@/components/shared/ChartReadout";
+import { MARK_ATTR } from "@/types/readout";
 
 const CHAMBERS: MapChamberKey[] = ["senate", "house"];
 const CHAMBER_NAME: Record<MapChamberKey, string> = { senate: "Senate", house: "House" };
@@ -34,10 +36,6 @@ const ACCOUNTABILITY_SOURCE =
 
 const WAITING_STROKE = "var(--ink-lo)";
 
-function pct(share: number | null): string {
-  return share == null ? "n/a" : `${Math.round(share * 100)}%`;
-}
-
 export function seatLabel(s: AccountabilitySeat): string {
   return raceLabel({
     state: s.state,
@@ -46,14 +44,6 @@ export function seatLabel(s: AccountabilitySeat): string {
     isSpecial: s.special,
   });
 }
-
-/** What a seat with no swing is waiting on, in words. */
-const COUNT_WORDS: Record<AccountabilitySeat["count"], string> = {
-  official: "official",
-  counting: "count not yet official",
-  no_count: "no count read",
-  not_two_party: "official, but not a Democrat against a Republican",
-};
 
 /** "N of M ranged seats have an official count", or, before any, that
  * nothing is graded yet: an empty check is said, never shown as zeros. */
@@ -78,14 +68,18 @@ function CoverageStrip({
   level,
   cell,
   promised,
+  promisedShown,
 }: {
   level: 80 | 95;
   cell: CoverageCell;
   promised: number;
+  promisedShown: string;
 }) {
   const share = cell[`share${level}`];
   const interval = cell[`interval${level}`];
   const held = cell[`held${level}`];
+  const shareShown = cell[`share${level}Shown`];
+  const intervalShown = cell[`interval${level}Shown`];
   return (
     <div className="grid grid-cols-1 gap-1 sm:grid-cols-[8.5rem_minmax(0,1fr)] sm:items-center sm:gap-3">
       <span className="font-mono text-xs text-ink-lo">
@@ -105,7 +99,6 @@ function CoverageStrip({
           <div
             className="absolute -inset-y-1 w-px bg-ink-hi"
             style={{ left: `${promised * 100}%` }}
-            title={`Promised ${pct(promised)}`}
           />
           {share != null && (
             <div
@@ -117,7 +110,7 @@ function CoverageStrip({
         <p className="mt-1 text-xs text-ink-lo">
           {share == null
             ? "None checked yet."
-            : `${pct(share)} inside (exact 95% interval ${pct(interval?.[0] ?? null)} to ${pct(interval?.[1] ?? null)}); promised ${pct(promised)}.`}
+            : `${shareShown} inside (exact 95% interval ${intervalShown ?? "n/a"}); promised ${promisedShown}.`}
         </p>
       </div>
     </div>
@@ -163,16 +156,26 @@ function ChamberCheck({ name, c }: { name: string; c: ChamberAccountability }) {
         </span>
       </div>
       <div className="space-y-3">
-        <CoverageStrip level={80} cell={c.all} promised={c.promised.nominal80} />
-        <CoverageStrip level={95} cell={c.all} promised={c.promised.nominal95} />
+        <CoverageStrip
+          level={80}
+          cell={c.all}
+          promised={c.promised.nominal80}
+          promisedShown={c.promised.nominal80Shown}
+        />
+        <CoverageStrip
+          level={95}
+          cell={c.all}
+          promised={c.promised.nominal95}
+          promisedShown={c.promised.nominal95Shown}
+        />
       </div>
       {held.coverage80 != null && (
         <p className="text-xs text-ink-min">
           What the map said beforehand: on {held.races} past races
           {held.cycles ? ` (${held.cycles[0]} to ${held.cycles[1]})` : ""} it never saw, its 80%
-          ranges held {pct(held.coverage80)} and its 95% ranges {pct(held.coverage95)}
+          ranges held {held.coverage80Shown} and its 95% ranges {held.coverage95Shown}
           {fw
-            ? `; on ${fw.cycle}, fitted on earlier cycles only, ${pct(fw.coverage80)} and ${pct(fw.coverage95)}`
+            ? `; on ${fw.cycle}, fitted on earlier cycles only, ${fw.coverage80Shown} and ${fw.coverage95Shown}`
             : ""}
           .
         </p>
@@ -209,10 +212,10 @@ function ChamberCheck({ name, c }: { name: string; c: ChamberAccountability }) {
                     {b.graded} of {b.ranged}
                   </td>
                   <td className="py-1.5 pr-3 text-right text-ink-hi">
-                    {b.graded ? `${b.held80} · ${pct(b.share80)}` : "n/a"}
+                    {b.graded ? `${b.held80} · ${b.share80Shown}` : "n/a"}
                   </td>
                   <td className="py-1.5 text-right text-ink-hi">
-                    {b.graded ? `${b.held95} · ${pct(b.share95)}` : "n/a"}
+                    {b.graded ? `${b.held95} · ${b.share95Shown}` : "n/a"}
                   </td>
                 </tr>
               ))}
@@ -255,12 +258,6 @@ function tileFill(s: AccountabilitySeat): {
   return { fill: NO_CONTEST_FILL, stroke: WAITING_STROKE, strokeDasharray: "0.8 0.8" };
 }
 
-function tileTitle(s: AccountabilitySeat): string {
-  return s.swingLabel
-    ? `${seatLabel(s)}: ${s.marginLabel}, usual ${s.usualMarginLabel}, swing ${s.swingLabel}`
-    : `${seatLabel(s)}: ${COUNT_WORDS[s.count]}`;
-}
-
 function SenateSwing({ seats }: { seats: AccountabilitySeat[] }) {
   const byState = new Map<string, AccountabilitySeat[]>();
   for (const s of seats) byState.set(s.state, [...(byState.get(s.state) ?? []), s]);
@@ -276,7 +273,7 @@ function SenateSwing({ seats }: { seats: AccountabilitySeat[] }) {
         const list = byState.get(state) ?? [];
         const part = TILE / Math.max(list.length, 1);
         return (
-          <g key={state}>
+          <g key={state} {...(list.length ? { [MARK_ATTR]: state } : {})}>
             {list.length === 0 ? (
               <rect x={x} y={y} width={TILE} height={TILE} fill={NO_CONTEST_FILL} />
             ) : (
@@ -289,9 +286,7 @@ function SenateSwing({ seats }: { seats: AccountabilitySeat[] }) {
                   height={TILE}
                   strokeWidth={0.25}
                   {...tileFill(s)}
-                >
-                  <title>{tileTitle(s)}</title>
-                </rect>
+                />
               ))
             )}
             <text
@@ -324,6 +319,15 @@ function HouseSwing({ seats }: { seats: AccountabilitySeat[] }) {
           <text x={b.x} y={b.y - 2} fontSize="6" className="fill-ink-min font-mono">
             {b.state}
           </text>
+          {/* The state's mark: its block with a margin, a 24px target. */}
+          <rect
+            {...{ [MARK_ATTR]: b.state }}
+            x={b.x - 3}
+            y={b.y - 9}
+            width={b.cols * step + 5}
+            height={b.rows * step + 11}
+            fill="transparent"
+          />
           {b.seats.map((s, i) => (
             <rect
               key={s.id}
@@ -333,9 +337,7 @@ function HouseSwing({ seats }: { seats: AccountabilitySeat[] }) {
               height={HOUSE_TILE}
               strokeWidth={0.3}
               {...tileFill(s)}
-            >
-              <title>{tileTitle(s)}</title>
-            </rect>
+            />
           ))}
         </g>
       ))}
@@ -382,6 +384,18 @@ function SwingLegend({ bins }: { bins: Data["bins"] }) {
       </ul>
     </div>
   );
+}
+
+/** The swing map's states in reading order: the Senate's west to east,
+ *  north to south; the House's in its layout's order. */
+function swingOrder(c: MapChamberKey, ch: ChamberAccountability) {
+  const states =
+    c === "senate"
+      ? Object.entries(STATE_TILES)
+          .sort(([, [ac, ar]], [, [bc, br]]) => ar - br || ac - bc)
+          .map(([st]) => st)
+      : houseLayout(ch.seats).blocks.map((b) => b.state);
+  return states.flatMap((st) => (ch.stateMarks?.[st] ? [ch.stateMarks[st]] : []));
 }
 
 function swingSentence(name: string, c: ChamberAccountability): string {
@@ -528,17 +542,20 @@ export default function MapAccountability({ data, pageUrl }: { data: Data; pageU
             <div key={c} className="space-y-2">
               <h3 className="font-mono text-xs text-ink-hi">{CHAMBER_NAME[c]}</h3>
               <p className="text-sm text-ink-lo">{swingSentence(CHAMBER_NAME[c], ch)}</p>
-              <div
+              {/* Each state reads its seats' swing (the API's words); the
+                  table below lists every seat. */}
+              <ChartReadout
+                label={`${CHAMBER_NAME[c]} swing map`}
+                marks={swingOrder(c, ch)}
+                labelAt="mark"
                 className="mx-auto max-w-[38rem]"
-                role="img"
-                aria-label={`${CHAMBER_NAME[c]} swing map. ${swingSentence(CHAMBER_NAME[c], ch)} The table below lists every seat.`}
               >
                 {c === "senate" ? (
                   <SenateSwing seats={ch.seats} />
                 ) : (
                   <HouseSwing seats={ch.seats} />
                 )}
-              </div>
+              </ChartReadout>
               <SwingTable seats={ch.seats} />
             </div>
           );

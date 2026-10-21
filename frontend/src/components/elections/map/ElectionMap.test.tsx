@@ -23,6 +23,7 @@ import type {
   ElectionMapResponse,
   MapSeat,
   RangedSeat,
+  StateMarks,
 } from "@/types/electionMap";
 import type { MapChamber, MapView } from "@/lib/electionMap";
 
@@ -101,6 +102,7 @@ const data: ElectionMapData = {
     status: "ok",
   },
   bins: { leansMax: 5, usuallyMax: 15 },
+  stateMarks: { usual: {}, polls: {}, diff: {} },
   calibration: {
     cycles: [1998, 2022],
     races: 419,
@@ -206,6 +208,20 @@ const houseSeats: MapSeat[] = [
   { ...data.seats[1], id: "2026-HOUSE-WY-0", district: 0 } as MapSeat,
 ];
 
+/** What the API's state_marks says for each state, in each view (its words
+ *  are tested in the backend): enough here to read the readout. */
+function marksFor(seats: MapSeat[]): StateMarks {
+  const out: StateMarks = { usual: {}, polls: {}, diff: {} };
+  for (const view of ["usual", "polls", "diff"] as const)
+    for (const seat of seats)
+      out[view][seat.state] = { id: seat.state, label: seat.stateName, shown: `${view} words` };
+  return out;
+}
+
+/** A state's mark on the visible tile map (thumbnails carry none). */
+const tile = (state: string) =>
+  document.querySelector(`[role='group'] [data-mark='${state}']`) as HTMLElement;
+
 /** The API's response around the fixture: Senate as `data`, a small House. */
 const response: ElectionMapResponse = {
   schemaVersion: 2,
@@ -238,6 +254,7 @@ const response: ElectionMapResponse = {
       calibration: data.calibration,
       model: data.model,
       seats: data.seats,
+      stateMarks: marksFor(data.seats),
     },
     house: {
       shift: -6.1,
@@ -245,6 +262,7 @@ const response: ElectionMapResponse = {
       calibration: { ...data.calibration, cycles: [2018, 2022], races: 1150 },
       model: { ...data.model, file: "app/data/forecast_house_model.json" },
       seats: houseSeats,
+      stateMarks: marksFor(houseSeats),
     },
   },
 };
@@ -266,7 +284,14 @@ function renderMap(
     pollsInRange: over.pollsInRange ?? true,
     national: { ...response.national, status: over.nationalStatus ?? "ok" },
     chambers: over.seats
-      ? { ...response.chambers, senate: { ...response.chambers.senate, seats: over.seats } }
+      ? {
+          ...response.chambers,
+          senate: {
+            ...response.chambers.senate,
+            seats: over.seats,
+            stateMarks: marksFor(over.seats),
+          },
+        }
       : response.chambers,
   };
   return render(
@@ -301,7 +326,7 @@ describe("election map", () => {
     renderMap("usual");
     fireEvent.click(screen.getByRole("button", { name: /Difference/ }));
     expect(window.location.search).toContain("view=diff");
-    fireEvent.click(screen.getByRole("button", { name: /^Ohio:/ }));
+    fireEvent.click(tile("OH"));
     const detail = screen.getByRole("complementary", { name: "Seat detail" });
     expect(detail.textContent).toContain("margin D+9 to R+5");
     expect(detail.textContent).toContain("Too close to tell");
@@ -331,7 +356,7 @@ describe("election map", () => {
     expect(frame.textContent).toContain("Fundamentals only · 19 days out.");
     expect(frame.textContent).toContain("checked only over the final 21 days before election day");
     expect(frame.textContent).toContain("Past polls the ranges are fitted on: Silver Bulletin.");
-    fireEvent.click(screen.getByRole("button", { name: /^Ohio:/ }));
+    fireEvent.click(tile("OH"));
     const detail = screen.getByRole("complementary", { name: "Seat detail" });
     expect(detail.textContent).toContain("Fundamentals only");
     expect(detail.textContent).toContain(
@@ -356,7 +381,7 @@ describe("election map", () => {
 
   it("says why a seat has no range", () => {
     renderMap("polls");
-    fireEvent.click(screen.getByRole("button", { name: /^Wyoming:/ }));
+    fireEvent.click(tile("WY"));
     expect(screen.getByText("No Democratic nominee is on the ballot.")).toBeInTheDocument();
   });
 
@@ -451,7 +476,7 @@ describe("election map", () => {
       ).violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.html).join(" | ")}`);
     expect(await run()).toEqual([]);
     fireEvent.click(screen.getByRole("button", { name: /Polls/ }));
-    fireEvent.click(screen.getByRole("button", { name: /^Ohio:/ }));
+    fireEvent.click(tile("OH"));
     fireEvent.click(screen.getByRole("button", { name: /Table/ }));
     expect(await run()).toEqual([]);
     fireEvent.click(screen.getAllByRole("button", { name: "Difference" })[0]);
@@ -464,13 +489,19 @@ describe("election map", () => {
     expect(window.location.search).toContain("chamber=house");
     const frame = document.querySelector("[data-share-section='general-map']") as HTMLElement;
     expect(within(frame).getByText(`${VIEW_STAMP.polls} · House`)).toBeInTheDocument();
-    // The tile map is one stop per state, named with its seat count.
-    // The tile map (wider screens; a phone gets the state list, CSS-hidden here).
-    const tiles = screen.getByRole("group", { name: "House seats, grouped by state" });
-    const ohio = within(tiles).getByRole("button", {
-      name: /^Ohio: 2 seats, 2 too close to tell/,
-    });
-    fireEvent.keyDown(ohio, { key: "Enter" });
+    // The tile map is one Tab stop, a state its mark (24px+ with its hit
+    // area); no seat's 7px tile is a target. The arrow keys read a state in
+    // the API's words, Enter opens its seats as a list.
+    const tiles = screen.getByRole("group", { name: /^House seats, grouped by state: 2 marks/ });
+    expect(tiles.querySelectorAll("[role=button], [tabindex='0'] [tabindex]")).toHaveLength(0);
+    expect(tiles.querySelectorAll("rect[data-mark]")).toHaveLength(2);
+    tiles.focus();
+    fireEvent.keyDown(tiles, { key: "End" });
+    fireEvent.keyDown(tiles, { key: "Home" });
+    const first = within(tiles).getByText(/: polls words\.$/).textContent!;
+    if (!first.startsWith("Ohio")) fireEvent.keyDown(tiles, { key: "ArrowRight" });
+    expect(within(tiles).getByText("Ohio: polls words.")).toBeInTheDocument();
+    fireEvent.keyDown(tiles, { key: "Enter" });
     const sheet = screen.getByRole("complementary", { name: "Seat detail" });
     expect(within(sheet).getByText("Ohio · 2 seats")).toBeInTheDocument();
     fireEvent.click(within(sheet).getByRole("button", { name: /Ohio's 9th district/ }));
@@ -519,7 +550,7 @@ describe("election map", () => {
       pollSource: { state: "rejected", detail: "shares sum to 110.0", checkedOn: "2026-10-16" },
     });
     renderMap("polls", "senate", { seats: [rejected] });
-    fireEvent.click(screen.getByRole("button", { name: /^Ohio:/ }));
+    fireEvent.click(tile("OH"));
     const detail = screen.getByRole("complementary", { name: "Seat detail" });
     expect(detail.textContent).toContain(
       "failed Civitas's checks on 16 Oct 2026 (shares sum to 110.0)"
@@ -541,13 +572,11 @@ describe("election map", () => {
       close: false,
     });
     renderMap("polls", "senate", { seats: [ranged(), special] });
-    const ohio = screen.getByRole("button", { name: /^Ohio:/ });
-    fireEvent.keyDown(ohio, { key: "Enter" });
+    // A click on the state opens a chooser listing both races.
+    fireEvent.click(tile("OH"));
     const sheet = screen.getByRole("complementary", { name: "Seat detail" });
     fireEvent.click(within(sheet).getByRole("button", { name: /Ohio \(special\)/ }));
     expect(sheet.textContent).toContain("margin R+1 to R+9");
-    fireEvent.click(document.querySelector("[data-seat='2026-SEN-OH']") as Element);
-    expect(sheet.textContent).toContain("margin D+9 to R+5");
   });
 
   it("labels a range by what it rests on, never polls on a seat with none", () => {
@@ -558,11 +587,7 @@ describe("election map", () => {
       rangeBasisShort: "no poll",
     } as Partial<RangedSeat>);
     renderMap("polls", "senate", { seats: [unpolled] });
-    const ohio = screen.getByRole("button", { name: /^Ohio:/ });
-    expect(ohio.getAttribute("aria-label")).toContain(
-      "Margin range, no poll of this seat: D+9 to R+5"
-    );
-    fireEvent.click(ohio);
+    fireEvent.click(tile("OH"));
     const detail = screen.getByRole("complementary", { name: "Seat detail" });
     expect(detail.textContent).toContain("Margin range, no poll of this seat");
     expect(detail.textContent).toContain("R+5 lean");
@@ -588,7 +613,7 @@ describe("election map", () => {
       },
     } as Partial<RangedSeat>);
     renderMap("polls", "senate", { seats: [seat] });
-    fireEvent.click(screen.getByRole("button", { name: /^Ohio:/ }));
+    fireEvent.click(tile("OH"));
     const list = screen.getByRole("list", { name: "Polls in the average" });
     expect(within(list).getAllByRole("listitem")).toHaveLength(1);
     expect(list.textContent).toContain("D 40 / R 49; D 42 / R 51");
@@ -656,15 +681,16 @@ describe("election map", () => {
     })) as unknown as typeof window.matchMedia;
     try {
       renderMap("polls");
-      const ohio = screen.getByRole("button", { name: /^Ohio:/ });
-      ohio.focus();
-      fireEvent.click(ohio);
+      const map = screen.getByRole("group", { name: /^Senate seats by state/ });
+      map.focus();
+      fireEvent.keyDown(map, { key: "Home" });
+      fireEvent.keyDown(map, { key: "Enter" });
       const dialog = screen.getByRole("dialog", { name: "Seat detail" });
       expect(dialog).toHaveAttribute("aria-modal", "true");
       fireEvent.keyDown(window, { key: "Escape" });
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
       await new Promise((r) => requestAnimationFrame(() => r(null)));
-      expect(document.activeElement).toBe(ohio);
+      expect(document.activeElement).toBe(map);
     } finally {
       window.matchMedia = original;
     }

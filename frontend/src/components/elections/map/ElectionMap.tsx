@@ -10,6 +10,8 @@ import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR, shareMetaAttrs } from "@/lib/sh
 import { trapTab } from "@/lib/focusedDialog";
 import { MAP_LABEL_HALO } from "@/lib/results";
 import { overlay } from "@/lib/chartColors";
+import ChartReadout, { readoutWords } from "@/components/shared/ChartReadout";
+import { MARK_ATTR } from "@/types/readout";
 import {
   CHAMBER_LABEL,
   CLOSE_HATCH,
@@ -20,7 +22,6 @@ import {
   chamberWord,
   formatAsOf,
   houseLayout,
-  stateAriaLabel,
   type MapChamber,
   MAP_VIEWS,
   NO_CONTEST_FILL,
@@ -46,7 +47,6 @@ import {
   racePageHref,
   nationalSentence,
   rangeLabel,
-  seatAriaLabel,
   seatBin,
   seatName,
   stampSentence,
@@ -161,19 +161,14 @@ function SenateTileMap({
   mini?: boolean;
 }) {
   const hatch = `hatch-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  const [active, setActive] = useState<string | null>(null);
   const byState = useMemo(() => {
     const m = new Map<string, MapSeat[]>();
     for (const s of data.seats) m.set(s.state, [...(m.get(s.state) ?? []), s]);
     return m;
   }, [data.seats]);
-  return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      className="block h-auto w-full"
-      role={mini ? undefined : "group"}
-      aria-hidden={mini ? true : undefined}
-      aria-label={mini ? undefined : "Senate seats by state"}
-    >
+  const svg = (
+    <svg viewBox={`0 0 ${W} ${H}`} className="block h-auto w-full" aria-hidden="true">
       <HatchDefs id={hatch} />
       {Object.entries(STATE_TILES).map(([state, [col, row]]) => {
         const x = col * (TILE + GAP);
@@ -199,42 +194,9 @@ function SenateTileMap({
           );
         }
         const part = TILE / seats.length;
+        const on = active === state;
         return (
-          <g
-            key={state}
-            role={mini ? undefined : "button"}
-            tabIndex={mini ? undefined : 0}
-            aria-label={mini ? undefined : seats.map((s) => seatAriaLabel(s, view)).join(" ")}
-            aria-pressed={mini ? undefined : seats.some((s) => s.id === selected)}
-            className={
-              mini
-                ? undefined
-                : "cursor-pointer outline-none [&:focus-visible>rect.frame]:stroke-signal-cyan [&:focus-visible>rect.frame]:[stroke-width:1]"
-            }
-            onClick={
-              mini
-                ? undefined
-                : (e) => {
-                    // A click on one half of a two-race state opens that race.
-                    const hit = (e.target as Element).getAttribute("data-seat");
-                    if (hit) onSelect?.(hit);
-                    else if (seats.length > 1) onState?.(state);
-                    else onSelect?.(seats[0].id);
-                  }
-            }
-            onKeyDown={
-              mini
-                ? undefined
-                : (e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      // Two races: the keyboard gets a chooser listing both.
-                      if (seats.length > 1) onState?.(state);
-                      else onSelect?.(seats[0].id);
-                    }
-                  }
-            }
-          >
+          <g key={state} {...(mini ? {} : { [MARK_ATTR]: state })}>
             {seats.map((s, i) => {
               const bin = seatBin(s, view);
               return (
@@ -258,8 +220,14 @@ function SenateTileMap({
                 width={TILE + 1}
                 height={TILE + 1}
                 fill="none"
-                stroke={seats.some((s) => s.id === selected) ? "var(--ink-hi)" : "transparent"}
-                strokeWidth="0.6"
+                stroke={
+                  on
+                    ? "var(--signal-cyan)"
+                    : seats.some((s) => s.id === selected)
+                      ? "var(--ink-hi)"
+                      : "transparent"
+                }
+                strokeWidth={on ? 1 : 0.6}
               />
             )}
             {!mini && (
@@ -300,17 +268,41 @@ function SenateTileMap({
       })}
     </svg>
   );
+  if (mini) return svg;
+  // One Tab stop: the states west to east, north to south, each its race
+  // (or both) in the API's words; Enter or a click opens it, a state with
+  // two races its chooser.
+  const marks = Object.entries(STATE_TILES)
+    .filter(([st]) => byState.has(st) && data.stateMarks[view][st])
+    .sort(([, [ac, ar]], [, [bc, br]]) => ar - br || ac - bc)
+    .map(([st]) => data.stateMarks[view][st]);
+  return (
+    <ChartReadout
+      label="Senate seats by state"
+      marks={marks}
+      labelAt="mark"
+      ring={false}
+      onActive={setActive}
+      onOpen={(st) => {
+        const seats = byState.get(st) ?? [];
+        if (seats.length > 1) onState?.(st);
+        else if (seats[0]) onSelect?.(seats[0].id);
+      }}
+    >
+      {svg}
+    </ChartReadout>
+  );
 }
 
 /** The House tile map: one equal-size tile per seat, each state a block
- * (houseLayout). A state is one keyboard stop, never 435; Enter or a tap
- * opens its seats as a list. On a wide screen a click on a tile opens that
- * seat directly. */
+ * (houseLayout). The map is one Tab stop and a state its mark: hover, tap
+ * or the arrow keys read the state's seats in the API's words, and Enter or
+ * a click opens them as a list. A seat's 7px tile is never a target on its
+ * own (WCAG 2.5.8): each state's block, with its hit area, is. */
 function HouseTileMap({
   data,
   view,
   selected,
-  onSelect,
   onState,
   mini = false,
 }: {
@@ -324,52 +316,16 @@ function HouseTileMap({
   const hatch = `hhatch-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const layout = useMemo(() => houseLayout(data.seats), [data.seats]);
   const step = HOUSE_TILE + HOUSE_GAP;
-  const open = (state: string, seatId: string | undefined) => {
-    const wide =
-      typeof window !== "undefined" && window.matchMedia?.("(min-width: 1024px)").matches;
-    if (wide && seatId) onSelect?.(seatId);
-    else onState?.(state);
-  };
-  return (
+  const [active, setActive] = useState<string | null>(null);
+  const svg = (
     <svg
       viewBox={`-2 -2 ${layout.width + 4} ${layout.height + 4}`}
       className="block h-auto w-full"
-      role={mini ? undefined : "group"}
-      aria-hidden={mini ? true : undefined}
-      aria-label={mini ? undefined : "House seats, grouped by state"}
+      aria-hidden="true"
     >
       <HatchDefs id={hatch} />
       {layout.blocks.map((b) => (
-        <g
-          key={b.state}
-          role={mini ? undefined : "button"}
-          tabIndex={mini ? undefined : 0}
-          aria-label={
-            mini
-              ? undefined
-              : stateAriaLabel(b.seats[0].stateName, b.seats, view, data.bins.leansMax)
-          }
-          className={
-            mini
-              ? undefined
-              : "cursor-pointer outline-none [&:focus-visible>rect.frame]:stroke-signal-cyan [&:focus-visible>rect.frame]:[stroke-width:1]"
-          }
-          onClick={
-            mini
-              ? undefined
-              : (e) => open(b.state, (e.target as Element).getAttribute("data-seat") ?? undefined)
-          }
-          onKeyDown={
-            mini
-              ? undefined
-              : (e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    onState?.(b.state);
-                  }
-                }
-          }
-        >
+        <g key={b.state}>
           {!mini && (
             <text
               x={b.x}
@@ -380,10 +336,11 @@ function HouseTileMap({
               {b.state}
             </text>
           )}
-          {/* An invisible hit area around the block, so a small state
-              is still a 24px target once the map is phone-sized. */}
+          {/* An invisible hit area around the block: the state's mark, so a
+              small state is still a 24px target once the map is phone-sized. */}
           {!mini && (
             <rect
+              {...{ [MARK_ATTR]: b.state }}
               x={b.x - 3}
               y={b.y - 9}
               width={b.cols * step + 5}
@@ -400,7 +357,6 @@ function HouseTileMap({
             return (
               <g key={s.id}>
                 <rect
-                  data-seat={s.id}
                   x={x}
                   y={y}
                   width={HOUSE_TILE}
@@ -430,13 +386,31 @@ function HouseTileMap({
               width={b.cols * step + 1}
               height={b.rows * step + 1}
               fill="none"
-              stroke="transparent"
-              strokeWidth="0.8"
+              stroke={active === b.state ? "var(--signal-cyan)" : "transparent"}
+              strokeWidth={active === b.state ? 1.5 : 0.8}
+              pointerEvents="none"
             />
           )}
         </g>
       ))}
     </svg>
+  );
+  if (mini) return svg;
+  // Blocks in the layout's order: rows by rough geography, west to east.
+  const marks = layout.blocks
+    .map((b) => data.stateMarks[view][b.state])
+    .filter((m): m is NonNullable<typeof m> => m != null);
+  return (
+    <ChartReadout
+      label="House seats, grouped by state"
+      marks={marks}
+      labelAt="mark"
+      ring={false}
+      onActive={setActive}
+      onOpen={(st) => onState?.(st)}
+    >
+      {svg}
+    </ChartReadout>
   );
 }
 
@@ -493,7 +467,7 @@ function HouseStateList({
           <button
             type="button"
             onClick={() => onState(state)}
-            aria-label={stateAriaLabel(seats[0].stateName, seats, view, data.bins.leansMax)}
+            aria-label={readoutWords(data.stateMarks[view][state])}
             className="flex min-h-11 w-full items-center gap-3 py-1.5 text-left"
           >
             <span className="w-28 shrink-0 text-sm text-ink-hi">{seats[0].stateName}</span>

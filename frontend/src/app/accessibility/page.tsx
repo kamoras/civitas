@@ -269,6 +269,13 @@ export default function AccessibilityPage() {
                     deadline&apos;s tick sits over the early-voting band, so pointing within 12
                     pixels of it reaches it.
                   </P>
+                  <P>
+                    On the Senate and House map, the whole map is one Tab stop and each state names
+                    its race (both, where it has two) or its seats; Enter, a click or a second tap
+                    opens them. A House seat&apos;s small tile is never a target on its own: its
+                    state&apos;s block is, at least 24 pixels. The archive&apos;s swing maps read
+                    each state the same way, and their tables list every seat.
+                  </P>
                 </Box>
                 <Box
                   title="Typefaces, and why"

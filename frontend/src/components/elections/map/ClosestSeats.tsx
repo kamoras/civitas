@@ -64,7 +64,8 @@ export default function ClosestSeats({
               className="flex min-h-11 w-full items-center justify-between gap-3 text-left hover:text-phos"
             >
               <span className="min-w-0 text-[15px] text-ink-hi">{seatName(s)}</span>
-              <span className="flex shrink-0 items-center gap-2 font-mono text-sm text-ink-lo">
+              {/* Shrinks and wraps rather than widen the page (320px at 200% text). */}
+              <span className="flex min-w-0 items-center gap-2 text-right font-mono text-sm text-ink-lo [overflow-wrap:anywhere]">
                 {view === "usual" || s.status !== "range"
                   ? (s.leanLabel ?? "")
                   : view === "polls"

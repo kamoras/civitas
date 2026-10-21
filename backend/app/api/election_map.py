@@ -27,7 +27,8 @@ from sqlalchemy.orm import Session
 from app.api.response_helpers import CACHE_TTL_LIST_S, cached_json
 from app.election_phase import CAMPAIGN, active_election
 from app.file_cache import new_reload_lock, reload_if_moved
-from app.forecast.build import map_path
+from app.forecast.build import LEANS_MAX, map_path
+from app.readout import mark, seat_name
 from app.forecast.polls import POLL_ATTRIBUTION, POLL_LICENSE, POLL_LICENSE_URL
 from app.ordinals import ordinal
 from app.time_utils import utcnow
@@ -80,6 +81,70 @@ def current_map(db: Session | None = None) -> dict:
     return dict(data, cycle=election.cycle, stale=utcnow() - as_of > STALE_AFTER)
 
 
+VIEWS = ("usual", "polls", "diff")
+_CLOSE_USUAL = {"close", "D_leans", "R_leans"}
+
+
+def _seat_name(s: dict) -> str:
+    return seat_name(s["stateName"], s.get("district"), s["special"])
+
+
+def _seat_words(s: dict, view: str) -> str:
+    """One seat in the map's view, as its readout says it: the usual vote,
+    the poll range and whether the polls point away from it, in the words
+    the build wrote. Ranges, never a call."""
+    usual = f"usual vote {s['leanLabel']} lean" if s.get("leanLabel") else "no usual-vote figure"
+    if s["status"] != "range":
+        return f"{usual}. {s.get('reason') or ''}".strip()
+    if view == "usual" or not s.get("range80Label"):
+        return usual
+    polls = (f"{s.get('rangeBasisLabel') or 'Margin range'}: {s['range80Label']}"
+             f"{', too close to tell' if s.get('close') else ''}")
+    d = s.get("difference") or {"strength": 0, "seatPolls": True}
+    diff = (f", polls point toward {d['direction']}" if d["strength"] > 0
+            else "" if d["seatPolls"] else ", no seat poll") if view == "diff" else ""
+    return f"{polls}; {usual}{diff}"
+
+
+def leans_max(data: dict) -> float:
+    """The map's "leans" bound, from the file; an archived map written
+    before the file carried it uses the build's."""
+    return (data.get("bins") or {}).get("leansMax", LEANS_MAX)
+
+
+def state_marks(chamber: str, seats: list[dict], leans_max: float) -> dict[str, dict[str, dict]]:
+    """Each state's readout on the tile map, per view: a Senate state names
+    its race (or both, where it has two); a House state its seat count and
+    how many are close or where polls disagree. Counted here, so the page
+    counts nothing (ElectionMap)."""
+    by_state: dict[str, list[dict]] = {}
+    for s in seats:
+        by_state.setdefault(s["state"], []).append(s)
+    out: dict[str, dict[str, dict]] = {v: {} for v in VIEWS}
+    for st, group in by_state.items():
+        name = group[0]["stateName"]
+        for view in VIEWS:
+            if chamber == "house":
+                n = len(group)
+                if view == "usual":
+                    k = sum(s.get("usualBin") in _CLOSE_USUAL for s in group)
+                    context = f"{k} within {leans_max:g} points of even in the usual vote"
+                elif view == "polls":
+                    k = sum(s["status"] == "range" and s.get("pollsBin") == "close" for s in group)
+                    context = f"{k} too close to tell"
+                else:
+                    k = sum(s["status"] == "range" and (s.get("difference") or {}).get("strength", 0) > 0
+                            for s in group)
+                    context = f"{k} where polls disagree with the usual vote"
+                out[view][st] = mark(st, name, f"{n} {'seat' if n == 1 else 'seats'}", context=context)
+            elif len(group) == 1:
+                out[view][st] = mark(st, _seat_name(group[0]), _seat_words(group[0], view))
+            else:
+                out[view][st] = mark(st, name, f"{len(group)} races: " + "; ".join(
+                    f"{_seat_name(s)}, {_seat_words(s, view)}" for s in group))
+    return out
+
+
 @router.get("/map")
 def election_map(chamber: str | None = Query(None, pattern="^(senate|house)$",
                                               description="Only this chamber's seats (the page loads one at a time)")):
@@ -91,7 +156,8 @@ def election_map(chamber: str | None = Query(None, pattern="^(senate|house)$",
     data = current_map()
     chambers = {
         name: dict(c, seats=[dict(s, polls={k: v for k, v in s["polls"].items() if k != "all"}) if "polls" in s else s
-                             for s in c["seats"]])
+                             for s in c["seats"]],
+                   stateMarks=state_marks(name, c["seats"], leans_max(data)))
         for name, c in data["chambers"].items() if chamber in (None, name)
     }
     data = dict(data, chambersAvailable=list(data["chambers"]))
