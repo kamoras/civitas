@@ -28,6 +28,9 @@ export interface CandidateSummary {
    * ROY"). Show it through candidateName(). Optional: an older backend
    * omits it. */
   ballotName?: string | null;
+  /** What to show (backend app/name_casing.py): ballotName when there is
+   *  one, else `name` as a reader writes it. Read it through candidateName(). */
+  displayName?: string | null;
   /** False for someone the state's certified ballot lists who never filed
    * with the FEC — no FEC page, and no totals will ever arrive. Optional
    * because a backend deployed before this field omits it (= filed). */

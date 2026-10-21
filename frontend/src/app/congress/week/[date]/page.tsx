@@ -1,6 +1,7 @@
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { TOPIC_FEEDS, absoluteUrl, pageMetadata } from "@/lib/site";
+import { CARD_ALT } from "@/lib/seo";
 import { ISO_DATE, fetchWeek } from "@/lib/congressServer";
 import { longDate } from "@/lib/congress";
 import PeriodReportView from "@/components/congress/PeriodReportView";
@@ -36,7 +37,12 @@ export async function generateMetadata({
     path: `/congress/week/${start}`,
     feed: TOPIC_FEEDS.congress,
     images: [
-      { url: absoluteUrl(`/api/og?congressWeek=${start}`), width: 1200, height: 630, alt: title },
+      {
+        url: absoluteUrl(`/api/og?congressWeek=${start}`),
+        width: 1200,
+        height: 630,
+        alt: CARD_ALT.period(title),
+      },
     ],
   });
 }

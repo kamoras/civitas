@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import type { VoteDetail } from "@/types/congress";
 import { fetchRollCall } from "@/lib/congressServer";
 import { CHAMBER_NAME, dayHref, longDate, rollCallHref } from "@/lib/congress";
-import { describeRollCall } from "@/lib/seo";
+import { CARD_ALT, describeRollCall } from "@/lib/seo";
 import { TOPIC_FEEDS, absoluteUrl, pageMetadata } from "@/lib/site";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
 import RollCallView from "@/components/congress/RollCallView";
@@ -50,7 +50,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
         ),
         width: 1200,
         height: 630,
-        alt: meta.title,
+        alt: CARD_ALT.vote(meta.title),
       },
     ],
   });

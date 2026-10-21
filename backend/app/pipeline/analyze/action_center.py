@@ -44,6 +44,7 @@ from app.contact import BOT_USER_AGENT
 from app.config import settings
 from app.config_definitions import RECENT_FEED_MAX_LIMIT, RECENT_FEED_POOL_MULTIPLIER
 from app.database import SessionLocal
+from app.name_casing import candidate_display_name
 from app.election_phase import active_election
 from app.state_names import STATE_NAMES
 from app.models import (
@@ -4916,7 +4917,7 @@ def _ballot_nominees(db: Session, cycle: int) -> list[_Nominee]:
     for cand, race in rows:
         person = _person([cand.name, cand.ballot_name])
         if person is not None:
-            out.append(_Nominee(race, cand.ballot_name or cand.name, person))
+            out.append(_Nominee(race, candidate_display_name(cand), person))
     return out
 
 

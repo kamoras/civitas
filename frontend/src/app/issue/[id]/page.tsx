@@ -25,7 +25,7 @@ import {
 import ShareButtons from "@/components/action/ShareButtons";
 import { TOPIC_FEEDS, absoluteUrl, monitorFeed, notFoundMetadata, pageMetadata } from "@/lib/site";
 import FollowFeed from "@/components/shared/FollowFeed";
-import { articleJsonLd } from "@/lib/seo";
+import { CARD_ALT, articleJsonLd } from "@/lib/seo";
 import JsonLd from "@/components/seo/JsonLd";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
@@ -127,7 +127,7 @@ export async function generateMetadata({
     description: issue.summary || "Track what Congress is doing, and what you can do about it.",
     path,
     type: "article",
-    images: [{ url: ogImage, width: 1200, height: 630, alt: issue.title }],
+    images: [{ url: ogImage, width: 1200, height: 630, alt: CARD_ALT.issue(issue.title) }],
     // A developing issue is drafted from a primary source before any press
     // coverage confirms it, and may expire unconfirmed. It stays readable
     // here, but isn't offered to search engines as a finished story.

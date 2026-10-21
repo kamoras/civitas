@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound, permanentRedirect } from "next/navigation";
 import { absoluteUrl, notFoundMetadata, pageMetadata } from "@/lib/site";
+import { CARD_ALT } from "@/lib/seo";
 import ExploreDocumentView from "./ExploreDocumentView";
 import { fetchExploreDoc } from "./fetchDoc";
 import { exploreHref } from "@/lib/exploreHref";
@@ -40,7 +41,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
         url: absoluteUrl(`/api/og?explore=${doc.id}`),
         width: 1200,
         height: 630,
-        alt: doc.title,
+        alt: CARD_ALT.document(doc.title),
       },
     ],
   });

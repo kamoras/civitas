@@ -56,10 +56,10 @@ describe("record pages' og:image", () => {
       params: Promise.resolve({ id: "S.2403" }),
       searchParams: Promise.resolve({}),
     });
-    expect(images(meta)).toEqual([expect.stringMatching(/\/api\/og\?bill=119\/S\.2403$/)]);
+    expect(images(meta)).toEqual([expect.stringMatching(/\/api\/og\?billPage=119\/S\.2403$/)]);
   });
 
-  it("a bill the site doesn't track keeps the site card (no stored card to draw)", async () => {
+  it("a bill the site doesn't track shares as its bill card too, from Congress.gov", async () => {
     fetchBillRecord.mockResolvedValue({
       record: { billId: "S.9", billLabel: "S. 9", congress: 119, title: "A bill" },
       failed: false,
@@ -69,7 +69,7 @@ describe("record pages' og:image", () => {
       params: Promise.resolve({ id: "S.9" }),
       searchParams: Promise.resolve({}),
     });
-    expect(images(meta)).toEqual(["/opengraph-image"]);
+    expect(images(meta)).toEqual([expect.stringMatching(/\/api\/og\?billPage=119\/S\.9$/)]);
   });
 
   it("an Explore document shares as its document card", async () => {

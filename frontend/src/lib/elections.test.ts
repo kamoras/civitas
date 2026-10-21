@@ -510,7 +510,16 @@ describe("candidateName", () => {
     expect(candidateName({ name: "DOE, JANE", ballotName: "Jane Doe" })).toBe("Jane Doe");
   });
 
-  it("falls back to the FEC name until a state source names the candidate", () => {
+  it("shows the backend's display name: the printing, else the FEC name as written", () => {
+    expect(
+      candidateName({ name: "GOLDMAN, CRAIG", ballotName: null, displayName: "Craig Goldman" })
+    ).toBe("Craig Goldman");
+    expect(
+      candidateName({ name: "DOE, JANE", ballotName: "JANE DOE", displayName: "JANE DOE" })
+    ).toBe("JANE DOE");
+  });
+
+  it("falls back to the FEC name from an older backend or archive", () => {
     expect(candidateName({ name: "DOE, JANE", ballotName: null })).toBe("DOE, JANE");
     expect(candidateName({ name: "DOE, JANE" })).toBe("DOE, JANE");
   });

@@ -53,6 +53,20 @@ describe("pageMetadata", () => {
     expect(m.twitter?.images).toEqual([DEFAULT_OG_IMAGE]);
   });
 
+  it("gives a section page its own card, described in its alt text", () => {
+    const m = pageMetadata({ title: "t", description: "d", path: "/elections/calendar" });
+    const [image] = m.openGraph?.images as { url: string; alt: string }[];
+    expect(image.url).toBe("/api/og?page=%2Felections%2Fcalendar");
+    expect(image.alt).toMatch(/^Elections: Election calendar\. /);
+    expect(m.twitter?.images).toEqual(m.openGraph?.images);
+  });
+
+  it("keeps an explicit card over the section card", () => {
+    const own = [{ url: "/api/og?x=1", alt: "own" }];
+    const m = pageMetadata({ title: "t", description: "d", path: "/congress", images: own });
+    expect(m.openGraph?.images).toEqual(own);
+  });
+
   it("advertises the feed on every page — a route's `alternates` replaces the root's", () => {
     const m = pageMetadata({ title: "t", description: "d", path: "/x" });
     expect(m.alternates?.types).toEqual({

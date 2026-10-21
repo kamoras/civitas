@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { absoluteUrl, agencyFeed, notFoundMetadata, pageMetadata } from "@/lib/site";
 import FollowFeed from "@/components/shared/FollowFeed";
-import { agencyJsonLd, describeAgency } from "@/lib/seo";
+import { CARD_ALT, agencyJsonLd, cardImage, describeAgency } from "@/lib/seo";
 import { fetchAgency } from "@/lib/agencyServer";
 import { fiscalYearLabel, money, readOn } from "@/lib/agencies";
 import { commentPeriodToday, safeHref } from "@/lib/formatting";
@@ -30,6 +30,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     ...describeAgency(agency),
     path: agencyHref(agency.slug),
     feed: agencyFeed(agency.slug, agency.name),
+    images: cardImage(`agency=${encodeURIComponent(agency.slug)}`, CARD_ALT.agency(agency.name)),
   });
 }
 

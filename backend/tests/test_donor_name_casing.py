@@ -2,6 +2,7 @@
 
 import pytest
 
+from app import name_casing
 from app.pipeline.transform import normalize_finance as nf
 
 
@@ -27,5 +28,5 @@ def test_names_are_shown_as_written(filed, shown):
 
 
 def test_without_the_table_each_word_is_capitalized(monkeypatch):
-    monkeypatch.setattr(nf, "_name_casing_cache", {})
+    monkeypatch.setattr(name_casing, "_cache", {})
     assert nf._clean_donor_name("UCLA HEALTH") == "Ucla Health"
