@@ -30,3 +30,10 @@ STATE_NAMES: dict[str, str] = {
 
 # "New York" -> "NY"
 STATE_NAME_TO_CODE: dict[str, str] = {name: code for code, name in STATE_NAMES.items()}
+
+
+def by_state_name(code: str) -> str:
+    """Sort key for state codes a page lists by name: "AK" after "AL"
+    (Alaska after Alabama), "DC" among the Ds by its name. Lists sorted by
+    code but printed by name read out of order (2026-10)."""
+    return STATE_NAMES.get(code, code)

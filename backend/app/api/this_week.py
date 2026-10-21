@@ -24,6 +24,7 @@ from app.election_phase import active_election, election_today
 from app.issue_ids import to_public_id
 from app.models import ActionIssue, CongressDay, ExploreDocument, RollCall
 from app.services.roll_call_shape import shapes
+from app.state_names import by_state_name
 from app.pipeline.congress_activity import eastern_today
 from app.retractions import retraction_for_issue
 from app.services.congress_service import CHAMBERS, bill_label, long_date, next_meeting, week_bounds
@@ -228,7 +229,7 @@ def election(db: Session) -> dict:
         "daysUntil": (e.election_day - election_today()).days,
         # Every jurisdiction with a ballot page (DC included: it votes on
         # measures), for the state picker.
-        "states": sorted(ballot_state_codes()),
+        "states": sorted(ballot_state_codes(), key=by_state_name),
         # Each state's next voter deadline (registration, early voting, mail
         # ballots), soonest first, on that state's own clock.
         "deadlines": next_deadlines(e.election_day),

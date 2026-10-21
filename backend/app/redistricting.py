@@ -24,7 +24,7 @@ from collections import Counter, defaultdict
 from app import district_lean
 from app.live_results.sync import _maps
 from app.pipeline.fetch.district_pvi import district_pvi_for_congress
-from app.state_names import STATE_NAMES
+from app.state_names import STATE_NAMES, by_state_name
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ def overlap_file() -> dict:
 
 
 def redrawn_overlap_states() -> list[str]:
-    return sorted((overlap_file().get("states") or {}).keys())
+    return sorted((overlap_file().get("states") or {}).keys(), key=by_state_name)
 
 
 def number_of(key: str) -> int:

@@ -123,7 +123,7 @@ function Strip({ m, name }: { m: PeerMeasure; name: string }) {
             }
           >
             {m.expectedBasis === "seat"
-              ? `${fmt(m, m.expected)} expected`
+              ? `${fmt(m, m.expected)} seat average`
               : `median ${fmt(m, m.expected)}`}
           </span>
         )}
@@ -245,7 +245,11 @@ function Row({
       <div className={showTable ? "md:col-span-3" : "sr-only"}>
         <table className="w-full max-w-md text-sm">
           <caption className="text-left text-xs text-ink-min">
-            {m.label}: every {m.peerGroup.label.toLowerCase()} figure, lowest first
+            {m.label}:{" "}
+            {m.peerGroup.labelOne
+              ? `every ${m.peerGroup.labelOne}'s figure`
+              : `every figure among the ${m.peerGroup.label}`}
+            , lowest first
           </caption>
           <thead>
             <tr className="text-left text-xs text-ink-min">
@@ -418,7 +422,7 @@ export default function WhereTheyStand({
               />
               {name}
             </span>
-            <span>┆ what the seat predicts, or the peer median</span>
+            <span>┆ the average for seats like this one, or the peer median</span>
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button

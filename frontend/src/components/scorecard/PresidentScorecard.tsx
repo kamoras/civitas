@@ -227,7 +227,7 @@ export default function PresidentScorecard({
                         ? "Could not load the trades."
                         : trades.total === 0
                           ? "None disclosed this term"
-                          : `${trades.total.toLocaleString()} disclosed this term`}
+                          : `${trades.total.toLocaleString("en-US")} disclosed this term`}
                   </span>
                   <span className="font-mono text-xs text-ink-min">
                     OGE annual report and periodic transaction reports
@@ -262,7 +262,7 @@ export default function PresidentScorecard({
                 <div className="flex min-h-24 flex-col gap-1.5 border border-white/[0.18] bg-surface px-5 py-4">
                   <span className="text-base font-semibold text-ink-hi">Executive orders</span>
                   <span className="text-sm text-ink-lo">
-                    {president.eoCount.toLocaleString()} signed
+                    {president.eoCount.toLocaleString("en-US")} signed
                   </span>
                   <span className="font-mono text-xs text-ink-min">Federal Register</span>
                 </div>
