@@ -197,8 +197,8 @@ export default function NewsChapter() {
           or rule having aged past the window, isn&apos;t part of that record either: its own page
           stays up for two weeks, marked <strong className="text-ink-hi">Not confirmed</strong>.
           That column lists one issue per ongoing story the site follows (the newest, tagged as an
-          ongoing story, with the story&apos;s other days of the last two named beside it), so two
-          days of one story don&apos;t fill it.
+          ongoing story, with the story&apos;s other days that week named beside it), so two days of
+          one story don&apos;t fill it.
         </P>
         <P>
           Each issue ends with what you can do about it, built from the record and never advocacy

@@ -144,7 +144,7 @@ export interface FrontPage {
   /** The nameplate's dateline, one phrase each: the date, Congress, the election. */
   dateline: string[];
   edition: { sentence: string; week: string | null; weekLabel: string | null };
-  /** Monday of the week the Congress entries' votes come from; null past the stale bound. */
+  /** Monday of the latest week of business, which the Congress entries come from; null before any. */
   voteWeek: string | null;
   lead: FrontPageEntry | null;
   tier: FrontPageEntry[];

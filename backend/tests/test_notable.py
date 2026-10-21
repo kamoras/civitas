@@ -32,9 +32,9 @@ def _rc(db, day, yeas, nays, *, chamber="senate", question="On Passage", require
 
 
 def _entries(db, today):
-    """The closest vote, then the lone breaks, of the week shown on `today`."""
-    _, votes = nt._week_votes(db, today)
-    closest = nt._closest([v for v in votes if not nt.is_housekeeping(v.question, v.chamber)])
+    """The closest vote, then the lone breaks, of the latest week of business."""
+    votes = nt._week_votes(db, nt._business_week(db, today))
+    closest = nt._closest(votes, nt.median_margin(db, 119))
     return ([closest] if closest else []) + nt._lone_breaks(db, votes)
 
 
@@ -92,8 +92,9 @@ class TestClosest:
         # A 3/5 question is left out: its distance from passing is the threshold's.
         _rc(db_session, "2026-09-30", 50, 50, requirement="3/5")
         db_session.commit()
-        assert nt._week_votes(db_session, date(2026, 10, 2))[0] == date(2026, 9, 28)
+        assert nt._business_week(db_session, date(2026, 10, 2)) == (date(2026, 9, 28), date(2026, 10, 4))
         first = _entries(db_session, date(2026, 10, 2))[0]
+        # Margins 22 and 1: the median is 11.5, and 1 is under it.
         assert first["kind"] == "closest" and first["close"]
         assert first["vote"]["number"] == close.number
         assert first["headline"] == "Decided by 1 vote in the Senate, 49–50: Rejected."
@@ -108,10 +109,25 @@ class TestClosest:
         assert first["vote"]["number"] == newer.number
         assert first["headline"] == "Tied 47–47 in the Senate: Passed."
 
-    def test_a_wide_margin_is_not_close(self, db_session):
-        _rc(db_session, "2026-09-28", 60, 38)
+    def test_close_means_under_this_congresss_median_margin(self, db_session):
+        # Earlier weeks of the Congress: margins 2, 10, 30, 40.
+        for day, (y, n) in zip(("2026-07-07", "2026-07-08", "2026-07-14", "2026-07-15"),
+                               ((51, 49), (55, 45), (65, 35), (70, 30))):
+            _rc(db_session, day, y, n)
+        # A housekeeping question and a 3/5 question don't count toward it.
+        _rc(db_session, "2026-07-16", 50, 50, question="On the Motion to Table")
+        _rc(db_session, "2026-07-16", 50, 50, requirement="3/5")
+        week = _rc(db_session, "2026-09-29", 60, 40)  # margin 20: the median of 2, 10, 20, 30, 40
+        db_session.commit()
+        assert nt.median_margin(db_session, 119) == 20
+        first = _entries(db_session, date(2026, 10, 2))[0]
+        assert first["vote"]["number"] == week.number and not first["close"]
+        week.yeas, week.nays = 55, 45  # margin 10: median of 2, 10, 10, 30, 40 is 10, not under it
         db_session.commit()
         assert not _entries(db_session, date(2026, 10, 2))[0]["close"]
+        week.yeas, week.nays = 52, 47  # margin 5: median of 2, 5, 10, 30, 40 is 10
+        db_session.commit()
+        assert _entries(db_session, date(2026, 10, 2))[0]["close"]
 
     def test_housekeeping_questions_are_not_votes_on_anything(self, db_session):
         _rc(db_session, "2026-09-29", 50, 49, question="On the Motion to Table")
@@ -157,16 +173,14 @@ class TestLoneBreak:
 
 
 class TestWindow:
-    def test_the_last_week_in_session_shows_through_a_short_recess(self, db_session):
+    def test_the_latest_week_of_business_however_long_ago(self, db_session):
         _rc(db_session, "2026-09-30", 49, 50)
         db_session.commit()
-        week, _ = nt._week_votes(db_session, date(2026, 10, 27))
-        assert week == date(2026, 9, 28) and len(_entries(db_session, date(2026, 10, 27))) == 1
+        assert nt._business_week(db_session, date(2026, 12, 1)) == (date(2026, 9, 28), date(2026, 10, 4))
+        assert len(_entries(db_session, date(2026, 12, 1))) == 1
 
-    def test_a_long_recess_shows_none_of_it(self, db_session):
-        _rc(db_session, "2026-09-30", 49, 50)
-        db_session.commit()
-        assert nt._week_votes(db_session, date(2026, 10, 29)) == (None, [])
+    def test_no_business_on_record(self, db_session):
+        assert nt._business_week(db_session, TODAY) is None and nt._week_votes(db_session, None) == []
 
 
 def _e(kind, column, day, *, close=False, figure=True):
@@ -184,51 +198,50 @@ class TestRule:
         news = [_e("issue", "news", "2026-10-20"), _e("issue", "news", "2026-10-19")]
         return congress, agencies, news
 
-    def test_a_close_recent_vote_leads(self):
-        page = nt.arrange(*self.everything(), TODAY)
+    def test_a_close_vote_leads(self):
+        page = nt.arrange(*self.everything())
         assert page["lead"]["kind"] == "closest"
         assert [e["kind"] for e in page["tier"]] == ["law", "comment"]
 
     def test_each_fallback_in_order(self):
         congress, agencies, news = self.everything()
-        congress[0]["close"] = False  # a vote decided by a wide margin doesn't lead
-        assert nt.arrange(congress, agencies, news, TODAY)["lead"]["kind"] == "law"
-        congress[1]["date"] = "2026-10-01"  # a law older than the lead window doesn't
-        assert nt.arrange(congress, agencies, news, TODAY)["lead"]["kind"] == "confirmed"
-        congress[2]["date"] = "2026-10-01"
-        assert nt.arrange(congress, agencies, news, TODAY)["lead"]["kind"] == "loneBreak"
-        congress[3]["date"] = "2026-10-01"
-        assert nt.arrange(congress, agencies, news, TODAY)["lead"]["headline"] == "issue 2026-10-20"
-        assert nt.arrange(congress, agencies, [], TODAY)["lead"]["kind"] == "comment"
-        assert nt.arrange([], [], [], TODAY) == {
+        congress[0]["close"] = False  # not under the Congress's median margin
+        assert nt.arrange(congress, agencies, news)["lead"]["kind"] == "law"
+        assert nt.arrange([congress[0], *congress[2:]], agencies, news)["lead"]["kind"] == "confirmed"
+        assert nt.arrange([congress[0], congress[3]], agencies, news)["lead"]["kind"] == "loneBreak"
+        assert nt.arrange([congress[0]], agencies, news)["lead"]["headline"] == "issue 2026-10-20"
+        assert nt.arrange([], agencies, [])["lead"]["kind"] == "comment"
+        assert nt.arrange([], [], []) == {
             "lead": None, "tier": [], "columns": {"congress": [], "agencies": [], "news": []}}
 
+    def test_while_congress_is_out_a_vote_does_not_lead(self):
+        congress, agencies, news = self.everything()
+        page = nt.arrange(congress, agencies, news, congress_out=True)
+        assert page["lead"]["kind"] == "law"  # a law signed in a recess is news
+        votes_only = [congress[0], congress[3]]
+        page = nt.arrange(votes_only, agencies, news, congress_out=True)
+        assert page["lead"]["kind"] == "issue"
+        assert page["tier"][0] is congress[0]  # still on the page, dated
+
     def test_no_entry_appears_twice(self):
-        page = nt.arrange(*self.everything(), TODAY)
+        page = nt.arrange(*self.everything())
         shown = [page["lead"], *page["tier"], *(e for col in page["columns"].values() for e in col)]
         assert len({id(e) for e in shown}) == len(shown) == 8
 
     def test_the_tier_skips_entries_without_a_figure_and_never_takes_one_column_twice(self):
         congress, _, news = self.everything()
         congress[1]["figure"] = None
-        page = nt.arrange(congress, [], news, TODAY)
+        page = nt.arrange(congress, [], news)
         assert [e["kind"] for e in page["tier"]] == ["confirmed", "issue"]
         assert [e["kind"] for e in page["columns"]["congress"]] == ["loneBreak", "law"]
 
     def test_a_column_takes_one_of_each_kind_before_a_second(self):
         laws = [_e("law", "congress", f"2026-10-1{d}") for d in (5, 4, 3, 2, 1)]
         lone = _e("loneBreak", "congress", "2026-10-01")
-        page = nt.arrange(laws + [lone], [], [], TODAY)
+        page = nt.arrange(laws + [lone], [], [])
         assert page["lead"] is laws[0] and page["tier"] == [laws[1]]
         assert [e["kind"] for e in page["columns"]["congress"]] == ["law", "law", "loneBreak"]
         assert laws[4] not in page["columns"]["congress"]
-
-    def test_a_close_vote_weeks_old_is_dated_in_the_column_not_the_lead(self):
-        congress, agencies, news = self.everything()
-        old = dict(congress[0], date="2026-09-30")
-        page = nt.arrange([old], agencies, news, TODAY)
-        assert page["lead"]["kind"] == "issue"
-        assert page["tier"][0] is old
 
 
 class TestCandidates:
@@ -267,15 +280,18 @@ class TestCandidates:
                                                                    "state": "ZZ"}]}])))
         _rc(db_session, "2026-10-16", 51, 47, question="On the Nomination PN9-1")
         db_session.commit()
-        got = nt._confirmations(db_session, TODAY)
+        got = nt._confirmations(db_session, date(2026, 10, 12), TODAY)
+        assert nt._confirmations(db_session, date(2026, 10, 19), TODAY) == []
         assert got[0]["headline"].startswith("Confirmed by the Senate: Jane")
         assert got[0]["figure"]["type"] == "split" and got[0]["figure"]["caption"] == "Confirmed 51–47"
 
 
 class TestFrontPage:
-    def test_a_recess_with_no_votes_falls_back_and_says_congress_is_out(self, db_session, freeze_utcnow):
+    def test_while_congress_is_out_the_news_leads_and_the_last_week_of_business_is_dated(
+            self, db_session, freeze_utcnow):
         freeze_utcnow(datetime(2026, 10, 20, 16))
-        _rc(db_session, "2026-08-20", 49, 50)  # past the stale bound
+        _rc(db_session, "2026-08-20", 49, 50)  # the last business, weeks ago
+        _rc(db_session, "2026-08-19", 70, 30)
         db_session.add(CongressDay(chamber="senate", date="2026-10-19", in_session=True, is_final=True,
                                    source="digest", adjournment_text="The Senate met in pro forma session.",
                                    next_meeting="3:30 p.m., Thursday, October 22",
@@ -285,19 +301,23 @@ class TestFrontPage:
         db_session.commit()
         page = nt.front_page(db_session, TODAY)
         assert page["lead"]["headline"] == "The day's top story"
-        assert [e["kind"] for e in page["tier"]] == ["comment"]
+        # The close vote of the last week of business is still shown, dated.
+        assert [e["kind"] for e in page["tier"]] == ["closest", "comment"]
+        assert page["tier"][0]["close"] and page["tier"][0]["date"] == "2026-08-20"
         assert page["dateline"][:2] == ["Tuesday, October 20",
                                         "Congress is out; the Senate next sits Thursday, October 22, pro forma"]
-        assert page["voteWeek"] is None and page["columns"]["congress"] == []
+        assert page["voteWeek"] == "2026-08-17"
+        assert page["edition"]["weekLabel"] == "The week of August 17"
 
     def test_nothing_on_record_is_no_front_page(self, db_session):
         assert nt.front_page(db_session, TODAY)["lead"] is None
 
 
 def test_the_endpoint_reads_the_eastern_clock(db_session, freeze_utcnow):
+    _rc(db_session, "2026-10-07", 70, 30)
     _rc(db_session, "2026-10-14", 49, 50)
     db_session.commit()
-    # 03:00 UTC on Oct 22 is still Oct 21 in the East: within the lead window.
+    # 03:00 UTC on Oct 22 is still Oct 21 in the East.
     freeze_utcnow(datetime(2026, 10, 22, 3))
     app.dependency_overrides[get_db] = lambda: db_session
     try:

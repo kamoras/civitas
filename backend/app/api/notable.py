@@ -5,41 +5,51 @@ site already stores. Nothing here is generated: each headline is a
 template around stored figures, or the record's own words (a law's
 title, a rule's title, an outlet's headline).
 
+Every window is one the site already defines, and no threshold is typed:
+
+- "The latest week of business" is the Monday-to-Sunday week holding the
+  latest day either chamber took a record vote or passed, failed or
+  confirmed anything (congress_service.last_business_day, the day /congress
+  names when Congress is out).
+- "Congress is out" is /congress's own test (congress_service.recess): the
+  latest day either chamber met had no business.
+
 Candidates:
 
-- the closest simple-majority record vote of Congress's latest week of
-  record votes (a tie the Vice President broke is the closest there is),
-- a lone break: the one member of a party who voted the other way from
-  every other member of that party, at most one per party (the newest),
-- each bill that became law in the last ``RECENT_DAYS`` days,
-- each nomination (not a list, not military) the Senate confirmed in the
-  last ``RECENT_DAYS`` days,
+- the closest simple-majority record vote of the latest week of business
+  (a tie the Vice President broke is the closest there is),
+- a lone break in that week: the one member of a party who voted the other
+  way from every other member of that party, at most one per party (the
+  newest),
+- each bill that became law, and each nomination (not a list, not
+  military) the Senate confirmed, from the start of that week to today,
 - open comment periods: the proposed or final rule whose comments close
   soonest first, then the most salient others (comment_periods.salience,
   paperwork notices left out),
 - the Action Center's recent issues, one per story (a national monitor's
-  later days fold under its newest, as on /issues/recent).
+  later days fold under its newest, as on /issues/recent; those in the same
+  Monday-to-Sunday week as the day shown are named beside it).
 
-The lead is the first of these that holds, in this order: the closest
-vote, if cast in the last ``LEAD_WITHIN_DAYS`` days and decided by at most
-``CLOSE_SHARE`` of those voting; else the newest law enacted in that span;
-else the newest confirmation in it; else the newest lone break in it; else
-the day's top issue; else the comment deadline closing soonest. The second
-tier is the first remaining entry of Congress, then of Agencies, then of
-In the news, two at most, so the two never come from one column. Each
-column lists what is left of its own, ``COLUMN_ITEMS`` at most, each
-kind's first entry before any kind's second. No entry appears twice.
-
-Congress's latest week is shown through a short recess (dated), and past
-``STALE_AFTER_DAYS`` without a record vote it is left out rather than
-reaching back for something to show; the lead then falls to the news.
+The lead is the first of these that holds, in this order: the closest vote,
+if its margin is smaller than the median margin of this Congress's
+simple-majority record votes (measured from the stored roll calls on each
+request, so the bar moves with the record); else the newest law; else the
+newest confirmation; else the newest lone break; else the day's top issue;
+else the comment deadline closing soonest. While Congress is out, a vote
+(the closest, or a lone break) doesn't lead: its week is the last one of
+business, not this one. The second tier is the first remaining entry with a
+figure from Congress, then Agencies, then In the news, two at most, so the
+two never come from one column. Each column lists what is left of its own,
+each kind's first entry before any kind's second. No entry appears twice.
+A Congress entry is dated, so the last week of business reads as past.
 Every figure (counts, shares, days left) is computed here; the page only
 draws it.
 """
 
 import json
+import statistics
 from collections import defaultdict
-from datetime import date, timedelta
+from datetime import date
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -70,29 +80,12 @@ router = APIRouter()
 
 _TTL_S = 300
 
-# Past this many days since the latest record vote, the week is no longer
-# news: a three-week recess still shows the last week in session (labelled
-# with its dates), a recess longer than four weeks shows none of it.
-STALE_AFTER_DAYS = 28
-
-# How far back a law or a confirmation is still on the front page.
-RECENT_DAYS = 14
-
-# A story leads only if it happened this recently: a weeks-old vote under
-# today's dateline would read as today's news.
-LEAD_WITHIN_DAYS = 7
-
-# A vote leads only if this close: decided by at most a tenth of the
-# members voting Yea or Nay (a convention). 49-50 qualifies; 60-38 does not.
-CLOSE_SHARE = 0.10
-
-# Entries per column, and how many recent stories are read for the news.
+# Entries per column: a layout decision (three items keep the columns about
+# as tall as the lead and tier above them at 1280px), not a rule about the
+# data.
 COLUMN_ITEMS = 3
-NEWS_STORIES = COLUMN_ITEMS + 3
-
-# A folded story's other days are named when within this many days of the
-# day shown ("also 19 Oct"); older days of a long story are not.
-FOLD_DAYS = 2
+# Stories read for the news: enough for the lead, the tier and a full column.
+NEWS_STORIES = COLUMN_ITEMS + 2
 
 # A party needs this many members voting Yea or Nay before one dissenter
 # is "the only one". With three voting, one of them is a third of the
@@ -142,10 +135,28 @@ def _split(rc: RollCall, caption: str) -> dict:
             "yeaShare": round(rc.yeas / total, 4) if total else 0, "caption": caption}
 
 
-def _closest(votes: list[RollCall]) -> dict | None:
+def _simple_majority(votes: list[RollCall]) -> list[RollCall]:
+    return [v for v in votes if v.majority_requirement == _SIMPLE_MAJORITY and (v.yeas or v.nays)
+            and not is_housekeeping(v.question, v.chamber)]
+
+
+def median_margin(db: Session, congress: int) -> float | None:
+    """The median gap between yeas and nays over the Congress's
+    simple-majority record votes (housekeeping questions left out, as
+    everywhere a vote is read for its substance); None before any."""
+    rows = db.query(RollCall.question, RollCall.chamber, RollCall.yeas, RollCall.nays).filter(
+        RollCall.congress == congress, RollCall.majority_requirement == _SIMPLE_MAJORITY,
+    ).all()
+    margins = [abs((r.yeas or 0) - (r.nays or 0)) for r in rows
+               if (r.yeas or r.nays) and not is_housekeeping(r.question, r.chamber)]
+    return statistics.median(margins) if margins else None
+
+
+def _closest(votes: list[RollCall], median: float | None = None) -> dict | None:
     """The simple-majority vote with the smallest gap between yeas and
-    nays; the newest on a tie."""
-    pool = [v for v in votes if v.majority_requirement == _SIMPLE_MAJORITY and (v.yeas or v.nays)]
+    nays; the newest on a tie. `close` when its gap is under `median`, the
+    Congress's median margin."""
+    pool = _simple_majority(votes)
     if not pool:
         return None
     rc = min(pool, key=lambda v: (abs(v.yeas - v.nays), _desc_key(v)))
@@ -164,7 +175,7 @@ def _closest(votes: list[RollCall]) -> dict | None:
         caption = f"Decided by {_plural(margin, 'vote')}"
     return {"kind": "closest", "column": "congress", "date": rc.date, "headline": headline,
             "vote": _vote_ref(rc), "figure": _split(rc, caption),
-            "close": margin <= CLOSE_SHARE * ((rc.yeas or 0) + (rc.nays or 0))}
+            "close": median is not None and margin < median}
 
 
 def _desc_key(v: RollCall) -> tuple:
@@ -260,23 +271,24 @@ def _lone_breaks(db: Session, votes: list[RollCall]) -> list[dict]:
     return sorted(by_party, key=lambda e: (e["vote"]["date"], e["vote"]["number"]), reverse=True)
 
 
-def _week_votes(db: Session, today: date) -> tuple[date | None, list[RollCall]]:
-    """Monday of Congress's latest week of record votes and its votes; (None,
-    []) before any vote or past ``STALE_AFTER_DAYS``."""
-    latest = (db.query(RollCall.date).filter(RollCall.date <= today.isoformat())
-              .order_by(RollCall.date.desc()).first())
-    if latest is None or today - date.fromisoformat(latest[0]) > timedelta(days=STALE_AFTER_DAYS):
-        return None, []
-    monday, sunday = week_bounds(date.fromisoformat(latest[0]))
-    return monday, db.query(RollCall).filter(
-        RollCall.date >= monday.isoformat(), RollCall.date <= sunday.isoformat(),
+def _business_week(db: Session, today: date) -> tuple[date, date] | None:
+    """Monday and Sunday of the latest week of business, None before any."""
+    last = cs.last_business_day(db, today)
+    return week_bounds(last) if last else None
+
+
+def _week_votes(db: Session, week: tuple[date, date] | None) -> list[RollCall]:
+    if week is None:
+        return []
+    return db.query(RollCall).filter(
+        RollCall.date >= week[0].isoformat(), RollCall.date <= week[1].isoformat(),
     ).all()
 
 
-def _laws(db: Session, today: date) -> list[dict]:
-    laws = cs.became_law(db, today - timedelta(days=RECENT_DAYS), today)
+def _laws(db: Session, since: date, today: date) -> list[dict]:
+    laws = cs.became_law(db, since, today)
     figure = {"type": "stat", "value": len(laws),
-              "caption": f"{'law' if len(laws) == 1 else 'laws'} enacted in {RECENT_DAYS} days"}
+              "caption": f"{'law' if len(laws) == 1 else 'laws'} enacted since {since:%B} {since.day}"}
     return [{
         "kind": "law", "column": "congress", "date": law["date"],
         "headline": f"{law['billLabel'] or law['billId']} became law",
@@ -287,11 +299,11 @@ def _laws(db: Session, today: date) -> list[dict]:
     } for law in sorted(laws, key=lambda b: (b["date"], b["billId"]), reverse=True)]
 
 
-def _confirmations(db: Session, today: date) -> list[dict]:
+def _confirmations(db: Session, since: date, today: date) -> list[dict]:
     rows = (db.query(Nomination)
             .filter(Nomination.status == "confirmed", Nomination.is_list.is_(False),
                     Nomination.is_military.is_(False),
-                    Nomination.status_date >= (today - timedelta(days=RECENT_DAYS)).isoformat(),
+                    Nomination.status_date >= since.isoformat(),
                     Nomination.status_date <= today.isoformat())
             .order_by(Nomination.status_date.desc(), Nomination.number.desc())
             .limit(COLUMN_ITEMS + 2).all())
@@ -372,9 +384,9 @@ def _news(db: Session) -> list[dict]:
         # carrying it); the first outlet when that article isn't stored.
         outlet = next((outlet_of[(issue.title, u)] for u in urls if (issue.title, u) in outlet_of),
                       outlets[0] if outlets else None)
-        shown = date.fromisoformat(issue.date)
+        week = week_bounds(date.fromisoformat(issue.date))
         also = sorted({f.date for f in folded
-                       if f.date != issue.date and abs((date.fromisoformat(f.date) - shown).days) <= FOLD_DAYS},
+                       if f.date != issue.date and week[0] <= date.fromisoformat(f.date) <= week[1]},
                       reverse=True)
         monitor = next(({"slug": s, "title": monitors[s]} for s in sorted(story) if s in monitors), None)
         out.append({
@@ -388,12 +400,6 @@ def _news(db: Session) -> list[dict]:
     return out
 
 
-def _within(entry: dict | None, today: date, days: int = LEAD_WITHIN_DAYS) -> dict | None:
-    if entry is None:
-        return None
-    return entry if (today - date.fromisoformat(entry["date"][:10])).days <= days else None
-
-
 def _one_of_each_first(entries: list[dict]) -> list[dict]:
     """Each kind's first entry before any kind's second, otherwise in
     order: a fortnight of laws doesn't crowd a lone break off the column."""
@@ -405,16 +411,16 @@ def _one_of_each_first(entries: list[dict]) -> list[dict]:
     return [e for _, _, e in sorted(ranked, key=lambda r: r[:2])]
 
 
-def arrange(congress: list[dict], agencies: list[dict], news: list[dict], today: date) -> dict:
+def arrange(congress: list[dict], agencies: list[dict], news: list[dict], congress_out: bool = False) -> dict:
     """The fixed rule (module docstring) over the candidates, each list in
     its own priority order: lead, tier, columns, no entry twice."""
     closest = next((e for e in congress if e["kind"] == "closest"), None)
     first_of = {k: next((e for e in congress if e["kind"] == k), None) for k in ("law", "confirmed", "loneBreak")}
     lead = next((e for e in (
-        _within(closest, today) if closest and closest["close"] else None,
-        _within(first_of["law"], today),
-        _within(first_of["confirmed"], today),
-        _within(first_of["loneBreak"], today),
+        closest if closest and closest["close"] and not congress_out else None,
+        first_of["law"],
+        first_of["confirmed"],
+        None if congress_out else first_of["loneBreak"],
         news[0] if news else None,
         agencies[0] if agencies else None,
     ) if e is not None), None)
@@ -474,31 +480,33 @@ def _sources_sentence() -> str:
 
 def front_page(db: Session, today: date | None = None) -> dict:
     today = today or eastern_today()
-    week_start, votes = _week_votes(db, today)
-    closest = _closest([v for v in votes if not is_housekeeping(v.question, v.chamber)])
-    congress = (([closest] if closest else []) + _laws(db, today) + _confirmations(db, today)
+    week = _business_week(db, today)
+    votes = _week_votes(db, week)
+    simple = _simple_majority(votes)
+    closest = _closest(simple, median_margin(db, simple[0].congress) if simple else None)
+    since = week[0] if week else today
+    congress = (([closest] if closest else []) + _laws(db, since, today) + _confirmations(db, since, today)
                 + _lone_breaks(db, votes))
-    page = arrange(congress, _comments(db, today), _news(db), today)
+    latest = cs.latest_day(db)
+    recess = cs.recess(db, cs.day_report(db, latest)) if latest else None
+    page = arrange(congress, _comments(db, today), _news(db), congress_out=recess is not None)
     if page["lead"] is None:
         return {"asOf": today.isoformat(), "lead": None, "tier": [], "columns": {c: [] for c in _COLUMNS}}
 
-    latest = cs.latest_day(db)
-    recess = cs.recess(db, cs.day_report(db, latest)) if latest else None
-    week = date.fromisoformat(recess["week"]) if recess else (week_bounds(latest)[0] if latest else None)
     this_week = week_bounds(today)[0]
+    monday = week[0] if week else None
     return {
         "asOf": today.isoformat(),
         "dateline": [line for line in (cs.long_date(today), _congress_line(db, today, recess, latest),
                                        _election_line(db, today)) if line],
         "edition": {
             "sentence": _sources_sentence(),
-            "week": week.isoformat() if week else None,
-            "weekLabel": ("Everything this week" if week == this_week
-                          else f"The week of {week:%B} {week.day}") if week else None,
+            "week": monday.isoformat() if monday else None,
+            "weekLabel": ("Everything this week" if monday == this_week
+                          else f"The week of {monday:%B} {monday.day}") if monday else None,
         },
-        # The week the Congress entries' votes come from, null past the
-        # stale bound.
-        "voteWeek": week_start.isoformat() if week_start else None,
+        # The latest week of business, which the Congress entries come from.
+        "voteWeek": monday.isoformat() if monday else None,
         **page,
     }
 

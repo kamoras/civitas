@@ -243,10 +243,12 @@ export default function DataChapter() {
         </P>
         <P>
           The homepage&apos;s front page picks its stories by a fixed rule: the lead is the closest
-          record vote of the last seven days if a tenth or less of those voting decided it, else the
-          newest law enacted, the newest confirmation or the newest lone party break in those days,
-          else the day&apos;s top story in the news, else the comment deadline closing soonest. The
-          next two stories come from different columns, and nothing appears twice.
+          record vote of the latest week of business if it was closer than the median margin of this
+          Congress&apos;s simple-majority votes (measured from the votes on record, so the bar moves
+          with them), else the newest law enacted or confirmation since that week began, else the
+          newest lone party break, else the day&apos;s top story in the news, else the comment
+          deadline closing soonest. While Congress is out, a vote doesn&apos;t lead. The next two
+          stories come from different columns, and nothing appears twice.
         </P>
         <P>
           Every source&apos;s rate limits are respected, and responses are cached for up to 72 hours
