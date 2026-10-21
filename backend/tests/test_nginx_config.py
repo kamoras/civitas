@@ -10,6 +10,8 @@ header must include it itself. These tests read the config as text: nginx is
 not installed where the fast suite runs.
 """
 
+import os
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -147,8 +149,9 @@ def test_www_redirects_to_the_one_canonical_host():
         if s.head == "server" and not any(d.startswith("listen 127.0.0.1:") for d in s.directives)
     ]
     (server,) = public
-    (block,) = [b for b in server.children if b.head == "if ($host = www.civitas-research.org)"]
-    assert block.directives == ["return 301 https://civitas-research.org$request_uri"]
+    # Read from the Host, not typed: a copy under another domain needs no edit.
+    (block,) = [b for b in server.children if b.head == r"if ($host ~ ^www\.(.+)$)"]
+    assert block.directives == ["return 301 https://$1$request_uri"]
 
 
 def test_security_headers_live_only_in_the_snippet():
@@ -291,3 +294,63 @@ def test_permissions_policy_lets_the_site_itself_ask_for_location():
     text = SNIPPET.read_text()
     assert "geolocation=(self)" in text
     assert "geolocation=()" not in text
+
+
+# Which proxy may name the visitor: nginx/real-ip.sh writes the snippet the
+# public server includes, from REAL_IP_FROM / REAL_IP_HEADER (.env).
+
+REAL_IP_SCRIPT = NGINX_DIR / "real-ip.sh"
+
+
+def _real_ip_snippet(tmp_path, **env):
+    out = tmp_path / "real-ip.conf"
+    run_env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "REAL_IP_SNIPPET": str(out), **env}
+    result = subprocess.run(["sh", str(REAL_IP_SCRIPT)], env=run_env, capture_output=True, text=True)
+    return result, (out.read_text() if out.exists() else "")
+
+
+def _trusted(snippet: str) -> list[str]:
+    return [d.split()[1] for d in _parse(snippet).directives if d.startswith("set_real_ip_from")]
+
+
+def test_the_public_server_includes_the_real_ip_snippet_and_names_no_address():
+    public = [
+        s
+        for s in _walk(_parse(CONF.read_text()))
+        if s.head == "server" and not any(d.startswith("listen 127.0.0.1:") for d in s.directives)
+    ]
+    (server,) = public
+    assert "include /etc/nginx/snippets/real-ip.conf" in server.directives
+    conf = [d for b in _walk(_parse(CONF.read_text())) for d in b.directives]
+    assert not [d for d in conf if d.startswith(("set_real_ip_from", "real_ip_header"))]
+    dockerfile = (NGINX_DIR / "Dockerfile").read_text()
+    assert "COPY --chmod=755 real-ip.sh /docker-entrypoint.d/15-civitas-real-ip.sh" in dockerfile
+    assert "RUN /docker-entrypoint.d/15-civitas-real-ip.sh" in dockerfile
+
+
+def test_by_default_only_loopback_is_trusted(tmp_path):
+    """Unset, no address off this machine may name a visitor: a host behind a
+    reverse proxy sets REAL_IP_FROM to it (production's .env names the Pi's
+    LAN address, docs/self-hosting.md)."""
+    result, snippet = _real_ip_snippet(tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert _parse(snippet).directives == [
+        "set_real_ip_from 127.0.0.1",
+        "set_real_ip_from ::1",
+        "real_ip_header X-Real-IP",
+    ]
+
+
+def test_one_address_reproduces_the_single_hop_config(tmp_path):
+    """REAL_IP_FROM=<address> gives exactly the two directives the config
+    used to type for the Pi."""
+    _, snippet = _real_ip_snippet(tmp_path, REAL_IP_FROM="192.168.0.101")
+    assert _parse(snippet).directives == ["set_real_ip_from 192.168.0.101", "real_ip_header X-Real-IP"]
+
+
+def test_none_trusts_no_one_and_bad_values_refuse_to_start(tmp_path):
+    _, snippet = _real_ip_snippet(tmp_path, REAL_IP_FROM="none")
+    assert _parse(snippet).directives == []
+    for i, env in enumerate(({"REAL_IP_FROM": "10.0.0.1; return 200"}, {"REAL_IP_HEADER": "X-Real-IP; deny all"})):
+        result, _ = _real_ip_snippet(tmp_path / str(i), **env)
+        assert result.returncode != 0

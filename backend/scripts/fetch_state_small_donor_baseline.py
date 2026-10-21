@@ -38,8 +38,9 @@ import urllib.request
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 from app.contact import CONTACT_NOTE  # noqa: E402
+from app.site_url import SITE_URL  # noqa: E402
 
-API_BASE = "https://civitas-research.org/api"
+API_BASE = f"{SITE_URL}/api"
 UA = {"User-Agent": f"CivitasCivicPlatform/1.0 (funding-baseline calibration{CONTACT_NOTE})"}
 
 STATE_POPULATION_PATH = pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "state_population.json"

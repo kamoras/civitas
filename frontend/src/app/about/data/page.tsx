@@ -1,4 +1,4 @@
-import { pageMetadata } from "@/lib/site";
+import { GITHUB_REPO_URL, pageMetadata } from "@/lib/site";
 import ComputedLeanData from "@/components/about/ComputedLeanData";
 import DataLicense from "@/components/about/DataLicense";
 import SourceLedger from "@/components/about/SourceLedger";
@@ -695,6 +695,15 @@ export default function DataChapter() {
             Civitas&apos;s nightly update of the Senate pages, not anything the Senate did), says
             when, and counts how many of the five completed. Until a failed run completes again, its
             pages show its last completed run.
+          </P>
+        </Sub>
+        <Sub title="Run your own copy" id="self-hosting">
+          <P>
+            The code is open source, and everything above can be rebuilt on another machine from the
+            same public sources. The{" "}
+            <A href={`${GITHUB_REPO_URL}/blob/main/docs/self-hosting.md`}>self-hosting guide</A>{" "}
+            walks through it step by step: the hardware, the free keys, the first data load and how
+            long it takes, and what a lost server can and can&apos;t get back.
           </P>
         </Sub>
         <Facts>
