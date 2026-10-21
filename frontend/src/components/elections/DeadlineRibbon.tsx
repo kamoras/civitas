@@ -1,5 +1,7 @@
 import type { VoterDeadline } from "@/types/election";
+import { MARK_ATTR } from "@/types/readout";
 import { shortDate } from "@/lib/congress";
+import ChartReadout from "@/components/shared/ChartReadout";
 
 const DAY_MS = 86_400_000;
 
@@ -18,9 +20,10 @@ function tone(d: VoterDeadline): string {
  * A state's deadlines on one track, from the earliest of them (or today)
  * to election day: ticks for deadlines, bands for windows (early voting,
  * same-day registration), a marker for today on the state's clock, and the
- * passed ones dimmed. A picture of the list below it, which is its text
- * equivalent, so it is hidden from assistive technology. Every date is the
- * backend's.
+ * passed ones dimmed. Each deadline names itself on hover, tap and the
+ * keyboard (ChartReadout): its label, the backend's sentence, the state's
+ * rule and its source. The list below is the text equivalent. Every date
+ * and word is the backend's.
  */
 export default function DeadlineRibbon({
   items,
@@ -52,55 +55,70 @@ export default function DeadlineRibbon({
   // near the end, centred between (no horizontal scroll at 375 px).
   const anchor = (iso: string) =>
     pct(iso) < 25 ? "" : pct(iso) > 75 ? "-translate-x-full" : "-translate-x-1/2";
+  const key = (d: VoterDeadline) => `${d.kind}-${d.method}-${d.basis}-${d.date}`;
+  const marks = items.map((d) => ({
+    id: key(d),
+    label: d.label,
+    shown: d.sentence,
+    context: d.rule,
+    href: d.source.url,
+  }));
   return (
-    <div aria-hidden="true" className="mt-3 select-none">
-      <div className="relative h-14">
-        {/* The record rule: the whole run to election day. */}
-        <div className="absolute inset-x-0 top-6 h-px bg-white/25" />
-        {/* Passed time, shaded. */}
-        <div className="absolute left-0 top-5 h-2 bg-white/[0.06]" style={{ width: at(today) }} />
-        {items.map((d) => {
-          const passed = d.status === "closed";
-          const band = d.endDate && d.endDate !== d.date;
-          return band ? (
-            <span
-              key={`${d.kind}-${d.method}-${d.date}`}
-              className={`absolute top-5 h-2 ${tone(d)} ${passed ? "opacity-30" : ""}`}
-              style={{ left: at(d.date), width: width(d.date, d.endDate!) }}
-            />
-          ) : (
-            <span
-              key={`${d.kind}-${d.method}-${d.basis}-${d.date}`}
-              className={`absolute top-3 h-6 w-0.5 -translate-x-1/2 ${tone(d)} ${passed ? "opacity-30" : ""}`}
-              style={{ left: at(d.closesOn) }}
-            />
-          );
-        })}
-        <span
-          className="absolute top-1 h-10 w-px -translate-x-1/2 bg-ink-hi"
-          style={{ left: at(today) }}
-        />
-        {pct(today) < 80 && (
+    <div className="mt-3 select-none">
+      <ChartReadout label="Voter deadlines, to election day" marks={marks}>
+        <div className="relative h-14">
+          {/* The record rule: the whole run to election day. */}
+          <div className="absolute inset-x-0 top-6 h-px bg-white/25" />
+          {/* Passed time, shaded. */}
+          <div className="absolute left-0 top-5 h-2 bg-white/[0.06]" style={{ width: at(today) }} />
+          {items.map((d) => {
+            const passed = d.status === "closed";
+            const band = d.endDate && d.endDate !== d.date;
+            return band ? (
+              <span
+                key={key(d)}
+                {...{ [MARK_ATTR]: key(d) }}
+                className={`absolute top-5 h-2 ${tone(d)} ${passed ? "opacity-30" : ""}`}
+                style={{ left: at(d.date), width: width(d.date, d.endDate!) }}
+              />
+            ) : (
+              <span
+                key={key(d)}
+                {...{ [MARK_ATTR]: key(d) }}
+                className={`absolute top-3 h-6 w-0.5 -translate-x-1/2 ${tone(d)} ${passed ? "opacity-30" : ""}`}
+                style={{ left: at(d.closesOn) }}
+              />
+            );
+          })}
           <span
-            className={`absolute top-10 whitespace-nowrap font-mono text-[11px] text-ink-hi ${anchor(today)}`}
+            className="absolute top-1 h-10 w-px -translate-x-1/2 bg-ink-hi"
             style={{ left: at(today) }}
-          >
-            Today
+          />
+          {pct(today) < 80 && (
+            <span
+              className={`absolute top-10 whitespace-nowrap font-mono text-[11px] text-ink-hi ${anchor(today)}`}
+              style={{ left: at(today) }}
+            >
+              Today
+            </span>
+          )}
+          <span className="absolute right-0 top-10 font-mono text-[11px] text-ink-hi">
+            {shortDate(electionDay)}
           </span>
-        )}
-        <span className="absolute right-0 top-10 font-mono text-[11px] text-ink-hi">
-          {shortDate(electionDay)}
-        </span>
-        {registerBy && day(registerBy) >= now && (
-          <span
-            className={`absolute top-0 whitespace-nowrap font-mono text-[11px] text-phos ${anchor(registerBy)}`}
-            style={{ left: at(registerBy) }}
-          >
-            Register by {shortDate(registerBy)}
-          </span>
-        )}
-      </div>
-      <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px] text-ink-lo">
+          {registerBy && day(registerBy) >= now && (
+            <span
+              className={`absolute top-0 whitespace-nowrap font-mono text-[11px] text-phos ${anchor(registerBy)}`}
+              style={{ left: at(registerBy) }}
+            >
+              Register by {shortDate(registerBy)}
+            </span>
+          )}
+        </div>
+      </ChartReadout>
+      <p
+        aria-hidden="true"
+        className="mt-1 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px] text-ink-lo"
+      >
         <span>
           <span className="mr-1 inline-block h-2.5 w-0.5 bg-phos align-middle" />
           registration

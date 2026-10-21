@@ -34,6 +34,9 @@ export interface PaginatedBills {
   perPage: number;
   totalPages: number;
   stageCounts: Record<string, number>;
+  /** The funnel's drawing per stage: share of every bill counted ("16%")
+   * and the bar's width against the fullest stage (bill_service.stage_flow). */
+  stageFlow: Record<string, { shareText: string; barPercent: number }>;
   /** Bills past introduction and referral among stageCounts. */
   inMotion: number;
   /** sort=hot only: bills named by a live Action Center issue, or, when no

@@ -1,3 +1,5 @@
+import type { ReadoutMark } from "./readout";
+
 /** Elections feature types (2026-07). Mirrors the backend's
  * /api/elections/* response shapes exactly — see backend/app/api/elections.py.
  */
@@ -102,6 +104,8 @@ export interface LeanContext {
   /** Every seat's lean against the nation, one entry per figure, most
    * Democratic first, labelled as the map labels it. */
   distribution?: { lean: number; label: string; count: number }[];
+  /** The axis's readouts, one per figure in `distribution`, id the lean. */
+  marks?: ReadoutMark[];
 }
 
 export interface RaceSummary {
@@ -779,6 +783,8 @@ export interface PviMeta {
 export interface PviMap {
   /** "ST" -> signed int PVI, e.g. { "GA": 3 }. */
   states: Record<string, number>;
+  /** The lean map's readout per state: name, lean, place, ballot page. */
+  stateMarks: Record<string, ReadoutMark>;
   /** "ST-N" -> signed int PVI, e.g. { "CA-12": -13 }. */
   districts: Record<string, number>;
   /** Methodology/provenance — treat as possibly missing. */

@@ -2,6 +2,7 @@
 
 import { useConfig } from "@/hooks/useConfig";
 import { billStageStyle } from "@/lib/billStages";
+import type { PaginatedBills } from "@/types/bill";
 
 export const MAIN_FLOW_STAGES = [
   "INTRODUCED",
@@ -18,19 +19,17 @@ export const MAIN_FLOW_STAGES = [
 
 export const ALL_STAGE_CODES = [...MAIN_FLOW_STAGES, "VETOED"];
 
-// Below this, a nonzero bar would round to a sliver a couple pixels wide —
-// floor it so it stays visible (and clickable) without lying about scale
-// for the bars that actually earn their width.
-const MIN_BAR_PCT = 2;
-
 interface BillStageFlowProps {
   stageCounts: Record<string, number>;
+  /** Each stage's share and bar width, from the API (bill_service.stage_flow). */
+  stageFlow: PaginatedBills["stageFlow"];
   activeStage: string | null;
   onSelectStage: (stage: string | null) => void;
 }
 
 export default function BillStageFlow({
   stageCounts,
+  stageFlow,
   activeStage,
   onSelectStage,
 }: BillStageFlowProps) {
@@ -38,17 +37,13 @@ export default function BillStageFlow({
   const stages = config?.billStages ?? {};
   const vetoedCount = stageCounts["VETOED"] || 0;
 
-  const totalAll = Object.values(stageCounts).reduce((sum, n) => sum + n, 0) || 1;
-  const maxCount = Math.max(1, ...MAIN_FLOW_STAGES.map((code) => stageCounts[code] || 0));
-
   return (
     <div className="space-y-3">
       <div className="flex flex-col gap-1">
         {MAIN_FLOW_STAGES.map((code) => {
           const info = stages[code];
           const count = stageCounts[code] || 0;
-          const pct = count > 0 ? Math.max((count / maxCount) * 100, MIN_BAR_PCT) : 0;
-          const share = totalAll > 0 ? Math.round((count / totalAll) * 100) : 0;
+          const flow = stageFlow[code];
           const style = billStageStyle(code);
           const isActive = activeStage === code;
 
@@ -58,7 +53,6 @@ export default function BillStageFlow({
               type="button"
               onClick={() => onSelectStage(isActive ? null : code)}
               aria-pressed={isActive}
-              title={`${info?.name ?? code}: ${count.toLocaleString("en-US")} bill${count === 1 ? "" : "s"} (${share}% of all bills tracked)`}
               className={`group -mx-2 flex flex-wrap items-center gap-x-3 gap-y-1 border-l-2 px-2 py-1.5 text-left transition-colors ${
                 isActive ? `bg-white/5 ${style.rule}` : "border-l-transparent hover:bg-white/[0.03]"
               }`}
@@ -86,7 +80,7 @@ export default function BillStageFlow({
                   className={`absolute inset-y-0 left-0 transition-[width] duration-300 ${style.bar} ${
                     isActive ? "opacity-100" : "opacity-75"
                   }`}
-                  style={{ width: `${pct}%` }}
+                  style={{ width: `${flow?.barPercent ?? 0}%` }}
                 />
               </span>
 
@@ -96,7 +90,12 @@ export default function BillStageFlow({
                   bar matters at 390px, where the bar was down to 55px. */}
               <span className="w-12 shrink-0 text-right font-mono text-xs tabular-nums text-ink sm:w-24">
                 {count.toLocaleString("en-US")}
-                <span className="hidden sm:inline text-ink-min"> · {share}%</span>
+                {/* The share, read out on a phone too; shown from sm up. */}
+                <span className="sr-only text-ink-min sm:not-sr-only">
+                  {" "}
+                  · {flow?.shareText ?? "0%"}
+                  <span className="sr-only"> of all bills counted</span>
+                </span>
               </span>
             </button>
           );

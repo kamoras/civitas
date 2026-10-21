@@ -45,6 +45,7 @@ function BillsPageContent() {
   const [stageCounts, setStageCounts] = useState<Record<string, number>>(
     () => initial?.stageCounts ?? {}
   );
+  const [stageFlow, setStageFlow] = useState(() => initial?.stageFlow ?? {});
   const [inMotion, setInMotion] = useState(() => initial?.inMotion ?? 0);
 
   // From a bill page's "other bills still at this stage" (?stage=<code>):
@@ -80,6 +81,7 @@ function BillsPageContent() {
       .then((res) => {
         if (cancelled) return;
         setStageCounts(res.stageCounts);
+        setStageFlow(res.stageFlow);
         setInMotion(res.inMotion ?? 0);
       })
       .catch(() => {});
@@ -169,6 +171,7 @@ function BillsPageContent() {
           <div className="border border-t-0 border-white/[0.07] bg-surface-base p-4 mb-6">
             <BillStageFlow
               stageCounts={stageCounts}
+              stageFlow={stageFlow}
               activeStage={stage}
               onSelectStage={selectStage}
             />

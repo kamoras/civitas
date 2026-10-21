@@ -97,6 +97,8 @@ from app.pipeline.fetch.state_election_dates import primary_date
 from app.pipeline.fetch.town_directory import address_for_town, towns_for_state
 from app.race_context import funding_sources, lean_context, races_csv
 from app.services.ballot_boxes import ballot_boxes
+from app.ordinals import ordinal
+from app.readout import mark
 from app.services.senator_service import STATE_NAMES
 from app.time_utils import utcnow
 
@@ -2018,6 +2020,32 @@ def list_races(db: Session = Depends(get_db)):
     return cached_json(data, max_age=phase_cache_s(election))
 
 
+def state_lean_marks(leans: dict[str, int], names: dict[str, str], states: set[str]) -> dict[str, dict]:
+    """The lean map's readouts: each state's name, its lean as the map writes
+    it, its place among the states, and its ballot page. A state with no
+    lean says so; DC, which elects no voting member, has no page."""
+    ranked = {s: v for s, v in leans.items() if s in states}
+    of = len(ranked)
+    out = {}
+    for st in sorted(states | {"DC"}):
+        v = ranked.get(st)
+        if st == "DC":
+            out[st] = mark(st, names.get(st, st), "no voting member of Congress")
+            continue
+        if v is None:
+            shown, context = "no lean on file", None
+        elif v == 0:
+            shown, context = district_lean.lean_label(v), f"even, among the {of} states"
+        else:
+            side = "Republican" if v > 0 else "Democratic"
+            further = sum((w > v) if v > 0 else (w < v) for w in ranked.values())
+            shown = district_lean.lean_label(v)
+            place = "" if further == 0 else f"{ordinal(further + 1)} "
+            context = f"the {place}most {side} of the {of} states"
+        out[st] = mark(st, names.get(st, st), shown, context=context, href=f"/elections/states/{st}")
+    return out
+
+
 @router.get("/pvi")
 def pvi_map(db: Session = Depends(get_db)):
     """State + district PVI maps (positive = R lean, negative = D lean) —
@@ -2038,7 +2066,9 @@ def pvi_map(db: Session = Depends(get_db)):
         meta["districts"] = district_meta
     return cached_json(
         {
-            "states": get_state_pvi_map(),
+            "states": (states := get_state_pvi_map()),
+            # The lean map's readout for each state (app/readout.py).
+            "stateMarks": state_lean_marks(states, STATE_NAMES, set(federal_states())),
             "districts": districts,
             "meta": meta,
             # Lets the /elections directory page show "{cycleYear} MIDTERM

@@ -11,12 +11,13 @@ const mapProps = vi.hoisted(() => ({
     getStateLabel: (s: string) => string;
   },
 }));
+// Each state's readout, read as the label a test checks.
 vi.mock("@/components/elections/RaceMap", () => ({
   default: (props: {
     getFillColor: (s: string) => string;
-    getStateLabel: (s: string) => string;
+    marks: Record<string, { shown: string }>;
   }) => {
-    mapProps.current = props;
+    mapProps.current = { ...props, getStateLabel: (s: string) => props.marks[s]?.shown };
     return null;
   },
 }));

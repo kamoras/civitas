@@ -502,7 +502,7 @@ export async function fetchBillsInFlight(options?: {
       lists: ["bills"],
       // The stage funnel reduces over these on every render; an absent map has
       // to arrive as {} rather than undefined.
-      records: ["stageCounts"],
+      records: ["stageCounts", "stageFlow"],
     },
     url
   );
@@ -2023,6 +2023,7 @@ export async function fetchPviMap(): Promise<PviMap> {
   return {
     ...raw,
     states: asRecord(raw.states),
+    stateMarks: asRecord(raw.stateMarks),
     districts: asRecord(raw.districts),
   } as unknown as PviMap;
 }

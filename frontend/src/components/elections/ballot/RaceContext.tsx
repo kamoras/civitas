@@ -15,6 +15,8 @@ import type { LeanContext, RaceWithCandidates, SeatHolder } from "@/types/electi
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR, shareMetaAttrs } from "@/lib/shareImage";
 import { INLINE_LINK } from "@/lib/controlStyles";
+import { MARK_ATTR } from "@/types/readout";
+import ChartReadout from "@/components/shared/ChartReadout";
 
 /** The seat's lean in words: what R+5 means, for a reader who has never
  * seen a PVI. "The last two presidential elections" is the PVI's own
@@ -65,7 +67,7 @@ function LeanAxis({ context, seatLabel }: { context: LeanContext; seatLabel: str
   const summary = `Every ${context.unit === "states" ? "state" : "district"}'s lean, from ${dist[0].label} to ${dist[dist.length - 1].label}; this seat, ${seatLabel}, marked. ${leanCountsSentence(context)}`;
   return (
     <div className="mt-3">
-      <div role="img" aria-label={summary} data-testid="lean-axis">
+      <div data-testid="lean-axis">
         <div className="relative h-5 font-mono text-[10px] text-ink-hi" aria-hidden="true">
           <span
             className="absolute bottom-0 whitespace-nowrap"
@@ -79,47 +81,65 @@ function LeanAxis({ context, seatLabel }: { context: LeanContext; seatLabel: str
             {seat <= 0.5 ? `▼ this seat · ${seatLabel}` : `this seat · ${seatLabel} ▼`}
           </span>
         </div>
-        <svg
-          viewBox={`0 0 ${AXIS_W} ${AXIS_H}`}
-          preserveAspectRatio="none"
-          className="block h-12 w-full"
-          aria-hidden="true"
+        {/* Each lean's column names itself: its seats, counted and named
+            (the API's marks, in lean order, starting at this seat's). */}
+        <ChartReadout
+          label={summary}
+          marks={context.marks ?? []}
+          startId={String(context.seatLean)}
         >
-          {dist.map((d) =>
-            Array.from({ length: d.count }, (_, k) => (
+          <svg
+            viewBox={`0 0 ${AXIS_W} ${AXIS_H}`}
+            preserveAspectRatio="none"
+            className="block h-12 w-full"
+          >
+            {dist.map((d) => (
               <rect
-                key={`${d.lean}-${k}`}
-                data-lean={d.lean}
-                className={tint(d.lean)}
-                x={(d.lean - lo) * colW + colW * 0.1}
-                width={colW * 0.8}
-                y={AXIS_H - (k + 1) * markH + markH * 0.1}
-                height={markH * 0.8}
+                key={`hit-${d.lean}`}
+                {...{ [MARK_ATTR]: String(d.lean) }}
+                x={(d.lean - lo) * colW}
+                width={colW}
+                y={0}
+                height={AXIS_H}
+                fill="transparent"
               />
-            ))
-          )}
-          {even != null && (
-            <line
-              x1={even * AXIS_W}
-              x2={even * AXIS_W}
-              y1={0}
-              y2={AXIS_H}
-              className="stroke-ink-min"
-              strokeDasharray="3 3"
+            ))}
+            {dist.map((d) =>
+              Array.from({ length: d.count }, (_, k) => (
+                <rect
+                  key={`${d.lean}-${k}`}
+                  data-lean={d.lean}
+                  className={tint(d.lean)}
+                  x={(d.lean - lo) * colW + colW * 0.1}
+                  width={colW * 0.8}
+                  y={AXIS_H - (k + 1) * markH + markH * 0.1}
+                  height={markH * 0.8}
+                />
+              ))
+            )}
+            {even != null && (
+              <line
+                x1={even * AXIS_W}
+                x2={even * AXIS_W}
+                y1={0}
+                y2={AXIS_H}
+                className="stroke-ink-min"
+                strokeDasharray="3 3"
+                vectorEffect="non-scaling-stroke"
+              />
+            )}
+            <rect
+              data-seat
+              x={(context.seatLean - lo) * colW}
+              width={colW}
+              y={0}
+              height={AXIS_H}
+              className="fill-none stroke-ink-hi"
+              strokeWidth={2}
               vectorEffect="non-scaling-stroke"
             />
-          )}
-          <rect
-            data-seat
-            x={(context.seatLean - lo) * colW}
-            width={colW}
-            y={0}
-            height={AXIS_H}
-            className="fill-none stroke-ink-hi"
-            strokeWidth={2}
-            vectorEffect="non-scaling-stroke"
-          />
-        </svg>
+          </svg>
+        </ChartReadout>
         <div
           className="relative mt-1 flex justify-between gap-2 font-mono text-[10px] text-ink-min"
           aria-hidden="true"

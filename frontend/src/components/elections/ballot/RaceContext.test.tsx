@@ -63,8 +63,8 @@ describe("RaceContext", () => {
     expect(screen.getByText("The seat · R+3")).toBeInTheDocument();
     expect(screen.getByText(/about 3 points more Republican/)).toBeInTheDocument();
     expect(screen.getByText(/Cook PVI, as a cross-check/)).toBeInTheDocument();
-    const axis = screen.getByRole("img", {
-      name: "Every district's lean, from D+40 to R+30; this seat, R+3, marked. 236 of 435 districts lean more Democratic, 187 more Republican, 11 the same.",
+    const axis = screen.getByRole("group", {
+      name: /^Every district's lean, from D\+40 to R\+30; this seat, R\+3, marked\. 236 of 435 districts lean more Democratic, 187 more Republican, 11 the same: /,
     });
     // One mark per seat, all in one SVG of fixed height scaled to the width:
     // a single row at 320, 375 or 1280 px, never a wrapping grid of cells.

@@ -91,6 +91,12 @@ class TestLeanContext:
                 {"lean": 2, "label": "R+2", "count": 2},
                 {"lean": 9, "label": "R+9", "count": 1},
             ],
+            "marks": [
+                {"id": "-3", "label": "D+3", "detail": None, "shown": "1 district", "context": "AA-1", "href": None},
+                {"id": "2", "label": "R+2", "detail": None, "shown": "2 districts",
+                 "context": "this seat's figure: AA-2, BB-AL", "href": None},
+                {"id": "9", "label": "R+9", "detail": None, "shown": "1 district", "context": "CC-1", "href": None},
+            ],
         }
 
     def test_senate_among_the_states_only(self, monkeypatch):
@@ -104,10 +110,22 @@ class TestLeanContext:
                 {"lean": 0, "label": "EVEN", "count": 1},
                 {"lean": 5, "label": "R+5", "count": 1},
             ],
+            "marks": [
+                {"id": "-10", "label": "D+10", "detail": None, "shown": "1 state", "context": "AA", "href": None},
+                {"id": "0", "label": "EVEN", "detail": None, "shown": "1 state", "context": "this seat's figure: BB",
+                 "href": None},
+                {"id": "5", "label": "R+5", "detail": None, "shown": "1 state", "context": "CC", "href": None},
+            ],
         }
 
     def test_a_statewide_stand_in_is_not_ranked_among_districts(self):
         assert lean_context("H", 5, "state", self.STATES, self.DISTRICTS) is None
+
+    def test_a_crowded_figure_names_six_seats_then_counts(self):
+        table = {f"TX-{n}": 7 for n in range(1, 10)}
+        out = lean_context("H", 7, "district", {}, table)
+        assert out["marks"][0]["context"] == (
+            "this seat's figure: TX-1, TX-2, TX-3, TX-4, TX-5, TX-6 and 3 more")
 
     def test_no_lean(self):
         assert lean_context("S", None, None, self.STATES, self.DISTRICTS) is None

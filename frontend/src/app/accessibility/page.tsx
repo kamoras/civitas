@@ -180,9 +180,12 @@ export default function AccessibilityPage() {
                 <Item label="Charts">
                   Other charts work the same way, one chart at a time: a vote&apos;s yea and nay bar
                   names each side with its votes and share and links to who voted each way, a
-                  party&apos;s dots name each member and their vote, and a comment period&apos;s bar
-                  gives its days gone and its dates. Each is one Tab stop the arrow keys walk, and
-                  its figures are also written out beside it.
+                  party&apos;s dots name each member and their vote, a comment period&apos;s bar
+                  gives its days gone and its dates, each voter deadline gives its rule and source,
+                  each column of a race&apos;s lean chart names the seats in it, and each state on
+                  the Elections maps gives its name, its figure and its page. Each is one Tab stop
+                  the arrow keys walk (a map goes state by state, west to east and north to south),
+                  and its figures are also written out beside it.
                 </Item>
               </List>
               <More label="Typefaces, and why">

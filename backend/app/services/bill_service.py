@@ -569,11 +569,31 @@ def get_bills_in_flight(
         per_page=per_page,
         total_pages=total_pages,
         stage_counts=stage_counts,
+        stage_flow=stage_flow(stage_counts),
         in_motion=sum(n for s, n in stage_counts.items() if s not in _NOT_YET_MOVING),
         shown=shown,
         moved_since=moved_since,
         reached_label=MILESTONE_HEADINGS.get(reached) if reached else None,
     )
+
+
+# A nonzero stage's bar is never drawn narrower than this share of the
+# fullest one: thinner, it rounds to a sliver too small to see or tap. A
+# drawing floor, not a figure: the share beside it is the true one.
+_MIN_BAR_PERCENT = 2.0
+
+
+def stage_flow(stage_counts: dict[str, int]) -> dict[str, dict]:
+    """Each stage's share of every bill counted ("16%") and its bar's width
+    against the fullest stage on the funnel's main line (vetoed bills are a
+    chip beside it, not a bar), so the page draws without arithmetic."""
+    total = sum(stage_counts.values())
+    widest = max((n for s, n in stage_counts.items() if s != BillStage.VETOED.value), default=0)
+    out = {}
+    for s, n in stage_counts.items():
+        bar = max(100 * n / widest, _MIN_BAR_PERCENT) if n and widest else 0.0
+        out[s] = {"shareText": f"{round(100 * n / total)}%" if total else "0%", "barPercent": round(bar, 2)}
+    return out
 
 
 # Every bill is introduced and, within days, referred to committee: neither
