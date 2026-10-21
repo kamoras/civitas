@@ -2083,6 +2083,19 @@ export interface NationalMonitor {
   updateCount: number;
   /** A closed monitor's closing day. */
   closedOn?: string | null;
+  /** Its newest update, on the list only (backend _latest_updates). */
+  latest?: MonitorLatest | null;
+}
+
+/** A monitor's newest update for its box: `text` is an outlet's own words,
+ *  quoted with `source`; null where the update's text is not (the box then
+ *  names the headline). */
+export interface MonitorLatest {
+  date: string;
+  text: string | null;
+  source: string;
+  sourceUrl: string;
+  headline: string;
 }
 
 export interface MonitorList {

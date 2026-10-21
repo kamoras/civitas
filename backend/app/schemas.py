@@ -1976,6 +1976,18 @@ class MonitorUpdateSchema(CamelModel):
     created_at: str = ""
 
 
+class MonitorLatestSchema(CamelModel):
+    """A monitor's newest update, for its box on the Ongoing tab. `text` is
+    the issue's lede, quoted, with the outlet it is quoted from; null where
+    the update's text is not an outlet's own words (an update written before
+    the claim layer, 2026-09-24), and the box then names the headline."""
+    date: str
+    text: str | None = None
+    source: str
+    source_url: str
+    headline: str = ""
+
+
 class NationalMonitorSchema(CamelModel):
     id: int
     slug: str
@@ -1990,6 +2002,8 @@ class NationalMonitorSchema(CamelModel):
     update_count: int = 0
     # A closed monitor's closing day (its last write, when it closed).
     closed_on: str | None = None
+    # Its newest update, on the list only (list_monitors).
+    latest: MonitorLatestSchema | None = None
 
 
 class NationalMonitorDetailSchema(NationalMonitorSchema):

@@ -45,7 +45,7 @@ from app.schemas import (
     ActionIssueSchema, ActionItemSchema, CommitteeContactSchema, CommitteeLeaderSchema, DeciderSchema,
     IssueMemberSchema, IssueMembersSchema, IssueVoteSchema, RelatedBillSchema,
     RelatedExploreDoc, RelatedSenator,
-    NationalMonitorSchema, NationalMonitorDetailSchema, MonitorUpdateSchema,
+    MonitorLatestSchema, NationalMonitorSchema, NationalMonitorDetailSchema, MonitorUpdateSchema,
     TimelineEntrySchema,
 )
 from app.services.explore_keys import issue_doc_ids, public_key, resolve_keys
@@ -1191,6 +1191,35 @@ def _monitor_to_schema(m: NationalMonitor, include_updates: bool = False, db: Se
 _RECENTLY_CLOSED_DAYS = 60
 
 
+def _latest_updates(db: Session, monitors: list[NationalMonitor]) -> dict[int, dict]:
+    """Each monitor's newest update, for its box. An update stores the
+    issue's lede (summary[:500]) and the issue's first source, which is not
+    always the outlet the lede is quoted from; so the lede is quoted, with
+    its own outlet, only where the issue that wrote the update is found
+    (same headline, same text) and records that outlet (summary_source: set
+    only by the claim layer, whose ledes are verbatim). Otherwise the box
+    names the headline and the update's source, quoting nothing."""
+    newest = {m.id: m.updates[0] for m in monitors if m.updates}
+    titles = {u.article_title for u in newest.values() if u.article_title}
+    issues: dict[tuple[str, str], ActionIssue] = {}
+    if titles:
+        for issue in db.query(ActionIssue).filter(
+            ActionIssue.title.in_(titles), ActionIssue.summary_source.isnot(None)
+        ):
+            issues.setdefault((issue.title, (issue.summary or "")[:500]), issue)
+    out = {}
+    for monitor_id, u in newest.items():
+        issue = issues.get((u.article_title, u.summary))
+        out[monitor_id] = MonitorLatestSchema(
+            date=u.date,
+            text=issue.summary if issue else None,
+            source=(issue.summary_source if issue else u.source_name) or "",
+            source_url=(issue.summary_source_url if issue else u.source_url) or "",
+            headline=u.article_title or "",
+        ).model_dump(by_alias=True)
+    return out
+
+
 @router.get("/monitors")
 async def list_monitors(response: Response, db: Session = Depends(get_db)):
     """List all active and watching national monitors, and those closed
@@ -1218,9 +1247,10 @@ async def list_monitors(response: Response, db: Session = Depends(get_db)):
         .order_by(NationalMonitor.updated_at.desc())
         .all()
     )
+    latest = _latest_updates(db, monitors + closed)
     return {
-        "monitors": [_monitor_to_schema(m) for m in monitors],
-        "recentlyClosed": [_monitor_to_schema(m) for m in closed],
+        "monitors": [{**_monitor_to_schema(m), "latest": latest.get(m.id)} for m in monitors],
+        "recentlyClosed": [{**_monitor_to_schema(m), "latest": latest.get(m.id)} for m in closed],
         "recentlyClosedDays": _RECENTLY_CLOSED_DAYS,
     }
 

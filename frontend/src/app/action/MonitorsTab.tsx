@@ -5,8 +5,11 @@ import OnTheRecord from "@/components/action/OnTheRecord";
 import { fetchMonitors, fetchMonitorDetail } from "@/lib/api";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { retryKeepingFocus } from "@/lib/tabFocus";
-import { formatUtcDate, policyAreaLabel, safeHref } from "@/lib/formatting";
-import { SECTION_HEADING, TEXT_LINK } from "@/components/action/IssueEnrichment";
+import { formatUtcDate, policyAreaLabel, restatesTitle, safeHref } from "@/lib/formatting";
+import { OutletLink, SECTION_HEADING, TEXT_LINK } from "@/components/action/IssueEnrichment";
+import BoxGrid from "@/components/shared/BoxGrid";
+import RecordBox from "@/components/shared/RecordBox";
+import NoteLine from "@/components/elections/NoteLine";
 import type { MonitorUpdate, NationalMonitor } from "@/lib/api";
 import { scrollBehavior } from "@/lib/motion";
 import FollowFeed from "@/components/shared/FollowFeed";
@@ -120,6 +123,13 @@ function MonitorUpdates({ slug, title }: { slug: string; title: string }) {
   );
 }
 
+/**
+ * One monitor as a box ("Boxes, not blocks"): its status and areas over its
+ * title, its newest update quoted with the outlet it is from (or, where the
+ * update's text isn't an outlet's own words, its headline and source), and
+ * the updates and last date as its figure. Its description, feed, related
+ * votes and every update are behind "More", read when first opened.
+ */
 function MonitorRow({
   monitor,
   initiallyOpen,
@@ -127,96 +137,103 @@ function MonitorRow({
   monitor: NationalMonitor;
   initiallyOpen: boolean;
 }) {
-  const [open, setOpen] = useState(initiallyOpen);
-  const ref = useRef<HTMLLIElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [opened, setOpened] = useState(initiallyOpen);
   const active = monitor.status === "active";
   const statusLabel = active ? "Active" : monitor.status === "watching" ? "Watching" : "Closed";
   const areas = monitor.policyAreas ?? [];
+  const id = `monitor-${monitor.slug}`;
+  const latest = monitor.latest;
+  const last = monitor.lastArticleDate || monitor.updatedAt;
 
-  // Arrived from a "Tracked in …" link: bring this row into view, and move
-  // focus to it, since the link that was followed is gone from the page.
+  // Arrived from a "Tracked in …" link: bring this box into view, and move
+  // focus to its "More", since the link that was followed is gone.
   useEffect(() => {
     if (!initiallyOpen) return;
     const t = setTimeout(() => {
-      buttonRef.current?.focus({ preventScroll: true });
-      ref.current?.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
+      const box = document.getElementById(id);
+      box?.querySelector<HTMLElement>("summary")?.focus({ preventScroll: true });
+      box?.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
     }, 100);
     return () => clearTimeout(t);
-  }, [initiallyOpen]);
+  }, [initiallyOpen, id]);
+
+  const kicker = [
+    statusLabel,
+    // A long-running monitor accumulates one policy area per smaller
+    // monitor merged into it (backend _merge_monitors): past a handful
+    // they read as noise.
+    areas.length > 0
+      ? `${areas.slice(0, 3).map(policyAreaLabel).join(" · ")}${areas.length > 3 ? ` +${areas.length - 3}` : ""}`
+      : null,
+    monitor.closedOn
+      ? `Tracked ${shortDate(monitor.createdAt)} – ${shortDate(last || monitor.createdAt)} · closed ${shortDate(monitor.closedOn)}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const line = latest?.text
+    ? {
+        quote: {
+          text: latest.text,
+          source: (
+            <>
+              <OutletLink name={latest.source} url={latest.sourceUrl} />, {shortDate(latest.date)}
+            </>
+          ),
+        },
+      }
+    : latest
+      ? {
+          dek: (
+            <>
+              Latest, {shortDate(latest.date)}: {latest.headline || "an update"}
+              {latest.source ? ` (${latest.source})` : ""}
+            </>
+          ),
+        }
+      : {};
+  const description =
+    monitor.description && !restatesTitle(monitor.title, monitor.description)
+      ? monitor.description
+      : "";
 
   return (
-    <li ref={ref} id={`monitor-${monitor.slug}`} className="border-b border-white/[0.07]">
-      <h3>
-        <button
-          ref={buttonRef}
-          onClick={() => setOpen((v) => !v)}
-          aria-expanded={open}
-          aria-controls={`monitor-detail-${monitor.slug}`}
-          className="flex w-full items-start gap-4 py-4 text-left"
-        >
-          <span className="min-w-0 flex-1">
-            <span className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 font-mono text-xs text-ink-min">
-              <span className={active ? "text-phos-mid" : undefined}>{statusLabel}</span>
-              {monitor.closedOn ? (
-                <span>
-                  Tracked {shortDate(monitor.createdAt)} –{" "}
-                  {shortDate(monitor.lastArticleDate || monitor.createdAt)} · closed{" "}
-                  {shortDate(monitor.closedOn)}
-                </span>
-              ) : (
-                <span>Updated {shortDate(monitor.lastArticleDate || monitor.updatedAt)}</span>
-              )}
-              <span>
-                {monitor.updateCount} update{monitor.updateCount !== 1 ? "s" : ""}
-              </span>
-              {/* A long-running monitor accumulates one policy area per
-                  smaller monitor merged into it over time (see backend's
-                  _merge_monitors) — past a handful they read as noise. */}
-              {areas.length > 0 && (
-                <span className="text-ink-lo">
-                  {areas.slice(0, 3).map(policyAreaLabel).join(" · ")}
-                  {areas.length > 3 && ` +${areas.length - 3}`}
-                </span>
-              )}
-            </span>
-            <span className="mt-1.5 block font-display text-lg font-semibold leading-snug text-ink-hi">
-              {monitor.title}
-            </span>
-            {!open && monitor.description && (
-              <span className="mt-1 line-clamp-2 block font-sans text-[15px] leading-relaxed text-ink-lo">
-                {monitor.description}
-              </span>
+    <RecordBox
+      id={id}
+      compact
+      tone={active ? "record" : "neutral"}
+      kicker={kicker}
+      title={monitor.title}
+      {...line}
+      figure={{
+        type: "stat",
+        value: monitor.updateCount,
+        caption: `update${monitor.updateCount !== 1 ? "s" : ""} · last ${shortDate(last)}`,
+      }}
+      more={{
+        label: "every update and the related votes",
+        open: initiallyOpen,
+        onToggle: (open) => open && setOpened(true),
+        children: (
+          <div id={`monitor-detail-${monitor.slug}`}>
+            {description && (
+              <p className="max-w-3xl font-sans text-[15px] leading-relaxed text-ink">
+                {description}
+              </p>
             )}
-          </span>
-          <span
-            className="mt-0.5 shrink-0 font-mono text-lg leading-none text-ink-min"
-            aria-hidden="true"
-          >
-            {open ? "−" : "+"}
-          </span>
-        </button>
-      </h3>
-
-      {open && (
-        <div id={`monitor-detail-${monitor.slug}`} className="pb-5">
-          {monitor.description && (
-            <p className="max-w-3xl font-sans text-[15px] leading-relaxed text-ink">
-              {monitor.description}
+            <p className="mt-2 font-mono text-xs text-ink-min">
+              Tracking since {shortDate(monitor.createdAt)}
             </p>
-          )}
-          <p className="mt-2 font-mono text-xs text-ink-min">
-            Tracking since {shortDate(monitor.createdAt)}
-          </p>
-          <FollowFeed
-            className="mt-2"
-            subject="this monitor"
-            feed={monitorFeed(monitor.slug, monitor.title)}
-          />
-          <MonitorUpdates slug={monitor.slug} title={monitor.title} />
-        </div>
-      )}
-    </li>
+            <FollowFeed
+              className="mt-2"
+              subject="this monitor"
+              feed={monitorFeed(monitor.slug, monitor.title)}
+            />
+            {opened && <MonitorUpdates slug={monitor.slug} title={monitor.title} />}
+          </div>
+        ),
+      }}
+    />
   );
 }
 
@@ -265,9 +282,9 @@ function OffListMonitor({ slug }: { slug: string }) {
       <h2 id="off-list-heading" className={SECTION_HEADING}>
         No longer tracked
       </h2>
-      <ul>
+      <BoxGrid columns={1}>
         <MonitorRow monitor={request.data} initiallyOpen />
-      </ul>
+      </BoxGrid>
     </section>
   );
 }
@@ -305,12 +322,14 @@ export default function MonitorsTab({ initialSlug }: { initialSlug?: string | nu
 
   return (
     <div>
-      <p className="mb-6 max-w-2xl font-sans text-base leading-relaxed text-ink-lo">
-        Concerns that keep coming back across days of coverage, detected automatically. Each one
-        gathers the dated updates that fed it, with a source for every entry. One with no new
-        coverage for a week is marked watching until coverage returns; after a month it closes. A
-        closed one stays listed here for {closedDays} days, and in the Archive.
-      </p>
+      <div className="mb-6 max-w-2xl">
+        <NoteLine lead="Concerns that keep coming back across days of coverage.">
+          Detected automatically. Each one gathers the dated updates that fed it, with a source for
+          every entry. One with no new coverage for a week is marked watching until coverage
+          returns; after a month it closes. A closed one stays listed here for {closedDays} days,
+          and in the Archive.
+        </NoteLine>
+      </div>
 
       {offList && <OffListMonitor slug={offList} />}
 
@@ -327,11 +346,11 @@ export default function MonitorsTab({ initialSlug }: { initialSlug?: string | nu
             separate days within two weeks.
           </p>
         ) : (
-          <ul>
+          <BoxGrid columns={2}>
             {monitors.map((m) => (
               <MonitorRow key={m.slug} monitor={m} initiallyOpen={m.slug === initialSlug} />
             ))}
-          </ul>
+          </BoxGrid>
         )}
       </section>
 
@@ -343,11 +362,11 @@ export default function MonitorsTab({ initialSlug }: { initialSlug?: string | nu
             <span>Closed in the last {closedDays} days</span>
             <span aria-hidden="true">{closed.length}</span>
           </h2>
-          <ul>
+          <BoxGrid columns={2}>
             {closed.map((m) => (
               <MonitorRow key={m.slug} monitor={m} initiallyOpen={m.slug === initialSlug} />
             ))}
-          </ul>
+          </BoxGrid>
         </section>
       )}
     </div>
