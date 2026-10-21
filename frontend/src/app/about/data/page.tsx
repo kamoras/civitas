@@ -7,7 +7,8 @@ import {
   Summary,
   Point,
   Section,
-  Sub,
+  Boxes,
+  Box,
   P,
   List,
   Item,
@@ -64,206 +65,243 @@ export default function DataChapter() {
 
       <Section id="sources" title="Where the data comes from">
         <SourceLedger />
-        <Sub title="Congress">
-          <Facts>
-            <Fact label="Congress.gov">
-              Members, bills, sponsors and cosponsors, votes, and each bill&apos;s summary, action
-              history and text. And every presidential nomination this Congress, read daily: its
-              description, nominees, committee, hearings and every action in Congress.gov&apos;s own
-              words, on <A href="/congress/nominations">the nominations pages</A>. Its status
-              (pending, confirmed, returned, withdrawn) is read from Congress.gov&apos;s action
-              codes, and each roll call that names a nomination links to it. A bill&apos;s path
-              (introduced, committee, each chamber, the President, law) and how each chamber passed
-              it (a roll call, a voice vote or unanimous consent) are read from the same action
-              codes and the chamber&apos;s own wording; the plain meaning beside a procedural step
-              comes from a fixed glossary keyed by its action code, never written by a model. A vote
-              on a House amendment shows the amendment&apos;s purpose from its Congress.gov record,
-              word for word.
-            </Fact>
-            <Fact label="FEC (fec.gov)">
-              Campaign finance: individual and PAC contributions, committee filings and types,
-              spending, and declared candidates for every federal race.
-            </Fact>
-            <Fact label="Senate.gov & House Clerk">
-              Roll-call votes with every member&apos;s position, each shown on its own page
-              (nominations included) and linked to the chamber&apos;s record, with a Senate
-              amendment&apos;s purpose quoted from the roll call itself, and each chamber&apos;s
-              live floor log. Held from the first day of Civitas&apos;s record of Congress, as are
-              the Daily Digest&apos;s days, and a page outside it says where the record starts; a
-              bill of an earlier Congress says its votes aren&apos;t held and links each roll call
-              to the chamber&apos;s record. A Senate tie the Vice President broke is shown with the
-              Vice President&apos;s vote, an election of the Speaker by each candidate&apos;s votes,
-              and a quorum call as the members present, with no result. The election map&apos;s past
-              House results for a year the FEC has not yet compiled come from the Clerk&apos;s
-              official election statistics, checked against the Clerk&apos;s own district totals.
-            </Fact>
-            <Fact label="unitedstates/congress-legislators">
-              Committee seats and party leadership titles, an open dataset refreshed weekly. It
-              updates every month or two, so a member seated since then takes their committee seats
-              from the chamber&apos;s own list: the House Clerk&apos;s member data or
-              senate.gov&apos;s committee rosters.
-            </Fact>
-            <Fact label="GovInfo">
-              The Congressional Record, read in full each day, and its Daily Digest: every committee
-              meeting and report it prints is searchable by committee, word or bill on{" "}
-              <A href="/congress/committees">the committee record</A> and listed on each bill&apos;s
-              page.
-            </Fact>
-            <Fact label="Party leadership and caucus">
-              House leadership posts come from the House Clerk&apos;s member list: Speaker, both
-              leaders and whips, both conference chairs, the Democratic caucus vice chair and the
-              Republican Policy Committee chair. Other party posts, such as conference vice chairs
-              and secretaries or campaign committee chairs, appear only where the volunteer-kept
-              congress-legislators dataset records them, since no official list publishes them, so a
-              member holding one may show no title. Senate posts come from that dataset and match
-              senate.gov&apos;s leadership page. An independent representative is read with the
-              caucus the Clerk records for them; an independent senator with the party they vote and
-              cosponsor with, since the Senate records no caucus.
-            </Fact>
-            <Fact label="Voteview">
-              Congress-by-congress roll-call positions (Nokken-Poole), which tell which side of the
-              party a break falls on.
-            </Fact>
-            <Fact label="Cooperative Election Study">
-              Approval of each member among their own constituents, by party (2024 survey, Harvard
-              Dataverse): shown on profiles, not scored.
-            </Fact>
-            <Fact label="Financial disclosures">
-              STOCK Act trade reports and annual disclosures from the House Clerk and the
-              Senate&apos;s eFD system; the sitting president&apos;s disclosures from the Office of
-              Government Ethics. The president&apos;s annual report lists every transaction of its
-              year and is the record for that year, and its asset lists back the president&apos;s
-              holdings; the periodic reports since are scans, read by OCR, and their dates support
-              no timeliness figure. Where a scanned report&apos;s date can&apos;t be read (one 2026
-              presidential report is printed at half size), the trade is listed with the date marked
-              not legible, for members&apos; paper filings as for the president&apos;s. A
-              trade&apos;s industry is the SEC&apos;s own industry code for the company behind it,
-              found by ticker or by company name, exactly or in a brokerage statement&apos;s short
-              form when that fits one company only (&ldquo;HONEYWELL INTL INC&rdquo;); bonds, funds
-              and anything else the SEC doesn&apos;t cover carry none rather than a guess. A trade
-              two of a filer&apos;s reports both list counts once, at the earlier report&apos;s
-              date.
-            </Fact>
-            <Fact label="Lobbying Disclosure Act registry (lda.gov)">
-              Registered lobbying spending by organizations that appear among donors, and the bills
-              their filings name. Each lobbying firm&apos;s report for a quarter counts once, the
-              latest filed, so an amendment replaces the report it amends.
-            </Fact>
-            <Fact label="Partisan lean">
-              State and district Cook PVI. A state&apos;s is computed from its certified
-              presidential returns for the two elections in Cook&apos;s window (the FEC&apos;s
-              compilation or the MIT Election Lab&apos;s official state file); a district&apos;s is
-              Cook&apos;s published figure, shown beside a{" "}
-              <A href="#computed-lean">lean Civitas computes</A> from precinct returns.
-            </Fact>
-          </Facts>
-        </Sub>
-        <Sub title="Presidents">
-          <Facts>
-            <Fact label="American Presidency Project">
-              The presidential roster, approval polling from Truman on, and earlier election margins
-              (UC Santa Barbara).
-            </Fact>
-            <Fact label="Federal Register">Executive orders, memoranda and proclamations.</Fact>
-            <Fact label="BLS · MeasuringWorth">
-              Payroll jobs from 1939, and real GDP back to 1790.
-            </Fact>
-            <Fact label="FRED (St. Louis Fed)">
-              The BLS unemployment rate (from 1948) and consumer price index (from 1947).
-            </Fact>
-            <Fact label="Maddison Project · World Bank">
-              GDP per person for the US and 13 peer economies from 1946, to compare postwar growth.
-            </Fact>
-            <Fact label="C-SPAN Historians Survey">
-              The newest edition published, for the historians&apos; rank on a president&apos;s
-              page.
-            </Fact>
-          </Facts>
-        </Sub>
-        <Sub title="Courts, elections and documents">
-          <Facts>
-            <Fact label="Oyez · supremecourt.gov">
-              Cases, justices&apos; votes in a term the Supreme Court Database doesn&apos;t cover
-              yet, and official slip opinions. Oyez is shared under Creative Commons
-              Attribution-NonCommercial 4.0; slip opinions are public domain.
-            </Fact>
-            <Fact label="Supreme Court Database · Federal Judicial Center · Martin-Quinn">
-              Every justice&apos;s votes in orally argued cases (the voting record, and the cases
-              the federal government argued for the appointer estimate, with Epstein and
-              Posner&apos;s coding through 2014); nomination dates; each justice&apos;s position per
-              term with its 95% credible interval. The Database is shared under Creative Commons
-              Attribution-NonCommercial 3.0 United States; Martin and Quinn publish their scores
-              with no licence stated, and they are cited as Martin and Quinn (2002). A confirmed
-              federal judge&apos;s nomination page links the Federal Judicial Center&apos;s
-              biography where its directory has exactly one judge with the same court, nomination
-              date and surname.
-            </Fact>
-            <Fact label="Federal Register · USAspending.gov">
-              Every federal agency the Register lists, with its description, parent and
-              sub-agencies, read weekly; and each toptier agency&apos;s budgetary resources,
-              obligations and outlays by fiscal year from USAspending. The two name agencies
-              differently, so they are paired by name similarity at a threshold measured against the
-              agencies&apos; own abbreviations; an agency whose name falls short is listed unlinked
-              rather than guessed. A rule&apos;s agency is the most specific one the Register lists
-              on it.
-            </Fact>
-            <Fact label="State election offices">
-              Certified candidate lists and primary results, from each state&apos;s own site. And
-              statewide ballot measures, read directly from each state&apos;s own certified list,
-              voter guide or ballot notice and quoted verbatim with the drafter named: the only
-              source for measures. A state we don&apos;t read yet, or which publishes no list, shows
-              as not yet covered with its official lookup link.
-            </Fact>
-            <Fact label="Census Bureau · Google Civic">
-              District boundaries; and lookups run only on addresses we chose (a town hall for the
-              town selector, a fixed public building per district to fill in candidate lists), never
-              a visitor&apos;s.
-            </Fact>
-            <Fact label="State election offices · NASS · USAGov · vote.gov">
-              Each state&apos;s own pages for checking registration, registering, a sample ballot,
-              the polling place and voting by mail, as NASS&apos;s Can I Vote lists them, linked
-              after a nightly check that each still opens, or, where the state&apos;s site turns the
-              check away, linked as unconfirmed with a backup beside it; otherwise the backup alone
-              (Can I Vote, USAGov&apos;s office directory, or vote.gov).
-            </Fact>
-            <Fact label="Silver Bulletin · Wikipedia">
-              The election map&apos;s past polls, which its ranges are fitted and checked on, come
-              from Silver Bulletin&apos;s raw poll file (every rated poll since 1998 with its
-              result), used free of charge as its terms allow and attributed to Silver Bulletin as
-              they ask; a new copy is used only after it passes Civitas&apos;s checks. This
-              year&apos;s polls come from Wikipedia&apos;s race articles (CC BY-SA 4.0).
-            </Fact>
-            <Fact label="News & trends">
-              RSS feeds from six newsrooms, Google Trends and Bluesky, for the Action Center.
-            </Fact>
-          </Facts>
-        </Sub>
-        <P>
-          The homepage lists, for each main source, how many records it has supplied and the date of
-          the newest one, counted from what is stored, so a stale source shows as stale.
-        </P>
-        <P>
-          The homepage&apos;s front page picks its stories by a fixed rule: the lead is the closest
-          record vote of the latest week of business if it was closer than the median margin of this
-          Congress&apos;s simple-majority votes (measured from the votes on record, so the bar moves
-          with them), else the newest law enacted or confirmation since that week began, else the
-          newest lone party break, else the day&apos;s top story in the news, else the comment
-          deadline closing soonest. While Congress is out, a vote doesn&apos;t lead. The next two
-          stories come from different columns, and nothing appears twice.
-        </P>
-        <P>
-          Every source&apos;s rate limits are respected, and responses are cached for up to 72 hours
-          to avoid asking twice, except a state&apos;s answer that it has no measures, kept for only
-          six hours, so a measure certified afterwards appears the next night. A bill&apos;s own
-          records are kept until Congress.gov lists the bill as updated, which is checked hourly.
-        </P>
-        <P>
-          Every member page and bill page ends in a methods, sources and citation section, one link
-          from the top of the page: where each figure comes from, the period it covers, how much
-          record is behind it and the research it follows; the record itself as JSON from the{" "}
-          <A href="/developers">public API</A> (a member&apos;s votes, a bill&apos;s roll calls);
-          and an APA-style reference with the date of the run.
-        </P>
+        <Boxes>
+          <Box
+            title="Congress"
+            dek="Members, bills, votes, nominations and the Congressional Record from Congress.gov, the chambers and GovInfo; money from the FEC; trades and lobbying from official filings; partisan lean from Cook and certified returns."
+            more="every Congress source"
+          >
+            <Facts>
+              <Fact label="Congress.gov">
+                Members, bills, sponsors and cosponsors, votes, and each bill&apos;s summary, action
+                history and text. And every presidential nomination this Congress, read daily: its
+                description, nominees, committee, hearings and every action in Congress.gov&apos;s
+                own words, on <A href="/congress/nominations">the nominations pages</A>. Its status
+                (pending, confirmed, returned, withdrawn) is read from Congress.gov&apos;s action
+                codes, and each roll call that names a nomination links to it. A bill&apos;s path
+                (introduced, committee, each chamber, the President, law) and how each chamber
+                passed it (a roll call, a voice vote or unanimous consent) are read from the same
+                action codes and the chamber&apos;s own wording; the plain meaning beside a
+                procedural step comes from a fixed glossary keyed by its action code, never written
+                by a model. A vote on a House amendment shows the amendment&apos;s purpose from its
+                Congress.gov record, word for word.
+              </Fact>
+              <Fact label="FEC (fec.gov)">
+                Campaign finance: individual and PAC contributions, committee filings and types,
+                spending, and declared candidates for every federal race.
+              </Fact>
+              <Fact label="Senate.gov & House Clerk">
+                Roll-call votes with every member&apos;s position, each shown on its own page
+                (nominations included) and linked to the chamber&apos;s record, with a Senate
+                amendment&apos;s purpose quoted from the roll call itself, and each chamber&apos;s
+                live floor log. Held from the first day of Civitas&apos;s record of Congress, as are
+                the Daily Digest&apos;s days, and a page outside it says where the record starts; a
+                bill of an earlier Congress says its votes aren&apos;t held and links each roll call
+                to the chamber&apos;s record. A Senate tie the Vice President broke is shown with
+                the Vice President&apos;s vote, an election of the Speaker by each candidate&apos;s
+                votes, and a quorum call as the members present, with no result. The election
+                map&apos;s past House results for a year the FEC has not yet compiled come from the
+                Clerk&apos;s official election statistics, checked against the Clerk&apos;s own
+                district totals.
+              </Fact>
+              <Fact label="unitedstates/congress-legislators">
+                Committee seats and party leadership titles, an open dataset refreshed weekly. It
+                updates every month or two, so a member seated since then takes their committee
+                seats from the chamber&apos;s own list: the House Clerk&apos;s member data or
+                senate.gov&apos;s committee rosters.
+              </Fact>
+              <Fact label="GovInfo">
+                The Congressional Record, read in full each day, and its Daily Digest: every
+                committee meeting and report it prints is searchable by committee, word or bill on{" "}
+                <A href="/congress/committees">the committee record</A> and listed on each
+                bill&apos;s page.
+              </Fact>
+              <Fact label="Party leadership and caucus">
+                House leadership posts come from the House Clerk&apos;s member list: Speaker, both
+                leaders and whips, both conference chairs, the Democratic caucus vice chair and the
+                Republican Policy Committee chair. Other party posts, such as conference vice chairs
+                and secretaries or campaign committee chairs, appear only where the volunteer-kept
+                congress-legislators dataset records them, since no official list publishes them, so
+                a member holding one may show no title. Senate posts come from that dataset and
+                match senate.gov&apos;s leadership page. An independent representative is read with
+                the caucus the Clerk records for them; an independent senator with the party they
+                vote and cosponsor with, since the Senate records no caucus.
+              </Fact>
+              <Fact label="Voteview">
+                Congress-by-congress roll-call positions (Nokken-Poole), which tell which side of
+                the party a break falls on.
+              </Fact>
+              <Fact label="Cooperative Election Study">
+                Approval of each member among their own constituents, by party (2024 survey, Harvard
+                Dataverse): shown on profiles, not scored.
+              </Fact>
+              <Fact label="Financial disclosures">
+                STOCK Act trade reports and annual disclosures from the House Clerk and the
+                Senate&apos;s eFD system; the sitting president&apos;s disclosures from the Office
+                of Government Ethics. The president&apos;s annual report lists every transaction of
+                its year and is the record for that year, and its asset lists back the
+                president&apos;s holdings; the periodic reports since are scans, read by OCR, and
+                their dates support no timeliness figure. Where a scanned report&apos;s date
+                can&apos;t be read (one 2026 presidential report is printed at half size), the trade
+                is listed with the date marked not legible, for members&apos; paper filings as for
+                the president&apos;s. A trade&apos;s industry is the SEC&apos;s own industry code
+                for the company behind it, found by ticker or by company name, exactly or in a
+                brokerage statement&apos;s short form when that fits one company only
+                (&ldquo;HONEYWELL INTL INC&rdquo;); bonds, funds and anything else the SEC
+                doesn&apos;t cover carry none rather than a guess. A trade two of a filer&apos;s
+                reports both list counts once, at the earlier report&apos;s date.
+              </Fact>
+              <Fact label="Lobbying Disclosure Act registry (lda.gov)">
+                Registered lobbying spending by organizations that appear among donors, and the
+                bills their filings name. Each lobbying firm&apos;s report for a quarter counts
+                once, the latest filed, so an amendment replaces the report it amends.
+              </Fact>
+              <Fact label="Partisan lean">
+                State and district Cook PVI. A state&apos;s is computed from its certified
+                presidential returns for the two elections in Cook&apos;s window (the FEC&apos;s
+                compilation or the MIT Election Lab&apos;s official state file); a district&apos;s
+                is Cook&apos;s published figure, shown beside a{" "}
+                <A href="#computed-lean">lean Civitas computes</A> from precinct returns.
+              </Fact>
+            </Facts>
+          </Box>
+          <Box
+            title="Presidents"
+            dek="The roster, approval and past margins from the American Presidency Project; orders from the Federal Register; the economy from official statistics; the historians' rank from C-SPAN."
+            more="every president source"
+          >
+            <Facts>
+              <Fact label="American Presidency Project">
+                The presidential roster, approval polling from Truman on, and earlier election
+                margins (UC Santa Barbara).
+              </Fact>
+              <Fact label="Federal Register">Executive orders, memoranda and proclamations.</Fact>
+              <Fact label="BLS · MeasuringWorth">
+                Payroll jobs from 1939, and real GDP back to 1790.
+              </Fact>
+              <Fact label="FRED (St. Louis Fed)">
+                The BLS unemployment rate (from 1948) and consumer price index (from 1947).
+              </Fact>
+              <Fact label="Maddison Project · World Bank">
+                GDP per person for the US and 13 peer economies from 1946, to compare postwar
+                growth.
+              </Fact>
+              <Fact label="C-SPAN Historians Survey">
+                The newest edition published, for the historians&apos; rank on a president&apos;s
+                page.
+              </Fact>
+            </Facts>
+          </Box>
+          <Box
+            title="Courts, elections and documents"
+            dek="Court records from Oyez, the Supreme Court and research databases; agencies from the Federal Register and USAspending; ballots from each state's own election office; polls and news."
+            more="every court, election and document source"
+          >
+            <Facts>
+              <Fact label="Oyez · supremecourt.gov">
+                Cases, justices&apos; votes in a term the Supreme Court Database doesn&apos;t cover
+                yet, and official slip opinions. Oyez is shared under Creative Commons
+                Attribution-NonCommercial 4.0; slip opinions are public domain.
+              </Fact>
+              <Fact label="Supreme Court Database · Federal Judicial Center · Martin-Quinn">
+                Every justice&apos;s votes in orally argued cases (the voting record, and the cases
+                the federal government argued for the appointer estimate, with Epstein and
+                Posner&apos;s coding through 2014); nomination dates; each justice&apos;s position
+                per term with its 95% credible interval. The Database is shared under Creative
+                Commons Attribution-NonCommercial 3.0 United States; Martin and Quinn publish their
+                scores with no licence stated, and they are cited as Martin and Quinn (2002). A
+                confirmed federal judge&apos;s nomination page links the Federal Judicial
+                Center&apos;s biography where its directory has exactly one judge with the same
+                court, nomination date and surname.
+              </Fact>
+              <Fact label="Federal Register · USAspending.gov">
+                Every federal agency the Register lists, with its description, parent and
+                sub-agencies, read weekly; and each toptier agency&apos;s budgetary resources,
+                obligations and outlays by fiscal year from USAspending. The two name agencies
+                differently, so they are paired by name similarity at a threshold measured against
+                the agencies&apos; own abbreviations; an agency whose name falls short is listed
+                unlinked rather than guessed. A rule&apos;s agency is the most specific one the
+                Register lists on it.
+              </Fact>
+              <Fact label="State election offices">
+                Certified candidate lists and primary results, from each state&apos;s own site. And
+                statewide ballot measures, read directly from each state&apos;s own certified list,
+                voter guide or ballot notice and quoted verbatim with the drafter named: the only
+                source for measures. A state we don&apos;t read yet, or which publishes no list,
+                shows as not yet covered with its official lookup link.
+              </Fact>
+              <Fact label="Census Bureau · Google Civic">
+                District boundaries; and lookups run only on addresses we chose (a town hall for the
+                town selector, a fixed public building per district to fill in candidate lists),
+                never a visitor&apos;s.
+              </Fact>
+              <Fact label="State election offices · NASS · USAGov · vote.gov">
+                Each state&apos;s own pages for checking registration, registering, a sample ballot,
+                the polling place and voting by mail, as NASS&apos;s Can I Vote lists them, linked
+                after a nightly check that each still opens, or, where the state&apos;s site turns
+                the check away, linked as unconfirmed with a backup beside it; otherwise the backup
+                alone (Can I Vote, USAGov&apos;s office directory, or vote.gov).
+              </Fact>
+              <Fact label="Silver Bulletin · Wikipedia">
+                The election map&apos;s past polls, which its ranges are fitted and checked on, come
+                from Silver Bulletin&apos;s raw poll file (every rated poll since 1998 with its
+                result), used free of charge as its terms allow and attributed to Silver Bulletin as
+                they ask; a new copy is used only after it passes Civitas&apos;s checks. This
+                year&apos;s polls come from Wikipedia&apos;s race articles (CC BY-SA 4.0).
+              </Fact>
+              <Fact label="News & trends">
+                RSS feeds from six newsrooms, Google Trends and Bluesky, for the Action Center.
+              </Fact>
+            </Facts>
+          </Box>
+          <Box
+            title="Source freshness"
+            dek="The homepage lists, for each main source, how many records it has supplied and the date of the newest one, counted from what is stored, so a stale source shows as stale."
+          />
+          <Box
+            title="How the front page picks stories"
+            dek="By a fixed rule: a close vote leads first, then a new law or confirmation, a lone party break, the top news story, or the next comment deadline."
+            more="the full rule"
+          >
+            <P>
+              The homepage&apos;s front page picks its stories by a fixed rule: the lead is the
+              closest record vote of the latest week of business if it was closer than the median
+              margin of this Congress&apos;s simple-majority votes (measured from the votes on
+              record, so the bar moves with them), else the newest law enacted or confirmation since
+              that week began, else the newest lone party break, else the day&apos;s top story in
+              the news, else the comment deadline closing soonest. While Congress is out, a vote
+              doesn&apos;t lead. The next two stories come from different columns, and nothing
+              appears twice.
+            </P>
+          </Box>
+          <Box
+            title="Rate limits and caching"
+            dek="Every source's rate limits are respected, and responses are cached for up to 72 hours so nothing is asked twice."
+            figure={{ type: "stat", value: 72, caption: "hours, longest cache" }}
+            more="the exceptions"
+          >
+            <P>
+              Every source&apos;s rate limits are respected, and responses are cached for up to 72
+              hours to avoid asking twice, except a state&apos;s answer that it has no measures,
+              kept for only six hours, so a measure certified afterwards appears the next night. A
+              bill&apos;s own records are kept until Congress.gov lists the bill as updated, which
+              is checked hourly.
+            </P>
+          </Box>
+          <Box
+            title="Methods on every record page"
+            dek="Every member and bill page ends in a methods, sources and citation section: where each figure comes from, the record as JSON, and a reference."
+            more="what the section holds"
+          >
+            <P>
+              Every member page and bill page ends in a methods, sources and citation section, one
+              link from the top of the page: where each figure comes from, the period it covers, how
+              much record is behind it and the research it follows; the record itself as JSON from
+              the <A href="/developers">public API</A> (a member&apos;s votes, a bill&apos;s roll
+              calls); and an APA-style reference with the date of the run.
+            </P>
+          </Box>
+        </Boxes>
       </Section>
 
       <Section id="license" title="License: what you may do with the data">
@@ -279,269 +317,403 @@ export default function DataChapter() {
           Three kinds of model run here, each for what it&apos;s suited to. None ever produces a
           score: every score is a published formula.
         </P>
-        <Sub title="Embedding models: sorting records into categories">
-          <P>
-            Small sentence-embedding models turn text into numbers whose closeness tracks closeness
-            in meaning
-            <Cite id="reimers2019" />. That lets the pipeline classify by comparison (this bill
-            against a description of each policy area, this donor&apos;s employer against a
-            description of each industry), with no hand-written keyword rules, and it generalizes to
-            names the pipeline has never seen
-            <Cite id="bengio2003" />. Unlike a generative model, it is deterministic and can&apos;t
-            invent a category
-            <Cite id="minaee2021" />. Two are used, both about 22 million parameters: Snowflake
-            Arctic-XS for classification, and all-MiniLM-L6-v2
-            <Cite id="wang2020" /> for search and the Action Center&apos;s similarity checks.
-          </P>
-          <More label="Why two models">
+        <Boxes>
+          <Box
+            title="Embedding models: sorting records into categories"
+            dek="Small models turn text into numbers whose closeness tracks meaning, so records are sorted by comparison, with no keyword rules. They can't invent a category."
+            figure={{ type: "stat", value: 22, text: "22M", caption: "parameters each" }}
+            more="how, which models, and why two"
+          >
             <P>
-              Arctic packs text written in the same style into a narrow band of similarity scores
-              (about 0.55–0.87), which left several thresholds unable to tell a real match from
-              noise. On this site&apos;s own failure cases, all-MiniLM-L6-v2 separated them roughly
-              four times as well for matching news to documents and three times as well for policy
-              relevance. Classification stays on Arctic because its thresholds were calibrated
-              against that model: moving a threshold to a different model without re-measuring it is
-              how thresholds quietly stop meaning anything.
+              Small sentence-embedding models turn text into numbers whose closeness tracks
+              closeness in meaning
+              <Cite id="reimers2019" />. That lets the pipeline classify by comparison (this bill
+              against a description of each policy area, this donor&apos;s employer against a
+              description of each industry), with no hand-written keyword rules, and it generalizes
+              to names the pipeline has never seen
+              <Cite id="bengio2003" />. Unlike a generative model, it is deterministic and
+              can&apos;t invent a category
+              <Cite id="minaee2021" />. Two are used, both about 22 million parameters: Snowflake
+              Arctic-XS for classification, and all-MiniLM-L6-v2
+              <Cite id="wang2020" /> for search and the Action Center&apos;s similarity checks.
             </P>
-          </More>
-        </Sub>
-        <Sub title="A face detector: choosing a member's photo">
-          <P>
-            Each member has two official photos, one on their Congress.gov record and one in the
-            Biographical Directory, and either can be a full-length or painted portrait rather than
-            a head-and-shoulders shot. Once a night a small face detector (YuNet, run with OpenCV)
-            measures how large the face is in each, and the record&apos;s photo is kept unless its
-            face is small and the directory&apos;s is clearly larger. The two cut-offs were fitted
-            to a side-by-side comparison of every current member&apos;s two photos. It picks between
-            official photos; it never identifies anyone.
-          </P>
-        </Sub>
-        <Sub title="A language model: locating text, a few short write-ups">
-          <P>
-            A small open-weight model (LFM2.5-1.2B-Instruct, run with llama.cpp
-            <Cite id="gerganov2023" />) is used for:
-          </P>
-          <List>
-            <Item label="Action Center">
-              Finding an attributable claim in an article. The sentence shown is then copied from
-              the article and checked word for word: see <A href="/about/news#quoted">how</A>.
-            </Item>
-            <Item label="Monitors and the timeline">
-              Deciding whether a story is significant enough to track and whether two monitors are
-              the same, and short summaries of each period on the year-in-review timeline.
-            </Item>
-            <Item label="Explore">A summary of a document, only when you ask for one.</Item>
-            <Item label="Race posts">
-              Finding who did what in a news report about a race. Both parts are copied from the
-              report word for word and checked against it. An issue post is its issue&apos;s checked
-              claim; every other post fills a fixed template.
-            </Item>
-          </List>
-        </Sub>
-        <Sub title="What AI does not do">
-          <List>
-            <Item label="Scores">Every score is a deterministic formula with no model input.</Item>
-            <Item label="Ballot content">
-              Nothing on a ballot page is model-written, at any stage (
-              <A href="/about/elections#measures">why</A>).
-            </Item>
-            <Item label="Classifying bills and donors">
-              Done by embeddings and nearest-neighbor voting. A language model was tried for donors
-              and invented categories that don&apos;t exist (&ldquo;SPORTS&rdquo;,
-              &ldquo;RESTAURANT&rdquo;) while taking 40+ minutes for what now takes under five
-              seconds.
-            </Item>
-            <Item label="Member write-ups">
-              Model-written voting narratives, key-vote explanations and campaign-promise checks
-              were all removed in 2026-07 after audits found them unreliable however they were
-              prompted.
-            </Item>
-          </List>
-        </Sub>
+            <More label="Why two models">
+              <P>
+                Arctic packs text written in the same style into a narrow band of similarity scores
+                (about 0.55–0.87), which left several thresholds unable to tell a real match from
+                noise. On this site&apos;s own failure cases, all-MiniLM-L6-v2 separated them
+                roughly four times as well for matching news to documents and three times as well
+                for policy relevance. Classification stays on Arctic because its thresholds were
+                calibrated against that model: moving a threshold to a different model without
+                re-measuring it is how thresholds quietly stop meaning anything.
+              </P>
+            </More>
+          </Box>
+          <Box
+            title="A face detector: choosing a member's photo"
+            dek="Each night a small face detector picks between a member's two official photos, keeping a head-and-shoulders shot. It never identifies anyone."
+            more="how it chooses"
+          >
+            <P>
+              Each member has two official photos, one on their Congress.gov record and one in the
+              Biographical Directory, and either can be a full-length or painted portrait rather
+              than a head-and-shoulders shot. Once a night a small face detector (YuNet, run with
+              OpenCV) measures how large the face is in each, and the record&apos;s photo is kept
+              unless its face is small and the directory&apos;s is clearly larger. The two cut-offs
+              were fitted to a side-by-side comparison of every current member&apos;s two photos. It
+              picks between official photos; it never identifies anyone.
+            </P>
+          </Box>
+          <Box
+            title="A language model: locating text, a few short write-ups"
+            dek={
+              <>
+                A small open-weight model (LFM2.5-1.2B-Instruct, run with llama.cpp
+                <Cite id="gerganov2023" />) finds claims in news, names monitors and writes a few
+                summaries.
+              </>
+            }
+            more="each use"
+          >
+            <List>
+              <Item label="Action Center">
+                Finding an attributable claim in an article. The sentence shown is then copied from
+                the article and checked word for word: see <A href="/about/news#quoted">how</A>.
+              </Item>
+              <Item label="Monitors and the timeline">
+                Deciding whether a story is significant enough to track and whether two monitors are
+                the same, and short summaries of each period on the year-in-review timeline.
+              </Item>
+              <Item label="Explore">A summary of a document, only when you ask for one.</Item>
+              <Item label="Race posts">
+                Finding who did what in a news report about a race. Both parts are copied from the
+                report word for word and checked against it. An issue post is its issue&apos;s
+                checked claim; every other post fills a fixed template.
+              </Item>
+            </List>
+          </Box>
+          <Box
+            title="What AI does not do"
+            dek="No model writes a score, anything on a ballot page, or a member write-up. Bills and donors are classified by embeddings, not a language model."
+            more="each, and why"
+          >
+            <List>
+              <Item label="Scores">
+                Every score is a deterministic formula with no model input.
+              </Item>
+              <Item label="Ballot content">
+                Nothing on a ballot page is model-written, at any stage (
+                <A href="/about/elections#measures">why</A>).
+              </Item>
+              <Item label="Classifying bills and donors">
+                Done by embeddings and nearest-neighbor voting. A language model was tried for
+                donors and invented categories that don&apos;t exist (&ldquo;SPORTS&rdquo;,
+                &ldquo;RESTAURANT&rdquo;) while taking 40+ minutes for what now takes under five
+                seconds.
+              </Item>
+              <Item label="Member write-ups">
+                Model-written voting narratives, key-vote explanations and campaign-promise checks
+                were all removed in 2026-07 after audits found them unreliable however they were
+                prompted.
+              </Item>
+            </List>
+          </Box>
+        </Boxes>
       </Section>
 
       <Section id="classification" title="How records are classified">
-        <P>
-          The pipeline classifies thousands of bills, donors and votes each run, trying the cheapest
-          method that works first
-          <Cite id="jurafsky2023" />:
-        </P>
-        <Steps>
-          <Step n={1} title="Structured records">
-            Fields the source already provides, like the FEC&apos;s committee type codes.
-          </Step>
-          <Step n={2} title="Memory">
-            Anything classified in an earlier run is recalled rather than recomputed
-            <Cite id="lin1992" />.
-          </Step>
-          <Step n={3} title="Comparison with descriptions">
-            Cosine similarity against a plain-English description of each category, such as each of
-            the 18 policy areas (based on the Congressional Research Service&apos;s scheme) or each
-            industry
-            <Cite id="yin2019" />. Bill direction (does it expand, restrict or reform?) is read the
-            same way
-            <Cite id="baumgartner1993" />, in the text-as-data tradition
-            <Cite id="grimmer2013" />.
-          </Step>
-          <Step n={4} title="Nearest neighbors">
-            Whatever is left is labeled by a similarity-weighted vote of the seven most similar
-            already-labeled items
-            <Cite id="cover1967" />
-            <Cite id="snell2017" />, drawn from a reference set that grows every run
-            <Cite id="lewis2020" />.
-          </Step>
-        </Steps>
-        <P>
-          Confident labels become examples for future runs, so the reference set grows over time
-          <Cite id="yarowsky1995" />. A nearest-neighbor guess is stored but never used as an
-          example for the next guess, so one run&apos;s mistake can&apos;t teach the next to repeat
-          it.
-        </P>
-        <More label="Keeping stale labels from outliving the code that made them">
-          <P>
-            At the start of every run, the pipeline fingerprints its own analysis code (ignoring
-            comments). If the code has changed since the last run, every stored label and the
-            reference set are cleared so the new code starts fresh; if not, they are kept. Raw data
-            from government sources is never cleared: it reflects the sources, not our processing.
-          </P>
-          <P>
-            Classification avoids hand-written keyword lists, with three narrow, documented
-            exceptions: a check for a bill&apos;s leading verb, a hotel-brand tier for industries,
-            and a PAC-suffix and payment-processor tier for donors. Each exists because of a
-            specific, measured failure of the embedding model, and runs only as a first filter in
-            front of the embedding classifier, never in place of it. The project&apos;s README lists
-            each with its measurement.
-          </P>
-        </More>
+        <Boxes>
+          <Box
+            title="Cheapest method first"
+            dek={
+              <>
+                The pipeline classifies thousands of bills, donors and votes each run, trying the
+                cheapest method that works first
+                <Cite id="jurafsky2023" />.
+              </>
+            }
+            figure={{ type: "stat", value: 4, caption: "steps, in order" }}
+            more="the four steps"
+          >
+            <Steps>
+              <Step n={1} title="Structured records">
+                Fields the source already provides, like the FEC&apos;s committee type codes.
+              </Step>
+              <Step n={2} title="Memory">
+                Anything classified in an earlier run is recalled rather than recomputed
+                <Cite id="lin1992" />.
+              </Step>
+              <Step n={3} title="Comparison with descriptions">
+                Cosine similarity against a plain-English description of each category, such as each
+                of the 18 policy areas (based on the Congressional Research Service&apos;s scheme)
+                or each industry
+                <Cite id="yin2019" />. Bill direction (does it expand, restrict or reform?) is read
+                the same way
+                <Cite id="baumgartner1993" />, in the text-as-data tradition
+                <Cite id="grimmer2013" />.
+              </Step>
+              <Step n={4} title="Nearest neighbors">
+                Whatever is left is labeled by a similarity-weighted vote of the seven most similar
+                already-labeled items
+                <Cite id="cover1967" />
+                <Cite id="snell2017" />, drawn from a reference set that grows every run
+                <Cite id="lewis2020" />.
+              </Step>
+            </Steps>
+          </Box>
+          <Box
+            title="Labels that teach the next run"
+            dek="Confident labels become examples for future runs. A nearest-neighbor guess is never used as an example, so one run's mistake can't teach the next."
+            more="the evidence"
+          >
+            <P>
+              Confident labels become examples for future runs, so the reference set grows over time
+              <Cite id="yarowsky1995" />. A nearest-neighbor guess is stored but never used as an
+              example for the next guess, so one run&apos;s mistake can&apos;t teach the next to
+              repeat it.
+            </P>
+          </Box>
+          <Box
+            title="Keeping stale labels from outliving the code that made them"
+            dek="When the analysis code changes, every stored label is cleared so the new code starts fresh. Raw government data is never cleared."
+            more="the fingerprint, and three keyword exceptions"
+          >
+            <P>
+              At the start of every run, the pipeline fingerprints its own analysis code (ignoring
+              comments). If the code has changed since the last run, every stored label and the
+              reference set are cleared so the new code starts fresh; if not, they are kept. Raw
+              data from government sources is never cleared: it reflects the sources, not our
+              processing.
+            </P>
+            <P>
+              Classification avoids hand-written keyword lists, with three narrow, documented
+              exceptions: a check for a bill&apos;s leading verb, a hotel-brand tier for industries,
+              and a PAC-suffix and payment-processor tier for donors. Each exists because of a
+              specific, measured failure of the embedding model, and runs only as a first filter in
+              front of the embedding classifier, never in place of it. The project&apos;s README
+              lists each with its measurement.
+            </P>
+          </Box>
+        </Boxes>
       </Section>
 
       <Section id="computed-lean" title="A second partisan lean, computed here">
-        <P>
-          Every House district&apos;s lean on the site is Cook&apos;s published PVI, and that is the
-          figure the scores use. Beside it, the race pages, the redistricting pages and each member
-          page&apos;s methods section show a Civitas-computed lean: the same formula, worked out
-          here from open precinct returns, so anyone can check where the number comes from. It is
-          shown for comparison and used in no score.
-        </P>
-        <P>
-          The formula is Cook&apos;s: the district&apos;s Democratic share of the two-party
-          presidential vote minus the nation&apos;s, weighted 75% to the most recent presidential
-          election and 25% to the one before, with a Republican lean written R+. For the earlier
-          election, each precinct&apos;s votes, from precinct results published with their maps (the
-          Voting and Election Science Team&apos;s, CC BY 4.0), are shared among the Census blocks
-          inside it by population. For the later one, precinct returns that record the House
-          district each precinct voted in (the MIT Election Data and Science Lab&apos;s, CC0) are
-          counted on the lines that election was held on. For each state that has redrawn since,
-          that vote is carried onto the new lines through each county&apos;s and state house
-          district&apos;s change between the two elections. Census block files place every block in
-          its district on every map. The data file names each input, with its election year and
-          license.
-        </P>
-        <P>
-          Where the later election&apos;s precinct file is wrong (counties counted twice, precincts
-          missing, early votes reported only county-wide), the state&apos;s or county&apos;s own
-          certified count replaces it, and every correction is listed with its source in the data
-          file. A district whose correction could only come from behind a login or a bot wall would
-          be marked unavailable rather than filled in from anywhere else; none is.
-        </P>
-        <P>
-          Measured in October 2026, on the 2020 and 2024 elections: against Cook&apos;s published
-          figures the result differed by 0.27 points on average on the 119th Congress&apos;s lines
-          (423 of 435 districts rounded to the same number, all within one point) and by 0.28 on the
-          120th Congress&apos;s lines (403 the same, 432 within one). The Texas Legislative
-          Council&apos;s official per-district tables matched the 2024 counts on the lines they were
-          cast on to within 0.01 point, and the 2020 allocation on both maps to within about a
-          tenth; California&apos;s counts are taken from its own per-district table. The data
-          file&apos;s validation section carries the current figures. Cook publishes whole numbers;
-          this figure keeps one decimal.
-        </P>
+        <Boxes>
+          <Box
+            title="Cook's figure, checked"
+            dek="Scores use Cook's published PVI. Beside it, Civitas shows the same formula worked out from open precinct returns, used in no score."
+            more="where it is shown"
+          >
+            <P>
+              Every House district&apos;s lean on the site is Cook&apos;s published PVI, and that is
+              the figure the scores use. Beside it, the race pages, the redistricting pages and each
+              member page&apos;s methods section show a Civitas-computed lean: the same formula,
+              worked out here from open precinct returns, so anyone can check where the number comes
+              from. It is shown for comparison and used in no score.
+            </P>
+          </Box>
+          <Box
+            title="The formula and its inputs"
+            dek="The district's Democratic share of the two-party presidential vote minus the nation's, weighted to the most recent election, from open precinct data."
+            figure={{
+              type: "stat",
+              value: 75,
+              text: "75 / 25",
+              caption: "latest / prior election",
+            }}
+            more="how each election is counted"
+          >
+            <P>
+              The formula is Cook&apos;s: the district&apos;s Democratic share of the two-party
+              presidential vote minus the nation&apos;s, weighted 75% to the most recent
+              presidential election and 25% to the one before, with a Republican lean written R+.
+              For the earlier election, each precinct&apos;s votes, from precinct results published
+              with their maps (the Voting and Election Science Team&apos;s, CC BY 4.0), are shared
+              among the Census blocks inside it by population. For the later one, precinct returns
+              that record the House district each precinct voted in (the MIT Election Data and
+              Science Lab&apos;s, CC0) are counted on the lines that election was held on. For each
+              state that has redrawn since, that vote is carried onto the new lines through each
+              county&apos;s and state house district&apos;s change between the two elections. Census
+              block files place every block in its district on every map. The data file names each
+              input, with its election year and license.
+            </P>
+          </Box>
+          <Box
+            title="Corrections from certified counts"
+            dek="Where the precinct file is wrong, the state's or county's own certified count replaces it, and each correction is listed with its source."
+            more="what counts as wrong, and walled sources"
+          >
+            <P>
+              Where the later election&apos;s precinct file is wrong (counties counted twice,
+              precincts missing, early votes reported only county-wide), the state&apos;s or
+              county&apos;s own certified count replaces it, and every correction is listed with its
+              source in the data file. A district whose correction could only come from behind a
+              login or a bot wall would be marked unavailable rather than filled in from anywhere
+              else; none is.
+            </P>
+          </Box>
+          <Box
+            title="How close it comes to Cook"
+            dek="Measured in October 2026: it differed from Cook's figures by 0.27 points on average on the 119th Congress's lines, and by 0.28 on the 120th's."
+            figure={{ type: "stat", value: 0.27, text: "0.27", caption: "points apart on average" }}
+            more="the counts, and official checks"
+          >
+            <P>
+              Measured in October 2026, on the 2020 and 2024 elections: against Cook&apos;s
+              published figures the result differed by 0.27 points on average on the 119th
+              Congress&apos;s lines (423 of 435 districts rounded to the same number, all within one
+              point) and by 0.28 on the 120th Congress&apos;s lines (403 the same, 432 within one).
+              The Texas Legislative Council&apos;s official per-district tables matched the 2024
+              counts on the lines they were cast on to within 0.01 point, and the 2020 allocation on
+              both maps to within about a tenth; California&apos;s counts are taken from its own
+              per-district table. The data file&apos;s validation section carries the current
+              figures. Cook publishes whole numbers; this figure keeps one decimal.
+            </P>
+          </Box>
+        </Boxes>
         <ComputedLeanData />
       </Section>
 
       <Section id="explore" title="How document search ranks results">
-        <P>
-          Document search (the Documents filter of the site search) covers floor speeches,
-          presidential actions, Federal Register rules and Supreme Court opinions. A floor speech is
-          one member&apos;s own words, whole, under the heading the Congressional Record printed
-          over them, or as remarks on the debate they joined; floor business such as quorum calls
-          and requests to schedule a vote is left out. A Federal Register document is kept to its
-          first 15,000 characters, and a Supreme Court case to the Court&apos;s summary of its
-          holding and the question it decided; each page says when it shows less than the whole
-          document and links to it. Four rankings are combined
-          <Cite id="cormack2009" />:
-        </P>
-        <List>
-          <Item label="Meaning">
-            Embedding similarity to your query, which finds a document even when it uses different
-            words
-            <Cite id="karpukhin2020" />.
-          </Item>
-          <Item label="Keywords">
-            A keyword index
-            <Cite id="robertson2009" />, for exact words. A document&apos;s own identifier finds
-            that document first: its Federal Register citation or document number, an executive
-            order or proclamation number, a regulation identifier number, the Regulations.gov docket
-            it takes comments in (&ldquo;IRS-2026-1090&rdquo;), or a floor speech&apos;s
-            Congressional Record citation (&ldquo;172 Cong. Rec. H5836&rdquo;). A search that is
-            only an identifier matches it as written, and when no document here is known by it the
-            page says so, and where the official copy is, instead of listing documents that only
-            share a word with it.
-          </Item>
-          <Item label="Recency">A newer document is usually the more useful answer.</Item>
-          <Item label="Authority">
-            How often other federal documents cite this one, by executive order number or Federal
-            Register citation, scored like PageRank. A regulation identifier number names a
-            rulemaking, not a document, and doesn&apos;t count.
-          </Item>
-        </List>
-        <P>
-          Each kind of document is held from the day Civitas began reading it, not from the start of
-          the record: the Documents filter lists each kind&apos;s first and last date under its
-          filters. Floor speeches are kept after their Congress ends. Every document&apos;s page is
-          at an address made from its official identifier (its Federal Register document number, its
-          Congressional Record granule, its Supreme Court docket), which stays the same when the
-          document is read again, and &ldquo;Cite this&rdquo; credits the agency, the chamber or the
-          Court that issued it, with Civitas as where it was read.
-        </P>
-        <P>
-          Copies of the same document are collapsed (a recurring notice that only opens the same way
-          is not a copy), and no single member or agency can crowd the top results: the rest are
-          moved down, never dropped. Ranking weights are changed only when a measurement of search
-          quality says to, never because one set of results looks better.
-        </P>
+        <Boxes>
+          <Box
+            title="What document search covers"
+            dek="Floor speeches, presidential actions, Federal Register rules and Supreme Court opinions. Each page says when it shows less than the whole document."
+            more="what is kept of each"
+          >
+            <P>
+              Document search (the Documents filter of the site search) covers floor speeches,
+              presidential actions, Federal Register rules and Supreme Court opinions. A floor
+              speech is one member&apos;s own words, whole, under the heading the Congressional
+              Record printed over them, or as remarks on the debate they joined; floor business such
+              as quorum calls and requests to schedule a vote is left out. A Federal Register
+              document is kept to its first 15,000 characters, and a Supreme Court case to the
+              Court&apos;s summary of its holding and the question it decided; each page says when
+              it shows less than the whole document and links to it.
+            </P>
+          </Box>
+          <Box
+            title="Four rankings combined"
+            dek={
+              <>
+                Results blend meaning, keywords, recency and how often other documents cite one
+                <Cite id="cormack2009" />. A document&apos;s own identifier finds it first.
+              </>
+            }
+            figure={{ type: "stat", value: 4, caption: "rankings" }}
+            more="each ranking"
+          >
+            <List>
+              <Item label="Meaning">
+                Embedding similarity to your query, which finds a document even when it uses
+                different words
+                <Cite id="karpukhin2020" />.
+              </Item>
+              <Item label="Keywords">
+                A keyword index
+                <Cite id="robertson2009" />, for exact words. A document&apos;s own identifier finds
+                that document first: its Federal Register citation or document number, an executive
+                order or proclamation number, a regulation identifier number, the Regulations.gov
+                docket it takes comments in (&ldquo;IRS-2026-1090&rdquo;), or a floor speech&apos;s
+                Congressional Record citation (&ldquo;172 Cong. Rec. H5836&rdquo;). A search that is
+                only an identifier matches it as written, and when no document here is known by it
+                the page says so, and where the official copy is, instead of listing documents that
+                only share a word with it.
+              </Item>
+              <Item label="Recency">A newer document is usually the more useful answer.</Item>
+              <Item label="Authority">
+                How often other federal documents cite this one, by executive order number or
+                Federal Register citation, scored like PageRank. A regulation identifier number
+                names a rulemaking, not a document, and doesn&apos;t count.
+              </Item>
+            </List>
+          </Box>
+          <Box
+            title="Dates held, and permanent addresses"
+            dek="Each kind of document is held from the day Civitas began reading it. Each page's address comes from its official identifier and stays the same."
+            more="dates, addresses and citing"
+          >
+            <P>
+              Each kind of document is held from the day Civitas began reading it, not from the
+              start of the record: the Documents filter lists each kind&apos;s first and last date
+              under its filters. Floor speeches are kept after their Congress ends. Every
+              document&apos;s page is at an address made from its official identifier (its Federal
+              Register document number, its Congressional Record granule, its Supreme Court docket),
+              which stays the same when the document is read again, and &ldquo;Cite this&rdquo;
+              credits the agency, the chamber or the Court that issued it, with Civitas as where it
+              was read.
+            </P>
+          </Box>
+          <Box
+            title="Copies and crowding"
+            dek="Copies are collapsed, and no member or agency can crowd the top results. Weights change only when a measurement says to."
+            more="the detail"
+          >
+            <P>
+              Copies of the same document are collapsed (a recurring notice that only opens the same
+              way is not a copy), and no single member or agency can crowd the top results: the rest
+              are moved down, never dropped. Ranking weights are changed only when a measurement of
+              search quality says to, never because one set of results looks better.
+            </P>
+          </Box>
+        </Boxes>
       </Section>
 
       <Section id="site-search" title="How the site search works">
-        <P>
-          The search box in the header looks through everything that has a page here: members of
-          Congress, presidents and justices, bills, roll calls, agencies, committees, states,
-          districts, races, ballot measures, Action Center issues, ongoing stories, nominations,
-          documents and the site&apos;s own pages. As you type, it matches names, numbers and
-          spellings, with no AI model: a bill number in any spelling, a district code like TX-23, an
-          agency&apos;s acronym, a Federal Register citation, a name with a letter wrong.
-        </P>
-        <P>
-          Press Enter and the results are one list: those matches and the federal documents that
-          best fit your words, ranked together. Documents are found the way document search finds
-          them, including by meaning, so describing a rule in your own words works: of six such
-          searches for open proposed rules, the list used to find none and now finds all six in its
-          first ten. Each result says what it is (a member, a bill, a document), and the filters
-          above the list narrow it to one kind; the Documents filter has the document search&apos;s
-          own filters. The two rankings are combined by position, not by score
-          <Cite id="cormack2009" />, with weights measured on test searches held out from the
-          tuning: names, bills, pages and identifiers ranked exactly as well as before, and a
-          document described by its own words was in the first ten 91 times in 100, where it had
-          been 0.
-        </P>
-        <P>
-          When what you typed names one page clearly (a bill number, a district code, a full name),
-          Enter takes you straight there, to the part of the page your other words name (&ldquo;HR 1
-          votes&rdquo;, a member&apos;s name and &ldquo;donors&rdquo;). When two pages fit equally
-          well, such as two members with one surname, you get the list instead. How clear is clear
-          enough was measured: of 2,588 test searches built from the pages&apos; own names and
-          numbers, held out from the tuning, 93 in 100 went straight to the right page, and none
-          went straight to a wrong one.
-        </P>
+        <Boxes>
+          <Box
+            title="Everything with a page"
+            dek="The header search looks through every page here. As you type, it matches names, numbers and spellings, with no AI model."
+            more="what it searches and matches"
+          >
+            <P>
+              The search box in the header looks through everything that has a page here: members of
+              Congress, presidents and justices, bills, roll calls, agencies, committees, states,
+              districts, races, ballot measures, Action Center issues, ongoing stories, nominations,
+              documents and the site&apos;s own pages. As you type, it matches names, numbers and
+              spellings, with no AI model: a bill number in any spelling, a district code like
+              TX-23, an agency&apos;s acronym, a Federal Register citation, a name with a letter
+              wrong.
+            </P>
+          </Box>
+          <Box
+            title="One list of results"
+            dek="Press Enter for one list of pages and documents, ranked together. A document described in its own words lands in the first ten 91 times in 100."
+            figure={{ type: "stat", value: 91, text: "91%", caption: "found in the first ten" }}
+            more="how the two rankings combine, and the test"
+          >
+            <P>
+              Press Enter and the results are one list: those matches and the federal documents that
+              best fit your words, ranked together. Documents are found the way document search
+              finds them, including by meaning, so describing a rule in your own words works: of six
+              such searches for open proposed rules, the list used to find none and now finds all
+              six in its first ten. Each result says what it is (a member, a bill, a document), and
+              the filters above the list narrow it to one kind; the Documents filter has the
+              document search&apos;s own filters. The two rankings are combined by position, not by
+              score
+              <Cite id="cormack2009" />, with weights measured on test searches held out from the
+              tuning: names, bills, pages and identifiers ranked exactly as well as before, and a
+              document described by its own words was in the first ten 91 times in 100, where it had
+              been 0.
+            </P>
+          </Box>
+          <Box
+            title="Straight to the page"
+            dek="When what you typed names one page clearly, Enter goes straight there. In tests, 93 in 100 did, and none went to a wrong page."
+            figure={{ type: "stat", value: 93, text: "93%", caption: "straight to the right page" }}
+            more="ties, and how it was measured"
+          >
+            <P>
+              When what you typed names one page clearly (a bill number, a district code, a full
+              name), Enter takes you straight there, to the part of the page your other words name
+              (&ldquo;HR 1 votes&rdquo;, a member&apos;s name and &ldquo;donors&rdquo;). When two
+              pages fit equally well, such as two members with one surname, you get the list
+              instead. How clear is clear enough was measured: of 2,588 test searches built from the
+              pages&apos; own names and numbers, held out from the tuning, 93 in 100 went straight
+              to the right page, and none went straight to a wrong one.
+            </P>
+          </Box>
+        </Boxes>
       </Section>
 
       <Section id="privacy" title="What we record about you">
@@ -550,162 +722,240 @@ export default function DataChapter() {
           visits on our own server in a way designed so that, once a day is over, nobody, including
           us, can recover who visited:
         </P>
-        <List>
-          <Item label="Daily unique visits">
-            Each visitor&apos;s IP address is scrambled with a random key that exists only for the
-            current day and is then deleted. Without the key, the scrambled value can&apos;t be
-            turned back into an address. Raw IP addresses and browser identification strings are
-            never stored, only a coarse browser, operating system and device type (for example
-            &ldquo;Firefox, Windows, desktop&rdquo;). Only a browser that runs the page counts: a
-            visit is counted when, after asking for a page, the same browser makes the requests the
-            running page makes anyway to load its links. Scripts and crawlers that never run the
-            page aren&apos;t counted, and neither are search and AI crawlers that do run it but say
-            what they are, or automated browsers. Turning JavaScript off means you aren&apos;t
-            counted either. An ad or tracker blocker makes no difference to the visit or the page
-            you arrived on, because counting them sends nothing beyond what the page needs.
-          </Item>
-          <Item label="Page views">
-            A count per page type, per day. Pages you open by following a link inside the site send
-            a small request of their own to be counted; a blocker that refuses tracking requests
-            stops it, and those pages then aren&apos;t counted.
-          </Item>
-          <Item label="Load times">
-            A tally of how long pages take to load, in broad ranges, with nothing about who loaded
-            them. The page also says whether it was opened on a desktop, a tablet or a phone, worked
-            out in your browser from its screen size and whether it uses touch, and sent as one of
-            those three words; your browser identification string is not read. Automated browsers
-            send nothing.
-          </Item>
-          <Item label="Action taps">
-            A count per day of taps on an Action Center issue&apos;s action links (picking a state,
-            a phone number, a contact form, copying the call script, a comment page, a committee, a
-            bill), per issue and kind, with nothing about who tapped: not your state, not which
-            member or number. Repeat taps of the same link from one reader count once a day.
-          </Item>
-          <Item label="Searches">
-            Nothing. What you type in the search box is not stored or logged: the server&apos;s logs
-            keep which page was asked for but not the words after it, a search&apos;s answer is kept
-            only by your own browser, for a few minutes, and the server forgets the words once it
-            has answered.
-          </Item>
-          <Item label="API use">
-            A count per day of requests to the <A href="/developers">public API and MCP server</A>,
-            by endpoint and outcome, with nothing about who made them. Programs calling the API are
-            not counted as visitors.
-          </Item>
-          <Item label="Rate limits">
-            To hold each address to its share of requests, the server counts them against a
-            scrambled form of the address, made like the daily visit count but with a separate
-            random key. The counts live only in the server&apos;s memory, never on disk, and each
-            day&apos;s key is deleted at the end of the next day (so a limit doesn&apos;t restart at
-            midnight).
-          </Item>
-        </List>
-        <P>
-          None of it is shared or sold. Requests this server makes go only to the public sources
-          listed above, and none carries anything about a visitor. Nothing is kept in your browser
-          past the tab you have open: the site stores no preferences, history or record of what you
-          did there.
-        </P>
-        <P>
-          The choices the site holds are the state you pick in the header, so each page that needs a
-          state doesn&apos;t ask again, and the House district you find on the member directory. It
-          is kept in this tab only and is gone when you close it, and it reaches our server only in
-          the address of a page you open, such as a state&apos;s member list. &ldquo;Use my
-          location&rdquo; runs only when you press it. Your browser then works out where you are,
-          which on many devices uses its maker&apos;s own location service (Apple&apos;s,
-          Google&apos;s or Microsoft&apos;s), not Civitas Research. The page turns that position
-          into a state on your device and keeps only the state. The position itself is never sent to
-          us, logged or stored.
-        </P>
-        <P>
-          The member directory and the ballot pages have &ldquo;Find my district from my
-          location&rdquo; for a town split between districts. It works the same way, one step finer:
-          the page downloads your state&apos;s district outlines from this site (the whole
-          state&apos;s file, the same for everyone) and works out your districts on your device.
-          Tapping your part of a split town on its map is worked out the same way. Neither the
-          position nor the tap is sent, logged or stored; the directory keeps your House district
-          number for this tab only, and the ballot page keeps nothing. For an exact answer from your
-          street address, the pages link house.gov and your state&apos;s own lookup: those sites
-          would then have your address, Civitas never does.
-        </P>
-        <P>
-          Your browser asks nothing of any other host. Every picture comes from this server: the
-          members&apos; official photos (the one on each member&apos;s Congress.gov record, from
-          www.congress.gov, used only when Congress.gov credits it: most read &ldquo;Image courtesy
-          of the Member&rdquo;, the rest name the Senate photographer or Historical Office, the
-          House collection, the Pictorial Directory or the GPO Member Guide; or the Biographical
-          Directory&apos;s portrait from bioguide.congress.gov, for a member whose record has no
-          credited photo, or whose record photo a face detector run on this server finds is not a
-          head-and-shoulders shot where the portrait is), the presidents&apos; portraits
-          (public-domain images on Wikimedia Commons, found through Wikidata and used only when
-          Commons marks the file public domain, or else a CC0 portrait from the National Portrait
-          Gallery&apos;s open access collection, each credited on its page with its author and
-          license), the justices&apos; photos (from Oyez) and a news photo on an Action Center issue
-          (from the outlet that licensed it) are fetched by this server, which keeps a copy and
-          serves it to you, so those sites never see who is looking. The fonts, scripts, maps and
-          styles are hosted here too. Links to sources are only followed if you click them.
-        </P>
-        <Sub title="The one company between you and this server" id="cloudflare">
-          <P>
-            Every visit reaches this server through Cloudflare&apos;s network. It shields a site
-            served from a home connection and keeps copies of the site&apos;s scripts and styles
-            closer to readers. Like any network provider it sees your IP address and which page you
-            asked for, under{" "}
-            <a
-              href="https://www.cloudflare.com/privacypolicy/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-signal-cyan underline underline-offset-2 hover:text-phos"
-            >
-              Cloudflare&apos;s privacy policy
-            </a>
-            .
-          </P>
-          <P>
-            It also asks your browser to tell it when a page fails to load (Network Error Logging),
-            and if it ever challenges a visitor as a possible bot, it sets a cookie to remember that
-            they passed. It does not add its analytics or any other script to these pages: every
-            page leaves this server marked so that Cloudflare may not change it.
-          </P>
-        </Sub>
+        <Boxes>
+          <Box
+            title="Daily unique visits"
+            dek="Each IP address is scrambled with a key that is deleted after the day. Only a browser that runs the page counts."
+            more="what is stored, and who is not counted"
+          >
+            <P>
+              Each visitor&apos;s IP address is scrambled with a random key that exists only for the
+              current day and is then deleted. Without the key, the scrambled value can&apos;t be
+              turned back into an address. Raw IP addresses and browser identification strings are
+              never stored, only a coarse browser, operating system and device type (for example
+              &ldquo;Firefox, Windows, desktop&rdquo;). Only a browser that runs the page counts: a
+              visit is counted when, after asking for a page, the same browser makes the requests
+              the running page makes anyway to load its links. Scripts and crawlers that never run
+              the page aren&apos;t counted, and neither are search and AI crawlers that do run it
+              but say what they are, or automated browsers. Turning JavaScript off means you
+              aren&apos;t counted either. An ad or tracker blocker makes no difference to the visit
+              or the page you arrived on, because counting them sends nothing beyond what the page
+              needs.
+            </P>
+          </Box>
+          <Box
+            title="Page views"
+            dek="A count per page type, per day. Pages you open by following a link inside the site send a small request of their own to be counted; a blocker that refuses tracking requests stops it, and those pages then aren't counted."
+          />
+          <Box
+            title="Load times"
+            dek="A tally of how long pages take to load, in broad ranges, with nothing about who loaded them."
+            more="the device type, and automated browsers"
+          >
+            <P>
+              A tally of how long pages take to load, in broad ranges, with nothing about who loaded
+              them. The page also says whether it was opened on a desktop, a tablet or a phone,
+              worked out in your browser from its screen size and whether it uses touch, and sent as
+              one of those three words; your browser identification string is not read. Automated
+              browsers send nothing.
+            </P>
+          </Box>
+          <Box
+            title="Action taps"
+            dek="A daily count of taps on an issue's action links, per issue and kind, with nothing about who tapped."
+            more="which links, and repeats"
+          >
+            <P>
+              A count per day of taps on an Action Center issue&apos;s action links (picking a
+              state, a phone number, a contact form, copying the call script, a comment page, a
+              committee, a bill), per issue and kind, with nothing about who tapped: not your state,
+              not which member or number. Repeat taps of the same link from one reader count once a
+              day.
+            </P>
+          </Box>
+          <Box
+            title="Searches"
+            dek="Nothing. What you type in the search box is not stored or logged."
+            more="logs, and your browser"
+          >
+            <P>
+              Nothing. What you type in the search box is not stored or logged: the server&apos;s
+              logs keep which page was asked for but not the words after it, a search&apos;s answer
+              is kept only by your own browser, for a few minutes, and the server forgets the words
+              once it has answered.
+            </P>
+          </Box>
+          <Box
+            title="API use"
+            dek={
+              <>
+                A count per day of requests to the{" "}
+                <A href="/developers">public API and MCP server</A>, by endpoint and outcome, with
+                nothing about who made them. Programs calling the API are not counted as visitors.
+              </>
+            }
+          />
+          <Box
+            title="Rate limits"
+            dek="Requests are counted against a scrambled form of each address, in memory only, never on disk."
+            more="the keys"
+          >
+            <P>
+              To hold each address to its share of requests, the server counts them against a
+              scrambled form of the address, made like the daily visit count but with a separate
+              random key. The counts live only in the server&apos;s memory, never on disk, and each
+              day&apos;s key is deleted at the end of the next day (so a limit doesn&apos;t restart
+              at midnight).
+            </P>
+          </Box>
+          <Box
+            title="Nothing shared, nothing kept"
+            dek="None of it is shared or sold. Requests this server makes go only to the public sources listed above, and none carries anything about a visitor. Nothing is kept in your browser past the tab you have open: the site stores no preferences, history or record of what you did there."
+          />
+          <Box
+            title="Your state, for this tab only"
+            dek="The state you pick stays in this tab only. “Use my location” runs only when you press it, and the position is never sent to us."
+            more="what is kept, and where location comes from"
+          >
+            <P>
+              The choices the site holds are the state you pick in the header, so each page that
+              needs a state doesn&apos;t ask again, and the House district you find on the member
+              directory. It is kept in this tab only and is gone when you close it, and it reaches
+              our server only in the address of a page you open, such as a state&apos;s member list.
+              &ldquo;Use my location&rdquo; runs only when you press it. Your browser then works out
+              where you are, which on many devices uses its maker&apos;s own location service
+              (Apple&apos;s, Google&apos;s or Microsoft&apos;s), not Civitas Research. The page
+              turns that position into a state on your device and keeps only the state. The position
+              itself is never sent to us, logged or stored.
+            </P>
+          </Box>
+          <Box
+            title="Your district, on your device"
+            dek="“Find my district from my location” works out your districts on your device. The position is never sent, logged or stored."
+            more="split towns, and exact lookups"
+          >
+            <P>
+              The member directory and the ballot pages have &ldquo;Find my district from my
+              location&rdquo; for a town split between districts. It works the same way, one step
+              finer: the page downloads your state&apos;s district outlines from this site (the
+              whole state&apos;s file, the same for everyone) and works out your districts on your
+              device. Tapping your part of a split town on its map is worked out the same way.
+              Neither the position nor the tap is sent, logged or stored; the directory keeps your
+              House district number for this tab only, and the ballot page keeps nothing. For an
+              exact answer from your street address, the pages link house.gov and your state&apos;s
+              own lookup: those sites would then have your address, Civitas never does.
+            </P>
+          </Box>
+          <Box
+            title="No other hosts"
+            dek="Your browser asks nothing of any other host. Every picture, font, script and map is served from this server."
+            more="where each picture comes from"
+          >
+            <P>
+              Your browser asks nothing of any other host. Every picture comes from this server: the
+              members&apos; official photos (the one on each member&apos;s Congress.gov record, from
+              www.congress.gov, used only when Congress.gov credits it: most read &ldquo;Image
+              courtesy of the Member&rdquo;, the rest name the Senate photographer or Historical
+              Office, the House collection, the Pictorial Directory or the GPO Member Guide; or the
+              Biographical Directory&apos;s portrait from bioguide.congress.gov, for a member whose
+              record has no credited photo, or whose record photo a face detector run on this server
+              finds is not a head-and-shoulders shot where the portrait is), the presidents&apos;
+              portraits (public-domain images on Wikimedia Commons, found through Wikidata and used
+              only when Commons marks the file public domain, or else a CC0 portrait from the
+              National Portrait Gallery&apos;s open access collection, each credited on its page
+              with its author and license), the justices&apos; photos (from Oyez) and a news photo
+              on an Action Center issue (from the outlet that licensed it) are fetched by this
+              server, which keeps a copy and serves it to you, so those sites never see who is
+              looking. The fonts, scripts, maps and styles are hosted here too. Links to sources are
+              only followed if you click them.
+            </P>
+          </Box>
+          <Box
+            id="cloudflare"
+            title="The one company between you and this server"
+            dek="Every visit passes through Cloudflare's network, which sees your IP address and the page. It adds no analytics or script to these pages."
+            more="what Cloudflare sees and sets"
+          >
+            <P>
+              Every visit reaches this server through Cloudflare&apos;s network. It shields a site
+              served from a home connection and keeps copies of the site&apos;s scripts and styles
+              closer to readers. Like any network provider it sees your IP address and which page
+              you asked for, under{" "}
+              <a
+                href="https://www.cloudflare.com/privacypolicy/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-signal-cyan underline underline-offset-2 hover:text-phos"
+              >
+                Cloudflare&apos;s privacy policy
+              </a>
+              .
+            </P>
+            <P>
+              It also asks your browser to tell it when a page fails to load (Network Error
+              Logging), and if it ever challenges a visitor as a possible bot, it sets a cookie to
+              remember that they passed. It does not add its analytics or any other script to these
+              pages: every page leaves this server marked so that Cloudflare may not change it.
+            </P>
+          </Box>
+        </Boxes>
       </Section>
 
       <Section id="infrastructure" title="The computer it runs on">
-        <P>
-          The whole of Civitas (database, models, pipeline and website) runs on one Raspberry Pi 5,
-          a credit-card-sized computer with 16 GB of memory and an NVMe drive, at home. Its board
-          measured 2–7 watts during the nightly pipeline, and we budget 7 for the whole machine; a
-          cloud AI accelerator draws 250–400
-          <Cite id="patterson2021" />. The trade is speed: the nightly pipeline takes hours rather
-          than minutes, which is fine for a nightly job. See the{" "}
-          <A href="/environmental">environmental page</A> for the full energy accounting.
-        </P>
-        <P>
-          Using an open-weight model means no per-use fees that could make the project unaffordable,
-          no dependence on another company staying in business, and nothing leaving the device.
-        </P>
-        <Sub title="The nightly runs" id="nightly-runs">
-          <P>
-            Every night five runs go one after another: the Senate; a supplementary run (Explore
-            documents, the Supreme Court and presidents); the House; stock trades; and elections.
-            Each reads what the database already holds, so one that fails leaves the others&apos;
-            records current, and the next still runs. The band at the top of every page names any
-            data run whose latest attempt failed (&ldquo;Senate data run failed&rdquo; means
-            Civitas&apos;s nightly update of the Senate pages, not anything the Senate did), says
-            when, and counts how many of the five completed. Until a failed run completes again, its
-            pages show its last completed run.
-          </P>
-        </Sub>
-        <Sub title="Run your own copy" id="self-hosting">
-          <P>
-            The code is open source, and everything above can be rebuilt on another machine from the
-            same public sources. The{" "}
-            <A href={`${GITHUB_REPO_URL}/blob/main/docs/self-hosting.md`}>self-hosting guide</A>{" "}
-            walks through it step by step: the hardware, the free keys, the first data load and how
-            long it takes, and what a lost server can and can&apos;t get back.
-          </P>
-        </Sub>
+        <Boxes>
+          <Box
+            title="One Raspberry Pi"
+            dek="The whole of Civitas runs on one Raspberry Pi 5 at home. Its board measured 2–7 watts during the nightly pipeline; a cloud AI accelerator draws 250–400."
+            figure={{ type: "stat", value: 7, text: "2–7 W", caption: "board, nightly pipeline" }}
+            more="the machine, and the trade"
+          >
+            <P>
+              The whole of Civitas (database, models, pipeline and website) runs on one Raspberry Pi
+              5, a credit-card-sized computer with 16 GB of memory and an NVMe drive, at home. Its
+              board measured 2–7 watts during the nightly pipeline, and we budget 7 for the whole
+              machine; a cloud AI accelerator draws 250–400
+              <Cite id="patterson2021" />. The trade is speed: the nightly pipeline takes hours
+              rather than minutes, which is fine for a nightly job. See the{" "}
+              <A href="/environmental">environmental page</A> for the full energy accounting.
+            </P>
+          </Box>
+          <Box
+            title="Why an open-weight model"
+            dek="Using an open-weight model means no per-use fees that could make the project unaffordable, no dependence on another company staying in business, and nothing leaving the device."
+          />
+          <Box
+            id="nightly-runs"
+            title="The nightly runs"
+            dek="Five runs go one after another each night. One that fails leaves the others current, and the band at the top of every page names it."
+            figure={{ type: "stat", value: 5, caption: "runs each night" }}
+            more="the runs, and what the band says"
+          >
+            <P>
+              Every night five runs go one after another: the Senate; a supplementary run (Explore
+              documents, the Supreme Court and presidents); the House; stock trades; and elections.
+              Each reads what the database already holds, so one that fails leaves the others&apos;
+              records current, and the next still runs. The band at the top of every page names any
+              data run whose latest attempt failed (&ldquo;Senate data run failed&rdquo; means
+              Civitas&apos;s nightly update of the Senate pages, not anything the Senate did), says
+              when, and counts how many of the five completed. Until a failed run completes again,
+              its pages show its last completed run.
+            </P>
+          </Box>
+          <Box
+            id="self-hosting"
+            title="Run your own copy"
+            dek="The code is open source, and everything above can be rebuilt on another machine from the same public sources."
+            more="the self-hosting guide"
+          >
+            <P>
+              The code is open source, and everything above can be rebuilt on another machine from
+              the same public sources. The{" "}
+              <A href={`${GITHUB_REPO_URL}/blob/main/docs/self-hosting.md`}>self-hosting guide</A>{" "}
+              walks through it step by step: the hardware, the free keys, the first data load and
+              how long it takes, and what a lost server can and can&apos;t get back.
+            </P>
+          </Box>
+        </Boxes>
         <Facts>
           <Fact label="Hardware">Raspberry Pi 5 (16 GB), NVMe SSD</Fact>
           <Fact label="Backend">Python 3.13, FastAPI, SQLAlchemy, SQLite</Fact>

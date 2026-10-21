@@ -5,7 +5,7 @@ import { aboutPageJsonLd } from "@/lib/seo";
 import JsonLd from "@/components/seo/JsonLd";
 import { ABOUT_CHAPTERS } from "@/lib/aboutPages";
 import { ACTION_CENTER_HREF, MEMBERS_HREF, PRESIDENTS_HREF } from "@/lib/routes";
-import { AboutPage, Section, P, A } from "@/components/about/AboutPage";
+import { AboutPage, Section, Boxes, Box, P, A } from "@/components/about/AboutPage";
 import LegacyAboutAnchor from "@/components/about/LegacyAboutAnchor";
 
 const ABOUT_DESCRIPTION =
@@ -110,28 +110,35 @@ export default function AboutOverview() {
       <LegacyAboutAnchor />
 
       <Section id="principles" title="What we hold ourselves to">
-        <ul className="grid grid-cols-1 gap-px border border-white/[0.07] bg-white/[0.07] sm:grid-cols-2">
+        <Boxes>
           {PRINCIPLES.map((p) => (
-            <li key={p.title} className="bg-surface p-5">
-              <h3 className="font-display text-base font-semibold text-ink-hi">{p.title}</h3>
-              <p className="mt-1.5 text-sm leading-relaxed text-ink-lo">{p.body}</p>
-            </li>
+            <Box key={p.title} title={p.title} dek={p.body} />
           ))}
-        </ul>
+        </Boxes>
       </Section>
 
       <Section id="peers" title="How a member of Congress is shown">
-        <P>
-          Each member page sets four figures beside the same figures for colleagues in the same
-          party: <A href="/about/scores#funding">small gifts and PAC money</A>,{" "}
-          <A href="/about/scores#alignment">breaks with the party</A> and{" "}
-          <A href="/about/scores#effectiveness">bills moved</A>. A word says if the member is above,
-          near or below them, by a fixed rule. There is no overall score and no rank.
-        </P>
-        <P>
-          Figures cover the current Congress, except money, which covers the election that won the
-          seat. <A href="/about/scores">How each figure is measured</A>.
-        </P>
+        <Boxes>
+          <Box
+            title="Beside peers, by a fixed rule"
+            dek="Each member page sets four figures beside colleagues in the same party. There is no overall score and no rank."
+            figure={{ type: "stat", value: 4, caption: "figures on each member page" }}
+            more="the figures, and the rule"
+          >
+            <P>
+              Each member page sets four figures beside the same figures for colleagues in the same
+              party: <A href="/about/scores#funding">small gifts and PAC money</A>,{" "}
+              <A href="/about/scores#alignment">breaks with the party</A> and{" "}
+              <A href="/about/scores#effectiveness">bills moved</A>. A word says if the member is
+              above, near or below them, by a fixed rule. There is no overall score and no rank.
+            </P>
+          </Box>
+          <Box
+            title="This Congress, and the election that won the seat"
+            dek="Figures cover the current Congress, except money, which covers the election that won the seat."
+            links={[{ label: "How each figure is measured", href: "/about/scores" }]}
+          />
+        </Boxes>
       </Section>
 
       <Section id="coverage" title="What's covered">
@@ -156,30 +163,24 @@ export default function AboutOverview() {
       </Section>
 
       <Section id="cannot-tell-you" title="What the figures can't tell you">
-        <ul className="space-y-3">
-          <Caveat>
-            <strong className="text-ink-hi">Why someone voted.</strong> The record shows what
-            members did, not their reasons. A donor whose industry lines up with a vote shows where
-            money and votes meet, not that the money bought the vote.
-          </Caveat>
-          <Caveat>
-            <strong className="text-ink-hi">
-              What your neighbors think about a specific bill.
-            </strong>{" "}
-            A seat&apos;s expectations come from how it votes for president, a broad stand-in for
-            local opinion rather than a measure of it.
-          </Caveat>
-          <Caveat>
-            <strong className="text-ink-hi">Which party is better.</strong> Democrats and
-            Republicans fund campaigns differently on average, so their funding figures differ too.
-            The method is the same for both; the fundraising isn&apos;t.
-          </Caveat>
-          <Caveat>
-            <strong className="text-ink-hi">Your exact ballot.</strong> Ballots differ street by
-            street. We show what&apos;s the same across a state and link you to your election office
-            for the rest, rather than ask for your address.
-          </Caveat>
-        </ul>
+        <Boxes>
+          <Box
+            title="Why someone voted"
+            dek="The record shows what members did, not their reasons. A donor whose industry lines up with a vote shows where money and votes meet, not that the money bought the vote."
+          />
+          <Box
+            title="What your neighbors think about a specific bill"
+            dek="A seat's expectations come from how it votes for president, a broad stand-in for local opinion rather than a measure of it."
+          />
+          <Box
+            title="Which party is better"
+            dek="Democrats and Republicans fund campaigns differently on average, so their funding figures differ too. The method is the same for both; the fundraising isn't."
+          />
+          <Box
+            title="Your exact ballot"
+            dek="Ballots differ street by street. We show what's the same across a state and link you to your election office for the rest, rather than ask for your address."
+          />
+        </Boxes>
         <P>
           <A href="/about/limitations">Every known limitation</A>, with the reason each is still
           open.
@@ -207,19 +208,26 @@ export default function AboutOverview() {
       </Section>
 
       <Section id="who" title="Who runs it">
-        <P>
-          One developer, as a hobby, on a Raspberry Pi at home. Civitas is not a company, a charity
-          or any kind of registered group. There is no cloud service, no advertising and no outside
-          money: it takes nothing from parties, candidates or PACs and sells nothing. It exists
-          partly to show that a civic accountability tool doesn&apos;t need venture capital or a
-          data center: the whole thing uses about as much electricity in a year as a refrigerator
-          does in six weeks.
-        </P>
-        <P>
-          Civitas Research ({SITE_DOMAIN}) is an independent, open-source political transparency
-          project covering the U.S. federal government. It is not affiliated with any other
-          organization named Civitas, such as think tanks, university institutes or companies.
-        </P>
+        <Boxes>
+          <Box
+            title="One developer, on a Raspberry Pi"
+            dek="A hobby, run at home. No cloud service, no advertising and no outside money."
+            more="what it takes and what it costs"
+          >
+            <P>
+              One developer, as a hobby, on a Raspberry Pi at home. Civitas is not a company, a
+              charity or any kind of registered group. There is no cloud service, no advertising and
+              no outside money: it takes nothing from parties, candidates or PACs and sells nothing.
+              It exists partly to show that a civic accountability tool doesn&apos;t need venture
+              capital or a data center: the whole thing uses about as much electricity in a year as
+              a refrigerator does in six weeks.
+            </P>
+          </Box>
+          <Box
+            title="Not affiliated"
+            dek={`Civitas Research (${SITE_DOMAIN}) is an independent, open-source political transparency project covering the U.S. federal government. It is not affiliated with any other organization named Civitas, such as think tanks, university institutes or companies.`}
+          />
+        </Boxes>
         <div className="flex flex-wrap gap-2">
           <PillLink href={GITHUB_REPO_URL} external>
             Source code
@@ -230,14 +238,6 @@ export default function AboutOverview() {
         </div>
       </Section>
     </AboutPage>
-  );
-}
-
-function Caveat({ children }: { children: ReactNode }) {
-  return (
-    <li className="border-l-3 border-ink-min/60 pl-4 text-base leading-relaxed text-ink">
-      {children}
-    </li>
   );
 }
 
