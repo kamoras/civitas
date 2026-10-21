@@ -69,6 +69,7 @@ from app.pipeline.fetch.fr_rulemaking import RULE_DOC_TYPES
 from app.pipeline.fetch.news_feeds import NEWS_FEEDS
 from app.pipeline.transform.normalize_votes import MAJORITY_LEADER_TITLES, is_housekeeping
 from app.services import congress_service as cs
+from app.services.bill_service import short_title
 from app.services.bill_record import MemberLinks
 from app.services.congress_service import amendment_fields, bill_label, week_bounds
 from app.services.explore_keys import public_key
@@ -285,15 +286,24 @@ def _week_votes(db: Session, week: tuple[date, date] | None) -> list[RollCall]:
     ).all()
 
 
+def _law_name(law: dict) -> str | None:
+    """Congress.gov's title when it is a short title, as written."""
+    name = " ".join((law.get("name") or "").split()).rstrip(".")
+    return name if short_title(name) else None
+
+
 def _laws(db: Session, since: date, today: date) -> list[dict]:
     laws = cs.became_law(db, since, today)
     figure = {"type": "stat", "value": len(laws),
               "caption": f"{'law' if len(laws) == 1 else 'laws'} enacted since {since:%B} {since.day}"}
     return [{
         "kind": "law", "column": "congress", "date": law["date"],
-        "headline": f"{law['billLabel'] or law['billId']} became law",
-        # Congress.gov's title and the action as recorded.
-        "dek": law["name"], "action": law["text"],
+        # The name news uses for the law leads where the title is one
+        # ("... Act"), its number beneath; an official long title ("A bill
+        # to amend ...") stays beneath a numbered headline.
+        "headline": f"{_law_name(law) or law['billLabel'] or law['billId']} became law",
+        "dek": (law["billLabel"] or law["billId"]) if _law_name(law) else law["name"],
+        "action": law["text"],
         "billId": law["billId"], "billLabel": law["billLabel"], "congress": law["congress"],
         "figure": figure,
     } for law in sorted(laws, key=lambda b: (b["date"], b["billId"]), reverse=True)]
