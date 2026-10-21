@@ -23,7 +23,14 @@ import {
   WhatYouCanDo,
 } from "@/components/action/IssueEnrichment";
 import ShareButtons from "@/components/action/ShareButtons";
-import { TOPIC_FEEDS, absoluteUrl, monitorFeed, notFoundMetadata, pageMetadata } from "@/lib/site";
+import {
+  TOPIC_FEEDS,
+  absoluteUrl,
+  monitorFeed,
+  notFoundMetadata,
+  pageMetadata,
+  ogCardUrl,
+} from "@/lib/site";
 import FollowFeed from "@/components/shared/FollowFeed";
 import { CARD_ALT, articleJsonLd } from "@/lib/seo";
 import JsonLd from "@/components/seo/JsonLd";
@@ -121,7 +128,7 @@ export async function generateMetadata({
   // (from_public_id), so the request's spelling isn't necessarily the one
   // to index.
   const path = `/issue/${issue.publicId}`;
-  const ogImage = absoluteUrl(`/api/og?issue=${issue.publicId}`);
+  const ogImage = absoluteUrl(ogCardUrl(`issue=${issue.publicId}`));
   return pageMetadata({
     title: issue.title,
     description: issue.summary || "Track what Congress is doing, and what you can do about it.",

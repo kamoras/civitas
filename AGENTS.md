@@ -1639,7 +1639,19 @@ Feed descriptions are **stripped of HTML** as they are parsed
 policy-relevance embedding (which sees only the first 200 characters, all of
 it markup for an image-led item), the LLM prompt, and the digest detector
 below. Block tags become `"; "` so item boundaries survive, and the
-500-character cap measures prose rather than tags.
+500-character cap measures prose rather than tags. A picture is not prose:
+`<figure>` and `<figcaption>` go with everything in them
+(`news_feeds._FIGURE_ELEMENTS`). WordPress feeds open content:encoded with
+the lead photo's caption, and until 2026-10-21 that caption was read as the
+article's first sentence: 632 of 2,522 stored race-coverage summaries led
+with one, and twelve race posts quoted a caption as the news (withdrawn,
+`retractions.json`). An article read again replaces its stored summary
+(`election_coverage._refresh_summary`), and older items are re-read from
+their article pages by the Election run, at most 400 a night
+(`fetch/coverage_captions.py`): a summary opening with the page's own
+`<figcaption>` or JSON-LD image caption gets the page's description, and
+`RaceCoverageItem.caption_checked_at` marks it verified. A page that can't
+be read is never counted clean.
 
 Each feed's publication times are kept for 60 days
 (`ops_alerts.check_source_freshness`), and a feed silent for a day past its
@@ -2766,6 +2778,16 @@ the pending list).
   merges metadata *shallowly*: a route that sets `openGraph` at all drops its
   parent's og:site_name, og:url and — verified under `next build` — the root
   `opengraph-image` too, which is why the helper always supplies an image.
+- **Every card and icon URL carries its design's version** (`?v=`, a hash of
+  the files that draw it, `frontend/scripts/assetVersions.mjs`): build one
+  with `ogCardUrl()` / `ICON_PATH` (`src/lib/site.ts`) on the frontend and
+  `app/site_assets.py` on the backend, which also re-versions stored card
+  URLs as the feeds serve them. Feed readers and chat proxies cache a
+  picture by URL for good: after the 2026-10 rebrand Discord showed the old
+  icon and old dark cards beside new posts. The backend reads the hash from
+  `app/data/asset_versions.json`; after changing a card or icon file run
+  `npm run asset-versions` (`src/lib/assetVersions.test.ts` fails until
+  then). nginx's cache key includes the query, and the route reads no `v`.
 - **Canonicals are per route, never on the root layout** (it would be
   inherited by every page and declare the whole site a duplicate of the
   homepage). A section layout's canonical is inherited the same way, so a

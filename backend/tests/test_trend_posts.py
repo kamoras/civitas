@@ -35,6 +35,7 @@ from app.pipeline.analyze.trend_relevance import TrendScores
 from app.pipeline.fetch import trending
 from app.pipeline.fetch.trending import BlueskyTrend
 from app.services import record_cards
+from app.site_assets import _versions
 
 NOW = datetime(2026, 10, 14, 18, 0)  # 14:00 Eastern, inside the posting window
 RELEVANT = TrendScores(relevance=0.9, tragedy=0.0, loaded=0.0)
@@ -126,7 +127,7 @@ def test_an_act_title_match_posts_the_vote_in_its_own_words(world, bluesky_confi
     assert post.text == (
         "On Passage of the Bill: Example Tariff Relief Act. Bill Passed, 2–1. (Oct 13 · Senate roll call 301)"
     )
-    assert post.image_url == "https://civitas-research.org/api/og?vote=senate/119/2/301"
+    assert post.image_url == f"https://civitas-research.org/api/og?vote=senate/119/2/301&v={_versions()['ogCard']}"
     row = world["db"].query(TrendCandidate).one()
     assert (row.decision, row.match_type, row.record_kind) == ("posted", "act", "vote")
     assert row.broadcast_post_id == post.id
@@ -298,7 +299,7 @@ def test_a_loaded_bill_title_is_left_out_of_the_post_and_the_image(world, monkey
     (post,) = posts(world["db"])
     assert post.text.startswith("On Passage of the Bill: S. 100. Bill Passed, 2–1.")
     assert "Example Tariff Relief Act" not in post.text
-    assert post.image_url.endswith("&title=0")
+    assert "&title=0" in post.image_url
     assert "Example Tariff Relief Act" not in post.alt_text
 
 
@@ -599,7 +600,7 @@ def test_the_image_goes_to_bluesky_with_its_alt_text(world, bluesky_configured, 
     monkeypatch.setattr(trend_poster, "embed_kind_for", lambda db, now: "image")
     world["trends"] = [trend("Example Tariff Relief Act")]
     run(world)
-    assert seen["url"] == "http://frontend:3000/api/og?vote=senate/119/2/301"
+    assert seen["url"] == f"http://frontend:3000/api/og?vote=senate/119/2/301&v={_versions()['ogCard']}"
     image = seen["image"]
     assert (image.width, image.height) == (1200, 630)
     assert image.alt == posts(world["db"])[0].alt_text

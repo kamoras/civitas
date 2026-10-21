@@ -151,9 +151,23 @@ export function metaDescription(text: string, max = 160): string {
 
 type OgImage = { url: string; width?: number; height?: number; alt?: string };
 
+/**
+ * A card's path, `/api/og?<query>&v=<design version>`. Every card URL the
+ * site emits goes through here: feed readers and chat proxies (Discord)
+ * cache a picture by its URL for good, so the version (a hash of the card
+ * code, scripts/assetVersions.mjs, set at build) makes a new design a new
+ * URL. The route reads no `v`.
+ */
+export function ogCardUrl(query: string): string {
+  return `/api/og?${query}&v=${process.env.OG_CARD_VERSION}`;
+}
+
+/** The 192px PNG icon, versioned the same way (scripts/assetVersions.mjs). */
+export const ICON_PATH = `/apple-icon.png?v=${process.env.ICON_VERSION}`;
+
 /** The root `app/opengraph-image.tsx` card, by its route. */
 export const DEFAULT_OG_IMAGE: OgImage = {
-  url: "/opengraph-image",
+  url: `/opengraph-image?v=${process.env.OG_CARD_VERSION}`,
   width: 1200,
   height: 630,
   alt: "Civitas Research: no number without its source. Congress, the money, the votes, elections and agencies, from the public record.",
@@ -169,7 +183,7 @@ export function defaultOgImages(path: string): OgImage[] {
   return card
     ? [
         {
-          url: `/api/og?page=${encodeURIComponent(path)}`,
+          url: ogCardUrl(`page=${encodeURIComponent(path)}`),
           width: 1200,
           height: 630,
           alt: sectionCardAlt(card),

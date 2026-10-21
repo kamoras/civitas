@@ -79,3 +79,32 @@ describe("issue card render", () => {
     expect(res.headers.get("content-type")).toBe("image/png");
   });
 });
+
+describe("state ballot card render", () => {
+  it("renders a card whose tiles are sentences, and reads no version parameter", async () => {
+    // Wisconsin on 2026-10-21: no Senate seat up, measures not read yet.
+    const ballot = {
+      state: "WI",
+      stateName: "Wisconsin",
+      cycleYear: 2026,
+      electionDate: "2026-11-03",
+      senateRaces: [],
+      nextSenateElection: 2028,
+      houseRaces: [{}, {}],
+      measures: [],
+      measureCoverage: { status: "not_yet_covered" },
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (String(url).includes("/api/elections/states/WI")) return Response.json(ballot);
+        throw new Error("offline");
+      })
+    );
+    const res = await GET(new NextRequest("http://localhost/api/og?state=WI&v=0123456789"));
+    const body = new Uint8Array(await res.arrayBuffer());
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("image/png");
+    expect(Array.from(body.slice(1, 4))).toEqual([0x50, 0x4e, 0x47]);
+  });
+});

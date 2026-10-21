@@ -1,6 +1,15 @@
+import { assetVersions } from "./scripts/assetVersions.mjs";
+
+const versions = assetVersions();
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "standalone",
+  // A content hash of the files that draw the cards and the icon, put on
+  // every URL of theirs the site emits (src/lib/site.ts ogCardUrl, iconUrl):
+  // feed readers and chat proxies cache a picture by URL for good, so a new
+  // design has to be a new URL (scripts/assetVersions.mjs).
+  env: { OG_CARD_VERSION: versions.ogCard, ICON_VERSION: versions.icon },
   // Metadata goes in <head> for every request. Next 16 otherwise streams
   // generateMetadata into <body> for any user agent not on its built-in
   // bot list, and that list lacks the link-preview fetchers of places this
