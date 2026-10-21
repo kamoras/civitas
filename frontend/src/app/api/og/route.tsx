@@ -322,7 +322,9 @@ export type OgProfile = {
 /** The historians' rank of one presidency, from /api/presidents. */
 export type OgHistoriansRank = { rank: number | null; rated: number | null };
 
-export type Tile = { value: string; label: string };
+// A tile's figure and what it counts, or (value null) a sentence in its
+// place: an absence a bare 0 would misstate ("Measures not yet covered").
+export type Tile = { value: string | null; label: string };
 
 const pct = (v: number) => `${Math.round(v)}%`;
 
@@ -589,22 +591,32 @@ async function genericCard({
   );
 }
 
-function StatTile({ value, label }: { value: string; label: string }) {
+function StatTile({ value, label }: Tile) {
   return (
     <div
       style={{
         display: "flex",
         flexDirection: "column",
+        justifyContent: value === null ? "center" : "flex-start",
         flex: 1,
         padding: "20px 24px",
         background: C.paper,
         border: `2px solid ${HAIRLINE}`,
       }}
     >
-      <span style={{ color: INK_HI, fontSize: value.length > 7 ? 34 : 44, fontWeight: 600 }}>
-        {value}
-      </span>
-      <span style={{ color: INK_LO, fontSize: 20, fontWeight: 600, marginTop: 8, lineHeight: 1.3 }}>
+      {/* No fragment: satori lays a fragment's children out in a row. */}
+      {value !== null && (
+        <span style={{ color: INK_HI, fontSize: value.length > 7 ? 34 : 44, fontWeight: 600 }}>
+          {value}
+        </span>
+      )}
+      <span
+        style={
+          value === null
+            ? { color: INK_HI, fontSize: 28, fontWeight: 600, lineHeight: 1.25 }
+            : { color: INK_LO, fontSize: 20, fontWeight: 600, marginTop: 8, lineHeight: 1.3 }
+        }
+      >
         {label}
       </span>
     </div>
@@ -623,7 +635,7 @@ async function tileCard({
   section: string;
   title: string;
   description: string;
-  tiles: { value: string; label: string }[];
+  tiles: Tile[];
   footerLabel: string;
 }) {
   return new ImageResponse(
@@ -700,21 +712,53 @@ async function electionImage(ballot: StateBallot | null, code: string) {
   const description = ISO_DATE.test(ballot.electionDate)
     ? `Election day: ${calendarDate(ballot.electionDate)}`
     : `Election day: ${ballot.electionDate}`;
+  return tileCard({ section, title, description, tiles: ballotTiles(ballot), footerLabel });
+}
+
+// The state ballot card's tiles. A count is shown only where it is one; an
+// empty list is worded as the absence it is (AGENTS.md §7: null is not
+// zero), never "0": a state with no Senate seat up has no Senate race, and
+// a state whose measures haven't been read (MeasureCoverage not_yet_covered
+// or ingest_failed) has measures nobody has counted. Wisconsin's card read
+// "0 Ballot measures" that way (2026-10-21).
+export function ballotTiles(ballot: StateBallot): Tile[] {
   const senate = ballot.senateRaces.length;
   const house = ballot.houseRaces.length;
-  const measures = ballot.measures.length;
-
-  return tileCard({
-    section,
-    title,
-    description,
-    tiles: [
-      { value: String(senate), label: plural(senate, "U.S. Senate race", "U.S. Senate races") },
-      { value: String(house), label: plural(house, "U.S. House race", "U.S. House races") },
-      { value: String(measures), label: plural(measures, "Ballot measure", "Ballot measures") },
-    ],
-    footerLabel,
-  });
+  // On the ballot: a removed or withdrawn measure is shown on the page for
+  // a while, marked, but is not something a voter marks (ballotContests).
+  const listed = ballot.measures.length;
+  const measures = ballot.measures.filter(
+    (m) => m.status !== "removed" && m.status !== "withdrawn"
+  ).length;
+  const confirmedNone = ballot.measureCoverage.status === "confirmed_none";
+  return [
+    senate > 0
+      ? { value: String(senate), label: plural(senate, "U.S. Senate race", "U.S. Senate races") }
+      : {
+          value: null,
+          // nextSenateElection is null only where there is no Senate seat (DC).
+          label:
+            ballot.nextSenateElection === null
+              ? "No U.S. Senate seat"
+              : `No Senate race in ${ballot.cycleYear}`,
+        },
+    house > 0
+      ? { value: String(house), label: plural(house, "U.S. House race", "U.S. House races") }
+      : { value: null, label: "House races not listed yet" },
+    measures > 0
+      ? {
+          value: String(measures),
+          label: plural(measures, "Statewide ballot measure", "Statewide ballot measures"),
+        }
+      : {
+          value: null,
+          label: confirmedNone
+            ? "No statewide measures"
+            : listed > 0 && ballot.measureCoverage.status === "covered"
+              ? "No statewide measures remaining"
+              : "Measures not yet covered",
+        },
+  ];
 }
 
 const CHAMBER_NAME: Record<Chamber, string> = { senate: "Senate", house: "House" };
@@ -1273,7 +1317,9 @@ async function electionArchiveImage(cycle: number) {
     description: "The count as each state reported it, and the ballot it was on. No race called.",
     tiles: [
       { value: String(r.totals.races), label: "Senate and House races" },
-      { value: String(r.totals.measures), label: "Statewide ballot measures" },
+      r.totals.measures > 0
+        ? { value: String(r.totals.measures), label: "Statewide ballot measures" }
+        : { value: null, label: "No statewide measures archived" },
     ],
     footerLabel: "State election offices",
   });

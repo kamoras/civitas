@@ -108,6 +108,28 @@
         101
       ],
       "reason": "Sixteen race updates posted between 17 September and 15 October 2026 linked a story to a race it was not about. Fifteen were attached by a candidate's name alone, with nothing in the story about the race (a member's official business, a court case, talk of a presidential run), and one came from a multi-story newsletter. The four posted since the Atom feeds began are withdrawn from them, and all sixteen stories from their race pages. The fixes are the same as for the entry above (PR #1093)."
+    },
+    {
+      "date": "2026-10-21",
+      "migration": null,
+      "issueIds": [],
+      "publicIds": [],
+      "coverageItems": [],
+      "broadcastPostIds": [
+        12,
+        15,
+        18,
+        49,
+        58,
+        76,
+        96,
+        98,
+        100,
+        123,
+        131,
+        148
+      ],
+      "reason": "Twelve race updates posted between 1 and 21 October 2026 quoted a news photo's caption as if it were the news (for example, a candidate speaking at a gathering months earlier). The captions came from the picture at the top of each article, which the feed reader took for the article's first sentence. It now leaves pictures and their captions out of an article's text, so a post is copied from the article itself (PR #PRNUM). The twelve posts are withdrawn from the Atom feeds; the stories stay on their race pages."
     }
   ]
 }

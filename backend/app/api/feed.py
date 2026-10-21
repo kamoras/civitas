@@ -32,6 +32,7 @@ from app import entity_feeds
 from app.api.agencies import children_of, descendants
 from app.api.response_helpers import CACHE_TTL_LIST_S, cached_json
 from app.broadcast import FEEDS, KINDS, SITE_URL, not_withdrawn
+from app.site_assets import icon_url, versioned_card
 from app.database import get_db
 from app.entity_feeds import EntityFeed
 from app.member_ids import resolve_member_id
@@ -110,8 +111,8 @@ def _picture(post: BroadcastPost) -> tuple[str | None, str | None]:
     carries one (a trend post's record image, the one Bluesky shows),
     otherwise the linked page's card."""
     if post.image_url:
-        return post.image_url, post.alt_text
-    return post.card_image, post.card_image_alt
+        return versioned_card(post.image_url), post.alt_text
+    return versioned_card(post.card_image), post.card_image_alt
 
 
 def _content_html(post: BroadcastPost) -> str:
@@ -146,7 +147,7 @@ def render_atom(*, title: str, subtitle: str, path: str, posts: list[BroadcastPo
     _sub(author, "uri", SITE_URL)
     # A PNG, not the SVG favicon: Discord and most feed readers don't draw
     # SVG, and a feed reader or bot shows this beside every entry.
-    _sub(feed, "icon", f"{SITE_URL}/apple-icon.png")
+    _sub(feed, "icon", icon_url())
     for post in posts:
         entry = _sub(feed, "entry")
         # A tag URI on the row id, which is never reused: stable across
@@ -199,7 +200,7 @@ def render_entity_atom(feed: EntityFeed, path: str) -> bytes:
     author = _sub(root, "author")
     _sub(author, "name", "Civitas Research")
     _sub(author, "uri", SITE_URL)
-    _sub(root, "icon", f"{SITE_URL}/apple-icon.png")
+    _sub(root, "icon", icon_url())
     for e in feed.entries:
         url = f"{SITE_URL}{e.url}"
         entry = _sub(root, "entry")

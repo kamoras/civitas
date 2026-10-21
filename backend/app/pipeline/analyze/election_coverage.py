@@ -342,13 +342,24 @@ def _to_naive_utc(dt: datetime | None) -> datetime | None:
     return dt
 
 
-def _already_ingested(db: Session, race_id: str, url: str) -> bool:
+def _already_ingested(db: Session, race_id: str, url: str) -> RaceCoverageItem | None:
+    """The stored item for this race and URL, if any."""
     return (
-        db.query(RaceCoverageItem.id)
+        db.query(RaceCoverageItem)
         .filter(RaceCoverageItem.race_id == race_id, RaceCoverageItem.url == url)
         .first()
-        is not None
     )
+
+
+def _refresh_summary(item: RaceCoverageItem, summary: str | None) -> None:
+    """An article read again keeps the source's text as it reads now: a
+    stored summary that differs (the publisher edited it, or the feed
+    parser's reading of it changed: a photo caption was read as the first
+    sentence until 2026-10-21, news_feeds._FIGURE_ELEMENTS) is replaced and
+    scored again. Only while the article is still in its feed."""
+    if summary and item.summary != summary:
+        item.summary = summary
+        item.relevance = None
 
 
 def _title_key(title: str | None) -> str:
@@ -551,7 +562,11 @@ def _store_if_new(
     only because Bluesky search had been returning nothing at all.
     """
     url_key = ("url", race_id, fields["url"])
-    if url_key in seen or _already_ingested(db, race_id, fields["url"]):
+    if url_key in seen:
+        return False
+    stored = _already_ingested(db, race_id, fields["url"])
+    if stored is not None:
+        _refresh_summary(stored, fields.get("summary"))
         return False
     # Same story, different outlet — see _drop_syndicated_reprints. `seen`
     # is primed with every stored (race, title) before the pass starts,
