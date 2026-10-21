@@ -148,16 +148,62 @@ describe("the ballot page", () => {
     expect(grid.getByRole("heading", { level: 2, name: "Contests" })).toBeInTheDocument();
     const titles = grid.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
     expect(titles[0]).toBe("U.S. Representative");
-    expect(titles.at(-1)).toBe("What a statewide page leaves out");
-    // Listed in the phone's "On this page" bar, which needs the id and the
-    // label on one element.
-    expect(grid.getByRole("heading", { name: "What a statewide page leaves out" })).toHaveAttribute(
-      "id",
-      "not-on-this-page"
-    );
-    // The kicker says the column and the ballot's own instruction.
-    expect(grid.getAllByText("Federal offices · Vote for one").length).toBeGreaterThan(0);
+    expect(titles.at(-1)).toBe("News coverage");
+    // What the page leaves out follows, one line, listed in the phone's "On
+    // this page" bar (which needs the id and the label on one element).
+    const omits = document.getElementById("not-on-this-page")!;
+    expect(omits).toHaveAttribute("data-section", "Not on this page");
+    expect(omits.querySelector("details")).toBeTruthy();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("keeps a contest box compact: names in view, money and commands behind More", () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          houseRaces: [
+            houseRace({
+              candidates: [candidate({ id: "d", name: "A Dem", party: "DEM", contributions: 5e5 })],
+            }),
+          ],
+        })}
+      />
+    );
+    const box = screen
+      .getByRole("heading", { name: "U.S. Representative" })
+      .closest("article") as HTMLElement;
+    const more = box.querySelector("details")!;
+    expect(more.open).toBe(false);
+    // The name is in view, outside the disclosure; the money is inside it.
+    const names = within(box).getAllByText("A Dem");
+    expect(names.some((n) => !more.contains(n))).toBe(true);
+    expect(more).toHaveTextContent(/raised/);
+    expect(within(more).getByRole("button", { name: /Research this race/ })).toBeTruthy();
+  });
+
+  it("says what the lists are in one line each above the contests, the rest behind More", () => {
+    render(
+      <StateBallotClient
+        ballot={ballot({
+          ballotBasis: {
+            basis: "nominees",
+            primaryPassed: true,
+            daysSincePrimary: 70,
+            supersededByPrimary: false,
+          },
+          rankedChoice: true,
+        })}
+      />
+    );
+    for (const id of ["ballot-nominees", "ranked-choice"]) {
+      const note = screen.getByTestId(id);
+      expect(note.tagName).toBe("DETAILS");
+      expect((note as HTMLDetailsElement).open).toBe(false);
+      expect(
+        note.compareDocumentPosition(screen.getByTestId("ballot-contests")) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+    }
   });
 
   it("works on an older API without boxes: each contest keeps its own label", () => {
@@ -203,13 +249,6 @@ describe("the ballot page", () => {
             contestCount: 6,
             summary: [
               {
-                key: "contests",
-                kicker: "The ballot",
-                title: "6 contests on this page",
-                dek: "Each one opens below.",
-                figure: stat(6, "contests"),
-              },
-              {
                 key: "candidates",
                 kicker: "Who is on it",
                 title: "10 federal candidates, 4 with a voting record in Congress",
@@ -232,7 +271,11 @@ describe("the ballot page", () => {
       />
     );
     const grid = within(screen.getByRole("region", { name: "This ballot" }));
-    expect(grid.getByRole("img", { name: "6 contests." })).toBeInTheDocument();
+    expect(grid.getByRole("img", { name: "10 candidates." })).toBeInTheDocument();
+    // Each figure's sentence is behind "More".
+    expect(
+      grid.getByText("Nominees from the August 11, 2026 primary results.").closest("details")
+    ).toBeTruthy();
     expect(grid.getByRole("img", { name: "R+5 statewide lean." })).toBeInTheDocument();
     // The lists' basis is said above the ballot; the figures follow the
     // contests, so the ballot stays near the top.
@@ -297,7 +340,7 @@ describe("the ballot page", () => {
       />
     );
     const box = screen.getByTestId("ballot-contests");
-    expect(within(box).getByText("Shannon Bly")).toBeInTheDocument();
+    expect(within(box).getAllByText("Shannon Bly").length).toBeGreaterThan(0);
   });
 
   it("leads with the next voter deadline in one line, the full calendar after the ballot", () => {
@@ -341,9 +384,8 @@ describe("the ballot page", () => {
       />
     );
     const lead = screen.getByTestId("vote-steps-lead");
-    expect(
-      within(lead).getByRole("heading", { name: "Online registration closes Oct 26" })
-    ).toBeInTheDocument();
+    expect(lead).toHaveTextContent("Next deadline: Online registration closes Oct 26.");
+    expect(within(lead).getByRole("img", { name: "6 days left." })).toBeInTheDocument();
     expect(within(lead).getByRole("link", { name: /Every voter deadline/ })).toHaveAttribute(
       "href",
       "#voter-deadlines"
@@ -628,14 +670,14 @@ describe("U.S. Representative", () => {
   it("marks a sitting member on a single new-lines seat's ballot box the same way", () => {
     render(<StateBallotClient ballot={ballot({ newDistrictLines: true })} />);
     const box = screen.getByTestId("ballot-contests");
-    expect(within(box).getByText("Sitting member")).toBeInTheDocument();
+    expect(within(box).getAllByText("Sitting member").length).toBeGreaterThan(0);
     expect(within(box).queryByText("Incumbent")).not.toBeInTheDocument();
   });
 
   it("keeps INCUMBENT on a state's old lines", () => {
     render(<StateBallotClient ballot={ballot()} />);
     const box = screen.getByTestId("ballot-contests");
-    expect(within(box).getByText("Incumbent")).toBeInTheDocument();
+    expect(within(box).getAllByText("Incumbent").length).toBeGreaterThan(0);
   });
 
   it("opens a picked district's research with its full county list", async () => {
@@ -1802,7 +1844,7 @@ describe("ballot measures", () => {
   it("opens the drawer at a measure from its row in the ballot box, focus on its heading", async () => {
     render(<StateBallotClient ballot={threeMeasures()} />);
     const box = within(screen.getByTestId("ballot-contests"));
-    await userEvent.click(box.getByRole("button", { name: /^3\s*Issue 3$/ }));
+    await userEvent.click(box.getByRole("button", { name: "3: Issue 3" }));
     const drawer = within(screen.getByRole("dialog"));
     expect(drawer.getByRole("heading", { name: "Statewide ballot measures" })).toBeInTheDocument();
     expect(document.activeElement).toBe(drawer.getByRole("heading", { name: "3" }));
@@ -1842,8 +1884,8 @@ describe("state offices not loaded", () => {
   it("fills the State column with a placeholder rather than leaving it empty", async () => {
     render(<StateBallotClient ballot={ballot()} />);
     const box = screen.getByTestId("ballot-contests");
-    // The column title and the placeholder contest share the words.
-    expect(within(box).getAllByText("State offices")).toHaveLength(2);
+    // The placeholder contest, titled for the offices it stands for.
+    expect(within(box).getAllByText("State offices")).toHaveLength(1);
     const drawer = await openContest(/State offices/);
     expect(drawer.getByText(/does not have OH's own offices yet/)).toBeInTheDocument();
     expect(drawer.getByText("not")).toBeInTheDocument(); // "This does not mean there are none"
@@ -1862,10 +1904,10 @@ describe("state offices not loaded", () => {
         })}
       />
     );
-    // Only the column title: no placeholder contest.
+    // No placeholder contest.
     expect(
-      within(screen.getByTestId("ballot-contests")).getAllByText("State offices")
-    ).toHaveLength(1);
+      within(screen.getByTestId("ballot-contests")).queryAllByText("State offices")
+    ).toHaveLength(0);
   });
 });
 

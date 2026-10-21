@@ -721,9 +721,9 @@ export interface BallotBoxLine {
 }
 
 export interface BallotBoxes {
-  /** The ballot at a glance: contests, candidates, the lean, electoral votes. */
+  /** The ballot at a glance: candidates, the lean, electoral votes. */
   summary: (BallotBoxLine & {
-    key: "contests" | "candidates" | "lean" | "electoral";
+    key: "candidates" | "lean" | "electoral";
     kicker: string;
     title: string;
   })[];

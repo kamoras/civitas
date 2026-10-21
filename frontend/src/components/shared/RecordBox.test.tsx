@@ -135,6 +135,21 @@ describe("RecordBox", () => {
     expect(await violations(container)).toEqual([]);
   });
 
+  it("draws a compact box with no kicker, tighter, with a narrower figure column", () => {
+    render(
+      <RecordBox
+        compact
+        title="Statewide offices"
+        dek="5 offices on the ballot."
+        figure={{ type: "stat", value: 5, caption: "offices" }}
+      />
+    );
+    const box = screen.getByRole("heading", { name: "Statewide offices" }).closest("article")!;
+    expect(box.className).toContain("py-2.5");
+    expect(box.querySelector(".grid")!.className).toContain("_5.5rem]");
+    expect(box.textContent).toBe("Statewide offices5 offices on the ballot.5offices");
+  });
+
   it("draws `below` across the box, after the figure, not in the text's column", () => {
     render(
       <RecordBox

@@ -2883,8 +2883,16 @@ and the figure (a race's candidates, a row of commands; `children` share
 the text's narrower column beside a figure), a stat's `text` where the
 backend writes the value ("D+8" for a lean of -8), a countdown's `caption`
 for a date that isn't a comment period (`""` when the title says what
-closes; no period, no bar), and `labelLevel` / `level` for a grid under a
-section's own heading. On a ballot page the box lines are counts and
+closes; no period, no bar), `labelLevel` / `level` for a grid under a
+section's own heading, and `compact` (no kicker needed, tighter, a narrower
+figure column) for boxes that are a list a reader scans, such as the
+ballot's contests, whose money and commands sit behind "More". A box page
+must not push the thing a reader came for further down than the page it
+replaced: measure the first contest (or record) and the page's length
+before and after on a phone, as the ballot page's README entry does. A
+note that must come before the content (§7's "what these lists are") is
+one line with the rest behind "More" (`components/elections/NoteLine.tsx`),
+not a paragraph or a box. On a ballot page the box lines are counts and
 labels only: what a measure does, what yes or no means and every deadline
 stay quoted where §7 puts them, never summarised in a box.
 

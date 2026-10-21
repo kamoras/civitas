@@ -50,16 +50,11 @@ describe("VoteStepsLead", () => {
       <VoteStepsLead calendar={calendar({ next: d, items: [d] })} steps={[step("register")]} />
     );
     const lead = screen.getByTestId("vote-steps-lead");
-    // A box: the kicker marks a deadline a day off, the title is the
-    // calendar's sentence, the rule follows with its publisher, and the
-    // days left are the figure.
-    expect(within(lead).getByText("Next deadline · 1 day left")).toBeInTheDocument();
-    expect(
-      within(lead).getByRole("heading", { name: "Online registration closes Oct 21" })
-    ).toBeInTheDocument();
-    expect(lead).toHaveTextContent("From Secretary of State");
-    expect(within(lead).getByText("8 days before the election.").closest("details")).toBeTruthy();
-    expect(within(lead).getByRole("img", { name: "1 day left." })).toBeInTheDocument();
+    // One line (#1160's form): the calendar's sentence, the days left as a
+    // figure beside it, the row marked when the deadline is a day off.
+    expect(lead).toHaveTextContent("Next deadline: Online registration closes Oct 21.");
+    const figure = within(lead).getByRole("img", { name: "1 day left." });
+    expect(figure.closest("div.border-l-signal-orange")).toBeTruthy();
     expect(within(lead).getByRole("link", { name: /step by step/ })).toHaveAttribute(
       "href",
       "#vote-steps"

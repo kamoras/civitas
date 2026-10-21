@@ -26,8 +26,9 @@ import TownContestCard from "@/components/elections/TownContestCard";
 import FollowFeed from "@/components/shared/FollowFeed";
 import BoxGrid from "@/components/shared/BoxGrid";
 import RecordBox from "@/components/shared/RecordBox";
+import NoteLine from "@/components/elections/NoteLine";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
-import BallotRaceRows from "@/components/elections/ballot/BallotRaceRows";
+import BallotRaceRows, { CandidateNames } from "@/components/elections/ballot/BallotRaceRows";
 import ContestDrawer from "@/components/elections/ballot/ContestDrawer";
 import RaceResearch from "@/components/elections/ballot/RaceResearch";
 import StateResults from "@/components/elections/results/StateResults";
@@ -578,6 +579,21 @@ const OPERATOR_NONE_TEXT = (state: string) =>
   `operator's determination, made after checking the state's own announcements when its published ` +
   `list stopped being available, not a list published by the state.`;
 /** The shareable measures box's short form of OPERATOR_NONE_TEXT. */
+/** A measure's button in its box: the state's number where it is a short
+ * one ("Prop 1", "IL26-001"), else its place on the ballot. North
+ * Carolina numbers its amendments with their whole caption, three lines of
+ * button each. The accessible name starts with what the button shows
+ * (WCAG 2.5.3), then the number and title in full. */
+function chipLabel(number: string | null | undefined, i: number): string {
+  return number && number.length <= 14 ? number : String(i + 1);
+}
+
+function measureChipName(number: string | null | undefined, title: string, i: number): string {
+  const full = [number, title].filter(Boolean).join(": ");
+  const chip = chipLabel(number, i);
+  return chip === number ? full : `${chip}. ${full}`;
+}
+
 const OPERATOR_NONE_SHORT =
   "None remain as far as Civitas can tell: our determination, not a list from the state.";
 
@@ -1377,22 +1393,71 @@ function ContestTitle({ title, onClick }: { title: string; onClick: () => void }
   );
 }
 
-const COLUMN_TITLES: Record<BallotContest["column"], string> = {
-  federal: "Federal offices",
-  state: "State offices",
-  local: "Measures · Local",
-};
+/** Every statewide office and its nominees, a body's seats under one
+ * heading saying how it is elected (listed flat, New Hampshire's five
+ * council districts read as five offices every voter marks). */
+function StatewideList({ ballot }: { ballot: StateBallot }) {
+  return (
+    <ul>
+      {groupStatewideRaces(ballot.statewideRaces).map((g) =>
+        g.race ? (
+          <li key={g.key} className="border-b border-white/[0.09] py-2 last:border-b-0">
+            <span className="block text-[13px] font-semibold text-ink-hi">
+              {g.race.label}
+              {termPhrase(g.race.termYears) && (
+                <span className="font-normal text-ink-lo"> · {termPhrase(g.race.termYears)}</span>
+              )}
+            </span>
+            <span className="flex flex-wrap gap-x-3 text-sm">
+              {g.race.nominees.map((n) => (
+                <NomineeName key={`${n.party}-${n.name}`} nominee={n} />
+              ))}
+            </span>
+          </li>
+        ) : (
+          // A body's seats under one heading, saying how it is
+          // elected: listed flat, New Hampshire's five council
+          // districts read as five offices every voter marks.
+          <li key={g.key} className="border-b border-white/[0.09] py-2 last:border-b-0">
+            <span className="block text-[13px] font-semibold text-ink-hi">
+              {g.seats![0].officeLabel || g.seats![0].label}
+              <span className="font-normal text-ink-lo">
+                {" "}
+                · {g.seats!.length} {g.seats!.length === 1 ? "seat" : "seats"}
+                {termPhrase(g.seats![0].termYears) && ` · ${termPhrase(g.seats![0].termYears)}`}
+              </span>
+            </span>
+            {g.seats![0].electedBy === "district" && (
+              <span className="block text-[13px] text-ink-lo">
+                Each voter votes in their district&apos;s seat only
+              </span>
+            )}
+            {g.seats![0].electedBy === "statewide" && (
+              <span className="block text-[13px] text-ink-lo">Every voter votes for each seat</span>
+            )}
+            {g.seats!.map((seat) => (
+              <span key={seat.office} className="flex flex-wrap items-baseline gap-x-3 text-sm">
+                <span className="font-mono text-[11px] text-ink-lo">
+                  {/^\d/.test(seat.seat ?? "") ? `District ${seat.seat}` : seat.seat}
+                </span>
+                {seat.nominees.map((n) => (
+                  <NomineeName key={`${n.party}-${n.name}`} nominee={n} />
+                ))}
+              </span>
+            ))}
+          </li>
+        )
+      )}
+    </ul>
+  );
+}
 
-/** A box's kicker where its column's name doesn't say what it is. */
-const KICKER: Partial<Record<BallotContest["kind"], string>> = {
-  measures: "Measures",
-  local: "Local",
-  news: "Coverage",
-};
-
-/** One contest as a record box: the office, the backend's line and count
- * for it (services/ballot_boxes.py; the contest's own label from an older
- * API), what a reader needs to pick it, and its research one tap away. */
+/** One contest as a compact record box: the office (a button that opens
+ * its research), the backend's line and count for it
+ * (services/ballot_boxes.py; the contest's own label from an older API),
+ * and the names a reader looks for. Money, commands and details are behind
+ * the box's "More", so the whole ballot fits in the screens the old index
+ * took. */
 function ContestCard({
   contest,
   ballot,
@@ -1415,89 +1480,74 @@ function ContestCard({
   const shareable = contest.kind !== "house" || singleHouse;
   const shareId = shareable ? `contest-${contest.key}` : undefined;
   const shareAnchor = contestHash(contest, singleHouse ? ballot.houseRaces[0].id : null).slice(1);
-  const box = (children: ReactNode, more: { label: string; children: ReactNode } | null = null) => (
+  const box = (
+    visible: ReactNode,
+    more: { label: string; details?: ReactNode; open: string } | null = null
+  ) => (
+    // No kicker: the office is the title, and the ballot's instruction
+    // ("Vote for one") heads the contest's drawer, which also shares it.
     <RecordBox
+      compact
       level={level}
-      kicker={[KICKER[contest.kind] ?? COLUMN_TITLES[contest.column], contest.instruction]
-        .filter(Boolean)
-        .join(" · ")}
       title={<ContestTitle title={contest.title} onClick={open} />}
       dek={line?.dek ?? contest.subtitle}
       figure={line?.figure ?? null}
       share={shareId}
-      more={more}
-      below={
-        // Across the box, under the line and the count: rows and lists
-        // take their own line, the commands share one.
-        <div className="flex flex-wrap items-center gap-3">
-          {children}
-          {shareId && (
-            <span {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
-              <ShareSectionButton label={contest.title} anchor={shareAnchor} />
-            </span>
-          )}
-        </div>
+      below={visible || undefined}
+      more={
+        more
+          ? {
+              label: more.label,
+              children: (
+                <div className="flex flex-col items-start gap-3">
+                  {more.details && <div className="w-full">{more.details}</div>}
+                  <div className="flex flex-wrap items-center gap-3">
+                    <OpenButton label={more.open} onClick={open} />
+                    {shareId && (
+                      <span {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
+                        <ShareSectionButton label={contest.title} anchor={shareAnchor} />
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ),
+            }
+          : null
       }
     />
   );
+  const lists = "w-full text-[13px] text-ink-lo";
 
   switch (contest.kind) {
-    case "senate": {
-      const race = contest.race!;
-      return box(
-        <>
-          <div className="w-full">
-            <BallotRaceRows
-              race={race}
-              newLines={ballot.newDistrictLines}
-              resultsMode={resultsMode}
-            />
-          </div>
-          <OpenButton label="Research this race" onClick={open} />
-        </>
-      );
-    }
+    case "senate":
     case "house": {
-      if (singleHouse) {
+      const race =
+        contest.kind === "senate" ? contest.race! : singleHouse ? ballot.houseRaces[0] : null;
+      if (race) {
         return box(
-          <>
-            <div className="w-full">
+          <CandidateNames
+            race={race}
+            newLines={ballot.newDistrictLines}
+            resultsMode={resultsMode}
+          />,
+          {
+            label: "money raised, and the research",
+            open: "Research this race",
+            details: (
               <BallotRaceRows
-                race={ballot.houseRaces[0]}
+                race={race}
                 newLines={ballot.newDistrictLines}
                 resultsMode={resultsMode}
               />
-            </div>
-            <OpenButton
-              label="Research this race"
-              onClick={() => onOpen("house", ballot.houseRaces[0].id)}
-            />
-          </>
+            ),
+          }
         );
       }
-      return box(
-        <>
-          {/* First, not the numbers: most voters don't know their
-              district number. */}
-          <OpenButton
-            label="Don't know your district? Map, town or county"
-            onClick={() => onOpen("house", null)}
-          />
-          {/* On new lines the first question is whether the reader's
-              district changed; the drawer answers per district, this
-              page answers for the whole map. */}
-          {ballot.houseRaces.some((r) => r.redistricting) && (
-            <Link
-              href={redistrictingHref(ballot.state)}
-              className={`inline-flex min-h-6 items-center text-sm ${INLINE_LINK}`}
-            >
-              New lines this year: what changed →
-            </Link>
-          )}
-        </>,
-        {
-          label: "pick a district by number",
-          children: (
+      return box(null, {
+        label: "pick a district by number",
+        open: "Don't know your district? Map, town or county",
+        details: (
+          <>
             <div className="grid grid-cols-[repeat(auto-fill,minmax(2.75rem,1fr))] gap-1.5">
               {ballot.houseRaces.map((r) => (
                 <button
@@ -1511,85 +1561,38 @@ function ContestCard({
                 </button>
               ))}
             </div>
-          ),
-        }
-      );
+            {/* On new lines the first question is whether the reader's
+                district changed; the drawer answers per district, this
+                page answers for the whole map. */}
+            {ballot.houseRaces.some((r) => r.redistricting) && (
+              <Link
+                href={redistrictingHref(ballot.state)}
+                className={`mt-3 inline-flex min-h-6 items-center text-sm ${INLINE_LINK}`}
+              >
+                New lines this year: what changed →
+              </Link>
+            )}
+          </>
+        ),
+      });
     }
     case "statewide":
       return box(
-        ballot.statewideRaces.length > 0 && <OpenButton label="Source and notes" onClick={open} />,
+        null,
         ballot.statewideRaces.length === 0
           ? null
           : {
               label: "every office and its nominees",
-              children: (
-                <ul>
-                  {groupStatewideRaces(ballot.statewideRaces).map((g) =>
-                    g.race ? (
-                      <li key={g.key} className="border-b border-white/[0.09] py-2 last:border-b-0">
-                        <span className="block text-[13px] font-semibold text-ink-hi">
-                          {g.race.label}
-                          {termPhrase(g.race.termYears) && (
-                            <span className="font-normal text-ink-lo">
-                              {" "}
-                              · {termPhrase(g.race.termYears)}
-                            </span>
-                          )}
-                        </span>
-                        <span className="flex flex-wrap gap-x-3 text-sm">
-                          {g.race.nominees.map((n) => (
-                            <NomineeName key={`${n.party}-${n.name}`} nominee={n} />
-                          ))}
-                        </span>
-                      </li>
-                    ) : (
-                      // A body's seats under one heading, saying how it is
-                      // elected: listed flat, New Hampshire's five council
-                      // districts read as five offices every voter marks.
-                      <li key={g.key} className="border-b border-white/[0.09] py-2 last:border-b-0">
-                        <span className="block text-[13px] font-semibold text-ink-hi">
-                          {g.seats![0].officeLabel || g.seats![0].label}
-                          <span className="font-normal text-ink-lo">
-                            {" "}
-                            · {g.seats!.length} {g.seats!.length === 1 ? "seat" : "seats"}
-                            {termPhrase(g.seats![0].termYears) &&
-                              ` · ${termPhrase(g.seats![0].termYears)}`}
-                          </span>
-                        </span>
-                        {g.seats![0].electedBy === "district" && (
-                          <span className="block text-[13px] text-ink-lo">
-                            Each voter votes in their district&apos;s seat only
-                          </span>
-                        )}
-                        {g.seats![0].electedBy === "statewide" && (
-                          <span className="block text-[13px] text-ink-lo">
-                            Every voter votes for each seat
-                          </span>
-                        )}
-                        {g.seats!.map((seat) => (
-                          <span
-                            key={seat.office}
-                            className="flex flex-wrap items-baseline gap-x-3 text-sm"
-                          >
-                            <span className="font-mono text-[11px] text-ink-lo">
-                              {/^\d/.test(seat.seat ?? "") ? `District ${seat.seat}` : seat.seat}
-                            </span>
-                            {seat.nominees.map((n) => (
-                              <NomineeName key={`${n.party}-${n.name}`} nominee={n} />
-                            ))}
-                          </span>
-                        ))}
-                      </li>
-                    )
-                  )}
-                </ul>
-              ),
+              open: "Source and notes",
+              details: <StatewideList ballot={ballot} />,
             }
       );
     case "stateleg":
-      return box(
-        <>
-          <ul className="w-full text-[13px] text-ink-lo">
+      return box(null, {
+        label: "each chamber",
+        open: "Find your seats by town",
+        details: (
+          <ul className={lists}>
             {ballot.stateLegRaces.map((c) => (
               <li key={c.chamber}>
                 <span className="font-semibold text-ink-hi">{c.label}</span> · {c.districts.length}{" "}
@@ -1598,87 +1601,105 @@ function ContestCard({
               </li>
             ))}
           </ul>
-          <OpenButton label="Find your seats by town" onClick={open} />
-        </>
-      );
+        ),
+      });
     case "judicial":
       return box(
-        ballot.judicialRaces.length > 0 && (
-          <>
-            <ul className="w-full text-[13px] text-ink-lo">
-              {ballot.judicialRaces.map((c) => (
-                <li key={c.court}>
-                  <span className="font-semibold text-ink-hi">{c.label}</span> · {c.seats.length}{" "}
-                  {c.seats.length === 1 ? "seat" : "seats"}
-                  {termPhrase(c.termYears) && ` · ${termPhrase(c.termYears)}`}
-                </li>
-              ))}
-            </ul>
-            <OpenButton label="See the candidates" onClick={open} />
-          </>
-        )
+        null,
+        ballot.judicialRaces.length === 0
+          ? null
+          : {
+              label: "each court",
+              open: "See the candidates",
+              details: (
+                <ul className={lists}>
+                  {ballot.judicialRaces.map((c) => (
+                    <li key={c.court}>
+                      <span className="font-semibold text-ink-hi">{c.label}</span> ·{" "}
+                      {c.seats.length} {c.seats.length === 1 ? "seat" : "seats"}
+                      {termPhrase(c.termYears) && ` · ${termPhrase(c.termYears)}`}
+                    </li>
+                  ))}
+                </ul>
+              ),
+            }
       );
     case "stateNone":
-      return box(<OpenButton label="Details" onClick={open} />);
-    case "measures":
+      return box(null);
+    case "measures": {
+      const stale =
+        ballot.measures.length > 0 &&
+        (!!ballot.measureCoverage.unreadReason ||
+          (ballot.measureCoverage.status !== "covered" &&
+            ballot.measureCoverage.status !== "confirmed_none"));
+      const operator =
+        ballot.measureCoverage.status === "confirmed_none" &&
+        ballot.measureCoverage.basis === "operator";
       return box(
-        <>
-          {/* This box is shared as an image on its own, so it carries the
-              drawer's two caveats in short: a list the latest read did not
-              confirm is not presented as current, and a measure no longer
-              on the ballot is not listed as if it were. */}
-          {ballot.measures.length > 0 &&
-            (ballot.measureCoverage.unreadReason ||
-              (ballot.measureCoverage.status !== "covered" &&
-                ballot.measureCoverage.status !== "confirmed_none")) && (
-              <p className="w-full text-[13px] text-signal-amber">
+        (stale || operator || ballot.measures.length > 0) && (
+          <>
+            {/* This box is shared as an image on its own, so it carries the
+                drawer's two caveats in short: a list the latest read did not
+                confirm is not presented as current, and a measure no longer
+                on the ballot is not listed as if it were. */}
+            {stale && (
+              <p className="mb-2 text-[13px] text-signal-amber">
                 From our last successful read: may be out of date.
               </p>
             )}
-          {/* An operator's accepted absence marks every row removed; say
-              whose determination that is, or the image reads as the state
-              having struck them. */}
-          {ballot.measureCoverage.status === "confirmed_none" &&
-            ballot.measureCoverage.basis === "operator" && (
-              <p className="w-full text-[13px] text-signal-amber">{OPERATOR_NONE_SHORT}</p>
+            {/* An operator's accepted absence marks every row removed; say
+                whose determination that is, or the image reads as the state
+                having struck them. */}
+            {operator && (
+              <p className="mb-2 text-[13px] text-signal-amber">{OPERATOR_NONE_SHORT}</p>
             )}
-          {/* One button per measure, opening the drawer at it: California's
-              fourteen run to ten screens of verbatim text, and the ninth
-              was a click and seven screens of scrolling away. */}
-          {ballot.measures.length > 0 && (
-            <ul aria-label="Open a measure" className="w-full">
-              {ballot.measures.map((m) => (
-                <li key={m.id} className="border-b border-white/[0.09] last:border-b-0">
-                  <button
-                    type="button"
-                    data-open-measure={m.id}
-                    onClick={() => onOpen(contest.key, null, m.id)}
-                    className="min-h-[44px] w-full py-2 text-left text-[13px] text-ink-hi hover:text-phos"
-                  >
-                    <span className="mr-2 font-mono text-xs text-ink-lo">{m.number}</span>
-                    {m.title}
-                    {(m.status === "removed" || m.status === "withdrawn") && (
-                      <span className="ml-2 font-mono text-[11px] text-signal-red">{m.status}</span>
-                    )}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-          <OpenButton
-            label={ballot.measures.length > 0 ? "Read the measures" : "Details"}
-            onClick={open}
-          />
-        </>
+            {/* One button per measure, opening the drawer at it: California's
+                fourteen run to ten screens of verbatim text, and the ninth
+                was a click and seven screens of scrolling away. The number
+                is shown, the title is its name. */}
+            {ballot.measures.length > 0 && (
+              <ul aria-label="Open a measure" className="flex flex-wrap gap-1.5">
+                {ballot.measures.map((m, i) => (
+                  <li key={m.id} className="max-w-full">
+                    <button
+                      type="button"
+                      data-open-measure={m.id}
+                      onClick={() => onOpen(contest.key, null, m.id)}
+                      aria-label={measureChipName(m.number, m.title, i)}
+                      className="min-h-[44px] min-w-[44px] max-w-[min(16rem,100%)] truncate border border-white/25 px-2 font-mono text-sm text-ink-hi hover:border-phos hover:text-phos"
+                    >
+                      {chipLabel(m.number, i)}
+                      {(m.status === "removed" || m.status === "withdrawn") && (
+                        <span className="ml-1 text-[11px] text-signal-red">{m.status}</span>
+                      )}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
+        ),
+        ballot.measures.length > 0
+          ? {
+              label: "each measure's title",
+              open: "Read the measures",
+              details: (
+                <ul className={lists}>
+                  {ballot.measures.map((m) => (
+                    <li key={m.id}>
+                      <span className="mr-2 font-mono text-xs">{m.number}</span>
+                      <span className="text-ink-hi">{m.title}</span>
+                    </li>
+                  ))}
+                </ul>
+              ),
+            }
+          : null
       );
+    }
     case "local":
-      return box(<OpenButton label="Choose your town" onClick={open} />);
     case "news":
-      return box(
-        ballot.coverage.length > 0 && (
-          <OpenButton label={`Read ${ballot.coverage.length} stories`} onClick={open} />
-        )
-      );
+      return box(null);
   }
 }
 
@@ -1688,9 +1709,9 @@ function ContestCard({
 function NoSenateBox({ ballot, level }: { ballot: StateBallot; level: 3 | 4 }) {
   return (
     <RecordBox
+      compact
       level={level}
-      kicker="Federal offices · Not on this ballot"
-      title="U.S. Senator"
+      title="U.S. Senator: not on this ballot"
       dek={
         ballot.boxes?.contests["no-senate"]?.dek ??
         `Neither of ${ballot.state}'s Senate seats is up for election in ${ballot.cycleYear}. This state's next regular Senate election is in ${ballot.nextSenateElection}.`
@@ -2097,51 +2118,74 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                     level={contestLevel}
                   />
                 ))}
-                <RecordBox
-                  level={contestLevel}
-                  // The "On this page" bar finds a heading by its id.
-                  headingAttrs={{ id: "not-on-this-page", ...onThisPage("Not on this page") }}
-                  kicker="Not on this page"
-                  title="What a statewide page leaves out"
-                  dek="Ballots are printed per precinct, so some of what you will vote on cannot be shown here. Your sample ballot lists it."
-                >
-                  <ul className="list-disc pl-5 text-[13px] text-ink-lo">
-                    {ballot.omits.map((item) => (
-                      <li key={item}>{item}</li>
-                    ))}
-                  </ul>
-                </RecordBox>
               </BoxGrid>
             </div>
 
-            {/* The ballot's shape, a box per figure, after the contests so
+            {/* What a statewide page leaves out (the API's `omits`), one line
+                with the list behind "More". */}
+            <div id="not-on-this-page" {...onThisPage("Not on this page")} className="mt-3">
+              <NoteLine lead="Not on this page: what your sample ballot lists beyond the statewide contests.">
+                <ul className="list-disc pl-5">
+                  {ballot.omits.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </NoteLine>
+            </div>
+
+            {/* The ballot's shape in one row of figures, after the contests so
               the ballot stays near the top (the next deadline's countdown
-              is the page's first figure). */}
+              is the page's first figure). Each figure's sentence, from the
+              backend, is behind "More". */}
             {summary.length > 0 && (
-              <BoxGrid
-                columns={summary.length > 3 ? 2 : 3}
-                label="This ballot"
-                labelId="this-ballot"
-                labelLevel={resultsFraming ? 3 : 2}
-                className="mt-8"
+              <section
+                aria-label="This ballot"
+                className="mt-4 flex flex-wrap items-baseline gap-x-5 gap-y-1 border-t-2 border-ink-hi pt-2"
               >
-                {summary.map((b) => (
-                  <RecordBox
-                    key={b.key}
-                    level={contestLevel}
-                    kicker={b.kicker}
-                    title={b.title}
-                    href={b.key === "electoral" ? "/elections#president" : undefined}
-                    dek={b.dek ?? undefined}
-                    figure={b.figure}
-                    more={
-                      b.key === "lean"
-                        ? { label: "how the lean is measured", children: <PviMethodologyNote /> }
-                        : null
-                    }
-                  />
-                ))}
-              </BoxGrid>
+                {summary.map((b) =>
+                  b.figure?.type === "stat" ? (
+                    <span
+                      key={b.key}
+                      role="img"
+                      aria-label={`${b.figure.text ?? b.figure.value.toLocaleString("en-US")} ${b.figure.caption}.`}
+                      className="min-w-0 max-w-full"
+                    >
+                      <span className="font-display text-2xl font-semibold text-ink-hi">
+                        {b.figure.text ?? b.figure.value.toLocaleString("en-US")}
+                      </span>{" "}
+                      <span className="text-sm text-ink-lo">{b.figure.caption}</span>
+                    </span>
+                  ) : null
+                )}
+                <details className="group/more text-sm open:basis-full">
+                  <summary
+                    className={`${INLINE_LINK} inline-flex min-h-6 cursor-pointer list-none items-center [&::-webkit-details-marker]:hidden`}
+                  >
+                    More: what each figure counts
+                  </summary>
+                  <dl className="mt-2 space-y-2 border-t border-white/25 pt-3">
+                    {summary.map((b) => (
+                      <div key={b.key}>
+                        <dt className="font-semibold text-ink-hi">
+                          {b.key === "electoral" ? (
+                            <Link href="/elections#president" className={INLINE_LINK}>
+                              {b.title}
+                            </Link>
+                          ) : (
+                            b.title
+                          )}
+                        </dt>
+                        {b.dek && <dd className="text-ink">{b.dek}</dd>}
+                        {b.key === "lean" && (
+                          <dd className="mt-1">
+                            <PviMethodologyNote />
+                          </dd>
+                        )}
+                      </div>
+                    ))}
+                  </dl>
+                </details>
+              </section>
             )}
 
             <div className="mt-6">

@@ -974,7 +974,9 @@ describe("the state page in results mode", () => {
       );
       await screen.findByRole("region", { name: "U.S. House" });
       const box = screen.getByTestId("ballot-contests");
-      expect(within(box).getByText("Member before this election, OH-2")).toBeInTheDocument();
+      expect(within(box).getAllByText("Member before this election, OH-2").length).toBeGreaterThan(
+        0
+      );
       expect(within(box).queryByText(/Sitting member/)).not.toBeInTheDocument();
     });
   });

@@ -102,8 +102,8 @@ def _measures_box(ballot: dict) -> dict:
         # and says so (the drawer's notice says the rest).
         confirmed = coverage.get("status") in ("covered", "confirmed_none") \
             and not coverage.get("unreadReason")
-        return {"dek": f"{_plural(active, 'measure')} on the ballot. Each is quoted as "
-                       "the state publishes it." if confirmed else
+        return {"dek": f"{_plural(active, 'measure')}, each quoted as the state "
+                       "publishes it." if confirmed else
                        f"{_plural(active, 'measure')} from our last successful read, which "
                        "may be out of date.",
                 "figure": _stat(active, "measure" if active == 1 else "measures")}
@@ -144,8 +144,7 @@ def contest_boxes(ballot: dict) -> dict[str, dict]:
         # Senators serve staggered six-year terms (art. I, section 3), so a
         # state votes on a seat about one cycle in three.
         out["no-senate"] = {
-            "dek": f"Neither seat is up in {ballot['cycleYear']}: senators serve six-year terms, "
-                   f"and the next regular Senate election here is in "
+            "dek": f"Not up in {ballot['cycleYear']}; next regular election "
                    f"{ballot['nextSenateElection']}.",
             "figure": None,
         }
@@ -162,7 +161,7 @@ def contest_boxes(ballot: dict) -> dict[str, dict]:
     if chambers:
         seats = sum(len(c["districts"]) for c in chambers)
         out["stateleg"] = {
-            "dek": f"{_plural(seats, 'seat')} contested; yours depend on where you live."
+            "dek": f"{_plural(seats, 'seat')} contested."
                    f"{_basis_words(bool(statewide_cov.get('ballotList')))}",
             "figure": _stat(seats, "seat" if seats == 1 else "seats"),
         }
@@ -176,12 +175,12 @@ def contest_boxes(ballot: dict) -> dict[str, dict]:
             {"dek": f"{_plural(courts, 'court')} on the ballot.{_basis_words(bool(judicial_cov.get('ballotList')))}",
              "figure": _stat(courts, "court" if courts == 1 else "courts")})
 
-    out["state-offices"] = {"dek": "Not loaded yet. That does not mean there are none: check "
-                                   "the official lookup.", "figure": None}
+    out["state-offices"] = {"dek": "Not loaded yet, which does not mean none: check the official "
+                                   "lookup.", "figure": None}
     out["measures"] = _measures_box(ballot)
     n = len(coverage)
-    out["news"] = ({"dek": f"{_plural(n, 'story', 'stories')} about these races, each linked to "
-                           "its outlet.", "figure": _stat(n, "story" if n == 1 else "stories")}
+    out["news"] = ({"dek": f"{_plural(n, 'story', 'stories')} about these races.",
+                    "figure": _stat(n, "story" if n == 1 else "stories")}
                    if n else {"dek": "No coverage of these races yet.", "figure": None})
     return out
 
@@ -207,14 +206,6 @@ def summary_boxes(ballot: dict) -> list[dict]:
                for c in r["candidates"] if is_active(c)]
     basis = (ballot.get("ballotBasis") or {}).get("basis")
     boxes = []
-
-    n = contest_count(ballot)
-    boxes.append({
-        "key": "contests", "kicker": "The ballot",
-        "title": f"{_plural(n, 'contest')} on this page",
-        "dek": None,
-        "figure": _stat(n, "contest" if n == 1 else "contests"),
-    })
 
     if federal:
         records = sum(1 for c in federal if c.get("incumbentRecord") or c.get("memberRecord"))

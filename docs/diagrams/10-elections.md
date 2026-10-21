@@ -253,7 +253,9 @@ everything below reads it. Each box's line and count come from the backend
 (`services/ballot_boxes.py`, `boxes` on the payload), as do the "This
 ballot" figures after the contests.
 
-- **One layout at every width**: the boxes in ruled columns (one on a phone,
+- **One layout at every width**: compact boxes (the office, its line and count,
+  a race's candidates by name; money and commands behind "More") in ruled
+  columns (one on a phone,
   two, then three, by the grid's own width). A contest's title opens its
   research in a drawer (`ContestDrawer.tsx`), beside the ballot on a
   computer and full screen on a phone, with Previous/Next through the whole

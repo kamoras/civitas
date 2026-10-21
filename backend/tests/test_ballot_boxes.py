@@ -35,7 +35,7 @@ def test_summary_counts_and_lean():
     summary = {b["key"]: b for b in boxes["summary"]}
     # One House race per voter plus five statewide offices.
     assert boxes["contestCount"] == 6
-    assert summary["contests"]["figure"] == {"type": "stat", "value": 6, "caption": "contests"}
+    assert "contests" not in summary  # the count is the Contests heading's, not a box
     assert summary["candidates"]["title"] == "10 federal candidates"
     assert summary["candidates"]["dek"] == "Nominees from the August 11, 2026 primary results."
     assert summary["lean"]["title"] == "Connecticut leans D+8"
