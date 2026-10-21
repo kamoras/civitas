@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { leadOrder, sectionBlurb, sectionPreview, seasonLead } from "./sectionPreviews";
-import { SECTIONS } from "./routes";
+import { SECTIONS, sectionLeaves } from "./routes";
 import type { SectionFigures } from "@/types/sections";
 
 const MAP_OFF = "The election map is shown during the campaign only.";
@@ -130,7 +130,7 @@ describe("sectionPreview", () => {
       executive: ["budget", "comments"],
       elections: ["map", "redistricting", "archive"],
     })) {
-      const keys = SECTIONS[section as keyof typeof SECTIONS].tabs.map((t) => t.key as string);
+      const keys = sectionLeaves(section as keyof typeof SECTIONS).map((t) => t.key);
       for (const t of tabs) {
         expect(keys).toContain(t);
         expect(sectionPreview(FIGURES, section, t)).not.toBeNull();
@@ -144,13 +144,13 @@ describe("sectionBlurb", () => {
   // "Open the page" (the agencies hub showed that on five cards).
   it("describes every page of every hub that shows cards", () => {
     for (const section of ["congress", "executive", "elections"] as const)
-      for (const t of SECTIONS[section].tabs)
+      for (const t of sectionLeaves(section))
         expect(sectionBlurb(section, t.key), `${section}.${t.key}`).toBeTruthy();
   });
 });
 
 describe("leadOrder", () => {
-  const tabs = SECTIONS.elections.tabs.map((t) => ({ key: t.key as string }));
+  const tabs = sectionLeaves("elections").map((t) => ({ key: t.key }));
   it("orders by the season's lead and drops nothing", () => {
     expect(leadOrder(tabs, ["calendar", "archive"]).map((t) => t.key)).toEqual([
       "calendar",

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
+import SectionTabs from "@/components/layout/SectionTabs";
 import { MEASURES_HREF } from "@/lib/routes";
 import Footer from "@/components/layout/Footer";
 import { axisMax, fmt } from "@/components/scorecard/WhereTheyStand";
@@ -348,6 +349,7 @@ export default function MeasuresClient({
         className="px-4 pb-16 pt-[var(--header-clearance)] font-sans"
       >
         <div className="mx-auto max-w-6xl">
+          <SectionTabs section="congress" active="measures" />
           <h1 className="font-display text-[30px] font-semibold leading-tight sm:text-[44px]">
             {name} by the numbers
           </h1>

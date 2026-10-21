@@ -164,7 +164,7 @@ export default function PeriodReportView({
           <SectionTabs section="congress" active={lead ? "reports" : kind} />
           <PageMasthead
             className="mb-6"
-            eyebrow="What happened in Congress"
+            eyebrow="What happened on the floor"
             title={lead?.title ?? title}
           >
             {lead ? (

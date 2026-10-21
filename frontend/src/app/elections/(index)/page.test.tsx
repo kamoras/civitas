@@ -135,16 +135,10 @@ describe("ElectionsPage", () => {
     const nav = await screen.findByRole("navigation", { name: "Elections sections" });
     // The wide row (a phone's switcher lists the same links).
     const tabs = within(nav.querySelector<HTMLElement>("[data-section-row]")!).getAllByRole("link");
-    expect(tabs.map((t) => t.textContent)).toEqual([
-      "Ballots by state",
-      "Seat map",
-      "New House maps",
-      "Calendar",
-      "Archive",
-    ]);
+    expect(tabs.map((t) => t.textContent)).toEqual(["Ballots", "Seat map", "Calendar", "Archive"]);
     expect(tabs[0]).toHaveAttribute("aria-current", "page");
-    expect(tabs[3]).toHaveAttribute("href", "/elections/calendar");
-    expect(tabs[4]).toHaveAttribute("href", "/elections/archive");
+    expect(tabs[2]).toHaveAttribute("href", "/elections/calendar");
+    expect(tabs[3]).toHaveAttribute("href", "/elections/archive");
     expect(tabs[1]).toHaveAttribute("href", "/elections/map?chamber=senate&view=usual");
     // The inline masthead links, which ran off a phone screen, are gone.
     expect(screen.queryByText(/Poll ranges →/)).not.toBeInTheDocument();

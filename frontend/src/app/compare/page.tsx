@@ -7,6 +7,7 @@ import Navbar from "@/components/layout/Navbar";
 import PageMasthead from "@/components/layout/PageMasthead";
 import Footer from "@/components/layout/Footer";
 import PageFallback from "@/components/layout/PageFallback";
+import SectionTabs from "@/components/layout/SectionTabs";
 import {
   fetchSenatorsByState,
   fetchSenator,
@@ -458,6 +459,8 @@ function comparePath(left: Senator, right: Senator, lCh: Chamber, rCh: Chamber):
 // The masthead's line, sent with the server's fallback too (PageFallback).
 const COMPARE_EYEBROW = "Compare · two legislators, side by side";
 const COMPARE_TITLE = "Compare legislators";
+// A view of Members (the directory), in the Congress tab bar.
+const COMPARE_TABS = <SectionTabs section="congress" active="compare" />;
 const COMPARE_LEDE = (
   <p>
     Pick two legislators, or start from a quick comparison, to see their money, votes and bills on
@@ -591,6 +594,7 @@ function ComparePageInner() {
             {/* The masthead stays while a linked pair loads: the server's
                 fallback sends it, and dropping it here made it vanish and
                 come back. */}
+            {COMPARE_TABS}
             <PageMasthead className="mb-8" eyebrow={COMPARE_EYEBROW} title={COMPARE_TITLE}>
               {COMPARE_LEDE}
             </PageMasthead>
@@ -609,6 +613,7 @@ function ComparePageInner() {
       <Navbar />
       <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
         <div className="max-w-5xl mx-auto">
+          {COMPARE_TABS}
           <PageMasthead className="mb-8" eyebrow={COMPARE_EYEBROW} title={COMPARE_TITLE}>
             {COMPARE_LEDE}
           </PageMasthead>
@@ -664,6 +669,7 @@ export default function ComparePage() {
         <PageFallback
           eyebrow={COMPARE_EYEBROW}
           title={COMPARE_TITLE}
+          tabs={COMPARE_TABS}
           lede={COMPARE_LEDE}
           mastheadClassName="mb-8"
           rows={3}

@@ -180,7 +180,7 @@ const PREVIEWS: Record<string, Record<string, (f: SectionFigures) => Preview | n
  */
 const BLURBS: Record<string, Record<string, string>> = {
   congress: {
-    reports: "What Congress did, day by day, with each chamber's votes",
+    reports: "What happened on the floor, day by day, with each chamber's votes",
     week: "What each chamber did in the last week Congress met",
     month: "What each chamber did in the last month Congress met",
     members: "Every senator and representative, found by state, town or name",
@@ -192,7 +192,6 @@ const BLURBS: Record<string, Record<string, string>> = {
     president: "How often members voted the way the president said to",
   },
   executive: {
-    overview: "The president, the agencies and the documents they issue",
     president: "The sitting president's record, documents and nominations",
     presidents: "Every president, with the historians' rank and each term's record",
     compare: "Two presidencies side by side",

@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { SECTIONS, type SectionKey } from "@/lib/routes";
+import { NOMINATIONS_HREF } from "@/lib/nominations";
+import { SECTIONS, sectionLeaves, type SectionKey, type SectionPage } from "@/lib/routes";
 import { absoluteUrl } from "@/lib/site";
 import { leadOrder, sectionBlurb, sectionPreview, seasonLead } from "@/lib/sectionPreviews";
 import { shareMetaAttrs } from "@/lib/shareImage";
@@ -32,8 +33,15 @@ const SOURCES: Partial<Record<SectionKey, string>> = {
   court: "Supreme Court Database; Oyez; Martin-Quinn scores",
 };
 
+/** Another section's page a hub also lists: Nominations is Congress's page
+ * (the Senate confirms them), and "who did the president nominate" is
+ * looked for under the Executive. */
+const HUB_EXTRAS: Partial<Record<SectionKey, SectionPage[]>> = {
+  executive: [{ key: "nominations", label: "Nominations", href: NOMINATIONS_HREF }],
+};
+
 /**
- * A section hub's other pages, each a card with one live figure from the
+ * A section hub's other pages, every view of every tab one by one, each a card with one live figure from the
  * backend (GET /api/sections, worded by lib/sectionPreviews.ts), so a page
  * a reader didn't know about announces itself with what it holds. Rendered
  * on the server with the page; one share button takes the whole grid,
@@ -49,14 +57,15 @@ export default async function SectionCards({
   className = "mt-8",
 }: {
   section: SectionKey;
-  /** The hub page these cards sit on: left out of its own grid. */
-  current: string;
+  /** The page these cards sit on, when it is one of the section's pages:
+   *  left out of its own grid. */
+  current?: string;
   className?: string;
 }) {
   const figures = await fetchSectionFigures();
   const { label, href } = SECTIONS[section];
   const cards = leadOrder(
-    SECTIONS[section].tabs.filter((t) => t.key !== current),
+    [...sectionLeaves(section), ...(HUB_EXTRAS[section] ?? [])].filter((t) => t.key !== current),
     seasonLead(figures, section)
   );
   const headingId = `${section}-pages-heading`;
@@ -101,7 +110,7 @@ export default async function SectionCards({
                     <span aria-hidden="true" className="mr-1.5 text-ink-min">
                       &rsaquo;
                     </span>
-                    {t.label}
+                    {t.title ?? t.label}
                   </Link>
                 </h3>
                 {p ? (

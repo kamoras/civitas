@@ -1,6 +1,7 @@
 "use client";
 
 import Navbar from "@/components/layout/Navbar";
+import SectionTabs from "@/components/layout/SectionTabs";
 import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
 import { BOXED_CONTROL } from "@/lib/controlStyles";
@@ -12,6 +13,7 @@ export default function ComparePresidentsError({ retry }: { retry: () => void })
       <Navbar />
       <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
         <div className="mx-auto max-w-5xl">
+          <SectionTabs section="executive" active="compare" />
           <PageMasthead eyebrow="Compare · two presidents, side by side" title="Compare presidents">
             <p>
               The presidents&apos; records could not be reached just now. This is an outage on this

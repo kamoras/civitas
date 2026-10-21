@@ -2759,7 +2759,15 @@ the pending list).
   section (records with a `[segment]`, the footer's own pages and the admin
   aside). A hub card with a live figure gets it from `GET /api/sections`
   (`app/api/sections.py`), worded in `lib/sectionPreviews.ts`; a figure not
-  read yet says so, never a bare zero.
+  read yet says so, never a bare zero. **A menu names five pages or fewer**
+  (2026-10, from 28 entries to 18; `routes.test.ts` holds it): a page that
+  belongs with another goes in that tab's `views`, a second row of the tab
+  bar on its pages (Reports: Floor and Members; Members: Directory and
+  Compare two; Every president: Compare; Agencies: Budgets; Seat map: New
+  House maps), and a view's own `views` are a toggle on the page (Day, Week,
+  Month). Each view keeps its own path, so folding a page into a tab needs
+  no redirect and no query-string state; a tab with views is its first
+  view (same key and href), and the hub's cards list every view one by one.
 - **The main navigation's current section is the longest match** in
   `SECTIONS[*].match` (`currentSection` in `src/lib/routes.ts`), so a nested
   page belongs to the section that names it, and no prefix may be claimed by

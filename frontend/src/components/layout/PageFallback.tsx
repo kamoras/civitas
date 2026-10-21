@@ -40,6 +40,7 @@ export default function PageFallback({
   title,
   lede,
   aside,
+  tabs,
   width = "max-w-5xl",
   mastheadClassName = "mb-6",
   rows = 4,
@@ -56,6 +57,8 @@ export default function PageFallback({
   /** The masthead's aside as the page renders it before its data arrives,
    *  when it takes room (it wraps under the title on a phone). */
   aside?: React.ReactNode;
+  /** The section tab bar the page renders above its masthead (SectionTabs). */
+  tabs?: React.ReactNode;
   /** The page's own content width and masthead spacing, so the line wraps
    *  the same here as on the page and nothing moves when the page replaces
    *  this. */
@@ -70,6 +73,7 @@ export default function PageFallback({
       <Navbar />
       <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
         <div className={`${width} mx-auto`}>
+          {tabs}
           <PageMasthead className={mastheadClassName} eyebrow={eyebrow} title={title} aside={aside}>
             {lede}
           </PageMasthead>

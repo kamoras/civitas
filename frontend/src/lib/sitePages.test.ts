@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { SECTIONS } from "./routes";
+import { SECTIONS, sectionPages, type SectionKey } from "./routes";
 import { ABOUT_CHAPTERS, ABOUT_OVERVIEW_HREF } from "./aboutPages";
 
 // Site search's page list and section anchors are backend data
@@ -18,10 +18,14 @@ const sections: Record<string, { anchor: string; file: string; headings: string[
 const listed = new Set(pages.map((p) => `${p.label}\u0000${p.href}`));
 
 describe("site search's page list", () => {
-  it("has every section hub and tab, with the navigation's label and href", () => {
-    for (const s of Object.values(SECTIONS)) {
+  it("has every section hub, tab and view, with the navigation's name and href", () => {
+    for (const key of Object.keys(SECTIONS) as SectionKey[]) {
+      const s = SECTIONS[key];
       expect(listed, s.label).toContain(`${s.label}\u0000${s.href}`);
-      for (const t of s.tabs) expect(listed, t.label).toContain(`${t.label}\u0000${t.href}`);
+      for (const t of sectionPages(key)) {
+        const name = t.title ?? t.label;
+        expect(listed, name).toContain(`${name}\u0000${t.href}`);
+      }
     }
   });
 
