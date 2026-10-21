@@ -10,8 +10,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import ActionIssue, Justice
+from app.models import ActionIssue, Justice, President
 from app.photos import bioguide_photo_source, photo_source_allowed
+from app.pipeline.fetch.president_portraits import stored_portraits
 
 router = APIRouter()
 
@@ -22,6 +23,9 @@ _MAX_ID_LEN = 64
 def _stored_source(kind: str, photo_id: str, db: Session) -> str | None:
     if kind == "bioguide":
         return bioguide_photo_source(db, photo_id)
+    if kind == "president":
+        row = db.get(President, photo_id)
+        return (stored_portraits(db).get(str(row.number)) or {}).get("url") if row else None
     if kind == "justice":
         row = db.get(Justice, photo_id)
         return row.thumbnail_url if row else None

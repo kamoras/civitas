@@ -63,7 +63,9 @@ import logging
 from sqlalchemy.orm import Session
 
 from app.models import President, PresidentTrade
+from app.photos import portrait_credit, president_photo
 from app.pipeline.fetch.cspan_historians_survey import edition_url, stored_edition
+from app.pipeline.fetch.president_portraits import stored_portraits
 from app.pipeline.analyze.president_scorer import (
     compute_president_overall_score,
     dimensions_available,
@@ -88,7 +90,8 @@ def effective_weights(p: President) -> dict[str, float]:
     return {k: round(w, 4) for k, w in president_effective_weights(p).items()}
 
 
-def _build_response(p: President) -> PresidentSchema:
+def _build_response(p: President, portraits: dict[str, dict] | None = None) -> PresidentSchema:
+    portraits = portraits or {}
     return PresidentSchema(
         id=p.id,
         name=p.name,
@@ -112,6 +115,8 @@ def _build_response(p: President) -> PresidentSchema:
         election_margin=p.election_margin,
         historical_legacy_score=p.historical_legacy_score,
         recent_avg_approval=p.recent_avg_approval,
+        photo_url=president_photo(p, portraits),
+        photo_credit=portrait_credit(portraits.get(str(p.number))),
     )
 
 
@@ -119,7 +124,7 @@ def get_president(db: Session, president_id: str) -> PresidentSchema | None:
     p = db.query(President).filter(President.id == president_id).first()
     if not p:
         return None
-    return _build_response(p)
+    return _build_response(p, stored_portraits(db))
 
 
 def get_president_score_breakdown(db: Session, president_id: str) -> dict | None:
@@ -216,7 +221,8 @@ def historians_rank(points: int | None, rated: list[int]) -> int | None:
 
 def get_all_presidents(db: Session) -> list[PresidentSchema]:
     presidents = db.query(President).order_by(President.number.desc()).all()
-    return [_build_response(p) for p in presidents]
+    portraits = stored_portraits(db)
+    return [_build_response(p, portraits) for p in presidents]
 
 
 def get_president_list(db: Session) -> list[dict]:
@@ -254,7 +260,7 @@ def get_current_president(db: Session) -> PresidentSchema | None:
     needed for the frontend's separate "currently serving" spotlight
     view."""
     p = current_president(db)
-    return _build_response(p) if p else None
+    return _build_response(p, stored_portraits(db)) if p else None
 
 
 def get_president_leaderboard(db: Session) -> list[PresidentLeaderboardEntry]:

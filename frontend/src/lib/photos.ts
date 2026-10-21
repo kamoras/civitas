@@ -14,6 +14,8 @@ import { fetchRemoteImage, onAllowedHost, type RemoteImageResult } from "./remot
  *  - bioguide: a member's official photo, the headshot on the member's
  *    Congress.gov record or else bioguide's portrait (backend
  *    `bioguide_photo_source`);
+ *  - president: a public-domain portrait on Wikimedia Commons the
+ *    pipeline found through Wikidata (backend president_portraits.py);
  *  - justice, issue: a URL the pipeline stored (an Oyez thumbnail, an
  *    Action Center issue's rights-cleared news photo).
  */
@@ -21,6 +23,8 @@ const PHOTO_IDS = {
   bioguide: /^[A-Z]\d{6}$/,
   justice: /^[a-z0-9_]{1,64}$/,
   issue: /^\d{1,18}$/,
+  // A president's id ("surname-number"), as in their page's address.
+  president: /^[a-z0-9-]{1,64}$/,
 } as const;
 
 export type PhotoKind = keyof typeof PHOTO_IDS;
@@ -41,6 +45,7 @@ export const PHOTO_HOSTS: Record<PhotoKind, readonly string[]> = {
   bioguide: ["www.congress.gov", "bioguide.congress.gov"],
   justice: ["api.oyez.org"],
   issue: ["rollcall.com"],
+  president: ["thumb.wikimedia.org", "upload.wikimedia.org", "ids.si.edu"],
 };
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";

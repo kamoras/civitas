@@ -40,7 +40,8 @@ from app.member_ids import resolve_member_id
 from app.issue_ids import to_public_id
 from app.models import ActionIssue, ExploreDocument, Justice, President, Representative, ScoreSnapshot, Senator
 from app.ordinals import ordinal
-from app.photos import bioguide_photo, justice_photo
+from app.photos import bioguide_photo, justice_photo, president_photo
+from app.pipeline.fetch.president_portraits import stored_portraits
 from app.pipeline.analyze.president_scorer import compute_president_overall_score
 from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.score_display import displayed_rank, displayed_score
@@ -216,7 +217,7 @@ def list_politicians(
                 "stateName": None,
                 "district": None,
                 "role": f"President ({ordinal(p.number)})",
-                "thumbnailUrl": None,
+                "thumbnailUrl": president_photo(p, stored_portraits(db)),
                 "hasScorecard": overall is not None,
                 "overallScore": overall,
                 "activeIssueCount": len(issue_map.get(p.id, [])),
@@ -275,7 +276,7 @@ def _detect_branch(pid: str, db: Session) -> tuple[str, object] | None:
     return None
 
 
-def _build_identity(branch: str, entity) -> dict:
+def _build_identity(branch: str, entity, db: Session | None = None) -> dict:
     if branch == "senate":
         return {
             "name": entity.name,
@@ -320,6 +321,7 @@ def _build_identity(branch: str, entity) -> dict:
             "party": entity.party,
             "role": "President",
             "number": entity.number,
+            "thumbnailUrl": president_photo(entity, stored_portraits(db) if db else {}),
             "termStart": entity.term_start,
             "termEnd": entity.term_end,
             "isCurrent": entity.is_current,
@@ -615,7 +617,7 @@ def get_politician(politician_id: str, db: Session = Depends(get_db)) -> JSONRes
     return _cached_json({
         "id": politician_id,
         "branch": branch,
-        "identity": _build_identity(branch, entity),
+        "identity": _build_identity(branch, entity, db),
         "hasScorecard": overall is not None or branch == "scotus",
         "overallScore": overall,
         "scorecard": scorecard,

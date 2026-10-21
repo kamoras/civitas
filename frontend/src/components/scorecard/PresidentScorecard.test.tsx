@@ -193,6 +193,30 @@ describe("PresidentScorecard", () => {
     expect(screen.queryByText(/not rated/i)).not.toBeInTheDocument();
   });
 
+  it("shows the portrait from this site, credited, and the number without one", () => {
+    const withPhoto = {
+      ...president,
+      photoUrl: "/photo/president/doe-47",
+      photoCredit: {
+        text: "Portrait: Jane Roe. Public domain, via Wikimedia Commons.",
+        url: "https://commons.wikimedia.org/wiki/File:X.jpg",
+      },
+    };
+    const { unmount } = render(<PresidentScorecard president={withPhoto} peers={peers} />);
+    expect(screen.getByRole("img", { name: "Jane Doe" })).toHaveAttribute(
+      "src",
+      "/photo/president/doe-47"
+    );
+    expect(screen.getByRole("link", { name: /Portrait: Jane Roe/ })).toHaveAttribute(
+      "href",
+      "https://commons.wikimedia.org/wiki/File:X.jpg"
+    );
+    unmount();
+    render(<PresidentScorecard president={president} peers={peers} />);
+    expect(screen.queryByRole("img", { name: "Jane Doe" })).not.toBeInTheDocument();
+    expect(screen.getByText("47")).toBeInTheDocument();
+  });
+
   it("has no structural accessibility violations", async () => {
     render(
       <main>
