@@ -65,7 +65,7 @@ from app.models import (
 )
 from app.pipeline.analyze import action_metrics
 from app.committee_routing import route_committees
-from app import roll_call_links
+from app import calibration_drift, roll_call_links
 from app.person_names import (
     APOSTROPHES as _APOSTROPHES,
     RecordName as _RecordName,
@@ -411,6 +411,60 @@ def fit_restatement_cut(issues: Sequence[tuple[int, str, list[str]]]) -> dict | 
             "negatives": len(pairs), "lines": len(lines)}
 
 
+def _json_set(raw) -> set:
+    try:
+        return set(json.loads(raw or "[]"))
+    except (TypeError, ValueError):
+        return set()
+
+
+def near_identical_pairs(issues: Sequence) -> list[tuple[int, int, bool]]:
+    """(i, j, same story) for the pairs of `issues` (rows with date, title,
+    source_urls, related_monitor_slugs, related_bill_ids) within
+    REMATCH_WINDOW_DAYS the data decides: the same source article, the same
+    national monitor or the same bill is one story; different monitors on
+    different days are two. Any other pair is left out."""
+    rows = [(date.fromisoformat(str(r.date)[:10]), _json_set(r.source_urls), _json_set(r.related_monitor_slugs),
+             {b.get("id") if isinstance(b, dict) else b for b in _json_set_list(r.related_bill_ids)} - {None})
+            for r in issues]
+    out = []
+    for i, j in itertools.combinations(range(len(rows)), 2):
+        (di, ui, mi, bi), (dj, uj, mj, bj) = rows[i], rows[j]
+        if abs((di - dj).days) > REMATCH_WINDOW_DAYS:
+            continue
+        if ui & uj or mi & mj or bi & bj:
+            out.append((i, j, True))
+        elif mi and mj and di != dj:
+            out.append((i, j, False))
+    return out
+
+
+def _json_set_list(raw) -> list:
+    try:
+        value = json.loads(raw or "[]")
+    except (TypeError, ValueError):
+        return []
+    return value if isinstance(value, list) else []
+
+
+def fit_near_identical_cut(issues: Sequence) -> dict | None:
+    """The near-identical title cut (comment above near_identical_cut): the
+    lowest cosine no data-labelled different-story pair reaches, plus
+    CUT_MARGIN, with the share of same-story pairs it would join. None with
+    fewer than MIN_HARD_NEGATIVES different-story pairs."""
+    pairs = near_identical_pairs(issues)
+    negatives = [(i, j) for i, j, same in pairs if not same]
+    positives = [(i, j) for i, j, same in pairs if same]
+    if len(negatives) < MIN_HARD_NEGATIVES:
+        return None
+    vectors = _embed_texts_sim([r.title or "" for r in issues])
+    fitted = _zero_merge_cut([float(vectors[i] @ vectors[j]) for i, j in negatives])
+    threshold = round(min(fitted + CUT_MARGIN, 0.99), 2)
+    joined = sum(float(vectors[i] @ vectors[j]) >= threshold for i, j in positives)
+    return {"threshold": threshold, "fitted": fitted, "margin": CUT_MARGIN, "negatives": len(negatives),
+            "positives": len(positives), "positives_joined": joined}
+
+
 def refit_cuts(db: Session) -> None:
     """Refit both cuts on the first refresh of each UTC day, inside a
     savepoint of the refresh's session (it commits). A fit with too few
@@ -431,7 +485,9 @@ def refit_cuts(db: Session) -> None:
         except ValueError:
             facts = []
         issues.append((row.id, row.date, [row.summary or "", *facts]))
-    fits = {"cluster": fit_cluster_cut(articles), "restatement": fit_restatement_cut(issues)}
+    near_rows = db.query(ActionIssue).filter(ActionIssue.source_type.is_(None), ActionIssue.date >= issue_since).all()
+    fits = {"cluster": fit_cluster_cut(articles), "restatement": fit_restatement_cut(issues),
+            "near_identical": fit_near_identical_cut(near_rows)}
     for key, fitted in fits.items():
         if fitted is None:
             logger.info("Cut refit (%s): too few pairs the data labels; the stored cut stands", key)
@@ -514,12 +570,35 @@ ACTION_CENTER_PROMPT_VERSION = "action-v21"
 # retirement pass in _run_refresh for the full reasoning.
 _RETIREMENT_GRACE_HOURS = 24
 
-# Where title cosine alone decides "same story": hand-measured 0.92 on 120
-# issue pairs (2026-07), bundled with its provenance in
-# app/data/action_thresholds.json. Not fitted: its only automatic label was
-# the signature test, which on 2026-10-08 called 65 issue pairs the same
-# story when 16 were.
-_NEAR_IDENTICAL_TITLE_THRESHOLD = json.loads((_DATA_DIR / "action_thresholds.json").read_text())["values"]["near_identical"]
+# Where title cosine alone decides "same story". Refit once a UTC day
+# (refit_cuts, fit_near_identical_cut) from pairs of stored issues the data
+# itself labels: two issues in different national monitors on different
+# days are two stories, and the cut is the lowest no such pair reaches, plus
+# CUT_MARGIN, as the article and claim cuts are fitted. Pairs the data
+# can't decide are left out, never guessed. Until MIN_HARD_NEGATIVES such
+# pairs exist (on the 2026-10-18 snapshot, 1: two monitors had opened) the
+# cut in use is the bundled one, app/data/action_thresholds.json, written by
+# scripts/calibrate_near_identical.py with the same fit: today it carries
+# the 0.92 hand-measured on 120 pairs in 2026-07, whose labels were not
+# kept, and records how many data-labelled pairs it would need.
+_NEAR_IDENTICAL_PATH = _DATA_DIR / "action_thresholds.json"
+
+
+def near_identical_cut() -> float:
+    """The near-identical title cut in use: the day's refit (stored_cut), else
+    the bundled value."""
+    cached = _cuts_cache.get("near_identical")
+    if cached is not None and utcnow() - cached[1] < timedelta(hours=1):
+        return float(cached[0]["threshold"])
+    stored = None
+    try:
+        with SessionLocal() as session:
+            stored = api_cache_get(session, _CUTS_TIER, "near_identical", max_age_hours=_CUTS_TTL_HOURS)
+    except Exception:
+        logger.warning("Stored near-identical cut unreadable; using the bundled one", exc_info=True)
+    value = stored or {"threshold": json.loads(_NEAR_IDENTICAL_PATH.read_text())["values"]["near_identical"]}
+    _cuts_cache["near_identical"] = (value, utcnow())
+    return float(value["threshold"])
 
 
 def _full_story_should_invalidate(
@@ -900,7 +979,7 @@ def _same_story(sim: float, title: str, facts: list, cand_title: str, cand_facts
     story under its earlier posts; a missed match shows a second card.
     """
     return _is_exact_content_duplicate(title, facts, cand_title, cand_facts) or (
-        sim >= _NEAR_IDENTICAL_TITLE_THRESHOLD
+        sim >= near_identical_cut()
     )
 
 
@@ -954,7 +1033,7 @@ def _issue_day(issue) -> "date | None":
 def _near_identical_clusters(issues: list["ActionIssue"]) -> dict[int, int]:
     """Index -> index of its cluster's representative, over clusters of
     near-identical titles (same
-    _NEAR_IDENTICAL_TITLE_THRESHOLD/_is_exact_content_duplicate logic
+    near_identical_cut/_is_exact_content_duplicate logic
     _find_matching_issue uses), keeping whichever cluster member has the
     latest created_at. Relative order of the kept issues is preserved
     from the input.
@@ -1004,6 +1083,7 @@ def _near_identical_clusters(issues: list["ActionIssue"]) -> dict[int, int]:
     n = len(issues)
     days = [_issue_day(issue) for issue in issues]
     same_story = [[False] * n for _ in range(n)]
+    compared: list[float] = []
     for i in range(n):
         for j in range(i + 1, n):
             a, b = issues[i], issues[j]
@@ -1031,6 +1111,9 @@ def _near_identical_clusters(issues: list["ActionIssue"]) -> dict[int, int]:
                     float(sims[i, j]), a.title or "", facts_list[i], b.title or "", facts_list[j],
                 )
             same_story[i][j] = same_story[j][i] = m
+            if not (a.source_type or b.source_type):
+                compared.append(float(sims[i, j]))
+    calibration_drift.observe("near_identical", compared, near_identical_cut())
 
     # Complete-linkage: only merge two clusters when every issue in one
     # matches every issue in the other, so a single weak edge can never
@@ -1348,7 +1431,7 @@ def _log_summary_source_consistency(summary: str, source_text: str) -> None:
     Bucketed into deciles (not a single low/high split) and recorded via
     the same action_metrics counter every other validator uses, so the
     persisted per-run history builds a real distribution over time. Every
-    other similarity threshold in this codebase (_NEAR_IDENTICAL_TITLE_THRESHOLD,
+    other similarity threshold in this codebase (near_identical_cut,
     TOPIC_CHANGE_THRESHOLD, etc.) was set only after measuring that
     distribution against real failure cases — this collects the
     equivalent data for summary/source consistency instead of guessing a
