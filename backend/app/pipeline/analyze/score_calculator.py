@@ -187,6 +187,7 @@ from app.pipeline.analyze.population_reference import (
     LES_REFERENCE,
 )
 from app.pipeline.analyze.score_bounds import clamp
+from app.score_display import shown_share
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -197,7 +198,7 @@ logger = logging.getLogger(__name__)
 # public changelog) in sync, and add a decision record for the new version
 # under docs/methodology/member-score/ — that is where the reasons go, not
 # here.
-ALGORITHM_VERSION = "v6.35"
+ALGORITHM_VERSION = "v6.36"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
 # use identical score_* column names, so one map covers both entity types.
@@ -1552,11 +1553,11 @@ def _funding_independence_core(
                     "the campaign itemizes every gift, so its filings report no unitemized "
                     f"money to read a small-donor share from; {_NOT_MEASURED}"
                 ) if small_pct is None else (
-                    f"{small_pct:.0f}% of contributions unitemized (donors who gave $200 or less)"
+                    f"{shown_share(small_pct / 100)} of contributions unitemized (donors who gave $200 or less)"
                     + (
-                        f" vs. an expected ~{small_expected_pct:.0f}% for a state this size"
+                        f" vs. an expected ~{shown_share(small_expected_pct / 100)} for a state this size"
                         if district is None
-                        else f" vs. the House median of {small_expected_pct:.0f}%"
+                        else f" vs. the House median of {shown_share(small_expected_pct / 100)}"
                     )
                 ),
             },

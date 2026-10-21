@@ -509,11 +509,12 @@ export default async function ElectionsChapter() {
               House member running for the Senate) was listed with no link to their record; the race
               now links it, named as what they are now (&ldquo;House member, GA-6&rdquo;), never as
               the seat&apos;s incumbent. A member&apos;s own profile now links to the race they are
-              on the ballot in, and a House member always links to the race for their own seat: 59
+              on the ballot in, and every member of Congress links to the race for their own seat (a
+              senator&apos;s by the class of their seat, from the Senate&apos;s own list): 59 House
               members who aren&apos;t nominees there (retiring, running for another office, or
               beaten in a primary) had no link at all. Their profile says they aren&apos;t among the
               confirmed nominees, naming the source, and never a reason the record doesn&apos;t
-              state.
+              state. The race names them too, linked to their record.
             </Item>
             <Item label="Parties">
               Where a state prints a party Civitas has no code for (California&apos;s Peace and

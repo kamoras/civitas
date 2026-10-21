@@ -22,6 +22,19 @@ def displayed_score(score: float) -> int:
     return math.floor(score + 0.5)
 
 
+def shown_share(share: float) -> str:
+    """A 0-1 share as every surface states it: a whole percent rounded half
+    up (as displayed_score, so a share reads the same in Python and in the
+    browser), and "under 1%" for a share above zero that would round to
+    0%, which would be a false claim. The findings sentences, the peer
+    strips, compare, the race money bars and the scorecard all take a
+    share's words from here."""
+    if 0 < share < 0.005:
+        return "under 1%"
+    # Rounded first so 0.195 * 100 (19.499999...) reads 20%, as 19.5 does.
+    return f"{displayed_score(round(share * 100, 9))}%"
+
+
 def displayed_rank(score: float, field: list[float]) -> int:
     """Standard competition rank ("1224") of `score` within `field`, both
     compared as displayed: members who show the same number share a rank."""

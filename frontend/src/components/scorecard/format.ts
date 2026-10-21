@@ -1,7 +1,10 @@
-/** A 0–1 share as a whole percent, "<1%" for a share that rounds to zero
- *  but isn't: "0%" of a member's money from PACs would be a false claim. */
+/** A 0–1 share as a whole percent, "under 1%" for a share that rounds to
+ *  zero but isn't: "0%" of a member's money from PACs would be a false
+ *  claim. The backend's words for a share (score_display.shown_share) come
+ *  first wherever the API sends them; this is the same rule, for figures
+ *  it doesn't. */
 export function percent(share: number): string {
-  if (share > 0 && share < 0.005) return "<1%";
+  if (share > 0 && share < 0.005) return "under 1%";
   return `${Math.round(share * 100)}%`;
 }
 

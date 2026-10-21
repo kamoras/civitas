@@ -84,6 +84,40 @@ def senate_classes() -> dict[int, frozenset[str]]:
         return _senate_classes_cache
 
 
+_senator_class_cache: dict[str, int] | None = None
+_senator_class_stamp = None
+
+
+def senator_class(bioguide_id: str | None) -> int | None:
+    """The class of a sitting senator's seat (1, 2 or 3), by bioguide id,
+    from the same file's `members` (each senator's <class> on the Senate's
+    own list, replaced whole on each good read), else None: an id not on
+    the list, or a file written before it carried members."""
+    global _senator_class_cache, _senator_class_stamp
+
+    def load() -> dict[str, int]:
+        try:
+            data = read_json_preferring(*_CLASS_FILES, default=None, accept=lambda d: _classes(d) is not None)
+        except Uncached as unreadable:
+            raise Uncached(_members(unreadable.value)) from None
+        return _members(data)
+
+    if not bioguide_id:
+        return None
+    with _senate_classes_lock:
+        _senator_class_cache, _senator_class_stamp = reload_if_moved(
+            [_CLASS_FILES[0]], _senator_class_cache, _senator_class_stamp, load,
+        )
+        return _senator_class_cache.get(bioguide_id)
+
+
+def _members(data) -> dict[str, int]:
+    members = data.get("members") if isinstance(data, dict) else None
+    if not isinstance(members, dict):
+        return {}
+    return {k: v for k, v in members.items() if isinstance(k, str) and v in (1, 2, 3)}
+
+
 def classes_on_file(runtime_path: pathlib.Path) -> dict[int, frozenset[str]]:
     """What a refresh merges its fresh read with — the classes at
     `runtime_path`, else the bundled copy's (missing or malformed: the
@@ -102,8 +136,9 @@ def classes_on_file(runtime_path: pathlib.Path) -> dict[int, frozenset[str]]:
 def reset_senate_classes() -> None:
     """Drop this process's cached sets, after a refresh wrote new ones (the
     other processes notice the file move on their next read)."""
-    global _senate_classes_cache, _senate_classes_stamp
+    global _senate_classes_cache, _senate_classes_stamp, _senator_class_cache, _senator_class_stamp
     _senate_classes_cache, _senate_classes_stamp = None, None
+    _senator_class_cache, _senator_class_stamp = None, None
 
 
 def federal_states() -> frozenset[str]:
@@ -180,16 +215,20 @@ def last_certified_general(today: date) -> int | None:
 _CLASS_BASE_YEARS = {1: 2018, 2: 2020, 3: 2022}
 
 
+def class_up(year: int) -> int | None:
+    """The Senate class whose regular seats are up in `year`, or None in
+    an odd year."""
+    return next((cls for cls, base in _CLASS_BASE_YEARS.items() if (year - base) % 6 == 0), None)
+
+
 def seats_up_for_year(year: int) -> frozenset[str]:
     """States with a REGULAR Senate seat up in `year` (by class rotation).
 
     Special elections are additional to this set and are not derivable
     from the calendar — they exist only when a seat was vacated.
     """
-    for cls, base_year in _CLASS_BASE_YEARS.items():
-        if (year - base_year) % 6 == 0:
-            return senate_classes().get(cls, frozenset())
-    return frozenset()
+    cls = class_up(year)
+    return senate_classes().get(cls, frozenset()) if cls else frozenset()
 
 
 def next_senate_election_year(state: str, after_year: int) -> int | None:

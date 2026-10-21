@@ -13,6 +13,7 @@ from collections import Counter
 from app.district_lean import lean_label
 from app.election_calendar import federal_states
 from app.models import Candidate
+from app.score_display import shown_share
 
 # The FEC totals row's categories of `contributions`, which add up to it:
 # (key the API sends, Candidate column). "Smaller" individual donors are the
@@ -64,19 +65,19 @@ def funding_sources(cand: Candidate) -> dict | None:
     if total is None or total <= 0 or any(a is None for a in amounts):
         return None
     adds_up = all(a >= 0 for a in amounts) and abs(sum(amounts) - total) <= RECONCILE_TOLERANCE
+    # Each share in the words every other surface uses (shown_share), so a
+    # share reads the same here as on a profile for the same figures. Only
+    # the blocks are apportioned, since they must fill the strip exactly.
+    blocks = apportion(amounts, FUNDING_BLOCKS) if adds_up else [None] * len(amounts)
     parts = [
         {
             "key": key,
             "amount": amount,
-            "percent": percent,
-            "blocks": blocks,
+            "share": round(amount / total, 4) if adds_up else None,
+            "shown": shown_share(amount / total) if adds_up else None,
+            "blocks": block,
         }
-        for (key, _), amount, percent, blocks in zip(
-            FUNDING_CATEGORIES,
-            amounts,
-            apportion(amounts, 100) if adds_up else [None] * len(amounts),
-            apportion(amounts, FUNDING_BLOCKS) if adds_up else [None] * len(amounts),
-        )
+        for (key, _), amount, block in zip(FUNDING_CATEGORIES, amounts, blocks)
     ]
     return {"addsUp": adds_up, "parts": parts}
 

@@ -55,6 +55,23 @@ def parse_senate_classes(xml: bytes) -> dict[int, set[str]]:
     return classes
 
 
+def parse_senator_classes(xml: bytes) -> dict[str, int]:
+    """{bioguide id: class number} for each sitting senator on the list;
+    {} when it can't be read. Which senator holds the seat a cycle's race
+    is for (api/elections.member_seat_race)."""
+    try:
+        root = etree.fromstring(xml)
+    except etree.XMLSyntaxError:
+        return {}
+    members: dict[str, int] = {}
+    for member in root.iterfind("member"):
+        bioguide = (member.findtext("bioguide_id") or "").strip()
+        number = _ROMAN.get((member.findtext("class") or "").strip().removeprefix("Class ").strip())
+        if bioguide and number:
+            members[bioguide] = number
+    return members
+
+
 def gate(classes: dict[int, set[str]]) -> list[str]:
     """Structural checks from the Constitution's own shape, never a state
     list: three classes, none empty, and no state in all three (a state has
@@ -76,7 +93,7 @@ def _stored(path: pathlib.Path) -> dict[int, set[str]]:
     return {n: set(states) for n, states in election_calendar.classes_on_file(path).items()}
 
 
-def write_classes(classes: dict[int, set[str]], path: pathlib.Path) -> None:
+def write_classes(classes: dict[int, set[str]], path: pathlib.Path, members: dict[str, int] | None = None) -> None:
     write_text_atomic(path, json.dumps(
         {
             "_source": (
@@ -86,6 +103,9 @@ def write_classes(classes: dict[int, set[str]], path: pathlib.Path) -> None:
             ),
             "_as_of": utcnow().date().isoformat(),
             "classes": {str(k): sorted(v) for k, v in sorted(classes.items())},
+            # Each sitting senator's class, as the list read now shows it
+            # (not merged: a senator who left is no one's seat holder).
+            "members": dict(sorted((members or {}).items())),
         },
         indent=1,
     ) + "\n")
@@ -110,7 +130,7 @@ async def refresh_senate_classes(client: httpx.AsyncClient, path: str | None = N
             return False
         stored = _stored(target)
         merged = {n: live.get(n, set()) | stored.get(n, set()) for n in (1, 2, 3)}
-        write_classes(merged, target)
+        write_classes(merged, target, parse_senator_classes(body))
         from app import election_calendar
 
         election_calendar.reset_senate_classes()

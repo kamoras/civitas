@@ -519,7 +519,60 @@ class TestIncumbentRecordLink:
 
         body = _body(get_politician("lucy-mcbride", db_session))
         assert body["onBallot"]["raceId"] == "2026-SEN-GA"
-        assert body["seatRace"] is None  # senators: no seat class to key a race on
+        assert body["seatRace"] is None  # this senator's class isn't on file
+
+    def test_a_retiring_senator_keeps_the_link_to_their_seat(self, db_session, monkeypatch):
+        """By the seat's class, never by candidacy: the regular race is the
+        class up this cycle, and the race names the senator leaving it."""
+        from app.election_calendar import class_up
+        up = class_up(2026)
+        other = next(c for c in (1, 2, 3) if c != up)
+        classes = {"M000001": up, "M000002": other}
+        monkeypatch.setattr(elections, "senator_class", classes.get)
+        _senator(db_session, "lucy-mcbride", "Lucy McBride", "GA", bioguide_id="M000001")
+        _senator(db_session, "pat-roe", "Pat Roe", "GA", bioguide_id="M000002")
+        _race(db_session, "2026-SEN-GA", "GA")
+        _candidate(db_session, "S6GA00002", "2026-SEN-GA", "DOE, SAM", confirmed_general=True)
+        db_session.commit()
+
+        seat = _body(get_politician("lucy-mcbride", db_session))["seatRace"]
+        assert (seat["raceId"], seat["office"], seat["status"]) == ("2026-SEN-GA", "S", "notNominee")
+        assert _body(get_politician("pat-roe", db_session))["seatRace"] is None  # not up, no special
+        holder = _body(elections.state_ballot("GA", db_session))["senateRaces"][0]["seatHolder"]
+        assert (holder["id"], holder["status"]) == ("lucy-mcbride", "notNominee")
+
+    def test_a_special_is_the_seat_of_the_class_not_up(self, db_session, monkeypatch):
+        from app.election_calendar import class_up
+        other = next(c for c in (1, 2, 3) if c != class_up(2026))
+        monkeypatch.setattr(elections, "senator_class", {"M000002": other}.get)
+        _senator(db_session, "pat-roe", "Pat Roe", "GA", bioguide_id="M000002")
+        _race(db_session, "2026-SEN-GA-SPECIAL", "GA").is_special = True
+        db_session.commit()
+
+        assert elections.member_seat_race(db_session, "GA", None, "M000002", "S")["raceId"] == "2026-SEN-GA-SPECIAL"
+        holder = _body(elections.state_ballot("GA", db_session))["senateRaces"][0]["seatHolder"]
+        assert (holder["id"], holder["status"]) == ("pat-roe", "unconfirmed")
+
+    def test_the_house_race_names_the_member_leaving_it(self, db_session):
+        _representative(db_session, "lucy-mcbride", "Lucy McBride", "GA", 6, bioguide_id="M000001")
+        _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
+        _candidate(db_session, "H6GA06002", "2026-HOUSE-GA-6", "ROE, PAT", confirmed_general=True)
+        db_session.commit()
+
+        race = _body(elections.state_ballot("GA", db_session))["houseRaces"][0]
+        assert {k: race["seatHolder"][k] for k in ("id", "name", "status", "certified")} == {
+            "id": "lucy-mcbride", "name": "Lucy McBride", "status": "notNominee", "certified": False,
+        }
+        assert _body(elections.race_detail("2026-HOUSE-GA-6", db_session))["seatHolder"]["id"] == "lucy-mcbride"
+
+    def test_a_nominee_is_named_by_their_own_row_not_as_the_seat_holder(self, db_session):
+        _representative(db_session, "lucy-mcbride", "Lucy McBride", "GA", 6, bioguide_id="M000001")
+        _race(db_session, "2026-HOUSE-GA-6", "GA", office="H", district=6)
+        _candidate(db_session, "H6GA06001", "2026-HOUSE-GA-6", "MCBRIDE, LUCY",
+                   incumbent_challenge="I", member_bioguide="M000001", confirmed_general=True)
+        db_session.commit()
+
+        assert _body(elections.state_ballot("GA", db_session))["houseRaces"][0]["seatHolder"] is None
 
     def test_a_filer_whose_state_confirmed_no_one_is_not_called_on_the_ballot(self, db_session):
         """A race whose nominees aren't read lists every FEC filer, and a

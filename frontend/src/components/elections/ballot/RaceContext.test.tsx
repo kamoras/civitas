@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import RaceContext, { leanCountsSentence, leanSentence } from "./RaceContext";
+import RaceContext, { leanCountsSentence, leanSentence, seatHolderSentence } from "./RaceContext";
 import type { BallotCandidate, RaceWithCandidates } from "@/types/election";
 
 function cand(over: Partial<BallotCandidate> = {}): BallotCandidate {
@@ -167,5 +167,40 @@ describe("lean wording", () => {
         seatLean: 0,
       })
     ).toBe("20 of 50 states lean more Democratic, 29 more Republican.");
+  });
+
+  it("names the member who holds the seat when they aren't a nominee for it", () => {
+    render(
+      <RaceContext
+        race={race({
+          seatHolder: {
+            id: "example-member",
+            name: "Example Member",
+            party: "D",
+            status: "notNominee",
+            certified: true,
+          },
+        })}
+      />
+    );
+    expect(screen.getByText("Who holds this seat")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Example Member holds this seat and is not on the November ballot for it\./)
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Where they stand/ })).toHaveAttribute(
+      "href",
+      "/politicians/example-member"
+    );
+  });
+
+  it("says nothing about a holder the state hasn't confirmed either way", () => {
+    expect(
+      seatHolderSentence(
+        { id: "x", name: "Example Member", party: "R", status: "unconfirmed", certified: false },
+        "North Carolina"
+      )
+    ).toBe(
+      "Example Member holds this seat. Confirmed nominees aren't available for North Carolina yet."
+    );
   });
 });
