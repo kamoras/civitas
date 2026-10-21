@@ -2445,6 +2445,7 @@ the pending list).
 | Per-client rate limits + once-per-period rules shared by every API worker | `backend/app/api/throttle.py` |
 | Process roles (read-only API vs pipeline) | `backend/app/config.py` (`PROCESS_ROLE`), `backend/app/main.py` (lifespan), `backend/app/background.py`, `docker-compose.swarm.yml`, `nginx/civitas.conf` |
 | Admin dashboard (tabbed sub-dashboards, SVG line charts, chart palette) | `frontend/src/app/admin/page.tsx` (shell + tabs), `frontend/src/components/admin/` |
+| Chart readouts: one hover, tap and keyboard interaction for every chart; what each mark's label says | `frontend/src/components/shared/ChartReadout.tsx`, `frontend/src/types/readout.ts`, `backend/app/readout.py` |
 | Share a section as an image (capture, framing, share dialog) | `frontend/src/lib/shareImage.ts`, `frontend/src/components/share/` |
 | Same-origin photos (portraits, justices, issue photos) | `backend/app/photos.py`, `backend/app/api/photos.py`, `backend/app/pipeline/fetch/member_photos.py` (which member photo, by face size; detector process `face_detection.py`; `scripts/calibrate_member_photos.py`), `frontend/src/lib/photos.ts`, `frontend/src/app/photo/[kind]/[id]/route.ts` (and `[width]/route.ts`, the sized copies `Photo`'s srcset asks for), `frontend/src/components/Photo.tsx`, nginx `location /photo/` |
 | Issue contact surface (state picker, phones, roll-call record, call script) + action-tap counter | `frontend/src/components/action/ContactYourMembers.tsx`, `backend/app/api/action.py` (`get_issue_members`, `issue_roll_calls`, `bill_decider`), `backend/app/api/visits.py` (`track_action`), `GET /api/admin/action-taps` |
@@ -2636,6 +2637,18 @@ the pending list).
   block and a check in `wcagContrast.test.ts` (marks 3:1 on both grounds,
   text 4.5:1 on its fill). Share captures are drawn in the theme the reader
   is viewing.
+- **Every chart names its marks** (2026-10): one shared interaction,
+  `components/shared/ChartReadout.tsx`. Hover or tap picks the nearest mark
+  within 24px (along the axis for marks given `x`/`y`, by shape for drawn
+  elements carrying `data-mark={id}`), the label stays while the pointer is
+  on it and closes on Escape, a click (a second tap on touch) opens the
+  mark's page; the chart is one Tab stop the arrow keys walk (`cols` for a
+  grid), Enter opens, a polite live region reads each label. What a label
+  says is the API's (`ReadoutMark`: label, detail, shown, context, href),
+  written beside the data by `backend/app/readout.py` or the service that
+  owns it, never computed on the page. The drawing stays `aria-hidden`; the
+  chart keeps its table, list or text beside it. Strips (`Strip.tsx`) are
+  this component; a new chart uses it rather than its own pointer code.
 - **Type** (2026-10, `src/app/fonts.ts`): Source Serif 4 600 for titles
   (`font-display`), Fira Sans 400/600 for everything else (`font-sans`; the
   long-standing `font-mono` class maps to Fira Sans too, so a label keeps its

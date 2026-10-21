@@ -1,12 +1,16 @@
 import type { CountdownFigure, DotsFigure, Figure, SplitFigure, StatFigure } from "@/types/figure";
 import { overlay, partyMark } from "@/lib/chartColors";
+import { MARK_ATTR } from "@/types/readout";
+import ChartReadout from "./ChartReadout";
 
 /**
  * A record box's figure: a counted number, a yea-nay split, a party's dots
  * or a comment period's countdown. The homepage's front page and every
- * RecordBox draw these, so a figure looks the same on every page. Each is
- * an image with its own text (role="img" and a label that says what it
- * shows); every number and caption comes from the backend.
+ * RecordBox draw these, so a figure looks the same on every page. A
+ * figure with marks (a split's sides, a party's dots, a period's bar)
+ * names each on hover, tap and the keyboard (ChartReadout), from the
+ * backend's `marks`; the rest is an image with its own text (role="img").
+ * Every number and caption comes from the backend.
  *
  * Sizes: "lead" and "tier" are the front page's (set by the window's
  * width); "box" and "boxLead" follow the box they sit in (container
@@ -26,12 +30,24 @@ const YEA = "var(--phos)";
 const NAY = "var(--signal-red)";
 
 function splitLabel(f: SplitFigure): string {
-  return `${f.yeas} yea to ${f.nays} nay. ${f.caption}.`;
+  return `${f.yeas} yea to ${f.nays} nay, ${f.caption}`;
+}
+
+/** The yea and nay sides, each a mark its readout names. */
+function SplitSides({ f, height, gap }: { f: SplitFigure; height: string; gap: string }) {
+  return (
+    <ChartReadout label={splitLabel(f)} marks={f.marks}>
+      <div className={`flex ${gap} ${height}`}>
+        <span {...{ [MARK_ATTR]: "yea" }} style={{ flex: f.yeas, background: YEA }} />
+        <span {...{ [MARK_ATTR]: "nay" }} style={{ flex: f.nays, background: NAY }} />
+      </div>
+    </ChartReadout>
+  );
 }
 
 function BigSplit({ f, size }: { f: SplitFigure; size: FigureSize }) {
   return (
-    <div role="img" aria-label={splitLabel(f)}>
+    <div>
       <div
         className={`whitespace-nowrap text-center font-display font-semibold leading-none text-ink-hi ${VALUE[size]}`}
       >
@@ -50,20 +66,16 @@ function BigSplit({ f, size }: { f: SplitFigure; size: FigureSize }) {
 
 function SplitBar({ f, height }: { f: SplitFigure; height: string }) {
   return (
-    <div className={`mt-3 flex gap-0.5 ${height}`}>
-      <span style={{ flex: f.yeas, background: YEA }} />
-      <span style={{ flex: f.nays, background: NAY }} />
+    <div className="mt-3">
+      <SplitSides f={f} height={height} gap="gap-0.5" />
     </div>
   );
 }
 
 function MiniSplit({ f }: { f: SplitFigure }) {
   return (
-    <div role="img" aria-label={splitLabel(f)} className="mb-0.5 mt-1.5 w-full max-w-[180px]">
-      <div className="flex h-2 gap-px">
-        <span style={{ flex: f.yeas, background: YEA }} />
-        <span style={{ flex: f.nays, background: NAY }} />
-      </div>
+    <div className="mb-0.5 mt-1.5 w-full max-w-[180px]">
+      <SplitSides f={f} height="h-2" gap="gap-px" />
     </div>
   );
 }
@@ -79,30 +91,36 @@ function Dots({ f, mini = false }: { f: DotsFigure; mini?: boolean }) {
   const rows = Math.ceil(f.voting / cols);
   const pitch = 12;
   const mark = partyMark(f.party);
+  // Who each dot is, in drawing order: the breaker is the last.
+  const marks = f.marks.length === f.voting ? f.marks : [];
   return (
-    <div role="img" aria-label={`${f.caption}.`} className={mini ? "mt-1.5 max-w-[180px]" : ""}>
-      <svg
-        viewBox={`0 0 ${cols * pitch} ${rows * pitch}`}
-        className="block w-full max-w-[180px]"
-        aria-hidden="true"
+    <div className={mini ? "mt-1.5 max-w-[180px]" : ""}>
+      <ChartReadout
+        label={`${f.caption}: one dot per ${f.party === "D" ? "Democrat" : "Republican"} voting`}
+        marks={marks}
+        startId={marks[marks.length - 1]?.id}
+        className="max-w-[180px]"
       >
-        {Array.from({ length: f.voting }, (_, i) => {
-          const breaker = i === f.voting - 1;
-          return (
-            <circle
-              key={i}
-              cx={(i % cols) * pitch + pitch / 2}
-              cy={Math.floor(i / cols) * pitch + pitch / 2}
-              r={breaker ? 3.6 : 4.4}
-              // The breaker is a ring, not another colour: told apart by
-              // shape, never by a party's colour.
-              fill={breaker ? "none" : mark}
-              stroke={breaker ? "var(--ink-hi)" : undefined}
-              strokeWidth={breaker ? 2 : undefined}
-            />
-          );
-        })}
-      </svg>
+        <svg viewBox={`0 0 ${cols * pitch} ${rows * pitch}`} className="block w-full max-w-[180px]">
+          {Array.from({ length: f.voting }, (_, i) => {
+            const breaker = i === f.voting - 1;
+            return (
+              <circle
+                key={i}
+                {...{ [MARK_ATTR]: marks[i]?.id }}
+                cx={(i % cols) * pitch + pitch / 2}
+                cy={Math.floor(i / cols) * pitch + pitch / 2}
+                r={breaker ? 3.6 : 4.4}
+                // The breaker is a ring, not another colour: told apart by
+                // shape, never by a party's colour.
+                fill={breaker ? "none" : mark}
+                stroke={breaker ? "var(--ink-hi)" : undefined}
+                strokeWidth={breaker ? 2 : undefined}
+              />
+            );
+          })}
+        </svg>
+      </ChartReadout>
       {!mini && <div className="mt-2 text-sm text-ink-lo">{f.caption}</div>}
     </div>
   );
@@ -120,13 +138,16 @@ export function daysLeftWords(f: CountdownFigure): string {
 function Elapsed({ f, className = "" }: { f: CountdownFigure; className?: string }) {
   if (f.totalDays == null || f.elapsedPercent == null) return null;
   return (
-    <div
-      role="img"
-      aria-label={`${f.totalDays - f.daysLeft} of the period's ${f.totalDays} days gone. ${daysLeftWords(f)}.`}
-      className={`flex h-2 w-full max-w-[180px] ${className}`}
-      style={{ background: overlay(0.15) }}
-    >
-      <span style={{ width: `${f.elapsedPercent}%`, background: "var(--signal-amber)" }} />
+    <div className={`w-full max-w-[180px] ${className}`}>
+      <ChartReadout label={`Comment period, ${daysLeftWords(f)}`} marks={f.marks ?? []}>
+        <div
+          {...{ [MARK_ATTR]: "elapsed" }}
+          className="flex h-2"
+          style={{ background: overlay(0.15) }}
+        >
+          <span style={{ width: `${f.elapsedPercent}%`, background: "var(--signal-amber)" }} />
+        </div>
+      </ChartReadout>
     </div>
   );
 }
