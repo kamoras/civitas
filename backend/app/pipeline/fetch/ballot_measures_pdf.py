@@ -177,12 +177,28 @@ async def discover_pdf_url_checked(
             continue
         visited.add(url)
         try:
-            response = await client.get(url, timeout=30.0)
+            # A redirect within the state's own site is the page moved, not
+            # gone: voteidaho.gov sent every page to a maintenance landing
+            # page on archive.voteidaho.gov in 2026-10, which still links
+            # the pamphlet, and a 302 read as an unreadable page failed the
+            # state. One that leaves the site was not read (below).
+            response = await client.get(url, timeout=30.0, follow_redirects=True)
             response.raise_for_status()
             html = response.text
         except Exception:
             complete = False
             continue
+        landed = str(response.url)
+        if response.history:
+            # The document linked from where the page landed is taken, but
+            # its absence there is not "not published": a moved page that
+            # lands on a homepage or a stopgap says nothing about the
+            # document the registered page would have linked.
+            complete = False
+            if not same_site(urlparse(landed).netloc, start_domain):
+                continue
+        url = landed
+        visited.add(url)
         fetched += 1
 
         for href, text in _PDF_LINK_RE.findall(html):

@@ -101,6 +101,7 @@ only NEBRASKA is opted in:
 
 import logging
 import re
+import time
 from datetime import datetime, timezone
 from urllib.parse import urljoin, urlsplit
 from zoneinfo import ZoneInfo
@@ -464,6 +465,85 @@ def general_contests(html: str) -> list[ContestCount]:
     return out
 
 
+async def _results_page(client: httpx.AsyncClient, state: str, url: str, label: str) -> str | None:
+    """A results page's HTML; None when the host sends it to another site
+    (it serves no election there). A failed read raises FeedUnreadable."""
+    resp = await http_utils.fetch_with_retry(
+        client, _rate_limiter, "GET", url, log_label=label, headers=BROWSER_HEADERS, follow_redirects=False,
+    )
+    if resp is None:
+        raise FeedUnreadable(f"{state} results page {url} could not be read")
+    if 300 <= getattr(resp, "status_code", 200) < 400:
+        # Between elections the host sends its results page to the
+        # Secretary of State's own site (New Mexico's and Montana's,
+        # 2026-10; Montana's behind a bot wall): it serves no election,
+        # which is "not published yet", not an outage. A redirect within
+        # the host is followed.
+        target = urljoin(url, resp.headers.get("location") or "")
+        if urlsplit(target).hostname != urlsplit(url).hostname:
+            logger.info("%s results page redirects off its host to %s: no election served", state, target)
+            return None
+        html = await fetch_text_with_retry(client, _rate_limiter, url, label)
+        if html is None:
+            raise FeedUnreadable(f"{state} results page {url} could not be read")
+        return html
+    return resp.text
+
+
+# A state whose no-eid page stops serving the staged general (New Mexico's,
+# 2026-10: the general was staged there on 2026-09-28; by 2026-10-12 the
+# page redirected to the Secretary of State's site, while the general stayed
+# staged under its own id, eid=2917, read 2026-10-21) is found by its id.
+# The state's own results page for the year (`general_eid_discovery.page_url`,
+# "{year}" filled from the election) links the year's published elections
+# by id on the results host; the vendor numbers elections in order (New
+# Mexico's 2026: 2901 municipal, 2911 primary, 2912 a runoff, 2917 the
+# staged general), so the ids just past the newest linked one are read, as
+# are the newest linked ones (a general already published is linked). Each
+# page is taken only on its own type and date (_general_held_on): an id
+# never stands for an election by itself.
+_EID_WALK = 12
+_EID_LINKED = 4
+_EID_MISS_TTL_S = 20 * 60
+_general_eids: dict[tuple[str, str], int] = {}
+_general_eid_misses: dict[tuple[str, str], float] = {}
+
+
+async def _discover_general_eid(
+    client: httpx.AsyncClient, state: str, base_url: str, query: dict, discovery: dict, election_day,
+) -> int | None:
+    """The id of the general held on `election_day`, or None when no page
+    near the state's newest linked election serves it. Two pages that both
+    do are refused rather than picked between (UntrustedCount)."""
+    key = (base_url, election_day.isoformat())
+    if key in _general_eids:
+        return _general_eids[key]
+    missed = _general_eid_misses.get(key)
+    if missed is not None and time.monotonic() - missed < _EID_MISS_TTL_S:
+        return None
+    page_url = discovery["page_url"].format(year=election_day.year)
+    index = await fetch_text_with_retry(client, _rate_limiter, page_url, f"{state} results index")
+    if index is None:
+        raise FeedUnreadable(f"{state} results index {page_url} could not be read")
+    host = re.escape(urlsplit(base_url).hostname or "")
+    linked = sorted({int(m) for m in re.findall(rf"//{host}/[^\"'\s>]*?[?&;]eid=(\d+)", index)}, reverse=True)
+    held = []
+    if linked:
+        for eid in [*range(linked[0] + 1, linked[0] + 1 + _EID_WALK), *linked[:_EID_LINKED]]:
+            url = f"{base_url}/resultsSW.aspx?type={query['type']}&map={query['map']}&eid={eid}"
+            html = await _results_page(client, state, url, f"{state} election {eid}")
+            if html is not None and _general_held_on(html) == election_day.isoformat():
+                held.append(eid)
+    if len(held) > 1:
+        raise UntrustedCount(f"{state}: elections {held} are each a general on {election_day}; refusing to guess")
+    if not held:
+        logger.info("%s: no election near %s's newest linked id serves the %s general", state, page_url, election_day)
+        _general_eid_misses[key] = time.monotonic()
+        return None
+    _general_eids[key] = held[0]
+    return held[0]
+
+
 async def fetch_general_results(
     client: httpx.AsyncClient, election_day, state: str, source: dict,
 ) -> StateCount | None:
@@ -499,29 +579,22 @@ async def fetch_general_results(
     contests: list[ContestCount] = []
     urls = []
     stamps = []
+    eid = ""
     for query in queries:
         url = f"{base_url}/resultsSW.aspx?type={query['type']}&map={query['map']}"
         label = f"{state} general results {query['type']}"
-        resp = await http_utils.fetch_with_retry(
-            client, _rate_limiter, "GET", url, log_label=label, headers=BROWSER_HEADERS, follow_redirects=False,
-        )
-        if resp is None:
-            raise FeedUnreadable(f"{state} results page {url} could not be read")
-        if 300 <= getattr(resp, "status_code", 200) < 400:
-            # Between elections the host sends its results page to the
-            # Secretary of State's own site (New Mexico's and Montana's,
-            # 2026-10; Montana's behind a bot wall): it serves no election,
-            # which is "not published yet", not an outage. A redirect within
-            # the host is followed.
-            target = urljoin(url, resp.headers.get("location") or "")
-            if urlsplit(target).hostname != urlsplit(url).hostname:
-                logger.info("%s results page redirects off its host to %s: no election served", state, target)
+        html = await _results_page(client, state, url + eid, label)
+        if html is None and not eid and source.get("general_eid_discovery"):
+            found = await _discover_general_eid(
+                client, state, base_url, query, source["general_eid_discovery"], election_day,
+            )
+            if found is None:
                 return None
-            html = await fetch_text_with_retry(client, _rate_limiter, url, label)
-            if html is None:
-                raise FeedUnreadable(f"{state} results page {url} could not be read")
-        else:
-            html = resp.text
+            eid = f"&eid={found}"
+            html = await _results_page(client, state, url + eid, label)
+        if html is None:
+            return None
+        url += eid
         if _general_held_on(html) != election_day.isoformat():
             return None
         if (message := _testing_message(html)) is not None:

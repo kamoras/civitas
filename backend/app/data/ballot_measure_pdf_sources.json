@@ -110,7 +110,7 @@
     "ME": {
       "source_name": "Maine Secretary of State",
       "strategy": "me_citizens_guide",
-      "description": "The 'Maine Citizen's Guide to the Referendum Election' (SOS with the Attorney General, Treasurer and Office of Fiscal and Program Review), found from the Upcoming Elections page / the SOS news release announcing it because its filename changes every year. Reads the AG's Intent and Content (official_summary) and verbatim 'A “YES” vote ...'/'A “NO” vote ...' sentences, plus Treasurer debt service and OFPR fiscal impact. Verified against the real 2024 (5 questions) and 2025 (2 questions) guides; the parsed list must match the guide's own question listing. 2026 guide not yet published as of 2026-09-28, so this reads not-yet-covered rather than guessing."
+      "description": "The 'Maine Citizen's Guide to the Referendum Election' (SOS with the Attorney General, Treasurer and Office of Fiscal and Program Review), found from the Upcoming Elections page / the SOS news release announcing it because its filename changes every year. Reads the AG's Intent and Content (official_summary) and verbatim 'A “YES” vote ...'/'A “NO” vote ...' sentences, plus Treasurer debt service and OFPR fiscal impact. Verified against the real 2024 (5 questions) and 2025 (2 questions) guides; the parsed list must match the guide's own question listing. 2026 guide still not published as of 2026-10-21, and no Secretary of State page states the ballot has no question, so this reads not-yet-covered rather than guessing."
     },
     "AL": {
       "source_name": "Alabama Secretary of State (Fair Ballot Commission ballot statements)",
@@ -230,7 +230,7 @@
       ],
       "source_name": "Idaho Secretary of State",
       "strategy": "id_voter_pamphlet",
-      "description": "Official Idaho Voter Pamphlet (archive.voteidaho.gov/download/{year}_Voter_Pamphlet.pdf, discovered from the general-election page; the Spanish 'Folleto' is excluded). Verified live 2026-09-28: HJR 4, HJR 6, Proposition One and the House Bill 932 advisory question, with Idaho's own 'WHAT YOUR VOTE WILL DO' YES/NO framing and the Division of Financial Management's fiscal summary. See ballot_measures_id.py."
+      "description": "Official Idaho Voter Pamphlet (archive.voteidaho.gov/download/{year}_Voter_Pamphlet.pdf, discovered from the general-election page; the Spanish 'Folleto' is excluded). Verified live 2026-09-28: HJR 4, HJR 6, Proposition One and the House Bill 932 advisory question, with Idaho's own 'WHAT YOUR VOTE WILL DO' YES/NO framing and the Division of Financial Management's fiscal summary. From 2026-10-21 every voteidaho.gov address redirects (302) to a maintenance page on archive.voteidaho.gov that still links the pamphlet; discovery follows a redirect only within the site. See ballot_measures_id.py."
     },
     "MT": {
       "source_name": "Montana Secretary of State",
@@ -305,7 +305,7 @@
     "OH": {
       "source_name": "Ohio Secretary of State",
       "strategy": "oh_official_sample_ballot",
-      "description": "The Secretary's official sample ballot for the general election, linked from the directives page (ohiosos.gov/elections/elections-officials/rules/): the state-issue page, read column by column — Issue number, the ballot title, the ballot language and, where printed, the ballot's own 'A “YES”/“NO” vote means ...' sentences. Verified live 2026-09-28: Issue 3 (photo identification), and against the 2024 (Issue 1) and 2022 (Issues 1-2) sample ballots; the 2025 sample ballot, with no state-issue page, reads as none. See ballot_measures_oh.py."
+      "description": "The Secretary's official sample ballot for the general election, linked from the directives page (ohiosos.gov/elections/elections-officials/rules/): the state-issue page, read column by column — Issue number, the ballot title, the ballot language and, where printed, the ballot's own 'A “YES”/“NO” vote means ...' sentences. Verified live 2026-09-28: Issue 3 (photo identification), and against the 2024 (Issue 1) and 2022 (Issues 1-2) sample ballots; the 2025 sample ballot, with no state-issue page, reads as none. From 2026-10-21 all of www.ohiosos.gov answers a Cloudflare challenge: ingest_failed naming the wall, never worked around, and no county republishes the Secretary's sample ballot. See ballot_measures_oh.py."
     },
     "UT": {
       "source_name": "Utah Lieutenant Governor",

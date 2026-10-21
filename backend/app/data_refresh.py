@@ -102,7 +102,10 @@ class Context:
     def tried_within(self, days: int) -> bool:
         if self.last_failed:
             days = min(days, RETRY_FAILED_AFTER_DAYS)
-        return self.last_tried is not None and utcnow() - self.last_tried < timedelta(days=days)
+        # Counted in calendar days: the job runs once a day at 15:40 and a
+        # heavy file finishes hours later, so a 24-hour clock made every
+        # cadence a day late (tried at 18:48, a week on at 15:40 is 6d 21h).
+        return self.last_tried is not None and (utcnow().date() - self.last_tried.date()).days < days
 
 
 @dataclass(frozen=True)
@@ -217,17 +220,46 @@ def failure_alert(name: str, what: str, detail: str | None, logged_at: str | Non
     return body
 
 
+def bundled_sha256(name: str) -> str | None:
+    """The content hash of app/data/`name` as shipped with the code."""
+    try:
+        doc = json.loads((BUNDLED / name).read_text())
+    except (OSError, ValueError):
+        return None
+    return content_sha256(doc) if isinstance(doc, dict) else None
+
+
+def bundled_moved(name: str, doc: dict) -> bool:
+    """A refreshed copy in use whose bundled copy has changed since it was
+    installed: a commit regenerated the file (a method change, or data the
+    method now reads), and read() keeps serving the refreshed copy until
+    the next refresh. #1113 shipped the House fit through 2024 on
+    2026-10-19, and the map kept the 2026-10-18 refit through 2022 for a
+    week. Copies installed before the record existed have none and are not
+    told apart."""
+    recorded = (doc.get("_refreshed") or {}).get("bundled")
+    return recorded is not None and recorded != bundled_sha256(name)
+
+
 def install(spec: DataFile | str, new: dict, argv: list[str]) -> bool:
     """Write a gated candidate as the copy in use, with its provenance.
     False when it is the same content as the copy in use (nothing written)."""
     name = spec if isinstance(spec, str) else spec.name
     old = read(name)
     sha = content_sha256(new)
+    bundled = bundled_sha256(name)
     if old and content_sha256(old) == sha:
+        provenance = old.get("_refreshed") or {}
+        if provenance and provenance.get("bundled") != bundled:
+            # Same content, but measured against the bundled copy now shipped.
+            write_text_atomic(runtime_data_path(name), json.dumps(
+                {**old, "_refreshed": {**provenance, "bundled": bundled}}, indent=1, ensure_ascii=False) + "\n")
+            _read_cache.pop(name, None)
         return False
     rel = [a if not a.startswith(str(BACKEND)) else os.path.relpath(a, BACKEND) for a in argv]
     doc = {**new, "_refreshed": {"at": utcnow().isoformat(timespec="seconds"),
-                                 "by": "app/data_refresh.py", "command": " ".join(rel), "sha256": sha}}
+                                 "by": "app/data_refresh.py", "command": " ".join(rel), "sha256": sha,
+                                 "bundled": bundled}}
     write_text_atomic(runtime_data_path(name), json.dumps(doc, indent=1, ensure_ascii=False) + "\n")
     _read_cache.pop(name, None)
     return True
@@ -332,7 +364,8 @@ def run_refreshes(files: list[DataFile] | None = None, *, pipeline_busy: bool = 
     for spec in files if files is not None else DATA_FILES:
         try:
             ctx = Context(spec.name, read(spec.name), utcnow().date(), *_last_try(spec.name))
-            if spec.command and spec.due(ctx):
+            shipped = any(bundled_moved(n, read(n)) for n in (spec.name, *spec.outputs))
+            if spec.command and (spec.due(ctx) or (shipped and not ctx.tried_within(1))):
                 if spec.heavy and pipeline_busy:
                     outcomes[spec.name] = "waiting for the pipeline"
                 else:

@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { BSKY_PROFILE_URL, GITHUB_REPO_URL, SITE_TAGLINE } from "@/lib/site";
-import ThemeToggle from "@/components/layout/ThemeToggle";
 
 /**
  * Colophon footer.
@@ -76,7 +75,6 @@ export default function Footer() {
                 {label}
               </a>
             ))}
-            <ThemeToggle />
           </div>
         </nav>
 
