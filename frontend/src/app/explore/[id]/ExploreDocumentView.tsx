@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { documentsHref } from "@/lib/routes";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import {
@@ -612,12 +613,12 @@ export default function ExploreDocumentView({
       <main id="main-content" tabIndex={-1} className="pt-[var(--header-clearance)] pb-16 px-4">
         <div className="max-w-3xl mx-auto">
           {/* Back to the results the reader came from; a reader who
-              arrived from anywhere else has none, and gets Explore. */}
+              arrived from anywhere else has none, and gets the documents search. */}
           <Link
-            href={query ? `/explore?q=${encodeURIComponent(query)}` : "/explore"}
+            href={documentsHref({ q: query || undefined })}
             className="inline-block text-xs font-mono text-ink-lo hover:text-phos transition-colors mb-2"
           >
-            {query ? "← Back to results" : "← Explore"}
+            {query ? "← Back to results" : "← Search documents"}
           </Link>
           {/* What this site is, for a reader who arrived here from a search
               engine or a shared link: one line, in the homepage's words. */}

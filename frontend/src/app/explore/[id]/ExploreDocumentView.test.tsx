@@ -87,12 +87,15 @@ describe("Explore document page", () => {
     withDocument();
     api.streamExploreDocumentSummary.mockReturnValue(new Promise(() => {}));
     renderPage();
-    expect(screen.getByRole("link", { name: "← Explore" })).toHaveAttribute("href", "/explore");
+    expect(screen.getByRole("link", { name: "← Search documents" })).toHaveAttribute(
+      "href",
+      "/search?tab=documents"
+    );
     cleanup();
     renderPage(DOC, "tariffs");
     expect(screen.getByRole("link", { name: "← Back to results" })).toHaveAttribute(
       "href",
-      "/explore?q=tariffs"
+      "/search?tab=documents&q=tariffs"
     );
   });
 

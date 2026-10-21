@@ -1,5 +1,6 @@
 import { EYEBROW } from "@/lib/typeStyles";
 import Link from "next/link";
+import { OPEN_COMMENTS_HREF } from "@/lib/routes";
 import { connection } from "next/server";
 import type { CommentDeadline, StateNextDeadline, ThisWeek } from "@/types/thisWeek";
 import { countdownText } from "@/components/elections/VoterCalendar";
@@ -293,7 +294,7 @@ function FullStrip({ data }: { data: ThisWeek }) {
             </ul>
           )}
           <Link
-            href="/explore?comment=open"
+            href={OPEN_COMMENTS_HREF}
             className={`inline-flex min-h-6 w-fit items-center font-mono text-xs ${LINK}`}
           >
             Every open comment period &rarr;

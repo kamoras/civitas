@@ -118,8 +118,8 @@ describe("Navbar", () => {
     expect(
       within(row).getByRole("button", { name: /^Elections,? ?current section$/ })
     ).toBeInTheDocument();
-    expect(within(row).getByRole("link", { name: "Explore" })).toHaveAttribute("href", "/explore");
-    expect(within(row).queryByRole("button", { name: /^Explore/ })).toBeNull();
+    // Documents are searched from the header's search, not a section.
+    expect(within(row).queryByRole("link", { name: "Explore" })).toBeNull();
   });
 
   it("lists the sections first, each one's pages behind its own disclosure, then the state", () => {

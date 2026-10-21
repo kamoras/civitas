@@ -50,6 +50,7 @@ export default function SearchCombobox({
   onNavigate,
   label = "Search Civitas",
   inlineList = false,
+  hidden,
 }: {
   initialQuery?: string;
   autoFocus?: boolean;
@@ -59,6 +60,10 @@ export default function SearchCombobox({
   /** The list in the page's flow (inside the search dialog) rather than
    *  over what follows it. */
   inlineList?: boolean;
+  /** Fields the form sends beside the words: the results page's filter
+   *  (`tab`), and on the Documents filter its other filters, so a new
+   *  search keeps them. */
+  hidden?: Record<string, string>;
 }) {
   const router = useRouter();
   const id = useId();
@@ -172,6 +177,9 @@ export default function SearchCombobox({
 
   return (
     <form role="search" action="/search" method="get" className="@container relative w-full">
+      {Object.entries(hidden ?? {}).map(([name, v]) => (
+        <input key={name} type="hidden" name={name} value={v} />
+      ))}
       <label htmlFor={inputId} className="mb-2 block font-mono text-xs text-ink-lo">
         {label}
       </label>

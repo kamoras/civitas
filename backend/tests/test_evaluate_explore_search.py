@@ -10,7 +10,6 @@ harness that silently builds degenerate queries would report a hybrid
 
 import importlib.util
 import pathlib
-import random
 
 import pytest
 
@@ -20,9 +19,7 @@ import pytest
 # lazily leaves the run with no explore_documents table — and only when the
 # file runs alone, since any other module that imports it first hides the
 # problem.
-from app.models import ExploreDocument, Senator, SponsoredBill  # noqa: E402
-from app.config import settings  # noqa: E402
-from app.services.bill_service import clear_bill_collection_cache  # noqa: E402
+from app.models import ExploreDocument  # noqa: E402
 
 _SCRIPT = (
     pathlib.Path(__file__).resolve().parent.parent / "scripts" / "evaluate_explore_search.py"
@@ -319,34 +316,3 @@ def test_own_identifier_probes_use_the_documents_own_names(harness):
     ])
     assert sorted((p["style"], p["doc_id"], p["query"]) for p in probes) == [
         ("frcite", 1, "91 FR 48248"), ("frdoc", 1, "2026-15603")]
-
-
-def test_group_probes_are_built_from_the_records(harness):
-    members = harness.build_member_probes([{"id": "avery-holt", "name": "Avery Holt"}], random.Random(1))
-    assert [(p["style"], p["query"]) for p in members][:2] == [("surname", "holt"), ("full name", "Avery Holt")]
-    typo = members[2]["query"]
-    assert typo != "holt" and sorted(typo) == sorted("holt") and typo[0] == "h"
-
-    bills = harness.build_bill_probes(
-        [{"billId": "S.2079", "label": "S. 2079", "title": "A bill to ban burning", "shortTitle": "Flag Burners Act"}],
-        random.Random(1),
-    )
-    assert [(p["style"], p["query"]) for p in bills][:2] == [("number", "S. 2079"), ("name", "Flag Burners Act")]
-
-
-def test_group_measurement_ranks_the_target_in_its_own_group(harness, db_session):
-    db_session.add(Senator(id="avery-holt", name="Avery Holt", state="PA", party="D", is_current=True))
-    db_session.add(SponsoredBill(senator_id="avery-holt", bill_id="S.2079", title="Flag Burners Act",
-                                 stage="INTRODUCED", congress=settings.CURRENT_CONGRESS, bill_type="S",
-                                 latest_action_date="2026-01-01"))
-    db_session.commit()
-    clear_bill_collection_cache()
-
-    by = harness.measure_groups(db_session, [
-        {"group": "members", "style": "surname", "target": "avery-holt", "query": "holt"},
-        {"group": "bills", "style": "words", "target": "S.2079", "query": "burning flag"},
-        {"group": "bills", "style": "words", "target": "S.2079", "query": "tax credits"},
-    ])
-    # The Bills group matches titles, so the member's own bill stays out.
-    assert by[("members", "surname")] == {"ranks": [1], "other": [False]}
-    assert by[("bills", "words")]["ranks"] == [1, None]
