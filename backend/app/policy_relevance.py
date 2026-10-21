@@ -41,13 +41,14 @@ from the same feeds), labelled the same way. On 2026-10-16 that was 443
 labelled articles, 440 of them relevant: the database keeps what the old
 gate let through and the races matched, so it holds almost no articles
 filed under another desk. Those arrive with the feeds themselves, about 30
-a day (48 in a first run's 48-hour window), so the store clears
-MIN_CLASS_ROWS of both labels three to four days after deploy.
+a day (48 in a first run's 48-hour window).
 
-Until the store holds MIN_CLASS_ROWS of each label, the seed — the texts of
-app/data/policy_relevance_examples.json, labelled the same way from their
-outlet and masked names, never from the hand labels they once carried —
-fills in, so a fresh database still has a gate.
+Until the store holds as many articles of each label as the seed does, the
+seed — the texts of app/data/policy_relevance_examples.json, labelled the
+same way from their outlet and masked names, never from the hand labels
+they once carried — fills in, so a fresh database still has a gate. The
+store takes over once its own evidence for each label is at least the
+seed's: no count is typed (it was 150, "a guess at enough").
 
 Lives outside app/pipeline/, like committee_routing.py, so it is outside the
 analysis-code fingerprint without touching the hashed exemption lists:
@@ -86,11 +87,6 @@ DESCRIPTION_CHARS = 200
 # several news cycles of every desk; short enough that the vote follows
 # what the feeds carry now.
 REFERENCE_DAYS = 90
-
-# Below this many stored articles of either label the seed joins the
-# reference. A guess at "enough", not a fit: it is about a day and a half
-# of the national feeds' positives, and the seed only ever adds examples.
-MIN_CLASS_ROWS = 150
 
 # A copy of the same wire story (PBS republishing AP) is not independent
 # evidence for itself when the calibration leaves one out.
@@ -238,7 +234,8 @@ def reference(db: Session, exclude_urls: Iterable[str] = ()) -> tuple[np.ndarray
     """(embeddings, labels, seed rows used) of the labelled reference: every
     stored labelled article inside REFERENCE_DAYS (but those in
     `exclude_urls`, which are being judged) on the current model, plus the
-    seed while either label is short of MIN_CLASS_ROWS."""
+    seed while the store holds fewer articles of either label than the seed
+    has of it."""
     model = _MODEL
     since = utcnow() - timedelta(days=REFERENCE_DAYS)
     exclude = set(exclude_urls)
@@ -249,7 +246,9 @@ def reference(db: Session, exclude_urls: Iterable[str] = ()) -> tuple[np.ndarray
     vectors = np.array([np.frombuffer(r.embedding, dtype=np.float32) for r in rows], dtype=np.float32)
     labels = np.array([float(r.label) for r in rows])
     positives = int(labels.sum()) if len(rows) else 0
-    if min(positives, len(rows) - positives) >= MIN_CLASS_ROWS:
+    seed = [label for _, label in seed_rows()]
+    seed_positives, seed_negatives = sum(seed), len(seed) - sum(seed)
+    if positives >= seed_positives and len(rows) - positives >= seed_negatives:
         return vectors, labels, 0
     seed_vectors, seed_labels = _seed_reference()
     if not rows:

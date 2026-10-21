@@ -36,7 +36,7 @@ from app.pipeline.fetch.bill_display_titles import cached_display_titles, titles
 from app.pipeline.fetch.http_utils import fetch_with_retry
 from app.pipeline.rate_limiter import RateLimiter
 from app.pipeline.transform.normalize_votes import resolve_senate_lis_ids
-from app.services import bill_journey
+from app.services import bill_boxes, bill_journey
 from app.services.congress_service import amendment_fields, bill_coverage, bill_days, bill_label
 from app.services.explore_keys import public_key
 from app.services.nomination_links import nomination_votes
@@ -286,8 +286,8 @@ class MemberLinks:
 
     def _senate_lis_ids(self, db: Session) -> dict[str, str]:
         """{senator id: LIS id} where the roll calls give one last name and
-        state to two people (resolve_senate_lis_ids): Lindsey Graham's
-        votes linked to Darline Graham's page, who took his seat."""
+        state to two people (resolve_senate_lis_ids): one senator's votes
+        linked to the page of the other senator of that surname and state."""
         people = db.query(
             RollCallPosition.member_id, RollCallPosition.first_name,
             RollCallPosition.last_name, RollCallPosition.state,
@@ -582,7 +582,7 @@ def shape_record(db: Session, congress: int, bill_id: str, raw: dict) -> dict:
          "session": v.get("sessionNumber"), "sourceUrl": _roll_call_source(congress, v)}
         for v in a.get("recordedVotes") or []
     ])
-    return {
+    record = {
         "billId": bill_id,
         "billLabel": bill_label(bill_id),
         "congress": congress,
@@ -626,6 +626,9 @@ def shape_record(db: Session, congress: int, bill_id: str, raw: dict) -> dict:
         # Congress: an empty one outside it is "not held", not "none".
         "coverage": bill_coverage(db, congress),
     }
+    # Each part's one templated line, for the page's boxes (bill_boxes).
+    record["boxes"] = bill_boxes.boxes(record, bill.get("laws") or [])
+    return record
 
 
 def _roll_call_source(congress: int, vote: dict) -> str | None:

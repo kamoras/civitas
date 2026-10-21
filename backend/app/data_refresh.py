@@ -30,6 +30,7 @@ Readers call `read(name)`, which notices a rewrite from either process.
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import json
 import logging
@@ -46,7 +47,7 @@ from datetime import date, datetime, timedelta
 
 import httpx
 
-from app import committee_routing
+from app import committee_routing, site_search
 from app.atomic_write import runtime_data_path, write_text_atomic
 from app.config import settings
 from app.contact import BOT_USER_AGENT
@@ -115,7 +116,7 @@ class DataFile:
     command: Callable[[Context], list[str] | None] | None = None
     due: Callable[[Context], bool] = lambda ctx: False
     gate: Callable[[dict, dict], list[str]] = lambda new, old: []
-    stale: Callable[[Context], str | None] = lambda ctx: None
+    stale: Callable[[Context], object] = lambda ctx: None  # str (alert), None (current) or UNCHECKED
     heavy: bool = False  # loads the embedding model or is CPU-bound: not while a pipeline runs
     moves_scores: bool = False
     timeout_s: int = 3600
@@ -129,7 +130,13 @@ class DataFile:
 
     @property
     def stem(self) -> str:
-        return self.name.removesuffix(".json").replace("_", "-")
+        return self.name.removesuffix(".gz").removesuffix(".json").replace("_", "-")
+
+
+# What a staleness check returns on a day it doesn't look (a release check
+# that reads a publisher's page monthly): the alert stays as it is. Returning
+# None instead resolved a monthly check's alert the day after it opened.
+UNCHECKED = object()
 
 
 def content_sha256(doc: dict) -> str:
@@ -333,7 +340,9 @@ def run_refreshes(files: list[DataFile] | None = None, *, pipeline_busy: bool = 
                     _record_try(spec.name, outcomes[spec.name])
                     ctx.doc = read(spec.name)
             why = spec.stale(ctx)
-            if why:
+            if why is UNCHECKED:
+                pass  # a check that runs monthly keeps its alert, open or not, between runs
+            elif why:
                 send_ops_alert(
                     f"{spec.name} is out of date",
                     f"app/data/{spec.name}: {why}",
@@ -577,7 +586,7 @@ def _peer_gdp_stale(ctx: Context) -> str | None:
     """A newer Maddison Project release than the one on file, from
     DataverseNL's search (monthly; None when it can't be read)."""
     if ctx.tried_within(30):
-        return None
+        return UNCHECKED
     _record_try(ctx.name, "release check")
     have = re.search(r"Maddison Project Database (\d{4})", str(ctx.doc.get("_source") or ""))
     try:
@@ -595,6 +604,134 @@ def _peer_gdp_stale(ctx: Context) -> str | None:
                 f"dataset with its own file id and layout: point scripts/fetch_peer_gdp.py at it and rerun "
                 f"(a new release revises history, so president Effectiveness moves).")
     return None
+
+
+# The EAC's Election Administration and Voting Survey: one release per
+# federal general, and corrected versions of it. The script reads the
+# newest year and version the EAC's datasets page lists.
+def _eavs_gate(new: dict, old: dict) -> list[str]:
+    failures = []
+    if (new.get("year") or 0) < (old.get("year") or 0):
+        failures.append(f"year {new.get('year')} is older than the {old.get('year')} survey in use")
+    missing = set(STATE_NAMES) - set(new.get("states") or {})
+    if missing:
+        failures.append(f"missing {sorted(missing)}")
+    if old.get("items") and set(new.get("items") or {}) != set(old["items"]):
+        failures.append("its items are not the ones the view reads")
+    return failures
+
+
+# USAspending to Federal Register agency names: the threshold is refitted on
+# labels the two lists supply (scripts/calibrate_agency_crosswalk.py).
+def _agency_crosswalk_gate(new: dict, old: dict) -> list[str]:
+    failures = []
+    if not (0 < (new.get("threshold") or 0) <= 1) or (new.get("youden_j") or 0) <= 0:
+        failures.append(f"threshold {new.get('threshold')} (J {new.get('youden_j')}) separates nothing")
+    for key in ("fr_agencies", "toptier_agencies", "labelled"):
+        if old.get(key) and (new.get(key) or 0) < 0.9 * old[key]:
+            failures.append(f"{key}: {new.get(key)} against {old[key]} in use")
+    return failures
+
+
+def _get_text(url: str) -> str | None:
+    try:
+        resp = httpx.get(url, headers={"User-Agent": BOT_USER_AGENT}, timeout=60, follow_redirects=True)
+        resp.raise_for_status()
+        return resp.text
+    except Exception:
+        logger.info("Data refresh: %s unreadable", url, exc_info=True)
+        return None
+
+
+def _url_exists(url: str) -> bool | None:
+    try:
+        resp = httpx.head(url, headers={"User-Agent": BOT_USER_AGENT}, timeout=60, follow_redirects=True)
+    except Exception:
+        logger.info("Data refresh: %s unreachable", url, exc_info=True)
+        return None
+    return resp.status_code == 200
+
+
+# Occupation to industry (scripts/fetch_occupation_industry.py): the ACS
+# 1-year PUMS comes out each autumn for the year before, O*NET a few times a
+# year. The script reads the newest of each, but downloads 2.4 GB of
+# records, so this only says when a newer one is out (monthly; nothing when
+# a source can't be read). A rerun moves donors' industries, so scores.
+OCCUPATION_FILE = "occupation_industry.json.gz"
+_PUMS_URL = "https://www2.census.gov/programs-surveys/acs/data/pums/{year}/1-Year/csv_pus.zip"
+_ONET_PAGE = "https://www.onetcenter.org/database.html"
+
+
+def _occupation_industry_stale(ctx: Context) -> str | None:
+    if ctx.tried_within(30):
+        return UNCHECKED
+    _record_try(ctx.name, "release check")
+    try:
+        with gzip.open(BUNDLED / OCCUPATION_FILE, "rt", encoding="utf-8") as f:
+            source = str(json.load(f).get("_source") or "")
+    except (OSError, ValueError):
+        return None
+    acs, onet = re.search(r"ACS (\d{4})", source), re.search(r"O\*NET (\d+)\.(\d+)", source)
+    newer = []
+    if acs:
+        year = int(acs[1])
+        posted = [y for y in range(year + 1, ctx.today.year) if _url_exists(_PUMS_URL.format(year=y))]
+        if posted:
+            newer.append(f"the ACS {max(posted)} 1-year PUMS is posted (this file is ACS {year})")
+    page = _get_text(_ONET_PAGE) if onet else None
+    versions = {(int(a), int(b)) for a, b in re.findall(r"db_(\d+)_(\d+)_", page or "")}
+    if onet and versions and max(versions) > (int(onet[1]), int(onet[2])):
+        newest = max(versions)
+        newer.append(f"O*NET {newest[0]}.{newest[1]} is published (this file is {onet[1]}.{onet[2]})")
+    if not newer:
+        return None
+    return ("; ".join(newer) + ". Rerun scripts/fetch_occupation_industry.py --download (it reads the newest of "
+            "each; 2.4 GB of records) and commit the file: donors' industries move, so scores do.")
+
+
+# The Court-level finding (scripts/research_justice_loyalty.py
+# --write-finding): research-only dependencies the image doesn't carry, so
+# this says when the Supreme Court Database has published a newer release
+# than the one the finding was computed on (monthly).
+_SCDB_HOME = "https://scdb.la.psu.edu/"
+
+
+def _court_finding_stale(ctx: Context) -> str | None:
+    if ctx.tried_within(30):
+        return UNCHECKED
+    _record_try(ctx.name, "release check")
+    have = re.fullmatch(r"(\d{4})_(\d{2})", str(ctx.doc.get("scdbRelease") or ""))
+    page = _get_text(_SCDB_HOME) if have else None
+    releases = {(int(a), int(b)) for a, b in re.findall(r"(\d{4})[ -][Rr]elease[ -](\d{2})", page or "")}
+    if not have or not releases or max(releases) <= (int(have[1]), int(have[2])):
+        return None
+    newest = max(releases)
+    return (f"the Supreme Court Database {newest[0]} Release {newest[1]:02d} is published (the finding uses "
+            f"{have[1]} Release {have[2]}). Point SCDB_FILE and its download in scripts/research_justice_loyalty.py "
+            f"at it and rerun with --write-finding (research dependencies, scripts/requirements-research.txt).")
+
+
+# Site search's ranking and its fusion with Explore (scripts/calibrate_site_
+# search.py, calibrate_search_fusion.py) are fitted on known-item probes
+# built from the index, per kind of entity. A kind the fit never saw is
+# ranked by parameters nothing measured on it, so the check alerts when the
+# index holds one (AGENTS.md §3b: "rerun it when the index gains a kind").
+# They are not refitted here: a ranking weight changes through review.
+def _search_kinds_stale(script: str) -> Callable[[Context], str | None]:
+    def check(ctx: Context) -> str | None:
+        live = site_search.index_kinds()
+        if live is None:
+            return None
+        fitted = ctx.doc.get("kinds")
+        if fitted is None:
+            return (f"it records no kinds of entity, so whether its fit covers the index's ({', '.join(sorted(live))}) "
+                    f"can't be told. Rerun scripts/{script} on the live index; it records them.")
+        unseen = sorted(live - set(fitted))
+        if unseen:
+            return (f"the index now holds {', '.join(unseen)}, which the fit never saw. Rerun scripts/{script} on "
+                    f"the live index and review the measured change (AGENTS.md §3b).")
+        return None
+    return check
 
 
 # The election map's training polls (app/forecast/training_polls.py):
@@ -753,6 +890,14 @@ DATA_FILES: list[DataFile] = [
              gate=training_polls.gate, timeout_s=900),
     DataFile("forecast_model.json", command=_forecast_command, due=_forecast_due, gate=_forecast_gate,
              outputs=FORECAST_OUTPUTS, check=_forward_finding, heavy=True, timeout_s=3600),
+    DataFile("eavs.json", command=lambda ctx: [PY, _script("fetch_eavs.py"), "{out}"], due=_every(30),
+             gate=_eavs_gate, timeout_s=900),
+    DataFile("agency_crosswalk.json", command=lambda ctx: [PY, _script("calibrate_agency_crosswalk.py"), "{out}"],
+             due=_every(30), gate=_agency_crosswalk_gate, timeout_s=300),
+    DataFile(OCCUPATION_FILE, stale=_occupation_industry_stale),
+    DataFile("court_finding.json", stale=_court_finding_stale),
+    DataFile("site_search_calibration.json", stale=_search_kinds_stale("calibrate_site_search.py")),
+    DataFile("search_fusion_calibration.json", stale=_search_kinds_stale("calibrate_search_fusion.py")),
     DataFile("ces_member_approval.json", stale=_ces_stale),
     DataFile("peer_gdp_per_capita.json", stale=_peer_gdp_stale),
     DataFile("bluesky_post_windows.json", stale=_bluesky_windows_stale),

@@ -1,0 +1,5 @@
+{
+  "_source": "Written by frontend/scripts/assetVersions.mjs (npm run asset-versions): a sha256 of the files that draw the site's cards and icon, the same value the frontend computes at build. Read by backend/app/site_assets.py. Regenerate when those files change; frontend/src/lib/assetVersions.test.ts fails until this matches.",
+  "ogCard": "c37e3d5d87",
+  "icon": "05c4edd933"
+}

@@ -234,7 +234,7 @@ describe("siteJsonLd", () => {
       name: "Civitas Research",
       alternateName: ["Civitas", "civitas-research.org"],
       url: "https://civitas-research.org/",
-      logo: "https://civitas-research.org/apple-icon.png",
+      logo: `https://civitas-research.org/apple-icon.png?v=${process.env.ICON_VERSION}`,
       sameAs: [
         "https://bsky.app/profile/civitas-research.org",
         "https://github.com/kamoras/civitas",

@@ -14,6 +14,10 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
+# The site's public address (SITE_URL in .env, passed by docker-compose.yml).
+# NEXT_PUBLIC_ values are inlined at build time; empty means the production
+# site (src/lib/site.ts).
+ARG NEXT_PUBLIC_SITE_URL=""
 RUN npm run build
 
 FROM base AS runner

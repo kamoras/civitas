@@ -57,7 +57,9 @@ def test_reference_recovers_each_groups_era_and_scores_what_is_left():
     early = {"own": 60 + 30 * 0.55 + 2, "opp": 90 - 90 * 0.55 + 2, "ind": 70 - 35 * 0.55 + 2}
     late = {"own": 60 + 30 * 0.90 + 2, "opp": 90 - 90 * 0.90 + 2, "ind": 70 - 35 * 0.90 + 2}
     assert abs(approval_vs_era(early, 0.55, ref["fits"]) - approval_vs_era(late, 0.90, ref["fits"])) < 1e-6
-    assert partisan_reference(_population()[:5]) is None
+    # Two parameters and a spread need three presidencies; no count is typed.
+    assert partisan_reference(_population()[:2]) is None
+    assert partisan_reference(_population()[:3])["n"] == 3
 
 
 def test_public_mandate_scores_the_era_comparison_when_it_can():

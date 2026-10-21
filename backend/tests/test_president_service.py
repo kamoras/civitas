@@ -116,6 +116,15 @@ class TestGetPresidentScoreBreakdown:
             assert (r["historiansRank"], r["historiansRated"]) == (facts["historiansRank"], facts["historiansRated"])
         assert rows[0]["historiansRank"] is None
 
+    def test_the_list_names_the_survey_edition_it_ranks_by(self, db_session):
+        """The list's caption names the edition the points were read from,
+        never a typed year: none before the survey is read."""
+        db_session.add(_make_president("a-1", number=1, historical_legacy_score=900))
+        db_session.commit()
+        assert get_president_list(db_session)[0]["historiansEdition"] is None
+        api_cache_set(db_session, "cspan-historians-survey", "latest-overall", {"edition": 2031, "data": {}})
+        assert get_president_list(db_session)[0]["historiansEdition"] == 2031
+
     def test_breakdown_has_all_four_dimensions(self, db_session):
         db_session.add(_make_president("test-3", gdp_growth_avg=3.0))
         db_session.commit()

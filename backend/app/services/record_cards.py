@@ -27,6 +27,7 @@ from datetime import date, datetime
 
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.models import (
     CongressDay,
     CongressEvent,
@@ -41,7 +42,7 @@ from app.services.bill_record import bill_label, party_breakdown
 from app.services.explore_keys import public_key
 from app.services.roll_call_shape import shape
 
-SITE_DOMAIN = "civitas-research.org"
+SITE_DOMAIN = settings.SITE_DOMAIN
 
 PARTY_NAMES = {"R": "Republican", "D": "Democratic", "I": "Independent", "ID": "Independent"}
 # The tally's rows, in the image's fixed order.

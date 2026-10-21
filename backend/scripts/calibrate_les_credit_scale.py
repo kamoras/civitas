@@ -25,12 +25,13 @@ import pathlib
 import urllib.request
 
 from app.contact import CONTACT_NOTE
+from app.site_url import SITE_URL
 from app.pipeline.analyze.score_calculator import (
     compute_les_reference,
     derive_chamber_majority,
 )
 
-API_BASE = "https://civitas-research.org/api"
+API_BASE = f"{SITE_URL}/api"
 UA = {"User-Agent": f"CivitasCivicPlatform/1.0 (LES calibration{CONTACT_NOTE})"}
 OUT = pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "les_reference.json"
 

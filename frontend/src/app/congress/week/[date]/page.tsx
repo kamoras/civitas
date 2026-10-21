@@ -1,6 +1,6 @@
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { TOPIC_FEEDS, absoluteUrl, pageMetadata } from "@/lib/site";
+import { TOPIC_FEEDS, absoluteUrl, pageMetadata, ogCardUrl } from "@/lib/site";
 import { CARD_ALT } from "@/lib/seo";
 import { ISO_DATE, fetchWeek } from "@/lib/congressServer";
 import { longDate } from "@/lib/congress";
@@ -38,7 +38,7 @@ export async function generateMetadata({
     feed: TOPIC_FEEDS.congress,
     images: [
       {
-        url: absoluteUrl(`/api/og?congressWeek=${start}`),
+        url: absoluteUrl(ogCardUrl(`congressWeek=${start}`)),
         width: 1200,
         height: 630,
         alt: CARD_ALT.period(title),
