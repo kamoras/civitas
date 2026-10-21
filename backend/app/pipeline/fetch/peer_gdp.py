@@ -62,14 +62,17 @@ logger = logging.getLogger(__name__)
 # Denmark, Switzerland, Norway, Japan.
 PEER_COUNTRIES = ("GBR", "FRA", "DEU", "NLD", "CAN", "AUS", "SWE", "ITA", "BEL", "DNK", "CHE", "NOR", "JPN")
 US = "USA"
-# Fewest peers with a growth rate over a window before their median is used.
-_MIN_PEERS = 8
+# Fewest peers with a growth rate over a window before their median is used:
+# most of them, so the median is the peers' and not a few of theirs.
+_MIN_PEERS = len(PEER_COUNTRIES) // 2 + 1
 # The first year with a bundled level, so the first growth year the
 # convergence rate is fitted on is the next.
 _FIRST_GAP_YEAR = 1946
-# Fewest years before the convergence rate is trusted. A run that can't fit
-# one keeps the stored figures.
-_MIN_CONVERGENCE_YEARS = 30
+# The convergence rate is used only when Sen's (1968) distribution-free 95%
+# interval for the slope excludes zero: catch-up the record measures. A run
+# that can't measure one keeps the stored figures. No count of years is
+# typed (it was 30).
+_Z95 = statistics.NormalDist().inv_cdf(0.975)
 
 _WB_URL = (
     "https://api.worldbank.org/v2/country/{countries}/indicator/NY.GDP.PCAP.KD"
@@ -184,21 +187,37 @@ def convergence_rate(world_bank: dict, bundled: dict, last_year: int) -> float |
     `last_year`: the Theil-Sen slope, the median of the slopes between
     every pair of years (Theil 1950; Sen 1968, JASA 63(324)). Positive
     while the peers are poorer and catching up (a negative gap lowers the
-    US's relative growth). None with fewer than _MIN_CONVERGENCE_YEARS
-    years.
+    US's relative growth). None when Sen's 95% interval for the slope
+    (sen_interval) includes zero.
 
     Not least squares: single years of postwar reconstruction move a
     least-squares slope from 5.6 to 10.2 depending on the year the fit
     starts (1947-1955); the median of pairwise slopes stays within 7.1 to
     9.9, and every rate in that range leaves the era trend near zero."""
     points = [p for p in (_year(y, world_bank, bundled) for y in range(_FIRST_GAP_YEAR + 1, last_year + 1)) if p]
-    if len(points) < _MIN_CONVERGENCE_YEARS:
-        return None
-    slopes = [
+    slopes = sorted(
         ((a[0] - a[1]) - (b[0] - b[1])) / (a[2] - b[2])
         for i, a in enumerate(points) for b in points[i + 1:] if a[2] != b[2]
-    ]
-    return statistics.median(slopes) if slopes else None
+    )
+    interval = sen_interval(slopes, len(points))
+    if interval is None or interval[0] <= 0 <= interval[1]:
+        return None
+    return statistics.median(slopes)
+
+
+def sen_interval(slopes: list[float], n: int) -> tuple[float, float] | None:
+    """Sen's (1968) 95% interval for a Theil-Sen slope from the sorted
+    pairwise `slopes` of n points: the ranks (N - C) / 2 and (N + C) / 2 + 1,
+    with C = z * sqrt(Var(Kendall's S)) = z * sqrt(n (n - 1) (2n + 5) / 18).
+    None when too few points put both ends inside the slopes."""
+    big_n = len(slopes)
+    if n < 3 or not big_n:
+        return None
+    c = _Z95 * math.sqrt(n * (n - 1) * (2 * n + 5) / 18)
+    lower, upper = math.floor((big_n - c) / 2), math.ceil((big_n + c) / 2)
+    if lower < 0 or upper >= big_n:
+        return None
+    return slopes[lower], slopes[upper]
 
 
 def peer_relative_growth(

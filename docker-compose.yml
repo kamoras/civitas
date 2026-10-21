@@ -1,10 +1,15 @@
 # For development or simple usage: docker compose up -d
-# For production deploys: docker stack deploy -c docker-compose.yml
-#   -c docker-compose.swarm.yml civitas (see docker-compose.swarm.yml for
+# For production deploys: ./check-and-deploy.sh, which merges this file with
+#   docker-compose.swarm.yml and stack-deploys the result as `civitas`
+#   (docs/self-hosting.md; see docker-compose.swarm.yml for
 #   what that overlay changes and why — the short version is: no more
 #   deploy.sh, Swarm's own rolling-update + healthcheck-gated rollback
 #   replaces the hand-rolled blue/green port-flip script).
 name: civitas
+# No container_name on any service: Compose names containers from the
+# project (civitas-backend-1, ...), so a second copy run under its own
+# `docker compose -p <name>` doesn't collide with this one, and Swarm ignores
+# the key anyway. Nothing addresses a container by a fixed name.
 services:
   # 2026-08: ollama was bundled here as the LLM_BACKEND=ollama option's
   # runtime, but the default (and the only backend this project actually
@@ -31,7 +36,6 @@ services:
   # official image lets Dependabot bump it like every other dependency.
   llama-server:
     image: ghcr.io/ggml-org/llama.cpp:server@sha256:7149802e349d69ac0bc6bf05ff210a13f6ba83cc15af6f4be5d38ce7ef825abb
-    container_name: mp-llama-server
     ports:
       - "127.0.0.1:8070:8070"
     volumes:
@@ -85,7 +89,6 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     image: civitas-backend:${IMAGE_TAG:-latest}
-    container_name: mp-backend
     ports:
       - "127.0.0.1:8000:8000"
     env_file: .env
@@ -123,8 +126,12 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      # The site's public address for the build (SITE_URL in .env; empty
+      # means the production site, src/lib/site.ts). Compose reads .env for
+      # this substitution; the backend gets the same value through env_file.
+      args:
+        NEXT_PUBLIC_SITE_URL: ${SITE_URL:-}
     image: civitas-frontend:${IMAGE_TAG:-latest}
-    container_name: mp-frontend
     ports:
       - "127.0.0.1:3000:3000"
     environment:

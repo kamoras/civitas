@@ -493,6 +493,8 @@ _BROWSER_ONLY_USER_AGENTS = {
     ("backend/app/pipeline/fetch/state_candidates_nh.py", "Chrome/151"),
     ("frontend/src/lib/remoteImage.ts", "Chrome/128"),
     ("backend/scripts/fetch_site_fonts.py", "Chrome/104"),
+    # Not a request header: robots.txt's rule for which crawlers it applies to.
+    ("frontend/src/app/robots.ts", "*"),
 }
 # Names that carry the contact: a value built from one names it.
 _CONTACT_NAMES = {

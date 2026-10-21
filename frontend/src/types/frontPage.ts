@@ -4,6 +4,7 @@
  *  every sentence and figure is the backend's; the page only draws them. */
 
 import type { AmendmentFields } from "./congress";
+import type { CountdownFigure, DotsFigure, Figure, SplitFigure, StatFigure } from "./figure";
 
 export interface FrontPageVote extends AmendmentFields {
   chamber: "senate" | "house";
@@ -20,42 +21,6 @@ export interface FrontPageVote extends AmendmentFields {
   billLabel: string | null;
   tieBreaker: { byWhom: string; vote: string } | null;
 }
-
-/** Yeas against nays, as a bar. */
-export interface SplitFigure {
-  type: "split";
-  yeas: number;
-  nays: number;
-  yeaShare: number;
-  caption: string;
-}
-
-/** One dot per member of the party voting Yea or Nay, the breaker's marked. */
-export interface DotsFigure {
-  type: "dots";
-  party: "D" | "R";
-  voting: number;
-  caption: string;
-}
-
-/** Days left in a comment period, and how much of it has gone. */
-export interface CountdownFigure {
-  type: "countdown";
-  opened: string;
-  closes: string;
-  totalDays: number;
-  daysLeft: number;
-  elapsedPercent: number;
-}
-
-/** One counted figure and what it counts. */
-export interface StatFigure {
-  type: "stat";
-  value: number;
-  caption: string;
-}
-
-export type Figure = SplitFigure | DotsFigure | CountdownFigure | StatFigure;
 
 interface EntryBase {
   column: "congress" | "agencies" | "news";

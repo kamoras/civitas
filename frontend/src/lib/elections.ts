@@ -375,8 +375,8 @@ export function candidateName(c: {
   displayName?: string | null;
 }): string {
   // displayName is the backend's choice (app/name_casing.py): the printed
-  // ballot name verbatim, else the FEC name as written ("Craig Goldman",
-  // not "GOLDMAN, CRAIG"). An older backend or archive sends neither.
+  // ballot name verbatim, else the FEC name as written ("Jane Doe",
+  // not "DOE, JANE"). An older backend or archive sends neither.
   return c.displayName || c.ballotName || c.name;
 }
 

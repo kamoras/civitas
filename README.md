@@ -817,6 +817,8 @@ What each chamber did each day, for the Congress reports. Every half hour (`cong
 
 **How a bill got where it is (2026-10).** Half of the 119th Congress's laws (60 of 123) passed with no roll call, by unanimous consent or a voice vote, and their pages said "No recorded votes", which a reader takes for nobody voting. The bill page now reads its path from the official actions (`services/bill_journey.py`): Congress.gov lists many actions twice, once from the chamber and once from the Library of Congress ("Signed by President." under two codes; "Passed/agreed to in House: ..." restating the House's sentence), and same-day twins are folded into the chamber's wording with every code and roll call kept (S. 240's 27 actions are 20). Each folded action carries a one-line plain meaning from a checked-in glossary keyed by its action code (`app/data/bill_action_glossary.json`; a code is listed only where every action carrying it in the cached record shares one meaning). How each chamber passed the bill is read from its passage codes and the chamber's fixed formula ("by Unanimous Consent", "by voice vote", "by the Yeas and Nays"; a roll call wherever the action records one) and said plainly: "Passed the Senate by unanimous consent on December 11, 2025; no roll call is taken for that." A journey map above the stage ladder dates each stop the bill's type passes (introduced, committee, each chamber's floor, resolving differences, the President, law) with the time between them; the list is its own text equivalent. The votes section says how the bill passed instead of "No recorded votes" when no roll call was taken. Under the title a line lists the page's sections (Summary, Its path, Votes with their count, History, In committee, Text, Data & citation), and a CRS summary over 200 words shows its title line and first paragraph with the rest behind a native "Read the full CRS summary (N words)" disclosure (`SummaryBody`), which find-in-page still opens: H.R. 1's whole summary put its votes 55.6 screens down at 1280 px.
 
+**Bill pages in boxes (2026-10).** A bill page now leads with boxes in ruled columns, the homepage front page's vocabulary as one shared pair (`BoxGrid`, `RecordBox`, with `RecordFigure` drawing the same stat, split, dots and countdown figures the front page draws): where the bill is (a law's number and the days from introduction to law, or how long it has been in committee), what it does in the CRS summary's first sentence, quoted and credited, how far this Congress's bills get (the stage ladder), one box per chamber decision with the roll call's yea-nay split and each party's line, the votes, the history, the committee record, the cost estimates, the sponsor, the text and the floor debate. Each box's line is a template the backend fills from the stored record (`services/bill_boxes.py`, served as `boxes` on the bill record; the Digest's count as `headline` on `committee_record.search`), counted from the same lists the page shows, and everything the line doesn't say (every action, every Digest entry word for word, the whole summary, every cosponsor) sits behind the box's "More", a native disclosure find-in-page still opens; every recorded vote follows the boxes as before. Measured on an iPhone SE (375 px) against production on 2026-10-21: H.R. 1 went from 31.7 screens with no figure to 11.8 with its first figure 1.1 screens down, its longest block from 377 words (a Daily Digest entry) to 82 (the sources section, unchanged), its prose from 2,305 words to 375, and its reading grade from 8.6 to 5.7; a law with no roll call (S. 222) from 16.1 screens to 9.0, and a bill in committee (S. 1870) from 10.8 to 7.3, with a 650-word Digest entry moved behind "More". At 200% text on a 320 px screen the vote panel's party splits and state picker no longer push the page sideways.
+
 **Checked against the sources (2026-10-11).** All 915 Senate roll calls of the 119th Congress match senate.gov's vote menus (number, date, tally), 45 sampled House roll calls match the Clerk's XML, every one of the 122 public laws is listed under the week Congress.gov dates it, and a sampled Senate day's 36 passed measures match its Digest entry for entry. Three things that did not hold are fixed. A House vote on an amendment is titled by the amendment the Clerk names ("Doe of Ohio Part B Amendment No. 1"); the Clerk gives it no description, and 90 read only as their bill's number (`congress_activity._vote_title`; stored votes are re-read once by `repair_house_requirements`). A Senate pro forma session timed to the second reads "for under a minute", not "for 0 minutes" (59 day reports). A bill the second chamber has passed is "Passed Both Chambers" (`BillStage.PASSED_BOTH`), not "In Other Chamber" until it reaches the President (52 bills and resolutions); it counts as Legislative Effectiveness's "passed the chamber" stage, as before. The sitemap lists every current-Congress bill a report links to, not only those a sitting member sponsors (36 were missing).
 
 **An empty day says something (2026-10).** A default view that is all zeros tells a reader nothing, so each of these says what the site does know instead, from stored rows only. `/congress` on a day neither chamber did business (a pro forma sitting, a two-minute House session) led with "met for 2 minutes" above eight zeros; `GET /api/congress/latest` now carries `recess` (`congress_service.recess`) when the latest day had no floor action — no record vote, nothing passed, failed or confirmed; a committee report filed in a pro forma sitting is not floor action, and the House files them through a recess — and neither chamber is still on its live floor log — and the page leads with "Congress is out", the last day of business, each chamber's next sitting as the record gives it (marked when the program says pro forma), and opens the week of that last business with a link to the latest sitting. The bills page's "Active now" list is bills named by a live Action Center issue, which is most days none; when it is, `GET /api/bills?sort=hot` serves bills that moved this week (a recorded action in the last seven days, past referral) with `shown: "moved"` and `movedSince`, and the page says which list it is showing. The "bills in motion" headline is the backend's `inMotion`, no longer summed in the browser. A tracked bill's page states the base rate for its stage (`stageBaseRate`, `bill_service.stage_base_rate`): of this Congress's bills from sitting members, the share at that stage and the share that became law, and of those that got at least that far, the share that became law so far — a description of bills at the stage, worded so it never forecasts the bill (GovTrack's prognosis is the same idea); none for an earlier Congress's bill or one already law or vetoed. Above it the page leads with what the bill does, in the Congressional Research Service's own words (its summary's first paragraph, attributed and dated), and how far it has got: one row per milestone (introduced, reported by a committee, passed one chamber, passed both, became law) with the share of this Congress's bills that reached it and this bill's row marked (`stageMilestones`, `bill_service.stage_milestones`, over the same bills as the base rate; `StageLadder.tsx`). Its sources, the roll calls as JSON from the public API, and an APA-style reference close the page (`BillSources.tsx`, linked as "Data & citation" in the page's own menu). `/congress` leads with two pictures of the Congress so far, both shareable and each with its table (`GET /api/congress/glance`, `services/congress_glance.py`, `CongressGlance.tsx`): a calendar with a row a month and a cell a day, each cell split into the Senate and the House, lit when the chamber sat (its Record day in session, or a roll call that day) and brighter the more record votes it took; and the bill pipeline, how many of this Congress's bills from sitting members were introduced, reported by a committee, passed one chamber, passed both and became law, drawn on a log scale (19,195 introduced against 122 laws on the 2026-10-16 copy leaves every bar after the first invisible on a linear one). Each step is a link to the bills it counts: `GET /api/bills?reached=<stage>` (one of the milestones' stage codes, `bill_service.MILESTONE_HEADINGS`; anything else is a 422) keeps this Congress's bills from sitting members that got at least that far, through the same population and rule as the counts (`_this_congress`, `_reached`), so a vetoed bill is in "passed both chambers" and the list's total is the row's number. The bills page reads `?reached=` once, at mount, and lists them under the milestone's heading; the chamber, party and search filters narrow it with the heading saying so, and picking a stage in the funnel (a bill's current stage, `?stage=`) drops it rather than showing the overlap under either name. With a state picked in the header, "Your members this Congress" follows: each sitting member's roll calls voted and missed, latest three votes (with or against party, `member_positions`) and latest three bills, linking to the profile, from `GET /api/congress/members?state=` (the state in that one URL and nowhere else; `roll_call_positions.member_id` is indexed for it, 4.5 s to 1.6 s for California's 54 members). In a recess the week's lists fold behind their headings and counts, and the section cards' week and month tiles show the last day of business instead of "None". At 375 px the recess page went from 11.8 screens with no visual to 5.0 screens with the calendar at 1.0 screens, in the server-rendered HTML. The Action Center's Ongoing tab also lists monitors closed in the last 60 days, with when each was tracked and closed (`recentlyClosed` on `GET /api/action/monitors`; a closed monitor's row is last written when it closes, so `updated_at` is its closing day).
@@ -2270,27 +2272,38 @@ See the [Methodology page](/about) for full details and inline citations.
 
 ## Quick Start
 
+For the whole process of standing up a server (hardware, every key, the
+production Swarm setup, the first data load and how long it takes, and
+recovering a lost server), see **[docs/self-hosting.md](docs/self-hosting.md)**.
+The short version:
+
 ```bash
 # 1. Clone the repo
-git clone git@github.com:kamoras/civitas.git
+git clone https://github.com/kamoras/civitas.git
 cd civitas
 
 # 2. Create your env file from the template
 cp .env.example .env
 
-# 3. Edit .env — at minimum set your API key, admin token and contact address
+# 3. Edit .env — at minimum set your API key, both tokens and contact address
 #    DATA_GOV_API_KEY=your-key-from-api-data-gov
-#    ADMIN_TOKEN=your-secret-admin-token
+#    ADMIN_TOKEN=your-secret-admin-token            (the template's value is refused)
+#    PIPELINE_TRIGGER_TOKEN=another-secret-token    (likewise)
 #    CONTACT_EMAIL=an-address-you-read@example.org   (named in every request's User-Agent)
 nano .env
 
-# 4. Start all services
+# 4. Download the LLM's weights (about 731 MB)
+mkdir -p llama-models
+curl -fL -o llama-models/lfm2.5-1.2b-instruct-q4_k_m.gguf \
+  https://huggingface.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF/resolve/main/LFM2.5-1.2B-Instruct-Q4_K_M.gguf
+
+# 5. Start all services
 docker compose up -d
 
-# 5. Verify everything is running
+# 6. Verify everything is running
 docker compose ps
 
-# 6. Open the app
+# 7. Open the app
 #    Frontend: http://localhost:3000
 #    API docs: http://localhost:8000/docs
 ```
@@ -2413,8 +2426,9 @@ blue/green script:
 runs the nightly and hourly schedule. Pipelines therefore never share a
 Python process, or a memory limit, with the requests visitors make.
 
-`docker stack deploy -c docker-compose.yml -c docker-compose.swarm.yml
-civitas` follows this sequence, all built into Swarm rather than scripted:
+A deploy (`check-and-deploy.sh`: the two compose files merged by
+`docker compose config`, then `docker stack deploy` of the result) follows
+this sequence, all built into Swarm rather than scripted:
 1. Build the new Docker image locally, tagged with the deploying commit's
    short SHA (GHCR pull is disabled — see `AGENTS.md` "CI/CD" for why)
 2. Swarm starts a new task on the same overlay network (`update_config.order:
@@ -2632,7 +2646,10 @@ See `.env.example` for all options. Key variables:
 |---|---|---|
 | `DATA_GOV_API_KEY` | Yes | API key from api.data.gov (covers Congress.gov, FEC, GovInfo) |
 | `BLS_API_KEY` | No | Free BLS v2 registration key (data.bls.gov/registrationEngine): 500 jobs-API requests a day instead of 25 |
-| `ADMIN_TOKEN` | Yes | Bearer token for admin panel and pipeline triggers |
+| `ADMIN_TOKEN` | Yes | Bearer token for the admin panel and admin API (falls back to `PIPELINE_TRIGGER_TOKEN`) |
+| `PIPELINE_TRIGGER_TOKEN` | Yes | Bearer token for the public `/api/pipeline/trigger` routes. For both tokens, `.env.example`'s `change-me-to-a-random-token` counts as unset and is refused (`app/api/auth.py`) |
+| `SITE_URL` | No | The site's public address (default `https://civitas-research.org`): links, feeds, cards, canonicals, `robots.txt`. Typed only in `backend/app/site_url.py` and `frontend/src/lib/site.ts` (`tests/test_site_url.py`); the frontend gets it at build as `NEXT_PUBLIC_SITE_URL` |
+| `REAL_IP_FROM` / `REAL_IP_HEADER` | No | The proxy in front of nginx allowed to name the visitor (`nginx/real-ip.sh`; default loopback only, header `X-Real-IP`). Required behind a reverse proxy: production sets the Pi's LAN address |
 | `CONTACT_EMAIL` | Yes | Your instance's contact address, named in the User-Agent of every request the pipeline and scripts send (`backend/app/contact.py`). Unset or malformed, requests name Civitas with no address, the SEC (whose fair-access policy requires a contact) is not fetched and raises an ops alert, and the pipeline logs a warning at start |
 | `LLM_BACKEND` | No | `llama-server` (default) or `ollama` |
 | `LLAMA_SERVER_URL` | No | llama-server URL (default: `http://llama-server:8070`, the in-stack service) |

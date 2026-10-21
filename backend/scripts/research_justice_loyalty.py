@@ -13,7 +13,10 @@ downloaded once into --cache:
 - Martin-Quinn scores (2024 release): each justice's position per term.
 
 Run: python scripts/research_justice_loyalty.py --cache .research-cache/justice-loyalty
-(pandas, statsmodels, scipy). With --write-bundle it also writes
+(pandas, statsmodels, scipy). With --write-finding it writes
+app/data/court_finding.json, the Court-level finding /court and the methods
+page state (section 8: the appointer effect less its placebo, with its
+bootstrap interval), never a number typed into a page. With --write-bundle it also writes
 app/data/justice_president_votes_1937_2014.csv.gz, the hand-coded votes the
 pipeline reads for the terms before the Database's lead parties take over
 (pipeline/analyze/justice_loyalty.py): the one source here it can't fetch,
@@ -29,6 +32,7 @@ import argparse
 import csv
 import math
 import io
+import json
 import re
 import pathlib
 import sys
@@ -44,11 +48,17 @@ from scipy.stats import spearmanr
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from app.contact import BOT_USER_AGENT  # noqa: E402
-from app.pipeline.analyze.justice_loyalty import MIN_VOTES_EACH_SIDE, Estimate  # noqa: E402
+from app.pipeline.analyze.justice_loyalty import Estimate, measurable  # noqa: E402
 
+# The Supreme Court Database release read: its file name carries it, and
+# court_finding.json records it so the data refresh job can tell when a
+# newer one is out (app/data_refresh.py, _court_finding_stale).
+SCDB_FILE = "SCDB_2026_01_justiceCentered_Citation.zip"
+SCDB_RELEASE = re.match(r"SCDB_(\d{4})_(\d{2})_", SCDB_FILE).group(1, 2)
+FINDING = pathlib.Path(__file__).resolve().parents[1] / "app/data/court_finding.json"
 SOURCES = {
     "JusticePresident.zip": "https://epstein.wustl.edu/s/JusticePresident.zip",
-    "SCDB_2026_01_justiceCentered_Citation.zip": "https://scdb.la.psu.edu/?jet_download=c99e5d5b7131dda1f6d1c06a5e7c4dda58c38c88",
+    SCDB_FILE: "https://scdb.la.psu.edu/?jet_download=c99e5d5b7131dda1f6d1c06a5e7c4dda58c38c88",
     "mq_justices.csv": "https://mqscores.wustl.edu/media/2024/justices.csv",
     "judges.csv": "https://www.fjc.gov/sites/default/files/history/judges.csv",
 }
@@ -235,15 +245,17 @@ def loyalty(P: pd.DataFrame) -> pd.DataFrame:
 
 def _per_justice(P: pd.DataFrame, formula: str, coef: str, side_in, side_out) -> pd.DataFrame:
     """Each justice's `coef` from `formula` (OLS, HC1), shrunk and scored
-    with the pipeline's own code (justice_loyalty): measurable with
-    MIN_VOTES_EACH_SIDE votes on each side, the sides being the masks
-    side_in(g) and side_out(g)."""
+    with the pipeline's own code (justice_loyalty): measurable as the
+    pipeline judges it (justice_loyalty.measurable), the sides being the
+    masks side_in(g) and side_out(g)."""
     est, n = {}, {}
     for j, g in P.groupby("justiceName"):
         n[j] = (int(side_in(g).sum()), int(side_out(g).sum()))
-        if min(n[j]) < MIN_VOTES_EACH_SIDE:
+        if not min(n[j]):
             continue
         f = smf.ols(formula, g).fit(cov_type="HC1")
+        if not measurable(float(f.bse[coef]), float(f.get_influence().hat_matrix_diag.max())):
+            continue
         est[j] = Estimate(raw=float(f.params[coef]), se=float(f.bse[coef]), votes_in=n[j][0], votes_out=n[j][1],
                           rate_in=float(g.y[side_in(g)].mean()), rate_out=float(g.y[side_out(g)].mean()))
     shrunk, mu, tau = shrink(est)
@@ -536,7 +548,7 @@ def _career_fit(P: pd.DataFrame, shape: str, flag: str = "in_office") -> tuple:
     return pooled, R
 
 
-def career(P: pd.DataFrame, sv: pd.DataFrame, sc: pd.DataFrame, judges: pathlib.Path) -> None:
+def career(P: pd.DataFrame, sv: pd.DataFrame, sc: pd.DataFrame, judges: pathlib.Path) -> dict:
     """Candidate F: the appointer indicator with a pooled career-tenure
     curve. Identified because the appointer's window varies in length (and
     a few windows start years into a career), so at a given tenure some
@@ -619,6 +631,9 @@ def career(P: pd.DataFrame, sv: pd.DataFrame, sc: pd.DataFrame, judges: pathlib.
         d0 = pd.concat([by_d[j].assign(justiceName=f"{j}#{i}") for i, j in enumerate(pick) if j in by_d])
         draws.append(net(p, d0))
     lo, hi = np.percentile(draws, [2.5, 97.5])
+    finding = {"estimate": round(float(net(P, D0)), 4), "low": round(float(lo), 4), "high": round(float(hi), 4),
+               "draws": len(draws), "firstTerm": int(P.term.min()), "lastTerm": int(P.term.max()),
+               "justices": int(P.justiceName.nunique())}
     print(f"  Court-level: A's pooled effect less its k=0 placebo {net(P, D0) * 100:+.1f} points, 95% bootstrap CI over "
           f"justices [{lo * 100:+.1f}, {hi * 100:+.1f}] (200 draws); F's +{real * 100:.1f} against its placebo sd "
           f"{v.std(ddof=1) * 100:.1f}: [{(real - 1.96 * v.std(ddof=1)) * 100:+.1f}, {(real + 1.96 * v.std(ddof=1)) * 100:+.1f}]")
@@ -653,6 +668,7 @@ def career(P: pd.DataFrame, sv: pd.DataFrame, sc: pd.DataFrame, judges: pathlib.
               f"{rates[(1, 0)]:.3f} -> {rates[(1, 1)]:.3f}, the others {rates[(0, 0)]:.3f} -> {rates[(0, 1)]:.3f}; "
               f"appointer effect (case and justice fixed effects, clustered by case) {b * 100:+.1f} points, "
               f"95% CI [{(b - 1.96 * se) * 100:+.1f}, {(b + 1.96 * se) * 100:+.1f}]")
+    return finding
 
 
 def against_ideology(sc: pd.DataFrame, mq: pd.DataFrame) -> None:
@@ -694,10 +710,12 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--cache", default=".research-cache/justice-loyalty", type=pathlib.Path)
     ap.add_argument("--write-bundle", action="store_true")
+    ap.add_argument("--write-finding", nargs="?", const=FINDING, type=pathlib.Path, metavar="PATH",
+                    help="write the Court-level finding (default app/data/court_finding.json)")
     args = ap.parse_args()
     paths = fetch(args.cache)
     ep = read_zip(paths["JusticePresident.zip"], ".dta", lambda b: pd.read_stata(b, convert_categoricals=False))
-    sc = read_zip(paths["SCDB_2026_01_justiceCentered_Citation.zip"], ".csv",
+    sc = read_zip(paths[SCDB_FILE], ".csv",
                   lambda b: pd.read_csv(b, encoding="latin-1", low_memory=False))
     mq = pd.read_csv(paths["mq_justices.csv"])
     reproduce(ep)
@@ -709,9 +727,30 @@ def main():
     same_party(P)
     against_ideology(sc, mq)
     era(P)
-    career(P, sv, sc, paths["judges.csv"])
+    finding = career(P, sv, sc, paths["judges.csv"])
+    if args.write_finding:
+        write_finding(args.write_finding, finding)
     if args.write_bundle:
         write_bundle(ep)
+
+
+def write_finding(path: pathlib.Path, finding: dict) -> None:
+    """The Court-level finding as /court and /about/presidents-and-justices
+    state it: shares (0.025 is 2.5 points), with the interval's own words
+    decided here (does it exclude no effect), not on the page."""
+    doc = {
+        "_source": (
+            "backend/scripts/research_justice_loyalty.py --write-finding, section 8: the appointer effect "
+            "pooled over every justice (Epstein & Posner's hand-coded votes through 2014, the Supreme Court "
+            f"Database {SCDB_RELEASE[0]} Release {SCDB_RELEASE[1]} after), less the placebo window at the same "
+            "point in a career, with a 95% bootstrap interval over justices (docs/research/justice-scores.md)."
+        ),
+        "scdbRelease": f"{SCDB_RELEASE[0]}_{SCDB_RELEASE[1]}",
+        **finding,
+        "excludesZero": finding["low"] > 0 or finding["high"] < 0,
+    }
+    path.write_text(json.dumps(doc, indent=1) + "\n")
+    print(f"\nwrote {path}")
 
 
 def write_bundle(ep: pd.DataFrame) -> None:

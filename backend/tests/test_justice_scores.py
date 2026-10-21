@@ -43,16 +43,25 @@ def test_fit_recovers_the_effect_holding_the_side_fixed():
     assert est.votes_in + est.votes_out == 4000
 
 
-def test_too_few_votes_on_either_side_is_not_estimated():
-    votes = [(1, 1, 0)] * 100 + [(0, 0, 1)] * 9
-    assert fit(votes) is None
+def test_a_side_of_one_vote_is_not_estimated():
+    """One vote fits itself (leverage 1): nothing is measured."""
+    assert fit([(1, 1, 0)] * 100 + [(0, 0, 1)]) is None
+    assert fit([(1, 1, 0)] * 100) is None
+
+
+def test_a_thin_side_is_measured_with_an_honest_interval():
+    """No count of votes is typed: nine votes all one way are measured, but
+    their interval is never narrower than the shares' own uncertainty (HC1
+    alone read them as exact)."""
+    e = fit([(1, 1, 0)] * 100 + [(0, 0, 1)] * 9)
+    assert e is not None and e.se > 0.05
 
 
 def test_each_justice_keeps_their_own_unshrunk_estimate():
     # Nothing is pulled toward other justices or scored: one justice alone
-    # is estimated, and a thin record has no estimate rather than a guess.
+    # is estimated, and a record of one vote a side has no estimate.
     rng = np.random.default_rng(3)
-    est = estimates_by_justice({"alone": simulate(rng, 0.3, n=2000), "thin": [(1, 1, 0)] * 5 + [(0, 0, 0)] * 100})
+    est = estimates_by_justice({"alone": simulate(rng, 0.3, n=2000), "thin": [(1, 1, 0)] + [(0, 0, 0)] * 100})
     assert set(est) == {"alone"}
     assert est["alone"].raw == pytest.approx(0.3, abs=0.06)
 

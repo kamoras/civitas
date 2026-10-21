@@ -1,4 +1,5 @@
 import { GITHUB_REPO_URL } from "@/lib/site";
+import type { AppointerFinding } from "@/types/court";
 
 /** Why no justice is scored (justice v3), shown wherever a score would be. */
 export const NOT_SCORED_REASON =
@@ -15,10 +16,22 @@ export function signedPoints(share: number): string {
 }
 
 /** The Court-level finding, stated as fact: the appointer effect pooled over
- *  every justice since 1937, less what a placebo window at the same point in
- *  a career shows, with a bootstrap interval over justices. Printed by
- *  section 8 of backend/scripts/research_justice_loyalty.py (Supreme Court
- *  Database 2026 Release 01); update it with docs/research/justice-scores.md
- *  when that is rerun. */
-export const COURT_FINDING =
-  "Across every justice since 1937, justices side with the federal government about 2.5 points more often while their appointing president is in office, once career timing is set aside (95% interval −0.7 to +5.6): not distinguishable from no effect.";
+ *  every justice, less what a placebo window at the same point in a career
+ *  shows, with a bootstrap interval over justices. The figures are the
+ *  backend's (app/data/court_finding.json, written by
+ *  scripts/research_justice_loyalty.py --write-finding), never typed here;
+ *  null when they can't be read, and the page then says nothing. */
+export function courtFinding(f: AppointerFinding | null | undefined): string | null {
+  if (!f) return null;
+  const points = Math.abs(f.estimate * 100).toFixed(1);
+  const direction = f.estimate >= 0 ? "more" : "less";
+  const reading = f.excludesZero
+    ? "distinguishable from no effect."
+    : "not distinguishable from no effect.";
+  return (
+    `Across every justice since ${f.firstTerm}, justices side with the federal government about ` +
+    `${points} points ${direction} often while their appointing president is in office, once ` +
+    `career timing is set aside (95% interval ${signedPoints(f.low)} to ${signedPoints(f.high)}): ` +
+    reading
+  );
+}

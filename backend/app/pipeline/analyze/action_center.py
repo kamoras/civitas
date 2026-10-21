@@ -1841,8 +1841,8 @@ def _mentions_full_name(
     exactly the false positives the bare-surname path is hardened against by
     _COMMON_WORD_SURNAMES. Measured against the current roster:
 
-      "reported cases" contains "ed case"    -> Rep. Ed Case (D-HI)
-      "several green energy jobs" contains "al green" -> Rep. Al Green (D-TX)
+      "reported cases" contains "ed case"    -> a sitting member's full name
+      "several green energy jobs" contains "al green" -> another's
 
     Both surnames are on the common-word stoplist, so the surname pass
     correctly refuses them — and the full-name pass then tagged the member
@@ -1850,7 +1850,7 @@ def _mentions_full_name(
 
     Anchored with lookarounds rather than \b, because \b is a *transition*
     assertion: for a name ending in a non-word character it asserts the
-    opposite of what is wanted. "Angus King Jr." ends in ".", and
+    opposite of what is wanted. "Jane Roe Jr." ends in ".", and
     r"...jr\.\b" demands a word character right after that period — which
     "Jr. voted" does not have, so every member carrying a Jr./Sr. suffix would
     silently stop matching.
@@ -2203,7 +2203,7 @@ def _surname_owned_by_other_name(text: str, match: "re.Match", member_name: str)
     is neither one of the member's own name tokens nor a title/honorific.
 
     "featuring Ferran Torres' late goal" → the "Torres" is owned by
-    "Ferran", who is not Rep. Ritchie Torres → True.
+    "Ferran", who is not the member named Torres → True.
     "Sen. Torres said" / "... change. Torres said" → False (title-prefixed
     or sentence-initial — could genuinely be the member).
     """
@@ -4867,7 +4867,7 @@ def _other_senate_race_named(db, cycle: int, state: str, race_id: str, story_tex
     if not others or len(known) != len(others):
         return None
     # Leniently: a capitalised surname of theirs is enough to hold back
-    # ("Raphael Warnock leads as Perdue concedes to Brennan" is about both
+    # ("Jane Doe leads as Roe concedes to Poe" is about both
     # races). Holding back can only cost a miss.
     return any(_names_a_candidate(story_text, theirs, surname_alone=True) for theirs in known)
 

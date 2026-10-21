@@ -24,12 +24,27 @@ presidents' terms stored for the president scorecard.
 
 import math
 from dataclasses import dataclass
+from statistics import NormalDist
 
 import numpy as np
 
-# A justice's effect is estimated only with this many votes both under the
-# appointing president and under others; fewer can't separate the two.
-MIN_VOTES_EACH_SIDE = 10
+# A justice's effect is stated only where it is measured: no vote fits
+# itself (a leverage of 1, a side of one vote), and the 95% interval is
+# narrower than the effect's whole range, -1 to 1 (a difference of two
+# shares). No count of votes is typed (it was 10 a side). The standard
+# error is never below the two shares' own binomial uncertainty
+# (Agresti & Caffo 2000: a success and a failure added to each side):
+# HC1 collapses toward zero when a side's votes all go one way, which made
+# a five-vote record look exact. On every justice in the bundled coding the
+# two agree to within 7%.
+Z95 = NormalDist().inv_cdf(0.975)
+EFFECT_RANGE = 2.0
+
+
+def measurable(se: float, max_leverage: float) -> bool:
+    """Whether an estimate with standard error `se`, from a fit whose
+    largest leverage is `max_leverage`, says anything (module comment)."""
+    return max_leverage < 1 - 1e-9 and math.isfinite(se) and 2 * Z95 * se < EFFECT_RANGE
 
 
 @dataclass(frozen=True)
@@ -50,6 +65,16 @@ class Estimate:
     rate_out: float
 
 
+def _binomial_se(y: np.ndarray, x_in: np.ndarray) -> float:
+    """The standard error of the difference of the two sides' shares with a
+    success and a failure added to each (Agresti & Caffo 2000)."""
+    out = 0.0
+    for side in (x_in == 1, x_in == 0):
+        n, p = int(side.sum()), (float(y[side].sum()) + 1) / (int(side.sum()) + 2)
+        out += p * (1 - p) / (n + 2)
+    return math.sqrt(out)
+
+
 def fit(votes: list[tuple[int, int, int]]) -> Estimate | None:
     """One justice's effect from (for_government, appointer_in_office,
     government_petitioner) triples: OLS with an intercept, HC1 errors."""
@@ -57,17 +82,23 @@ def fit(votes: list[tuple[int, int, int]]) -> Estimate | None:
     x_in = np.array([v[1] for v in votes], dtype=float)
     x_pet = np.array([v[2] for v in votes], dtype=float)
     n_in, n_out = int(x_in.sum()), int(len(votes) - x_in.sum())
-    if min(n_in, n_out) < MIN_VOTES_EACH_SIDE:
+    if not n_in or not n_out:
         return None
     X = np.column_stack([np.ones_like(y), x_in, x_pet])
     xtx_inv = np.linalg.pinv(X.T @ X)
+    leverage = float(np.max(np.einsum("ij,jk,ik->i", X, xtx_inv, X)))
     beta = xtx_inv @ X.T @ y
     resid = y - X @ beta
     n, k = X.shape
     meat = (X * resid[:, None] ** 2).T @ X
+    if n <= k:
+        return None
     cov = xtx_inv @ meat @ xtx_inv * n / (n - k)
+    se = max(float(math.sqrt(max(cov[1, 1], 0.0))), _binomial_se(y, x_in))
+    if not measurable(se, leverage):
+        return None
     return Estimate(
-        raw=float(beta[1]), se=float(math.sqrt(max(cov[1, 1], 0.0))),
+        raw=float(beta[1]), se=se,
         votes_in=n_in, votes_out=n_out,
         rate_in=float(y[x_in == 1].mean()), rate_out=float(y[x_in == 0].mean()),
     )
@@ -106,5 +137,5 @@ def label(
 
 def estimates_by_justice(rows: dict[str, list[tuple[int, int, int]]]) -> dict[str, Estimate]:
     """Each justice's own estimate from their labeled votes (label); a
-    justice without MIN_VOTES_EACH_SIDE votes both ways has none."""
+    justice whose estimate isn't measurable (fit) has none."""
     return {j: e for j, r in rows.items() if (e := fit(r)) is not None}
