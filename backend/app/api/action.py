@@ -685,7 +685,7 @@ def _trending_ids_for(issues: list[ActionIssue], db_visits: Session) -> set[str]
         logger.warning("Trending lookup failed (visits DB unavailable) — no issues flagged trending")
         return set()
     view_counts = {pid: count for pid, count in rows}
-    return compute_trending_issue_ids(view_counts)
+    return compute_trending_issue_ids(view_counts, live=len(public_ids))
 
 
 # Runs to look back through for one that wrote issues: two days of hourly
