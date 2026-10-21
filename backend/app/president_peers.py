@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from sqlalchemy.orm import Session
 
 from app.models import President
-from app.peer_comparison import percentile, peer_word
+from app.peer_comparison import RULE as MEMBER_RULE, percentile, peer_word
 from app.pipeline.analyze.president_scorer import (
     FULL_TERM_DAYS,
     _approval_reference,
@@ -39,13 +39,16 @@ from app.pipeline.analyze.president_scorer import (
 from app.pipeline.fetch.cspan_historians_survey import edition_url, stored_edition
 from app.time_utils import utcnow
 
-# Fewest presidencies with a figure before a word is drawn: the president
-# reference's own floor (president_scorer._MIN_PRESIDENT_REFERENCE_N). The
-# members' floor (RULE["minRecord"], 20) is more than most of these eras hold.
-MIN_PEERS = 10
 # The word's cut points are the members' (peer_comparison.RULE), served with
 # every comparison so the page can state them.
-RULE = {"wellOutside": [10, 90], "outside": [25, 75], "wellGapSd": 1.0, "minPeers": MIN_PEERS}
+RULE_CUTS = {k: MEMBER_RULE[k] for k in ("wellOutside", "outside", "wellGapSd")}
+# Fewest presidencies with a figure before a word is drawn: the fewest at
+# which the rule's outer cut can be crossed at all. A presidency's mid-rank
+# percentile among n others is at least 50 / (n + 1), so a "well below"
+# below the 10th percentile needs n + 1 > 50 / 10. Derived from the cut, not
+# typed (it was 10, the old reference floor).
+MIN_PEERS = int(50 / RULE_CUTS["wellOutside"][0])
+RULE = {**RULE_CUTS, "minPeers": MIN_PEERS}
 
 _APPROVAL_SOURCE = {"name": "American Presidency Project",
                     "url": "https://www.presidency.ucsb.edu/statistics/data/presidential-job-approval"}
