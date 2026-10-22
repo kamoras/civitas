@@ -130,6 +130,8 @@ export interface IndustryDonation {
   name: string;
   total: number;
   percentage: number;
+  /** The bar against the largest industry, 0-100 (the API's); absent from an older one. */
+  barPercent?: number | null;
 }
 
 export interface VotingRecord {

@@ -373,8 +373,12 @@ export function DataDashboard({ d }: { d: AdminDashboard | null }) {
                                 <div
                                   key={bucket}
                                   className="flex-1 flex flex-col items-center gap-0.5"
-                                  title={`${bucket}: ${count} entries`}
                                 >
+                                  {/* The count in print, never a hover-only title. */}
+                                  <span className="text-[11px] font-mono tabular-nums text-ink-lo">
+                                    {count.toLocaleString("en-US")}
+                                    <span className="sr-only"> entries at {bucket}</span>
+                                  </span>
                                   <div
                                     className="w-full flex items-end justify-center"
                                     style={{ height: "48px" }}

@@ -814,3 +814,14 @@ def test_the_lean_map_names_each_state_and_its_place():
     assert marks["DD"]["shown"] == "EVEN"
     assert marks["EE"]["shown"] == "no lean on file" and marks["EE"]["href"] == "/elections/states/EE"
     assert marks["DC"]["href"] is None and marks["DC"]["shown"] == "no voting member of Congress"
+
+
+def test_each_money_bar_is_a_share_of_this_races_leader():
+    out = elections.with_raised_shares([{"contributions": 1_900_000}, {"contributions": 130_000},
+                                        {"contributions": None}])
+    assert [c["raisedShare"] for c in out] == [100, 7, 0]
+    assert out[1]["raisedShareShown"] == "$130K raised, 7% of the leader in this race"
+    assert out[2]["raisedShareShown"] is None
+    # Nobody has reported: every bar empty, nothing divided by zero.
+    assert elections.with_raised_shares([{"contributions": 0}])[0] == {
+        "contributions": 0, "raisedShare": 0, "raisedShareShown": None}

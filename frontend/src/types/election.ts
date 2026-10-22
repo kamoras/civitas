@@ -50,6 +50,11 @@ export interface CandidateSummary {
    * API is rate-limited, so not every candidate is refreshed every run).
    * Never a fabricated 0. */
   contributions: number | null;
+  /** Contributions as a percent of the race's top fundraiser (the money
+   *  bar's width) and in words; the API's (elections.with_raised_shares),
+   *  absent from an older backend. */
+  raisedShare?: number;
+  raisedShareShown?: string | null;
   cashOnHand: number | null;
   /** ISO 8601 (UTC, explicit Z/offset) timestamp of the last successful
    * FEC financials sync for this candidate — null means the figures above
