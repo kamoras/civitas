@@ -30,7 +30,7 @@ flowchart TB
     CLUSTER["<b>3. CLUSTER</b><br/>complete linkage on headline + description start<br/>every pair ≥ the judged cut (0.71)"]
     CLUSTER --> RANK
 
-    RANK["<b>4. RANK</b><br/>0.40 × civic actionability<br/>0.35 × source breadth<br/>0.25 × trending relevance"]
+    RANK["<b>4. RANK</b> (lexicographic, no weights)<br/>names an official · outlets reporting<br/>· officials named · civic documents · trending"]
     RANK --> TOP["Try ranked clusters in order<br/>up to 6 (CANDIDATE_POOL)<br/>until 2 publish (MAX_ISSUES)"]
     TOP --> EXTRACT
 
