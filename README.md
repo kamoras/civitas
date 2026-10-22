@@ -2138,7 +2138,13 @@ FastAPI generates from the routes and their response schemas
 (`backend/app/api/public.py`, `app/schemas.py` "Public API v1"), so the
 reference always describes the running code. `tests/test_public_api_contract.py`
 validates every endpoint's real body against its documented schema (the
-schemas forbid extra fields), so the two cannot drift apart.
+schemas forbid extra fields), so the two cannot drift apart. A CSV
+download's entry shows its first paragraph (what the file is); the rest of
+its docstring, the encoding, licence and every column (126 to 242 words),
+is behind that entry's "More" (2026-10). Measured on an iPhone SE (375 px)
+with the density audit's method: the page went from 44.7 screens to 39.8,
+its longest block from 261 words to 77, and its reading grade from 11.2 to
+8.8; the last CSV endpoint moved up from 17.4 screens to 14.6.
 
 ```
 GET /api/public/v1/senators                      Serving senators, ranked by score
