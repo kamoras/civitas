@@ -10,26 +10,40 @@ import { houseSeatLabel } from "@/lib/elections";
 import type { ShareSubject } from "@/lib/shareImage";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import { SectionHeadingLevelProvider } from "@/components/shared/CollapsibleSection";
-import Holdings from "@/components/checker/Holdings";
 import IndustryBreakdown from "@/components/checker/IndustryBreakdown";
 import LobbyingMatches from "@/components/checker/LobbyingMatches";
 import PlatformTracker from "@/components/checker/PlatformTracker";
 import SponsoredBills from "@/components/checker/SponsoredBills";
 import StockTrades from "@/components/checker/StockTrades";
 import VotingRecord from "@/components/checker/VotingRecord";
-import AlignmentColumn from "./AlignmentColumn";
 import AlsoOnRecord, { type RecordView } from "./AlsoOnRecord";
-import EffectivenessColumn from "./EffectivenessColumn";
-import FundingColumn from "./FundingColumn";
+import ApprovalBox from "./ApprovalBox";
+import BillsBox from "./BillsBox";
+import MoneyBox from "./MoneyBox";
+import VotesBox from "./VotesBox";
+import BoxGrid from "@/components/shared/BoxGrid";
+import { CHIP } from "@/components/shared/RecordBox";
+import PresidentBox from "@/components/presidentialSupport/PresidentBox";
+import type { GovernmentRecord, MemberBoxes } from "@/types/politicians";
 import MethodsLedger from "./MethodsLedger";
 import ScorecardDrawer from "./ScorecardDrawer";
 import ScorecardHeader from "./ScorecardHeader";
 import WhereTheyStand from "./WhereTheyStand";
 import type { PeerComparison } from "@/types/peers";
 import TopDonorsTable from "./TopDonorsTable";
-import { SectionHeading } from "@/components/shared/Type";
 
 type DrawerView = "donors" | "votes" | "bills" | RecordView;
+
+/** The section chips under the strips: each box's anchor and name. */
+const SECTION_CHIPS: [string, string][] = [
+  ["#funding-independence", "Money"],
+  ["#constituent-alignment", "Votes"],
+  ["#legislative-effectiveness", "Bills"],
+  ["#holdings", "Holdings"],
+  ["#trades", "Trades"],
+  ["#government-record", "Record"],
+  ["#methods", "Methods"],
+];
 
 const DRAWER_TITLE: Record<DrawerView, string> = {
   donors: "Donors and industries",
@@ -68,7 +82,9 @@ export default function MemberScorecard({
   former = false,
   scoredOn = null,
   peers = null,
-  votesNote = null,
+  boxes = null,
+  ballotDetail = null,
+  governmentRecord = { totalDocs: 0, recentDocs: [] },
 }: {
   member: Senator;
   chamber: "senate" | "house";
@@ -85,9 +101,13 @@ export default function MemberScorecard({
   peers?: PeerComparison | null;
   /** The latest scoring run, for the methods section and its citation. */
   scoredOn?: { date: string; algorithmVersion: string | null } | null;
-  /** Votes with the president's stated positions in one line (rendered by
-   *  the server page): in the Votes column, not above the member's name. */
-  votesNote?: ReactNode;
+  /** Every box's title, line and figure (backend member_boxes); absent
+   *  from an older backend. */
+  boxes?: MemberBoxes | null;
+  /** The ballot's full lines, behind the header's committee line. */
+  ballotDetail?: ReactNode;
+  /** Documents on public record (the profile's governmentRecord). */
+  governmentRecord?: GovernmentRecord;
 }) {
   const [view, setView] = useState<DrawerView | null>(null);
   const close = useCallback(() => setView(null), []);
@@ -138,7 +158,7 @@ export default function MemberScorecard({
   return (
     <SectionHeadingLevelProvider value="h3">
       <ShareSubjectProvider subject={shareSubject}>
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-5">
           <ScorecardHeader
             member={member}
             chamber={chamber}
@@ -149,6 +169,8 @@ export default function MemberScorecard({
             committees={committees}
             titleAs={titleAs}
             former={former}
+            boxes={boxes}
+            ballotDetail={ballotDetail}
           />
 
           {!former && (
@@ -160,40 +182,53 @@ export default function MemberScorecard({
             />
           )}
 
-          <SectionHeading className="border-t-[3px] border-ink-hi pt-3">
-            The record behind it
-          </SectionHeading>
+          {/* The page's sections, one tap away: the boxes below. */}
+          <nav aria-label="On this page" className="flex flex-wrap items-center gap-2">
+            <span className="text-small text-ink-lo">On this page</span>
+            {SECTION_CHIPS.map(([href, label]) => (
+              <a key={href} href={href} className={CHIP}>
+                {label}
+              </a>
+            ))}
+          </nav>
 
-          <div className="grid grid-cols-[minmax(0,1fr)] items-stretch gap-5 lg:grid-cols-3">
-            <FundingColumn
+          <BoxGrid label="The record behind it" labelId="record-behind-it">
+            <MoneyBox
               funding={member.funding}
+              box={boxes?.money}
               dimension={breakdown?.fundingIndependence}
               onMore={() => setView("donors")}
               donorVoteLinks={member.lobbyingMatches?.length ?? 0}
               onDonorVotes={() => setView("donorVotes")}
             />
-            <AlignmentColumn
+            <VotesBox
               memberId={member.id}
               chamber={chamber}
               name={member.name}
               seat={seat}
               breaks={member.votingRecord.votedAgainstPartyCount}
-              approval={member.constituentApproval}
+              box={boxes?.votes}
               dimension={breakdown?.constituentAlignment}
               onMore={() => setView("votes")}
-              note={votesNote}
             />
-            <EffectivenessColumn
+            <BillsBox
               chamber={chamber}
               bills={member.sponsoredBills ?? []}
+              box={boxes?.bills}
               dimension={breakdown?.legislativeEffectiveness}
               onMore={() => setView("bills")}
             />
-          </div>
+            <PresidentBox memberId={member.id} name={member.name} box={boxes?.president} />
+            <ApprovalBox approval={member.constituentApproval} box={boxes?.approval} />
+          </BoxGrid>
 
-          <Holdings memberId={member.id} filer={chamber} variant="panel" />
-
-          <AlsoOnRecord member={member} chamber={chamber} onOpen={setView} />
+          <AlsoOnRecord
+            member={member}
+            chamber={chamber}
+            boxes={boxes}
+            record={governmentRecord}
+            onOpen={setView}
+          />
 
           <MethodsLedger
             member={member}

@@ -79,6 +79,7 @@ const DATA: PeerComparison = {
     }),
   ],
   standsOut: "Money from small donors: Donors who gave $200 or less gave 13% of the money.",
+  standsOutKey: "smallGifts",
   standsOutWhy:
     "Picked by rule: of the four figures, this one is furthest from the middle of the group.",
 };
@@ -93,13 +94,13 @@ describe("WhereTheyStand", () => {
     expect(screen.getByRole("heading", { name: "Where Pat Lee stands" })).toBeInTheDocument();
     expect(screen.getByText(DATA.standsOut)).toBeInTheDocument();
     expect(screen.getByText(DATA.standsOutWhy)).toBeInTheDocument();
-    // Each question heads its rows once; each row says why it is there.
+    // Each cell is headed by its measure; its question and why it is there
+    // sit behind "How this is measured".
     expect(
-      screen.getByRole("heading", { level: 3, name: "Who funds the campaign?" })
+      screen.getByRole("heading", { level: 3, name: DATA.measures[0].label })
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { level: 3, name: "How does this member vote?" })
-    ).toBeInTheDocument();
+    expect(screen.getAllByText("Who funds the campaign?")[0]).toBeInTheDocument();
+    expect(screen.getAllByText("How does this member vote?")[0]).toBeInTheDocument();
     expect(screen.getByText(DATA.measures[0].why)).toBeInTheDocument();
     expect(screen.getAllByText("How this is measured")).toHaveLength(2);
     const caption = screen.getByText(/Gifts of \$200 or less were 13% of the money\. 2 of/);
@@ -131,6 +132,8 @@ describe("WhereTheyStand", () => {
     ).toBeInTheDocument();
     // The table is there for screen readers before it is shown.
     expect(screen.getAllByRole("table")).toHaveLength(2);
+    // Its links stay out of the Tab order until the table is on screen.
+    expect(screen.getAllByRole("link", { name: "Sam Ray" })[0]).toHaveAttribute("tabindex", "-1");
     await userEvent.click(screen.getByRole("button", { name: "Show as a table" }));
     expect(screen.getByRole("button", { name: "Hide the tables" })).toHaveAttribute(
       "aria-pressed",
@@ -140,6 +143,7 @@ describe("WhereTheyStand", () => {
       "href",
       "/politicians/sam-ray"
     );
+    expect(screen.getAllByRole("link", { name: "Sam Ray" })[0]).not.toHaveAttribute("tabindex");
     expect(screen.getByRole("radio", { name: "Senate Democrats" })).toBeChecked();
     const r = await axe.run(document.body, { rules: { "color-contrast": { enabled: false } } });
     expect(r.violations.map((v) => v.id)).toEqual([]);
@@ -151,6 +155,22 @@ describe("WhereTheyStand", () => {
     await userEvent.click(screen.getByRole("radio", { name: "Whole Senate" }));
     expect(fetchPeerComparison).toHaveBeenCalledWith("senate", "pat-lee", "chamber");
     expect(window.location.search).toContain("peers=chamber");
+  });
+});
+
+describe("stands out", () => {
+  it("says nothing when no measure is genuinely unusual", () => {
+    render(
+      <main>
+        <WhereTheyStand
+          memberId="pat-lee"
+          name="Pat Lee"
+          chamber="senate"
+          initial={{ ...DATA, standsOut: "Close to peers on every measure.", standsOutKey: null }}
+        />
+      </main>
+    );
+    expect(screen.queryByText(/Stands out/)).toBeNull();
   });
 });
 

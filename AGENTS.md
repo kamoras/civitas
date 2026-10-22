@@ -3009,7 +3009,17 @@ kicker, headline, figure and line (money with the funding window's election
 named, votes, bills, votes with the president with its verdict and
 `finding`, approval at home, holdings, trades, positions, the government
 record), counted from the same breakdown, holdings, trade and survey reads
-the rest of the page shows.
+the rest of the page shows. The page (`MemberScorecard.tsx`) is built from
+them: a compact header (the ballot status as a one-line kicker, the
+committees folded to the backend's line with the chips, the office and the
+sources behind it), "Where <name> stands" as a small multiple of the four
+peer strips (one column on a phone, two from 40rem, four from 62rem; each
+cell's method behind "How this is measured", and the "Stands out" line only
+when `standsOutKey` names a measure), section chips, then two `BoxGrid`s:
+the record behind it (Money, Votes, Bills, With the president, Approval at
+home; `MemberBox`, one per file) and also on record (Holdings as a stacked
+bar, Trades, Positions, donor and vote links, the government record).
+Votes with the president appear once, in their box.
 
 The executive hub (`/executive`) is four boxes, each led by a figure the
 backend counts (the president's documents on record, the open comment
