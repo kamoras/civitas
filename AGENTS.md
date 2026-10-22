@@ -2972,6 +2972,10 @@ not a paragraph or a box. On a ballot page the box lines are counts and
 labels only: what a measure does, what yes or no means and every deadline
 stay quoted where §7 puts them, never summarised in a box.
 
+A redrawn state's page (`/elections/redistricting/[ST]`) leads with two
+boxes: seats by lean (the strips) and residents moved (a stat), each
+figure's method behind its own "More".
+
 Site search's results (`/search?q=`) are compact boxes: the kind as the
 kicker, the index's context line as the line, and a document's `snippet`
 (its own words around the query, matches marked) behind "More".

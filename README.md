@@ -1221,6 +1221,24 @@ its residents lived before, and a sitting member's profile says where the
 residents of the district they were elected in went, until the new Congress
 sits.
 
+**A redrawn state's page leads with two boxes (2026-10).** Under the
+title, one line ("California votes on a new U.S. House map in 2026."),
+then "The delegation, by lean" as record boxes (`BoxGrid` / `RecordBox`):
+**Seats by lean**, the before and after strips under one line of the old
+tiles' counts ("R 10 → 4 (−6) · D 42 → 48 (+6)"), and **Residents moved**,
+the moved share as a stat with the unchanged seats and the average
+resident's shift as its line. The method paragraphs (73 to 109 words) sit
+behind each box's "More", beside the figure each explains, and the Method &
+data section's source list behind one line (`NoteLine`); the downloads and
+the matrix are where they were. Measured on an iPhone SE (375 px) with the
+density audit's method, main against this change on a production build:
+"Find your district" moved up from 1.43 to 1.33 screens on California's
+page (1.44 to 1.33 Texas, 1.37 to 1.31 Utah), the longest block went from
+109 words to 31 (36 on Utah), the reading grade from 7.1 to 4.6
+(California), the first screen's prose from 22% to 12%, and the pages got
+shorter (24.9 to 22.4 screens, 20.7 to 18.2, 7.5 to 5.0); the district list
+itself is unchanged.
+
 **Who represents a county today is a different question.** The election
 crosswalk answers "which district do I vote in"; in a redrawn state it gives
 the new district, whose number names a different place from the one its
