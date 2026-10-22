@@ -12,7 +12,8 @@ import { absoluteUrl } from "@/lib/site";
 import AmendmentPurpose from "@/components/congress/AmendmentPurpose";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import RecordFigure, { InlineRecordFigure, daysLeftWords } from "@/components/shared/RecordFigure";
-import { CHIP, Glyph, Kicker as BoxKicker } from "@/components/shared/RecordBox";
+import { CHIP, Glyph, SourceChip, TONE, sourceWords } from "@/components/shared/RecordBox";
+import { formatEasternClock } from "@/lib/formatting";
 import type { BoxTone } from "@/types/figure";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import YourMembersLink from "./YourMembersLink";
@@ -55,6 +56,9 @@ async function fetchFrontPage(): Promise<FrontPageData | null> {
   }
 }
 
+// The selection rule in plain words (api/notable.py's docstring).
+const HOW_HREF = "/about/news#front-page";
+
 const MORE = `${INLINE_LINK} mt-3 inline-flex min-h-6 items-center text-sm`;
 const RULE = "border-white/25";
 
@@ -79,22 +83,54 @@ function kicker(e: FrontPageEntry, lead: boolean): string {
   } else if (e.kind === "comment") {
     parts.push(KIND.comment.label, e.agencyName);
     return parts.join(" · ");
-  } else if (e.kind === "issue") {
-    parts.push(e.outlet ?? KIND.issue.label);
-  } else {
+  } else if (e.kind !== "issue") {
     parts.push(KIND[e.kind].label);
   }
   parts.push(shortDate(e.date));
   return parts.join(" · ");
 }
 
-function Kicker({ entry, lead = false }: { entry: FrontPageEntry; lead?: boolean }) {
-  const k = KIND[entry.kind];
+/** The label before an item: where it came from (a record's glyph, or ¶
+ *  for a newsroom's headline). */
+function Source({ entry, small = false }: { entry: FrontPageEntry; small?: boolean }) {
   return (
-    <BoxKicker mark={k.glyph} tone={k.tone}>
-      {kicker(entry, lead)}
-    </BoxKicker>
+    <SourceChip
+      type={entry.source.type}
+      glyph={entry.kind === "issue" ? undefined : KIND[entry.kind].glyph}
+      small={small}
+    >
+      {sourceWords(entry.source)}
+    </SourceChip>
   );
+}
+
+function Kicker({ entry, lead = false }: { entry: FrontPageEntry; lead?: boolean }) {
+  return (
+    <div className="mb-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+      <Source entry={entry} />
+      <span className={`text-sm font-semibold ${TONE[KIND[entry.kind].tone]}`}>
+        {kicker(entry, lead)}
+      </span>
+    </div>
+  );
+}
+
+/** A record number set in DM Mono where a line starts with it ("H.R. 837
+ *  became law"); the rest as written. */
+function withRecordId(text: string, id: string | null | undefined): ReactNode {
+  if (!id || !text.startsWith(id)) return text;
+  return (
+    <>
+      <span className="font-id">{id}</span>
+      {text.slice(id.length)}
+    </>
+  );
+}
+
+/** A newsroom's headline in its own words, quoted; a record's as written. */
+function headlineText(e: FrontPageEntry): ReactNode {
+  if (e.source.type === "news") return <>&ldquo;{e.headline}&rdquo;</>;
+  return withRecordId(e.headline, e.kind === "law" ? e.billLabel : null);
 }
 
 /** Where an entry's headline goes. */
@@ -128,7 +164,9 @@ function Dek({ entry, lead }: { entry: FrontPageEntry; lead: boolean }) {
     case "loneBreak":
       return (
         <>
-          <div className={`${cls} line-clamp-3`}>{voteSubject(entry.vote)}</div>
+          <div className={`${cls} line-clamp-3`}>
+            {withRecordId(voteSubject(entry.vote), entry.vote.billLabel)}
+          </div>
           {entry.vote.amendment && (
             <div className={lead ? "mb-3" : "mt-1"}>
               <AmendmentPurpose vote={entry.vote} chamber={entry.vote.chamber} compact={!lead} />
@@ -139,7 +177,7 @@ function Dek({ entry, lead }: { entry: FrontPageEntry; lead: boolean }) {
     case "law":
       return (
         <div className={cls}>
-          {entry.dek} · {entry.action}
+          {withRecordId(entry.dek, entry.billLabel)} · {entry.action}
         </div>
       );
     case "confirmed":
@@ -209,7 +247,7 @@ function Links({ entry }: { entry: FrontPageEntry }) {
     if (vote.billId && vote.billLabel)
       items.push(
         <Link key="bill" href={billHref(vote.billId, vote.congress)} className={CHIP}>
-          {vote.billLabel}
+          <span className="font-id">{vote.billLabel}</span>
         </Link>
       );
   }
@@ -233,7 +271,7 @@ function Links({ entry }: { entry: FrontPageEntry }) {
   if (entry.kind === "law" && entry.billLabel)
     items.push(
       <Link key="bill" href={billHref(entry.billId, entry.congress)} className={CHIP}>
-        {entry.billLabel}
+        <span className="font-id">{entry.billLabel}</span>
       </Link>
     );
   if (entry.kind === "confirmed")
@@ -278,7 +316,7 @@ function Headline({
   return (
     <Tag className={`font-display font-semibold text-ink-hi ${className}`}>
       <Link href={primaryHref(entry)} className="hover:text-phos hover:underline">
-        {entry.headline}
+        {headlineText(entry)}
       </Link>
     </Tag>
   );
@@ -351,15 +389,20 @@ function itemMeta(e: FrontPageEntry): string {
         .filter(Boolean)
         .join(" · ");
     case "issue":
-      return [e.outlet, shortDate(e.date)].filter(Boolean).join(" · ");
+      return shortDate(e.date);
   }
 }
 
 function ColumnItem({ entry }: { entry: FrontPageEntry }) {
   return (
     <li className={`border-b py-2.5 last:border-b-0 ${RULE}`}>
+      <div className="mb-1">
+        <Source entry={entry} small />
+      </div>
       <Headline entry={entry} as="h4" className="mb-1 text-base leading-snug" />
-      {entry.kind === "law" && <div className="mt-0.5 text-sm text-ink-lo">{entry.dek}</div>}
+      {entry.kind === "law" && (
+        <div className="mt-0.5 text-sm text-ink-lo">{withRecordId(entry.dek, entry.billLabel)}</div>
+      )}
       <InlineRecordFigure f={entry.figure} />
       <div className="mt-0.5 text-sm text-ink-min">
         {itemMeta(entry)}
@@ -472,18 +515,39 @@ export function FrontPageView({ data }: { data: FrontPageData }) {
           </h2>
           <div className="text-sm text-ink-lo">{data.dateline.join(" · ")}</div>
         </div>
-        <div className="mb-5 flex flex-wrap md:flex-nowrap items-center justify-between gap-x-4 gap-y-1 border-b-[3px] border-ink-hi pb-2 pt-1.5 text-sm text-ink-lo">
-          <div className="min-w-0 md:flex-1">{data.edition.sentence}</div>
-          <div className="mt-0 flex flex-wrap items-center gap-x-4" data-share-exclude>
+        <div className="mb-5 grid gap-2 border-b-[3px] border-ink-hi pb-2.5 pt-2 text-sm">
+          <ul
+            aria-label="What the labels mean"
+            className="grid gap-1.5 text-ink lg:grid-cols-2 lg:gap-x-6"
+          >
+            {data.edition.legend.map((l) => (
+              <li key={l.type} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <SourceChip type={l.type}>{l.label}</SourceChip>
+                <span className="min-w-0">{l.sources}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-ink-lo">
+            {data.updatedAt && <span>Updated {formatEasternClock(data.updatedAt)}</span>}
+            <Link
+              href={HOW_HREF}
+              className={`${INLINE_LINK} inline-flex min-h-6 items-center`}
+              data-share-exclude
+            >
+              How this page is put together
+            </Link>
             {data.edition.week && data.edition.weekLabel && (
               <Link
                 href={weekHref(data.edition.week)}
                 className={`${INLINE_LINK} inline-flex min-h-6 items-center`}
+                data-share-exclude
               >
                 {data.edition.weekLabel} &rarr;
               </Link>
             )}
-            <ShareSectionButton label="Entered into the record" withStrip={false} />
+            <span data-share-exclude>
+              <ShareSectionButton label="Entered into the record" withStrip={false} />
+            </span>
           </div>
         </div>
 

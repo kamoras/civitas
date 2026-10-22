@@ -134,6 +134,9 @@ export interface ActionIssue {
   firstSurfaced: string;
   rank: number;
   title: string;
+  /** The newsroom whose headline `title` is; null when the title is
+   *  Civitas's template around a record (a drafted issue). */
+  headlineOutlet?: string | null;
   summary: string;
   facts: string[];
   /** Source name per fact, aligned with `facts` by index. Facts are

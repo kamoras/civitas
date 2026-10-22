@@ -56,6 +56,44 @@ export function Glyph({ children }: { children: ReactNode }) {
   );
 }
 
+/** Where an item came from: an official record (a solid border and §) or a
+ *  newsroom's reporting (a dashed border and ¶). Shape and words carry the
+ *  difference, never colour alone (WCAG 1.4.1). */
+const PROVENANCE = {
+  record: { glyph: "§", className: "border-solid border-ink-hi text-ink-hi" },
+  news: { glyph: "¶", className: "border-dashed border-ink-lo text-ink-lo" },
+} as const;
+
+export function SourceChip({
+  type,
+  glyph,
+  small = false,
+  children,
+}: {
+  type: keyof typeof PROVENANCE;
+  /** A record's own mark (a vote's "=", a rule's "✎"); § by default. */
+  glyph?: string;
+  small?: boolean;
+  children: ReactNode;
+}) {
+  const p = PROVENANCE[type];
+  return (
+    <span
+      className={`inline-flex min-h-6 max-w-full items-center gap-1.5 border-[1.5px] px-1.5 font-semibold ${small ? "text-xs" : "text-sm"} ${p.className}`}
+    >
+      <Glyph>{type === "news" ? p.glyph : (glyph ?? p.glyph)}</Glyph>
+      <span className="min-w-0 [overflow-wrap:anywhere]">{children}</span>
+    </span>
+  );
+}
+
+/** The chip's words: "Official record · Congress.gov", "Reported by NPR". */
+export function sourceWords(s: { type: "record" | "news"; publisher: string | null }): string {
+  if (s.type === "record")
+    return s.publisher ? `Official record · ${s.publisher}` : "Official record";
+  return s.publisher ? `Reported by ${s.publisher}` : "News";
+}
+
 export function Kicker({
   children,
   mark,

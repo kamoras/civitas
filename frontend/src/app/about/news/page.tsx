@@ -458,6 +458,58 @@ export default function NewsChapter() {
         </Boxes>
       </Section>
 
+      <Section id="front-page" title="How the homepage is put together">
+        <Boxes>
+          <Box
+            title="What can be on it"
+            dek="Only records the site already keeps: the week's closest vote and lone party breaks, new laws and confirmations, open comment periods, and the day's news stories."
+            more="each kind of entry"
+          >
+            <P>
+              Congress&apos;s entries come from its latest week of business, the latest week either
+              chamber took a record vote or passed, failed or confirmed anything: the closest
+              simple-majority vote that week, and a lone break, the one member of a party who voted
+              the other way from every other member of that party, at most one per party. Bills that
+              became law and nominations the Senate confirmed count from the start of that week to
+              today. The agencies&apos; entries are open comment periods: the rule whose comments
+              close soonest, then the ones most read on the Federal Register, with paperwork notices
+              left out. The news is the Action Center&apos;s recent stories, one per story.
+            </P>
+          </Box>
+          <Box
+            title="What leads"
+            dek="The first that holds: the closest vote, if closer than this Congress's typical margin; else the newest law, confirmation or lone break; else the top story; else the comment period closing soonest."
+            more="the second tier and the columns"
+          >
+            <P>
+              &ldquo;Typical&rdquo; is the median margin of this Congress&apos;s simple-majority
+              record votes, measured from the stored roll calls each time the page is put together,
+              so the bar moves with the record. While Congress is out, a vote doesn&apos;t lead: its
+              week is the last one of business, not this one, and it is shown dated. The two stories
+              under the lead are the first remaining entry with a figure from Congress, then the
+              agencies, then the news, so the two never come from one column. Each column lists what
+              is left of its own, each kind&apos;s first entry before any kind&apos;s second, three
+              at most. No entry appears twice.
+            </P>
+          </Box>
+          <Box
+            title="Where each item came from"
+            dek="Each item is labelled before its headline: an official record names its publisher; a news item names the newsroom and quotes its headline."
+            more="the labels and the time"
+          >
+            <P>
+              A record&apos;s label (a solid border and &sect;) names who published it: the Senate
+              or House roll call, Congress.gov or the Federal Register. Its headline is a fixed
+              template around the record&apos;s figures, or the record&apos;s own words, such as a
+              law&apos;s title. A news label (a dashed border and &para;) names the newsroom, and
+              the headline is that newsroom&apos;s own, in quotation marks. Nothing on the page is
+              written by a model. The page is put together from the stored records every few
+              minutes; &ldquo;Updated&rdquo; gives the time, Eastern.
+            </P>
+          </Box>
+        </Boxes>
+      </Section>
+
       <Section id="congress-reports" title="Congress reports">
         <Boxes>
           <Box

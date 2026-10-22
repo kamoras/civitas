@@ -54,7 +54,7 @@ from datetime import date
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.action import monitor_groups, recent_issues
+from app.api.action import RECORD_PUBLISHER, headline_outlets, monitor_groups, recent_issues
 from app.api.response_helpers import JSONResponse, cached_json
 from app.comment_periods import comment_window, is_paperwork, salience
 from app.database import get_db
@@ -62,9 +62,10 @@ from app.readout import mark, split_marks, vote_page
 from app.election_phase import CAMPAIGN, ELECTION_DAY, active_election
 from app.issue_ids import to_public_id
 from app.models import (
-    ExploreDocument, FeedArticle, NationalMonitor, Nomination, Representative, RollCall, RollCallPosition, Senator,
+    ExploreDocument, NationalMonitor, Nomination, Representative, RollCall, RollCallPosition, Senator,
 )
 from app.pipeline.congress_activity import eastern_today
+from app.time_utils import utcnow
 from app.pipeline.fetch.floor_logs import NAY_POSITIONS, YEA_POSITIONS
 from app.pipeline.fetch.fr_rulemaking import RULE_DOC_TYPES
 from app.pipeline.fetch.news_feeds import NEWS_FEEDS
@@ -409,22 +410,16 @@ def _news(db: Session) -> list[dict]:
     groups = monitor_groups(recent_issues(db), db)[:NEWS_STORIES]
     if not groups:
         return []
-    titles = {i.title for i, _, _ in groups}
-    outlet_of: dict[tuple[str, str], str] = {}
-    for title, url, source in (db.query(FeedArticle.title, FeedArticle.url, FeedArticle.source_name)
-                               .filter(FeedArticle.title.in_(sorted(titles)))):
-        outlet_of[(title, url)] = source
+    headline_of = headline_outlets(db, [i for i, _, _ in groups])
     slugs = set().union(*(s for _, s, _ in groups))
     monitors = dict(db.query(NationalMonitor.slug, NationalMonitor.title)
                     .filter(NationalMonitor.slug.in_(sorted(slugs)))) if slugs else {}
     out = []
     for issue, story, folded in groups:
         outlets = json.loads(issue.source_names or "[]")
-        urls = json.loads(issue.source_urls or "[]")
-        # The outlet whose headline titles the issue (the feed article
-        # carrying it); the first outlet when that article isn't stored.
-        outlet = next((outlet_of[(issue.title, u)] for u in urls if (issue.title, u) in outlet_of),
-                      outlets[0] if outlets else None)
+        # The newsroom whose headline titles the issue; None for a drafted
+        # issue's template around a record.
+        outlet = headline_of[issue.id]
         week = week_bounds(date.fromisoformat(issue.date))
         also = sorted({f.date for f in folded
                        if f.date != issue.date and week[0] <= date.fromisoformat(f.date) <= week[1]},
@@ -434,11 +429,28 @@ def _news(db: Session) -> list[dict]:
             "kind": "issue", "column": "news", "date": issue.date,
             "headline": issue.title, "publicId": to_public_id(issue.id),
             "outlet": outlet, "outlets": outlets, "alsoDates": also, "monitor": monitor,
+            "sourceType": issue.source_type,
             "figure": {"type": "stat", "value": len(outlets),
                        "caption": f"{'newsroom' if len(outlets) == 1 else 'newsrooms'} reporting"}
             if outlets else None,
         })
     return out
+
+
+def provenance(e: dict) -> dict:
+    """Where an entry came from, for the label before it: an official record
+    and its publisher, or the newsroom whose headline it is."""
+    match e["kind"]:
+        case "closest" | "loneBreak":
+            v = e["vote"]
+            return {"type": "record", "publisher": f"{_CHAMBER_NAME[v['chamber']]} roll call {v['number']}"}
+        case "law" | "confirmed":
+            return {"type": "record", "publisher": "Congress.gov"}
+        case "comment":
+            return {"type": "record", "publisher": "Federal Register"}
+    if e["outlet"] is None and e.get("sourceType") in RECORD_PUBLISHER:
+        return {"type": "record", "publisher": RECORD_PUBLISHER[e["sourceType"]]}
+    return {"type": "news", "publisher": e["outlet"]}
 
 
 def _one_of_each_first(entries: list[dict]) -> list[dict]:
@@ -512,11 +524,17 @@ def _election_line(db: Session, today: date) -> str | None:
     return f"{_plural((e.election_day - today).days, 'day')} to Election Day"
 
 
-def _sources_sentence() -> str:
+def _legend() -> list[dict]:
+    """What each label means, naming its sources: the two kinds of entry."""
     names = list(dict.fromkeys(f["name"] for f in NEWS_FEEDS))
     outlets = ", ".join(names[:-1]) + f" and {names[-1]}" if len(names) > 1 else "".join(names)
-    return (f"From the House and Senate's own records, Congress.gov, the Federal Register, {outlets}, "
-            "each in its own words")
+    return [
+        {"type": "record", "label": "Official record",
+         "sources": "Votes, laws, confirmations and rules, from the House Clerk, Senate.gov, Congress.gov "
+                    "and the Federal Register"},
+        {"type": "news", "label": "News",
+         "sources": f"Headlines in each newsroom's own words, quoted and linked, from {outlets}"},
+    ]
 
 
 def front_page(db: Session, today: date | None = None) -> dict:
@@ -531,6 +549,9 @@ def front_page(db: Session, today: date | None = None) -> dict:
     latest = cs.latest_day(db)
     recess = cs.recess(db, cs.day_report(db, latest)) if latest else None
     page = arrange(congress, _comments(db, today), _news(db), congress_out=recess is not None)
+    for e in [page["lead"], *page["tier"], *(e for col in page["columns"].values() for e in col)]:
+        if e is not None:
+            e["source"] = provenance(e)
     if page["lead"] is None:
         return {"asOf": today.isoformat(), "lead": None, "tier": [], "columns": {c: [] for c in _COLUMNS}}
 
@@ -540,8 +561,10 @@ def front_page(db: Session, today: date | None = None) -> dict:
         "asOf": today.isoformat(),
         "dateline": [line for line in (cs.long_date(today), _congress_line(db, today, recess, latest),
                                        _election_line(db, today)) if line],
+        # When this answer was put together from the stored rows (UTC).
+        "updatedAt": utcnow().replace(microsecond=0).isoformat() + "Z",
         "edition": {
-            "sentence": _sources_sentence(),
+            "legend": _legend(),
             "week": monday.isoformat() if monday else None,
             "weekLabel": ("Everything this week" if monday == this_week
                           else f"The week of {monday:%B} {monday.day}") if monday else None,

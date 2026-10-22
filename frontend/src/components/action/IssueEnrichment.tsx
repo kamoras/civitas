@@ -800,14 +800,27 @@ export function OutletLink({ name, url }: { name: string; url?: string | null })
   );
 }
 
+/** A quoted line's outlet, after it: set off by a real space and a dot, so
+ *  the text (copied, read aloud, searched) never runs the quote into the
+ *  name ("in November.The Hill"). */
+function OutletCredit({ name, url }: { name: string; url?: string | null }) {
+  return (
+    <span className="whitespace-nowrap font-mono text-xs text-ink-min">
+      <span aria-hidden="true">· </span>
+      <OutletLink name={name} url={url} />
+    </span>
+  );
+}
+
 /** The outlet of the issue's summary, which is a line quoted from one
  *  article like the facts under it. */
 export function SummarySource({ issue }: { issue: ActionIssue }) {
   if (!issue.summarySource) return null;
   return (
-    <span className="ml-2 whitespace-nowrap font-mono text-xs text-ink-min">
-      <OutletLink name={issue.summarySource} url={issue.summarySourceUrl} />
-    </span>
+    <>
+      {" "}
+      <OutletCredit name={issue.summarySource} url={issue.summarySourceUrl} />
+    </>
   );
 }
 
@@ -839,9 +852,10 @@ export function Coverage({
             <p className="font-sans text-[15px] leading-relaxed text-ink">
               {fact}
               {issue.factSources?.[i] && (
-                <span className="ml-2 whitespace-nowrap font-mono text-xs text-ink-min">
-                  <OutletLink name={issue.factSources[i]} url={issue.factSourceUrls?.[i]} />
-                </span>
+                <>
+                  {" "}
+                  <OutletCredit name={issue.factSources[i]} url={issue.factSourceUrls?.[i]} />
+                </>
               )}
               {isNewFact(issue.newFacts, fact) && <NewFactTag />}
             </p>

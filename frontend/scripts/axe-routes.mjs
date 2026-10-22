@@ -23,7 +23,8 @@ import { chromium, devices } from "playwright-core";
 const require = createRequire(import.meta.url);
 const AXE = readFileSync(require.resolve("axe-core/axe.min.js"), "utf8");
 const TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
-const WIDTHS = [320, 1280];
+// AXE_WIDTHS=320,390,1280 adds widths; 320 (the reflow check) and 1280 by default.
+const WIDTHS = (process.env.AXE_WIDTHS ?? "320,1280").split(",").map(Number);
 const PHONES = {
   "iPhone SE": devices["iPhone SE (3rd gen)"],
   "Android 360": devices["Galaxy S8"],
@@ -37,6 +38,8 @@ const PHONES = {
   // what ran past a phone (unbreakable labels, fixed rem columns, a header
   // that wrapped over the page) only did so here.
   "iPhone SE, 200% text": { ...devices["iPhone SE (3rd gen)"], fontSize: 32 },
+  // WCAG 1.4.4 on a desktop: the same doubled text at 1280px.
+  "Desktop 1280, 200% text": { viewport: { width: 1280, height: 900 }, fontSize: 32 },
 };
 // Controls nobody types into, so iOS never zooms for them.
 const NOT_TYPED_INTO = [
@@ -82,28 +85,29 @@ const browser = await chromium.launch({
   args: ["--no-sandbox"],
 });
 const failures = [];
+
+/** axe's WCAG 2.x A/AA violations on the loaded page, as failure lines. */
+async function axeViolations(page, where) {
+  await page.addScriptTag({ content: AXE });
+  const violations = await page.evaluate(
+    async (tags) =>
+      (await window.axe.run(document, { runOnly: { type: "tag", values: tags } })).violations.map(
+        (v) => ({ id: v.id, help: v.help, targets: v.nodes.map((n) => n.target.join(" ")) })
+      ),
+    TAGS
+  );
+  for (const v of violations)
+    failures.push(`${where}  ${v.id}: ${v.help}\n    ${v.targets.slice(0, 5).join("\n    ")}`);
+  return violations;
+}
+
 try {
   for (const url of urls) {
     const path = new URL(url).pathname + new URL(url).search;
     for (const width of WIDTHS) {
       const page = await browser.newPage({ viewport: { width, height: 900 }, colorScheme: SCHEME });
       await page.goto(base + path, { waitUntil: "networkidle", timeout: 60_000 });
-      await page.addScriptTag({ content: AXE });
-      const violations = await page.evaluate(
-        async (tags) =>
-          (
-            await window.axe.run(document, { runOnly: { type: "tag", values: tags } })
-          ).violations.map((v) => ({
-            id: v.id,
-            help: v.help,
-            targets: v.nodes.map((n) => n.target.join(" ")),
-          })),
-        TAGS
-      );
-      for (const v of violations)
-        failures.push(
-          `${path} @${width}px  ${v.id}: ${v.help}\n    ${v.targets.slice(0, 5).join("\n    ")}`
-        );
+      const violations = await axeViolations(page, `${path} @${width}px`);
       if (width === 320) {
         const over = await page.evaluate(
           () => document.documentElement.scrollWidth - document.documentElement.clientWidth
@@ -157,7 +161,12 @@ try {
         failures.push(
           `${path} on ${phone}  reflow: page is ${wide.over}px wider than the screen\n    ${wide.past.join("\n    ")}`
         );
-      console.log(`${path} on ${phone}: ${wide.over > 0 ? `${wide.over}px too wide` : "fits"}`);
+      // Doubled text: axe again, since contrast and target sizes move with it.
+      const found = fontSize ? (await axeViolations(page, `${path} on ${phone}`)).length : 0;
+      console.log(
+        `${path} on ${phone}: ${wide.over > 0 ? `${wide.over}px too wide` : "fits"}` +
+          (fontSize ? `, ${found} violation(s)` : "")
+      );
       await context.close();
     }
   }
