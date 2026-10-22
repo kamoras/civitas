@@ -366,6 +366,25 @@ class HoldingCategorySchema(CamelModel):
     mark: ReadoutMarkSchema | None = None
 
 
+class DisclosureScanSchema(CamelModel):
+    """A scanned or paper report's pages, kept on this site
+    (app/disclosure_scans.py). `pages` 0: none could be loaded yet."""
+    filing_id: str
+    pages: int = 0
+    # Each page's pixel size, [width, height], so the viewer holds its
+    # space before the image arrives.
+    page_sizes: list[list[int]] = Field(default_factory=list)
+    # Same-origin path of page N is page_url_prefix + "N.webp".
+    page_url_prefix: str = ""
+    # Where the pages were fetched from, and when (YYYY-MM-DD).
+    fetched_from: str = ""
+    fetched_at: str | None = None
+    # The last failed attempt (YYYY-MM-DD); stored pages, if any, are kept.
+    failed_at: str | None = None
+    # "Jane Doe's 2025 annual report": what each page's alt text names.
+    title: str = ""
+
+
 class HoldingsSchema(CamelModel):
     # False when no annual report for this member has been ingested yet
     # (a newly seated member, or before the first ingest run) — every other
@@ -385,6 +404,8 @@ class HoldingsSchema(CamelModel):
     parsed: bool = False
     # When not parsed: "scanned" (paper filing) or "unrecognized".
     unreadable_reason: Literal["scanned", "unrecognized"] | None = None
+    # A scanned report's page images, shown in place of the breakdown.
+    scan: DisclosureScanSchema | None = None
     # A Senate filing made on or after this report's date that states no year it can be
     # ranked by — a paper filing, or a title without one ("annual report
     # filed 2026-05-14") — named so the page doesn't imply this report is

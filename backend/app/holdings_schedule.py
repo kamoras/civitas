@@ -15,6 +15,7 @@ HOLDINGS_STEPS = [
     ("house_holdings",  "fetch", "Ingest House annual disclosures (holdings)"),
     ("senate_holdings", "fetch", "Ingest Senate annual disclosures (holdings)"),
     ("president_holdings", "fetch", "Ingest the president's annual disclosure (holdings)"),
+    ("scan_pages", "fetch", "Keep scanned disclosures' page images"),
 ]
 
 # Wall-clock budgets for each holdings phase, in its three steps:
@@ -39,6 +40,13 @@ PROBE_BUDGET = timedelta(minutes=2)
 # Longest a phase can run, give or take one parse — what the stock-trades
 # run's overrun alarm allows for (ops_alerts.stock_trades_overrun_budget).
 PHASE_CEILING = PREP_BUDGET + FETCH_BUDGET + PROBE_BUDGET
+
+# The page-image step (holdings_pipeline.ingest_scan_pages) starts no fetch
+# after FETCH_BUDGET, and the render in progress then is given at most
+# PREP_BUDGET more: inside PHASE_CEILING. A first run renders every scanned
+# report's pages (989 House pages took 72 s in a dev container, 2026-10;
+# slower on the Pi), so it may spread over two nights.
+SCAN_RENDER_GRACE = PREP_BUDGET
 
 # How long a night may spend re-reading stored trades an older PTR parser
 # read, across all three sources (stock_pipeline._reread_trades). The rest

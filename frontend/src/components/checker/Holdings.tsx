@@ -8,6 +8,7 @@ import { chartMark } from "@/lib/chartColors";
 import CollapsibleSection from "../shared/CollapsibleSection";
 import Pagination from "../shared/Pagination";
 import MetricTooltip from "./MetricTooltip";
+import ScannedFiling from "./ScannedFiling";
 import { asOfPhrase, formatBracket, OWNER_LABEL } from "@/lib/disclosures";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
@@ -363,7 +364,13 @@ export default function Holdings({
   const box = variant === "panel" ? "" : "panel p-4";
   const hasSlices = data.categories.some((c) => c.weight > 0);
   let chart: ReactNode;
-  if (!data.parsed) {
+  if (!data.parsed && data.unreadableReason === "scanned" && data.scan) {
+    chart = (
+      <div className={box}>
+        <ScannedFiling scan={data.scan} sourceLink={sourceLink} />
+      </div>
+    );
+  } else if (!data.parsed) {
     chart = (
       <p className={`${box} text-small text-ink-lo`}>
         {data.unreadableReason === "scanned"

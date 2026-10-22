@@ -150,7 +150,13 @@ export default function DataChapter() {
                 brokerage statement&apos;s short form when that fits one company only
                 (&ldquo;HONEYWELL INTL INC&rdquo;); bonds, funds and anything else the SEC
                 doesn&apos;t cover carry none rather than a guess. A trade two of a filer&apos;s
-                reports both list counts once, at the earlier report&apos;s date.
+                reports both list counts once, at the earlier report&apos;s date. An annual report
+                filed on paper (a House scan with no text in it, or a Senate paper filing)
+                can&apos;t be read into a holdings chart, so the member&apos;s page shows the filing
+                itself, page by page: the pages are copied from the Clerk or eFD each night, kept on
+                this site at the scan&apos;s own resolution, and served from here, so your browser
+                never loads them from a government host. The copy names the date it was made, and
+                the official filing is linked beside it.
               </Fact>
               <Fact label="Lobbying Disclosure Act registry (lda.gov)">
                 Registered lobbying spending by organizations that appear among donors, and the
