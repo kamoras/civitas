@@ -81,6 +81,14 @@ export function formatComputedLean(lean: number | null | undefined): string {
 /** The page every computed-lean figure links to for its method. */
 export const COMPUTED_LEAN_HREF = "/about/data#computed-lean";
 
+/** The law that fixes the federal Election Day (the Tuesday after the first
+ *  Monday in November), cited wherever a page counts down to it. */
+export const ELECTION_DAY_LAW = {
+  name: "2 U.S.C. 7",
+  // GovInfo's link service: the newest published edition of the section.
+  url: "https://www.govinfo.gov/link/uscode/2/7?type=usc&year=mostrecent&link-type=html",
+} as const;
+
 /** Solid palette hex, so a lean figure never renders below the contrast
  * floor. One function, not two: this used to also exist as pviTextColor,
  * copy-pasted into the elections hub while this file's own copy served

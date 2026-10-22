@@ -32,7 +32,8 @@ METHOD = {
     ),
     "expected": (
         "Per chamber and party, a fractional-response logit (Papke & Wooldridge 1996) of members' rates on their "
-        "seat's partisan lean (Cook PVI, signed toward the member's party), each member weighted by their "
+        "seat's partisan lean (a House seat's Cook PVI, a state's lean computed by Civitas with Cook's formula; "
+        "signed toward the member's party), each member weighted by their "
         "counted votes and fitted on this Congress's members every night. A member's expected rate is their "
         "party's fit at their seat's lean. No shrinkage is applied."
     ),

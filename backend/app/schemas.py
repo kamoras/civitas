@@ -1080,8 +1080,9 @@ class PublicMemberVoteSchema(_PublicModel):
                                                       "party signal (a bipartisan or housekeeping roll call, or a "
                                                       "vote that isn't Yea or Nay)")
     party_leaning: Literal["R", "D", "bipartisan"] | None = Field(
-        description="How the parties split on it, from the roll call's own positions: R or D when 65% or more of "
-                    "one party's Yea/Nay votes were Yea and 35% or fewer of the other's, bipartisan otherwise; "
+        description="How the parties split on it, from the roll call's own positions: R or D when most of "
+                    "one party's Yea/Nay votes were Yea and most of the other's Nay (Congressional Quarterly's "
+                    "party unity vote), bipartisan otherwise; "
                     "null for a housekeeping question (a quorum call, a motion to table or adjourn) or when either "
                     "party cast fewer than three Yea/Nay votes")
     counted_as_break: bool | None = Field(
@@ -1283,8 +1284,9 @@ class PublicScoreDimensionsSchema(_PublicModel):
 class PublicSeatSchema(_PublicModel):
     state: str
     district: int | None = Field(description="House district, 0 at-large; null for senators")
-    cook_pvi: int = Field(description="The seat's Cook PVI the score used, positive leaning Republican (the "
-                                      "district's for a House seat, the state's for a senator; 0 when unknown)")
+    cook_pvi: int = Field(description="The seat's lean the score used, positive leaning Republican (a House "
+                                      "seat's Cook PVI; for a senator, the state's lean computed by Civitas "
+                                      "with Cook's formula from certified presidential returns; 0 when unknown)")
     district_lines_congress: int | None = Field(
         description="The Congress whose district lines the House score was computed on; null for senators, or "
                     "a score stored before this was recorded")
@@ -1445,7 +1447,9 @@ class PublicPresidentialSupportMemberSchema(_PublicModel):
     party: str = Field(description="The party the expectation is read for (an independent's caucus party)")
     state: str
     district: int | None = Field(description="House district, 0 at-large; null for senators")
-    seat_lean: int | None = Field(description="The seat's Cook PVI, positive leaning Republican")
+    seat_lean: int | None = Field(description="The seat's lean, positive leaning Republican: a House seat's "
+                                              "Cook PVI; for a senator, the state's lean computed by Civitas "
+                                              "with Cook's formula")
     with_president: int = Field(description="Counted votes cast on the president's side")
     votes: int = Field(description="Counted votes cast (Yea or Nay; present and not voting excluded)")
     rate: float = Field(description="withPresident / votes")

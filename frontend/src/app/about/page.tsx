@@ -10,7 +10,7 @@ import LegacyAboutAnchor from "@/components/about/LegacyAboutAnchor";
 import { TYPE } from "@/lib/typeStyles";
 
 const ABOUT_DESCRIPTION =
-  "What Civitas Research is, how it sets each member of Congress beside peers from public records, how presidents are measured (and why not justices), and the rules it holds itself to.";
+  "What Civitas Research is, how it sets each member of Congress beside peers from public sources, how presidents are measured (and why not justices), and the rules it holds itself to.";
 
 // Absolute: the page names the site itself, so the template's
 // " | Civitas Research" would say it twice.
@@ -28,8 +28,8 @@ export const metadata = pageMetadata({
 
 const PRINCIPLES: readonly { title: string; body: string }[] = [
   {
-    title: "Public records only",
-    body: "Every figure comes from official records: Congress.gov, the FEC, the Federal Register, the courts. Nothing is purchased, and nothing is invented to fill a gap.",
+    title: "Public sources, each named",
+    body: "Figures come from official records (Congress.gov, the FEC, the Federal Register, the courts) and named public sources (surveys, academic datasets, Wikipedia), each shown with its source. Nothing is purchased, and nothing is invented to fill a gap.",
   },
   {
     title: "One formula for every party",
@@ -112,8 +112,8 @@ export default function AboutOverview() {
               <Box key={p.title} title={p.title} dek={p.body} more="what Civitas is">
                 <P>
                   Civitas sets the record of the people who represent you (senators, representatives
-                  and presidents) beside their peers, using only public records and formulas anyone
-                  can check, and keeps the record of Supreme Court justices.
+                  and presidents) beside their peers, using only named public sources and formulas
+                  anyone can check, and keeps the record of Supreme Court justices.
                 </P>
               </Box>
             ) : (
