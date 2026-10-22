@@ -4,7 +4,7 @@ counted, and each measure counts once however many times it was voted on."""
 
 import json
 
-from app.models import RepKeyVote, Representative, RollCall, RollCallPosition
+from app.models import RepKeyVote, Representative, RepSponsoredBill, RollCall, RollCallPosition
 from app.pipeline.analyze import party_line_record
 from app.pipeline.analyze.party_line_record import measure_key, party_line_records
 from app.pipeline.analyze.score_calculator import party_break_rate
@@ -125,6 +125,25 @@ def test_the_breakdown_serves_each_counted_break_with_its_roll_call(db_session):
     assert facts["breakVotes"][0]["vote"] == "Nay"
     assert facts["breakVotes"][0]["rollCall"]["parties"][0] == {"party": "R", "yea": 4, "nay": 1, "present": 0, "notVoting": 0}
     assert facts["flankBreakVotes"][0]["rollCall"]["billId"] == "HR.2"
+
+
+def test_a_flank_break_on_an_amendment_names_the_measure_not_the_sponsor(db_session):
+    """An amendment vote's own title names only its sponsor; the break lists
+    the bill it amends, from the stored bill when Congress.gov's titles
+    weren't read, and the amendment's purpose beside it."""
+    _roll_call(db_session, "house", 12, "On Agreeing to the Amendment", "HR.2", {"R4": "Nay"})
+    rc = db_session.query(RollCall).filter_by(number=12).one()
+    rc.title, rc.amendment, rc.amendment_purpose = "Doe Amdt. No. 7", "H.Amdt. 7", "To strike section 2."
+    db_session.add(RepSponsoredBill(representative_id="r4", bill_id="HR.2", congress=119,
+                                    title="National Defense Authorization Act for Fiscal Year 2026"))
+    record = {"congress": 119, "votes": 40, "breaks": [], "flankBreaks": [{"rollCall": "house-119-2-12", "vote": "Nay"}]}
+    db_session.add(Representative(id="r4", bioguide_id="R4", name="R4 LastR4", state="TN", district=4, party="R",
+                                  party_line_record=json.dumps(record)))
+    db_session.commit()
+
+    vote = get_representative_score_breakdown(db_session, "r4")["constituentAlignment"]["facts"]["flankBreakVotes"][0]
+    assert vote["rollCall"]["measureTitle"] == "National Defense Authorization Act for Fiscal Year 2026"
+    assert vote["rollCall"]["amendmentPurpose"] == "To strike section 2."
 
 
 def test_the_voting_record_states_the_counts_the_score_reads(db_session):

@@ -98,11 +98,31 @@ describe("RaceContext", () => {
     render(
       <RaceContext race={race({ usualVote: { lean: 5.34, label: "R+5", source: "computed" } })} />
     );
-    expect(screen.getByText(/the figure the 2026 map shows, used in no score/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/the figure the 2026 map shows, used in no member comparison/)
+    ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "How it is computed" })).toHaveAttribute(
       "href",
       "/about/data#computed-lean"
     );
+  });
+
+  it("never calls a state's lean Cook's: it is Civitas's own, from certified returns", () => {
+    const senate = race({
+      id: "2026-SENATE-NC",
+      office: "S",
+      district: null,
+      pviLevel: "state",
+      leanContext: { ...race().leanContext!, unit: "states", of: 50 },
+    });
+    const { unmount } = render(
+      <RaceContext race={{ ...senate, usualVote: { lean: 5, label: "R+5", source: "state" } }} />
+    );
+    expect(screen.queryByText(/Cook PVI/)).not.toBeInTheDocument();
+    unmount();
+    render(<RaceContext race={{ ...senate, usualVote: null }} />);
+    expect(screen.getByText("The seat · State lean R+5")).toBeInTheDocument();
+    expect(screen.queryByText(/Cook PVI/)).not.toBeInTheDocument();
   });
 
   it("falls back to Cook's figure, labelled as Cook's, without a computed one", () => {

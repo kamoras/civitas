@@ -1122,7 +1122,7 @@ class TestCalculateConfidence:
             },
             "votingRecord": {
                 "keyVotes": [
-                    {"votedWithParty": bool(i % 2)} for i in range(50)
+                    {"votedWithParty": bool(i % 2)} for i in range(100)
                 ],
                 "recentVotes": [],
             },
@@ -1148,6 +1148,28 @@ class TestCalculateConfidence:
             },
         }
         assert calculate_confidence(senator)["constituentAlignment"] == "low"
+
+    def test_vote_grade_follows_the_chambers_measured_reliability(self, monkeypatch):
+        from app.pipeline.analyze import score_calculator as sc
+
+        grades = {"chambers": {"senate": {"partial": 30, "full": 50}, "house": {"partial": 15, "full": 30}}}
+        monkeypatch.setattr(sc.data_refresh, "read", lambda name: grades)
+
+        def member(n, district=None):
+            votes = [{"billId": f"b{i}", "votedWithParty": True} for i in range(n)]
+            return {"district": district, "votingRecord": {"keyVotes": votes, "recentVotes": []}}
+
+        assert sc.calculate_confidence(member(35))["constituentAlignment"] == "medium"
+        assert sc.calculate_confidence(member(35, district=4))["constituentAlignment"] == "high"
+        assert sc.calculate_confidence(member(20, district=4))["constituentAlignment"] == "medium"
+        assert sc.calculate_confidence(member(14, district=4))["constituentAlignment"] == "low"
+
+    def test_the_bundled_vote_grades_are_ordered_for_both_chambers(self):
+        from app.pipeline.analyze.score_calculator import confidence_vote_grades
+
+        for chamber in ("senate", "house"):
+            partial, full = confidence_vote_grades(chamber)
+            assert 0 < partial <= full
 
     def test_unclear_promises_do_not_count(self):
         from app.pipeline.analyze.score_calculator import calculate_confidence

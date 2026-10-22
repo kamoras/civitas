@@ -17,6 +17,7 @@ import pathlib
 import re
 import unicodedata
 
+from app.score_display import shown_share
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -91,6 +92,23 @@ def _entry_for(chamber: str, state: str, name: str, district: int | None, party:
     return candidates[0] if len(candidates) == 1 and not by_initial else None
 
 
+# Places a share is served to, here and in the score breakdown's approval
+# facts (score_calculator), so the profile and the breakdown state one
+# figure. The survey file holds four; the breakdown used to round to three,
+# and 0.1148 here beside 0.115 there read 11% and 12% (shown_share rounds
+# half up, so a second rounding moved the figure).
+APPROVAL_PLACES = 4
+
+
+def approval_share(shrunk: float | None) -> float | None:
+    return None if shrunk is None else round(shrunk, APPROVAL_PLACES)
+
+
+def survey_year() -> int | None:
+    """The year the survey was fielded, for a label ("CES 2024")."""
+    return _survey().get("fielded_year")
+
+
 def constituent_approval(
     chamber: str, state: str, name: str, party: str | None,
     years_in_office: int, district: int | None = None,
@@ -115,7 +133,8 @@ def constituent_approval(
             "party": party,
             # None: the survey can't tell members apart in this cell (see
             # fetch_ces_approval.priors), so no per-member figure is shown.
-            "approve": est.get("shrunk"),
+            "approve": approval_share(est.get("shrunk")),
+            "approve_shown": None if est.get("shrunk") is None else shown_share(approval_share(est["shrunk"])),
             # Share of the figure that is this member's own respondents; the
             # rest is the typical member's (the shrinkage).
             "own_weight": est.get("own_weight"),

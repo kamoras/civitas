@@ -63,6 +63,12 @@ class TestComputePartySplit:
         pytest.param(2, 43, 40, 5, "D", id="democratic_bill"),
         pytest.param(30, 15, 35, 10, "bipartisan", id="bipartisan_bill"),
         pytest.param(2, 0, 1, 0, None, id="insufficient_data_returns_none"),
+        # CQ's party unity vote: a majority against a majority, however slim
+        # (65/35 read these bipartisan until v6.38).
+        pytest.param(27, 18, 18, 27, "R", id="sixty_forty_is_a_party_vote"),
+        pytest.param(20, 19, 19, 20, "R", id="bare_majorities_opposed"),
+        # An even split is no majority, so no side to oppose.
+        pytest.param(20, 20, 5, 35, "bipartisan", id="a_tied_party_has_no_majority"),
     ])
     def test_party_split(self, r_yea, r_nay, d_yea, d_nay, expected):
         data = self._make_members(r_yea=r_yea, r_nay=r_nay, d_yea=d_yea, d_nay=d_nay)

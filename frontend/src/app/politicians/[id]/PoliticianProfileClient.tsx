@@ -30,7 +30,6 @@ import RedrawnSeatNote from "@/components/redistricting/RedrawnSeatNote";
 import SeatOnMap from "@/components/elections/SeatOnMap";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import { fetchMapSeats } from "@/lib/api";
-import PresidentialSupportSection from "@/components/presidentialSupport/PresidentialSupportSection";
 import OnThisPage from "@/components/shared/OnThisPage";
 import { onThisPage } from "@/lib/onThisPage";
 
@@ -93,14 +92,10 @@ export default function PoliticianProfileClient({
   peers = null,
   charts = null,
   strip,
-  supportLine,
 }: {
   profile: PoliticianProfile;
   /** The "this week" strip, rendered by the server page. */
   strip?: React.ReactNode;
-  /** Votes with the president's stated positions in one line, rendered by
-   *  the server page (members only). */
-  supportLine?: React.ReactNode;
   /** The score breakdown, fetched with the profile (senators and
    *  representatives). */
   breakdown?: RepresentationScoreBreakdown | null;
@@ -135,14 +130,17 @@ export default function PoliticianProfileClient({
               the <head> names first: votes, sponsored bills' actions, score
               changes and disclosures). One row, not two lines before the
               member's name. */}
-          <div className="mb-6 flex flex-wrap items-center justify-between gap-x-4">
+          <div className="mb-3 flex items-center justify-between gap-x-4 sm:flex-wrap">
             {/* The branch's own trail (lib/routes.ts recordTrail): the
                 record's URL is the same for every branch, so the path
                 can't say which section the reader is in. */}
-            <nav aria-label="Breadcrumb">
-              <ol className="flex min-h-11 flex-wrap items-center font-mono text-small text-ink-min">
+            {/* On a phone one row: the page's own name, last, is cut with an
+                ellipsis rather than pushing the feed link to a row of its
+                own (the name is the page's title just below). */}
+            <nav aria-label="Breadcrumb" className="min-w-0">
+              <ol className="flex min-h-11 items-center font-mono text-small text-ink-min sm:flex-wrap">
                 {trail.crumbs.map((c) => (
-                  <li key={c.href} className="flex items-center">
+                  <li key={c.href} className="flex shrink-0 items-center">
                     <Link
                       href={c.href}
                       className="inline-flex min-h-11 items-center hover:text-phos transition-colors"
@@ -154,13 +152,17 @@ export default function PoliticianProfileClient({
                     </span>
                   </li>
                 ))}
-                <li aria-current="page" className="text-ink-lo">
+                <li aria-current="page" className="min-w-0 truncate text-ink-lo">
                   {identity.name}
                 </li>
               </ol>
             </nav>
             {isMember && (
-              <FollowFeed subject={identity.name} feed={memberFeed(profile.id, identity.name)} />
+              <FollowFeed
+                subject={identity.name}
+                feed={memberFeed(profile.id, identity.name)}
+                className="shrink-0 whitespace-nowrap sm:whitespace-normal"
+              />
             )}
           </div>
 
@@ -197,12 +199,6 @@ export default function PoliticianProfileClient({
               {/* "Is my member up, and against whom?" was four clicks away
                   (Elections, the state, the House box, the district), and
                   on a redrawn map under a different district number. */}
-              {profile.onBallot && <OnBallotLine race={profile.onBallot} />}
-              {profile.seatRace &&
-                profile.seatRace.status !== "nominee" &&
-                profile.seatRace.raceId !== profile.onBallot?.raceId && (
-                  <SeatRaceLine race={profile.seatRace} name={profile.identity.name} />
-                )}
               {isMember && (
                 // Keyed by member: moving between two profiles reuses this
                 // page, and every part of the scorecard that loads or keeps
@@ -222,7 +218,21 @@ export default function PoliticianProfileClient({
                   peers={peers as PeerComparison | null}
                   titleAs="h1"
                   former={hasLeftOffice}
-                  votesNote={supportLine}
+                  boxes={profile.boxes}
+                  governmentRecord={governmentRecord}
+                  ballotDetail={
+                    <>
+                      {/* "Is my member up, and against whom?": the header's
+                          one-line status links the race; the full lines
+                          sit behind the committee line. */}
+                      {profile.onBallot && <OnBallotLine race={profile.onBallot} />}
+                      {profile.seatRace &&
+                        profile.seatRace.status !== "nominee" &&
+                        profile.seatRace.raceId !== profile.onBallot?.raceId && (
+                          <SeatRaceLine race={profile.seatRace} name={profile.identity.name} />
+                        )}
+                    </>
+                  }
                 />
               )}
               {branch === "president" && (
@@ -272,8 +282,6 @@ export default function PoliticianProfileClient({
               arriving from a search result. */}
           {strip}
 
-          {isMember && <PresidentialSupportSection memberId={profile.id} name={identity.name} />}
-
           {/* Active Issues */}
           {activeIssues.length > 0 && (
             <SectionBlock title="In the Action Center" id="in-the-action-center">
@@ -315,7 +323,8 @@ export default function PoliticianProfileClient({
           )}
 
           {/* Government Record */}
-          {governmentRecord.totalDocs > 0 && (
+          {/* A member's record is a box in the scorecard (AlsoOnRecord). */}
+          {!isMember && governmentRecord.totalDocs > 0 && (
             <SectionBlock title="Government record" id="government-record">
               <p className={`mb-3 text-small text-ink-min`}>
                 {governmentRecord.totalDocs} document{governmentRecord.totalDocs !== 1 ? "s" : ""}{" "}

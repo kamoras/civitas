@@ -1,6 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import ConstituentApproval from "./ConstituentApproval";
+import ApprovalBox from "./ApprovalBox";
 
 const approval = {
   survey: "CES 2024 Common Content (pre-election wave, Oct-Nov 2024)",
@@ -15,31 +15,37 @@ const approval = {
 
 describe("ConstituentApproval", () => {
   it("shows each party's approval with how many gave an opinion", () => {
-    render(<ConstituentApproval approval={approval} />);
-    const items = screen.getAllByRole("listitem").map((li) => li.textContent ?? "");
+    render(<ApprovalBox approval={approval} box={null} />);
+    const list = screen.getByRole("list", { name: /Approval among constituents/ });
+    const items = within(list)
+      .getAllByRole("listitem")
+      .map((li) => li.textContent ?? "");
     expect(items[0]).toMatch(/Democrats.*23% approve.*88 with an opinion/);
     expect(items[1]).toMatch(/Republicans.*57% approve/);
   });
 
   it("marks a figure that comes mostly from similar members", () => {
-    render(<ConstituentApproval approval={approval} />);
-    const items = screen.getAllByRole("listitem").map((li) => li.textContent ?? "");
+    render(<ApprovalBox approval={approval} box={null} />);
+    const list = screen.getByRole("list", { name: /Approval among constituents/ });
+    const items = within(list)
+      .getAllByRole("listitem")
+      .map((li) => li.textContent ?? "");
     expect(items[0]).not.toMatch(/similar members/);
     expect(items[1]).toMatch(/mostly based on similar members/);
   });
 
   it("says a group can't be measured rather than showing a pooled number", () => {
-    render(<ConstituentApproval approval={approval} />);
+    render(<ApprovalBox approval={approval} box={null} />);
     expect(screen.getByText(/too few respondents to measure/)).toBeTruthy();
   });
 
   it("names the survey and the member it asked about", () => {
-    render(<ConstituentApproval approval={approval} />);
+    render(<ApprovalBox approval={approval} box={null} />);
     expect(screen.getByText(/rating .Ruth Pryor.\.$/)).toBeTruthy();
   });
 
   it("renders nothing without a reading", () => {
-    const { container } = render(<ConstituentApproval approval={null} />);
+    const { container } = render(<ApprovalBox approval={null} box={null} />);
     expect(container).toBeEmptyDOMElement();
   });
 });

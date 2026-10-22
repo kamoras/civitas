@@ -26,6 +26,7 @@ export default function BoxGrid({
   labelLevel = 2,
   labelHref,
   labelHrefText,
+  dek,
   children,
   className = "",
 }: {
@@ -39,6 +40,8 @@ export default function BoxGrid({
   /** A link beside the heading to the whole list the boxes come from. */
   labelHref?: string;
   labelHrefText?: string;
+  /** One line under the heading saying what the boxes are (or are not). */
+  dek?: string;
   children: ReactNode;
   className?: string;
 }) {
@@ -61,6 +64,7 @@ export default function BoxGrid({
               {labelHrefText}
             </BoxAnchor>
           )}
+          {dek && <p className={`basis-full ${TYPE.dek}`}>{dek}</p>}
         </div>
       )}
       <div

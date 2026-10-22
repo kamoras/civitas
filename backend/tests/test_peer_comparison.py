@@ -72,6 +72,8 @@ def test_rows_against_the_caucus_with_template_sentences(monkeypatch):
     assert out["standsOut"].startswith(("Money from small donors: ", "Money from PACs: "))
     assert out["standsOutWhy"].startswith(pc.STANDS_OUT_WHY)
     assert out["standsOutWhy"].endswith(small["why"]) or out["standsOutWhy"].endswith(by["pacMoney"]["why"])
+    # The profile shows the line only when a measure stands out, by its key.
+    assert pc.standout(out["measures"])["key"] in ("smallGifts", "pacMoney")
     assert pc.peer_comparison(None, "senate", "me", "chamber")["measures"][0]["peerGroup"]["n"] == 62
 
 
@@ -133,6 +135,7 @@ def test_every_strip_says_what_it_answers_and_why(monkeypatch):
         assert not ({"better", "worse", "good", "bad"} & set(m["why"].lower().replace(";", " ").split()))
     assert out["standsOut"] == "Close to peers on every measure."
     assert out["standsOutWhy"] == pc.NONE_STANDS_OUT_WHY
+    assert pc.standout(out["measures"]) is None
 
 
 def test_rank_words_share_a_place_on_ties():

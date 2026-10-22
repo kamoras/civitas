@@ -70,6 +70,12 @@ _MAX_PAGES = 50  # 5,000 filings — far above any real window; loop backstop
 # blocking a nightly pipeline run over.
 _ACTION_TIMEOUT_MS = 8000
 
+# Playwright's full Chromium, not its default headless shell: only the full
+# browser reads the image's managed policy that distrusts compromised roots
+# (backend/Dockerfile, AGENTS.md "Distrusted roots"). Checked live against
+# efdsearch.senate.gov 2026-10-22: the search returns the same filings.
+CHROMIUM_CHANNEL = "chromium"
+
 
 async def _click(locator) -> None:
     """Best-effort click: fires the action and swallows a timeout rather
@@ -224,7 +230,7 @@ async def search_filings(since_date: str, report_type: str, filer_type: str | No
     """
     try:
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
+            browser = await p.chromium.launch(headless=True, channel=CHROMIUM_CHANNEL)
             try:
                 page = await browser.new_page()
                 page.set_default_timeout(_ACTION_TIMEOUT_MS)

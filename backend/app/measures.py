@@ -12,6 +12,12 @@ import json
 from dataclasses import dataclass
 from typing import Callable
 
+# The party-line rule in words: normalize_votes.compute_party_vote_split's
+# majority-against-majority label (party_majority), Congressional Quarterly's
+# party unity vote. tests/test_snapshot_facts.py holds the two together.
+PARTY_LINE_RULE = ("a roll call where most of one party voted yes and most of the other voted no, counting "
+                   "only those who voted yes or no (Congressional Quarterly's party unity vote)")
+
 
 @dataclass(frozen=True)
 class Measure:
@@ -74,12 +80,13 @@ MEASURES = (
             why=("Share of party-line votes where this member sided with most of the other party. "
                  "It shows how closely votes follow the party; members from seats that lean the "
                  "other way tend to break more."),
-            measured=("A party-line vote is a roll call where most Democrats and most Republicans "
-                      "voted on opposite sides. A break is a vote with the other party's majority, "
+            measured=(f"A party-line vote is {PARTY_LINE_RULE}. "
+                      "A break is a vote with the other party's majority, "
                       "counted over this Congress; a vote against the party from its outer "
                       "flank (judged by the member's Voteview position) is not counted, and each "
                       "measure counts once. The tick is the seat average: the mean break rate for the "
-                      "same party in seats with the same Cook PVI lean, measured each run from every "
+                      "same party in seats with the same lean (a House seat's Cook PVI; a state's lean "
+                      "computed by Civitas with Cook's formula), measured each run from every "
                       "member. A few members break often and most rarely, so most sit below the "
                       "average and the peers' middle is lower than it. "
                       "Fewer than 20 party-line votes draws no word.")),

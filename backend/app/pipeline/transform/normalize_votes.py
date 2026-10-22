@@ -636,6 +636,16 @@ def normalize_recent_votes(
     return votes
 
 
+def party_majority(yea_share: float) -> str | None:
+    """The side a majority of a party's voting members took: "yea" above
+    half, "nay" below, None at an exact tie (no majority either way)."""
+    if yea_share > 0.5:
+        return "yea"
+    if yea_share < 0.5:
+        return "nay"
+    return None
+
+
 def compute_party_vote_split(roll_call_data: dict) -> dict | None:
     """Compute the full party split from roll call member votes: the
     same R/D/bipartisan label compute_party_split() returns, plus the two
@@ -644,6 +654,20 @@ def compute_party_vote_split(roll_call_data: dict) -> dict | None:
     Uses actual party vote distributions to determine if a roll call was a
     Republican bill, Democratic bill, or bipartisan vote — without relying on
     LLM classification.
+
+    A roll call is a party vote when a majority of voting Republicans
+    opposed a majority of voting Democrats: Congressional Quarterly's
+    "party unity vote", the definition CQ has published party unity scores
+    on since 1956 and the one the congressional-parties literature counts
+    party votes by (e.g. Rohde 1991, Parties and Leaders in the Postreform
+    House). It is labelled for the party whose majority voted Yea. Until
+    v6.38 the rule was at least 65% of one party Yea and at most 35% of the
+    other, which no source gives. Measured on the 119th Congress's stored
+    roll calls (housekeeping aside), the majority rule labels 817 Senate
+    roll calls a party vote where 65/35 labelled 775 (42 more) and 330 House
+    ones where it labelled 305 (25 more); members' break rates under the two
+    correlate 0.96 and 0.99 (Pearson; 0.96 and 0.89 by rank). The stricter
+    classic, Lowell's (1902) 90% against 90%, would label 684 and 252.
 
     The shares are of the members who voted Yea or Nay, as in CQ's party
     unity votes: an absent or "present" member took no side, and counting
@@ -675,9 +699,10 @@ def compute_party_vote_split(roll_call_data: dict) -> dict | None:
     r_yea_pct = r_yea / r_total
     d_yea_pct = d_yea / d_total
 
-    if r_yea_pct >= 0.65 and d_yea_pct <= 0.35:
+    r_side, d_side = party_majority(r_yea_pct), party_majority(d_yea_pct)
+    if r_side == "yea" and d_side == "nay":
         label = "R"
-    elif d_yea_pct >= 0.65 and r_yea_pct <= 0.35:
+    elif d_side == "yea" and r_side == "nay":
         label = "D"
     else:
         label = "bipartisan"
@@ -692,9 +717,9 @@ def compute_party_split(roll_call_data: dict) -> str | None:
     need the label. See that function for the underlying percentages.
 
     Returns:
-        "R" if 65%+ of Republicans voted Yea and 35%- of Democrats did,
-        "D" if 65%+ of Democrats voted Yea and 35%- of Republicans did,
-        "bipartisan" otherwise, or None if insufficient data.
+        "R" if a majority of voting Republicans voted Yea and a majority of
+        voting Democrats Nay, "D" the other way round, "bipartisan"
+        otherwise, or None if insufficient data.
     """
     result = compute_party_vote_split(roll_call_data)
     return result["label"] if result else None

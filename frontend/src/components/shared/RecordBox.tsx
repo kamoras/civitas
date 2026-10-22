@@ -164,6 +164,9 @@ export type RecordBoxProps = Line & {
   headingAttrs?: Record<string, string>;
   /** The box's anchor, for links from elsewhere on the page. */
   id?: string;
+  /** Attributes for the box itself, such as an "On this page" entry
+   *  (onThisPage) on a box that is a section of its page. */
+  attrs?: Record<string, string>;
   /** Offer this box as a shared image under this anchor id. */
   share?: string;
   figure?: Figure | null;
@@ -204,6 +207,7 @@ export default function RecordBox(props: RecordBoxProps) {
     level = 3,
     headingAttrs,
     id,
+    attrs,
     share,
     figure,
     links,
@@ -220,6 +224,7 @@ export default function RecordBox(props: RecordBoxProps) {
   return (
     <article
       id={id}
+      {...attrs}
       {...(share ? { [SHARE_SECTION_ATTR]: share } : {})}
       // The rule left of a box sits in the middle of the grid's column gap;
       // BoxGrid clips the ones left of its first column.
@@ -308,7 +313,13 @@ export function More({
   open,
   onToggle,
   className = "mt-3",
-}: NonNullable<RecordBoxProps["more"]> & { className?: string }) {
+  bare = false,
+}: NonNullable<RecordBoxProps["more"]> & {
+  className?: string;
+  /** The label alone, without "More: " (a summary that is itself a line,
+   *  such as a profile's committee line). */
+  bare?: boolean;
+}) {
   return (
     <details
       open={open}
@@ -324,7 +335,7 @@ export function More({
         <span aria-hidden="true" className="hidden no-underline group-open/more:inline">
           −
         </span>
-        More: {label}
+        {bare ? label : `More: ${label}`}
       </summary>
       <div className={`mt-2 border-t pt-3 text-ink ${RULE}`}>{children}</div>
     </details>

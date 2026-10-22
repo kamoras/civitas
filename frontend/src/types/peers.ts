@@ -66,6 +66,9 @@ export interface PeerComparison {
   standsOut: string;
   /** Why that line was picked: the rule, then the measure's why line. */
   standsOutWhy: string;
+  /** The measure that stands out, or null when none does: the page shows
+   *  the "stands out" line only then. Absent from an older backend. */
+  standsOutKey?: string | null;
 }
 
 /** One member's figure on a whole-chamber strip (GET /api/congress/measures). */

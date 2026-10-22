@@ -16,6 +16,8 @@ import { MARK_ATTR } from "@/types/readout";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR, shareMetaAttrs } from "@/lib/shareImage";
 import { onThisPage } from "@/lib/onThisPage";
 import { TYPE } from "@/lib/typeStyles";
+import MemberBox from "@/components/scorecard/MemberBox";
+import type { MemberBox as MemberBoxData } from "@/types/politicians";
 
 const HOLDINGS_PER_PAGE = 15;
 // The scorecard's panel sets the list beside the pie: a page about as tall
@@ -35,10 +37,10 @@ const SOURCE_LABEL = {
 } as const;
 
 const MEMBER_ABOUT_TEXT =
-  "Every asset listed on this member's most recent financial disclosure report: held by the member, their spouse, or a dependent child at the end of the year for an annual report, or, for a newly seated member's new-filer report, on the date a senator's report states (a representative's states none, so it is named by its filing date). The Ethics in Government Act requires values to be reported in ranges (for example $15,001 – $50,000), so no net-worth figure is computed; a value a member chose to state exactly is shown as that figure. Slices are sized by the midpoint of each range (the minimum, for the open-ended top range); the ranges themselves are what the member disclosed. The asset type is the one the member chose when filing. Informational only, not part of the overall score.";
+  "Every asset listed on this member's most recent financial disclosure report: held by the member, their spouse, or a dependent child at the end of the year for an annual report, or, for a newly seated member's new-filer report, on the date a senator's report states (a representative's states none, so it is named by its filing date). The Ethics in Government Act requires values to be reported in ranges (for example $15,001 – $50,000), so no net-worth figure is computed; a value a member chose to state exactly is shown as that figure. Slices are sized by the midpoint of each range (the minimum, for the open-ended top range); the ranges themselves are what the member disclosed. The asset type is the one the member chose when filing. Shown for context, not compared with other members.";
 
 const PRESIDENT_ABOUT_TEXT =
-  "Every asset with a stated value on the president's latest annual financial disclosure report (OGE Form 278e): the business entities of Schedule 1, the spouse's assets, and the investment accounts. Values are reported in ranges, never as exact amounts, so no net-worth figure is computed. Slices are sized by the midpoint of each range (the minimum, for the open-ended top range, which on this report is \"Over $50,000,000\"). The form has no asset-type column: a business entity's category comes from the underlying assets it states (real estate, a bank account, cryptocurrency), a fund is one the form marks as an excepted investment fund, and every other security is 'type not stated' rather than guessed from its name. Informational only, not part of the score.";
+  "Every asset with a stated value on the president's latest annual financial disclosure report (OGE Form 278e): the business entities of Schedule 1, the spouse's assets, and the investment accounts. Values are reported in ranges, never as exact amounts, so no net-worth figure is computed. Slices are sized by the midpoint of each range (the minimum, for the open-ended top range, which on this report is \"Over $50,000,000\"). The form has no asset-type column: a business entity's category comes from the underlying assets it states (real estate, a bank account, cryptocurrency), a fund is one the form marks as an excepted investment fund, and every other security is 'type not stated' rather than guessed from its name. Shown for context.";
 
 const ABOUT_TEXT = {
   senate: MEMBER_ABOUT_TEXT,
@@ -268,20 +270,177 @@ function HoldingRow({ holding, when }: { holding: Holding; when: string }) {
   );
 }
 
+/** Behind a holdings box's More: every asset type (select one to list
+ *  only those), the disclosed total, the later filing, and every holding,
+ *  largest first, a page at a time. */
+function HoldingsMore({
+  data,
+  filer,
+  when,
+  category,
+  loading,
+  filterPending,
+  error,
+  onSelect,
+  onHover,
+  onPage,
+  onAll,
+}: {
+  data: HoldingsData;
+  filer: "senate" | "house" | "president";
+  when: string;
+  category: string | null;
+  loading: boolean;
+  filterPending: boolean;
+  error: string | null;
+  onSelect: (key: string) => void;
+  onHover: (key: string | null) => void;
+  onPage: (page: number) => void;
+  onAll: () => void;
+}) {
+  const reportLabel = data.reportLabel || "latest annual report";
+  const selectedLabel = data.categories.find((c) => c.category === category)?.label;
+  if (!data.parsed) {
+    return (
+      <p className="text-small text-ink-lo">
+        {data.unreadableReason === "scanned"
+          ? `The ${reportLabel} is a scanned paper filing, so its assets can't be read reliably enough to chart.`
+          : `The ${reportLabel} isn't in a layout that can be read automatically, so its assets aren't charted here.`}
+      </p>
+    );
+  }
+  return (
+    <div className={`flex flex-col gap-3 ${loading ? "opacity-60 transition-opacity" : ""}`}>
+      <CategoryLegend
+        categories={data.categories}
+        when={when}
+        selected={category}
+        onHover={onHover}
+        onSelect={onSelect}
+      />
+      <p className="text-small leading-6 text-ink-min">
+        Disclosed value{" "}
+        {data.totalShown ??
+          formatBracket(data.totalLow, data.totalHigh, data.totalOpenEnded, formatCurrency)}{" "}
+        across {data.holdingsCount} asset{data.holdingsCount !== 1 ? "s" : ""}
+        {data.unvaluedCount > 0 &&
+          ` (${data.unvaluedCount} with no stated value, not charted)`} · {reportLabel}
+        {data.filedDate && data.asOfDate && `, filed ${data.filedDate}`} ·{" "}
+        <MetricTooltip text={ABOUT_TEXT[filer]}>About this data</MetricTooltip>
+      </p>
+      {data.laterFilingUrl && (
+        <p className="text-small text-ink-lo">
+          Also filed, on or after this report&apos;s filing date: the{" "}
+          {data.laterFilingLabel ?? "later filing"}. It states no date its holdings describe that
+          can be read here, so it can&apos;t be placed against this one, and this section stays with
+          the {reportLabel}.{" "}
+          <a
+            href={data.laterFilingUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-phos transition-colors"
+          >
+            View that filing ↗
+          </a>
+        </p>
+      )}
+      {error && (
+        <p className="text-signal-red text-small" role="alert">
+          {error}
+        </p>
+      )}
+      {data.holdingsCount > 0 && (
+        <div className="space-y-3">
+          <p className="text-small text-ink-min" aria-live="polite">
+            {selectedLabel
+              ? `${selectedLabel}: ${data.total} holding${data.total !== 1 ? "s" : ""}, largest first · `
+              : `All ${data.total} holdings, largest first`}
+            {selectedLabel && (
+              <button
+                type="button"
+                onClick={onAll}
+                {...{ [SHARE_EXCLUDE_ATTR]: "" }}
+                className="min-h-6 text-ink-lo hover:text-phos underline"
+              >
+                show all
+              </button>
+            )}
+          </p>
+          <div className="space-y-2">
+            {data.holdings.map((h, i) => (
+              <HoldingRow key={`${h.assetName}-${data.page}-${i}`} holding={h} when={when} />
+            ))}
+          </div>
+          <Pagination
+            page={data.page}
+            totalPages={data.totalPages}
+            disabled={filterPending}
+            onPageChange={onPage}
+          />
+        </div>
+      )}
+      <div {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
+        <ShareSectionButton label="Holdings" anchor={null} />
+      </div>
+    </div>
+  );
+}
+
+/** The categories as one stacked bar, each slice as wide as its share of
+ *  the stated value: a holdings box's figure (the panel draws a donut). Each
+ *  slice names its type, share and disclosed sum on hover, tap and the
+ *  keyboard (the API's marks); Enter lists that type's assets. */
+function HoldingsBar({
+  categories,
+  onSelect,
+}: {
+  categories: HoldingCategory[];
+  onSelect: (key: string) => void;
+}) {
+  const slices = categories.filter((c) => c.weight > 0);
+  const marks = slices.flatMap((c) => (c.mark ? [c.mark] : []));
+  return (
+    <ChartReadout
+      label="Holdings by asset type"
+      marks={marks}
+      labelAt="mark"
+      ring={false}
+      onOpen={onSelect}
+      className="h-3.5"
+    >
+      <div className="flex h-3.5 gap-0.5">
+        {slices.map((c) => (
+          <span
+            key={c.category}
+            className="h-full"
+            style={{ width: `${c.share * 100}%`, backgroundColor: chartMark(c.color) }}
+            {...{ [MARK_ATTR]: c.category }}
+          />
+        ))}
+      </div>
+    </ChartReadout>
+  );
+}
+
 interface HoldingsProps {
   memberId: string;
   /** Whose report: a senator's, a representative's or the sitting president's. */
   filer?: "senate" | "house" | "president";
   /** "panel": its own titled box with the chart and the list side by side
    *  and always open — how the member scorecard features it. "section"
-   *  (default): a collapsible section like the others. */
-  variant?: "section" | "panel";
+   *  (default): a collapsible section like the others. "box": one record
+   *  box (a member's profile), its headline the backend's. */
+  variant?: "section" | "panel" | "box";
+  /** The box's kicker, headline and line (member_boxes); null when no
+   *  report has been read. Only for the "box" variant. */
+  box?: MemberBoxData | null;
 }
 
 export default function Holdings({
   memberId,
   filer = "senate",
   variant = "section",
+  box,
 }: HoldingsProps) {
   const [hovered, setHovered] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
@@ -324,6 +483,74 @@ export default function Holdings({
     load(1, next);
   };
 
+  if (variant === "box") {
+    // The box is the backend's from the first paint (no shift when the
+    // report arrives); only the bar and the lists wait for it. None when the
+    // backend says no report has been read.
+    if (box === null || (box === undefined && !data?.available)) return null;
+    const when = asOfPhrase(data?.asOfDate ?? null);
+    const top = (data?.categories ?? []).filter((c) => c.weight > 0).slice(0, 3);
+    return (
+      <MemberBox
+        id="holdings"
+        label="Holdings"
+        box={box}
+        fallback={{
+          kicker: "Holdings",
+          title: data?.reportLabel || "Latest annual report",
+        }}
+        more={{
+          label: "every asset type and holding",
+          children: data ? (
+            <HoldingsMore
+              data={data}
+              filer={filer}
+              when={when}
+              category={category}
+              loading={loading}
+              filterPending={filterPending}
+              error={error}
+              onSelect={selectCategory}
+              onHover={setHovered}
+              onPage={(p) => load(p, category)}
+              onAll={() => load(1, null)}
+            />
+          ) : (
+            <p className="text-small text-ink-lo">Loading the report...</p>
+          ),
+        }}
+      >
+        {data?.parsed && top.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <HoldingsBar categories={data.categories} onSelect={selectCategory} />
+            <ul className="flex flex-wrap gap-x-4 gap-y-1 text-small text-ink-lo">
+              {top.map((c) => (
+                <li key={c.category} className="flex items-center gap-1.5">
+                  <span
+                    className="inline-block h-2.5 w-2.5 shrink-0"
+                    style={{ backgroundColor: chartMark(c.color) }}
+                    aria-hidden="true"
+                  />
+                  {c.label} {c.shareShown}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {data?.sourceUrl && (
+          <a
+            href={data.sourceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-2 inline-flex min-h-6 items-center text-small text-ink-lo underline underline-offset-2 hover:text-phos"
+          >
+            View filing ↗
+          </a>
+        )}
+      </MemberBox>
+    );
+  }
+
   // Hidden until there is a report to show — the same rule StockTrades
   // follows. A report that lists nothing still renders (below), since
   // "disclosed no assets" is information.
@@ -360,12 +587,12 @@ export default function Holdings({
 
   const about = <MetricTooltip text={ABOUT_TEXT[filer]}>About this data</MetricTooltip>;
   // Inside the panel the panel is the box; a section draws its own.
-  const box = variant === "panel" ? "" : "panel p-4";
+  const frame = variant === "panel" ? "" : "panel p-4";
   const hasSlices = data.categories.some((c) => c.weight > 0);
   let chart: ReactNode;
   if (!data.parsed) {
     chart = (
-      <p className={`${box} text-small text-ink-lo`}>
+      <p className={`${frame} text-small text-ink-lo`}>
         {data.unreadableReason === "scanned"
           ? `The ${reportLabel} is a scanned paper filing, so its assets can't be read reliably enough to chart.`
           : `The ${reportLabel} isn't in a layout that can be read automatically, so its assets aren't charted here.`}{" "}
@@ -374,7 +601,7 @@ export default function Holdings({
     );
   } else if (!hasSlices) {
     chart = (
-      <p className={`${box} text-small text-ink-lo`}>
+      <p className={`${frame} text-small text-ink-lo`}>
         {data.holdingsCount === 0
           ? `The ${reportLabel} lists no assets.`
           : `The ${reportLabel} lists ${data.holdingsCount} asset${data.holdingsCount !== 1 ? "s" : ""}, ${
@@ -390,7 +617,7 @@ export default function Holdings({
   } else {
     chart = (
       <div
-        className={`${box} ${loading ? "opacity-60 transition-opacity" : ""}`}
+        className={`${frame} ${loading ? "opacity-60 transition-opacity" : ""}`}
         aria-busy={loading}
       >
         <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
