@@ -195,8 +195,6 @@ export default function PeriodReportView({
               />
             </BoxGrid>
           )}
-          {strip}
-          {hub}
           <PeriodNav
             active={kind}
             hrefs={{
@@ -207,6 +205,8 @@ export default function PeriodReportView({
             previous={previous}
             next={next}
           />
+          {strip}
+          {hub}
           <div className="mt-8 grid grid-cols-1 gap-8 md:grid-cols-2">
             <FigureGroup name="Senate">
               <Figure
