@@ -7,7 +7,8 @@ unit-testable (that's covered by the live verification described in
 senate_ptr.py's module docstring instead), but _scrape_via_page — the
 actual flow logic (terms gate, form fill, pagination, termination
 conditions) — takes a `page` object as a plain argument, so it's exercised
-here against a small fake Playwright page rather than a real browser.
+here against a small fake Playwright page rather than a real browser. The
+launch itself is checked only for which browser it starts (full Chromium).
 """
 
 import json
@@ -405,3 +406,39 @@ class TestRepeatedRowsAcrossPages:
         assert [f["first"] for f in filings] == ["A"]
         assert "didn't load" not in caplog.text
         assert "showed 1 distinct rows of 2" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_search_launches_full_chromium_not_the_headless_shell(monkeypatch):
+    """The headless shell reads no managed policy, so it would trust the roots
+    the image distrusts (backend/chromium-distrusted-roots.json)."""
+    launches, closed = [], []
+
+    class _Browser:
+        async def new_page(self):
+            return SimpleNamespace(set_default_timeout=lambda ms: None)
+
+        async def close(self):
+            closed.append(True)
+
+    class _Chromium:
+        async def launch(self, **kwargs):
+            launches.append(kwargs)
+            return _Browser()
+
+    class _Playwright:
+        async def __aenter__(self):
+            return SimpleNamespace(chromium=_Chromium())
+
+        async def __aexit__(self, *exc):
+            return False
+
+    async def _scrape(page, since_date, report_type, filer_type):
+        return [{"report_url": "x"}]
+
+    monkeypatch.setattr(senate_ptr, "async_playwright", _Playwright)
+    monkeypatch.setattr(senate_ptr, "_scrape_via_page", _scrape)
+
+    assert await senate_ptr.search_ptr_filings("2026-10-01") == [{"report_url": "x"}]
+    assert launches == [{"headless": True, "channel": "chromium"}]
+    assert closed == [True]
