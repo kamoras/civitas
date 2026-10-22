@@ -11,7 +11,6 @@ import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
 import { CARD_ALT, cardImage, describeProfile, personJsonLd } from "@/lib/seo";
 import { recordTrail } from "@/lib/routes";
 import ThisWeekStrip from "@/components/shared/ThisWeekStrip";
-import PresidentialSupportLine from "@/components/presidentialSupport/PresidentialSupportLine";
 import PoliticianProfileClient from "./PoliticianProfileClient";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
@@ -158,11 +157,6 @@ export default async function PoliticianProfilePage({
         peers={peers}
         charts={charts}
         strip={<ThisWeekStrip variant="compact" />}
-        supportLine={
-          profile.branch === "senate" || profile.branch === "house" ? (
-            <PresidentialSupportLine memberId={profile.id} />
-          ) : null
-        }
       />
     </>
   );
