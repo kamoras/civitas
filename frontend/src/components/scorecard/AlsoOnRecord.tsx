@@ -74,7 +74,11 @@ export default function AlsoOnRecord({
   const docs = record.recentDocs;
 
   return (
-    <BoxGrid label="Also on record · not part of any measure" labelId="also-on-record">
+    <BoxGrid
+      label="Also on record"
+      labelId="also-on-record"
+      dek="Context from filings and records, not compared with other members."
+    >
       <Holdings memberId={member.id} filer={chamber} variant="box" box={boxes?.holdings} />
 
       <MemberBox

@@ -844,8 +844,11 @@ date from the House Clerk's member list (`fetch/house_clerk.py`). No source
 gives a senator's date, so the Senate is not prorated.
 
 Narrower windows mean less data backs each dimension by design, not because
-coverage got worse — `calculate_confidence`'s vote/bill thresholds are
-recalibrated accordingly (see `score_calculator.py`), and `ground_truth.py`'s
+coverage got worse — `calculate_confidence`'s vote grade is measured per
+chamber (split-half reliability of break rates reaching 0.70 and 0.80,
+`scripts/calibrate_confidence_grades.py` → `confidence_grades.json`, refreshed
+monthly), its other counts are stated conventions with their reasons
+(`docs/methodology/confidence-grades.md`), and `ground_truth.py`'s
 population-distribution checks are the backstop that would catch a real
 collapse. The gate derives every expectation from the current population's
 own raw data (rank consistency against FEC/roll-call metrics, point-mass and
@@ -2032,6 +2035,15 @@ it keeps, each enforced by a test (`tests/test_forecast_model.py`,
   was measured and rejected (it moved every forward figure the wrong way). The poll window
   is the training polls' own reach (`model.poll_window`), never typed;
   beyond it every range is the structural line's, labelled fundamentals only.
+  Five poll-weighting numbers are still stated priors (`model.STATED_PRIORS`:
+  the sample-size clip and reference, the house-effect shrink, the half-life
+  grid), named with their reasons on the map's method section. Their fit
+  (`fit_forecast_model.py --fit-priors`) stays off while a map built on them
+  is live; from the January 3 after a general held since
+  `model.PRIORS_STATED_ON`, `data_refresh._forecast_priors_stale` alerts until
+  a fit records fitted ones. Adopt that refit on its held-out checks, not its
+  in-sample likelihood: measured 2026-10-22, it fit better in sample and no
+  better held out.
 - **Training polls: Silver Bulletin, gated, attributed.**
   `app/forecast/training_polls.py` (fetched by
   `scripts/fetch_silver_bulletin_polls.py` with `BOT_USER_AGENT` and no other
