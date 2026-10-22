@@ -47,6 +47,18 @@ def configured_states() -> set[str]:
     return set((data.get("states") or {}).keys())
 
 
+def documented_wall(state: str, detail: str | None) -> str | None:
+    """The host of the bot wall `state`'s registry entry documents
+    (`wall`: {host, measured, evidence}), when the failure `detail` its
+    reader recorded names that host; else None. Such a failure is still
+    ingest_failed and its page still says so, but the nightly alert names
+    only new problems (the same rule as state_candidate_sources.json's
+    _robots_walls). An entry is removed when the site stops walling."""
+    wall = (source_for_state(state) or {}).get("wall")
+    host = wall.get("host") if isinstance(wall, dict) else None
+    return host if host and detail and host in detail else None
+
+
 def unread_reason(state: str) -> str | None:
     """Why `state`'s measures are not read — the `reason` of its registry
     'unread' entry, written for a voter and shown on the state's page.
