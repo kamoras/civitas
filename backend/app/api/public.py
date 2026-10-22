@@ -1682,6 +1682,7 @@ def get_presidential_support(
     view = chamber_view(db, chamber)
     if view is None:
         raise HTTPException(status_code=404, detail="Not measured yet")
+    view.pop("counts")  # the site page's lead figure; v1's shape is unchanged
     for member in view["members"]:
         member["siteUrl"] = _member_url(member["id"])
     return _pub_json(view, request, max_age=CACHE_TTL_DETAIL_S)

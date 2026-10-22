@@ -1,4 +1,4 @@
-import { courtFinding, JUSTICE_RESEARCH_URL } from "@/lib/justices";
+import { JUSTICE_RESEARCH_URL } from "@/lib/justices";
 import { INLINE_LINK } from "@/lib/controlStyles";
 import type { AppointerFinding } from "@/types/court";
 
@@ -24,7 +24,9 @@ async function fetchFinding(): Promise<AppointerFinding | null> {
  * research note instead of stating a figure.
  */
 export default async function CourtFinding() {
-  const sentence = courtFinding(await fetchFinding());
+  // The API writes the sentence; without one (an outage, or a backend older
+  // than the page) the research note is pointed to instead.
+  const sentence = (await fetchFinding())?.sentence;
   if (sentence) return <>{sentence}</>;
   return (
     <>

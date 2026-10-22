@@ -122,8 +122,8 @@ export default function AppointerIntervals({
                   <th scope="row">
                     <Link href={`/politicians/${encodeURIComponent(r.id)}`}>{r.name}</Link>
                   </th>
-                  <td>{r.estimateShown}</td>
-                  <td>{r.intervalShown}</td>
+                  <td>{r.estimateShown ?? "\u2014"}</td>
+                  <td>{r.intervalShown ?? "\u2014"}</td>
                 </tr>
               ))}
             </tbody>

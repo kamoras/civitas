@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import { olderApi } from "@/lib/olderApi";
 import { describe, expect, it } from "vitest";
 import RaceContext, { leanCountsSentence, leanSentence, seatHolderSentence } from "./RaceContext";
 import type { BallotCandidate, RaceWithCandidates } from "@/types/election";
@@ -38,6 +39,12 @@ function race(over: Partial<RaceWithCandidates> = {}): RaceWithCandidates {
       same: 11,
       seatLean: 3,
       distribution: DISTRIBUTION,
+      // What race_context._lean_marks sends, one per figure.
+      marks: DISTRIBUTION.map((d) => ({
+        id: String(d.lean),
+        label: d.label,
+        shown: `${d.count} districts`,
+      })),
     },
     candidateSource: "confirmed",
     counties: null,
@@ -202,5 +209,14 @@ describe("lean wording", () => {
     ).toBe(
       "Example Member holds this seat. Confirmed nominees aren't available for North Carolina yet."
     );
+  });
+});
+
+describe("an older API, during a rolling update", () => {
+  it("draws the lean axis plain without its readouts", () => {
+    const { container } = render(<RaceContext race={olderApi(race())} />);
+    expect(screen.queryByRole("group", { name: /^Every district's lean/ })).toBeNull();
+    expect(container.querySelectorAll("rect[data-lean]")).toHaveLength(435);
+    expect(container.textContent).not.toMatch(/undefined|NaN/);
   });
 });

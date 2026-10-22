@@ -64,6 +64,8 @@ class IndustryDonationSchema(CamelModel):
     name: str = Field(description="The code as words")
     total: float = Field(description="In dollars")
     percentage: float = Field(description="Share of the breakdown's total, 0-100, rounded to a whole number")
+    bar_percent: float | None = Field(None, description="The industry's bar against the largest industry's, "
+                                                        "0-100 (the profile's industry list draws it)")
 
 
 class HeldScoreSchema(CamelModel):
@@ -158,6 +160,15 @@ class FundingSchema(CamelModel):
                     "0-100; null when the campaign itemizes every gift, so the filings can't say")
     top_donors: list[DonorSchema] = Field(description="Largest donors first")
     industry_breakdown: list[IndustryDonationSchema] = Field(description="Contributions by industry")
+
+    @model_validator(mode="after")
+    def _bars(self):
+        """Each industry's bar against the largest: drawn by the page, never
+        divided there."""
+        top = max((i.total for i in self.industry_breakdown), default=0)
+        for i in self.industry_breakdown:
+            i.bar_percent = round(100 * i.total / top, 2) if top > 0 else 0.0
+        return self
 
 
 class VotingRecordSchema(CamelModel):
@@ -2060,6 +2071,18 @@ class MonitorUpdateSchema(CamelModel):
     created_at: str = ""
 
 
+class MonitorLatestSchema(CamelModel):
+    """A monitor's newest update, for its box on the Ongoing tab. `text` is
+    the issue's lede, quoted, with the outlet it is quoted from; null where
+    the update's text is not an outlet's own words (an update written before
+    the claim layer, 2026-09-24), and the box then names the headline."""
+    date: str
+    text: str | None = None
+    source: str
+    source_url: str
+    headline: str = ""
+
+
 class NationalMonitorSchema(CamelModel):
     id: int
     slug: str
@@ -2074,6 +2097,8 @@ class NationalMonitorSchema(CamelModel):
     update_count: int = 0
     # A closed monitor's closing day (its last write, when it closed).
     closed_on: str | None = None
+    # Its newest update, on the list only (list_monitors).
+    latest: MonitorLatestSchema | None = None
 
 
 class NationalMonitorDetailSchema(NationalMonitorSchema):
