@@ -146,14 +146,13 @@ def test_state_towns_404s_on_unknown_state():
     assert exc.value.status_code == 404
 
 
-def test_state_towns_omits_civic_towns_without_key_but_keeps_pdf_towns(monkeypatch):
-    """No GOOGLE_CIVIC_API_KEY means Cambridge (Google-Civic-only) isn't
-    offered, but Somerville still is — it has its own verified ballot PDF
-    (ballot_pdf_sources.json) and needs no API key at all. The two
-    sources are independent; state_towns unions them."""
+def test_state_towns_offers_no_town_without_key(monkeypatch):
+    """No GOOGLE_CIVIC_API_KEY means no town is offered: since Somerville's
+    hand-pointed sample-ballot PDF was removed, Google Civic is the town
+    ballot's only source."""
     monkeypatch.setattr(civic_info.settings, "GOOGLE_CIVIC_API_KEY", "")
     data = _body(elections.state_towns("MA"))
-    assert {t["name"] for t in data["towns"]} == {"Somerville"}
+    assert data["towns"] == []
 
 
 def test_state_towns_lists_curated_entries_when_configured(monkeypatch):

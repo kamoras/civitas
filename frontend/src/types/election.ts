@@ -840,17 +840,13 @@ export interface TownBallot {
   status: "not_yet_covered" | "ingest_failed" | "covered";
   /** The representative address results were resolved against, when the
    * source is Google Civic — WE chose this, never a visitor's own
-   * address. Null when the source is a town's own official ballot PDF
-   * (no representative-address approximation needed) or status isn't
-   * "covered". */
+   * address. Null when status isn't "covered". */
   address: string | null;
-  /** Which source actually answered — a town's own official ballot PDF
-   * when one is hand-verified to exist (see backend's
-   * ballot_pdf_sources.json), otherwise Google Civic's representative-
-   * address approximation. Null unless status is "covered". */
+  /** Which source answered (Google Civic's representative-address
+   * approximation). Null unless status is "covered". */
   source: string | null;
-  /** Link to the real source document, when the source is a PDF. Null
-   * for Google Civic (no single document to link) or when not covered. */
+  /** Link to a single source document. Always null from Google Civic
+   * (no single document to link). */
   sourceUrl: string | null;
   /** Which election these contests are actually FOR — load-bearing, not
    * decoration. Neither source is guaranteed to be answering for the

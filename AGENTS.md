@@ -1850,8 +1850,7 @@ the seated Congress's lines (`district_lines.table_for_lines`, shared by the
 computed lean and the county and place crosswalks, carries the last table
 forward only for a state whose map didn't change, and only once the cycle
 is listed), the voter calendar (150 days out), the poll closing times
-(45 days) and towns' sample ballots (60 days; a town ballot from an earlier
-cycle is never served as this one's). Standing law is stored as law
+(45 days). Standing law is stored as law
 (`election_rules.json`'s `standing`, a runoff counted from the general;
 `office_terms.json`'s year rules; `state_ballot_scope.json`'s
 `statewide_executive`), so the next cycle computes its own.

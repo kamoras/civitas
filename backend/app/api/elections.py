@@ -29,7 +29,6 @@ from app.election_calendar import (
     class_up,
     federal_states,
     next_election_day,
-    previous_election_day,
     next_senate_election_year,
     seats_up_for_year,
     senator_class,
@@ -63,15 +62,12 @@ from app.pipeline.fetch.state_candidates_common import last_name_matches
 from app.election_phase import ActiveElection, active_election, election_today
 from app.live_results.summary import state_summaries
 from app.live_results.sync import elected_congress_sits, redrawn_states
-from app.pipeline.fetch import ballot_pdf
 from app.pipeline.fetch.ballot_lookup import lookup_for_state, vote_steps
 from app.pipeline.fetch.ballot_measure_pdf_sources import unread_reason
 from app.pipeline.fetch.district_pvi import congress_for_election, district_pvi_for_congress
 from app.redistricting import new_district_notes
 from app.retractions import withdrawn_coverage_urls
 from app.pipeline.analyze.election_coverage import vacuous_corroboration_clause
-from app.pipeline.fetch.ballot_pdf_sources import source_for_town as ballot_pdf_source_for_town
-from app.pipeline.fetch.ballot_pdf_sources import town_names_for_state as ballot_pdf_town_names_for_state
 from app.pipeline.fetch.civic_info import fetch_town_ballot
 from app.pipeline.fetch.civic_info import is_configured as civic_is_configured
 from app.pipeline.fetch.state_candidate_sources import source_for_state
@@ -2177,59 +2173,28 @@ def _measure_json(measure) -> dict:
 
 @router.get("/states/{state}/towns")
 def state_towns(state: str):
-    """The curated town list for `state` — the union of two independent
-    sources, since a town needs covering by exactly one of them, never
-    both:
-
-    - Towns with a hand-verified official ballot PDF (ballot_pdf.py) —
-      always offered, no API key needed.
-    - Towns on the Google Civic representative-address path
-      (civic_info.py) — offered only when GOOGLE_CIVIC_API_KEY is set.
+    """The curated town list for `state`: towns on the Google Civic
+    representative-address path (civic_info.py), offered only when
+    GOOGLE_CIVIC_API_KEY is set.
 
     Never an error: an empty list is exactly how the frontend knows not
     to offer the town selector, same as MeasureCoverage.NOT_YET_COVERED
     for statewide measures.
 
-    No `db` dependency: both directories read a static bundled/volume
-    JSON file, never the database — unlike town_ballot below, which
-    needs `db` for the response caches."""
+    No `db` dependency: the directory is a static bundled/volume JSON
+    file, never the database, unlike town_ballot below, which needs `db`
+    for the response cache."""
     state = state.upper()
     if state not in ballot_state_codes():
         raise HTTPException(status_code=404, detail="Unknown state")
-
-    civic_towns = towns_for_state(state) if civic_is_configured() else []
-    civic_names = {t["name"].casefold() for t in civic_towns}
-
-    pdf_towns = [
-        {"name": name, "sourceName": (ballot_pdf_source_for_town(name) or {}).get("source_name") or ""}
-        for name in ballot_pdf_town_names_for_state(state)
-        if name.casefold() not in civic_names
-    ]
-
-    return cached_json(
-        {"towns": pdf_towns + civic_towns}, max_age=CACHE_TTL_DETAIL_S,
-    )
-
-
-def _pdf_contest_json(c: dict) -> dict:
-    """A ballot_pdf.py contest -> the same TownBallotItem shape the
-    frontend already renders for Google Civic contests. PDF-sourced
-    candidates carry no party/campaign-URL — the ballot itself doesn't
-    print either — so those fields are null, never guessed."""
-    return {
-        "kind": "contest",
-        "office": c["office"],
-        "candidates": [
-            {"name": cand["name"], "party": None, "candidateUrl": None}
-            for cand in c["candidates"]
-        ],
-    }
+    towns = towns_for_state(state) if civic_is_configured() else []
+    return cached_json({"towns": towns}, max_age=CACHE_TTL_DETAIL_S)
 
 
 def _uncovered_town_ballot(status: str) -> dict:
-    """The not_yet_covered/ingest_failed shape, shared across both
-    sources' failure paths so the null fields can't drift out of sync
-    with the "covered" shape above."""
+    """The not_yet_covered/ingest_failed shape, shared by the failure
+    paths so the null fields can't drift out of sync with the "covered"
+    shape."""
     return {
         "status": status, "address": None, "source": None, "sourceUrl": None,
         "electionName": None, "electionDate": None, "contests": [],
@@ -2238,64 +2203,36 @@ def _uncovered_town_ballot(status: str) -> dict:
 
 @router.get("/states/{state}/towns/{town}/ballot")
 async def town_ballot(_rl: UpstreamRouteLimit, state: str, town: str, db: Session = Depends(get_db)):
-    """Contests and measures for `town`.
+    """Contests and measures for `town`, from Google Civic's
+    voterInfoQuery against a fixed representative address (civic_info.py),
+    an approximation rather than the town's own document.
 
-    Two sources, tried in order:
-
-    1. A real, hand-verified official ballot PDF (ballot_pdf.py) — no API
-       key, no representative-address approximation, the town's own
-       published document. Only a handful of towns have one of these;
-       most jurisdictions gate their sample ballot behind an address
-       lookup with no static file to fetch at all (confirmed during
-       research: Cambridge MA, Ann Arbor MI).
-    2. Google Civic's voterInfoQuery against a fixed representative
-       address (civic_info.py) — the fallback for every other curated
-       town, an approximation rather than the town's own document.
-
-    Live, on-demand either way — not a nightly pipeline phase like
-    statewide measures, since town lookups can't be pre-fetched for every
-    curated town at any meaningful scale ahead of a specific request.
-    Bounded because the town list is small and curated (not user-typed
-    free text), and each lookup is cached so repeat visits don't re-fetch.
+    Live, on-demand: not a nightly pipeline phase like statewide measures,
+    since town lookups can't be pre-fetched for every curated town at any
+    meaningful scale ahead of a specific request. Bounded because the town
+    list is small and curated (not user-typed free text), and each lookup
+    is cached so repeat visits don't re-fetch.
 
     `status` mirrors MeasureCoverage's tri-state discipline: not_yet_
-    covered when the town isn't in either directory (or Google Civic
-    isn't configured and there's no PDF source either), ingest_failed on
-    a fetch/parse error, covered on success — an empty contests list on
-    success is real information ("nothing local at this address this
-    cycle"), unlike a fetch failure.
-    """
+    covered when the town isn't in the directory (or Google Civic isn't
+    configured), ingest_failed on a fetch/parse error, covered on success
+    (an empty contests list on success is real information, "nothing
+    local at this address this cycle", unlike a fetch failure).
+
+    Until 2026-10 one town (Somerville, MA) was read from its own sample
+    ballot PDF first. That needed a hand-typed URL and hand-measured
+    column bounds for every election, could not read ballot questions, and
+    by the general was still serving the September primary's ballot with
+    office names misread ("SATTORNEY GENERAL"); the general's four-page
+    layout parsed to nothing with the primary's bounds. It was removed
+    rather than kept as a document someone must re-point each cycle
+    (AGENTS.md section 6a)."""
+
     state = state.upper()
     if state not in ballot_state_codes():
         raise HTTPException(status_code=404, detail="Unknown state")
 
     async with make_async_client(timeout=30.0) as client:
-        if ballot_pdf.is_configured(town) and _in_active_cycle((ballot_pdf_source_for_town(town) or {}).get("election_date"), db):
-            pdf_result = await ballot_pdf.fetch_town_ballot_pdf(client, db, town, spend=spend_upstream)
-            if pdf_result is not None:
-                source = ballot_pdf_source_for_town(town) or {}
-                return cached_json({
-                    "status": "covered",
-                    "address": None,
-                    "source": source.get("source_name") or "the town's official ballot",
-                    "sourceUrl": pdf_result["sourceUrl"],
-                    # Load-bearing, not decoration: this PDF is whichever
-                    # election the town most recently published (right now,
-                    # Somerville's Sept 2026 primary) — NOT necessarily the
-                    # cycle's November general the rest of the page is
-                    # titled for. Showing primary candidates under a page
-                    # that says "GENERAL ELECTION" without saying so would
-                    # be actively misleading, not just incomplete.
-                    "electionName": source.get("election_name"),
-                    "electionDate": source.get("election_date"),
-                    "contests": [_pdf_contest_json(c) for c in pdf_result["contests"]],
-                }, max_age=CACHE_TTL_DETAIL_S)
-            # A configured PDF source that failed to fetch/parse is a real
-            # ingest failure, not a reason to silently fall through to
-            # the approximation below — that would quietly downgrade a
-            # known-real source to a guess without saying so.
-            return retry_soon_json(_uncovered_town_ballot("ingest_failed"))
-
         if not civic_is_configured() or address_for_town(state, town) is None:
             return cached_json(_uncovered_town_ballot("not_yet_covered"), max_age=CACHE_TTL_DETAIL_S)
 
@@ -2312,22 +2249,6 @@ async def town_ballot(_rl: UpstreamRouteLimit, state: str, town: str, db: Sessio
         "electionDate": result["election_date"],
         "contests": result["contests"],
     }, max_age=CACHE_TTL_DETAIL_S)
-
-
-def _in_active_cycle(election_date: str | None, db: Session) -> bool:
-    """Whether a document dated `election_date` belongs to the site's
-    election: after the general before it, up to and including its own
-    general. A town's sample ballot names one election (its URL embeds the
-    date); once the cycle moves on it is last cycle's ballot, not a ballot
-    for this one, and the town is not covered until its entry names the
-    new election. An undated document is not assumed current."""
-    try:
-        day = date.fromisoformat(election_date or "")
-    except ValueError:
-        return False
-    current = active_election(db).election_day
-    before = previous_election_day(current - timedelta(days=1))
-    return (before is None or day > before) and day <= current
 
 
 @router.get("/races/{race_id}")
