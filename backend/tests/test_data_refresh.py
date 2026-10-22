@@ -306,6 +306,18 @@ def test_the_district_lean_window_goes_stale_after_the_next_presidential_electio
     assert "2028" in dr._district_lean_stale(_ctx(doc=doc, today=date(2028, 12, 15)))
 
 
+def test_the_maps_stated_priors_alert_once_their_election_is_certified():
+    stated = {"fits": {"0": {"halfLife": 7.0}, "7": {"halfLife": 7.0}}}
+    fitted = {"fits": {h: {"priors": {"fitted": True}} for h in ("0", "7")}}
+    ctx = lambda doc, day: _ctx("forecast_model.json", doc, today=day)  # noqa: E731
+    # Not while the map built on them is live, nor in the results window.
+    assert dr._forecast_priors_stale(ctx(stated, date(2026, 10, 30))) is None
+    assert dr._forecast_priors_stale(ctx(stated, date(2027, 1, 2))) is None
+    # From the January 3 the election they were stated for is certified.
+    assert "--fit-priors" in dr._forecast_priors_stale(ctx(stated, date(2027, 1, 3)))
+    assert dr._forecast_priors_stale(ctx(fitted, date(2027, 1, 3))) is None
+
+
 def test_a_newer_maddison_release_is_found_by_search(monkeypatch):
     class Resp:
         def __init__(self, names):

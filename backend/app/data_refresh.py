@@ -859,6 +859,25 @@ def _forecast_gate(new: dict, old: dict) -> list[str]:
     return failures
 
 
+def _forecast_priors_stale(ctx: Context) -> str | None:
+    """The map's stated priors (model.STATED_PRIORS: the sample-size clip and
+    reference, the house-effect shrink, the half-life grid) are to be fitted
+    once the election they were stated for is certified, and not while a
+    map built on them is live. From the January 3 after a general held
+    since model.PRIORS_STATED_ON, a fit that doesn't record fitted priors
+    for every horizon is stale."""
+    fits = (ctx.doc.get("fits") or {}).values()
+    if fits and all((f.get("priors") or {}).get("fitted") for f in fits):
+        return None
+    if last_certified_general(ctx.today) == last_certified_general(date.fromisoformat(model.PRIORS_STATED_ON)):
+        return None
+    return ("the election map's poll weighting still rests on stated priors (app/forecast/model.py: N_REF, "
+            "N_MIN, N_CAP, HOUSE_SHRINK, HALF_LIFE_GRID), and the election they were stated for has been "
+            "certified. Run scripts/fit_forecast_model.py --fit-priors, review the refit's held-out checks, "
+            "make the flag the default in _forecast_command, and update the map's method section, which "
+            "names them as stated.")
+
+
 # Familywise error rate of the forward check's alert.
 FORWARD_ALPHA = 0.05
 
@@ -944,7 +963,8 @@ DATA_FILES: list[DataFile] = [
     DataFile(training_polls.FILE_NAME, command=_training_polls_command, due=_training_polls_due,
              gate=training_polls.gate, timeout_s=900),
     DataFile("forecast_model.json", command=_forecast_command, due=_forecast_due, gate=_forecast_gate,
-             outputs=FORECAST_OUTPUTS, check=_forward_finding, heavy=True, timeout_s=3600),
+             outputs=FORECAST_OUTPUTS, check=_forward_finding, stale=_forecast_priors_stale, heavy=True,
+             timeout_s=3600),
     DataFile("eavs.json", command=lambda ctx: [PY, _script("fetch_eavs.py"), "{out}"], due=_every(30),
              gate=_eavs_gate, timeout_s=900),
     DataFile("agency_crosswalk.json", command=lambda ctx: [PY, _script("calibrate_agency_crosswalk.py"), "{out}"],

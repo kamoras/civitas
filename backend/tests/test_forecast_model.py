@@ -75,6 +75,48 @@ def test_the_forward_check_reproduces():
     assert again["trainedOn"][1] < again["cycle"]
 
 
+def test_the_stated_priors_are_what_a_fit_without_priors_uses():
+    plain = model.fit(TRAINING["races"], TRAINING["generic"], 7)
+    stated = model.fit(TRAINING["races"], TRAINING["generic"], 7, priors=model.STATED_PRIORS)
+    assert "priors" not in plain
+    assert stated.pop("priors") == model.STATED_PRIORS
+    assert stated == plain
+
+
+def test_a_fit_with_fitted_priors_weights_polls_by_them():
+    polls = [model.Poll("A", 0, 20000, 2.0), model.Poll("B", 0, 500, -2.0)]
+    stated = model.poll_average(polls, 0, 7.0, {"pollsters": {}, "partisan": 0.0}, 21)
+    capped = dict(model.STATED_PRIORS, sampleCap=500)
+    even = model.poll_average(polls, 0, 7.0, {"pollsters": {}, "partisan": 0.0}, 21, capped)
+    assert stated.margin > 0  # the 3,000-capped panel outweighs the 500
+    assert even.margin == pytest.approx(0.0)
+    # A prediction reads the priors its fit recorded.
+    params = dict(FITTED["fits"]["0"], priors=capped)
+    row = {"lean": 0.0, "inc": 0}
+    assert model.predict_raw(row, polls, 0.0, params)["pollAverage"] == pytest.approx(0.0)
+
+
+def test_fit_priors_measures_the_stated_priors(monkeypatch):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "fit_forecast_model", Path(__file__).resolve().parents[1] / "scripts" / "fit_forecast_model.py")
+    fit_script = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fit_script)
+    monkeypatch.setattr(fit_script, "SHRINK_GRID", (0, 10))
+    monkeypatch.setattr(fit_script, "SAMPLE_MIN_QUANTILES", (0.0,))
+    monkeypatch.setattr(fit_script, "SAMPLE_CAP_QUANTILES", (0.95, 1.0))
+    rows = [r for r in TRAINING["races"] if r["year"] >= max(r["year"] for r in TRAINING["races"]) - 4]
+    generic = {y: v for y, v in TRAINING["generic"].items() if int(y) in {r["year"] for r in rows}}
+    pr = fit_script.fit_priors(rows, generic, horizons=(7,))
+    sizes = sorted(p[2] for r in rows for p in r["polls"] if p[2]) + []
+    assert pr["fitted"] is True
+    assert pr["houseShrink"] in (0, 10)
+    assert pr["halfLifeGrid"] == [float(d) for d in range(1, 2 * model.poll_window(rows, generic) + 1)]
+    assert pr["sampleCap"] >= pr["sampleMin"] > 0
+    assert min(sizes) <= pr["sampleRef"] <= max(sizes)
+
+
 @pytest.mark.parametrize("horizon", model.HORIZONS)
 def test_house_fit_reproduces_from_its_training_file(horizon):
     # The House borrows the Senate fit's national coefficient (model.fit).

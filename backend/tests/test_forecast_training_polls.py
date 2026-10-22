@@ -232,9 +232,9 @@ def test_the_forward_check_fits_on_earlier_cycles_only():
     seen = []
     real_fit = model.fit
 
-    def spy(train, gen, horizon, coef=None):
+    def spy(train, gen, horizon, coef=None, priors=None):
         seen.append(({r["year"] for r in train}, {int(y) for y in gen}))
-        return real_fit(train, gen, horizon, coef)
+        return real_fit(train, gen, horizon, coef, priors)
 
     with patch.object(model, "fit", spy):
         fw = model.forward(rows, generic, 0)
