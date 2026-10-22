@@ -131,3 +131,40 @@ class TestOutageIsNotANightWithoutTrades:
              patch.object(stock_pipeline, "search_ptr_filings", failed), \
              pytest.raises(SearchUnavailable, match="no response"):
             asyncio.run(stock_pipeline._ingest_senate(db_session, client=None))
+
+    def test_a_failed_search_for_originals_holds_back_only_their_amendments(self, db_session, caplog):
+        """The night's search answered; the wider one for an amendment's
+        original didn't. The amendment waits for the next run, neither
+        stored nor settled; every other filing is ingested."""
+        _senator(db_session, "s-1", "Jane Smith")
+        db_session.commit()
+        new = {"last": "Smith", "first": "Jane", "office": "Smith, Jane (Senator)", "filed_date": "2026-09-20",
+               "title": "Periodic Transaction Report for 09/20/2026",
+               "report_url": "https://efd/view/ptr/new/", "is_paper": False}
+        amendment = {**new, "title": "Periodic Transaction Report for 03/02/2026 (Amendment 1)",
+                     "report_url": "https://efd/view/ptr/amend/"}
+
+        async def search(since):
+            if since == "2026-03-02":  # the wider search, for the original
+                raise SearchUnavailable("the search form produced no response")
+            return [new, amendment]
+
+        async def rows(client, db, filing):
+            row = TradeRow(ticker=None, asset_name="Abc Corp", owner="Self", transaction_type="purchase",
+                           transaction_date="2026-09-01", disclosure_date=filing["filed_date"],
+                           amount_low=1001, amount_high=15000)
+            row.filing_id = filing["report_url"].rstrip("/").rsplit("/", 1)[-1]
+            row.source_url, row.parse_confidence = filing["report_url"], 1.0
+            return [row]
+
+        with patch.object(stock_pipeline, "senate_accept_terms", AsyncMock(return_value="tok")), \
+             patch.object(stock_pipeline, "search_ptr_filings", side_effect=search), \
+             patch.object(stock_pipeline, "fetch_senate_ptr", side_effect=rows), \
+             patch.object(stock_pipeline, "_classify_rows_industry", AsyncMock()), \
+             caplog.at_level("WARNING", logger=stock_pipeline.logger.name):
+            inserted = asyncio.run(stock_pipeline._ingest_senate(db_session, client=None))
+
+        assert inserted == 1
+        assert {t.filing_id for t in db_session.query(StockTrade)} == {"new"}
+        assert not stock_pipeline._marked(db_session, stock_pipeline._SETTLED_KEY.format("amend"))
+        assert "1 amended report(s) held back" in caplog.text and "no response" in caplog.text

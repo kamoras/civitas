@@ -55,6 +55,7 @@ from app.pipeline.filer_matching import match_representative as _match_represent
 from app.pipeline.filer_matching import match_senator as _match_senator
 from app.pipeline.fetch.senate_fd import is_senator_filing
 from app.pipeline.fetch.senate_ptr import (
+    SearchUnavailable,
     accept_terms as senate_accept_terms,
     fetch_and_parse_ptr as fetch_senate_ptr,
     report_version,
@@ -373,7 +374,16 @@ async def _with_missing_originals(db: Session, filings: list[dict]) -> list[dict
     }
     if not wanted:
         return filings
-    older = await search_ptr_filings(min(fam[2] for fam in wanted))
+    try:
+        older = await search_ptr_filings(min(fam[2] for fam in wanted))
+    except SearchUnavailable as e:
+        # Without its original an amendment's trades can't be dated, so the
+        # amendments in question are held back whole: neither ingested nor
+        # settled, and searched again next run. Every other filing goes on.
+        held = [f for f in filings if _family(f) in wanted]
+        logger.warning("Senate PTR: %d amended report(s) held back to the next run, their originals' "
+                       "search failed: %s", len(held), e)
+        return [f for f in filings if _family(f) not in wanted]
     return filings + [f for f in older if _family(f) in wanted and report_version(f.get("title", ""))[1] == 0]
 
 
