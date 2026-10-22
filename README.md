@@ -549,11 +549,10 @@ Every hour at :15
        │         same-story articles, and on 2026-09-27's feed the filter
        │         kept 28 articles where the day's mean keeps 48.
        ▼
-  4. RANK ────── score = 0.40 × (civic actionability)
-       │                 + 0.35 × (source breadth)
-       │                 + 0.25 × (trending score)
-       │         Actionability leads: officials mentioned + similarity to the
-       │         ingested civic-document corpus, not hand-authored keywords
+  4. RANK ────── lexicographic, no weights: names a tracked official,
+       │         then outlets reporting, officials named, similarity to the
+       │         civic-document corpus, trending (each key breaks only the
+       │         ties left by the ones before; docs/research/action-center-ranking.md)
        │         Try ranked clusters in order (up to CANDIDATE_POOL = 6)
        │         until MAX_ISSUES = 2 publish — a cluster that fails a gate
        │         falls through to the next instead of ending the run. A
