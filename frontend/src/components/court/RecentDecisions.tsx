@@ -1,9 +1,10 @@
 import Link from "next/link";
 import type { CaseLinks, CourtDecisionPage, CourtJustice } from "@/types/court";
 import { splitLabel, surname } from "@/lib/court";
+import { TYPE } from "@/lib/typeStyles";
 
 const LINK =
-  "inline-flex min-h-6 items-center font-mono text-xs text-ink-lo underline decoration-white/25 underline-offset-4 hover:text-phos";
+  "inline-flex min-h-6 items-center font-mono text-small text-ink-lo underline decoration-white/25 underline-offset-4 hover:text-phos";
 
 function longDate(iso: string | null): string | null {
   if (!iso) return null;
@@ -70,7 +71,7 @@ export default function RecentDecisions({
   const byId = new Map(justices.map((j) => [j.id, j]));
   const pages = Math.max(1, Math.ceil(page.total / page.perPage));
   if (page.total === 0) {
-    return <p className="text-base text-ink">No decision is stored yet.</p>;
+    return <p className="text-body text-ink">No decision is stored yet.</p>;
   }
   return (
     <div className="flex flex-col gap-4">
@@ -83,8 +84,8 @@ export default function RecentDecisions({
           return (
             <li key={d.caseId} className="flex flex-col gap-2 py-4">
               <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                <h4 className="text-base font-semibold text-ink-hi">{d.name}</h4>
-                <span className="font-mono text-sm tabular-nums text-ink-lo">
+                <h4 className={TYPE.boxTitle}>{d.name}</h4>
+                <span className="font-mono text-small tabular-nums text-ink-lo">
                   {splitLabel(d.split)}
                   {d.unanimous ? " · unanimous" : ""}
                   {date ? ` · ${date}` : ""}
@@ -109,14 +110,14 @@ export default function RecentDecisions({
                               : "border border-dashed border-white/30"
                         }`}
                       />
-                      <span className="font-mono text-[11px] text-ink-min">
+                      <span className="font-mono text-small text-ink-min">
                         {surname(j).slice(0, 3)}
                       </span>
                     </span>
                   );
                 })}
               </div>
-              <p className="text-sm leading-relaxed text-ink">
+              <p className="text-small leading-relaxed text-ink">
                 <span className="text-ink-lo">Majority:</span>{" "}
                 {names(d.majority, byId) || "none stored"}
                 {d.minority.length > 0 && (
@@ -140,7 +141,7 @@ export default function RecentDecisions({
       {pages > 1 && (
         <nav
           aria-label="Decisions pages"
-          className="flex flex-wrap items-center justify-between gap-4 font-mono text-sm"
+          className="flex flex-wrap items-center justify-between gap-4 font-mono text-small"
         >
           {page.page > 1 ? (
             <Link

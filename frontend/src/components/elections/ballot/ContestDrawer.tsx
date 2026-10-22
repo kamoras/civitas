@@ -5,6 +5,7 @@ import type { BallotContest } from "@/lib/ballotContests";
 import { useModalDialog } from "@/lib/useModalDialog";
 import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
+import { TYPE } from "@/lib/typeStyles";
 
 const COLUMN_LABEL: Record<BallotContest["column"], string> = {
   federal: "Federal",
@@ -86,7 +87,7 @@ export default function ContestDrawer({
         className="relative flex h-[85svh] w-full min-w-0 flex-col border-t-3 border-ink-min/60 bg-surface-base font-sans lg:h-full lg:w-[660px] lg:border-l lg:border-t-0 lg:border-white/25"
       >
         <div className="flex flex-wrap items-center justify-between gap-x-3 border-b border-white/[0.14] px-4 py-2.5">
-          <span className="min-w-0 font-mono text-xs text-ink-lo">
+          <span className="min-w-0 font-mono text-small text-ink-lo">
             {/* "Section", not "contest": the drawer also pages through parts
                 that are not contests (news coverage), and the page header
                 counts contests the voter actually decides ("17 contests"
@@ -96,7 +97,7 @@ export default function ContestDrawer({
           <button
             type="button"
             onClick={onClose}
-            className="min-h-[44px] px-2 font-mono text-xs text-signal-cyan hover:text-phos"
+            className="min-h-[44px] px-2 font-mono text-small text-signal-cyan hover:text-phos"
           >
             All contests
           </button>
@@ -116,15 +117,15 @@ export default function ContestDrawer({
                   id="contest-drawer-title"
                   ref={heading}
                   tabIndex={-1}
-                  className="text-[19px] font-semibold leading-tight text-ink-hi outline-none"
+                  className={`${TYPE.section} outline-none`}
                 >
                   {contest.title}
                 </h2>
-                <p className="mt-0.5 text-[13px] text-ink-lo">{contest.subtitle}</p>
+                <p className="mt-0.5 text-small text-ink-lo">{contest.subtitle}</p>
               </div>
               <span className="flex flex-wrap items-center gap-3">
                 {contest.instruction && (
-                  <span className="font-mono text-xs text-ink-lo">{contest.instruction}</span>
+                  <span className="font-mono text-small text-ink-lo">{contest.instruction}</span>
                 )}
                 <ShareSectionButton label={contest.title} anchor={shareAnchor} />
               </span>
@@ -138,14 +139,14 @@ export default function ContestDrawer({
             type="button"
             disabled={!prev}
             onClick={() => prev && onNavigate(prev.key)}
-            className="min-h-[48px] border border-white/25 px-3 text-left text-sm text-ink-hi hover:border-white/50 disabled:text-ink-min disabled:hover:border-white/25"
+            className="min-h-[48px] border border-white/25 px-3 text-left text-small text-ink-hi hover:border-white/50 disabled:text-ink-min disabled:hover:border-white/25"
           >
             {prev ? `←\u00a0${prev.title}` : "←\u00a0First contest"}
           </button>
           <button
             type="button"
             onClick={() => (next ? onNavigate(next.key) : onClose())}
-            className="min-h-[48px] bg-phos px-3 text-right text-sm font-semibold text-surface-base hover:bg-phos-mid"
+            className="min-h-[48px] bg-phos px-3 text-right text-small font-semibold text-surface-base hover:bg-phos-mid"
           >
             {next ? `${next.title}\u00a0→` : "Back to the ballot"}
           </button>

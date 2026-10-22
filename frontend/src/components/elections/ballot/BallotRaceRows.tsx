@@ -8,6 +8,7 @@ import {
   tierCandidates,
 } from "@/lib/elections";
 import { getPartyMeta } from "@/components/elections/CandidateCard";
+import { TYPE } from "@/lib/typeStyles";
 
 /** A federal race's candidates as ballot rows: name, party in words and
  * colour, money raised, and a bar scaled to this race's top fundraiser
@@ -37,20 +38,20 @@ export function CandidateNames({
   const redrawn = isRedrawnSeat(race, newLines);
   const active = race.candidates.filter(isActiveCandidate);
   if (active.length === 0)
-    return <p className="text-sm text-ink-lo">No candidates on record for this race yet.</p>;
+    return <p className="text-small text-ink-lo">No candidates on record for this race yet.</p>;
   const tiered = race.candidateSource === "filers" || race.candidateSource === "primary";
   const { leaders, tail } = tiered ? tierCandidates(active) : { leaders: active, tail: [] };
   const rows = [...leaders].sort((a, b) => (b.contributions ?? 0) - (a.contributions ?? 0));
   return (
-    <ul className="flex flex-wrap gap-x-4 gap-y-1 text-[15px]">
+    <ul className="flex flex-wrap gap-x-4 gap-y-1 text-body">
       {rows.map((c) => {
         const party = getPartyMeta(c);
         return (
           <li key={c.id} className="min-w-0 [overflow-wrap:anywhere]">
-            <span className="font-semibold text-ink-hi">{candidateName(c)}</span>{" "}
-            <span className={`font-mono text-xs ${party.color}`}>{party.label}</span>
+            <span className={TYPE.boxTitle}>{candidateName(c)}</span>{" "}
+            <span className={`font-mono text-small ${party.color}`}>{party.label}</span>
             {c.incumbentChallenge === "I" && (
-              <span className="ml-1 font-mono text-xs text-ink-lo">
+              <span className="ml-1 font-mono text-small text-ink-lo">
                 {incumbencyLabel("I", redrawn, c.incumbentRecord?.seat, resultsMode)}
               </span>
             )}
@@ -58,7 +59,9 @@ export function CandidateNames({
         );
       })}
       {tail.length > 0 && (
-        <li className="font-mono text-xs text-ink-lo">+ {tail.length} more filed with the FEC</li>
+        <li className="font-mono text-small text-ink-lo">
+          + {tail.length} more filed with the FEC
+        </li>
       )}
     </ul>
   );
@@ -82,9 +85,7 @@ export default function BallotRaceRows({
 
   if (active.length === 0) {
     return (
-      <p className="px-4 py-3 text-[13px] text-ink-lo">
-        No candidates on record for this race yet.
-      </p>
+      <p className="px-4 py-3 text-small text-ink-lo">No candidates on record for this race yet.</p>
     );
   }
 
@@ -99,17 +100,17 @@ export default function BallotRaceRows({
           <li key={c.id} className="border-b border-white/[0.09] px-4 py-2.5">
             <div className="flex items-baseline justify-between gap-3">
               <span className="flex min-w-0 flex-col">
-                <span className="break-words text-[15px] font-semibold text-ink-hi">
+                <span className={`${TYPE.boxTitle} break-words`}>
                   {candidateName(c)}
                   {c.incumbentChallenge === "I" && (
-                    <span className="ml-2 whitespace-nowrap align-middle font-mono text-[10px] font-normal text-ink-lo">
+                    <span className="ml-2 whitespace-nowrap align-middle font-mono text-small font-normal text-ink-lo">
                       {incumbencyLabel("I", redrawn, c.incumbentRecord?.seat, resultsMode)}
                     </span>
                   )}
                 </span>
-                <span className={`font-mono text-[11px] ${party.color}`}>{party.label}</span>
+                <span className={`font-mono text-small ${party.color}`}>{party.label}</span>
               </span>
-              <span className="shrink-0 font-mono text-xs tabular-nums text-ink-lo">
+              <span className="shrink-0 font-mono text-small tabular-nums text-ink-lo">
                 {raisedLabel(c)}
                 {c.contributions ? " raised" : ""}
               </span>
@@ -121,7 +122,7 @@ export default function BallotRaceRows({
         );
       })}
       {tail.length > 0 && (
-        <li className="border-b border-white/[0.09] px-4 py-2 font-mono text-xs text-ink-lo">
+        <li className="border-b border-white/[0.09] px-4 py-2 font-mono text-small text-ink-lo">
           + {tail.length} more filed with the FEC
         </li>
       )}

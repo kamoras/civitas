@@ -39,11 +39,11 @@ export default function ClosingSoon({
   for (const r of rows) byDay.set(r.closesOn, [...(byDay.get(r.closesOn) ?? []), r]);
   return (
     <section aria-labelledby="closing-soon-heading" className={className}>
-      <H id="closing-soon-heading" className="font-mono text-xs text-ink-min">
+      <H id="closing-soon-heading" className="font-mono text-small text-ink-min">
         Registration closes soon
       </H>
       {rows.length === 0 ? (
-        <p className="mt-1 text-sm text-ink">
+        <p className="mt-1 text-small text-ink">
           No state&apos;s regular registration closes in the next {days} days.{" "}
           <Link
             href={CALENDAR_HREF}
@@ -54,7 +54,7 @@ export default function ClosingSoon({
         </p>
       ) : (
         <>
-          <p className="mt-1 text-sm text-ink">
+          <p className="mt-1 text-small text-ink">
             In {rows.length} {rows.length === 1 ? "state" : "states"}, registration closes in the
             next {days} days.
           </p>
@@ -62,14 +62,14 @@ export default function ClosingSoon({
           <ol className="mt-2 flex flex-col gap-2">
             {Array.from(byDay.entries()).map(([day, states]) => (
               <li key={day} className="border-t border-white/[0.09] pt-2 first:border-t-0">
-                <p className="font-mono text-xs text-phos">{when(states[0])}</p>
+                <p className="font-mono text-small text-phos">{when(states[0])}</p>
                 <ul
                   className={
                     compact ? "mt-1 flex flex-wrap gap-x-4 gap-y-1" : "mt-1 flex flex-col gap-1"
                   }
                 >
                   {states.map((r) => (
-                    <li key={r.state} className="text-sm leading-snug">
+                    <li key={r.state} className="text-small leading-snug">
                       <Link
                         href={`${stateBallotHref(r.state)}#voter-deadlines`}
                         className="text-ink-hi underline decoration-white/30 underline-offset-4 hover:text-phos"
@@ -80,14 +80,16 @@ export default function ClosingSoon({
                       {r.register && (
                         <>
                           {" "}
-                          <RegisterLink link={r.register} showNote={false} className="text-sm" />
+                          <RegisterLink link={r.register} showNote={false} className="text-small" />
                           {!r.register.confirmed && (
-                            <span className="text-xs text-ink-min"> (unconfirmed)</span>
+                            <span className="text-small text-ink-min"> (unconfirmed)</span>
                           )}
                         </>
                       )}
                       {r.sameDay && !compact && (
-                        <span className="block text-xs text-ink-min">After that: {r.sameDay}</span>
+                        <span className="block text-small text-ink-min">
+                          After that: {r.sameDay}
+                        </span>
                       )}
                     </li>
                   ))}

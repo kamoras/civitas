@@ -14,7 +14,7 @@ export default function SourceLine({
   detail?: string;
 }) {
   return (
-    <p className="mt-3 font-mono text-xs text-ink-min">
+    <p className="mt-3 font-mono text-small text-ink-min">
       Source:{" "}
       <a
         href={source.url}

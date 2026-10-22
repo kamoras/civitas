@@ -210,7 +210,7 @@ function StatusLine({ status, loaded }: { status: PipelineStatus | null; loaded:
   const atShort = state.at ? formatRunTime(state.at) : null;
 
   return (
-    <span className="font-mono text-xs text-ink-lo">
+    <span className="font-mono text-small text-ink-lo">
       {loaded ? (
         <>
           {/* One line at every width: the fixed header's 96px clearance

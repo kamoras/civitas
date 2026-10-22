@@ -14,6 +14,7 @@ import { documentsHref, SEARCH_DOCUMENTS_HREF } from "@/lib/routes";
 import { DOCUMENTS_DESCRIPTION, DOCUMENTS_TITLE } from "@/lib/seo";
 import { splitHighlights, type ExploreResponse, type ExploreStats } from "@/lib/api";
 import type { SearchItem, SearchResults } from "@/types/search";
+import { TYPE } from "@/lib/typeStyles";
 
 // Per request, and the backend answer is never put in Next's data cache:
 // that cache is a file on disk, and it would keep what readers searched
@@ -162,7 +163,7 @@ function Chips({ q, tab, data }: { q: string; tab: string; data: SearchResults |
                 prefetch={false}
                 href={chipHref(q, c.tab)}
                 aria-current={current ? "page" : undefined}
-                className={`inline-flex min-h-11 items-center gap-2 whitespace-nowrap border px-3 font-mono text-xs ${current ? CHIP_ON : CHIP_OFF}`}
+                className={`inline-flex min-h-11 items-center gap-2 whitespace-nowrap border px-3 font-mono text-small ${current ? CHIP_ON : CHIP_OFF}`}
               >
                 {c.label}
                 {c.count !== undefined && c.count > 0 && (
@@ -336,7 +337,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Param
           {q && !data && (
             <p
               role="alert"
-              className="mt-8 border-2 border-signal-amber/60 p-4 font-mono text-sm text-ink-hi"
+              className="mt-8 border-2 border-signal-amber/60 p-4 font-mono text-small text-ink-hi"
             >
               Search didn&apos;t answer just now. Try again, or{" "}
               <Link prefetch={false} href={documentsHref({ q })} className="underline">
@@ -349,7 +350,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Param
           {data?.unavailable && (
             <p
               role="status"
-              className="mt-8 border-2 border-white/25 p-4 font-mono text-sm text-ink-hi"
+              className="mt-8 border-2 border-white/25 p-4 font-mono text-small text-ink-hi"
             >
               The search index is still being built (it takes a few minutes after an install).
               Meanwhile,{" "}
@@ -367,7 +368,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Param
                   aria-labelledby="close-call"
                   className="border-2 border-signal-amber/60 p-4"
                 >
-                  <h2 id="close-call" className="font-mono text-xs text-signal-amber">
+                  <h2 id="close-call" className={`${TYPE.kickerToned} text-signal-amber`}>
                     Close call. Which one did you mean?
                   </h2>
                   <div className="mt-2">
@@ -379,7 +380,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Param
               {(data.documentsUnavailable || data.documentsPartial) && (
                 <p
                   role="status"
-                  className="border border-signal-amber/30 bg-signal-amber/5 px-3 py-2 text-xs text-signal-amber"
+                  className="border border-signal-amber/30 bg-signal-amber/5 px-3 py-2 text-small text-signal-amber"
                 >
                   {data.documentsUnavailable
                     ? "Documents couldn't be searched just now, so this list has members, bills and the site's other pages only."
@@ -390,7 +391,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Param
               <section aria-labelledby="results-heading">
                 <h2
                   id="results-heading"
-                  className="flex flex-wrap items-baseline justify-between gap-2 pb-1 font-mono text-xs text-ink-hi"
+                  className={`${TYPE.kicker} flex flex-wrap items-baseline justify-between gap-2 pb-1`}
                 >
                   <span>
                     {total === 0
@@ -408,7 +409,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Param
                   <Link
                     prefetch={false}
                     href={documentsHref({ q })}
-                    className="mt-3 inline-flex min-h-11 items-center font-mono text-xs text-ink-hi underline underline-offset-4"
+                    className="mt-3 inline-flex min-h-11 items-center font-mono text-small text-ink-hi underline underline-offset-4"
                   >
                     Every document, with filters &rarr;
                   </Link>
@@ -419,17 +420,17 @@ export default async function SearchPage({ searchParams }: { searchParams: Param
                 <section aria-label="Closest names" className="border-2 border-white/25 p-4">
                   {data.near.length > 0 ? (
                     <>
-                      <p className="font-mono text-sm text-ink-hi">Closest by spelling:</p>
+                      <p className="font-mono text-small text-ink-hi">Closest by spelling:</p>
                       <div className="mt-2">
                         <ResultGrid items={data.near} showGroup />
                       </div>
                     </>
                   ) : (
-                    <p className="font-mono text-sm text-ink-hi">
+                    <p className="font-mono text-small text-ink-hi">
                       No name on the site is spelled anything like that.
                     </p>
                   )}
-                  <p className="mt-3 font-mono text-xs text-ink-lo">
+                  <p className="mt-3 font-mono text-small text-ink-lo">
                     Searched: member, president and justice names, bill numbers and titles, roll
                     calls, agencies, committees, states, districts, races, ballot measures, issues,
                     nominations, page names, and every federal document by its words and its

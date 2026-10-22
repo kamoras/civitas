@@ -7,6 +7,7 @@ import { shareMetaAttrs } from "@/lib/shareImage";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import type { SectionFigures } from "@/types/sections";
+import { TYPE } from "@/lib/typeStyles";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
@@ -86,7 +87,7 @@ export default async function SectionCards({
         className={`${className}`}
       >
         <div className="flex flex-wrap items-baseline justify-between gap-x-3 border-b border-white/15 pb-2">
-          <h2 id={headingId} className="font-mono text-xs text-ink-min">
+          <h2 id={headingId} className={TYPE.kicker}>
             More in {label}
           </h2>
           <ShareSectionButton label={`${label} pages`} />
@@ -102,7 +103,7 @@ export default async function SectionCards({
                 key={t.key}
                 className="group relative flex flex-col border border-white/[0.07] border-t-white/15 bg-surface px-4 py-3 transition-colors focus-within:border-phos/40 hover:border-phos/40"
               >
-                <h3 className="font-mono text-xs text-ink-hi">
+                <h3 className={TYPE.kicker}>
                   <Link
                     href={t.href}
                     className="after:absolute after:inset-0 group-hover:text-phos"
@@ -115,15 +116,15 @@ export default async function SectionCards({
                 </h3>
                 {p ? (
                   <p className="mt-2">
-                    <span className="block font-display text-3xl font-semibold leading-none tabular-nums text-ink-hi">
+                    <span className={`${TYPE.figure} block tabular-nums text-ink-hi`}>
                       {p.figure}
                     </span>
-                    <span className="mt-1.5 block font-sans text-sm leading-snug text-ink-lo">
+                    <span className="mt-1.5 block font-sans text-small leading-snug text-ink-lo">
                       {p.caption}
                     </span>
                   </p>
                 ) : (
-                  <p className="mt-2 text-sm leading-snug text-ink-lo">
+                  <p className="mt-2 text-small leading-snug text-ink-lo">
                     {sectionBlurb(section, t.key) ??
                       (figures ? "Open the page" : "Live figure unavailable right now")}
                   </p>

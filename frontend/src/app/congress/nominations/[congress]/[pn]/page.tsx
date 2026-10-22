@@ -31,6 +31,7 @@ import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import { TOPIC_FEEDS, absoluteUrl, pageMetadata } from "@/lib/site";
 import { fetchRecord } from "@/lib/ssrPayload";
 import type { NominationDetail } from "@/types/nomination";
+import { TYPE } from "@/lib/typeStyles";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 const LINK = "text-ink underline decoration-white/30 underline-offset-4 hover:text-phos";
@@ -160,7 +161,7 @@ export default async function NominationPage({ params }: PageProps) {
             <div>
               <SectionTabs section="congress" active="nominations" />
               {/* Under 640px the section row above names where this page sits. */}
-              <nav aria-label="Breadcrumb" className="hidden sm:block text-sm text-ink-lo">
+              <nav aria-label="Breadcrumb" className="hidden sm:block text-small text-ink-lo">
                 <Link href={NOMINATIONS_HREF} className="hover:text-phos">
                   Nominations
                 </Link>
@@ -177,23 +178,20 @@ export default async function NominationPage({ params }: PageProps) {
             >
               <header className="flex flex-col gap-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="font-mono text-xs text-ink-lo">{eyebrow}</p>
+                  <p className="font-mono text-small text-ink-lo">{eyebrow}</p>
                   <ShareSectionButton label="This nomination" withStrip={false} />
                 </div>
-                <h1
-                  id="nomination-title"
-                  className="max-w-4xl font-display text-2xl font-semibold leading-tight text-ink-hi sm:text-4xl"
-                >
+                <h1 id="nomination-title" className={`${TYPE.title} max-w-4xl`}>
                   {title}
                 </h1>
                 <div className="flex flex-wrap items-center gap-3">
                   <StatusBadge status={n.status} />
-                  <span className="text-sm text-ink-lo">{STATUS_NOTE[n.status]}</span>
+                  <span className="text-small text-ink-lo">{STATUS_NOTE[n.status]}</span>
                 </div>
                 {n.description && (
-                  <blockquote className="max-w-4xl border-l-2 border-white/20 pl-3 text-base text-ink">
+                  <blockquote className="max-w-4xl border-l-2 border-white/20 pl-3 text-body text-ink">
                     {n.description}
-                    <footer className="mt-1 font-mono text-xs text-ink-min">
+                    <footer className="mt-1 font-mono text-small text-ink-min">
                       The nomination as Congress.gov records it
                     </footer>
                   </blockquote>
@@ -203,21 +201,21 @@ export default async function NominationPage({ params }: PageProps) {
               <dl className="grid grid-cols-1 gap-px border border-white/15 bg-white/15 sm:grid-cols-2 lg:grid-cols-3">
                 {facts.map(([label, value]) => (
                   <div key={label} className="flex flex-col gap-1 bg-surface p-3">
-                    <dt className="font-mono text-xs text-ink-min">{label}</dt>
-                    <dd className="text-base text-ink">{value}</dd>
+                    <dt className="font-mono text-small text-ink-min">{label}</dt>
+                    <dd className="text-body text-ink">{value}</dd>
                   </div>
                 ))}
               </dl>
 
               {final && (
                 <div className="border border-white/15 bg-surface p-4 sm:p-5">
-                  <h2 className="font-mono text-xs text-ink-min">
+                  <h2 className={TYPE.kicker}>
                     The vote to confirm · roll call {final.number}, {shortDate(final.date)}
                   </h2>
                   <p className="mt-2 flex flex-col gap-1">
-                    <VoteCount vote={final} size="text-4xl" />
+                    <VoteCount vote={final} lead />
                   </p>
-                  <p className="mt-1 text-sm text-ink-lo">{voteResult(final)}</p>
+                  <p className="mt-1 text-small text-ink-lo">{voteResult(final)}</p>
                   <div className="mt-4 flex flex-col gap-2">
                     {(final.parties ?? []).map((p) => (
                       <PartyBar key={p.party} split={p} />
@@ -229,10 +227,10 @@ export default async function NominationPage({ params }: PageProps) {
 
             {n.finalVote && (
               <section aria-labelledby="senators" className="flex flex-col gap-4">
-                <h2 id="senators" className="font-display text-2xl font-semibold text-ink-hi">
+                <h2 id="senators" className={TYPE.section}>
                   How each senator voted
                 </h2>
-                <p className="text-sm text-ink-lo">
+                <p className="text-small text-ink-lo">
                   On{" "}
                   <Link
                     href={rollCallHref({ chamber: "senate", congress: n.congress, ...n.finalVote })}
@@ -248,7 +246,7 @@ export default async function NominationPage({ params }: PageProps) {
 
             {n.rollCalls.length > 0 && (
               <section aria-labelledby="votes" className="flex flex-col gap-3">
-                <h2 id="votes" className="font-display text-2xl font-semibold text-ink-hi">
+                <h2 id="votes" className={TYPE.section}>
                   Every recorded vote on it
                 </h2>
                 <ul className="border-t border-white/[0.09]">
@@ -262,7 +260,7 @@ export default async function NominationPage({ params }: PageProps) {
                         {rc.citations > 1 &&
                           ` (with ${rc.citations - 1} other nominations, en bloc)`}
                       </Link>
-                      <span className="font-mono text-xs text-ink-lo">
+                      <span className="font-mono text-small text-ink-lo">
                         {shortDate(rc.date)} · {voteResult(rc)} · <TallyText vote={rc} />
                       </span>
                     </li>
@@ -273,16 +271,16 @@ export default async function NominationPage({ params }: PageProps) {
 
             {names.length > 1 && (
               <section aria-labelledby="nominees" className="flex flex-col gap-3">
-                <h2 id="nominees" className="font-display text-2xl font-semibold text-ink-hi">
+                <h2 id="nominees" className={TYPE.section}>
                   The {n.nomineeCount.toLocaleString("en-US")} nominees
                 </h2>
                 {n.nominees[0]?.introText && (
-                  <p className="text-sm text-ink-lo">{n.nominees[0].introText}</p>
+                  <p className="text-small text-ink-lo">{n.nominees[0].introText}</p>
                 )}
                 <NameList names={names.slice(0, SHOWN_NAMES)} />
                 {names.length > SHOWN_NAMES && (
                   <details>
-                    <summary className="cursor-pointer font-mono text-xs text-ink-lo hover:text-phos">
+                    <summary className="cursor-pointer font-mono text-small text-ink-lo hover:text-phos">
                       [The other {(names.length - SHOWN_NAMES).toLocaleString("en-US")}]
                     </summary>
                     <NameList names={names.slice(SHOWN_NAMES)} />
@@ -292,7 +290,7 @@ export default async function NominationPage({ params }: PageProps) {
             )}
 
             <section aria-labelledby="actions" className="flex flex-col gap-3">
-              <h2 id="actions" className="font-display text-2xl font-semibold text-ink-hi">
+              <h2 id="actions" className={TYPE.section}>
                 Every action, newest first
               </h2>
               <ol className="border-t border-white/[0.09]">
@@ -301,12 +299,12 @@ export default async function NominationPage({ params }: PageProps) {
                     key={`${a.date}-${i}`}
                     className="grid grid-cols-1 gap-x-4 border-b border-white/[0.09] py-2 sm:grid-cols-[8rem_minmax(0,1fr)]"
                   >
-                    <span className="font-mono text-xs text-ink-min">{shortDate(a.date)}</span>
-                    <span className="text-sm text-ink">{a.text}</span>
+                    <span className="font-mono text-small text-ink-min">{shortDate(a.date)}</span>
+                    <span className="text-small text-ink">{a.text}</span>
                   </li>
                 ))}
               </ol>
-              <p className="text-sm text-ink-lo">
+              <p className="text-small text-ink-lo">
                 Source:{" "}
                 <a href={n.congressGovUrl} className={LINK}>
                   {n.citation} on Congress.gov
@@ -340,10 +338,10 @@ function NameList({
       {names.map((x, i) => (
         <li
           key={`${x.lastName}-${i}`}
-          className="border-b border-white/[0.07] py-1.5 text-sm text-ink"
+          className="border-b border-white/[0.07] py-1.5 text-small text-ink"
         >
           {[x.firstName, x.middleName, x.lastName].filter(Boolean).join(" ")}
-          {x.state && <span className="font-mono text-xs text-ink-min"> {x.state}</span>}
+          {x.state && <span className="font-mono text-small text-ink-min"> {x.state}</span>}
         </li>
       ))}
     </ul>

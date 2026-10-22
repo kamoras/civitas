@@ -59,8 +59,8 @@ function Panel({
   return (
     <figure className="m-0">
       <figcaption className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <span className="font-mono text-xs text-ink-hi">{label}</span>
-        <span className="font-mono text-xs text-ink-lo">
+        <span className="font-mono text-small text-ink-hi">{label}</span>
+        <span className="font-mono text-small text-ink-lo">
           {dist.n === 0 ? (
             "None confirmed yet"
           ) : (
@@ -118,7 +118,7 @@ function Panel({
         ))}
       </svg>
       {/* Labels in HTML, not SVG text: the bars stretch to the width, text must not. */}
-      <div aria-hidden="true" className="relative -mt-4 h-4 font-mono text-xs text-ink-min">
+      <div aria-hidden="true" className="relative -mt-4 h-4 font-mono text-small text-ink-min">
         {ticks.map((t) => (
           <span
             key={t}
@@ -131,7 +131,7 @@ function Panel({
           </span>
         ))}
       </div>
-      <p className="mt-1 font-mono text-xs text-ink-min">Tallest bar: {top}</p>
+      <p className="mt-1 font-mono text-small text-ink-min">Tallest bar: {top}</p>
     </figure>
   );
 }

@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { NextField as Field } from "@/types/nextCycle";
 import { STATE_NAMES } from "@/lib/stateCodes";
 import { safeHref } from "@/lib/formatting";
+import { TYPE } from "@/lib/typeStyles";
 
 const n = (x: number) => x.toLocaleString("en-US");
 /** A count as a figure: "None" for zero, never a bare 0. */
@@ -17,22 +18,21 @@ export default function NextField({ field }: { field: Field | null }) {
       aria-labelledby="next-field"
       className="mt-6 border font-sans border-phos/20 bg-surface px-4 pb-4"
     >
-      <h2
-        id="next-field"
-        className="border-b border-white/[0.07] py-2.5 font-mono text-xs text-ink-min"
-      >
+      <h2 id="next-field" className={`${TYPE.kicker} border-b border-white/[0.07] py-2.5`}>
         Registered with the FEC{field ? ` for ${field.cycle}` : ""}
       </h2>
       {!field ? (
-        <p className="mt-3 text-sm text-ink-lo">The FEC filings couldn&apos;t be read just now.</p>
+        <p className="mt-3 text-small text-ink-lo">
+          The FEC filings couldn&apos;t be read just now.
+        </p>
       ) : (
         <>
-          <p className="mt-3 font-display text-2xl font-semibold leading-tight text-ink-hi">
+          <p className={`${TYPE.section} mt-3`}>
             {field.registered > 0
               ? `${n(field.registered)} ${field.registered === 1 ? "candidate has" : "candidates have"} registered for federal races`
               : "No candidate has registered for a Senate or House race yet"}
           </p>
-          <p className="mt-2 text-sm text-ink-lo">
+          <p className="mt-2 text-small text-ink-lo">
             Registering with the FEC is not a place on the ballot: each state certifies its own
             ballot months from now. Open seats are the FEC&apos;s own coding.
           </p>
@@ -49,14 +49,12 @@ export default function NextField({ field }: { field: Field | null }) {
           </dl>
           {field.filedForOtherOffice.length > 0 && (
             <>
-              <h3 className="mt-4 font-mono text-xs text-ink-min">
-                Members registered for another office
-              </h3>
+              <h3 className={`${TYPE.kicker} mt-4`}>Members registered for another office</h3>
               <ul className="mt-1">
                 {field.filedForOtherOffice.map((m) => (
                   <li
                     key={m.id}
-                    className="border-t border-white/[0.07] py-1.5 text-sm text-ink-lo"
+                    className="border-t border-white/[0.07] py-1.5 text-small text-ink-lo"
                   >
                     <Link
                       href={`/politicians/${m.id}`}
@@ -73,7 +71,7 @@ export default function NextField({ field }: { field: Field | null }) {
               </ul>
             </>
           )}
-          <p className="mt-3 text-sm text-ink-lo">
+          <p className="mt-3 text-small text-ink-lo">
             {n(field.house.noFiling)} sitting House{" "}
             {field.house.noFiling === 1 ? "member has" : "members have"} no {field.cycle} filing on
             record yet
@@ -99,10 +97,8 @@ function Stat({ figure, label }: { figure: string; label: string }) {
   return (
     <div className="bg-surface px-3 py-2.5">
       <dt className="sr-only">{label}</dt>
-      <dd className="font-display text-2xl font-semibold leading-none tabular-nums text-ink-hi">
-        {figure}
-      </dd>
-      <dd className="mt-1 text-sm leading-snug text-ink-lo" aria-hidden="true">
+      <dd className={`${TYPE.section} tabular-nums`}>{figure}</dd>
+      <dd className="mt-1 text-small leading-snug text-ink-lo" aria-hidden="true">
         {label}
       </dd>
     </div>

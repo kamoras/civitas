@@ -16,7 +16,7 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
       {/* About a sixth-grade reading level (Flesch-Kincaid 5.7, from 8.8),
           keeping every caveat: the name match, the missing direction, and
           no claim of cause. */}
-      <div className="text-xs text-ink-lo mb-3">
+      <div className="text-small text-ink-lo mb-3">
         Industries that gave this member a large share of their money, beside the member&apos;s
         votes on bills in that industry&apos;s area. Lobbying reports are looked up under the
         largest donor&apos;s name, or the name of the company behind it when the donor is a PAC.
@@ -37,11 +37,11 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
               {/* The industry is the finding and its total is the industry's;
                   the largest donor is named apart from that sum, which it
                   only took part in. */}
-              <div className="mb-2 text-signal-cyan text-sm font-semibold">
+              <div className="mb-2 text-signal-cyan text-small font-semibold">
                 {match.industry.replace(/_/g, " ")}
               </div>
 
-              <div className="text-xs font-mono text-ink-lo mb-3 space-y-1">
+              <div className="text-small font-mono text-ink-lo mb-3 space-y-1">
                 <div>Industry contributions: {formatCurrency(match.donationToSenator)}</div>
                 {/* Can be one unspaced token: wrap it rather than let the
                     panel cut it off. */}
@@ -139,11 +139,11 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
                 )}
               </div>
 
-              <p className="text-base text-ink">{match.description}</p>
+              <p className="text-body text-ink">{match.description}</p>
 
               {votes.length > 0 && (
                 <div className="mt-3">
-                  <div className="text-xs font-mono text-ink-lo">
+                  <div className="text-small font-mono text-ink-lo">
                     This member&apos;s votes on the related bills:
                   </div>
                   <ul>

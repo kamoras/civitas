@@ -2,6 +2,7 @@ import type { CountdownFigure, DotsFigure, Figure, SplitFigure, StatFigure } fro
 import { overlay, partyMark } from "@/lib/chartColors";
 import { MARK_ATTR } from "@/types/readout";
 import ChartReadout from "./ChartReadout";
+import { TYPE } from "@/lib/typeStyles";
 
 /**
  * A record box's figure: a counted number, a yea-nay split, a party's dots
@@ -20,10 +21,10 @@ import ChartReadout from "./ChartReadout";
 export type FigureSize = "lead" | "tier" | "box" | "boxLead";
 
 const VALUE: Record<FigureSize, string> = {
-  lead: "text-[3.5rem] sm:text-[4.5rem]",
-  tier: "text-[2.125rem]",
-  box: "text-[1.625rem] @min-[26rem]:text-[2.125rem]",
-  boxLead: "text-[2.5rem] @min-[40rem]:text-[3.5rem]",
+  lead: TYPE.figureLg,
+  tier: TYPE.figure,
+  box: TYPE.figure,
+  boxLead: TYPE.figureLg,
 };
 
 const YEA = "var(--phos)";
@@ -48,18 +49,16 @@ function SplitSides({ f, height, gap }: { f: SplitFigure; height: string; gap: s
 function BigSplit({ f, size }: { f: SplitFigure; size: FigureSize }) {
   return (
     <div>
-      <div
-        className={`whitespace-nowrap text-center font-display font-semibold leading-none text-ink-hi ${VALUE[size]}`}
-      >
+      <div className={`${VALUE[size]} whitespace-nowrap text-center text-ink-hi`}>
         {f.yeas}–{f.nays}
       </div>
-      <div className="mt-1.5 text-center text-sm text-ink-lo">yeas to nays</div>
+      <div className="mt-1.5 text-center text-small text-ink-lo">yeas to nays</div>
       <SplitBar f={f} height={size === "lead" || size === "boxLead" ? "h-6" : "h-3"} />
-      <div className="mt-1 flex justify-between gap-2 text-sm text-ink-lo">
+      <div className="mt-1 flex justify-between gap-2 text-small text-ink-lo">
         <span>{f.yeas} yea</span>
         <span>{f.nays} nay</span>
       </div>
-      <div className="mt-0.5 text-center text-sm text-ink-hi">{f.caption}</div>
+      <div className="mt-0.5 text-center text-small text-ink-hi">{f.caption}</div>
     </div>
   );
 }
@@ -122,7 +121,7 @@ function Dots({ f, mini = false }: { f: DotsFigure; mini?: boolean }) {
           })}
         </svg>
       </ChartReadout>
-      {!mini && <div className="mt-2 text-sm text-ink-lo">{f.caption}</div>}
+      {!mini && <div className="mt-2 text-small text-ink-lo">{f.caption}</div>}
     </div>
   );
 }
@@ -163,13 +162,11 @@ function Countdown({ f, size }: { f: CountdownFigure; size: FigureSize }) {
       {...(bare ? { role: "img", "aria-label": `${daysLeftWords(f)}.` } : {})}
     >
       <div
-        className={`whitespace-nowrap font-display font-semibold leading-none text-signal-amber ${
-          size === "lead" ? VALUE.tier : VALUE[size]
-        }`}
+        className={`${size === "lead" ? VALUE.tier : VALUE[size]} whitespace-nowrap text-signal-amber`}
       >
         {f.daysLeft === 0 ? "Today" : f.daysLeft}
       </div>
-      <div className="mt-1 text-sm text-ink-lo">
+      <div className="mt-1 text-small text-ink-lo">
         {f.daysLeft === 0
           ? f.caption !== undefined
             ? "closes"
@@ -185,12 +182,8 @@ function Stat({ f, size }: { f: StatFigure; size: FigureSize }) {
   const value = f.text ?? f.value.toLocaleString("en-US");
   return (
     <div role="img" aria-label={`${value} ${f.caption}.`} className="text-center">
-      <div
-        className={`whitespace-nowrap font-display font-semibold leading-none text-ink-hi ${VALUE[size]}`}
-      >
-        {value}
-      </div>
-      <div className="mt-1.5 text-sm text-ink-lo">{f.caption}</div>
+      <div className={`${VALUE[size]} whitespace-nowrap text-ink-hi`}>{value}</div>
+      <div className="mt-1.5 text-small text-ink-lo">{f.caption}</div>
     </div>
   );
 }

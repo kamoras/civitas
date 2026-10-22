@@ -59,6 +59,7 @@ import type {
   MapSeat,
   RangedSeat,
 } from "@/types/electionMap";
+import { TYPE } from "@/lib/typeStyles";
 
 const SHARE_SOURCE =
   "Civitas, from official returns (MEDSL, FEC, House Clerk, VEST, Census); polls: Wikipedia contributors, CC BY-SA 4.0; past polls: Silver Bulletin";
@@ -474,13 +475,13 @@ function HouseStateList({
             }
             className="flex min-h-11 w-full items-center gap-3 py-1.5 text-left"
           >
-            <span className="w-28 shrink-0 text-sm text-ink-hi">{seats[0].stateName}</span>
+            <span className="w-28 shrink-0 text-small text-ink-hi">{seats[0].stateName}</span>
             <span className="flex flex-wrap gap-[3px]" aria-hidden="true">
               {seats.map((s) => (
                 <span key={s.id} className="relative block h-3 w-3" style={swatch(s)}>
                   {view === "diff" && differenceGlyph(s) && (
                     <span
-                      className="absolute inset-0 text-center font-mono text-[9px] leading-3"
+                      className="absolute inset-0 text-center font-mono text-small leading-3"
                       style={{
                         color: s.status === "range" && s.difference.direction === "D" ? DEM : REP,
                       }}
@@ -513,16 +514,16 @@ function StateSheet({
 }) {
   const seats = data.seats.filter((s) => s.state === state);
   return (
-    <div className="space-y-3 text-sm text-ink-lo">
+    <div className="space-y-3 text-small text-ink-lo">
       <div className="flex items-start justify-between gap-3">
-        <h3 className="font-mono text-xs text-ink-hi">
+        <h3 className={TYPE.kicker}>
           {seats[0]?.stateName} · {seats.length} {seats.length === 1 ? "seat" : "seats"}
         </h3>
         <button
           type="button"
           onClick={onClose}
           aria-label="Close the state's seats"
-          className="min-h-11 min-w-11 border border-white/20 px-3 font-mono text-xs text-ink-lo hover:text-ink-hi"
+          className="min-h-11 min-w-11 border border-white/20 px-3 font-mono text-small text-ink-lo hover:text-ink-hi"
         >
           ✕
         </button>
@@ -536,7 +537,7 @@ function StateSheet({
               className="flex min-h-11 w-full flex-wrap items-baseline justify-between gap-x-3 py-2 text-left hover:text-ink-hi"
             >
               <span className="text-ink-hi">{seatName(s)}</span>
-              <span className="font-mono text-xs">
+              <span className="font-mono text-small">
                 lean {s.leanLabel ?? "–"}
                 {s.status === "range"
                   ? ` · margin ${rangeLabel(s)}${s.rangeBasisShort ? ` (${s.rangeBasisShort})` : ""}${crossesEven(s) ? " · close" : ""}`
@@ -546,7 +547,7 @@ function StateSheet({
           </li>
         ))}
       </ul>
-      <p className="font-mono text-xs text-ink-min">Not a race call.</p>
+      <p className="font-mono text-small text-ink-min">Not a race call.</p>
     </div>
   );
 }
@@ -573,7 +574,7 @@ function DashedKey() {
 function NoRaceKey({ data }: { data: ElectionMapData }) {
   if (data.chamber !== "senate") return null;
   return (
-    <p className="mt-1 flex items-center gap-2 font-mono text-[10px] text-ink-lo sm:text-xs">
+    <p className="mt-1 flex items-center gap-2 font-mono text-small text-ink-lo">
       <svg viewBox="0 0 10 6" className="inline-block h-3 w-4 align-middle" aria-hidden="true">
         <rect width="10" height="6" fill={NO_CONTEST_FILL} />
       </svg>
@@ -586,7 +587,7 @@ function Legend({ data, view }: { data: ElectionMapData; view: MapView }) {
   const hatch = `lg-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   if (view === "diff") {
     return (
-      <ul className="flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-xs text-ink-lo">
+      <ul className="flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-small text-ink-lo">
         <li>
           <span style={{ color: DEM }}>« ‹</span> polls point toward D
         </li>
@@ -611,7 +612,7 @@ function Legend({ data, view }: { data: ElectionMapData; view: MapView }) {
       <svg width="0" height="0" className="absolute" aria-hidden="true">
         <HatchDefs id={hatch} />
       </svg>
-      <ul className="grid grid-cols-7 gap-px font-mono text-[10px] leading-tight text-ink-lo sm:text-xs">
+      <ul className="grid grid-cols-7 gap-px font-mono text-small leading-tight text-ink-lo">
         {legendCells(data.bins, view).map(({ bin, label }) => (
           <li key={bin} className="flex flex-col items-center gap-1 text-center">
             <svg viewBox="0 0 10 6" className="h-3 w-full" aria-hidden="true">
@@ -628,23 +629,23 @@ function Legend({ data, view }: { data: ElectionMapData; view: MapView }) {
         ))}
       </ul>
       {view === "polls" && (
-        <p className="mt-2 flex items-center gap-2 font-mono text-[10px] text-ink-lo sm:text-xs">
+        <p className="mt-2 flex items-center gap-2 font-mono text-small text-ink-lo">
           <DashedKey /> no poll of this seat: the usual vote and the national swing only
         </p>
       )}
       <NoRaceKey data={data} />
       {data.seats.some((s) => s.status === "no_lean") && (
-        <p className="mt-1 font-mono text-[10px] text-ink-lo sm:text-xs">
+        <p className="mt-1 font-mono text-small text-ink-lo">
           Empty dashed square: Civitas has no usual-vote figure for that seat.
         </p>
       )}
-      <p className="mt-1 font-mono text-[10px] text-ink-min sm:text-xs">
+      <p className="mt-1 font-mono text-small text-ink-min">
         {view === "usual"
           ? `${data.units?.lean ?? "Points more Republican (R) or Democratic (D) than the nation."} From the last two presidential elections.`
           : `A seat is coloured by the end of its range nearest even, so a range that crosses even is grey. Dark${data.chamber === "senate" ? ", with bright letters" : ""}: no range (no Democrat-versus-Republican race, or its ballot not yet confirmed).`}
       </p>
       {view === "polls" && data.units && (
-        <p className="mt-1 font-mono text-[10px] text-ink-min sm:text-xs">{data.units.margin}</p>
+        <p className="mt-1 font-mono text-small text-ink-min">{data.units.margin}</p>
       )}
     </div>
   );
@@ -672,7 +673,7 @@ function RangeBar({ seat }: { seat: RangedSeat }) {
           style={{ left: `${pos(seat.prior)}%` }}
         />
       </div>
-      <div className="mt-0.5 flex justify-between font-mono text-[10px] text-ink-min">
+      <div className="mt-0.5 flex justify-between font-mono text-small text-ink-min">
         <span>D+{span}</span>
         <span>Even</span>
         <span>R+{span}</span>
@@ -695,20 +696,20 @@ function SeatDetail({
 }) {
   const inc = (party: "D" | "R") => (seat.incumbentParty === party ? " (incumbent)" : "");
   return (
-    <div className="space-y-3 text-sm text-ink-lo">
+    <div className="space-y-3 text-small text-ink-lo">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="font-mono text-xs text-ink-min">
+          <p className="font-mono text-small text-ink-min">
             {seat.district != null ? "House" : "Senate"}
             {seat.special ? " · special election" : ""}
           </p>
-          <h3 className="font-display text-xl font-semibold text-ink-hi">{seatName(seat)}</h3>
+          <h3 className={TYPE.boxTitle}>{seatName(seat)}</h3>
         </div>
         <button
           type="button"
           onClick={onClose}
           aria-label="Close the seat detail"
-          className="min-h-11 min-w-11 border border-white/20 px-3 font-mono text-xs text-ink-lo hover:text-ink-hi"
+          className="min-h-11 min-w-11 border border-white/20 px-3 font-mono text-small text-ink-lo hover:text-ink-hi"
         >
           ✕
         </button>
@@ -730,7 +731,7 @@ function SeatDetail({
       )}
       <dl className="space-y-2">
         <div>
-          <dt className="font-mono text-xs text-ink-min">Usual vote</dt>
+          <dt className="font-mono text-small text-ink-min">Usual vote</dt>
           <dd className="text-ink-hi">
             {seat.leanLabel ? `${seat.leanLabel} lean` : "No figure"}{" "}
             <span className="text-ink-min">
@@ -742,16 +743,16 @@ function SeatDetail({
         </div>
         {seat.status === "range" ? (
           <div>
-            <dt className="font-mono text-xs text-ink-min">
+            <dt className="font-mono text-small text-ink-min">
               {seat.rangeBasisLabel ?? "Margin range"}
             </dt>
             <dd>
               <span className="text-ink-hi">margin {rangeLabel(seat)}</span>
               {crossesEven(seat) && (
-                <span className="ml-2 font-mono text-xs">Too close to tell</span>
+                <span className="ml-2 font-mono text-small">Too close to tell</span>
               )}
               <RangeBar seat={seat} />
-              <p className="mt-1 text-xs text-ink-min">
+              <p className="mt-1 text-small text-ink-min">
                 Bar: the 80% range; block: its middle ({seat.meanLabel}); dashed line: the usual
                 vote with incumbency and the national swing ({seat.priorLabel}).
               </p>
@@ -759,20 +760,20 @@ function SeatDetail({
           </div>
         ) : (
           <div>
-            <dt className="font-mono text-xs text-ink-min">No range</dt>
+            <dt className="font-mono text-small text-ink-min">No range</dt>
             <dd>{seat.reason}</dd>
           </div>
         )}
       </dl>
       {seat.status === "range" && (
         <>
-          <p className="text-xs">
+          <p className="text-small">
             {coverageSentence(data.calibration, data.chamber, seat.fundamentalsOnly)}
           </p>
-          <p className="text-xs">{pollSourceSentence(seat, data.pollWindowDays)}</p>
+          <p className="text-small">{pollSourceSentence(seat, data.pollWindowDays)}</p>
           {seat.polls.list.length > 0 && (
             <ul
-              className="space-y-1 border-t border-white/[0.07] pt-2 text-xs"
+              className="space-y-1 border-t border-white/[0.07] pt-2 text-small"
               aria-label={
                 seat.fundamentalsOnly ? "Newest polls, not in the range" : "Polls in the average"
               }
@@ -821,7 +822,7 @@ function SeatDetail({
         </>
       )}
       {seat.article?.url && (
-        <p className="text-xs text-ink-min">
+        <p className="text-small text-ink-min">
           Polls read from{" "}
           <a
             href={seat.article.url}
@@ -833,10 +834,10 @@ function SeatDetail({
           (Wikipedia contributors, CC BY-SA 4.0).
         </p>
       )}
-      <p className="font-mono text-xs text-ink-min">Not a race call.</p>
+      <p className="font-mono text-small text-ink-min">Not a race call.</p>
       <Link
         href={raceHref}
-        className="inline-flex min-h-11 items-center font-mono text-xs text-ink-hi underline"
+        className="inline-flex min-h-11 items-center font-mono text-small text-ink-hi underline"
       >
         {raceHref.startsWith("#") ? "→ Count and ballot" : "→ Race page"}
       </Link>
@@ -880,7 +881,7 @@ function SeatTable({ data, onSelect }: { data: ElectionMapData; onSelect: (id: s
     >
       <button
         type="button"
-        className="min-h-11 font-mono text-xs text-ink-lo hover:text-ink-hi"
+        className="min-h-11 font-mono text-small text-ink-lo hover:text-ink-hi"
         onClick={() => setSort((s) => ({ key, asc: s.key === key ? !s.asc : true }))}
       >
         {label}
@@ -890,7 +891,7 @@ function SeatTable({ data, onSelect }: { data: ElectionMapData; onSelect: (id: s
   );
   return (
     <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Every seat, as a table">
-      <table className="w-full min-w-[40rem] border-collapse text-sm text-ink-lo">
+      <table className="w-full min-w-[40rem] border-collapse text-small text-ink-lo">
         <caption className="sr-only">
           Every {data.cycle} {chamberWord(data.chamber)} seat: usual vote, margin range, polls used
           and difference
@@ -901,7 +902,7 @@ function SeatTable({ data, onSelect }: { data: ElectionMapData; onSelect: (id: s
             {th("usual", "Usual vote (lean)")}
             {th("range", "Margin range (80%)")}
             {th("polls", "Polls used")}
-            <th scope="col" className="px-2 py-1 text-left font-mono text-xs">
+            <th scope="col" className="px-2 py-1 text-left font-mono text-small">
               Latest poll
             </th>
             {th("diff", "Difference")}
@@ -926,11 +927,14 @@ function SeatTable({ data, onSelect }: { data: ElectionMapData; onSelect: (id: s
                     {rangeLabel(s)}
                     {crossesEven(s) ? " · close" : ""}
                     {s.rangeBasisShort && (
-                      <span className="font-sans text-xs text-ink-min"> ({s.rangeBasisShort})</span>
+                      <span className="font-sans text-small text-ink-min">
+                        {" "}
+                        ({s.rangeBasisShort})
+                      </span>
                     )}
                   </>
                 ) : (
-                  <span className="font-sans text-xs">
+                  <span className="font-sans text-small">
                     {s.status === "not_contested"
                       ? "No D-vs-R contest"
                       : s.status === "unconfirmed"
@@ -1126,7 +1130,7 @@ export default function ElectionMap({
       <div className="space-y-4">
         {/* Clear of the fixed site header when scrolled to: globals.css scroll-padding-top. */}
         <div id="map-views" {...{ [SHARE_EXCLUDE_ATTR]: "" }} className="space-y-3">
-          <div role="group" aria-label="Chamber" className="flex flex-wrap font-mono text-xs">
+          <div role="group" aria-label="Chamber" className="flex flex-wrap font-mono text-small">
             {MAP_CHAMBERS.map((c, i) => (
               <button
                 key={c}
@@ -1144,14 +1148,14 @@ export default function ElectionMap({
               </button>
             ))}
           </div>
-          <p aria-live="polite" className="font-mono text-xs text-ink-lo">
+          <p aria-live="polite" className="font-mono text-small text-ink-lo">
             {loading
               ? `Loading the ${chamberWord(loading)} map…`
               : loadError
                 ? "That map couldn't be loaded; try again."
                 : ""}
           </p>
-          <div role="group" aria-label="Map view" className="flex flex-wrap font-mono text-xs">
+          <div role="group" aria-label="Map view" className="flex flex-wrap font-mono text-small">
             {MAP_VIEWS.map((v, i) => {
               const disabled = v !== "usual" && !hasPolls;
               return (
@@ -1181,11 +1185,11 @@ export default function ElectionMap({
             })}
           </div>
           {!hasPolls && (
-            <p className="text-sm text-ink-lo">
+            <p className="text-small text-ink-lo">
               Polls and Difference are off: no seat has a poll-informed range yet.
             </p>
           )}
-          <p className="min-w-0 break-words font-mono text-xs text-ink-lo">
+          <p className="min-w-0 break-words font-mono text-small text-ink-lo">
             {changedLine(view, counts, data.national, data.bins)}
             {view !== "diff" && counts.differ > 0 && (
               <>
@@ -1223,13 +1227,13 @@ export default function ElectionMap({
           >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 id="general-map-stamp" className="font-mono text-xs text-ink-hi">
+                <h2 id="general-map-stamp" className={TYPE.kicker}>
                   {VIEW_STAMP[view]} · {CHAMBER_LABEL[chamber]}
                 </h2>
                 <p aria-live="polite" className="sr-only">
                   {stampSentence(view, counts, data.asOf)}
                 </p>
-                <p className="mt-1 text-sm text-ink-lo">
+                <p className="mt-1 text-small text-ink-lo">
                   {VIEW_EXPLAINER[view]}{" "}
                   <a
                     href="#method"
@@ -1246,13 +1250,13 @@ export default function ElectionMap({
               />
             </div>
             {!data.pollsInRange && view !== "usual" && (
-              <p className="mt-2 font-mono text-xs text-ink-hi">
+              <p className="mt-2 font-mono text-small text-ink-hi">
                 Fundamentals only · {data.daysToElection} days out.{" "}
                 <span className="text-ink-lo">{fundamentalsSentence(data.pollWindowDays)}</span>
               </p>
             )}
             {data.stale && (
-              <p className="mt-2 font-mono text-xs text-signal-amber">
+              <p className="mt-2 font-mono text-small text-signal-amber">
                 Not updated since {formatAsOf(data.asOf)}: the latest refreshes failed, so these
                 figures are older than usual.
               </p>
@@ -1272,7 +1276,7 @@ export default function ElectionMap({
             <div className="mt-3">
               <Legend data={data} view={view} />
               {view !== "usual" && (
-                <p className="mt-2 font-mono text-xs text-ink-lo">
+                <p className="mt-2 font-mono text-small text-ink-lo">
                   {nationalSentence(data.national)}
                 </p>
               )}
@@ -1284,7 +1288,7 @@ export default function ElectionMap({
               <div className="mt-3 md:hidden" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
                 <label
                   htmlFor="house-state-picker"
-                  className="block font-mono text-xs text-ink-min"
+                  className="block font-mono text-small text-ink-min"
                 >
                   Pick a state
                 </label>
@@ -1292,7 +1296,7 @@ export default function ElectionMap({
                   id="house-state-picker"
                   value={sheetState ?? ""}
                   onChange={(e) => e.target.value && openState(e.target.value)}
-                  className="mt-1 min-h-11 w-full border border-white/20 bg-surface-raised px-3 font-mono text-sm text-ink-hi"
+                  className="mt-1 min-h-11 w-full border border-white/20 bg-surface-raised px-3 font-mono text-small text-ink-hi"
                 >
                   <option value="">Choose a state…</option>
                   {[...new Map(data.seats.map((s) => [s.state, s.stateName])).entries()]
@@ -1315,7 +1319,7 @@ export default function ElectionMap({
             <div className="lg:hidden" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
               <ClosestSeats seats={data.seats} view={view} onSelect={select} />
             </div>
-            <p className="mt-3 border-t border-white/[0.07] pt-2 font-mono text-[11px] leading-relaxed text-ink-min">
+            <p className="mt-3 border-t border-white/[0.07] pt-2 font-mono text-small leading-relaxed text-ink-min">
               {footerText(data)}
             </p>
           </section>
@@ -1345,7 +1349,7 @@ export default function ElectionMap({
             ) : sheetState ? (
               <StateSheet data={data} state={sheetState} onSelect={select} onClose={close} />
             ) : (
-              <p className="text-sm text-ink-lo">
+              <p className="text-small text-ink-lo">
                 {chamber === "house"
                   ? "Choose a state for its seats, or a seat for its usual vote, its poll range, the polls behind it and a link to the race."
                   : "Choose a state for its usual vote, its poll range, the polls behind it and a link to the race."}
@@ -1360,13 +1364,13 @@ export default function ElectionMap({
             aria-expanded={tableOpen}
             aria-controls="general-map-table"
             onClick={() => setTableOpen((o) => !o)}
-            className="min-h-11 border border-white/20 px-4 font-mono text-xs text-ink-lo hover:text-ink-hi"
+            className="min-h-11 border border-white/20 px-4 font-mono text-small text-ink-lo hover:text-ink-hi"
           >
             Table {tableOpen ? "▴" : "▾"}
           </button>
           <a
             href={`${mapApi}.csv`}
-            className="inline-flex min-h-11 items-center border border-white/20 px-4 font-mono text-xs text-ink-lo hover:text-ink-hi"
+            className="inline-flex min-h-11 items-center border border-white/20 px-4 font-mono text-small text-ink-lo hover:text-ink-hi"
           >
             CSV
           </a>

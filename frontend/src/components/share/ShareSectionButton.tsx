@@ -19,7 +19,7 @@ type Capture =
   { state: "working" } | { state: "ready"; blob: Blob; previewUrl: string } | { state: "failed" };
 
 const ACTION =
-  "inline-flex min-h-[44px] items-center border px-3 font-mono text-xs transition-colors";
+  "inline-flex min-h-[44px] items-center border px-3 font-mono text-small transition-colors";
 
 /**
  * "Share" for one section of a page: turns the section (the nearest
@@ -36,7 +36,7 @@ export default function ShareSectionButton({
   withStrip = true,
   anchor,
   children = "Share",
-  className = `inline-flex min-h-11 sm:min-h-6 items-center border px-2 font-mono text-xs transition-colors ${BOXED_CONTROL.unselected}`,
+  className = `inline-flex min-h-11 sm:min-h-6 items-center border px-2 font-mono text-small transition-colors ${BOXED_CONTROL.unselected}`,
 }: {
   /** The section's name, for the button's accessible name and the dialog. */
   label: string;
@@ -188,14 +188,14 @@ export default function ShareSectionButton({
           <div className="flex min-h-40 items-center justify-center border border-white/[0.07] bg-surface">
             {capture.state === "working" && (
               // Announced through the status line below.
-              <p aria-hidden="true" className="font-mono text-xs text-ink-min">
+              <p aria-hidden="true" className="font-mono text-small text-ink-min">
                 Making the image…
               </p>
             )}
             {capture.state === "failed" && (
               // Announced through the status line below; hidden here so a
               // screen reader doesn't read it twice.
-              <p aria-hidden="true" className="px-4 py-6 font-mono text-xs text-ink-lo">
+              <p aria-hidden="true" className="px-4 py-6 font-mono text-small text-ink-lo">
                 The image couldn&apos;t be made in this browser. The link below still works.
               </p>
             )}
@@ -257,8 +257,8 @@ export default function ShareSectionButton({
             </button>
           </div>
 
-          <p className="break-all font-mono text-xs text-ink-min">{link}</p>
-          <p role="status" aria-live="polite" className="min-h-4 font-mono text-xs text-ink-lo">
+          <p className="break-all font-mono text-small text-ink-min">{link}</p>
+          <p role="status" aria-live="polite" className="min-h-4 font-mono text-small text-ink-lo">
             {status}
           </p>
         </div>

@@ -11,6 +11,7 @@ import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import { absoluteUrl } from "@/lib/site";
+import { TYPE } from "@/lib/typeStyles";
 
 /**
  * The comparison's voting record: how often the two voted the same way
@@ -52,11 +53,11 @@ export default function VotingAgreement({
     >
       <section
         aria-labelledby="voting-agreement"
-        className="border-t border-white/[0.07] bg-surface-base px-3 py-3 font-mono text-xs"
+        className="border-t border-white/[0.07] bg-surface-base px-3 py-3 font-mono text-small"
         {...{ [SHARE_SECTION_ATTR]: "voted-alike" }}
       >
         <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <h3 id="voting-agreement" className="text-ink-min">
+          <h3 id="voting-agreement" className={TYPE.boxTitle}>
             Voted alike · This Congress
           </h3>
           <ShareSectionButton label="Voted alike" anchor={null} />
@@ -64,7 +65,7 @@ export default function VotingAgreement({
         <p className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
           {data.agreementPct != null && (
             <>
-              <span className="font-display text-3xl font-semibold leading-none text-ink-hi tabular-nums">
+              <span className={`${TYPE.figure} tabular-nums text-ink-hi`}>
                 {data.agreementPct}%
               </span>
               <span aria-hidden="true" className="tracking-tight text-signal-cyan">
@@ -73,7 +74,7 @@ export default function VotingAgreement({
             </>
           )}
         </p>
-        <p className="mt-2 font-sans text-sm leading-snug text-ink">{data.sentence}</p>
+        <p className="mt-2 font-sans text-small leading-snug text-ink">{data.sentence}</p>
         {data.recentSplits.length > 0 && (
           <>
             <h4 className="mt-3 text-ink-min">Latest votes they split on</h4>
@@ -100,7 +101,7 @@ function Split({ vote: v, left, right }: { vote: AgreementSplit; left: string; r
     <li className="border-b border-white/[0.07] py-2 last:border-b-0">
       <Link
         href={rollCallHref(v)}
-        className="line-clamp-2 min-h-6 font-sans text-sm leading-snug text-ink-hi hover:underline"
+        className="line-clamp-2 min-h-6 font-sans text-small leading-snug text-ink-hi hover:underline"
       >
         {what}
       </Link>

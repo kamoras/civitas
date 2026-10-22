@@ -1,5 +1,5 @@
 import type { Senator } from "@/types/senator";
-import { TYPE } from "@/lib/typeStyles";
+import { TYPE, toned } from "@/lib/typeStyles";
 import type { Committee } from "@/types/politicians";
 import { asLabel, safeHref } from "@/lib/formatting";
 import { districtName } from "@/lib/elections";
@@ -8,7 +8,6 @@ import MetricTooltip from "@/components/checker/MetricTooltip";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import Photo from "@/components/Photo";
 import { onThisPage } from "@/lib/onThisPage";
-import { LONG_LABEL } from "@/lib/controlStyles";
 
 /**
  * `min-h-6` for WCAG 2.2 SC 2.5.8 (24x24 targets): the links sit in a
@@ -16,10 +15,10 @@ import { LONG_LABEL } from "@/lib/controlStyles";
  * exception.
  */
 const LINK =
-  "inline-flex min-h-6 items-center font-mono text-[13px] text-ink-lo underline underline-offset-2 hover:text-phos";
+  "inline-flex min-h-6 items-center font-mono text-small text-ink-lo underline underline-offset-2 hover:text-phos";
 
 const BUTTON =
-  "inline-flex min-h-11 items-center border border-ink-hi px-3 text-sm font-semibold text-ink-hi wrap-anywhere hover:bg-white/5";
+  "inline-flex min-h-11 items-center border border-ink-hi px-3 text-small font-semibold text-ink-hi wrap-anywhere hover:bg-white/5";
 
 /** A contact form's host, printed on its button ("wyden.senate.gov"). */
 function hostOf(url: string): string {
@@ -70,7 +69,7 @@ export default function ScorecardHeader({
 
   const initials = (
     <div
-      className={`flex h-14 w-12 shrink-0 items-center justify-center border-2 text-lg font-semibold sm:h-28 sm:w-24 sm:text-2xl ${PARTY_BORDER[member.party]} ${PARTY_COLORS[member.party]}`}
+      className={`${toned("boxTitle", PARTY_COLORS[member.party] ?? "text-ink-hi")} flex h-14 w-12 shrink-0 items-center justify-center border-2 sm:h-28 sm:w-24 ${PARTY_BORDER[member.party]}`}
       aria-hidden="true"
     >
       {member.initials}
@@ -107,19 +106,16 @@ export default function ScorecardHeader({
             size on a phone the name had about 110 px beside the photo and
             broke mid-word (WCAG 1.4.10). */}
         <div className="flex min-w-0 flex-1 basis-48 flex-col gap-2">
-          <Title
-            lang="en"
-            className={`${TYPE.title} break-words [hyphens:auto]`}
-          >
+          <Title lang="en" className={`${TYPE.title} break-words [hyphens:auto]`}>
             {member.name}
           </Title>
-          <p className={`font-mono text-ink-lo ${LONG_LABEL}`}>
+          <p className={`text-small text-ink-lo`}>
             {office} · {place} · {PARTY_LABELS[member.party] ?? member.party} · {tenure}
           </p>
           {(leadershipTitle || member.sponsorshipDescription) && (
-            <p className="flex flex-wrap items-center gap-2 text-sm text-ink-lo">
+            <p className="flex flex-wrap items-center gap-2 text-small text-ink-lo">
               {leadershipTitle && (
-                <span className="border border-signal-amber/40 bg-signal-amber/10 px-2 py-0.5 font-mono text-xs text-signal-amber">
+                <span className="border border-signal-amber/40 bg-signal-amber/10 px-2 py-0.5 font-mono text-small text-signal-amber">
                   {leadershipTitle}
                 </span>
               )}
@@ -135,7 +131,7 @@ export default function ScorecardHeader({
 
       <div className="flex min-w-0 flex-col gap-3 sm:pl-[calc(6rem+1.25rem)]">
         {committees && committees.length > 0 && (
-          <ul aria-label="Committees" className="flex flex-wrap gap-1.5 text-sm text-ink">
+          <ul aria-label="Committees" className="flex flex-wrap gap-1.5 text-small text-ink">
             {committees.map((c) => (
               <li key={c.committeeName} className="border border-white/30 px-2 py-0.5">
                 {c.committeeName.replace(/^(House|Senate) Committee on /, "")}
@@ -203,7 +199,7 @@ export default function ScorecardHeader({
           </a>
         </p>
         {!former && member.officeAddress && (
-          <p className="text-xs text-ink-min">DC office: {member.officeAddress}</p>
+          <p className="text-small text-ink-min">DC office: {member.officeAddress}</p>
         )}
       </div>
     </header>

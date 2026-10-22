@@ -69,16 +69,12 @@ export default function PresidentialSupportSection({
         <TerminalTitlebar title="With the president" />
         <div className="border border-t-0 border-white/[0.07] bg-surface-base p-4">
           <div className="flex flex-wrap items-baseline justify-between gap-3">
-            <h2
-              id="ps-heading"
-              {...onThisPage("With the president")}
-              className={TYPE.section}
-            >
+            <h2 id="ps-heading" {...onThisPage("With the president")} className={TYPE.section}>
               How often {name} votes with the president
             </h2>
             <ShareSectionButton label="With the president" />
           </div>
-          <p className="mt-2 max-w-2xl font-sans text-base leading-relaxed text-ink">
+          <p className="mt-2 max-w-2xl font-sans text-body leading-relaxed text-ink">
             {recordSentence(name, data)} {expectationSentence(data)}
           </p>
 
@@ -87,7 +83,7 @@ export default function PresidentialSupportSection({
           </div>
 
           <div className="mt-4">
-            <p className="font-mono text-xs text-ink-min">
+            <p className="font-mono text-small text-ink-min">
               Each square is one counted vote, oldest first · filled: on the president&apos;s side
             </p>
             <div aria-hidden="true" className="mt-2 flex max-w-2xl flex-wrap gap-[3px]">
@@ -111,11 +107,11 @@ export default function PresidentialSupportSection({
             open={open}
             onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}
           >
-            <summary className="inline-flex min-h-6 cursor-pointer items-center font-mono text-xs text-ink-lo hover:text-phos">
+            <summary className="inline-flex min-h-6 cursor-pointer items-center font-mono text-small text-ink-lo hover:text-phos">
               [The {data.votes} votes, the method and the data]
             </summary>
             <div className="mt-3 space-y-5">
-              <p className="font-mono text-xs text-ink-min">
+              <p className="font-mono text-small text-ink-min">
                 n = {data.votes} · rate {data.rate} · 95% range {data.rateLow} to {data.rateHigh} ·
                 expected {data.expected ?? "n/a"} · seat {leanLabel(data.seatLean)}
               </p>
@@ -126,7 +122,7 @@ export default function PresidentialSupportSection({
 
           <Link
             href={presidentSupportHref(data.chamber)}
-            className="mt-4 inline-block font-mono text-xs text-signal-cyan hover:text-phos"
+            className="mt-4 inline-block font-mono text-small text-signal-cyan hover:text-phos"
           >
             [Compare the whole {data.chamber === "senate" ? "Senate" : "House"}] →
           </Link>

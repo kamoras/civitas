@@ -156,17 +156,17 @@ function HoldingsDonut({
       >
         {focus ? (
           <>
-            <span className="text-ink-hi text-xl font-mono">{focus.shareShown ?? ""}</span>
-            <span className="text-ink text-xs leading-tight">{focus.label}</span>
-            <span className="text-ink-min text-[11px] font-mono mt-0.5">
+            <span className={`${TYPE.figure} text-ink-hi`}>{focus.shareShown ?? ""}</span>
+            <span className="text-ink text-small leading-tight">{focus.label}</span>
+            <span className="text-ink-min text-small font-mono mt-0.5">
               {focus.valueShown ??
                 formatBracket(focus.valueLow, focus.valueHigh, focus.openEnded, formatCurrency)}
             </span>
           </>
         ) : (
           <>
-            <span className="text-ink-hi text-xl font-mono">{holdingsCount}</span>
-            <span className="text-ink-lo text-xs">asset{holdingsCount !== 1 ? "s" : ""}</span>
+            <span className={`${TYPE.figure} text-ink-hi`}>{holdingsCount}</span>
+            <span className="text-ink-lo text-small">asset{holdingsCount !== 1 ? "s" : ""}</span>
           </>
         )}
       </div>
@@ -233,12 +233,12 @@ function CategoryLegend({
                 aria-hidden="true"
               />
               <span className="min-w-0">
-                <span className="text-ink text-sm">{c.label}</span>
+                <span className="text-ink text-small">{c.label}</span>
                 {/* Its own line, never truncated: the disclosed range is the
                     figure to quote, the share is only how the chart is drawn. */}
-                <span className="block text-ink-min text-xs">{legendDetail(c, when)}</span>
+                <span className="block text-ink-min text-small">{legendDetail(c, when)}</span>
               </span>
-              <span className="text-ink-hi text-sm font-mono">
+              <span className="text-ink-hi text-small font-mono">
                 {(c.weight > 0 && c.shareShown) || "—"}
               </span>
             </button>
@@ -255,8 +255,8 @@ function HoldingRow({ holding, when }: { holding: Holding; when: string }) {
       {/* anywhere, not break-word: a filer's asset or account name can be
           one long unspaced token, and only `anywhere` lets it shrink the
           row instead of widening it. */}
-      <div className="text-ink text-sm [overflow-wrap:anywhere]">{holding.assetName}</div>
-      <div className="flex items-center gap-2 flex-wrap text-xs text-ink-min mt-1">
+      <div className="text-ink text-small [overflow-wrap:anywhere]">{holding.assetName}</div>
+      <div className="flex items-center gap-2 flex-wrap text-small text-ink-min mt-1">
         <span className="text-ink-lo font-mono">{formatHoldingValue(holding, when)}</span>
         <span>{holding.categoryLabel}</span>
         <span>{OWNER_LABEL[holding.owner]}</span>
@@ -336,7 +336,7 @@ export default function Holdings({
   if (error && !data) {
     return (
       <div className="panel p-4 text-center" role="alert">
-        <span className="text-signal-red text-sm">{error}</span>
+        <span className="text-signal-red text-small">{error}</span>
       </div>
     );
   }
@@ -365,7 +365,7 @@ export default function Holdings({
   let chart: ReactNode;
   if (!data.parsed) {
     chart = (
-      <p className={`${box} text-sm text-ink-lo`}>
+      <p className={`${box} text-small text-ink-lo`}>
         {data.unreadableReason === "scanned"
           ? `The ${reportLabel} is a scanned paper filing, so its assets can't be read reliably enough to chart.`
           : `The ${reportLabel} isn't in a layout that can be read automatically, so its assets aren't charted here.`}{" "}
@@ -374,7 +374,7 @@ export default function Holdings({
     );
   } else if (!hasSlices) {
     chart = (
-      <p className={`${box} text-sm text-ink-lo`}>
+      <p className={`${box} text-small text-ink-lo`}>
         {data.holdingsCount === 0
           ? `The ${reportLabel} lists no assets.`
           : `The ${reportLabel} lists ${data.holdingsCount} asset${data.holdingsCount !== 1 ? "s" : ""}, ${
@@ -412,7 +412,7 @@ export default function Holdings({
         </div>
         {/* leading-6: the [?] is a 24px box on a 16px line, and on a
             wrapped line it overlapped "View filing" (axe target-size). */}
-        <p className="mt-3 text-xs leading-6 text-ink-min">
+        <p className="mt-3 text-small leading-6 text-ink-min">
           Disclosed value{" "}
           {formatBracket(data.totalLow, data.totalHigh, data.totalOpenEnded, formatCurrency)} across{" "}
           {data.holdingsCount} asset{data.holdingsCount !== 1 ? "s" : ""}
@@ -431,7 +431,7 @@ export default function Holdings({
   const notes = (
     <>
       {data.laterFilingUrl && (
-        <p className="text-xs text-ink-lo mt-2">
+        <p className="text-small text-ink-lo mt-2">
           Also filed, on or after this report&apos;s filing date: the{" "}
           {data.laterFilingLabel ?? "later filing"}. It states no date its holdings describe that
           can be read here, so it can&apos;t be placed against this one, and this section stays with
@@ -450,7 +450,7 @@ export default function Holdings({
               must show even with the list collapsed. The data shown is
               still the last that loaded. */}
       {error && (
-        <p className="text-signal-red text-sm mt-2" role="alert">
+        <p className="text-signal-red text-small mt-2" role="alert">
           {error}
         </p>
       )}
@@ -460,7 +460,7 @@ export default function Holdings({
     <>
       {hasList && (
         <div className="space-y-3 mt-4">
-          <p className="text-xs text-ink-min" aria-live="polite">
+          <p className="text-small text-ink-min" aria-live="polite">
             {selectedLabel
               ? `${selectedLabel}: ${data.total} holding${data.total !== 1 ? "s" : ""}, largest first · `
               : `All ${data.total} holdings, largest first`}
@@ -513,13 +513,13 @@ export default function Holdings({
         <header className="flex flex-wrap items-end justify-between gap-3 border-b border-white/25 bg-surface-raised px-5 py-4">
           <div className="min-w-0">
             <h2 className={TYPE.section}>Holdings</h2>
-            <p className="mt-1 font-mono text-xs text-ink-min">
+            <p className="mt-1 font-mono text-small text-ink-min">
               {reportLabel}
               {data.filedDate && data.asOfDate && ` · filed ${data.filedDate}`} · not part of the
               score
             </p>
           </div>
-          <span className="flex items-center gap-3 font-mono text-[13px]">
+          <span className="flex items-center gap-3 font-mono text-small">
             {sourceLink}
             {/* anchor={null}: this panel renders only after a client
                 fetch, so a cold load of /politicians/x#holdings has nothing
@@ -548,7 +548,7 @@ export default function Holdings({
                 aria-controls={listId}
                 onClick={() => setListOpen((o) => !o)}
                 {...{ [SHARE_EXCLUDE_ATTR]: "" }}
-                className="inline-flex min-h-11 items-center font-mono text-xs text-ink-lo hover:text-phos lg:hidden"
+                className="inline-flex min-h-11 items-center font-mono text-small text-ink-lo hover:text-phos lg:hidden"
               >
                 [{listOpen ? "Hide" : "Show"} all {data.holdingsCount} holdings]
               </button>

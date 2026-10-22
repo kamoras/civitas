@@ -38,6 +38,7 @@ import { SourceChip } from "@/components/shared/RecordBox";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import { SHARE_SECTION_ATTR, issueShareMeta } from "@/lib/shareImage";
+import { TYPE } from "@/lib/typeStyles";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
@@ -74,12 +75,10 @@ function Withdrawn({ retraction }: { retraction: Retraction }) {
       <Navbar />
       <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
         <div className="mx-auto flex max-w-2xl flex-col gap-4">
-          <p className="font-mono text-xs text-ink-min">Withdrawn {retraction.date}</p>
-          <h1 className="font-display text-3xl font-semibold text-ink-hi">
-            This issue was withdrawn
-          </h1>
+          <p className="font-mono text-small text-ink-min">Withdrawn {retraction.date}</p>
+          <h1 className={TYPE.title}>This issue was withdrawn</h1>
           <p className="leading-relaxed text-ink">{retraction.reason}</p>
-          <p className="text-sm text-ink-lo">
+          <p className="text-small text-ink-lo">
             Every withdrawal is listed, with its reason, in the public retraction log in the Civitas
             source code.{" "}
             <Link
@@ -183,7 +182,7 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
         <div className="relative z-10 mx-auto max-w-3xl">
           <Link
             href={ACTION_CENTER_HREF}
-            className="font-mono text-xs text-ink-lo hover:text-ink-hi"
+            className="font-mono text-small text-ink-lo hover:text-ink-hi"
           >
             ← Action Center
           </Link>
@@ -208,11 +207,11 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
                 <SourceChip type="news">Reported by {issue.headlineOutlet}</SourceChip>
               </div>
             )}
-            <h1 className="mt-3 text-balance font-display text-3xl font-semibold leading-tight tracking-[-0.01em] text-ink-hi sm:text-4xl">
+            <h1 className={`${TYPE.title} mt-3 text-balance`}>
               {issue.headlineOutlet ? <>&ldquo;{issue.title}&rdquo;</> : issue.title}
             </h1>
             {!restatesTitle(issue.title, issue.summary) && (
-              <p className="mt-4 font-sans text-base leading-relaxed text-ink sm:text-[17px]">
+              <p className="mt-4 font-sans text-body leading-relaxed text-ink">
                 {issue.summary}
                 <SummarySource issue={issue} />
               </p>
@@ -241,7 +240,7 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
 
           {/* Full story */}
           {paragraphs ? (
-            <article className="mb-4 mt-8 space-y-5 font-sans text-base leading-relaxed text-ink">
+            <article className="mb-4 mt-8 space-y-5 font-sans text-body leading-relaxed text-ink">
               {paragraphs.map((para, i) => {
                 // claims.build_story's only structure: "## Outlet" above
                 // that outlet's verbatim claims. Everything else is a
@@ -251,7 +250,7 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
                   return (
                     <h2
                       key={i}
-                      className="mt-10 border-b border-white/15 pb-2 font-mono text-xs text-ink-min first:mt-0"
+                      className={`${TYPE.kicker} mt-10 border-b border-white/15 pb-2 first:mt-0`}
                     >
                       {para.slice(3)}
                     </h2>

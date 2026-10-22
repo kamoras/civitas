@@ -66,8 +66,9 @@ export default function DataLicense() {
       <P>
         To cite a score, name the member, the score, the scoring version and the date it was
         computed (each profile&apos;s &ldquo;methods, data &amp; citation&rdquo; gives all four, as
-        does the API&apos;s <code className="font-mono text-xs text-ink-hi">algorithmVersion</code>{" "}
-        and <code className="font-mono text-xs text-ink-hi">scoredOn</code>), and link the
+        does the API&apos;s{" "}
+        <code className="font-mono text-small text-ink-hi">algorithmVersion</code> and{" "}
+        <code className="font-mono text-small text-ink-hi">scoredOn</code>), and link the
         record&apos;s page. How each score is computed:{" "}
         <A href="/about/scores">how senators and representatives are compared</A>.
       </P>

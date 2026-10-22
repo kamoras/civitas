@@ -7,6 +7,8 @@
    a reader's own text size scales them. TYPE in lib/typeStyles.ts pairs
    each with its face, weight and colour. */
 @theme {
+  /* Only the scale: Tailwind's own sizes (text-xs to text-9xl) are off. */
+  --text-*: initial;
   --text-display: 2.75rem;
   --text-display--line-height: 1.1;
   --text-title: 2.25rem;
@@ -39,12 +41,18 @@
 }
 
 /* A table header and bold text are the label weight: only 400 and 600 are
-   loaded, so the browser's 700 for <th>, <b> and <strong> was synthesised. */
+   loaded, so the browser's 700 for <th>, <b> and <strong> was synthesised.
+   A table header is the label size too, whatever its table's body text is
+   (a class on the cell still wins: this is the base layer). */
 @layer base {
   th,
   b,
   strong {
     font-weight: 600;
+  }
+  th {
+    font-size: var(--text-small);
+    line-height: var(--text-small--line-height);
   }
 }
 
@@ -627,29 +635,12 @@ input:focus-visible {
 }
 
 /* ===== A PHONE'S TYPE SCALE (mobile spec P1) =====
-   On a phone nothing a reader must read is under 13px. The site's data and
-   labels were 12px mono caps at 0.12-0.16em tracking: 72% of the
-   directory's text and half of a member page (2026-10-16). Labels are now
-   sentence case with no tracking (2026-10, "Letter case" in AGENTS.md).
-   Under 640px `text-xs` is 13px and the 9-12px one-offs are too (text
-   boxes and menus excepted: they take 16px, "Form controls on a phone"
-   below). Unlayered, so they beat the utilities. SVG text keeps its size: a
-   chart's labels are laid out for it. The tracked capitals left (the shared
-   eyebrow and the logotype) tighten to 0.08em, where wider would take the
-   width of 17px text. Labels of four words or more also go to 14px
-   (`labelCase` in lib/controlStyles.ts). */
+   On a phone nothing a reader must read is under 13px: the scale's
+   smallest step is 14px everywhere (`--text-small`, "One style per role"
+   above), and Tailwind's own sizes are switched off there, so a 9-12px
+   one-off can't come back. The tracked capitals left (the logotype)
+   tighten to 0.08em, where wider would take the width of 17px text. */
 @media (max-width: 639.98px) {
-  :root {
-    --text-xs: 0.8125rem;
-  }
-  :is(.text-\[9px\], .text-\[10px\], .text-\[11px\], .text-\[12px\]):not(
-    svg *,
-    input,
-    select,
-    textarea
-  ) {
-    font-size: 0.8125rem;
-  }
   :is(.tracking-\[0\.12em\], .tracking-\[0\.14em\], .tracking-\[0\.18em\]) {
     letter-spacing: 0.08em;
   }

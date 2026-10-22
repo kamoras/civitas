@@ -70,7 +70,7 @@ const GRADE_TEXT = {
   low: "Thin",
 } as const;
 
-const DT = "text-xs font-semibold text-ink-min";
+const DT = "text-small font-semibold text-ink-min";
 
 function count(n: number, one: string, many: string): string {
   return `${n.toLocaleString("en-US")} ${n === 1 ? one : many}`;
@@ -103,7 +103,7 @@ function SinceNote({ dim }: { dim: ScoreBreakdownDimension | undefined }) {
       ? `${since.billsChanged} ${since.billsChanged === 1 ? "bill" : "bills"} changed`
       : "Records changed";
   return (
-    <p className="border-l-2 border-signal-amber/60 pl-3 text-sm leading-relaxed text-ink-lo">
+    <p className="border-l-2 border-signal-amber/60 pl-3 text-small leading-relaxed text-ink-lo">
       {what} after {when ? `the run of ${when}` : "the run"}; the next nightly run includes them.
     </p>
   );
@@ -218,12 +218,12 @@ export default function MethodsLedger({
           className={`flex min-h-[44px] w-full flex-wrap items-baseline justify-between gap-3 bg-surface-raised px-5 py-4 text-left hover:text-phos ${open ? "border-b border-white/25" : ""}`}
         >
           <span>
-            <span aria-hidden="true" className="mr-2 font-mono text-ink-min">
+            <span aria-hidden="true" className="mr-2 text-ink-min">
               {open ? "−" : "+"}
             </span>
             Methods, data and citation
           </span>
-          <span className="text-xs font-normal text-ink-min">
+          <span className="font-sans text-small font-normal text-ink-min">
             {scoredOn ? `Updated ${scoredOn.date}` : "Not yet updated"}
             {scoredOn?.algorithmVersion ? ` · method ${scoredOn.algorithmVersion}` : ""} ·{" "}
             {currentCongressLabel()}
@@ -232,7 +232,7 @@ export default function MethodsLedger({
       </h2>
 
       <div id={bodyId} hidden={!open} className="flex flex-col gap-8 px-5 py-5">
-        <p className="max-w-3xl text-sm leading-relaxed text-ink-lo">
+        <p className="max-w-3xl text-small leading-relaxed text-ink-lo">
           Every figure on this page is read from public records by fixed rules, with no model
           judging the member, and refreshed each night. &ldquo;Record behind it&rdquo; says how much
           record the figures rest on (full, partial or thin, by fixed counts of votes, bills and
@@ -252,8 +252,8 @@ export default function MethodsLedger({
               key={m.key}
               className="flex flex-col gap-3 border-t border-white/[0.09] pt-5 first-of-type:border-t-0 first-of-type:pt-0"
             >
-              <h3 className={TYPE.section}>{m.name}</h3>
-              <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-[8rem_minmax(0,1fr)]">
+              <h3 className={TYPE.boxTitle}>{m.name}</h3>
+              <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-small sm:grid-cols-[8rem_minmax(0,1fr)]">
                 <dt className={DT}>Source</dt>
                 <dd className="text-ink-lo">{m.source(chamber)}</dd>
                 <dt className={DT}>Period</dt>
@@ -292,8 +292,8 @@ export default function MethodsLedger({
 
         <div className="grid grid-cols-1 gap-8 border-t border-white/[0.09] pt-5 lg:grid-cols-2">
           <div className="flex flex-col gap-2">
-            <h3 className="text-sm font-semibold text-ink-min">The record as data</h3>
-            <ul className="flex flex-col text-sm">
+            <h3 className={TYPE.kicker}>The record as data</h3>
+            <ul className="flex flex-col text-small">
               {[
                 [api, "Full record: funding, voting totals, data grades (JSON)"],
                 [
@@ -332,7 +332,7 @@ export default function MethodsLedger({
             </ul>
           </div>
           <div className="flex flex-col gap-2">
-            <h3 className="text-sm font-semibold text-ink-min">Cite this record</h3>
+            <h3 className={TYPE.kicker}>Cite this record</h3>
             <CiteThis
               title={`${member.name}, ${office}: record among peers, ${currentCongressLabel()}${version}`}
               date={scoredOn?.date}

@@ -22,6 +22,7 @@ import { formatDay, formatDuration, formatTime, statusClass } from "./format";
 import { ServiceHealth } from "./SystemDashboard";
 import { formatPct } from "./useHostHistory";
 import { emptyText, NotLoaded, Panel, StatTile, UsageBar } from "./widgets";
+import { TYPE } from "@/lib/typeStyles";
 
 /** The sub-dashboard a row links through to. */
 export type GoToTab = (tab: "traffic" | "pipelines" | "system") => void;
@@ -31,7 +32,7 @@ function MoreLink({ onClick, children }: { onClick: () => void; children: string
     <button
       type="button"
       onClick={onClick}
-      className="text-xs font-mono text-ink-min hover:text-ink-lo underline underline-offset-2"
+      className="text-small font-mono text-ink-min hover:text-ink-lo underline underline-offset-2"
     >
       {children} →
     </button>
@@ -72,14 +73,14 @@ function OpsAlertItem({ a }: { a: OpsAlert }) {
 export function OpsAlerts({ alerts }: { alerts: OpsAlert[] | undefined }) {
   if (!alerts) return <NotLoaded />;
   if (alerts.length === 0)
-    return <p className="text-xs font-mono text-ink-min">No alerts recorded.</p>;
+    return <p className="text-small font-mono text-ink-min">No alerts recorded.</p>;
   const active = alerts.filter((a) => a.open);
   const earlier = alerts.filter((a) => !a.open);
   const key = (a: OpsAlert) => `${a.at}-${a.subject}`;
   return (
-    <div className="space-y-4 text-xs font-mono">
+    <div className="space-y-4 text-small font-mono">
       <section aria-label="Active alerts">
-        <h3 className="mb-1 text-ink-lo">Active ({active.length})</h3>
+        <h3 className={`${TYPE.boxTitle} mb-1`}>Active ({active.length})</h3>
         {active.length === 0 ? (
           <p className="text-ink-min">Nothing is wrong right now.</p>
         ) : (
@@ -92,7 +93,7 @@ export function OpsAlerts({ alerts }: { alerts: OpsAlert[] | undefined }) {
       </section>
       {earlier.length > 0 && (
         <section aria-label="Earlier alerts">
-          <h3 className="mb-1 text-ink-lo">Earlier</h3>
+          <h3 className={`${TYPE.boxTitle} mb-1`}>Earlier</h3>
           <ul className="divide-y divide-white/[0.04]">
             {earlier.map((a) => (
               <OpsAlertItem key={key(a)} a={a} />
@@ -230,7 +231,7 @@ export function OverviewDashboard({
         />
         <StatTile
           label="Next scheduled run"
-          value={<span className="text-base">{formatTime(dashboard?.pipeline.nextScheduled)}</span>}
+          value={<span className="text-body">{formatTime(dashboard?.pipeline.nextScheduled)}</span>}
           note={dashboard?.pipeline.cronSchedule}
         />
       </div>
@@ -272,7 +273,7 @@ export function OverviewDashboard({
           title="Pipelines"
           actions={<MoreLink onClick={() => goTo("pipelines")}>Pipelines</MoreLink>}
         >
-          <table className="w-full text-xs font-mono">
+          <table className="w-full text-small font-mono">
             <caption className="sr-only">Latest run of each pipeline</caption>
             <thead>
               <tr className="text-ink-lo border-b border-white/[0.07]">
@@ -333,7 +334,7 @@ export function OverviewDashboard({
           actions={<MoreLink onClick={() => goTo("system")}>System</MoreLink>}
         >
           {host ? (
-            <div className="space-y-3 text-xs font-mono">
+            <div className="space-y-3 text-small font-mono">
               {[
                 {
                   label: "CPU",
@@ -379,7 +380,7 @@ export function OverviewDashboard({
               )}
             </div>
           ) : (
-            <p className="text-xs font-mono text-ink-min">Waiting for the first reading…</p>
+            <p className="text-small font-mono text-ink-min">Waiting for the first reading…</p>
           )}
         </Panel>
       </div>

@@ -7,6 +7,7 @@ import { congressGovCitedSource } from "@/lib/citedSources";
 import { longDate } from "@/lib/congress";
 import { ordinal } from "@/components/scorecard/format";
 import { onThisPage } from "@/lib/onThisPage";
+import { TYPE } from "@/lib/typeStyles";
 
 const LINK = "text-ink underline decoration-white/30 underline-offset-4 hover:text-phos";
 
@@ -83,25 +84,21 @@ export default function BillSources({
       aria-labelledby="sources"
       className="flex flex-col gap-6 border border-white/25 bg-surface p-5"
     >
-      <h2
-        id="sources"
-        {...onThisPage("Data and citation")}
-        className="font-display text-2xl font-semibold text-ink-hi"
-      >
+      <h2 id="sources" {...onThisPage("Data and citation")} className={TYPE.section}>
         Sources, data and citation
       </h2>
-      <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-sm sm:grid-cols-[7rem_minmax(0,1fr)]">
+      <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-small sm:grid-cols-[7rem_minmax(0,1fr)]">
         {sources.map(([term, text]) => (
           <div key={term} className="contents">
-            <dt className="font-mono text-xs text-ink-min">{term}</dt>
+            <dt className="font-mono text-small text-ink-min">{term}</dt>
             <dd className="leading-relaxed text-ink-lo">{text}</dd>
           </div>
         ))}
       </dl>
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
         <div className="flex flex-col gap-2">
-          <h3 className="font-mono text-xs text-ink-min">The record as data</h3>
-          <ul className="flex flex-col text-sm">
+          <h3 className={TYPE.kicker}>The record as data</h3>
+          <ul className="flex flex-col text-small">
             <li className="border-b border-white/[0.07] py-1.5">
               <a href={votesJson} className={LINK}>
                 Every roll call on {label}, with each party&apos;s split (JSON)
@@ -110,7 +107,7 @@ export default function BillSources({
             {congress && type && number && (
               <li className="border-b border-white/[0.07] py-1.5 text-ink-lo">
                 Congress.gov API:{" "}
-                <code className="break-all font-mono text-xs text-ink-hi">
+                <code className="break-all font-mono text-small text-ink-hi">
                   api.congress.gov/v3/bill/{congress}/{type}/{number}
                 </code>{" "}
                 (a free api.data.gov key)
@@ -128,7 +125,7 @@ export default function BillSources({
           </ul>
         </div>
         <div className="flex flex-col gap-2">
-          <h3 className="font-mono text-xs text-ink-min">Cite this bill page</h3>
+          <h3 className={TYPE.kicker}>Cite this bill page</h3>
           <CiteThis
             title={`${label}${title && title !== label ? `: ${title}` : ""}${congress ? ` (${ordinal(congress)} Congress)` : ""}`}
             date={record?.introducedDate ?? detail?.introducedDate ?? null}

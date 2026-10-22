@@ -124,7 +124,7 @@ export default function OnThisPage() {
       style={{ top: "var(--header-shown-h, var(--header-height))" }}
     >
       <div className="mx-auto flex h-11 w-full items-center justify-between gap-3 px-4">
-        <p className="min-w-0 truncate font-mono text-[0.8125rem] text-ink-hi">
+        <p className="min-w-0 truncate font-mono text-small text-ink-hi">
           {here ? here.label : "On this page"}
           {here?.count && <span className="text-ink-lo"> · {here.count}</span>}
         </p>
@@ -132,7 +132,7 @@ export default function OnThisPage() {
           type="button"
           aria-haspopup="dialog"
           onClick={() => setOpen(true)}
-          className="inline-flex h-11 shrink-0 items-center font-mono text-[0.8125rem] text-ink-lo hover:text-phos"
+          className="inline-flex h-11 shrink-0 items-center font-mono text-small text-ink-lo hover:text-phos"
         >
           <span aria-hidden="true">[&nbsp;</span>Sections<span aria-hidden="true">&nbsp;▾ ]</span>
         </button>
@@ -145,7 +145,7 @@ export default function OnThisPage() {
                 href={`#${s.id}`}
                 onClick={(e) => jump(e, s.id)}
                 aria-current={s.id === current ? "location" : undefined}
-                className={`flex min-h-13 items-center justify-between gap-3 px-4 font-sans text-[1.0625rem] hover:text-phos ${
+                className={`flex min-h-13 items-center justify-between gap-3 px-4 font-sans text-body hover:text-phos ${
                   s.id === current ? "bg-white/[0.06] text-ink-hi" : "text-ink"
                 }`}
               >
@@ -158,7 +158,7 @@ export default function OnThisPage() {
                   {s.label}
                 </span>
                 {s.count && (
-                  <span className="shrink-0 font-mono text-[0.9375rem] tabular-nums text-ink-lo">
+                  <span className="shrink-0 font-mono text-body tabular-nums text-ink-lo">
                     {s.count}
                   </span>
                 )}

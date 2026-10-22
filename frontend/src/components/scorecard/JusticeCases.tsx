@@ -15,7 +15,7 @@ const OPINION: Record<string, string> = {
 };
 
 const BUTTON =
-  "inline-flex min-h-11 items-center px-2 font-mono text-sm text-ink-hi underline underline-offset-4 hover:text-phos disabled:cursor-default disabled:text-ink-min disabled:no-underline";
+  "inline-flex min-h-11 items-center px-2 font-mono text-small text-ink-hi underline underline-offset-4 hover:text-phos disabled:cursor-default disabled:text-ink-min disabled:no-underline";
 
 /**
  * Every case on a justice's record, newest first, twenty at a time: the
@@ -46,27 +46,23 @@ export default function JusticeCases({ justiceId }: { justiceId: string }) {
       className="flex flex-col gap-4 border border-white/25 bg-surface px-5 py-5 font-sans"
     >
       <div>
-        <h2
-          id="cases-heading"
-          {...onThisPage("Every case")}
-          className={TYPE.section}
-        >
+        <h2 id="cases-heading" {...onThisPage("Every case")} className={TYPE.section}>
           Every case on the record
         </h2>
-        <p className="mt-1 font-mono text-xs text-ink-min">
+        <p className="mt-1 font-mono text-small text-ink-min">
           {data && data.total > 0
             ? `${data.total} orally argued cases · ${termsPhrase(data.terms)}`
             : "Orally argued cases, newest first"}
         </p>
       </div>
       {error ? (
-        <p className="text-base text-ink">The case list could not be loaded. Try again shortly.</p>
+        <p className="text-body text-ink">The case list could not be loaded. Try again shortly.</p>
       ) : !data ? (
-        <p className="text-base text-ink-lo" role="status">
+        <p className="text-body text-ink-lo" role="status">
           Loading the cases&hellip;
         </p>
       ) : data.total === 0 ? (
-        <p className="text-base text-ink">No decided case is on this justice&apos;s record yet.</p>
+        <p className="text-body text-ink">No decided case is on this justice&apos;s record yet.</p>
       ) : (
         <>
           <div
@@ -75,12 +71,12 @@ export default function JusticeCases({ justiceId }: { justiceId: string }) {
             role="region"
             aria-label="Cases on the record"
           >
-            <table className="w-full border-collapse text-sm">
+            <table className="w-full border-collapse text-small">
               <caption className="sr-only">
                 Cases on the record, newest first, page {data.page} of {pages}
               </caption>
               <thead>
-                <tr className="border-b border-white/15 text-left font-mono text-xs text-ink-min">
+                <tr className="border-b border-white/15 text-left font-mono text-small text-ink-min">
                   <th scope="col" className="py-2 pr-3 font-normal">
                     Case
                   </th>
@@ -97,7 +93,7 @@ export default function JusticeCases({ justiceId }: { justiceId: string }) {
                   <tr key={c.caseId} className="border-b border-white/[0.07] align-top">
                     <th scope="row" className="py-2.5 pr-3 text-left font-normal">
                       <span className="block text-ink-hi">{c.name}</span>
-                      <span className="block font-mono text-xs text-ink-lo">
+                      <span className="block font-mono text-small text-ink-lo">
                         {c.term} term{c.decided ? ` · decided ${c.decided}` : ""}
                       </span>
                       <CaseSources links={c.links} />
@@ -111,7 +107,7 @@ export default function JusticeCases({ justiceId }: { justiceId: string }) {
                             : c.vote}
                       </span>
                       {OPINION[c.opinion] && (
-                        <span className="block text-xs text-ink-lo">{OPINION[c.opinion]}</span>
+                        <span className="block text-small text-ink-lo">{OPINION[c.opinion]}</span>
                       )}
                     </td>
                     <td className="whitespace-nowrap py-2.5 text-right font-mono tabular-nums text-ink">
@@ -135,7 +131,7 @@ export default function JusticeCases({ justiceId }: { justiceId: string }) {
               >
                 &larr; Newer
               </button>
-              <span className="font-mono text-sm text-ink-lo" aria-live="polite">
+              <span className="font-mono text-small text-ink-lo" aria-live="polite">
                 Page {data.page} of {pages}
               </span>
               <button

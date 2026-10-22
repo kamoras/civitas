@@ -108,32 +108,29 @@ function Row({ m, me, showTable }: { m: PresidentPeerMeasure; me: Self; showTabl
       aria-labelledby={captionId}
       className="grid grid-cols-1 gap-x-6 gap-y-2 border-t border-white/25 px-4 py-4 [h3+&]:border-t-0 sm:px-6 md:grid-cols-[11rem_minmax(0,1fr)_9rem]"
     >
-      <div className="flex items-baseline justify-between gap-3 md:block">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 md:block">
         <div>
-          <p className={TYPE.section}>{m.label}</p>
-          <BigFigure
-            shown={m.shown}
-            className="text-2xl font-semibold leading-tight text-ink-hi sm:text-[28px]"
-          />
+          <p className={TYPE.kicker}>{m.label}</p>
+          <BigFigure shown={m.shown} className={`${TYPE.figure} text-ink-hi`} />
         </div>
         {word && (
           <p
-            className={`text-right text-[13px] font-semibold md:hidden ${strong ? "text-signal-orange" : "text-ink-lo"}`}
+            className={`text-right text-small font-semibold md:hidden ${strong ? "text-signal-orange" : "text-ink-lo"}`}
           >
             {word}
           </p>
         )}
       </div>
       <div className="min-w-0">
-        <p className="mb-1 text-sm text-ink">{m.why}</p>
+        <p className="mb-1 text-small text-ink">{m.why}</p>
         <Strip m={m} me={me} />
       </div>
       <p
-        className={`hidden self-center text-[13px] font-semibold md:block ${strong ? "text-signal-orange" : "text-ink-lo"}`}
+        className={`hidden self-center text-small font-semibold md:block ${strong ? "text-signal-orange" : "text-ink-lo"}`}
       >
         {word}
       </p>
-      <figcaption id={captionId} className="text-sm text-ink md:col-span-3">
+      <figcaption id={captionId} className="text-small text-ink md:col-span-3">
         <span className="sr-only">{m.label}: </span>
         {m.sentence} Compared with {m.peerGroup.n} {m.peerGroup.label}.
         {word && <span className="sr-only"> {word}.</span>}{" "}
@@ -147,7 +144,7 @@ function Row({ m, me, showTable }: { m: PresidentPeerMeasure; me: Self; showTabl
         </a>
       </figcaption>
       <details
-        className="group text-sm text-ink-lo md:col-span-3"
+        className="group text-small text-ink-lo md:col-span-3"
         {...{ [SHARE_EXCLUDE_ATTR]: "" }}
       >
         <summary className="inline-flex min-h-6 cursor-pointer items-center gap-1 font-semibold text-ink-hi underline-offset-2 hover:underline">
@@ -159,12 +156,12 @@ function Row({ m, me, showTable }: { m: PresidentPeerMeasure; me: Self; showTabl
         <p className="mt-1 max-w-prose">{m.measured}</p>
       </details>
       <div className={showTable ? "md:col-span-3" : "sr-only"}>
-        <table className="w-full max-w-md text-sm">
-          <caption className="text-left text-xs text-ink-min">
+        <table className="w-full max-w-md text-small">
+          <caption className="text-left text-small text-ink-min">
             {m.label}: the other {m.peerGroup.label}, lowest first
           </caption>
           <thead>
-            <tr className="text-left text-xs text-ink-min">
+            <tr className="text-left text-small text-ink-min">
               <th scope="col" className="py-1 font-semibold">
                 President
               </th>
@@ -232,11 +229,9 @@ export default function PresidentStanding({
       </div>
       {measures.length > 0 && (
         <div className="mt-4 border border-white/25 border-l-4 border-l-signal-orange bg-surface px-4 py-3 sm:px-6">
-          <p className="text-[13px] font-semibold text-signal-orange">Stands out</p>
-          <p className={`${TYPE.section} leading-snug`}>
-            {peers.standsOut}
-          </p>
-          <p className="mt-1 text-sm text-ink-lo">{peers.standsOutWhy}</p>
+          <p className="text-small font-semibold text-signal-orange">Stands out</p>
+          <p className={TYPE.boxTitle}>{peers.standsOut}</p>
+          <p className="mt-1 text-small text-ink-lo">{peers.standsOutWhy}</p>
         </div>
       )}
       {measures.length > 0 && (
@@ -245,7 +240,7 @@ export default function PresidentStanding({
             <div key={m.key}>
               {m.question !== measures[i - 1]?.question && (
                 <h3
-                  className={`${TYPE.section} px-4 pt-4 sm:px-6 ${i ? "border-t-2 border-ink-hi/60" : ""}`}
+                  className={`${TYPE.boxTitle} px-4 pt-4 sm:px-6 ${i ? "border-t-2 border-ink-hi/60" : ""}`}
                 >
                   {m.question}
                 </h3>
@@ -256,7 +251,7 @@ export default function PresidentStanding({
         </div>
       )}
       {peers.missing.length > 0 && (
-        <ul className="mt-3 flex flex-col gap-1 text-sm text-ink-lo">
+        <ul className="mt-3 flex flex-col gap-1 text-small text-ink-lo">
           {peers.missing.map((line) => (
             <li key={line}>{line}</li>
           ))}
@@ -264,7 +259,10 @@ export default function PresidentStanding({
       )}
       {measures.length > 0 && (
         <>
-          <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-lo" aria-hidden="true">
+          <p
+            className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-small text-ink-lo"
+            aria-hidden="true"
+          >
             <span>
               <Dot size={6} fill="var(--chart-muted)" className="mr-1 inline-block" />
               one presidency
@@ -280,7 +278,7 @@ export default function PresidentStanding({
             </span>
             <span>┆ the median, or what presidents starting from the same level saw</span>
           </p>
-          <p className="mt-2 max-w-prose text-xs text-ink-lo">
+          <p className="mt-2 max-w-prose text-small text-ink-lo">
             Each figure is compared with every other presidency that has it, within the era its
             series covers. The word is a fixed rule: outside the middle half ({lo}th to {hi}th
             percentile) reads &ldquo;above&rdquo; or &ldquo;below&rdquo;, and only with at least{" "}
@@ -292,13 +290,13 @@ export default function PresidentStanding({
               type="button"
               aria-pressed={showTable}
               onClick={() => setShowTable((v) => !v)}
-              className="min-h-11 border border-ink-hi bg-surface px-3 text-sm font-semibold text-ink-hi hover:bg-white/5"
+              className="min-h-11 border border-ink-hi bg-surface px-3 text-small font-semibold text-ink-hi hover:bg-white/5"
             >
               {showTable ? "Hide the tables" : "Show as a table"}
             </button>
             <Link
               href="/about/presidents-and-justices#presidents"
-              className="inline-flex min-h-11 items-center border border-ink-hi bg-surface px-3 text-sm font-semibold text-ink-hi hover:bg-white/5"
+              className="inline-flex min-h-11 items-center border border-ink-hi bg-surface px-3 text-small font-semibold text-ink-hi hover:bg-white/5"
             >
               How presidents are compared ▸
             </Link>

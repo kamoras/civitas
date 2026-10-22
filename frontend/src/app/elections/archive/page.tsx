@@ -10,6 +10,7 @@ import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
 import SectionTabs from "@/components/layout/SectionTabs";
 import { longDate } from "@/components/elections/archive/CycleArchive";
+import { TYPE } from "@/lib/typeStyles";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
@@ -62,9 +63,9 @@ export default async function ElectionArchiveIndexPage() {
           </PageMasthead>
           {index.cycles.length === 0 ? (
             <section className="border border-phos/20 bg-surface p-5">
-              <h2 className="font-mono text-xs text-ink-min">Nothing archived yet</h2>
+              <h2 className={TYPE.kicker}>Nothing archived yet</h2>
               <p className="mt-2 text-ink-lo">{next}</p>
-              <p className="mt-3 text-sm">
+              <p className="mt-3 text-small">
                 <Link
                   href="/elections"
                   className="inline-flex min-h-11 items-center text-ink-hi underline"
@@ -83,16 +84,14 @@ export default async function ElectionArchiveIndexPage() {
                       className="block border border-white/[0.09] bg-surface p-4 hover:border-phos/60"
                     >
                       <span className="flex flex-wrap items-baseline justify-between gap-2">
-                        <span className="font-display text-xl font-semibold text-ink-hi">
-                          The {c.cycle} general election →
-                        </span>
+                        <span className={TYPE.section}>The {c.cycle} general election →</span>
                         {c.stillCounting && (
-                          <span className="border border-signal-amber/40 px-2 py-0.5 font-mono text-[11px] text-ink-hi">
+                          <span className="border border-signal-amber/40 px-2 py-0.5 font-mono text-small text-ink-hi">
                             Count still moving
                           </span>
                         )}
                       </span>
-                      <span className="mt-1 block font-mono text-xs text-ink-lo">
+                      <span className="mt-1 block font-mono text-small text-ink-lo">
                         {longDate(c.electionDay)} · {c.races} federal races · {c.counted} with a
                         count read, {c.official} listed official
                         {c.stateContests ? ` · ${c.stateContests} state contests` : ""} ·{" "}
@@ -100,14 +99,14 @@ export default async function ElectionArchiveIndexPage() {
                         {c.hasMap ? " · the map before election day" : ""}
                       </span>
                       {c.accountability && (
-                        <span className="mt-1 block font-mono text-xs text-ink-hi">
+                        <span className="mt-1 block font-mono text-small text-ink-hi">
                           {c.accountability.graded > 0
                             ? `The map's ranges: ${c.accountability.held80} of ${c.accountability.graded} official margins inside the 80%, ${c.accountability.held95} inside the 95%`
                             : `The map's ranges: none graded yet, 0 of ${c.accountability.ranged} seats with a range official`}
                         </span>
                       )}
                       {c.recordAsOf && (
-                        <span className="mt-1 block font-mono text-[11px] text-ink-min">
+                        <span className="mt-1 block font-mono text-small text-ink-min">
                           Recorded {formatEasternTime(c.recordAsOf)}
                         </span>
                       )}
@@ -115,7 +114,7 @@ export default async function ElectionArchiveIndexPage() {
                   </li>
                 ))}
               </ol>
-              {next && <p className="text-sm text-ink-lo">{next}</p>}
+              {next && <p className="text-small text-ink-lo">{next}</p>}
             </>
           )}
         </div>

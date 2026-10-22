@@ -1,5 +1,6 @@
 import type { MapSeat, RangedSeat } from "@/types/electionMap";
 import { seatName, type MapView } from "@/lib/electionMap";
+import { TYPE } from "@/lib/typeStyles";
 
 /** How many seats the list shows; the table below the map has every one. */
 const SHOWN = 8;
@@ -49,10 +50,10 @@ export default function ClosestSeats({
   if (!rows.length) return null;
   return (
     <section aria-labelledby="closest-seats" className="mt-4">
-      <h3 id="closest-seats" className="font-mono text-xs text-ink-hi">
+      <h3 id="closest-seats" className={TYPE.kicker}>
         Closest seats
       </h3>
-      <p className="mt-1 text-sm text-ink-lo">
+      <p className="mt-1 text-small text-ink-lo">
         The {rows.length} {rows.length === 1 ? "seat" : "seats"} {HEADING[view]}.
       </p>
       <ul className="mt-2 border-t border-white/[0.09]">
@@ -63,9 +64,9 @@ export default function ClosestSeats({
               onClick={() => onSelect(s.id)}
               className="flex min-h-11 w-full items-center justify-between gap-3 text-left hover:text-phos"
             >
-              <span className="min-w-0 text-[15px] text-ink-hi">{seatName(s)}</span>
+              <span className="min-w-0 text-body text-ink-hi">{seatName(s)}</span>
               {/* Shrinks and wraps rather than widen the page (320px at 200% text). */}
-              <span className="flex min-w-0 items-center gap-2 text-right font-mono text-sm text-ink-lo [overflow-wrap:anywhere]">
+              <span className="flex min-w-0 items-center gap-2 text-right font-mono text-small text-ink-lo [overflow-wrap:anywhere]">
                 {view === "usual" || s.status !== "range"
                   ? (s.leanLabel ?? "")
                   : view === "polls"

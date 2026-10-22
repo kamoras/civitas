@@ -288,7 +288,7 @@ export default function DistrictMap({
   return (
     <div className="mb-4 border border-white/15">
       <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-white/10 px-3 py-2">
-        <p className="font-mono text-xs text-phos">
+        <p className="font-mono text-small text-phos">
           {results ? "Who leads each district" : "Point at where you live"}
         </p>
         {results ? (
@@ -296,7 +296,7 @@ export default function DistrictMap({
           // purple for a leader outside the two major parties and the dark
           // "no votes yet"), plus the hatch for a district Civitas shows no
           // count for.
-          <ul className="flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-[10px] text-ink-min">
+          <ul className="flex flex-wrap items-center gap-x-3 gap-y-0.5 font-mono text-small text-ink-min">
             <li>red = R leads · blue = D leads · purple = other or unstated party leads</li>
             <li>fainter = under half in · solid = count listed as official, still not called</li>
             <li className="flex items-center gap-1">
@@ -337,14 +337,14 @@ export default function DistrictMap({
             )}
           </ul>
         ) : unshaded ? (
-          <p className="font-mono text-[10px] text-ink-min">
+          <p className="font-mono text-small text-ink-min">
             {newLines ? `the new ${cycleYear ? `${cycleYear} ` : ""}districts · ` : ""}
             {showLean
               ? "no per-district lean published here yet"
               : "no lean shown from election day"}
           </p>
         ) : (
-          <p className="font-mono text-[10px] text-ink-min">
+          <p className="font-mono text-small text-ink-min">
             {newLines ? `the new ${cycleYear ? `${cycleYear} ` : ""}districts · ` : ""}
             redder = safer R · bluer = safer D · fainter = closer
             {stateLevel > 0 && " · grey = no district lean yet"}
@@ -454,7 +454,7 @@ export default function DistrictMap({
 
       <div
         aria-live="polite"
-        className="min-h-[3.25rem] border-t border-white/10 px-3 py-2 font-mono text-xs"
+        className="min-h-[3.25rem] border-t border-white/10 px-3 py-2 font-mono text-small"
       >
         {focus != null && results && (focusRace || results.has(focus)) ? (
           // By results, a count with no ballot race previews like any other.

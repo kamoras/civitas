@@ -35,7 +35,7 @@ function Lede({ facts, chamber }: { facts: EffectivenessFacts; chamber: "senate"
       : "";
   if (bills === 0) {
     return (
-      <p className="text-base leading-relaxed text-ink">
+      <p className="text-body leading-relaxed text-ink">
         No bills sponsored this Congress{besides}.
       </p>
     );
@@ -43,7 +43,7 @@ function Lede({ facts, chamber }: { facts: EffectivenessFacts; chamber: "senate"
   const [, committee, beyond, passed, law] = billsByStage;
   const chamberName = chamber === "house" ? "the House" : "the Senate";
   return (
-    <p className="text-base leading-relaxed text-ink">
+    <p className="text-body leading-relaxed text-ink">
       Sponsored {count(bills, "bill", "bills")} this Congress{besides}.{" "}
       {passed > 0 ? `${passed} passed ${chamberName}` : `None has passed ${chamberName}`}
       {committee + beyond > 0 ? `, ${committee + beyond} got committee action` : ""};{" "}
@@ -94,7 +94,7 @@ export default function EffectivenessColumn({
       {facts?.bills != null && dimension?.finding ? (
         // The finding states the bills; the stage counts are charted below.
         facts.resolutions > 0 && (
-          <p className="text-sm leading-relaxed text-ink-lo">
+          <p className="text-small leading-relaxed text-ink-lo">
             Besides these,{" "}
             {count(
               facts.resolutions,
@@ -107,7 +107,7 @@ export default function EffectivenessColumn({
       ) : facts?.bills != null ? (
         <Lede facts={facts} chamber={chamber} />
       ) : (
-        !facts && <p className="text-base text-ink-lo">No sponsored bills on record yet.</p>
+        !facts && <p className="text-body text-ink-lo">No sponsored bills on record yet.</p>
       )}
 
       {byStage && total > 0 && (
@@ -116,7 +116,7 @@ export default function EffectivenessColumn({
             {byStage.map((n, i) => (
               <li
                 key={labels[i]}
-                className="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)_2rem] items-center gap-2.5 text-sm"
+                className="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)_2rem] items-center gap-2.5 text-small"
               >
                 <span className="text-ink-lo">{labels[i]}</span>
                 <span className="h-1.5 bg-white/[0.07]" aria-hidden="true">
@@ -136,7 +136,7 @@ export default function EffectivenessColumn({
         <Block label="Furthest along">
           <ul className="flex flex-col gap-1.5">
             {furthest.map((b) => (
-              <li key={b.billId} className="flex items-baseline justify-between gap-3 text-sm">
+              <li key={b.billId} className="flex items-baseline justify-between gap-3 text-small">
                 <Link
                   href={billHref(b.billId, b.congress)}
                   className="line-clamp-2 min-w-0 text-ink underline decoration-white/15 underline-offset-2 hover:text-phos"
@@ -146,7 +146,7 @@ export default function EffectivenessColumn({
                 </Link>
                 {/* Capped so a long stage name wraps in its own column: at 200%
                     text on a phone it ran past the screen. */}
-                <span className="max-w-[45%] shrink-0 text-right font-mono text-xs text-ink-min">
+                <span className="max-w-[45%] shrink-0 text-right font-mono text-small text-ink-min">
                   {(b.stage && config?.billStages[b.stage]?.name) || b.stage}
                 </span>
               </li>

@@ -53,7 +53,7 @@ function ActionCenterStatus({ ac }: { ac: ActionRefreshState | null }) {
 
   if (!ac || (!ac.isRunning && !ac.lastCompletedAt)) {
     return (
-      <div className="p-4 text-xs font-mono text-ink-min">
+      <div className="p-4 text-small font-mono text-ink-min">
         No data yet: status available after first refresh.
       </div>
     );
@@ -74,7 +74,7 @@ function ActionCenterStatus({ ac }: { ac: ActionRefreshState | null }) {
   const subStep = ac.stageDetail && !progressMatch ? ac.stageDetail : null;
 
   return (
-    <div className="p-4 space-y-3 text-xs font-mono">
+    <div className="p-4 space-y-3 text-small font-mono">
       {/* Status + elapsed */}
       <div className="flex items-center justify-between">
         <span className="text-ink-lo">Status</span>
@@ -197,13 +197,13 @@ export function ActionTapsPanel({ token }: { token: string }) {
   const contacts = (r: { call: number; write: number }) => r.call + r.write;
   return (
     <Panel title="Action taps">
-      <p className="mb-4 text-xs font-mono text-ink-min">
+      <p className="mb-4 text-small font-mono text-ink-min">
         Taps on an issue&apos;s action links over 30 days, counted per day, issue and kind and
         nothing else: no address, hash or browser, and not which state, member or number. A state
         pick followed by no call is a reader who looked and stopped.
       </p>
       {failed ? (
-        <p className="text-xs font-mono text-signal-amber">Couldn&apos;t load action taps.</p>
+        <p className="text-small font-mono text-signal-amber">Couldn&apos;t load action taps.</p>
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <LineChart
@@ -263,7 +263,7 @@ export function ActorConcentrationPanel({ token }: { token: string }) {
   const share = (n: number, of: number) => (of ? n / of : null);
   return (
     <Panel title="Who leads the issues">
-      <p className="mb-4 text-xs font-mono text-ink-min">
+      <p className="mb-4 text-small font-mono text-ink-min">
         Each published news issue&apos;s principal actor is the official named first in its
         headline, or the kind of story when it names none. The Herfindahl index is the sum of
         squared shares: 1.0 when one actor leads every issue of the week, lower as the lead spreads.
@@ -301,7 +301,7 @@ export function ActorConcentrationPanel({ token }: { token: string }) {
             data ? "No labelled issues yet." : failed ? "Couldn't load concentration." : "Loading…"
           }
         />
-        <div className="text-xs font-mono">
+        <div className="text-small font-mono">
           {current && current.top ? (
             <dl className="grid grid-cols-2 gap-x-4 gap-y-1">
               <dt className="text-ink-lo">This week</dt>
@@ -445,7 +445,7 @@ export function ActionCenterDashboard({
       <div className="flex flex-wrap items-center gap-4">
         <Segmented label="Window" options={WINDOW_OPTIONS} value={limit} onChange={setLimit} />
         {refetchFailed && (
-          <span role="status" className="text-xs font-mono text-signal-amber">
+          <span role="status" className="text-small font-mono text-signal-amber">
             Couldn&apos;t refresh: showing data from {fetchedAt ? hourLabel(fetchedAt) : "—"}
           </span>
         )}
@@ -516,7 +516,7 @@ export function ActionCenterDashboard({
       </div>
 
       <Panel title="Output vs suppression">
-        <p className="mb-4 text-xs font-mono text-ink-min">
+        <p className="mb-4 text-small font-mono text-ink-min">
           Every gate fails closed, so silence is the failure mode. Healthy intake with output near
           zero and suppression climbing is a validator dropping everything; intake near zero is a
           quiet news cycle or a broken feed.
@@ -553,7 +553,9 @@ export function ActionCenterDashboard({
                 labelWidth="w-48"
               />
             ) : (
-              <p className="text-xs font-mono text-ink-min">Nothing suppressed in this window.</p>
+              <p className="text-small font-mono text-ink-min">
+                Nothing suppressed in this window.
+              </p>
             )}
           </div>
         </div>

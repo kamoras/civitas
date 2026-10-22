@@ -13,26 +13,24 @@ type Props<T extends string> = HTMLAttributes<HTMLElement> & {
   children: ReactNode;
 };
 
+// The element: its level in the outline (the look is the role).
+type Level = "h1" | "h2" | "h3" | "h4" | "p";
+
 const join = (role: string, extra?: string) => (extra ? `${role} ${extra}` : role);
 
 /** The page's h1. */
-export function PageTitle({ as: Tag = "h1", className, ...rest }: Props<"h1" | "h2" | "p">) {
+export function PageTitle({ as: Tag = "h1", className, ...rest }: Props<Level>) {
   return <Tag className={join(TYPE.title, className)} {...rest} />;
 }
 
 /** A part of the page: its h2. */
-export function SectionHeading({ as: Tag = "h2", className, ...rest }: Props<"h2" | "h3">) {
+export function SectionHeading({ as: Tag = "h2", className, ...rest }: Props<Level>) {
   return <Tag className={join(TYPE.section, className)} {...rest} />;
 }
 
 /** A box's or a list item's title: its h3. */
-export function BoxTitle({ as: Tag = "h3", className, ...rest }: Props<"h2" | "h3" | "h4" | "p">) {
+export function BoxTitle({ as: Tag = "h3", className, ...rest }: Props<Level>) {
   return <Tag className={join(TYPE.boxTitle, className)} {...rest} />;
-}
-
-/** One line under the title saying what the page is for. */
-export function Dek({ className, ...rest }: Omit<Props<never>, "as">) {
-  return <p className={join(TYPE.dek, className)} {...rest} />;
 }
 
 /** Where a figure or a section's data came from, and as of when. */

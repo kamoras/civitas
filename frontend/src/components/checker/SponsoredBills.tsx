@@ -8,6 +8,7 @@ import MetricTooltip from "./MetricTooltip";
 import { PARTY_BADGE, policyAreaBadgeClass } from "@/lib/partyStyles";
 import { billHref } from "@/lib/congress";
 import { policyAreaLabel } from "@/lib/formatting";
+import { TYPE } from "@/lib/typeStyles";
 
 interface SponsoredBillsProps {
   bills: SponsoredBill[];
@@ -90,7 +91,7 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
       source="congress.gov"
     >
       <div className="space-y-3">
-        <div className="grid grid-cols-3 gap-2 text-center text-sm">
+        <div className="grid grid-cols-3 gap-2 text-center text-small">
           <FilterTile
             count={bills.length}
             label="Bills sponsored"
@@ -123,7 +124,7 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
         {filter !== "all" && (
           <button
             onClick={() => setFilter("all")}
-            className="font-mono text-xs text-ink-min hover:text-phos transition-colors"
+            className="font-mono text-small text-ink-min hover:text-phos transition-colors"
           >
             Clear filter
           </button>
@@ -146,30 +147,32 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
                     <div className="flex items-center gap-2 flex-wrap">
                       <Link
                         href={url}
-                        className="text-sm text-ink hover:text-phos transition-colors"
+                        className="text-small text-ink hover:text-phos transition-colors"
                       >
                         {bill.title}
                       </Link>
                     </div>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      <span className="text-xs text-ink-min">{bill.billId}</span>
+                      <span className="text-small text-ink-min">{bill.billId}</span>
                       {bill.introducedDate && (
-                        <span className="text-xs text-ink-min">{bill.introducedDate}</span>
+                        <span className="text-small text-ink-min">{bill.introducedDate}</span>
                       )}
                       {bill.isLaw && (
-                        <span className="text-xs px-1.5 py-0.5 border text-signal-cyan border-white/15 bg-signal-cyan/10 font-mono">
+                        <span className="text-small px-1.5 py-0.5 border text-signal-cyan border-white/15 bg-signal-cyan/10 font-mono">
                           Signed into law
                         </span>
                       )}
                       {bill.commemorative && (
-                        <span className="text-xs px-1.5 py-0.5 border border-white/15 text-ink-lo font-mono">
+                        <span className="text-small px-1.5 py-0.5 border border-white/15 text-ink-lo font-mono">
                           <MetricTooltip text="Reads as commemorative: naming a post office or building, awarding a medal, recognising a person or event. Detected from the title by a classifier calibrated against their coding.">
                             Commemorative · 1×
                           </MetricTooltip>
                         </span>
                       )}
                       {badge && (
-                        <span className={`text-xs px-1 py-0.5 border font-mono ${badge.className}`}>
+                        <span
+                          className={`text-small px-1 py-0.5 border font-mono ${badge.className}`}
+                        >
                           {badge.label}
                         </span>
                       )}
@@ -178,7 +181,7 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
                         .map((a) => (
                           <span
                             key={a.area}
-                            className={`text-xs px-1.5 py-0.5 border ${policyAreaBadgeClass(a.party)}`}
+                            className={`text-small px-1.5 py-0.5 border ${policyAreaBadgeClass(a.party)}`}
                           >
                             {policyAreaLabel(a.area)}
                           </span>
@@ -188,7 +191,7 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
                       // Wraps, never truncated: the action is the bill's current status,
                       // and an ellipsis cut even a routine "Referred to the House
                       // Committee on..." short on a phone, with no way to read the rest.
-                      <div className="text-xs text-ink-min mt-1 break-words">
+                      <div className="text-small text-ink-min mt-1 break-words">
                         {bill.latestAction}
                       </div>
                     )}
@@ -200,13 +203,13 @@ export default function SponsoredBills({ bills }: SponsoredBillsProps) {
         </div>
 
         {filtered.length === 0 && (
-          <div className="text-xs text-ink-min font-mono py-2">No bills match this filter.</div>
+          <div className="text-small text-ink-min font-mono py-2">No bills match this filter.</div>
         )}
 
         {filtered.length > INITIAL_VISIBLE && (
           <button
             onClick={() => setShowAll(!showAll)}
-            className="text-xs text-ink-lo hover:text-phos transition-colors font-mono"
+            className="text-small text-ink-lo hover:text-phos transition-colors font-mono"
           >
             {showAll ? `[-] Show less` : `[+] Show all ${filtered.length} bills`}
           </button>
@@ -256,16 +259,14 @@ function FilterTile({
         aria-pressed={pressed}
         className={`block w-full ${empty ? "cursor-default" : "cursor-pointer"}`}
       >
-        <span
-          className={`block text-xl font-display font-semibold ${empty ? "text-ink-min" : countClass}`}
-        >
+        <span className={`${TYPE.section} block ${empty ? "text-ink-min!" : `${countClass}!`}`}>
           {count}
         </span>{" "}
         {/* 11px below sm: SPONSORED and ADVANCING are wider than a
             third-width tile's label box at 320px and split mid-word. */}
-        <span className="block text-[11px] text-ink-min sm:text-xs">{label}</span>
+        <span className="block text-small text-ink-min">{label}</span>
       </button>
-      <span className="text-xs text-ink-min">
+      <span className="text-small text-ink-min">
         <MetricTooltip text={help} />
       </span>
     </div>

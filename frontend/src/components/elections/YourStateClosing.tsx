@@ -21,8 +21,8 @@ export default function YourStateClosing({ rows }: { rows: RegistrationClosing[]
   const name = STATE_NAMES[state] ?? state;
   const href = `${stateBallotHref(state)}#voter-deadlines`;
   return (
-    <p className="mt-2 border-l-2 border-phos/60 pl-2 text-sm text-ink">
-      <span className="font-mono text-xs text-ink-min">Your state · </span>
+    <p className="mt-2 border-l-2 border-phos/60 pl-2 text-small text-ink">
+      <span className="font-mono text-small text-ink-min">Your state · </span>
       {row ? (
         <>
           <Link

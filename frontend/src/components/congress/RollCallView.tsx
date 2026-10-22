@@ -20,6 +20,7 @@ import { STATUS_LABEL, nominationHref } from "@/lib/nominations";
 import type { NominationVote, RollCallNomination } from "@/types/nomination";
 import OnThisPage from "@/components/shared/OnThisPage";
 import { onThisPage } from "@/lib/onThisPage";
+import { TYPE } from "@/lib/typeStyles";
 
 const LINK = "text-ink underline decoration-white/30 underline-offset-4 hover:text-phos";
 const SOURCE_NAME = { senate: "Senate.gov", house: "the House Clerk" } as const;
@@ -76,7 +77,7 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
             <div>
               <SectionTabs section="congress" active="reports" />
               {/* Under 640px the section row above names where this page sits. */}
-              <nav aria-label="Breadcrumb" className="hidden sm:block text-sm text-ink-lo">
+              <nav aria-label="Breadcrumb" className="hidden sm:block text-small text-ink-lo">
                 <Link href="/congress" className="hover:text-phos">
                   Congress
                 </Link>
@@ -100,17 +101,14 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
             >
               <header className="flex flex-col gap-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="font-mono text-xs text-ink-lo">{eyebrow}</p>
+                  <p className="font-mono text-small text-ink-lo">{eyebrow}</p>
                   <ShareSectionButton label="This vote" withStrip={false} />
                 </div>
-                <h1
-                  id="vote-title"
-                  className="max-w-4xl font-display text-2xl font-semibold leading-tight text-ink-hi sm:text-4xl"
-                >
+                <h1 id="vote-title" className={`${TYPE.title} max-w-4xl`}>
                   {subject}
                 </h1>
                 {(vote.question !== subject || (vote.billId && vote.billLabel)) && (
-                  <p className="text-base text-ink">
+                  <p className="text-body text-ink">
                     {/* An election of the Speaker has no title: the question is the h1. */}
                     {vote.question !== subject && vote.question}
                     {vote.billId && vote.billLabel && (
@@ -135,23 +133,19 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
                     <dl className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 gap-y-1">
                       {vote.candidates.map((c) => (
                         <div key={c.name} className="contents">
-                          <dt className="text-base text-ink">{c.name}</dt>
-                          <dd className="font-mono text-3xl leading-none tabular-nums text-ink-hi">
-                            {c.votes}
-                          </dd>
+                          <dt className="text-body text-ink">{c.name}</dt>
+                          <dd className={`${TYPE.figure} tabular-nums text-ink-hi`}>{c.votes}</dd>
                         </div>
                       ))}
                     </dl>
                   ) : vote.kind === "quorum" ? (
-                    <p className="font-mono text-3xl leading-none tabular-nums text-ink-hi">
-                      {voteTally(vote)}
-                    </p>
+                    <p className={`${TYPE.figure} tabular-nums text-ink-hi`}>{voteTally(vote)}</p>
                   ) : (
                     <p className="flex flex-col gap-2">
-                      <VoteCount vote={vote} size="text-5xl" />
+                      <VoteCount vote={vote} lead />
                     </p>
                   )}
-                  <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 font-mono text-xs">
+                  <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 font-mono text-small">
                     {counts.map(([label, n]) => (
                       <div key={label} className="contents">
                         <dt className="text-ink-min">{label}</dt>
@@ -170,7 +164,7 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
                   // An election of the Speaker is votes for names, not yea
                   // and nay: each party's candidates, as the bars show them.
                   <div className="flex flex-col gap-3">
-                    <h2 className="font-mono text-xs text-ink-min">By party</h2>
+                    <h2 className={TYPE.kicker}>By party</h2>
                     {vote.parties.map((p) => (
                       <PartyBar key={p.party} split={p} />
                     ))}
@@ -185,10 +179,10 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
               <h2
                 id="members"
                 {...onThisPage(`How each ${MEMBERS[vote.chamber]} voted`, vote.members.length)}
-                className="font-display text-2xl font-semibold text-ink-hi"
+                className={TYPE.section}
               >
                 How each {MEMBERS[vote.chamber]} voted
-                <span className="ml-2 font-mono text-sm font-normal text-ink-min">
+                <span className="ml-2 font-mono text-small font-normal text-ink-min">
                   {vote.members.length}
                 </span>
               </h2>
@@ -199,15 +193,11 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
               aria-labelledby="sources"
               className="flex flex-col gap-6 border border-white/25 bg-surface p-5"
             >
-              <h2
-                id="sources"
-                {...onThisPage("Source and citation")}
-                className="font-display text-2xl font-semibold text-ink-hi"
-              >
+              <h2 id="sources" {...onThisPage("Source and citation")} className={TYPE.section}>
                 Source and citation
               </h2>
               <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-                <ul className="flex flex-col text-sm">
+                <ul className="flex flex-col text-small">
                   {vote.sourceUrl && (
                     <li className="border-b border-white/[0.07] py-1.5 text-ink-lo">
                       The roll call as {SOURCE_NAME[vote.chamber]} records it:{" "}
@@ -245,7 +235,7 @@ export default function RollCallView({ vote, path }: { vote: VoteDetail; path: s
                   </li>
                 </ul>
                 <div className="flex flex-col gap-2">
-                  <h3 className="font-mono text-xs text-ink-min">Cite this vote</h3>
+                  <h3 className={TYPE.kicker}>Cite this vote</h3>
                   <CiteThis
                     title={`Roll call vote ${vote.number}, ${ordinal(vote.congress)} Congress, ${ordinal(vote.session)} session: ${subject}`}
                     date={vote.date}
@@ -277,12 +267,12 @@ function NominationLinks({ nv }: { nv: NominationVote }) {
     const n = nv.nominations[0];
     if (!n)
       return (
-        <p className="text-sm text-ink-lo">
+        <p className="text-small text-ink-lo">
           {nv.label}. The nomination&apos;s record isn&apos;t read yet.
         </p>
       );
     return (
-      <p className="text-sm text-ink-lo">
+      <p className="text-small text-ink-lo">
         {nv.label}. The nomination&apos;s record, with its committee, hearings and every action:{" "}
         <Link href={nominationHref(n)} className={LINK}>
           {label(n)}
@@ -290,7 +280,7 @@ function NominationLinks({ nv }: { nv: NominationVote }) {
         {nv.kind === "confirm" && (
           <>
             {" "}
-            <span className="font-mono text-xs text-ink-min">{STATUS_LABEL[n.status]}</span>
+            <span className="font-mono text-small text-ink-min">{STATUS_LABEL[n.status]}</span>
           </>
         )}
       </p>
@@ -298,8 +288,8 @@ function NominationLinks({ nv }: { nv: NominationVote }) {
   }
   const unread = nv.citationCount - nv.nominations.length;
   return (
-    <details className="text-sm text-ink-lo">
-      <summary className="cursor-pointer font-mono text-xs hover:text-phos">
+    <details className="text-small text-ink-lo">
+      <summary className="cursor-pointer font-mono text-small hover:text-phos">
         [{nv.label} on {nv.citationCount} nominations at once, each with its record]
       </summary>
       <ul className="mt-2 flex flex-col gap-1">

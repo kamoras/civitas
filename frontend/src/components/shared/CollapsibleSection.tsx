@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useId, useState, type ReactNode } from "react";
+import { toned } from "@/lib/typeStyles";
 
 /**
  * What heading level these sections sit at.
@@ -74,8 +75,8 @@ export default function CollapsibleSection({
     return (
       <div>
         <div className="w-full flex items-baseline justify-between mb-3">
-          <Heading className={`text-lg ${titleColor}`}>{title}</Heading>
-          {source && <span className="text-xs text-ink-lo hidden sm:inline">{source}</span>}
+          <Heading className={toned("boxTitle", titleColor)}>{title}</Heading>
+          {source && <span className="text-small text-ink-lo hidden sm:inline">{source}</span>}
         </div>
         {alwaysVisible}
         {children}
@@ -87,14 +88,14 @@ export default function CollapsibleSection({
     return (
       <div>
         <div className="w-full flex items-baseline justify-between mb-3">
-          <Heading className={`text-lg ${titleColor}`}>{title}</Heading>
+          <Heading className={toned("boxTitle", titleColor)}>{title}</Heading>
           <span className="flex items-center gap-3">
             {summary && (
-              <span className="text-xs text-ink-lo max-w-xs truncate hidden sm:inline">
+              <span className="text-small text-ink-lo max-w-xs truncate hidden sm:inline">
                 {summary}
               </span>
             )}
-            {source && <span className="text-xs text-ink-lo hidden sm:inline">{source}</span>}
+            {source && <span className="text-small text-ink-lo hidden sm:inline">{source}</span>}
           </span>
         </div>
         {alwaysVisible}
@@ -112,7 +113,7 @@ export default function CollapsibleSection({
   // a heading list should read the same whether the section is open or not.
   return (
     <div>
-      <Heading className={`text-lg ${titleColor} mb-3`} aria-labelledby={titleId}>
+      <Heading className={`${toned("boxTitle", titleColor)} mb-3`} aria-labelledby={titleId}>
         <button
           type="button"
           onClick={() => setOpen(!open)}
@@ -122,7 +123,7 @@ export default function CollapsibleSection({
         >
           <span className="flex items-center gap-2 min-w-0">
             <span
-              className="text-ink-min text-base font-mono group-hover:text-phos transition-colors"
+              className="text-ink-min text-body font-mono group-hover:text-phos transition-colors"
               aria-hidden="true"
             >
               {open ? "−" : "+"}
@@ -131,11 +132,11 @@ export default function CollapsibleSection({
           </span>
           <span className="flex items-center gap-3 font-normal tracking-normal">
             {!open && summary && (
-              <span className="text-xs text-ink-lo max-w-xs truncate hidden sm:inline">
+              <span className="text-small text-ink-lo max-w-xs truncate hidden sm:inline">
                 {summary}
               </span>
             )}
-            {source && <span className="text-xs text-ink-lo hidden sm:inline">{source}</span>}
+            {source && <span className="text-small text-ink-lo hidden sm:inline">{source}</span>}
           </span>
         </button>
       </Heading>
