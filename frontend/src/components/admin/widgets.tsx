@@ -142,8 +142,7 @@ export function RankBars({
         {entries.map((e) => (
           <div key={e.name} className="flex items-center gap-2">
             <span
-              className={`text-ink-lo text-xs font-mono ${labelWidth} shrink-0 truncate`}
-              title={e.name}
+              className={`text-ink-lo text-xs font-mono ${labelWidth} shrink-0 [overflow-wrap:anywhere]`}
             >
               {e.name}
             </span>

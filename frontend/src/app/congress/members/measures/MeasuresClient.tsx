@@ -9,7 +9,12 @@ import Footer from "@/components/layout/Footer";
 import { STATE_NAMES, byStateName } from "@/lib/stateCodes";
 import type { ChamberMeasure, ChamberMeasures, ChamberMember, ChamberPoint } from "@/types/peers";
 import ScrollRegion from "@/components/shared/ScrollRegion";
-import StripPoints, { partySeat, StripAxis, type StripPoint } from "@/components/shared/Strip";
+import StripPoints, {
+  partySeat,
+  StripAxis,
+  stripTop,
+  type StripPoint,
+} from "@/components/shared/Strip";
 
 const PARTY_FILL: Record<string, string> = {
   D: "var(--dem-blue)",
@@ -69,7 +74,8 @@ function Callout({
 }
 
 function ChamberStrip({ m, house }: { m: ChamberMeasure; house: boolean }) {
-  const at = (v: number) => Math.min(100, (v / m.axisMax) * 100);
+  const max = stripTop(m.axisMax, [...m.points.map((p) => p.value), m.median]);
+  const at = (v: number) => Math.min(100, (v / max) * 100);
   // A mark is 7px; its centre is 3.5px below its jittered top.
   const top = (i: number) => 14 + JITTER[i % JITTER.length];
   const points: StripPoint[] = m.points.map((p, i) => ({

@@ -20,6 +20,7 @@ from app import data_refresh
 from app.models import ExploreDocument, Justice, JusticeVote
 from app.ordinals import RIGHTMOST, rank_shown
 from app.photos import justice_photo
+from app.readout import mark
 from app.services.explore_keys import public_key
 from app.time_utils import utcnow
 
@@ -200,13 +201,22 @@ def _lineups(cases: dict[str, dict]) -> dict:
         by_term[c["term"]][c["split"]] += 1
         splits.add((c["majorityVotes"], c["minorityVotes"]))
     order = [f"{m}-{n}" for m, n in sorted(splits, key=_split_key)]
-    return {
-        "splits": order,
-        "terms": [
-            {"term": int(t), "cases": sum(counts.values()), "counts": {s: counts.get(s, 0) for s in order}}
-            for t, counts in sorted(by_term.items()) if t.isdigit()
-        ],
-    }
+    terms = []
+    for t, counts in sorted(by_term.items()):
+        if not t.isdigit():
+            continue
+        cases = sum(counts.values())
+        row = {"term": int(t), "cases": cases, "counts": {s: counts.get(s, 0) for s in order}}
+        # Each segment's width (percent of the term's cases) and readout,
+        # so the page divides nothing.
+        row["shares"] = {s: round(100 * n / cases, 2) for s, n in row["counts"].items()}
+        row["marks"] = [
+            mark(f"{t}-{s}", s.replace("-", "\u2013"), f"{n} case{'' if n == 1 else 's'}",
+                 detail=f"{t} term", context=f"{round(100 * n / cases)}% of the term's {cases}")
+            for s, n in row["counts"].items() if n
+        ]
+        terms.append(row)
+    return {"splits": order, "terms": terms}
 
 
 def court(db: Session, recent: int = 10) -> dict:
@@ -271,5 +281,23 @@ def appointer_finding() -> dict | None:
     doc = data_refresh.read(FINDING_FILE)
     if not all(k in doc for k in _FINDING_KEYS):
         return None
-    return {**{k: doc[k] for k in _FINDING_KEYS}, "source": doc.get("_source")}
+    return {**{k: doc[k] for k in _FINDING_KEYS}, "source": doc.get("_source"), "sentence": finding_sentence(doc)}
+
+
+def _points(share: float) -> str:
+    """A share as signed points with a true minus: 0.063 is "+6.3"."""
+    v = share * 100
+    return f"{'+' if v >= 0 else '\u2212'}{abs(v):.1f}"
+
+
+def finding_sentence(f: dict) -> str:
+    """The finding stated as fact, from the file's figures (the page prints
+    it as written): the pooled effect less what a placebo window at the same
+    point in a career shows, with its bootstrap interval over justices."""
+    direction = "more" if f["estimate"] >= 0 else "less"
+    reading = "distinguishable from no effect." if f["excludesZero"] else "not distinguishable from no effect."
+    return (f"Across every justice since {f['firstTerm']}, justices side with the federal government about "
+            f"{abs(f['estimate'] * 100):.1f} points {direction} often while their appointing president is in "
+            f"office, once career timing is set aside (95% interval {_points(f['low'])} to {_points(f['high'])}): "
+            f"{reading}")
 

@@ -157,8 +157,9 @@ export type RecordBoxProps = Line & {
   tone?: BoxTone;
   title: ReactNode;
   href?: string;
-  /** The title's heading level: 3 under a page section's h2 (the default). */
-  level?: 2 | 3 | 4;
+  /** The title's heading level: 3 under a page section's h2 (the default);
+   *  1 for a record page whose header is this box. */
+  level?: 1 | 2 | 3 | 4;
   /** Attributes for the heading, such as an "On this page" entry. */
   headingAttrs?: Record<string, string>;
   /** The box's anchor, for links from elsewhere on the page. */

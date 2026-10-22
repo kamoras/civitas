@@ -1508,7 +1508,14 @@ summary and facts are the sources' own words, checked verbatim
 (`post_composer.py`), and the recommended actions are built from real bill and
 source URLs (`_build_actions_from_data`), never written by the model. Members
 are linked by full name from the articles' own headlines and descriptions as
-well as the issue's text (a bare surname only from the issue's text). When the
+well as the issue's text (a bare surname only from the issue's text). Each
+issue stores the fingerprint of that rule (`member_link_stamp`, derived from
+the linking code itself, never a number to bump) and the reporting it read;
+every refresh matches a bounded batch of rows with another fingerprint again
+(`relink_issue_members`, current issues first), since the refresh rewrites
+only the rows it matches that run and every issue stays readable. A member
+contact row is built from those links when the issue is served, so a dropped
+link takes its "Contact" row with it. When the
 issue is served, a linked bill's stored stage names who acts next
 (`bill_decider`) and an open comment period names its agency; the reader's own
 members, their phones and their votes on the issue's roll calls come from the
@@ -2080,8 +2087,11 @@ it keeps, each enforced by a test (`tests/test_forecast_model.py`,
   and the same with the parties swapped. Nothing shown frames a figure
   around one party ("went to the Democrat", a raw signed margin); the
   internal R-positive sign convention stays inside the math. The method
-  section leads with a short plain summary; the full method sits behind a
-  disclosure.
+  section leads with a short plain summary (its first paragraph one line,
+  the rest behind "More"; "not a call" and the poll attributions stay
+  shown); the full method sits behind a disclosure. The map leads at every
+  width: on a phone the House's tile map comes first, with the state picker
+  and list after it as the full-size way into a state.
 - **No year in the code.** Article titles, the fieldwork floor, the House
   lines and every label (CSV header and filename, page titles, the method's
   presidential window) come from `active_election().cycle` and the data
@@ -2704,7 +2714,10 @@ the pending list).
   `AboutPage`: that is how its "On this page" list finds them (four or
   more), so a part wrapped in a fragment or another component drops out of
   it. A new score gets a plain line in `/about/scores`' short version,
-  held to a Flesch-Kincaid grade of 8 or below.
+  held to a Flesch-Kincaid grade of 8 or below. Its `lede` is one line
+  (about 40 characters, one line on a phone); the full introduction goes
+  in `intro`, which `AboutPage` puts behind a "More" at the foot of "The
+  short version".
 - A member page's money, votes and bills columns each lead with its `finding`
   (one template sentence from the breakdown API, `services/score_findings.py`,
   outside `pipeline/` so its wording never moves the analysis-code
@@ -2968,6 +2981,33 @@ one line with the rest behind "More" (`components/elections/NoteLine.tsx`),
 not a paragraph or a box. On a ballot page the box lines are counts and
 labels only: what a measure does, what yes or no means and every deadline
 stay quoted where §7 puts them, never summarised in a box.
+
+The executive hub (`/executive`) is four boxes, each led by a figure the
+backend counts (the president's documents on record, the open comment
+periods and budget total from `GET /api/sections`, the pending
+nominations), its list behind "More".
+
+A page whose intro was a paragraph above its figure (`/congress` in a
+recess, `/congress/nominations`, `/congress/president/*`) leads with one box
+instead: the page's figure (served by the backend: `recess.figure`, the
+nominations count, `counts` on the presidential-support view), a one-line
+line, and the intro behind "More".
+
+A redrawn state's page (`/elections/redistricting/[ST]`) leads with two
+boxes: seats by lean (the strips) and residents moved (a stat), each
+figure's method behind its own "More".
+
+Site search's results (`/search?q=`) are compact boxes: the kind as the
+kicker, the index's context line as the line, and a document's `snippet`
+(its own words around the query, matches marked) behind "More".
+
+An Explore document page (`/explore/[key]`) leads with one header box over
+the source text, which stays as it is: its type, issuer, date and citation
+in the backend's templated line (`api/explore.py` `document_headline`), the
+comment countdown while the period is open (`commentWindow`), and chips for
+the agency, the speaker's record, the bills a speech names and the executive
+orders the text cites that have a page here (`cited_orders`). The box's grid
+is `#comment`, where every "Comment" link lands.
 
 #### Empty defaults are content (2026-10)
 

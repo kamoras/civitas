@@ -446,7 +446,6 @@ function PhaseTimings({ token }: { token: string }) {
                           key={p.phase}
                           className="h-full"
                           style={{ width: `${p.pct}%`, background: phaseFill(colors[p.phase]) }}
-                          title={`${phaseLabel(p.phase)}: ${formatDuration(p.seconds)} (${p.pct}%)`}
                         />
                       ))}
                   </div>

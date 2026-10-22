@@ -13,13 +13,17 @@ Flow:
   8. Persist as ActionIssue rows for the current date
 """
 
+import ast
 import asyncio
+import hashlib
+import inspect
 import itertools
 import json
 import logging
 import math
 import pathlib
 import re
+import textwrap
 import threading
 from collections import Counter
 from difflib import SequenceMatcher
@@ -811,6 +815,7 @@ _ISSUE_UPDATE_ATTRS = (
     "title", "summary", "facts", "actions", "source_urls",
     "source_names", "policy_areas", "related_bill_ids",
     "related_explore_ids", "related_explore_keys", "related_senators", "related_officials",
+    "member_link_stamp", "member_link_texts",
     "primary_article_date", "image_url", "image_alt", "image_credit",
 )
 
@@ -2482,6 +2487,7 @@ def _find_related_officials(
         matched_justices: dict[str, dict] = {}
         member_names = [n for (n,) in db.query(Senator.name).all()] + [n for (n,) in db.query(Representative.name).all()]
         surname_holders = Counter(n.split()[-1].lower() for n in [*member_names, *(j.name for j in justices)] if n)
+        ordinary: frozenset[str] | None = None  # read once, when a surname turns up
         for j in justices:
             last = j.name.split()[-1]
             if _mentions_full_name(text, j.name):
@@ -2492,7 +2498,9 @@ def _find_related_officials(
             ):
                 continue
             else:
-                occurrences = _proper_noun_mentions(text, last, ordinary_words(db))
+                if ordinary is None:
+                    ordinary = ordinary_words(db)
+                occurrences = _proper_noun_mentions(text, last, ordinary)
                 if not occurrences or all(_surname_owned_by_other_name(text, m, j.name) for m in occurrences):
                     continue
                 reason = "referenced in coverage"
@@ -5754,10 +5762,8 @@ def _run_refresh(db: Session) -> int:
         related_explore_ids = [d["id"] for d in related_docs]
 
         # 9. Find senators/reps mentioned in this issue (backward compat field)
-        related_senators = _find_related_senators(
-            title, summary, facts, db,
-            article_texts=[f"{a.title}. {a.summary}" for a in filtered_cluster],
-        )
+        link_texts = [f"{a.title}. {a.summary}" for a in filtered_cluster]
+        related_senators = _find_related_senators(title, summary, facts, db, article_texts=link_texts)
 
         # 9b. Find ALL officials (senators + reps + president + justices) for profile cross-links
         related_officials = _find_related_officials(title, summary, facts, db)
@@ -5864,6 +5870,10 @@ def _run_refresh(db: Session) -> int:
             "related_explore_keys": json.dumps(keys_for_ids(db, related_explore_ids)),
             "related_senators": json.dumps(related_senators),
             "related_officials": json.dumps(related_officials),
+            # The rule and the reporting the members were matched under, so
+            # a later rule can match them again (relink_issue_members).
+            "member_link_stamp": member_link_stamp(),
+            "member_link_texts": json.dumps(link_texts),
             "ballot_links": json.dumps(issue_ballot_links),
             "primary_article_date": primary_article_date,
             "image_url": image_url,
@@ -5992,6 +6002,14 @@ def _run_refresh(db: Session) -> int:
         label_principal_actors(db)
     except Exception:
         logger.exception("Labelling issues' principal actors failed")
+        db.rollback()
+
+    # Rows whose members were matched under an earlier rule are matched
+    # again under this one, a bounded batch a run.
+    try:
+        relink_issue_members(db)
+    except Exception:
+        logger.exception("Re-matching issues' members failed")
         db.rollback()
 
     # The homepage feed's duplicates, marked here where the model is loaded
@@ -6131,6 +6149,131 @@ def label_principal_actors(db: Session) -> int:
     db.commit()
     logger.info("Labelled the principal actor of %d earlier issues", len(rows))
     return len(rows)
+
+
+# Issues re-matched a run when the linking rule changes (relink_issue_members).
+# Measured on a copy of the production database (2026-10-21): 0.07 s an
+# issue, so a batch adds about seven seconds to a refresh and the whole
+# archive (559 confirmed rows) is matched again within six runs of a deploy.
+RELINK_PER_RUN = 100
+
+
+def _stable_repr(value) -> str:
+    """repr with sets sorted: a set's order follows string hashing, which
+    changes from process to process."""
+    if isinstance(value, (set, frozenset)):
+        return repr(sorted(value, key=repr))
+    if isinstance(value, re.Pattern):
+        return repr((value.pattern, value.flags))
+    return repr(value)
+
+
+@lru_cache(maxsize=1)
+def member_link_stamp() -> str:
+    """A fingerprint of the rule that links members to an issue: the code of
+    _find_related_officials and of every function and constant of this
+    module it reaches, docstrings and comments left out. Stored on each
+    issue with the members it matched; an issue whose stamp differs was
+    matched under another rule and is matched again (relink_issue_members).
+    Derived from the code, never a number to remember to bump: the rule
+    changing is what changes it."""
+    names = globals()
+    parts: dict[str, str] = {}
+    todo = ["_find_related_officials"]
+    while todo:
+        name = todo.pop()
+        if name in parts or name not in names:
+            continue
+        obj = names[name]
+        if inspect.isfunction(obj):
+            if obj.__module__ != __name__:
+                continue
+            tree = ast.parse(textwrap.dedent(inspect.getsource(obj)))
+            for node in ast.walk(tree):
+                body = getattr(node, "body", None)
+                if (isinstance(body, list) and body and isinstance(body[0], ast.Expr)
+                        and isinstance(body[0].value, ast.Constant) and isinstance(body[0].value.value, str)):
+                    node.body = body[1:] or [ast.Pass()]
+            parts[name] = ast.dump(tree)
+            todo += [n.id for n in ast.walk(tree) if isinstance(n, ast.Name)]
+        elif isinstance(obj, (str, int, float, tuple, list, dict, set, frozenset, re.Pattern)):
+            parts[name] = _stable_repr(obj)
+        else:
+            parts[name] = ""  # a class, a module, a logger: not the rule
+    blob = "\n".join(f"{k}={v}" for k, v in sorted(parts.items()))
+    return hashlib.sha256(blob.encode()).hexdigest()[:16]
+
+
+def _member_ids(entries: list[dict]) -> set[str]:
+    return {e["id"] for e in entries if isinstance(e, dict) and e.get("id")}
+
+
+def relink_issue_members(db: Session, limit: int = RELINK_PER_RUN) -> int:
+    """Match the members of up to `limit` stored issues again, under the
+    current rule (member_link_stamp): every issue stays readable at its
+    link, and the refresh rewrites only the rows it matches to a story that
+    run, so a corrected rule otherwise never reached the rest (a Title Case
+    "Overhaul Much Harder" kept linking Rep. Harder, 2026-10). Current
+    issues first, then newest. The contact rows an issue page offers are
+    built from these members when it is served, so a link dropped here
+    takes its "Contact" row with it; the principal actor is relabelled when
+    the officials change.
+
+    An issue stored before the reporting was kept (`member_link_texts`
+    NULL) keeps the members its articles named in full ("named in the
+    reporting"): those articles are not held to read again."""
+    stamp = member_link_stamp()
+    rows = (
+        db.query(ActionIssue)
+        .filter(
+            ActionIssue.status == ActionIssueStatus.CONFIRMED,
+            or_(ActionIssue.member_link_stamp.is_(None), ActionIssue.member_link_stamp != stamp),
+        )
+        .order_by(ActionIssue.is_current.desc(), ActionIssue.date.desc(), ActionIssue.id.desc())
+        .limit(limit)
+        .all()
+    )
+    updates: list[tuple[ActionIssue, dict]] = []
+    for row in rows:
+        try:
+            facts = json.loads(row.facts or "[]")
+        except (TypeError, ValueError):
+            facts = []
+        if not isinstance(facts, list):
+            facts = []
+        try:
+            old_senators = json.loads(row.related_senators or "[]")
+            old_officials = json.loads(row.related_officials or "[]")
+        except (TypeError, ValueError):
+            old_senators, old_officials = [], []
+        texts = json.loads(row.member_link_texts) if row.member_link_texts else []
+        senators = _find_related_senators(row.title, row.summary or "", facts, db, article_texts=texts)
+        officials = _find_related_officials(row.title, row.summary or "", facts, db)
+        if row.member_link_texts is None:
+            found = _member_ids(senators)
+            kept = [e for e in old_senators if isinstance(e, dict)
+                    and e.get("match_reason") == "named in the reporting" and e.get("id") not in found]
+            senators += kept
+        update: dict = {"member_link_stamp": stamp}
+        if _member_ids(senators) != _member_ids(old_senators) or _member_ids(officials) != _member_ids(old_officials):
+            logger.info("Issue %d members re-matched: %s -> %s", row.id,
+                        sorted(_member_ids(old_senators)), sorted(_member_ids(senators)))
+            update |= {"related_senators": json.dumps(senators), "related_officials": json.dumps(officials)}
+            if row.principal_actor is not None and _member_ids(officials) != _member_ids(old_officials):
+                update["principal_actor"] = _principal_actor(row.title, row.summary or "", officials)
+        updates.append((row, update))
+    # Written after the matching, never during it: a row changed in the loop
+    # would be flushed by the next query and hold the write lock through
+    # the rest of the batch and the actor's embedding (_commit_stage).
+    for row, update in updates:
+        for attr, value in update.items():
+            setattr(row, attr, value)
+    if updates:
+        db.commit()
+    changed = sum(len(u) > 1 for _, u in updates)
+    if rows:
+        logger.info("Re-matched the members of %d issues (%d changed)", len(rows), changed)
+    return changed
 
 
 def _cleanup_old_unposted_issues(db: Session) -> int:

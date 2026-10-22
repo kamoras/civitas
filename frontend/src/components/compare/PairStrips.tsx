@@ -4,7 +4,12 @@ import { useAsyncData } from "@/hooks/useAsyncData";
 import { fetchChamberMeasures } from "@/lib/api";
 import { Dot } from "@/components/scorecard/WhereTheyStand";
 import type { ChamberMeasure } from "@/types/peers";
-import StripPoints, { partySeat, StripAxis, type StripPoint } from "@/components/shared/Strip";
+import StripPoints, {
+  partySeat,
+  StripAxis,
+  stripTop,
+  type StripPoint,
+} from "@/components/shared/Strip";
 
 type Side = { id: string; name: string };
 
@@ -23,7 +28,8 @@ function PairStrip({
   left: Side;
   right: Side;
 }) {
-  const at = (v: number) => Math.min(100, (v / m.axisMax) * 100);
+  const max = stripTop(m.axisMax, [...m.points.map((p) => p.value), m.median]);
+  const at = (v: number) => Math.min(100, (v / max) * 100);
   const find = (id: string) => m.points.find((p) => p.id === id);
   const l = find(left.id);
   const r = find(right.id);

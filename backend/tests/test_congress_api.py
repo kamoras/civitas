@@ -357,6 +357,8 @@ class TestRecess:
                         "October 6, in a pro forma session; the House at 1:30 p.m., Tuesday, October 6.",
             "lastBusinessDay": "2026-09-24",
             "week": "2026-09-21",
+            # Today (frozen: October 2, Eastern) less the last business.
+            "figure": {"type": "stat", "value": 8, "caption": "days since a record vote or a measure passed"},
         }
 
     def test_a_committee_report_filed_in_a_pro_forma_sitting_is_not_business(self, client, pro_forma_day):

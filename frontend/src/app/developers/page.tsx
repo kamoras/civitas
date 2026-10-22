@@ -168,6 +168,14 @@ function EndpointBlock({ endpoint, spec }: { endpoint: Endpoint; spec: Spec }) {
   const listOf = body?.type === "array" && body.items ? nestedObject(body, spec) : null;
   // Paths with nothing to fill in can be opened as they are.
   const openable = !path.includes("{");
+  const paras = (op.description ?? "")
+    .split("\n\n")
+    .map((p) => p.replace(/\s*\n\s*/g, " ").trim())
+    .filter(Boolean);
+  // A CSV download's first paragraph says what it is; the rest is its
+  // format (encoding, licence, every column: 126 to 242 words), kept behind
+  // the endpoint's More so the reference reads as a list of endpoints.
+  const [lead, format] = isCsv(op) ? [paras.slice(0, 1), paras.slice(1)] : [paras, []];
   return (
     <article id={op.operationId} className="space-y-3">
       <h4 className="font-display text-lg font-semibold text-ink-hi">{op.summary}</h4>
@@ -189,14 +197,23 @@ function EndpointBlock({ endpoint, spec }: { endpoint: Endpoint; spec: Spec }) {
           {isCsv(op) ? "CSV download (not an MCP tool)" : `MCP tool: ${op.operationId}`}
         </p>
       </div>
-      {op.description && (
+      {lead.length > 0 && (
         <div className="space-y-2 text-sm text-ink-mid">
-          {op.description.split("\n\n").map((para) => (
+          {lead.map((para) => (
             <p key={para}>
-              <Prose text={para.replace(/\s*\n\s*/g, " ")} />
+              <Prose text={para} />
             </p>
           ))}
         </div>
+      )}
+      {format.length > 0 && (
+        <More label="CSV format: encoding, licence and every column" context={`of ${path}`}>
+          {format.map((para) => (
+            <p key={para}>
+              <Prose text={para} />
+            </p>
+          ))}
+        </More>
       )}
       {params.length > 0 && (
         <div className="space-y-1">

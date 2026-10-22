@@ -32,7 +32,7 @@ export interface LineChart extends ChartBase {
   /** The accessible form: this term's points, and the others' middle half there. */
   table: { x: number; value: string; band: string | null }[];
   /** One readout per point of `series`, in order: value and the band there. */
-  marks: ReadoutMark[];
+  marks?: ReadoutMark[];
 }
 
 export interface BarsChart extends ChartBase {
@@ -47,7 +47,7 @@ export interface BarsChart extends ChartBase {
   } | null;
   bandShown: string | null;
   /** One readout per bar, in order. */
-  marks: ReadoutMark[];
+  marks?: ReadoutMark[];
 }
 
 export interface ElectionsChart extends ChartBase {
@@ -67,10 +67,10 @@ export interface ElectionsChart extends ChartBase {
     decidedByHouse: boolean;
   }[];
   medianShare: number;
-  medianShareShown: string;
+  medianShareShown?: string;
   medianMargin: number | null;
   /** One readout per election (id the year), in `rows` order. */
-  marks: ReadoutMark[];
+  marks?: ReadoutMark[];
 }
 
 export type PresidentChart = LineChart | BarsChart | ElectionsChart;

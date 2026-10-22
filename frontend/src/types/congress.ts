@@ -1,5 +1,5 @@
 import type { NominationVote } from "@/types/nomination";
-import type { BoxTone, Figure } from "@/types/figure";
+import type { BoxTone, Figure, StatFigure } from "@/types/figure";
 import type { StageMilestone } from "@/types/bill";
 /** The Congress reports (backend/app/services/congress_service.py) and a
  * bill's record (backend/app/services/bill_record.py). Every count and
@@ -136,6 +136,9 @@ export interface Recess {
   lastBusinessDay: string | null;
   /** The Monday of the week to open: the last one with business. */
   week: string;
+  /** The page's lead figure: days since that business (Eastern), as a
+   *  record box stat. Null with no business on record. */
+  figure?: StatFigure | null;
 }
 
 export interface PeriodTotals extends DayCounts {
