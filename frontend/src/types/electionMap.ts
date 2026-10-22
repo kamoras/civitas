@@ -271,7 +271,7 @@ export interface ElectionMapData {
   seats: MapSeat[];
   /** Each state's readout on the tile map, by view, then state (the API's
    *  words: api/election_map.state_marks). */
-  stateMarks: StateMarks;
+  stateMarks?: StateMarks;
 }
 
 export type StateMarks = Record<MapView, Record<string, ReadoutMark>>;

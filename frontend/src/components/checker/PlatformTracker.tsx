@@ -22,6 +22,17 @@ const DEPTH_STYLES = {
 // counted vote with one party's positions in every area); the API places the
 // marker and the fill (PartisanDepthSchema) and says it in words.
 
+/** Where the bar's marker and fill go: the API's places, or, from a backend
+ *  older than the page (a rolling update's minutes), the same places drawn
+ *  from the lean on the bar's -1..+1 scale. Drawing only: no figure from it
+ *  is printed. */
+function leanPlace(d: PartisanDepth): { marker: number; left: number; width: number } {
+  if (d.leanMarkerPercent != null && d.leanBarLeft != null && d.leanBarWidth != null)
+    return { marker: d.leanMarkerPercent, left: d.leanBarLeft, width: d.leanBarWidth };
+  const marker = 50 + Math.max(-1, Math.min(1, d.overallLean)) * 50;
+  return { marker, left: Math.min(50, marker), width: Math.abs(marker - 50) };
+}
+
 function PolicyLabel({ area }: { area: string }) {
   const label = usePolicyLabel(area);
   return <>{label}</>;
@@ -36,6 +47,7 @@ function PartisanDepthPanel({
 }) {
   const depthStyle = DEPTH_STYLES[depth.depth];
   const leanDirection = depth.overallParty === "R" ? "R" : "D";
+  const place = leanPlace(depth);
 
   const matchesParty = depth.overallParty === senatorParty;
   const oppositeParty = senatorParty === "R" ? "D" : "R";
@@ -64,21 +76,20 @@ function PartisanDepthPanel({
             magnitudes rendered as a heavier bar on the Republican side of a
             chart whose only job is to compare the two. */}
         <div
-          role="img"
-          aria-label={depth.leanSentence}
+          {...(depth.leanSentence ? { role: "img", "aria-label": depth.leanSentence } : {})}
           className="relative h-3 bg-white/[0.03] border border-white/[0.07]"
         >
           <div className="absolute top-0 bottom-0 left-1/2 w-px bg-phos" />
           <div
             className={`absolute top-0 bottom-0 ${leanDirection === "R" ? "bg-signal-red" : "bg-dem-blue"}`}
-            style={{ left: `${depth.leanBarLeft}%`, width: `${depth.leanBarWidth}%` }}
+            style={{ left: `${place.left}%`, width: `${place.width}%` }}
           />
           {/* The 2px inset keeps the 4px marker inside the track at either
               end; the clamp also guards a lean outside +/-1. */}
           <div
             className="absolute top-0 bottom-0 w-1 bg-phos"
             style={{
-              left: `clamp(2px, ${depth.leanMarkerPercent}%, calc(100% - 2px))`,
+              left: `clamp(2px, ${place.marker}%, calc(100% - 2px))`,
               transform: "translateX(-50%)",
             }}
           />
@@ -165,7 +176,7 @@ function PartisanDepthPanel({
           {/* Each area names its side and strength (the API's words). */}
           <ChartReadout
             label="Voting record by policy area"
-            marks={depth.policyBreakdown.map((p) => p.mark)}
+            marks={depth.policyBreakdown.flatMap((p) => (p.mark ? [p.mark] : []))}
             labelAt="mark"
             className="space-y-1"
           >
@@ -186,7 +197,8 @@ function PartisanDepthPanel({
                   <div className="flex-1 h-2 bg-white/[0.03] border border-white/[0.07] relative">
                     <div
                       className={`absolute top-0 bottom-0 ${isR ? "bg-signal-red right-0" : isD ? "bg-dem-blue left-0" : "bg-ind-purple left-1/2 -translate-x-1/2"}`}
-                      style={{ width: `${p.barPercent}%` }}
+                      // An older API sends no width: drawn from the strength.
+                      style={{ width: `${p.barPercent ?? Math.max(p.strength * 100, 4)}%` }}
                     />
                   </div>
                   <span
@@ -210,9 +222,11 @@ function PartisanDepthPanel({
             <tbody>
               {depth.policyBreakdown.map((p) => (
                 <tr key={p.area}>
-                  <th scope="row">{p.mark.label}</th>
-                  <td>{p.mark.shown}</td>
-                  <td>{p.strengthShown}</td>
+                  <th scope="row">
+                    <PolicyLabel area={p.area} />
+                  </th>
+                  <td>{p.mark?.shown ?? p.alignment}</td>
+                  <td>{p.strengthShown ?? "\u2014"}</td>
                 </tr>
               ))}
             </tbody>

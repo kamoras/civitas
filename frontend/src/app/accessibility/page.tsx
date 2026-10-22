@@ -276,6 +276,12 @@ export default function AccessibilityPage() {
                     state&apos;s block is, at least 24 pixels. The archive&apos;s swing maps read
                     each state the same way, and their tables list every seat.
                   </P>
+                  <P>
+                    On the Court page, each segment of the splits by term gives its split, its count
+                    and its share of the term. While the site is being updated, a chart can briefly
+                    come without its readouts; it is then drawn plain, with its table or list still
+                    beside it.
+                  </P>
                 </Box>
                 <Box
                   title="Typefaces, and why"

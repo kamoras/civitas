@@ -103,10 +103,17 @@ def test_lineups_count_each_split_by_term_lopsided_first(db_session):
     _case(db_session, "scotus-2024-3", 2024, "2025-06-03", ALL)
     c = court_service.court(db_session)
     assert c["lineups"]["splits"] == ["5-0", "4-1", "3-2"]
-    assert c["lineups"]["terms"] == [
+    terms = [{k: v for k, v in t.items() if k not in ("shares", "marks")} for t in c["lineups"]["terms"]]
+    assert terms == [
         {"term": 2023, "cases": 1, "counts": {"5-0": 1, "4-1": 0, "3-2": 0}},
         {"term": 2024, "cases": 3, "counts": {"5-0": 1, "4-1": 1, "3-2": 1}},
     ]
+    # Each segment's width and readout, from the API.
+    later = c["lineups"]["terms"][1]
+    assert later["shares"] == {"5-0": 33.33, "4-1": 33.33, "3-2": 33.33}
+    assert later["marks"][1] == {"id": "2024-4-1", "label": "4\u20131", "detail": "2024 term", "shown": "1 case",
+                                 "context": "33% of the term's 3", "href": None}
+    assert [m["id"] for m in c["lineups"]["terms"][0]["marks"]] == ["2023-5-0"]
     assert c["record"] == {"cases": 4, "unanimous": 2, "oneVote": 1, "unanimousPct": 50, "oneVotePct": 25, "terms": [2023, 2024]}
 
 
@@ -215,6 +222,17 @@ def test_the_court_level_finding_is_the_generated_files_never_typed(db_session, 
     assert finding["estimate"] == on_file["estimate"] and finding["low"] < finding["high"]
     assert finding["excludesZero"] == (finding["low"] > 0 or finding["high"] < 0)
     assert "research_justice_loyalty.py" in finding["source"]
+    assert finding["sentence"] == court_service.finding_sentence(on_file)
     assert _get(db_session, "/api/court").json()["appointerFinding"] == finding
     monkeypatch.setattr(court_service.data_refresh, "read", lambda name: {})
     assert _get(db_session, "/api/court/finding").json() is None
+
+
+def test_the_finding_is_written_by_the_api_from_the_files_figures():
+    f = {"estimate": 0.0246, "low": -0.0066, "high": 0.0562, "firstTerm": 1937, "excludesZero": False}
+    assert court_service.finding_sentence(f) == (
+        "Across every justice since 1937, justices side with the federal government about 2.5 points more often "
+        "while their appointing president is in office, once career timing is set aside (95% interval \u22120.7 "
+        "to +5.6): not distinguishable from no effect.")
+    s = court_service.finding_sentence({**f, "estimate": -0.03, "low": -0.05, "high": -0.01, "excludesZero": True})
+    assert "3.0 points less often" in s and s.endswith(": distinguishable from no effect.")
