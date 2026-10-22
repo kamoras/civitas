@@ -197,7 +197,7 @@ Pulls raw data from each government API and stores the complete response verbati
 | BLS | Payroll job growth by administration | batch |
 | FRED | Unemployment and consumer prices (BLS series, annual means) | batch, cached 7 days |
 | Cooperative Election Study (Harvard Dataverse, CC0) | Approval of each member among their own constituents, by the respondent's party (informational; `scripts/fetch_ces_approval.py`, per survey release) | one-off download |
-| MeasuringWorth / Maddison Project / World Bank | US real GDP back to 1790; real GDP per person for 13 peer economies | batch, cached 30 days |
+| MeasuringWorth / Maddison Project / World Bank | US real GDP back to 1790; real GDP per person for 23 peer economies (the OECD's members before 1994) | batch, cached 30 days |
 | Federal Register | Executive orders signed per administration | 1.0 RPS |
 | House Clerk / Senate eFD | STOCK Act periodic transaction reports, and annual and new-filer financial disclosures (PDF/HTML, parsed) | 1.0 / 0.5 RPS |
 | OGE | Sitting president's disclosures: the annual report (OGE Form 278e), whose Part 7 lists every transaction of its year as text, and the OGE Form 278-T periodic transaction reports since, which are scans read by OCR (PDF, parsed) | 0.5 RPS |
@@ -292,7 +292,7 @@ Fetches Supreme Court justices' records (not scored, justice v3), weekly on Sund
 
 Scores sitting and historical presidents from a mix of live and archival sources:
 - **Live**: BLS payroll jobs, MeasuringWorth real GDP and Maddison/World Bank peer-economy GDP, UCSB American Presidency Project approval polling (with Gallup's by-party breakdown, compared within its era against Voteview's House polarization), FRED/BLS unemployment and consumer prices (Effectiveness since 1947, each judged against where the term started)
-- **Historical**: C-SPAN Presidential Historians Survey (historical legacy), UCSB election-margin data, MeasuringWorth real-GDP series (1790–present), Maddison Project GDP per person for the US and 13 peer economies (1946–2022, extended by the World Bank's live series): postwar growth is scored relative to those peers, with their catching up with US incomes set aside
+- **Historical**: C-SPAN Presidential Historians Survey (historical legacy), UCSB election-margin data, MeasuringWorth real-GDP series (1790–present), Maddison Project GDP per person for the US and 23 peer economies, the OECD's members before its 1994 enlargement (1946–2022, extended by the World Bank's live series): postwar growth is scored relative to those peers, with their catching up with US incomes set aside
 - All three score dimensions (Public Mandate, Effectiveness, Historical Legacy) are computed from source data with no LLM involvement. Dimensions a president has no real data source for are left N/A rather than filled with a placeholder. The scores are kept for the public API (deprecated) and shown nowhere on the site: a president's page shows the record they are computed from (see Presidential Scores below).
 
 **Who is sitting** comes from UCSB's roster each night; nothing names a president in code. A president the tables below were written before is matched by name (`derived_president_id`; the election-mandates table by the roster's names, `presidential_elections`), and every night `ops_alerts.check_sitting_president` compares the roster's sitting president with the Federal Register's newest presidential document: one signed after the stored term began, by someone else, means the roster is behind an inauguration and sends an ops alert.

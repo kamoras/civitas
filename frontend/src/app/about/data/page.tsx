@@ -185,8 +185,8 @@ export default function DataChapter() {
                 The BLS unemployment rate (from 1948) and consumer price index (from 1947).
               </Fact>
               <Fact label="Maddison Project · World Bank">
-                GDP per person for the US and 13 peer economies from 1946, to compare postwar
-                growth.
+                GDP per person for the US and 23 peer economies (the OECD&apos;s members before its
+                1994 enlargement) from 1946, to compare postwar growth.
               </Fact>
               <Fact label="C-SPAN Historians Survey">
                 The newest edition published, for the historians&apos; rank on a president&apos;s
