@@ -11,7 +11,7 @@ import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
 import SectionTabs from "@/components/layout/SectionTabs";
-import VoteMembers, { PartyBar } from "@/components/congress/VoteMembers";
+import VoteMembers, { PartyBar, PartyBarsHelp } from "@/components/congress/VoteMembers";
 import { TallyText, VoteCount } from "@/components/congress/ReportParts";
 import AgencyLink from "@/components/agencies/AgencyLink";
 import { StatusBadge } from "@/components/nominations/NominationRow";
@@ -220,6 +220,7 @@ export default async function NominationPage({ params }: PageProps) {
                     {(final.parties ?? []).map((p) => (
                       <PartyBar key={p.party} split={p} />
                     ))}
+                    <PartyBarsHelp />
                   </div>
                 </div>
               )}

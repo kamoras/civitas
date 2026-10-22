@@ -5,7 +5,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import type { BillPassage, BillRecordVote, CoveragePart, VoteDetail } from "@/types/congress";
 import { CHAMBER_NAME, resultTone, rollCallHref, shortDate, voteResult } from "@/lib/congress";
 import { TallyText, VoteCount } from "./ReportParts";
-import VoteMembers, { PartyBar } from "./VoteMembers";
+import VoteMembers, { PartyBar, PartyBarsHelp } from "./VoteMembers";
 import AmendmentPurpose from "./AmendmentPurpose";
 import { TYPE } from "@/lib/typeStyles";
 
@@ -166,6 +166,7 @@ export default function VotePanel({
         {vote.parties.map((p) => (
           <PartyBar key={p.party} split={p} />
         ))}
+        <PartyBarsHelp />
       </div>
       {failed && (
         <p className="text-small text-signal-amber">

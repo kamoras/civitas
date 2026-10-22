@@ -230,7 +230,7 @@ interface FilterTileProps {
 }
 
 /**
- * One filter toggle. The count and label are a real <button>; the [?]
+ * One filter toggle. The count and label are a real <button>; the tooltip
  * explanation sits beside it, not inside. It used to be a div[role=button]
  * wrapping the label's MetricTooltip — which renders its own <button> — and
  * an interactive element inside another is announced as one control, so the

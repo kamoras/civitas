@@ -1,5 +1,6 @@
 "use client";
 
+import HowToRead from "@/components/shared/HowToRead";
 import Link from "next/link";
 import { useId, useMemo, useState } from "react";
 import type { PartySplit, VoteMember } from "@/types/congress";
@@ -18,6 +19,21 @@ const BUCKETS: { key: VoteMember["bucket"]; label: string; tone: string }[] = [
 
 /** One party's split on a roll call, as the chamber recorded it. The bar is
  * display scaling of those counts, not a new figure. */
+/** What the party bars show, once under them (in words: the bars are
+ *  aria-hidden, the counts beside them are read). "Solid" and "paler" hold
+ *  in both themes, where darker and lighter swap. */
+export function PartyBarsHelp({ className = "" }: { className?: string }) {
+  return (
+    <HowToRead className={className}>
+      <p>
+        Each bar is one party&rsquo;s members on this vote: the solid part voted yea, the paler part
+        nay, and the empty rest didn&rsquo;t vote or answered present. The counts beside each bar
+        say the same in numbers (NV is not voting).
+      </p>
+    </HowToRead>
+  );
+}
+
 export function PartyBar({ split }: { split: PartySplit }) {
   const total = split.yea + split.nay + split.present + split.notVoting || 1;
   const party = PARTY_NAME[split.party] ?? split.party;
