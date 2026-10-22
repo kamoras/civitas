@@ -1,6 +1,53 @@
 @import "tailwindcss";
 @config "../../tailwind.config.ts";
 
+/* ===== ONE STYLE PER ROLE (lib/typeStyles.ts) =====
+   The type scale's sizes, one `text-<role>` utility each: the desktop size
+   here, the phone size (under 640px) in the media query below. In rem, so
+   a reader's own text size scales them. TYPE in lib/typeStyles.ts pairs
+   each with its face, weight and colour. */
+@theme {
+  --text-display: 2.75rem;
+  --text-display--line-height: 1.1;
+  --text-title: 2.25rem;
+  --text-title--line-height: 1.1;
+  --text-section: 1.5rem;
+  --text-section--line-height: 1.25;
+  --text-box: 1.125rem;
+  --text-box--line-height: 1.35;
+  --text-dek: 1.125rem;
+  --text-dek--line-height: 1.5;
+  --text-body: 1rem;
+  --text-body--line-height: 1.6;
+  --text-small: 0.875rem;
+  --text-small--line-height: 1.45;
+  --text-figure: 1.875rem;
+  --text-figure--line-height: 1;
+  --text-figure-lg: 3.5rem;
+  --text-figure-lg--line-height: 1;
+}
+@media (max-width: 639.98px) {
+  :root {
+    --text-display: 1.875rem;
+    --text-title: 1.75rem;
+    --text-section: 1.375rem;
+    --text-box: 1.0625rem;
+    --text-dek: 1.0625rem;
+    --text-figure: 1.625rem;
+    --text-figure-lg: 2.5rem;
+  }
+}
+
+/* A table header and bold text are the label weight: only 400 and 600 are
+   loaded, so the browser's 700 for <th>, <b> and <strong> was synthesised. */
+@layer base {
+  th,
+  b,
+  strong {
+    font-weight: 600;
+  }
+}
+
 :root {
   /* The palette. Tailwind's colours (tailwind.config.ts) point at these, so a
      theme is these values and nothing else: same type, same layout.
@@ -24,10 +71,15 @@
   /* A search match inside a snippet (<mark>), opaque so its ratio with
      --ink-hi holds on any card it sits in (wcagContrast.test.ts). */
   --highlight: #ecdc8f;
-  --ink-hi: #1e1a15; /* 15.1:1 on parchment: headings, figures */
-  --ink: #362f27; /* body prose */
-  --ink-lo: #4a4238; /* 8.6:1: secondary text */
-  --ink-min: #5a5143; /* 6.9:1: captions, the floor for any text */
+  /* Three ink levels, far enough apart to read as levels (2026-10): the
+     four there were sat 1.27-1.34:1 apart, so secondary text read as body.
+     `ink` is the same as `ink-hi`: headings and prose share the darkest
+     ink and differ by face and size. Adjacent levels 1.57:1 and 1.44:1
+     apart, APCA Lc 9 (was 5-6; inkContrast.test.ts). */
+  --ink-hi: #1e1a15; /* 15.1:1 on parchment: headings, figures, prose */
+  --ink: #1e1a15; /* body prose: the same ink as headings */
+  --ink-lo: #433b31; /* 9.6:1: secondary text */
+  --ink-min: #5c5245; /* 6.7:1: captions, the floor for any text */
   --phos: #1b5e34; /* ledger green: links, live data, focus */
   --phos-mid: #18552f;
   --signal-cyan: #1b5e34; /* links take the ledger green */
@@ -151,8 +203,8 @@ html[data-header-hidden] {
     --surface-raised: #24201b;
     --highlight: #4a4220;
     --ink-hi: #f4efe6;
-    --ink: #e2dacd;
-    --ink-lo: #cfc6b6;
+    --ink: #f4efe6;
+    --ink-lo: #d8cfc0;
     --ink-min: #c2b8a5;
     --phos: #7fd49a;
     --phos-mid: #5db97b;
@@ -209,8 +261,8 @@ html[data-header-hidden] {
   --surface-raised: #24201b;
   --highlight: #4a4220;
   --ink-hi: #f4efe6;
-  --ink: #e2dacd;
-  --ink-lo: #cfc6b6;
+  --ink: #f4efe6;
+  --ink-lo: #d8cfc0;
   --ink-min: #c2b8a5;
   --phos: #7fd49a;
   --phos-mid: #5db97b;

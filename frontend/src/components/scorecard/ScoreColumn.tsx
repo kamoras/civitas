@@ -5,6 +5,7 @@ import ShareSectionButton from "@/components/share/ShareSectionButton";
 import MetricTooltip from "@/components/checker/MetricTooltip";
 import { onThisPage } from "@/lib/onThisPage";
 import { LONG_LABEL, labelCase } from "@/lib/controlStyles";
+import { TYPE } from "@/lib/typeStyles";
 
 /** One column of a record: a member's money, votes or bills, or a
  *  president's scored dimension (with its score), and the evidence behind
@@ -49,7 +50,7 @@ export default function ScoreColumn({
     >
       <header className="flex items-end justify-between gap-3 border-b border-white/25 bg-surface-raised px-5 py-4">
         <div className="min-w-0">
-          <h2 className="text-[19px] font-semibold leading-tight text-ink-hi">
+          <h2 className={TYPE.section}>
             {tooltip ? <MetricTooltip text={tooltip}>{title}</MetricTooltip> : title}
           </h2>
         </div>
@@ -57,7 +58,7 @@ export default function ScoreColumn({
       </header>
       <div className="flex flex-1 flex-col gap-5 px-5 py-4">
         {finding && (
-          <p className="font-display text-lg font-semibold leading-snug text-ink-hi">{finding}</p>
+          <p className={`${TYPE.section} leading-snug`}>{finding}</p>
         )}
         {children}
         {(method || shown != null) && (

@@ -27,6 +27,7 @@ import ScorecardHeader from "./ScorecardHeader";
 import WhereTheyStand from "./WhereTheyStand";
 import type { PeerComparison } from "@/types/peers";
 import TopDonorsTable from "./TopDonorsTable";
+import { TYPE } from "@/lib/typeStyles";
 
 type DrawerView = "donors" | "votes" | "bills" | RecordView;
 
@@ -159,7 +160,7 @@ export default function MemberScorecard({
             />
           )}
 
-          <h2 className="border-t-[3px] border-ink-hi pt-3 font-display text-[22px] font-semibold text-ink-hi sm:text-[26px]">
+          <h2 className={`${TYPE.section} border-t-[3px] border-ink-hi pt-3`}>
             The record behind it
           </h2>
 

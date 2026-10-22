@@ -6,6 +6,7 @@ import {
   SectionHeadingLevelProvider,
   SectionsOpenProvider,
 } from "@/components/shared/CollapsibleSection";
+import { TYPE } from "@/lib/typeStyles";
 
 /** Everything behind one of the scorecard's "all of it" links — every vote,
  *  every donor, every bill — over the scorecard: a panel beside it on a
@@ -54,7 +55,7 @@ export default function ScorecardDrawer({
               id="scorecard-drawer-title"
               ref={heading}
               tabIndex={-1}
-              className="mt-1 text-2xl font-semibold leading-tight text-ink-hi outline-none"
+              className={`${TYPE.section} mt-1 outline-none`}
             >
               {title}
             </h2>

@@ -1,5 +1,6 @@
 "use client";
 
+import { TYPE } from "@/lib/typeStyles";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import type { President } from "@/types/president";
@@ -117,7 +118,7 @@ export default function PresidentScorecard({
                 numberMark
               )}
               <div className="flex min-w-0 flex-col gap-2">
-                <Title className="break-words text-3xl font-semibold leading-tight text-ink-hi sm:text-4xl">
+                <Title className={`${TYPE.title} break-words`}>
                   {president.name}
                 </Title>
                 <p className="text-sm text-ink-lo">
@@ -165,7 +166,7 @@ export default function PresidentScorecard({
               </div>
             </div>
             <div className="flex flex-col gap-2 border-t border-white/[0.12] pt-5 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
-              <p className="text-[13px] font-semibold text-ink-lo">Historians&apos; rank</p>
+              <p className={TYPE.kicker}>Historians&apos; rank</p>
               {legacy?.rank != null ? (
                 <>
                   <p className="font-display text-5xl font-semibold leading-none text-ink-hi">
@@ -208,7 +209,7 @@ export default function PresidentScorecard({
           )}
 
           <section className="flex flex-col gap-3" aria-labelledby="also-on-record">
-            <h2 id="also-on-record" className="text-[13px] font-semibold text-ink-lo">
+            <h2 id="also-on-record" className={TYPE.section}>
               Also on record
             </h2>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

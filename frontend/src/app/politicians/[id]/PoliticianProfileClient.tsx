@@ -1,5 +1,6 @@
 "use client";
 
+import { TYPE } from "@/lib/typeStyles";
 import FollowFeed from "@/components/shared/FollowFeed";
 import { memberFeed } from "@/lib/site";
 import Link from "next/link";
@@ -370,7 +371,7 @@ export default function PoliticianProfileClient({
                   {/* h1, not a <p>: on a not-yet-scored official this block is
                       the only identity on the page, so it is the page title.
                       The scored path gets its h1 from the card's `titleAs`. */}
-                  <h1 className="font-display font-semibold text-base text-ink-hi">
+                  <h1 className={TYPE.title}>
                     {identity.name}
                   </h1>
                   <p className="font-mono text-xs text-ink-min">

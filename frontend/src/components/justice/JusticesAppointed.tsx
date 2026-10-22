@@ -6,6 +6,7 @@ import { useAsyncData } from "@/hooks/useAsyncData";
 import { fetchJusticesAppointedBy } from "@/lib/api";
 import { COURT_HREF } from "@/lib/court";
 import type { AppointedJustice } from "@/types/justice";
+import { TYPE } from "@/lib/typeStyles";
 
 function year(iso: string | null): string {
   return iso ? iso.slice(0, 4) : "";
@@ -68,7 +69,7 @@ export default function JusticesAppointed({ presidentId }: { presidentId: string
       aria-labelledby="justices-appointed-heading"
       className="mt-6 border border-white/25 bg-surface px-4 py-4 font-sans sm:px-6"
     >
-      <h2 id="justices-appointed-heading" className="text-[19px] font-semibold text-ink-hi">
+      <h2 id="justices-appointed-heading" className={TYPE.section}>
         Justices appointed
       </h2>
       <p className="mt-1 text-sm text-ink-lo">

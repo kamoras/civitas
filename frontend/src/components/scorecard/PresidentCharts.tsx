@@ -12,6 +12,7 @@ import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import ChartReadout from "@/components/shared/ChartReadout";
 import { MARK_ATTR } from "@/types/readout";
+import { TYPE } from "@/lib/typeStyles";
 
 // Drawn in a fixed box and stretched to the column: strokes keep their
 // width (non-scaling-stroke) and every label is HTML beside the drawing.
@@ -398,7 +399,7 @@ function Chart({ c }: { c: PresidentChart }) {
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="font-display text-lg font-semibold text-ink-hi">{c.title}</h3>
+          <h3 className={TYPE.section}>{c.title}</h3>
           <p className="text-sm text-ink">{c.why}</p>
         </div>
         <ShareSectionButton label={c.title} />
@@ -443,7 +444,7 @@ export default function PresidentChartsSection({ data }: { data: PresidentCharts
       <h2
         id="president-charts-heading"
         {...onThisPage("Through the term")}
-        className="border-t-[3px] border-ink-hi pt-3 font-display text-[22px] font-semibold text-ink-hi sm:text-[26px]"
+        className={`${TYPE.section} border-t-[3px] border-ink-hi pt-3`}
       >
         Through the term
       </h2>

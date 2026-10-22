@@ -20,6 +20,7 @@ import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import { absoluteUrl } from "@/lib/site";
 import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import { onThisPage } from "@/lib/onThisPage";
+import { TYPE } from "@/lib/typeStyles";
 
 /**
  * A member's votes with the president's stated positions, on the profile.
@@ -71,7 +72,7 @@ export default function PresidentialSupportSection({
             <h2
               id="ps-heading"
               {...onThisPage("With the president")}
-              className="font-display text-lg font-semibold text-ink-hi"
+              className={TYPE.section}
             >
               How often {name} votes with the president
             </h2>

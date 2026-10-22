@@ -7,6 +7,7 @@ import ChartReadout from "@/components/shared/ChartReadout";
 import { MARK_ATTR } from "@/types/readout";
 import { SHARE_SECTION_ATTR, shareMetaAttrs } from "@/lib/shareImage";
 import type { JusticeFigures } from "@/types/justice";
+import { TYPE } from "@/lib/typeStyles";
 
 /** The axis, in points either way: the sitting justices' estimates fall
  *  within +-20 and their 95% intervals mostly within +-35
@@ -43,7 +44,7 @@ export default function AppointerIntervals({
       <h2
         id="appointer-heading"
         {...onThisPage("Under the appointing president")}
-        className="text-[19px] font-semibold text-ink-hi"
+        className={TYPE.section}
       >
         Votes for the government under the appointing president
       </h2>
