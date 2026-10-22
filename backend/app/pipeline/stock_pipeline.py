@@ -44,7 +44,7 @@ from app.pipeline.fetch.president_ptr import (
     fetch_ptr_filing_index as fetch_president_ptr_index,
 )
 from app.pipeline.fetch.ptr_common import PARSER_VERSION as PTR_PARSER_VERSION
-from app.pipeline.fetch.ptr_common import TICKER_RE, TradeRow
+from app.pipeline.fetch.ptr_common import TICKER_RE, TradeRow, one_line
 from app.pipeline.fetch.fd_common import SENATE_ASSET_TYPE_CATEGORY, house_category, strip_house_code
 from app.pipeline.fetch.sec_tickers import SecUnavailable, issuer_industries
 from app.holdings_schedule import HOLDINGS_STEPS, MEMBER_PHOTOS_BUDGET, PTR_REREAD_BUDGET
@@ -221,6 +221,25 @@ async def _reclassify_stored_trades(db: Session, client: httpx.AsyncClient) -> i
         for row, industry in zip(rows, industries):
             if row.industry != (industry or "UNCLASSIFIED"):
                 row.industry = industry or "UNCLASSIFIED"
+                changed += 1
+        db.commit()
+    return changed
+
+
+def clean_stored_asset_names(db: Session) -> int:
+    """Put every stored trade's asset name on one line (ptr_common.one_line),
+    returning how many changed. Rows read since TradeRow cleaned its names
+    are already clean; this catches the rest (measured 2026-10-17: 4,138 of
+    4,916 House rows and 259 of 1,312 Senate rows carried newlines or runs
+    of spaces) and any a future path stores raw. Runs every night, before
+    re-filed trades are collapsed, which compares names: two copies of one
+    trade wrapped differently are one trade."""
+    changed = 0
+    for model in (StockTrade, RepStockTrade, PresidentTrade):
+        for row in db.query(model):
+            clean = one_line(row.asset_name)
+            if clean != row.asset_name:
+                row.asset_name = clean
                 changed += 1
         db.commit()
     return changed
@@ -786,6 +805,17 @@ async def run_stock_trades_pipeline() -> dict:
                 db.rollback()
                 record_exception(run, e, "reread")
                 error_parts.append("Re-read of stored filings: failed — see the run's error detail")
+            # Every stored asset name on one line, before the collapse below
+            # compares them.
+            try:
+                cleaned = clean_stored_asset_names(db)
+                if cleaned:
+                    logger.info("Trade asset names: %d stored names put on one line", cleaned)
+            except Exception as e:
+                logger.exception("Cleaning stored asset names failed")
+                db.rollback()
+                record_exception(run, e, "clean_asset_names")
+                error_parts.append("Cleaning stored asset names: failed — see the run's error detail")
             # A trade two reports list counts once, at its first disclosure.
             # After the re-read, which rewrites a filing's rows in full.
             try:

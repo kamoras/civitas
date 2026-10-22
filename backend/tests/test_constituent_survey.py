@@ -159,6 +159,7 @@ class TestJoin:
         assert got["surveyed_as"] == "Ruth Pryor"
         assert [g["party"] for g in got["by_party"]] == ["D", "R", "I"]
         assert got["by_party"][0]["approve"] == 0.2
+        assert got["by_party"][0]["approve_shown"] == "20%"
 
     def test_an_unmeasurable_group_carries_no_figure(self, survey):
         got = constituent_survey.constituent_approval("senate", "ME", "Ruth Pryor", "R", 28)

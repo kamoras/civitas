@@ -2109,7 +2109,10 @@ phase — fetches House (PDF) and Senate (HTML) STOCK Act periodic transaction
 reports plus the sitting president's OGE Form 278-T filings (PDF, from OGE's
 public presidential disclosure index), matches filer to a known member (the
 president's filings are indexed under the office and need no matching),
-labels each trade with the industry of the SIC code the SEC assigned its
+names each asset on one line (`ptr_common.one_line`: the filings wrap it
+in newlines and runs of spaces; rows stored before are re-cleaned every
+night, `clean_stored_asset_names`, ahead of the re-filed-trade collapse,
+which compares names), labels each trade with the industry of the SIC code the SEC assigned its
 issuer (`fetch/sec_tickers.py` — tier-1 structured metadata; the donor
 embedding classifier measured 30% agreement with it on trade names and is
 not used), and computes disclosure timeliness. Every stored trade's industry
@@ -2463,7 +2466,7 @@ the pending list).
 | SEO: per-route metadata, canonicals, JSON-LD, sitemap | `frontend/src/lib/site.ts`, `frontend/src/lib/seo.ts`, `frontend/src/app/sitemap.ts`, `backend/app/api/sitemap.py` |
 | Frontend types | `frontend/src/types/` |
 | Metric explanations (tooltips on all scorecard metrics) | `frontend/src/components/checker/MetricTooltip.tsx` |
-| Record boxes ("Boxes, not blocks": ruled grid, box, figures shared with the homepage) and the bill and state ballot pages built from them | `frontend/src/components/shared/BoxGrid.tsx`, `RecordBox.tsx`, `RecordFigure.tsx`, `frontend/src/types/figure.ts`, `frontend/src/components/congress/BillPageView.tsx`, `frontend/src/app/elections/states/[state]/StateBallotClient.tsx`; the bill page's lines from `backend/app/services/bill_boxes.py` (`boxes` on `GET /api/bills/{id}/record`) and `committee_record.search`'s `headline`; the ballot page's from `backend/app/services/ballot_boxes.py` (`boxes` on `GET /api/elections/states/{state}`); the Action Center's Today tab (`frontend/src/app/action/page.tsx` `IssueBox`, `OpenComments`; buttons from `issueCommands` in `IssueEnrichment.tsx`); `/environmental` from `backend/app/environmental.py`, `backend/app/environmental_sampler.py` (daily, `/data/environmental_runtime.json`) and `app/data/environmental.json` (`GET /api/environmental`; eGRID staleness in `data_refresh`) |
+| Record boxes ("Boxes, not blocks": ruled grid, box, figures shared with the homepage) and the bill and state ballot pages built from them | `frontend/src/components/shared/BoxGrid.tsx`, `RecordBox.tsx`, `RecordFigure.tsx`, `frontend/src/types/figure.ts`, `frontend/src/components/congress/BillPageView.tsx`, `frontend/src/app/elections/states/[state]/StateBallotClient.tsx`; the bill page's lines from `backend/app/services/bill_boxes.py` (`boxes` on `GET /api/bills/{id}/record`); a member profile's from `backend/app/services/member_boxes.py` (`boxes` on `GET /api/politicians/{id}`) and `committee_record.search`'s `headline`; the ballot page's from `backend/app/services/ballot_boxes.py` (`boxes` on `GET /api/elections/states/{state}`); the Action Center's Today tab (`frontend/src/app/action/page.tsx` `IssueBox`, `OpenComments`; buttons from `issueCommands` in `IssueEnrichment.tsx`); `/environmental` from `backend/app/environmental.py`, `backend/app/environmental_sampler.py` (daily, `/data/environmental_runtime.json`) and `app/data/environmental.json` (`GET /api/environmental`; eGRID staleness in `data_refresh`) |
 | Detail pages' two layers: where a member stands among peers, methods ledger, bill stage ladder and sources, "cite this", held and thin-data marks | `frontend/src/components/scorecard/WhereTheyStand.tsx`, `MethodsLedger.tsx`, `HeldScore.tsx`, `frontend/src/components/congress/StageLadder.tsx`, `BillSources.tsx`, `frontend/src/components/shared/CiteThis.tsx` (a government document or record cites its issuer: `frontend/src/lib/citedSources.ts`); data from `api/politicians.py` (`_chamber_field`, `_scored_on`) and `bill_service.stage_milestones` |
 | Action Center issue parts (shared with `/issue/[id]`: meta, tags, "What you can do", coverage, sources) | `frontend/src/components/action/IssueEnrichment.tsx` |
 | Every dot-per-person strip: nearest-dot hover label (name, seat or years, figure, place on the row), one Tab stop with arrow keys, the tick label at its tick, the big figure's unit line | `frontend/src/components/shared/Strip.tsx` (`StripPoints`, `StripAxis`, `BigFigure`); the place from `backend/app/ordinals.rank_shown` |
@@ -2998,6 +3001,15 @@ one line with the rest behind "More" (`components/elections/NoteLine.tsx`),
 not a paragraph or a box. On a ballot page the box lines are counts and
 labels only: what a measure does, what yes or no means and every deadline
 stay quoted where §7 puts them, never summarised in a box.
+
+A member's profile has its lines served the same way, on the profile itself
+(`boxes` on `GET /api/politicians/{id}`, `services/member_boxes.py`): the
+committee line and chips, a one-line ballot status, each record box's
+kicker, headline, figure and line (money with the funding window's election
+named, votes, bills, votes with the president with its verdict and
+`finding`, approval at home, holdings, trades, positions, the government
+record), counted from the same breakdown, holdings, trade and survey reads
+the rest of the page shows.
 
 The executive hub (`/executive`) is four boxes, each led by a figure the
 backend counts (the president's documents on record, the open comment

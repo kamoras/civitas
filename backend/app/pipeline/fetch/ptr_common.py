@@ -20,6 +20,15 @@ from scipy import ndimage
 logger = logging.getLogger(__name__)
 
 
+def one_line(text: str) -> str:
+    """An asset as the filing names it, on one line: the Senate's HTML cell
+    and the House's PDF text wrap it with newlines, indentation and
+    non-breaking spaces, which every page printed as they were ("BERY -
+    Berry Global Group, Inc. (Exchanged)" followed by a run of 44 spaces).
+    The words are the filing's; only the whitespace between them changes."""
+    return " ".join((text or "").split())
+
+
 @dataclass
 class TradeRow:
     """One parsed PTR transaction line.
@@ -56,6 +65,11 @@ class TradeRow:
     # "periodic" (a PTR / 278-T) or "annual" (a presidential 278e's Part 7,
     # which states no notification date: president_fd).
     report_kind: str = "periodic"
+
+    def __post_init__(self) -> None:
+        # Every parser builds its rows here, so every stored name is one line
+        # (stock_pipeline.clean_stored_asset_names re-cleans older rows).
+        self.asset_name = one_line(self.asset_name)
 
 # Bump whenever a parser here reads the same filing differently: every
 # stored trade an older version read — House, Senate and presidential — is

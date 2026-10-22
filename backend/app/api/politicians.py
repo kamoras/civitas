@@ -45,7 +45,10 @@ from app.pipeline.fetch.president_portraits import stored_portraits
 from app.pipeline.analyze.president_scorer import compute_president_overall_score
 from app.pipeline.analyze.score_calculator import compute_overall_score
 from app.score_display import displayed_rank, displayed_score
-from app.services.senator_service import STATE_NAMES
+from app.services import member_boxes
+from app.services.holdings_service import get_rep_holdings, get_senator_holdings
+from app.services.representative_service import get_rep_stock_trades, get_representative_score_breakdown
+from app.services.senator_service import STATE_NAMES, get_senator_score_breakdown, get_senator_stock_trades
 from app.time_utils import eastern_date
 from app.services.explore_keys import public_key
 
@@ -597,6 +600,27 @@ def suggest_politicians(
     )
 
 
+def _member_boxes(branch: str, entity, identity: dict, scorecard: dict | None, record: dict,
+                  on_ballot: dict | None, seat_race: dict | None, db: Session) -> dict | None:
+    """The profile's boxes (services/member_boxes.py) for a senator or
+    representative; None for anyone else, or when a service they read
+    fails (the page then draws its parts from the other fields)."""
+    if branch not in ("senate", "house"):
+        return None
+    senate = branch == "senate"
+    try:
+        breakdown = (get_senator_score_breakdown if senate else get_representative_score_breakdown)(db, entity.id)
+        holdings = (get_senator_holdings if senate else get_rep_holdings)(db, entity.id, 1, 1)
+        trades = (get_senator_stock_trades if senate else get_rep_stock_trades)(db, entity.id, 1, 1)
+        return member_boxes.boxes(
+            db, branch, entity, identity, scorecard, breakdown, holdings,
+            (trades.total, trades.late_count) if trades else (0, 0), record, on_ballot, seat_race,
+        )
+    except Exception:
+        logger.exception("Boxes for %s (%s) failed to build", entity.id, branch)
+        return None
+
+
 @router.get("/politicians/{politician_id}")
 def get_politician(politician_id: str, db: Session = Depends(get_db)) -> JSONResponse:
     """Return full profile for a single politician.
@@ -614,11 +638,17 @@ def get_politician(politician_id: str, db: Session = Depends(get_db)) -> JSONRes
         _president_overall(entity) if branch == "president" else None  # justices: not scored
     )
     scorecard = _build_scorecard(branch, politician_id, db)
+    identity = _build_identity(branch, entity, db)
+    record = _get_gov_record(politician_id, db)
+    member = branch in ("senate", "house")
+    on_ballot = member_on_ballot(db, entity.bioguide_id) if member else None
+    seat_race = (member_seat_race(db, entity.state, getattr(entity, "district", None), entity.bioguide_id,
+                                  "H" if branch == "house" else "S") if member else None)
 
     return _cached_json({
         "id": politician_id,
         "branch": branch,
-        "identity": _build_identity(branch, entity, db),
+        "identity": identity,
         "hasScorecard": overall is not None or branch == "scotus",
         "overallScore": overall,
         "scorecard": scorecard,
@@ -626,15 +656,15 @@ def get_politician(politician_id: str, db: Session = Depends(get_db)) -> JSONRes
         "chamberField": _chamber_field(branch, entity, db),
         "scoredOn": _scored_on(branch, politician_id, db),
         "activeIssues": _get_active_issues(politician_id, db),
-        "governmentRecord": _get_gov_record(politician_id, db),
+        "governmentRecord": record,
         # The race this member is a candidate in on the site's election
         # ballot (their own seat, or another office), so "is my member up,
         # and against whom?" is one link from the profile.
-        "onBallot": member_on_ballot(db, entity.bioguide_id) if branch in ("senate", "house") else None,
+        "onBallot": on_ballot,
         # The member's own seat's race, and whether they are a confirmed
         # nominee in it: a member not running keeps the link to who might
         # replace them.
-        "seatRace": member_seat_race(db, entity.state, getattr(entity, "district", None), entity.bioguide_id,
-                                     "H" if branch == "house" else "S")
-        if branch in ("senate", "house") else None,
+        "seatRace": seat_race,
+        # Every box's title, line and figure (services/member_boxes.py).
+        "boxes": _member_boxes(branch, entity, identity, scorecard, record, on_ballot, seat_race, db),
     })
