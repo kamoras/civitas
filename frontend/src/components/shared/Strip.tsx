@@ -63,6 +63,17 @@ export default function StripPoints({
   );
 }
 
+/** A strip's right end: the API's, or, from a backend older than the page
+ *  (the minutes a rolling update keeps the two apart), the largest figure on
+ *  it, unrounded, with no axis labels printed. */
+export function stripTop(
+  axisMax: number | undefined,
+  values: (number | null | undefined)[]
+): number {
+  if (axisMax) return axisMax;
+  return Math.max(...values.map((v) => v ?? 0)) || 1;
+}
+
 /**
  * Under a strip: the tick's label on its own line, at the tick (slid along
  * so it never runs off either end), then the axis's two ends. On separate
@@ -74,8 +85,9 @@ export function StripAxis({
   end,
   tick,
 }: {
-  start: string;
-  end: string;
+  /** The axis's ends as printed; absent from an older API, none shown. */
+  start?: string;
+  end?: string;
   tick?: { at: number; text: string } | null;
 }) {
   return (

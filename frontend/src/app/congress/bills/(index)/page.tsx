@@ -81,7 +81,7 @@ function BillsPageContent() {
       .then((res) => {
         if (cancelled) return;
         setStageCounts(res.stageCounts);
-        setStageFlow(res.stageFlow);
+        setStageFlow(res.stageFlow ?? {});
         setInMotion(res.inMotion ?? 0);
       })
       .catch(() => {});

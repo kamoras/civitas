@@ -10,5 +10,5 @@ export interface CommentWindow {
   /** Share of the period already gone, 0 to 100. */
   elapsedPercent: number;
   /** What the period bar's readout says. */
-  marks: ReadoutMark[];
+  marks?: ReadoutMark[];
 }

@@ -56,7 +56,8 @@ function Lines({ c }: { c: LineChart }) {
       : null;
   // Each point of the term, picked along the axis: its value and the other
   // presidencies' middle half at the same point (the API's words).
-  const marks = c.marks.map((m, i) => {
+  // None from an older API: the lines are drawn plain.
+  const marks = (c.marks ?? []).map((m, i) => {
     const [px, py] = c.series.points[i];
     return { ...m, x: (x(px) / W) * 100, yPct: (y(py) / H) * 100 };
   });
@@ -183,7 +184,7 @@ function Bars({ c }: { c: BarsChart }) {
   return (
     <>
       <Axis c={c}>
-        <ChartReadout label={c.title} marks={c.marks} startId={c.marks[c.marks.length - 1]?.id}>
+        <ChartReadout label={c.title} marks={c.marks} startId={c.marks?.at(-1)?.id}>
           <div className="relative h-48">
             {band && (
               <div
@@ -348,10 +349,12 @@ function Elections({ c }: { c: ElectionsChart }) {
             <span className="mr-1 inline-block h-2.5 w-3 bg-[var(--chart-muted)] align-middle" />
             every other election
           </span>
-          <span>
-            <span className="mr-1 inline-block w-5 border-t-2 border-dashed border-[var(--chart-muted)] align-middle" />
-            median winner, {c.medianShareShown}
-          </span>
+          {c.medianShareShown && (
+            <span>
+              <span className="mr-1 inline-block w-5 border-t-2 border-dashed border-[var(--chart-muted)] align-middle" />
+              median winner, {c.medianShareShown}
+            </span>
+          )}
         </p>
       </div>
       <div className="sr-only">
