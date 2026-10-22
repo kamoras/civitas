@@ -32,6 +32,27 @@ export interface ScoreVersion {
 
 export const SCORE_VERSIONS: ScoreVersion[] = [
   {
+    version: "President v12",
+    date: "2026-10-22",
+    title: "The peer economies are the OECD's members before 1994, by rule",
+    tldr: "Postwar growth was compared with thirteen countries a research note had picked. The peers are now every member of the OECD before its 1994 enlargement, the US aside: twenty-three rich economies that met the postwar decades' shocks together, chosen by a rule anyone can check.",
+    changes: [
+      "Added: Austria, Finland, Greece, Iceland, Ireland, Luxembourg (from 1950, where the Maddison Project starts it), New Zealand, Portugal, Spain and Turkey. None dropped. The list and the rule are written into the data file by scripts/fetch_peer_gdp.py.",
+      "Growth relative to the peers, catch-up set aside, on October 2026 data: Eisenhower 0.98 to 1.94 points a year, Kennedy 2.45 to 3.59, Obama 1.86 to 2.64, Biden 3.27 to 4.06; every postwar term rises because the wider group includes economies that were catching up faster, and Effectiveness compares each term with the others, so the order is what counts (rank correlation with before, 0.92).",
+      "Effectiveness's growth part, scored against the other postwar terms, moves by up to 18 points (Kennedy up, Reagan down 16, Carter and Clinton down 12, Obama up 10), so Effectiveness moves by up to about 4.5. The share of a term's growth shared with the peers falls from 64% to 55% since 1961, and the era trend left after the catch-up adjustment from +0.41 to +0.28.",
+    ],
+  },
+  {
+    version: "v6.38",
+    date: "2026-10-22",
+    title: "A party-line vote is a majority of one party against a majority of the other",
+    tldr: "A roll call counted as a party-line vote only when at least 65% of one party voted yes and at most 35% of the other did, a cut no source gives. It now counts when a majority of one party voted against a majority of the other, Congressional Quarterly's long-standing definition of a party unity vote.",
+    changes: [
+      "Measured on this Congress's stored roll calls, housekeeping aside: 817 Senate roll calls are party votes under the majority rule against 775 under 65/35, and 330 House ones against 305 (docs/methodology/member-score/v6.38.md).",
+      "Members' break rates under the two rules correlate 0.96 in the Senate and 0.99 in the House (0.96 and 0.89 by rank); the median member's rate rises from 0.5% to 0.6% (Senate) and 1.0% to 2.5% (House). Constituent Alignment compares each rate with what the seat predicts, measured on the same rule in the same run.",
+    ],
+  },
+  {
     version: "v6.37",
     date: "2026-10-21",
     title: "Two hand-set classifier checks measured and closed",

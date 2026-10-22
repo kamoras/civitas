@@ -59,9 +59,25 @@ function shapesOf(m: ChartMark, box: HTMLDivElement, r: DOMRect): Shape[] {
   return shown.length ? shown : all.slice(0, 1);
 }
 
-/** The shape a mark's label points at: its largest on screen. */
-function placeOf(m: ChartMark, box: HTMLDivElement, r: DOMRect): Shape | null {
+/** The shape a mark's label points at: the one nearest the pointer when
+ *  the pointer chose it (a mark drawn in two charts, as an election in the
+ *  electoral and the popular-vote rows, is pointed at where it was
+ *  hovered), else its largest on screen. */
+function placeOf(
+  m: ChartMark,
+  box: HTMLDivElement,
+  r: DOMRect,
+  near: { x: number; y: number } | null = null
+): Shape | null {
   const shapes = shapesOf(m, box, r);
+  if (near && shapes.length > 1) {
+    const gap = ({ b }: Shape) =>
+      Math.hypot(
+        Math.max(b.left - near.x, 0, near.x - b.left - b.width),
+        Math.max(b.top - near.y, 0, near.y - b.top - b.height)
+      );
+    return shapes.reduce<Shape | null>((best, s) => (best && gap(best) <= gap(s) ? best : s), null);
+  }
   return shapes.reduce<Shape | null>(
     (best, s) => (best && best.b.width * best.b.height >= s.b.width * s.b.height ? best : s),
     null
@@ -143,17 +159,26 @@ function Readout({
   const box = useRef<HTMLDivElement>(null);
   const link = useRef<HTMLAnchorElement & HTMLDivElement>(null);
   const pointer = useRef("mouse");
+  // Where the pointer was when it picked the mark, in px from the chart's
+  // top left; null for a keyboard choice.
+  const near = useRef<{ x: number; y: number } | null>(null);
   // Null too when the marks change under an open label (a peer-group switch).
   const m = active == null ? null : (marks[active] ?? null);
 
   const setActive = (i: number | null) => {
-    if (i === active) return;
-    setActiveIndex(i);
-    onActive?.(i == null ? null : (marks[i]?.id ?? null));
+    // The same mark again moves its label only when the pointer is now
+    // nearer another of its shapes.
+    if (i === active && near.current == null) return;
+    if (i !== active) {
+      setActiveIndex(i);
+      onActive?.(i == null ? null : (marks[i]?.id ?? null));
+    }
     const q = i == null ? null : marks[i];
     if (q == null || !box.current) return setPlace(null);
     const r = box.current.getBoundingClientRect();
-    const at = placeOf(q, box.current, r);
+    const at = placeOf(q, box.current, r, near.current);
+    if (i === active && place && at && at.b.top === place.b.top && at.b.left === place.b.left)
+      return;
     setPlace(
       at && {
         b: at.b,
@@ -198,6 +223,7 @@ function Readout({
     const r = box.current!.getBoundingClientRect();
     const px = e.clientX - r.left;
     const py = e.clientY - r.top;
+    near.current = { x: px, y: py };
     // On a drawn shape: that one, exactly (a state's outline, not its box).
     const on = (e.target as Element).closest?.(`[${MARK_ATTR}]`);
     if (on && box.current!.contains(on)) {
@@ -289,6 +315,7 @@ function Readout({
         return;
     }
     e.preventDefault();
+    near.current = null;
     setActive(next);
     setAnnounce(readoutWords(marks[next]));
   };

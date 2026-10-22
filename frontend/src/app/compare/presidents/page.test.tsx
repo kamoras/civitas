@@ -113,7 +113,7 @@ describe("ComparePresidentsPage", () => {
     ]);
     expect(row("Jobs a year (vs presidencies since 1939)")).toEqual(["—", "2.26M vs 1.44M"]);
     expect(
-      row("Growth per person vs 13 peer economies, points (vs presidencies since 1947)")
+      row("Growth per person vs 23 peer economies, points (vs presidencies since 1947)")
     ).toEqual(["—", "+1.9 vs +2.2"]);
     // A postwar term has no prewar figure.
     expect(row("Real GDP growth a year, before 1947 (vs presidencies before 1947)")).toEqual([

@@ -1101,8 +1101,9 @@ class PublicMemberVoteSchema(_PublicModel):
                                                       "party signal (a bipartisan or housekeeping roll call, or a "
                                                       "vote that isn't Yea or Nay)")
     party_leaning: Literal["R", "D", "bipartisan"] | None = Field(
-        description="How the parties split on it, from the roll call's own positions: R or D when 65% or more of "
-                    "one party's Yea/Nay votes were Yea and 35% or fewer of the other's, bipartisan otherwise; "
+        description="How the parties split on it, from the roll call's own positions: R or D when most of "
+                    "one party's Yea/Nay votes were Yea and most of the other's Nay (Congressional Quarterly's "
+                    "party unity vote), bipartisan otherwise; "
                     "null for a housekeeping question (a quorum call, a motion to table or adjourn) or when either "
                     "party cast fewer than three Yea/Nay votes")
     counted_as_break: bool | None = Field(

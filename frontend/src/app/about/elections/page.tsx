@@ -148,7 +148,7 @@ export default async function ElectionsChapter() {
               the same table the lean comes from. A district that only has its state&apos;s figure
               is not placed among districts, and from election day the lean is not shown at all, so
               that it can&apos;t be read as a call on the count. A House district&apos;s figure is
-              computed from precinct returns and used in no score (
+              computed from precinct returns and used in no member comparison (
               <A href="/about/data#computed-lean">how it is computed</A>); where Civitas has none,
               the page shows Cook&apos;s, labelled as Cook&apos;s.
             </P>
