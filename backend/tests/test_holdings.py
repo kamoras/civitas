@@ -1747,14 +1747,13 @@ class TestDuplicateRows:
     def test_a_row_repeated_across_pages_is_counted_once(self):
         from app.pipeline.fetch import senate_ptr
 
-        by_id: dict = {}
-        unparsed: set = set()
+        found = senate_ptr._Found()
         page = [{"url": "a"}, {"url": "b"}, {"url": None, "n": 1}]
         with patch.object(senate_ptr, "_parse_search_row",
                           side_effect=lambda r: {"report_url": f"https://e/view/annual/{r['url']}/"} if r["url"] else None):
-            senate_ptr._collect_rows(by_id, unparsed, page)
-            senate_ptr._collect_rows(by_id, unparsed, [{"url": "b"}, {"url": "c"}, {"url": None, "n": 1}])
-        assert (sorted(by_id), len(unparsed)) == (["a", "b", "c"], 1)
+            senate_ptr._collect_rows(found, page)
+            senate_ptr._collect_rows(found, [{"url": "b"}, {"url": "c"}, {"url": None, "n": 1}])
+        assert (sorted(found.by_id), len(found.unparsed), found.repeated) == (["a", "b", "c"], 1, {"b"})
 
     async def test_a_house_document_listed_twice_is_fetched_once(self, db_session, rep):
         filing = _house_filing("10078188")

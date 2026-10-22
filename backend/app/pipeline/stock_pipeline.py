@@ -430,10 +430,10 @@ async def _ingest_senate(db: Session, client: httpx.AsyncClient) -> int:
     # session — search_ptr_filings runs its own real browser session
     # (see its module docstring: the search endpoint itself is behind
     # Akamai bot-management no plain HTTP client gets past).
-    csrf_token = await senate_accept_terms(client)
-    if csrf_token is None:
-        logger.error("Could not establish a Senate eFD session — skipping Senate PTR ingestion this run")
-        return 0
+    # A session or a search that fails raises, failing the step with its
+    # cause: returning 0 here read an outage as a night with no new trades.
+    if await senate_accept_terms(client) is None:
+        raise RuntimeError("Could not establish a Senate eFD session")
 
     filings = await _with_missing_originals(db, await search_ptr_filings(since_date))
     inserted = 0

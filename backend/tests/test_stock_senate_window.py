@@ -10,9 +10,12 @@ import asyncio
 from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 from app.models import Senator, StockTrade
 from app.pipeline import stock_pipeline
 from app.pipeline.fetch.ptr_common import TradeRow
+from app.pipeline.fetch.senate_ptr import SearchUnavailable
 
 
 def _trade(db, filing_id, disclosure):
@@ -111,3 +114,20 @@ class TestFilerAttribution:
              patch.object(stock_pipeline, "fetch_senate_ptr", fetch):
             asyncio.run(stock_pipeline._ingest_senate(db_session, client=None))
         fetch.assert_not_called()
+
+
+class TestOutageIsNotANightWithoutTrades:
+    """A session or search that can't be read fails the step, with its cause,
+    rather than returning 0 trades (which reads as a quiet night)."""
+
+    def test_no_session_fails_the_step(self, db_session):
+        with patch.object(stock_pipeline, "senate_accept_terms", AsyncMock(return_value=None)), \
+             pytest.raises(RuntimeError, match="Senate eFD session"):
+            asyncio.run(stock_pipeline._ingest_senate(db_session, client=None))
+
+    def test_a_failed_search_fails_the_step(self, db_session):
+        failed = AsyncMock(side_effect=SearchUnavailable("the search form produced no response"))
+        with patch.object(stock_pipeline, "senate_accept_terms", AsyncMock(return_value="tok")), \
+             patch.object(stock_pipeline, "search_ptr_filings", failed), \
+             pytest.raises(SearchUnavailable, match="no response"):
+            asyncio.run(stock_pipeline._ingest_senate(db_session, client=None))
