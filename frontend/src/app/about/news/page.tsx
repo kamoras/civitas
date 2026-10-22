@@ -14,7 +14,8 @@ export default function NewsChapter() {
       href="/about/news"
       eyebrow="Methodology · news & the record"
       title="News & Congress reports"
-      lede={
+      lede={<p>The news and Congress pages, quoted.</p>}
+      intro={
         <p>
           The Action Center shows the day&apos;s most important civic stories; the Congress pages
           show what each chamber did. Neither is written by us or by a model: both quote their
