@@ -26,6 +26,18 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
+# Distrusted roots (AGENTS.md "Distrusted roots"): emSign ECC Root CA - G3,
+# eight revoked intermediates with compromised keys (GHSA-6q48-6c7w-9gw2).
+# Node's built-in root store can't drop a root, so Node is pointed at the
+# system store (--use-openssl-ca reads /etc/ssl/cert.pem, the bundle
+# update-ca-certificates writes) and the root is removed there. Through
+# NODE_OPTIONS so any child process inherits it: if something else needs
+# NODE_OPTIONS, append to it, never replace it. check-trust-stores.sh
+# asserts the built image.
+RUN apk add --no-cache ca-certificates && \
+    sed -i 's|^mozilla/emSign_ECC_Root_CA_-_G3\.crt$|!&|' /etc/ca-certificates.conf && \
+    update-ca-certificates
+ENV NODE_OPTIONS=--use-openssl-ca
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
