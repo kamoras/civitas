@@ -4,8 +4,7 @@ party, PAC money, small donors, bills past committee. One definition for the pee
 comparison (app/peer_comparison.py), the measures page and the facts each
 score snapshot keeps (models.ScoreSnapshot.facts).
 
-Imports nothing from the app but the party-line thresholds (from a module
-that imports only the standard library), so models.py can use it. Outside
+Imports nothing from the app, so models.py can use it. Outside
 app/pipeline/, so it never moves the analysis-code fingerprint.
 """
 
@@ -13,11 +12,11 @@ import json
 from dataclasses import dataclass
 from typing import Callable
 
-from app.pipeline.transform.normalize_votes import PARTY_SIDE_MAX, PARTY_SIDE_MIN
-
-# The party-line rule in words, from the constants the label is computed with.
-PARTY_LINE_RULE = (f"a roll call where at least {PARTY_SIDE_MIN:.0%} of one party voted yes and at most "
-                   f"{PARTY_SIDE_MAX:.0%} of the other did, counting those who voted yes or no")
+# The party-line rule in words: normalize_votes.compute_party_vote_split's
+# majority-against-majority label (party_majority), Congressional Quarterly's
+# party unity vote. tests/test_snapshot_facts.py holds the two together.
+PARTY_LINE_RULE = ("a roll call where most of one party voted yes and most of the other voted no, counting "
+                   "only those who voted yes or no (Congressional Quarterly's party unity vote)")
 
 
 @dataclass(frozen=True)

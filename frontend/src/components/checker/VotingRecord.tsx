@@ -336,7 +336,7 @@ export default function VotingRecord({
       <div className="panel px-2 py-3 sm:p-3">
         <div className={`${TYPE.section} text-signal-cyan!`}>{Math.round(partyLoyaltyPct)}%</div>
         <div className="[&>span]:justify-center text-ink-min text-small">
-          <MetricTooltip text="The share of this Congress's party-line votes (at least 65% of one party voting yes and at most 35% of the other) on which the member voted with most of their own party. Each bill or nomination counts once, however many times it came to a vote, and a vote against the party from its own flank isn't counted against it: the same count the profile's breaks figure uses.">
+          <MetricTooltip text="The share of this Congress's party-line votes (a majority of one party voting against a majority of the other) on which the member voted with most of their own party. Each bill or nomination counts once, however many times it came to a vote, and a vote against the party from its own flank isn't counted against it: the same count the profile's breaks figure uses.">
             Party loyalty
           </MetricTooltip>
         </div>
