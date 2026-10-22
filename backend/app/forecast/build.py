@@ -320,6 +320,9 @@ def build(db: Session, revisions: dict[str, dict] | None, today: date | None = N
             "model": {"beta": params["beta"], "priorSd": params["priorSd"], "halfLife": params["halfLife"],
                       "pollFloor": params["pollFloor"], "pollSpread": params["pollSpread"],
                       "scale": params["scale"], "priorScale": params["priorScale"],
+                      # The poll-weighting priors the fit used: stated
+                      # (model.STATED_PRIORS) until a fit records fitted ones.
+                      "priors": params.get("priors") or dict(model.STATED_PRIORS, fitted=False),
                       "file": f"app/data/{MODEL_FILES[chamber]}", "fit": fitted["_regenerate"],
                       "refreshed": (fitted.get("_refreshed") or {}).get("at")},
             "seats": seats,

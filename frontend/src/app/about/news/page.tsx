@@ -99,19 +99,25 @@ export default function NewsChapter() {
           </Box>
           <Box
             title="Ranking stories"
-            dek="Stories are ranked 40% civic actionability, 35% breadth and 25% trending. At most two issues publish per hourly run."
-            figure={{ type: "stat", value: 40, text: "40/35/25", caption: "percent weights" }}
+            dek="Stories are ranked by a fixed order of tests, with no weights: naming an official first, then how many outlets report it. At most two issues publish per hourly run."
+            figure={{ type: "stat", value: 5, text: "5", caption: "tests, in order" }}
             more="the ranking and repeats"
           >
             <P>
-              Stories are then ranked: 40% civic actionability (are officials named, does it
-              resemble the government documents we index), 35% breadth (how many independent
-              newsrooms cover it) and 25% whether people are talking about it on Google Trends and
-              Bluesky. Trending counts least because it is the most volatile. At most two issues
-              publish per hourly run, in rank order; if a top story fails the checks below, the next
-              one is tried. A story is passed over as a repeat only of one that actually published
-              in that run: a briefing that named two stories once crowded both out and then
-              published nothing itself.
+              Stories are ranked by five tests in a fixed order, each deciding only between stories
+              tied on every test before it: does it name an official we track (an issue must name
+              one, or a bill), how many independent newsrooms report it, how many officials it
+              names, how closely it resembles the government documents we index, and whether people
+              are talking about it on Google Trends and Bluesky. There are no weights to choose:
+              percentages were used until October 2026, but nothing the site stores could show what
+              they should be, since only the stories already chosen are ever seen by readers.
+              Replayed over a week of stored articles, the order put a story reported by more
+              outlets at the top (2.1 on average, against 1.4) and changed its top story less often
+              from hour to hour. Trending counts last because it is the most volatile. At most two
+              issues publish per hourly run, in rank order; if a top story fails the checks below,
+              the next one is tried. A story is passed over as a repeat only of one that actually
+              published in that run: a briefing that named two stories once crowded both out and
+              then published nothing itself.
             </P>
           </Box>
           <Box

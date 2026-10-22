@@ -5,9 +5,9 @@ Flow:
   2. Embed article titles+summaries, filter for US policy relevance
   3. Fetch trending topics from social media (Google Trends, Reddit)
   4. Cluster related articles by cosine similarity
-  5. Rank clusters by 0.40 civic actionability + 0.35 coverage breadth
-     + 0.25 trending relevance (see _rank_clusters) so actionable,
-     broadly-covered issues outrank editorial selection alone
+  5. Rank clusters by outlets reporting, then officials named, then
+     civic-document similarity, then trending (lexicographic, no weights:
+     see _rank_clusters)
   6. Use LLM to generate factual summary, key facts, and citizen actions
   7. Cross-reference with explore documents via embedding search
   8. Persist as ActionIssue rows for the current date
@@ -532,17 +532,16 @@ def cluster_calibration() -> dict:
 # How many candidate clusters get an LLM generation attempt per hourly run.
 # 2026-08: lowered from 4 to 2 as a deliberate capacity choice, not a
 # recalibrated quality threshold — there's a real difference between the
-# two. _rank_clusters' combined score is normalized against that day's OWN
-# maximum, so "top 4" always fills all 4 slots even on a quiet day where
-# only 1-2 clusters are genuinely newsworthy; the 3rd/4th ranked cluster
-# only has to beat its equally-weak peers, not clear any absolute bar. No
-# real per-signal absolute floor exists to calibrate against yet (that
-# would need the same measure-first approach as DEDUP_THRESHOLD/
-# SOURCE_SIM_FLOOR above), but a smaller quota directly does what was
-# asked for regardless: fewer issues attempted per run means only the
-# strongest candidates by the existing weighted ranking get a shot, at the
-# direct cost of quantity. Revisit the number itself once real per-cluster
-# score distributions are being logged (see _rank_clusters).
+# two. _rank_clusters orders the day's clusters against each other, so
+# "top 4" always fills all 4 slots even on a quiet day where only 1-2
+# clusters are genuinely newsworthy; the 3rd/4th ranked cluster only has
+# to beat its equally-weak peers, not clear any absolute bar. No real
+# per-signal absolute floor exists to calibrate against yet (that would
+# need the same measure-first approach as DEDUP_THRESHOLD/SOURCE_SIM_FLOOR
+# above), but a smaller quota directly does what was asked for regardless:
+# fewer issues attempted per run means only the strongest candidates by
+# the ranking get a shot, at the direct cost of quantity. The outlet counts
+# of the clusters tried and dropped are logged (cluster_rank_outlets_*).
 MAX_ISSUES = 2
 
 # How many ranked clusters a run may TRY to fill MAX_ISSUES slots. Separate
@@ -1911,35 +1910,32 @@ def _count_official_mentions(cluster_text: str, officials: dict) -> int:
     return count
 
 
-def _compute_action_link_boost(
+def _action_link_signals(
     clusters: list[list[NewsArticle]],
     db: "Session",
-) -> list[float]:
-    """Score each cluster by its measurable action surface in platform data.
+) -> list[tuple[int, float]]:
+    """(officials named, civic-document similarity) for each cluster: its
+    action surface measured in platform data, two of _rank_clusters' keys.
 
-    The platform exists so citizens can act — contact a member, track a
-    bill, respond to an executive action. Rather than scoring "civic-ness"
-    against hand-authored prototype sentences (whose absolute cosine
-    thresholds sat entirely inside the embedding model's ~0.55-0.87
-    same-register noise floor, passing 125/125 articles and scoring a
-    music performance 0.78 — 2026-07 audit), this measures two signals
-    derived only from data the platform already ingests:
+    Rather than scoring "civic-ness" against hand-authored prototype
+    sentences (whose absolute cosine thresholds sat entirely inside the
+    embedding model's ~0.55-0.87 same-register noise floor, passing 125/125
+    articles and scoring a music performance 0.78 — 2026-07 audit), both
+    come from data the platform already ingests:
 
-      1. Officials named (50%): distinct tracked officials (sitting
-         members, the president) named in the cluster's coverage,
-         deterministic string matching against the member tables,
-         capped at 3.
+      1. Officials named: distinct tracked officials (sitting members, the
+         president) named in the cluster's coverage, by deterministic
+         string matching against the member tables (_count_official_mentions).
 
-      2. Civic-document similarity (50%): top-k cosine similarity between
-         the cluster and the platform's own explore corpus (executive
-         orders, federal rules, bills — refreshed continuously), computed
-         in batch-centered embedding space. Centering subtracts the mean
-         article embedding of the run, removing the shared "news
-         register" component that makes raw similarities uninformative;
-         the same technique clustering already uses. Measured on live
-         articles: after centering, federal-policy stories score
-         0.3-0.5 against the corpus while celebrity/sports/lifestyle
-         stories score 0.07-0.26.
+      2. Civic-document similarity: top-k cosine similarity between the
+         cluster and the platform's own explore corpus (executive orders,
+         federal rules, bills — refreshed continuously), computed in
+         batch-centered embedding space. Centering subtracts the mean
+         article embedding of the run, removing the shared "news register"
+         component that makes raw similarities uninformative; the same
+         technique clustering already uses. Measured on live articles:
+         after centering, federal-policy stories score 0.3-0.5 against the
+         corpus while celebrity/sports/lifestyle stories score 0.07-0.26.
     """
     if not clusters:
         return []
@@ -1983,94 +1979,88 @@ def _compute_action_link_boost(
             top_k = min(10, len(sims))
             doc_scores[ci] = max(0.0, float(np.sort(sims)[-top_k:].mean()))
 
-    max_doc = max(doc_scores) if max(doc_scores, default=0.0) > 0 else 1.0
+    return [
+        (_count_official_mentions(" ".join(texts), officials), doc_scores[ci])
+        for ci, texts in enumerate(cluster_texts)
+    ]
 
-    boosts: list[float] = []
-    for ci, cluster in enumerate(clusters):
-        combined_text = " ".join(f"{a.title}. {a.summary[:200]}" for a in cluster)
-        n_officials = _count_official_mentions(combined_text, officials)
-        official_score = min(n_officials, 3) / 3.0
-        boosts.append(0.5 * official_score + 0.5 * doc_scores[ci] / max_doc)
 
-    logger.info(
-        "Action-link boosts: %s",
-        ", ".join(f"{b:.3f}" for b in boosts[:8]),
-    )
-    return boosts
+class RankSignals(NamedTuple):
+    """One cluster's ranking keys, in the order _rank_clusters compares them."""
+
+    names_official: bool  # names at least one tracked official
+    outlets: int  # distinct outlets reporting it
+    officials: int  # distinct tracked officials it names
+    documents: float  # similarity to the civic-document corpus
+    trending: float  # similarity to policy-relevant trending topics
 
 
 def _rank_clusters(
     clusters: list[list[NewsArticle]],
     trending: list[TrendingTopic],
     db: "Session",
-) -> tuple[list[list[NewsArticle]], list[float]]:
-    """Rank clusters by action surface, coverage breadth, and trending.
+) -> tuple[list[list[NewsArticle]], list[RankSignals]]:
+    """Rank clusters lexicographically: those naming a tracked official
+    first, then by how many outlets report the story, how many officials it
+    names, its similarity to the civic-document corpus, and to the day's
+    trending topics. Each key decides only between clusters tied on every
+    key before it.
 
-    Final score = 0.40 * action_link + 0.35 * coverage + 0.25 * trending.
-    Actionability leads: the platform exists so citizens can act (contact
-    Congress, track legislation, respond to executive action), so a story
-    with a direct US action surface outranks a better-covered story
-    without one. Actionability is measured from platform data (officials
-    named, similarity to the ingested civic-document corpus — see
-    _compute_action_link_boost), not hand-authored prototypes. Coverage
-    is the stability anchor (source count doesn't change hourly);
-    trending is weighted least because it is the most volatile signal
-    (Bluesky/Google shift every run) and would otherwise churn the top
-    issues hour to hour.
+    A rule with no weights, on purpose. Until 2026-10 the rank was
+    0.40 x action surface + 0.35 x coverage + 0.25 x trending, weights
+    nobody had fitted to anything. Fitting them needs a target the ranking
+    should predict, and none the stored data supplies is one: reader views
+    and action taps are counted only for the issues the ranking already
+    chose, and depend on the position it gave them; two stories have ever
+    become monitors; and the candidates that lost (their signals, or which
+    cluster they were) were never stored. So the order is a stated priority:
 
-    Returns (ranked_clusters, ranked_scores) — the combined score for
-    ranked_clusters[i] is ranked_scores[i], needed by
-    _deduplicate_top_clusters to log the real selected/rejected score
-    boundary, since dedup — not raw rank — decides final selection.
+      1. Names an official: the publication gate's own condition. An issue
+         publishes only if it anchors to a bill or a named official, and
+         which bill a story concerns isn't known at rank time, so a cluster
+         naming no one is tried only after every one that does.
+      2. Outlets: independent newsrooms each choosing to report the story is
+         the one signal here supplied by outside editorial judgement rather
+         than by Civitas's own similarity measures, and it moves least from
+         hour to hour.
+      3. Officials named: how many people the story gives a reader to ask.
+      4. Civic documents: how close the story sits to the rules, orders and
+         bills the corpus holds.
+      5. Trending: last, because it is the most volatile signal (it shifts
+         every run) and the least complete (it covers only the topics the
+         trend feeds list).
+
+    The replay behind the change is in docs/research/action-center-ranking.md.
+
+    Returns (ranked_clusters, ranked_signals): ranked_signals[i] is
+    ranked_clusters[i]'s keys, which _deduplicate_top_clusters logs for the
+    clusters it tries and drops, since dedup — not raw rank — decides final
+    selection.
     """
     if not clusters:
         return [], []
 
-    coverage_scores = [len({a.source_name for a in c}) for c in clusters]
-    max_cov = max(coverage_scores) if coverage_scores else 1.0
-    norm_coverage = [s / max_cov for s in coverage_scores]
-
     trending_boosts = _compute_trending_boost(clusters, trending)
-    max_trend = max(trending_boosts) if trending_boosts and max(trending_boosts) > 0 else 1.0
-    norm_trending = [s / max_trend for s in trending_boosts]
-
-    us_civic_boosts = _compute_action_link_boost(clusters, db)
-    max_civic = max(us_civic_boosts) if us_civic_boosts and max(us_civic_boosts) > 0 else 1.0
-    norm_us_civic = [s / max_civic for s in us_civic_boosts]
-
-    COVERAGE_WEIGHT = 0.35
-    TRENDING_WEIGHT = 0.25
-    US_CIVIC_WEIGHT = 0.40
-
-    combined = [
-        COVERAGE_WEIGHT * cov + TRENDING_WEIGHT * trend + US_CIVIC_WEIGHT * civic
-        for cov, trend, civic in zip(norm_coverage, norm_trending, norm_us_civic)
+    action_links = _action_link_signals(clusters, db)
+    signals = [
+        RankSignals(officials > 0, len({a.source_name for a in c}), officials, documents, trend)
+        for c, (officials, documents), trend in zip(clusters, action_links, trending_boosts)
     ]
-
-    ranked_indices = sorted(range(len(clusters)), key=lambda i: combined[i], reverse=True)
+    ranked_indices = sorted(range(len(clusters)), key=lambda i: signals[i], reverse=True)
 
     for i, idx in enumerate(ranked_indices[:6]):
-        c = clusters[idx]
-        titles = c[0].title[:60]
+        s = signals[idx]
         logger.info(
-            "  Rank %d: score=%.3f (cov=%.2f trend=%.2f civic=%.2f) sources=%d \"%s...\"",
-            i + 1, combined[idx], norm_coverage[idx], norm_trending[idx], norm_us_civic[idx],
-            len({a.source_name for a in c}), titles,
+            "  Rank %d: outlets=%d officials=%d documents=%.3f trending=%.3f \"%s...\"",
+            i + 1, s.outlets, s.officials, s.documents, s.trending, clusters[idx][0].title[:60],
         )
 
-    # Combined scores travel alongside the reordered clusters so
-    # _deduplicate_top_clusters — the function that actually decides what
-    # gets published, since it can skip a higher-ranked cluster as a
-    # near-duplicate and promote a lower-ranked one instead — can log the
-    # real selected/rejected score boundary. Logging it here instead would
-    # label by raw rank position, which doesn't match final selection
-    # whenever dedup reorders things.
-    return [clusters[i] for i in ranked_indices], [combined[i] for i in ranked_indices]
+    return [clusters[i] for i in ranked_indices], [signals[i] for i in ranked_indices]
 
 
 def _deduplicate_top_clusters(
     ranked_clusters: list[list[NewsArticle]],
-    ranked_scores: list[float],
+    ranked_signals: list["RankSignals"],
     max_candidates: int,
     published: list[int],
 ) -> Iterator[tuple[int, list[NewsArticle]]]:
@@ -2097,9 +2087,9 @@ def _deduplicate_top_clusters(
     the story. The cluster_dedup_merged_* counters keep their name for the
     series; they count clusters judged duplicates.
 
-    ranked_scores[i] is ranked_clusters[i]'s combined _rank_clusters score,
-    logged here as selected (tried) or rejected (a duplicate) because this
-    function decides which clusters are tried.
+    ranked_signals[i] is ranked_clusters[i]'s _rank_clusters keys; its
+    outlet count is logged here as selected (tried) or rejected (a
+    duplicate) because this function decides which clusters are tried.
     """
     if not ranked_clusters:
         return
@@ -2158,10 +2148,10 @@ def _deduplicate_top_clusters(
                 ranked_clusters[merged_into][0].title[:40],
                 float(embeddings[i] @ embeddings[merged_into]),
             )
-            action_metrics.increment_bucket("cluster_rank_score_rejected", ranked_scores[i])
+            action_metrics.increment(f"cluster_rank_outlets_rejected_{ranked_signals[i].outlets}")
             continue
 
-        action_metrics.increment_bucket("cluster_rank_score_selected", ranked_scores[i])
+        action_metrics.increment(f"cluster_rank_outlets_selected_{ranked_signals[i].outlets}")
         tried += 1
         yield i, cluster
 
@@ -5381,9 +5371,9 @@ def _run_refresh(db: Session) -> int:
     title_embs = _embed_texts([a.title for a, _ in relevant])
     day_title_mean = title_embs.mean(axis=0)
 
-    # 5. Rank clusters using coverage breadth + trending relevance
+    # 5. Rank clusters (outlets, officials, civic documents, trending)
     _set_refresh_state(stage="rank")
-    ranked_clusters, ranked_scores = _rank_clusters(clusters, trending, db)
+    ranked_clusters, ranked_signals = _rank_clusters(clusters, trending, db)
 
     # 5b. Candidates in rank order, skipping a cluster on the same story as
     # one already published this run (e.g., "Tariff hikes" and "Market
@@ -5391,7 +5381,7 @@ def _run_refresh(db: Session) -> int:
     # clusters publish, and only those count (_deduplicate_top_clusters).
     published_clusters: list[int] = []
     top_clusters = _deduplicate_top_clusters(
-        ranked_clusters, ranked_scores, CANDIDATE_POOL, published_clusters,
+        ranked_clusters, ranked_signals, CANDIDATE_POOL, published_clusters,
     )
     _set_refresh_state(stage="issues", stage_detail=f"0/{CANDIDATE_POOL}")
 
