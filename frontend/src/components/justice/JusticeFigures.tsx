@@ -3,6 +3,7 @@ import { onThisPage } from "@/lib/onThisPage";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { Dot } from "@/components/scorecard/WhereTheyStand";
 import StripPoints, { BigFigure, StripAxis, type StripPoint } from "@/components/shared/Strip";
+import CountHistogram, { wholeCounts } from "@/components/shared/CountHistogram";
 import { overlay } from "@/lib/chartColors";
 import { termsPhrase } from "@/lib/court";
 import { SHARE_SECTION_ATTR, shareMetaAttrs } from "@/lib/shareImage";
@@ -32,6 +33,36 @@ function axisLabel(m: JusticeMeasure, v: number): string {
 }
 
 function Strip({ m, justiceId }: { m: JusticeMeasure; justiceId: string }) {
+  if (
+    wholeCounts(
+      m.unit,
+      m.peers.map((p) => p.value)
+    )
+  ) {
+    // A whole number (opinions written): a dot histogram.
+    return (
+      <div className="min-w-0 px-2">
+        <CountHistogram
+          label={`${m.label}, sitting justices`}
+          points={m.peers.map((p) => ({
+            id: p.id,
+            name: p.name,
+            shown: p.shown,
+            rank: p.rank,
+            href: `/politicians/${encodeURIComponent(p.id)}`,
+            value: p.value,
+          }))}
+          marked={{ [justiceId]: { fill: "var(--ink-hi)", ring: "var(--phos)" } }}
+          startId={justiceId}
+          tick={
+            m.median != null && m.medianShown
+              ? { value: m.median, text: `median ${m.medianShown}` }
+              : null
+          }
+        />
+      </div>
+    );
+  }
   const [lo, hi] = stripDomain(m);
   const at = (v: number) => ((Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo)) * 100;
   const others = m.peers.filter((p) => p.id !== justiceId);
