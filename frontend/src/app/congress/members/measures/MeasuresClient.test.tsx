@@ -108,3 +108,31 @@ describe("an older API, during a rolling update", () => {
     expect(container.textContent).not.toMatch(/undefined|NaN/);
   });
 });
+
+describe("a whole-number measure", () => {
+  it("is a dot histogram of party shapes, one per member", async () => {
+    const bills = {
+      ...DATA.measures[0],
+      key: "billsMoved" as const,
+      label: "Bills past committee",
+      unit: "count" as const,
+      median: 2,
+      medianShown: "2",
+      points: [
+        { ...point("b", "Bea Ray", "R", 0), shown: "0 of 4" },
+        { ...point("a", "Al Fox", "D", 2), shown: "2 of 9" },
+        { ...point("c", "Cy Ng", "I", 2), shown: "2 of 3" },
+      ],
+    };
+    const { container } = render(
+      <MeasuresClient chamber="senate" data={{ ...DATA, measures: [bills] }} />
+    );
+    const chart = screen.getByRole("group", { name: /Bills past committee, every senator: 3/ });
+    expect(chart.querySelectorAll("svg circle")).toHaveLength(1);
+    expect(chart.querySelectorAll("svg rect")).toHaveLength(1);
+    expect(chart.querySelectorAll("svg polygon")).toHaveLength(1);
+    expect(screen.getByText("median 2")).toBeInTheDocument();
+    const r = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });
+    expect(r.violations.map((v) => v.id)).toEqual([]);
+  });
+});

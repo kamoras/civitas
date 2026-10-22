@@ -365,6 +365,7 @@ class TestHoldingsService:
         assert result.total_low == 1001.0 + 15001.0 + 1000000.0
         assert result.total_high == 15000.0 + 50000.0 + 1000000.0
         assert result.total_open_ended is True
+        assert result.total_shown == "$1.0M+"  # a floor in it: printed as a floor
         # Largest slice first. OTHER has no stated value, so it draws no
         # slice (weight 0) but is still listed — its holding must stay
         # reachable through the legend filter.
@@ -416,6 +417,7 @@ class TestHoldingsService:
         result = get_rep_holdings(db_session, "R1")
         assert (result.unvalued_count, result.total_low, result.total_high) == (0, 1251.0 + 1001.0, 1251.0 + 15000.0)
         assert result.total_open_ended is False
+        assert result.total_shown == "$2K \u2013 $16K"
         assert result.categories[0].open_ended is False
         assert result.categories[0].weight == pytest.approx(1251.0 + 8000.5)
         exact = next(h for h in result.holdings if h.asset_name == "Exact")

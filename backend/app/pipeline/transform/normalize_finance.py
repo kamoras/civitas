@@ -21,6 +21,7 @@ from app.pipeline.fetch.fec import (
     committee_industry,
     is_joint_fundraiser,
     is_political_committee,
+    financials_election_year,
     select_recent_elections,
 )
 from app.pipeline.transform.candidate_names import is_candidate_self_donor
@@ -266,6 +267,8 @@ def normalize_finance(
     return {
         "totalRaised": round(total_raised),
         "totalContributions": round(contribution_base),
+        # The election the window holds, for the page to name.
+        "electionYear": financials_election_year(recent_cycles[0]) if recent_cycles else None,
         "totalFromPACs": round(final_pac_total),
         "smallDonorPercentage": small_donor_percentage,
         "topDonors": top_donors,

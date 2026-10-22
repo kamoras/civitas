@@ -148,6 +148,9 @@ class FundingSchema(CamelModel):
     total_contributions: float | None = Field(
         None, description="Contributions (and candidate loans), in dollars: what the shares are taken over; "
                           "null on a record scored before it was kept")
+    election_year: int | None = Field(
+        None, description="The election these figures are from (the member's most recent completed one); null "
+                          "on a record scored before it was kept")
     # Read from the pipeline's "totalFromPACs" key; written as "totalFromPacs",
     # the spelling every other response (the leaderboards) uses.
     total_from_pacs: float = Field(
@@ -398,6 +401,8 @@ class HoldingsSchema(CamelModel):
     total_low: float = 0.0
     total_high: float = 0.0
     total_open_ended: bool = False
+    # The total as printed ("$21.0M+", "$1.2M – $2.5M"): holdings_service.value_shown.
+    total_shown: str | None = None
     categories: list[HoldingCategorySchema] = Field(default_factory=list)
     category_filter: str | None = None
     holdings: list[HoldingSchema] = Field(default_factory=list)
@@ -704,6 +709,8 @@ class ConstituentApprovalPartySchema(CamelModel):
     # How much of `approve` is the member's own respondents (0-1).
     own_weight: float | None = Field(None, description="How much of approve is the member's own respondents, 0-1")
     respondents: int = Field(description="The member's own constituents of this party who answered")
+    # The share as every surface prints it (score_display.shown_share).
+    approve_shown: str | None = None
 
 
 class ConstituentApprovalSchema(CamelModel):
@@ -1073,8 +1080,9 @@ class PublicMemberVoteSchema(_PublicModel):
                                                       "party signal (a bipartisan or housekeeping roll call, or a "
                                                       "vote that isn't Yea or Nay)")
     party_leaning: Literal["R", "D", "bipartisan"] | None = Field(
-        description="How the parties split on it, from the roll call's own positions: R or D when 65% or more of "
-                    "one party's Yea/Nay votes were Yea and 35% or fewer of the other's, bipartisan otherwise; "
+        description="How the parties split on it, from the roll call's own positions: R or D when most of "
+                    "one party's Yea/Nay votes were Yea and most of the other's Nay (Congressional Quarterly's "
+                    "party unity vote), bipartisan otherwise; "
                     "null for a housekeeping question (a quorum call, a motion to table or adjourn) or when either "
                     "party cast fewer than three Yea/Nay votes")
     counted_as_break: bool | None = Field(
@@ -1276,8 +1284,9 @@ class PublicScoreDimensionsSchema(_PublicModel):
 class PublicSeatSchema(_PublicModel):
     state: str
     district: int | None = Field(description="House district, 0 at-large; null for senators")
-    cook_pvi: int = Field(description="The seat's Cook PVI the score used, positive leaning Republican (the "
-                                      "district's for a House seat, the state's for a senator; 0 when unknown)")
+    cook_pvi: int = Field(description="The seat's lean the score used, positive leaning Republican (a House "
+                                      "seat's Cook PVI; for a senator, the state's lean computed by Civitas "
+                                      "with Cook's formula from certified presidential returns; 0 when unknown)")
     district_lines_congress: int | None = Field(
         description="The Congress whose district lines the House score was computed on; null for senators, or "
                     "a score stored before this was recorded")
@@ -1438,7 +1447,9 @@ class PublicPresidentialSupportMemberSchema(_PublicModel):
     party: str = Field(description="The party the expectation is read for (an independent's caucus party)")
     state: str
     district: int | None = Field(description="House district, 0 at-large; null for senators")
-    seat_lean: int | None = Field(description="The seat's Cook PVI, positive leaning Republican")
+    seat_lean: int | None = Field(description="The seat's lean, positive leaning Republican: a House seat's "
+                                              "Cook PVI; for a senator, the state's lean computed by Civitas "
+                                              "with Cook's formula")
     with_president: int = Field(description="Counted votes cast on the president's side")
     votes: int = Field(description="Counted votes cast (Yea or Nay; present and not voting excluded)")
     rate: float = Field(description="withPresident / votes")

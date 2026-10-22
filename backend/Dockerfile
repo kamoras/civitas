@@ -54,6 +54,25 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 RUN playwright install --with-deps chromium && \
     chmod -R a+rX /ms-playwright
 
+# Distrusted roots: removed from the system store (curl, OpenSSL, anything
+# not on certifi). After every apt step above, since a ca-certificates
+# upgrade rebuilds the store, and as a "!" line in ca-certificates.conf,
+# which later rebuilds keep. emSign ECC Root CA - G3: eight revoked
+# intermediates with compromised keys (GHSA-6q48-6c7w-9gw2); emSign's other
+# roots are unaffected and stay. To add a root, see AGENTS.md "Distrusted
+# roots"; check-trust-stores.sh asserts the built image.
+RUN sed -i 's|^mozilla/emSign_ECC_Root_CA_-_G3\.crt$|!&|' /etc/ca-certificates.conf && \
+    update-ca-certificates --fresh
+# Chromium doesn't read the system store: its root store is compiled in
+# (G3 is in it, checked on amd64 and arm64), so the same roots are
+# distrusted by managed policy (CADistrustedCertificates, the DER certs in
+# base64). Playwright's Chromium is a Chrome for Testing build, which reads
+# /etc/opt/chrome_for_testing; /etc/chromium is where a plain Chromium
+# build would look. The headless shell reads no policy at all, which is
+# why senate_ptr launches channel="chromium".
+COPY chromium-distrusted-roots.json /etc/opt/chrome_for_testing/policies/managed/distrusted-roots.json
+COPY chromium-distrusted-roots.json /etc/chromium/policies/managed/distrusted-roots.json
+
 COPY . .
 
 RUN groupadd -r civitas && useradd -r -g civitas -d /app civitas \

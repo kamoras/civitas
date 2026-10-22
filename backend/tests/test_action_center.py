@@ -31,6 +31,7 @@ from app.pipeline.analyze.action_center import (
     _entity_document_frequency,
     _prune_off_topic_updates,
     _shares_distinctive_entity,
+    RankSignals,
     _rank_clusters,
     _deduplicate_top_clusters,
     _update_national_monitors,
@@ -465,22 +466,45 @@ class TestRankClusters:
     _rank_clusters' own job is just producing the ranking those decisions
     are based on."""
 
-    @patch("app.pipeline.analyze.action_center._compute_action_link_boost")
+    @patch("app.pipeline.analyze.action_center._action_link_signals")
     @patch("app.pipeline.analyze.action_center._compute_trending_boost")
-    def test_returns_clusters_and_scores_in_matching_ranked_order(
-        self, mock_trending, mock_civic,
+    def test_lexicographic_named_official_then_outlets_officials_documents_trending(
+        self, mock_trending, mock_links,
     ):
-        clusters = [[_make_article(f"Story {i}")] for i in range(4)]
-        mock_trending.return_value = [0.0, 0.0, 0.0, 0.0]
-        # Deliberately out of input order — civic is the only nonzero
-        # component, so it alone determines rank.
-        mock_civic.return_value = [0.2, 0.8, 0.4, 0.6]
+        def cluster(name, outlets):
+            return [_make_article(f"{name} {k}", source=f"Outlet {k}") for k in range(outlets)]
 
-        ranked_clusters, ranked_scores = _rank_clusters(clusters, trending=[], db=MagicMock())
+        clusters = [
+            cluster("A", 1),
+            cluster("B", 2),
+            cluster("C", 2),
+            cluster("D", 2),
+            cluster("E", 2),
+            cluster("F", 5),  # names no one: after every cluster that does
+        ]
+        mock_links.return_value = [(9, 0.9), (1, 0.1), (2, 0.1), (2, 0.4), (2, 0.4), (0, 0.9)]
+        mock_trending.return_value = [0.9, 0.9, 0.0, 0.1, 0.2, 0.9]
 
-        assert [c[0].title for c in ranked_clusters] == ["Story 1", "Story 3", "Story 2", "Story 0"]
-        assert ranked_scores == sorted(ranked_scores, reverse=True)
-        assert len(ranked_scores) == len(ranked_clusters)
+        ranked, signals = _rank_clusters(clusters, trending=[], db=MagicMock())
+
+        # Officials break the outlet tie (C, D, E over B), documents break
+        # the officials tie (D, E over C), trending the documents tie (E
+        # over D); A's lead on every later key never lifts it over a second
+        # outlet, and F's five outlets never lift it over a named official.
+        assert [c[0].title[0] for c in ranked] == ["E", "D", "C", "B", "A", "F"]
+        assert [s.outlets for s in signals] == [2, 2, 2, 2, 1, 5]
+        assert signals == sorted(signals, reverse=True)
+
+    def test_no_weights_left(self):
+        import inspect
+        from app.pipeline.analyze import action_center
+
+        source = inspect.getsource(action_center._rank_clusters)
+        assert "_WEIGHT" not in source
+
+
+# Three clusters' ranking keys, in rank order: 3, 2 and 1 outlets.
+_SIGNALS = [RankSignals(True, n, 1, 0.0, 0.0) for n in (3, 2, 1)]
 
 
 def _tried(clusters, scores, n, publishes=lambda i: True):
@@ -505,7 +529,7 @@ class TestDeduplicateTopClusters:
         c2 = [_make_article("Trade war tariffs rise for Chinese imports")]
         c3 = [_make_article("Healthcare bill passes Senate committee")]
 
-        result = _tried([c1, c2, c3], [0.9, 0.8, 0.5], 4)
+        result = _tried([c1, c2, c3], _SIGNALS, 4)
         assert len(result) == 2
         titles = [r[0].title for r in result]
         assert "Trade war tariffs increase on Chinese goods" in titles
@@ -525,7 +549,7 @@ class TestDeduplicateTopClusters:
         c2 = [_make_article("Trade war tariffs rise for Chinese imports")]
         c3 = [_make_article("Healthcare bill passes Senate committee")]
 
-        _tried([c1, c2, c3], [0.9, 0.8, 0.5], 4)
+        _tried([c1, c2, c3], _SIGNALS, 4)
 
         counts = action_metrics.snapshot()
         merged = sum(v for k, v in counts.items() if k.startswith("cluster_dedup_merged_sim_bucket_"))
@@ -557,7 +581,7 @@ class TestDeduplicateTopClusters:
         c2 = [_make_article("Trade war tariffs rise for Chinese imports")]
         c3 = [_make_article("Healthcare bill passes Senate committee")]
 
-        result = _tried([c1, c2, c3], [0.9, 0.8, 0.5], 2)
+        result = _tried([c1, c2, c3], _SIGNALS, 2)
 
         result_titles = {a.title for cluster in result for a in cluster}
         assert "Healthcare bill passes Senate committee" in result_titles
@@ -575,10 +599,10 @@ class TestDeduplicateTopClusters:
         # (c3's 0.5, not c2's 0.8) lands in "selected" is what actually
         # proves the real outcome was logged.
         counts = action_metrics.snapshot()
-        assert counts.get(f"cluster_rank_score_selected_{action_metrics.decile_bucket(0.5)}") == 1
-        assert counts.get(f"cluster_rank_score_rejected_{action_metrics.decile_bucket(0.8)}") == 1
-        assert f"cluster_rank_score_selected_{action_metrics.decile_bucket(0.8)}" not in counts
-        assert f"cluster_rank_score_rejected_{action_metrics.decile_bucket(0.5)}" not in counts
+        assert counts.get("cluster_rank_outlets_selected_1") == 1
+        assert counts.get("cluster_rank_outlets_rejected_2") == 1
+        assert "cluster_rank_outlets_selected_2" not in counts
+        assert "cluster_rank_outlets_rejected_1" not in counts
 
     @patch("app.pipeline.analyze.action_center._embed_texts")
     def test_a_duplicate_of_a_cluster_that_did_not_publish_is_still_tried(self, mock_embed):
@@ -591,11 +615,11 @@ class TestDeduplicateTopClusters:
         story = [_make_article("Judge extends temporary block on media ban")]
         other = [_make_article("Healthcare bill passes Senate committee")]
 
-        tried = _tried([live_blog, story, other], [0.9, 0.8, 0.5], 3, publishes=lambda i: i != 0)
+        tried = _tried([live_blog, story, other], _SIGNALS, 3, publishes=lambda i: i != 0)
         assert tried == [live_blog, story, other]
 
         # Once the story does publish, its duplicate is not tried after it.
-        tried = _tried([story, live_blog, other], [0.9, 0.8, 0.5], 3)
+        tried = _tried([story, live_blog, other], _SIGNALS, 3)
         assert tried == [story, other]
 
 

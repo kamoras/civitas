@@ -15,6 +15,7 @@ import StripPoints, {
   stripTop,
   type StripPoint,
 } from "@/components/shared/Strip";
+import CountHistogram, { wholeCounts } from "@/components/shared/CountHistogram";
 import { TYPE } from "@/lib/typeStyles";
 
 const PARTY_FILL: Record<string, string> = {
@@ -37,6 +38,31 @@ function Mark({ party, size = 7 }: { party: string; size?: number }) {
         <polygon points={`${r},0 ${size},${r} ${r},${size} 0,${r}`} fill={fill} />
       )}
     </svg>
+  );
+}
+
+/** Mark's shape as an SVG child centred at (cx, cy): a histogram draws
+ *  every member in one SVG. */
+function PartyShape({
+  party,
+  cx,
+  cy,
+  size,
+}: {
+  party: string;
+  cx: number;
+  cy: number;
+  size: number;
+}) {
+  const fill = PARTY_FILL[party] ?? "var(--ind-purple)";
+  const r = size / 2;
+  if (party === "D") return <circle cx={cx} cy={cy} r={r} fill={fill} />;
+  if (party === "R") return <rect x={cx - r} y={cy - r} width={size} height={size} fill={fill} />;
+  return (
+    <polygon
+      points={`${cx},${cy - r} ${cx + r},${cy} ${cx},${cy + r} ${cx - r},${cy}`}
+      fill={fill}
+    />
   );
 }
 
@@ -75,6 +101,7 @@ function Callout({
 }
 
 function ChamberStrip({ m, house }: { m: ChamberMeasure; house: boolean }) {
+  const parties = new Map(m.points.map((p) => [p.id, p.party]));
   const max = stripTop(m.axisMax, [...m.points.map((p) => p.value), m.median]);
   const at = (v: number) => Math.min(100, (v / max) * 100);
   // A mark is 7px; its centre is 3.5px below its jittered top.
@@ -113,29 +140,62 @@ function ChamberStrip({ m, house }: { m: ChamberMeasure; house: boolean }) {
       </div>
       <p className="max-w-prose text-small text-ink">{m.why}</p>
       {/* The table below is the full text form of these strips. */}
-      <StripPoints
-        label={`${m.label}, every ${house ? "representative" : "senator"}`}
-        points={points}
-        className="mt-2 h-14"
-      >
-        <div className="absolute inset-x-0 top-[30px] h-px bg-white/40" />
-        {m.points.map((p, i) => (
-          <span
-            key={p.id}
-            className="absolute flex -translate-x-1/2"
-            style={{ left: `${at(p.value)}%`, top: `${top(i)}px` }}
-          >
-            <Mark party={p.party} />
-          </span>
-        ))}
-        {m.median != null && (
-          <span
-            className="absolute top-1 h-12 -translate-x-1/2 border-l-2 border-ink-hi"
-            style={{ left: `${at(m.median)}%` }}
+      {wholeCounts(
+        m.unit,
+        m.points.map((p) => p.value)
+      ) ? (
+        <div className="mt-2">
+          <CountHistogram
+            label={`${m.label}, every ${house ? "representative" : "senator"}`}
+            // Ties by party, so each column's stack splits into its parties.
+            points={[...m.points]
+              .sort((a, b) => a.value - b.value || a.party.localeCompare(b.party))
+              .map((p) => ({
+                id: p.id,
+                name: p.name,
+                detail: partySeat(p, house),
+                shown: p.shown,
+                rank: p.rank,
+                href: `/politicians/${p.id}`,
+                value: p.value,
+              }))}
+            tick={
+              m.median != null && m.medianShown
+                ? { value: m.median, text: `median ${m.medianShown}` }
+                : null
+            }
+            dot={(p, cx, cy, d) => (
+              <PartyShape party={parties.get(p.id) ?? ""} cx={cx} cy={cy} size={d} />
+            )}
           />
-        )}
-      </StripPoints>
-      <StripAxis start={m.axisStartShown} end={m.axisEndShown} />
+        </div>
+      ) : (
+        <>
+          <StripPoints
+            label={`${m.label}, every ${house ? "representative" : "senator"}`}
+            points={points}
+            className="mt-2 h-14"
+          >
+            <div className="absolute inset-x-0 top-[30px] h-px bg-white/40" />
+            {m.points.map((p, i) => (
+              <span
+                key={p.id}
+                className="absolute flex -translate-x-1/2"
+                style={{ left: `${at(p.value)}%`, top: `${top(i)}px` }}
+              >
+                <Mark party={p.party} />
+              </span>
+            ))}
+            {m.median != null && (
+              <span
+                className="absolute top-1 h-12 -translate-x-1/2 border-l-2 border-ink-hi"
+                style={{ left: `${at(m.median)}%` }}
+              />
+            )}
+          </StripPoints>
+          <StripAxis start={m.axisStartShown} end={m.axisEndShown} />
+        </>
+      )}
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Callout title="Furthest above expected" points={m.mostAbove} house={house} />
         <Callout title="Furthest below expected" points={m.mostBelow} house={house} />

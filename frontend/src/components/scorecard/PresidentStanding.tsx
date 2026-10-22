@@ -176,6 +176,9 @@ function Row({ m, me, showTable }: { m: PresidentPeerMeasure; me: Self; showTabl
                 <td className="py-1">
                   <Link
                     href={`/politicians/${m.distributionIds[i]}`}
+                    // Out of the Tab order while the table is only for screen
+                    // readers (WhereTheyStand does the same).
+                    tabIndex={showTable ? undefined : -1}
                     className="underline-offset-2 hover:underline"
                   >
                     {m.distributionNames[i]}

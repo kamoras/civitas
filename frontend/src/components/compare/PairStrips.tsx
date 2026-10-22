@@ -10,6 +10,7 @@ import StripPoints, {
   stripTop,
   type StripPoint,
 } from "@/components/shared/Strip";
+import CountHistogram, { wholeCounts } from "@/components/shared/CountHistogram";
 
 type Side = { id: string; name: string };
 
@@ -55,48 +56,80 @@ function PairStrip({
           )}
         </span>
       </figcaption>
-      <StripPoints
-        label={`${m.label}, every ${chamber === "house" ? "representative" : "senator"}`}
-        points={points}
-        startId={left.id}
-        className="mt-2 h-10"
-      >
-        <div className="absolute inset-x-0 top-[22px] h-px bg-white/40" />
-        {m.points.map((p, i) => (
-          <Dot
-            key={p.id}
-            size={5}
-            fill="var(--chart-muted)"
-            className="absolute -translate-x-1/2"
-            style={{ left: `${at(p.value)}%`, top: `${12 + JITTER[i % JITTER.length] / 2}px` }}
+      {wholeCounts(
+        m.unit,
+        m.points.map((p) => p.value)
+      ) ? (
+        <div className="mt-2">
+          <CountHistogram
+            label={`${m.label}, every ${chamber === "house" ? "representative" : "senator"}`}
+            points={m.points.map((p) => ({
+              id: p.id,
+              name: p.name,
+              detail: partySeat(p, chamber === "house"),
+              shown: p.shown,
+              rank: p.rank,
+              href: `/politicians/${p.id}`,
+              value: p.value,
+            }))}
+            marked={{
+              [left.id]: { fill: "var(--ink-hi)", ring: "var(--phos)" },
+              [right.id]: { fill: "var(--surface)", ring: "var(--ink-hi)" },
+            }}
+            startId={left.id}
+            tick={
+              m.median != null && m.medianShown
+                ? { value: m.median, text: `median ${m.medianShown}` }
+                : null
+            }
           />
-        ))}
-        {m.median != null && (
-          <span
-            className="absolute top-1 h-8 -translate-x-1/2 border-l-2 border-ink-hi"
-            style={{ left: `${at(m.median)}%` }}
-          />
-        )}
-        {l && (
-          <Dot
-            size={14}
-            fill="var(--ink-hi)"
-            ring="var(--phos)"
-            className="absolute top-[15px] -translate-x-1/2"
-            style={{ left: `${at(l.value)}%` }}
-          />
-        )}
-        {r && (
-          <Dot
-            size={14}
-            fill="var(--surface)"
-            ring="var(--ink-hi)"
-            className="absolute top-[15px] -translate-x-1/2"
-            style={{ left: `${at(r.value)}%` }}
-          />
-        )}
-      </StripPoints>
-      <StripAxis start={m.axisStartShown} end={m.axisEndShown} />
+        </div>
+      ) : (
+        <>
+          <StripPoints
+            label={`${m.label}, every ${chamber === "house" ? "representative" : "senator"}`}
+            points={points}
+            startId={left.id}
+            className="mt-2 h-10"
+          >
+            <div className="absolute inset-x-0 top-[22px] h-px bg-white/40" />
+            {m.points.map((p, i) => (
+              <Dot
+                key={p.id}
+                size={5}
+                fill="var(--chart-muted)"
+                className="absolute -translate-x-1/2"
+                style={{ left: `${at(p.value)}%`, top: `${12 + JITTER[i % JITTER.length] / 2}px` }}
+              />
+            ))}
+            {m.median != null && (
+              <span
+                className="absolute top-1 h-8 -translate-x-1/2 border-l-2 border-ink-hi"
+                style={{ left: `${at(m.median)}%` }}
+              />
+            )}
+            {l && (
+              <Dot
+                size={14}
+                fill="var(--ink-hi)"
+                ring="var(--phos)"
+                className="absolute top-[15px] -translate-x-1/2"
+                style={{ left: `${at(l.value)}%` }}
+              />
+            )}
+            {r && (
+              <Dot
+                size={14}
+                fill="var(--surface)"
+                ring="var(--ink-hi)"
+                className="absolute top-[15px] -translate-x-1/2"
+                style={{ left: `${at(r.value)}%` }}
+              />
+            )}
+          </StripPoints>
+          <StripAxis start={m.axisStartShown} end={m.axisEndShown} />
+        </>
+      )}
     </figure>
   );
 }

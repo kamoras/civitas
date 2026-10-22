@@ -167,6 +167,11 @@ class Senator(Base):
     # are taken over (normalize_finance.summarize_election_totals). NULL on
     # rows scored before it existed — readers fall back to total_raised.
     total_contributions: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # The election the funding figures are from (fetch/fec.
+    # select_recent_elections: the most recent completed one), so a page can
+    # name it ("Money · 2024 election"). NULL on rows scored before it was
+    # kept: the page then says "most recent completed election".
+    funding_election_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Party the member's votes are scored against: their own, or for an
     # Independent the party they caucus with (normalize_votes). Read back by
     # the score-breakdown API so it scores Independents as the pipeline did.
@@ -455,6 +460,11 @@ class Representative(Base):
     # are taken over (normalize_finance.summarize_election_totals). NULL on
     # rows scored before it existed — readers fall back to total_raised.
     total_contributions: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # The election the funding figures are from (fetch/fec.
+    # select_recent_elections: the most recent completed one), so a page can
+    # name it ("Money · 2024 election"). NULL on rows scored before it was
+    # kept: the page then says "most recent completed election".
+    funding_election_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Party the member's votes are scored against: their own, or for an
     # Independent the party they caucus with (normalize_votes). Read back by
     # the score-breakdown API so it scores Independents as the pipeline did.
@@ -797,7 +807,7 @@ class President(Base):
     election_margin: Mapped[float | None] = mapped_column(Float, nullable=True)
     gdp_growth_avg: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Average annual real GDP growth per person over the years Effectiveness
-    # credits, the 13 peer economies' median over the same years, and US
+    # credits, the peer economies' median over the same years, and US
     # minus peers with the peers' catch-up growth set aside
     # (app.pipeline.fetch.peer_gdp.peer_relative_growth) — what a postwar
     # term's GDP component scores since president v8. NULL before 1947 (no

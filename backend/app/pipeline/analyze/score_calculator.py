@@ -181,6 +181,7 @@ from app.config_definitions import (
 from app.models import PromiseAlignment
 from app.ordinals import ordinal
 from app.pipeline.analyze.constituent_approval import senate_approval
+from app.services.constituent_survey import approval_share
 from app.pipeline.analyze.population_reference import (
     CONSTITUENT_REFERENCE,
     FUNDING_REFERENCE,
@@ -198,7 +199,7 @@ logger = logging.getLogger(__name__)
 # public changelog) in sync, and add a decision record for the new version
 # under docs/methodology/member-score/ — that is where the reasons go, not
 # here.
-ALGORITHM_VERSION = "v6.37"
+ALGORITHM_VERSION = "v6.38"
 
 # weight-key -> Senator/Representative score_* attribute name. Both models
 # use identical score_* column names, so one map covers both entity types.
@@ -277,9 +278,13 @@ _ADVANCEMENT_ACTION_KEYWORDS = ("passed", "agreed to", "ordered to be reported")
 # neutral because PageRank centrality is structurally a function of network
 # size, which takes years to build — a freshman's near-zero percentile
 # reflects time in office, not ineffectiveness (2026-07 audit; see the
-# decision record docs/methodology/member-score/v5.12.md). Scaled to a full 6-year Senate term: long enough to
-# plausibly build a real network, short enough that a second-term member
-# isn't still getting a pass. Shared by Legislative Effectiveness's
+# decision record docs/methodology/member-score/v5.12.md). A CONVENTION: one
+# full Senate term, three House terms. Measured 2026-10-22 on the serving
+# members (one Congress's cross-section), a rise-then-flat fit of leadership
+# on tenure puts the bend at 7 years in the Senate (bootstrap 95% interval 3
+# to 11) and 1.5 in the House (1.5 to 6.5), 4 pooled (1.5 to 7): one
+# Congress can't place it more closely than that, and 6 is inside all three
+# intervals (docs/methodology/confidence-grades.md). Shared by Legislative Effectiveness's
 # leadership component (_legislative_effectiveness_core) and the displayed
 # leader/follower label (sponsorship_analysis.describe_senator_position), so
 # the same "seniority alone is never penalized" correction applies to both.
@@ -826,6 +831,16 @@ def explain_scores(senator: dict) -> dict:
 # the top of this module) so population_reference can stamp at construction.
 
 
+def confidence_vote_grades(chamber: str) -> tuple[int, int]:
+    """(Partial, Full) party-line votes for Constituent Alignment's data
+    grade in `chamber`: where a break rate's split-half reliability reaches
+    0.70 and 0.80 (scripts/calibrate_confidence_grades.py, refreshed monthly
+    through data_refresh). The grade only: the vote score's shrinkage still
+    saturates at CONSTITUENT_FULL_CONFIDENCE_VOTES."""
+    entry = (data_refresh.read("confidence_grades.json").get("chambers") or {}).get(chamber) or {}
+    return int(entry["partial"]), int(entry["full"])
+
+
 def calculate_confidence(senator: dict) -> dict[str, str]:
     """Data-sufficiency confidence per dimension: "high" | "medium" | "low".
 
@@ -861,18 +876,28 @@ def calculate_confidence(senator: dict) -> dict[str, str]:
         if isinstance(p, dict) and p.get("alignment") in (PromiseAlignment.KEPT, PromiseAlignment.PARTIAL, PromiseAlignment.BROKEN)
     )
 
-    # constituentAlignment/legislativeEffectiveness thresholds are halved from
-    # their original 10/40 and 3/10: both dimensions' underlying windows
-    # were cut from ~2-3 congresses to the current congress only (see
-    # AGENTS.md "current term"), so the old volume thresholds would grade
-    # most members down for less data purely as an artifact of the window
-    # change, not because they're actually under-covered. Funding's window
-    # only narrowed from 2 elections to 1 (much smaller cut), so its
-    # thresholds are unchanged.
+    # Constituent Alignment's grade is measured: Partial and Full from the
+    # record length at which a break rate's split-half reliability reaches
+    # 0.70 and 0.80 in the member's chamber (confidence_vote_grades).
+    #
+    # The rest are CONVENTIONS, counts no data here can calibrate, each with
+    # its reason (docs/methodology/confidence-grades.md):
+    #   - funding (3 / 10 top donors, 3 / 6 industries): Funding Independence's
+    #     concentration reads the top ten donors and Funding Diversity's
+    #     entropy the industry breakdown, so Full is a full top ten and six
+    #     industries (entropy over fewer can't spread far), Partial three of
+    #     either; a donor list has no split-half (one election, one filing set);
+    #   - bills (2 / 5 sponsored): until 2026-07 these were 3 / 10 over two
+    #     or three Congresses and were halved by hand when the window became
+    #     one Congress; a member's bills are the whole record, not a sample,
+    #     so there is no reliability to measure, only how much record there is;
+    #   - promises (3 / 8): Promise Persistence has had no input since promise
+    #     tracking was removed; kept for the stored scores that still carry it.
+    vote_partial, vote_full = confidence_vote_grades(_chamber_of(senator.get("district")))
     return {
         "fundingIndependence": grade(n_donors, 3, 10) if has_funding else "low",
         "promisePersistence": grade(n_evaluable, 3, 8),
-        "constituentAlignment": grade(n_party_votes, 5, CONSTITUENT_FULL_CONFIDENCE_VOTES),
+        "constituentAlignment": grade(n_party_votes, vote_partial, vote_full),
         "fundingDiversity": grade(n_industries, 3, 6) if has_funding else "low",
         "legislativeEffectiveness": grade(len(bills), 2, 5) if bills_status != "unavailable" else "low",
         "constituentAlignmentVotePart": _constituent_vote_part_status(senator),
@@ -2661,7 +2686,7 @@ def _constituent_alignment_core(
         names = {"D": "Democrats", "R": "Republicans", "I": "independents"}
         approval_facts = {
             "groups": [
-                {"group": g, "approve": round(a, 3), "typical": round(t, 3)} for g, a, t in approval["groups"]
+                {"group": g, "approve": approval_share(a), "typical": round(t, 3)} for g, a, t in approval["groups"]
             ],
             "z": round(approval["z"], 2),
             "survey": approval["survey"],

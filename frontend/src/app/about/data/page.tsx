@@ -44,8 +44,9 @@ export default function DataChapter() {
     >
       <Summary>
         <Point>
-          All data comes from official government sources and public records. Nothing is purchased
-          or taken from behind a paywall.
+          Data comes from official records and named public sources (surveys, academic datasets,
+          Wikipedia, newsrooms), each shown with its source. Nothing is purchased or taken from
+          behind a paywall.
         </Point>
         <Point>
           AI sorts records into categories, finds claims in news articles and writes a few short,
@@ -69,7 +70,7 @@ export default function DataChapter() {
         <Boxes>
           <Box
             title="Congress"
-            dek="Members, bills, votes, nominations and the Congressional Record from Congress.gov, the chambers and GovInfo; money from the FEC; trades and lobbying from official filings; partisan lean from Cook and certified returns."
+            dek="Members, bills, votes, nominations and the Congressional Record from Congress.gov, the chambers and GovInfo; money from the FEC; trades and lobbying from official filings; partisan lean from Cook's published district figures and, for states, Cook's formula on certified returns."
             more="every Congress source"
           >
             <Facts>
@@ -158,10 +159,10 @@ export default function DataChapter() {
                 once, the latest filed, so an amendment replaces the report it amends.
               </Fact>
               <Fact label="Partisan lean">
-                State and district Cook PVI. A state&apos;s is computed from its certified
-                presidential returns for the two elections in Cook&apos;s window (the FEC&apos;s
-                compilation or the MIT Election Lab&apos;s official state file); a district&apos;s
-                is Cook&apos;s published figure, shown beside a{" "}
+                A state&apos;s lean is computed by Civitas with Cook&apos;s formula, not taken from
+                Cook: from its certified presidential returns for the two elections in Cook&apos;s
+                window (the FEC&apos;s compilation or the MIT Election Lab&apos;s official state
+                file); a district&apos;s is Cook&apos;s published figure, shown beside a{" "}
                 <A href="#computed-lean">lean Civitas computes</A> from precinct returns.
               </Fact>
             </Facts>
@@ -184,8 +185,8 @@ export default function DataChapter() {
                 The BLS unemployment rate (from 1948) and consumer price index (from 1947).
               </Fact>
               <Fact label="Maddison Project · World Bank">
-                GDP per person for the US and 13 peer economies from 1946, to compare postwar
-                growth.
+                GDP per person for the US and 23 peer economies (the OECD&apos;s members before its
+                1994 enlargement) from 1946, to compare postwar growth.
               </Fact>
               <Fact label="C-SPAN Historians Survey">
                 The newest edition published, for the historians&apos; rank on a president&apos;s
@@ -395,12 +396,13 @@ export default function DataChapter() {
           </Box>
           <Box
             title="What AI does not do"
-            dek="No model writes a score, anything on a ballot page, or a member write-up. Bills and donors are classified by embeddings, not a language model."
+            dek="No model writes a figure on a member page, anything on a ballot page, or a member write-up. Bills and donors are classified by embeddings, not a language model."
             more="each, and why"
           >
             <List>
-              <Item label="Scores">
-                Every score is a deterministic formula with no model input.
+              <Item label="Member figures">
+                Every figure compared on a member page is a deterministic formula with no model
+                input.
               </Item>
               <Item label="Ballot content">
                 Nothing on a ballot page is model-written, at any stage (
@@ -502,15 +504,15 @@ export default function DataChapter() {
         <Boxes>
           <Box
             title="Cook's figure, checked"
-            dek="Scores use Cook's published PVI. Beside it, Civitas shows the same formula worked out from open precinct returns, used in no score."
+            dek="Member comparisons use Cook's published PVI. Beside it, Civitas shows the same formula worked out from open precinct returns, used in no comparison."
             more="where it is shown"
           >
             <P>
               Every House district&apos;s lean on the site is Cook&apos;s published PVI, and that is
-              the figure the scores use. Beside it, the race pages, the redistricting pages and each
-              member page&apos;s methods section show a Civitas-computed lean: the same formula,
-              worked out here from open precinct returns, so anyone can check where the number comes
-              from. It is shown for comparison and used in no score.
+              the figure member comparisons use. Beside it, the race pages, the redistricting pages
+              and each member page&apos;s methods section show a Civitas-computed lean: the same
+              formula, worked out here from open precinct returns, so anyone can check where the
+              number comes from. It is shown for comparison and used in no member comparison.
             </P>
           </Box>
           <Box
@@ -679,8 +681,13 @@ export default function DataChapter() {
           </Box>
           <Box
             title="One list of results"
-            dek="Press Enter for one list of pages and documents, ranked together. A document described in its own words lands in the first ten 91 times in 100."
-            figure={{ type: "stat", value: 91, text: "91%", caption: "found in the first ten" }}
+            dek="Press Enter for one list of pages and documents, ranked together. A document described in its own words lands in the first ten 91 times in 100 (measured October 2026)."
+            figure={{
+              type: "stat",
+              value: 91,
+              text: "91%",
+              caption: "found in the first ten (October 2026)",
+            }}
             more="how the two rankings combine, and the test"
           >
             <P>
@@ -688,20 +695,25 @@ export default function DataChapter() {
               best fit your words, ranked together. Documents are found the way document search
               finds them, including by meaning, so describing a rule in your own words works: of six
               such searches for open proposed rules, the list used to find none and now finds all
-              six in its first ten. Each result says what it is (a member, a bill, a document), and
-              the filters above the list narrow it to one kind; the Documents filter has the
-              document search&apos;s own filters. The two rankings are combined by position, not by
-              score
+              six in its first ten (measured October 2026). Each result says what it is (a member, a
+              bill, a document), and the filters above the list narrow it to one kind; the Documents
+              filter has the document search&apos;s own filters. The two rankings are combined by
+              position, not by score
               <Cite id="cormack2009" />, with weights measured on test searches held out from the
               tuning: names, bills, pages and identifiers ranked exactly as well as before, and a
               document described by its own words was in the first ten 91 times in 100, where it had
-              been 0.
+              been 0 (measured October 2026).
             </P>
           </Box>
           <Box
             title="Straight to the page"
-            dek="When what you typed names one page clearly, Enter goes straight there. In tests, 93 in 100 did, and none went to a wrong page."
-            figure={{ type: "stat", value: 93, text: "93%", caption: "straight to the right page" }}
+            dek="When what you typed names one page clearly, Enter goes straight there. In tests in October 2026, 93 in 100 did, and 1 in 2,644 went to a wrong page."
+            figure={{
+              type: "stat",
+              value: 93,
+              text: "93%",
+              caption: "straight to the right page (October 2026)",
+            }}
             more="ties, and how it was measured"
           >
             <P>
@@ -709,9 +721,10 @@ export default function DataChapter() {
               name), Enter takes you straight there, to the part of the page your other words name
               (&ldquo;HR 1 votes&rdquo;, a member&apos;s name and &ldquo;donors&rdquo;). When two
               pages fit equally well, such as two members with one surname, you get the list
-              instead. How clear is clear enough was measured: of 2,588 test searches built from the
-              pages&apos; own names and numbers, held out from the tuning, 93 in 100 went straight
-              to the right page, and none went straight to a wrong one.
+              instead. How clear is clear enough was measured in October 2026: of 2,644 test
+              searches built from the pages&apos; own names and numbers, held out from the tuning,
+              93 in 100 went straight to the right page, and one (a search for a site page) went
+              straight to a wrong one. On the searches the tuning was fitted to, none did.
             </P>
           </Box>
         </Boxes>

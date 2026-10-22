@@ -2,7 +2,15 @@ import Link from "next/link";
 import { NOMINATIONS_HREF } from "@/lib/nominations";
 import { SECTIONS, sectionLeaves, type SectionKey, type SectionPage } from "@/lib/routes";
 import { absoluteUrl } from "@/lib/site";
-import { leadOrder, sectionBlurb, sectionPreview, seasonLead } from "@/lib/sectionPreviews";
+import {
+  leadOrder,
+  sectionBlurb,
+  sectionPreview,
+  sectionSource,
+  seasonLead,
+} from "@/lib/sectionPreviews";
+import { INLINE_LINK } from "@/lib/controlStyles";
+import { SourceLine } from "@/components/shared/Type";
 import { shareMetaAttrs } from "@/lib/shareImage";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
@@ -98,6 +106,7 @@ export default async function SectionCards({
         >
           {cards.map((t) => {
             const p = sectionPreview(figures, section, t.key);
+            const src = sectionSource(section, t.key);
             return (
               <li
                 key={t.key}
@@ -115,14 +124,29 @@ export default async function SectionCards({
                   </Link>
                 </h3>
                 {p ? (
-                  <p className="mt-2">
-                    <span className={`${TYPE.figure} block tabular-nums text-ink-hi`}>
-                      {p.figure}
-                    </span>
-                    <span className="mt-1.5 block font-sans text-small leading-snug text-ink-lo">
-                      {p.caption}
-                    </span>
-                  </p>
+                  <>
+                    <p className="mt-2">
+                      <span className={`${TYPE.figure} block tabular-nums text-ink-hi`}>
+                        {p.figure}
+                      </span>
+                      <span className="mt-1.5 block font-sans text-small leading-snug text-ink-lo">
+                        {p.caption}
+                      </span>
+                    </p>
+                    {src && (
+                      <SourceLine className="mt-1.5 leading-snug">
+                        {src.href ? (
+                          // Above the card's own link (its ::after), so it
+                          // is a target of its own.
+                          <Link href={src.href} className={`relative z-10 ${INLINE_LINK}`}>
+                            {src.text}
+                          </Link>
+                        ) : (
+                          src.text
+                        )}
+                      </SourceLine>
+                    )}
+                  </>
                 ) : (
                   <p className="mt-2 text-small leading-snug text-ink-lo">
                     {sectionBlurb(section, t.key) ??

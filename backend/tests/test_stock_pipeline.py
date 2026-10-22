@@ -609,6 +609,35 @@ def test_a_trade_two_reports_list_counts_once_at_its_first_disclosure(db_session
     assert stock_pipeline.collapse_refiled_trades(db_session, StockTrade, "senator_id") == 0
 
 
+def test_a_parsed_trade_names_its_asset_on_one_line():
+    row = TradeRow(ticker=None, asset_name="BERY - Berry Global Group, Inc. (Exchanged)\n" + " " * 44
+                   + "\n\u00a0Amcor plc Ordinary Shares (Received)", owner="spouse", transaction_type="exchange",
+                   transaction_date="2025-04-30", disclosure_date="2026-08-08", amount_low=100001.0,
+                   amount_high=250000.0)
+    assert row.asset_name == "BERY - Berry Global Group, Inc. (Exchanged) Amcor plc Ordinary Shares (Received)"
+
+
+def test_stored_asset_names_are_put_on_one_line_before_refiled_trades_collapse(db_session):
+    """Rows stored before names were cleaned at ingest are cleaned every
+    night, and two copies of one trade wrapped differently then collapse."""
+    db_session.add(Senator(id="S1", name="Sen One", state="CA", party="D"))
+    trade = dict(senator_id="S1", ticker="BSX", owner="self", transaction_type="purchase",
+                 transaction_date="2026-07-02", days_to_disclose=0, amount_low=1001.0, amount_high=15000.0,
+                 industry="HEALTH", source_url="https://example.com")
+    db_session.add_all([
+        StockTrade(**trade, asset_name="Boston Scientific Corporation\nCommon Stock (BSX) [ST]",
+                   filing_id="first", disclosure_date="2026-08-17"),
+        StockTrade(**trade, asset_name="Boston Scientific Corporation Common  Stock (BSX) [ST] ",
+                   filing_id="later", disclosure_date="2026-08-20"),
+    ])
+    db_session.commit()
+    assert stock_pipeline.clean_stored_asset_names(db_session) == 2
+    assert stock_pipeline.clean_stored_asset_names(db_session) == 0
+    assert stock_pipeline.collapse_refiled_trades(db_session, StockTrade, "senator_id") == 1
+    assert [t.asset_name for t in db_session.query(StockTrade)] == [
+        "Boston Scientific Corporation Common Stock (BSX) [ST]"]
+
+
 @pytest.mark.parametrize("title,version", [
     ("Periodic Transaction Report for 11/15/2024 (Amendment 2)", ("2024-11-15", 2)),
     ("Periodic Transaction Report for 09/11/2026", ("2026-09-11", 0)),

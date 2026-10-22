@@ -844,8 +844,11 @@ date from the House Clerk's member list (`fetch/house_clerk.py`). No source
 gives a senator's date, so the Senate is not prorated.
 
 Narrower windows mean less data backs each dimension by design, not because
-coverage got worse — `calculate_confidence`'s vote/bill thresholds are
-recalibrated accordingly (see `score_calculator.py`), and `ground_truth.py`'s
+coverage got worse — `calculate_confidence`'s vote grade is measured per
+chamber (split-half reliability of break rates reaching 0.70 and 0.80,
+`scripts/calibrate_confidence_grades.py` → `confidence_grades.json`, refreshed
+monthly), its other counts are stated conventions with their reasons
+(`docs/methodology/confidence-grades.md`), and `ground_truth.py`'s
 population-distribution checks are the backstop that would catch a real
 collapse. The gate derives every expectation from the current population's
 own raw data (rank consistency against FEC/roll-call metrics, point-mass and
@@ -2109,7 +2112,10 @@ phase — fetches House (PDF) and Senate (HTML) STOCK Act periodic transaction
 reports plus the sitting president's OGE Form 278-T filings (PDF, from OGE's
 public presidential disclosure index), matches filer to a known member (the
 president's filings are indexed under the office and need no matching),
-labels each trade with the industry of the SIC code the SEC assigned its
+names each asset on one line (`ptr_common.one_line`: the filings wrap it
+in newlines and runs of spaces; rows stored before are re-cleaned every
+night, `clean_stored_asset_names`, ahead of the re-filed-trade collapse,
+which compares names), labels each trade with the industry of the SIC code the SEC assigned its
 issuer (`fetch/sec_tickers.py` — tier-1 structured metadata; the donor
 embedding classifier measured 30% agreement with it on trade names and is
 not used), and computes disclosure timeliness. Every stored trade's industry
@@ -2469,7 +2475,7 @@ the pending list).
 | SEO: per-route metadata, canonicals, JSON-LD, sitemap | `frontend/src/lib/site.ts`, `frontend/src/lib/seo.ts`, `frontend/src/app/sitemap.ts`, `backend/app/api/sitemap.py` |
 | Frontend types | `frontend/src/types/` |
 | Metric explanations (tooltips on all scorecard metrics) | `frontend/src/components/checker/MetricTooltip.tsx` |
-| Record boxes ("Boxes, not blocks": ruled grid, box, figures shared with the homepage) and the bill and state ballot pages built from them | `frontend/src/components/shared/BoxGrid.tsx`, `RecordBox.tsx`, `RecordFigure.tsx`, `frontend/src/types/figure.ts`, `frontend/src/components/congress/BillPageView.tsx`, `frontend/src/app/elections/states/[state]/StateBallotClient.tsx`; the bill page's lines from `backend/app/services/bill_boxes.py` (`boxes` on `GET /api/bills/{id}/record`) and `committee_record.search`'s `headline`; the ballot page's from `backend/app/services/ballot_boxes.py` (`boxes` on `GET /api/elections/states/{state}`); the Action Center's Today tab (`frontend/src/app/action/page.tsx` `IssueBox`, `OpenComments`; buttons from `issueCommands` in `IssueEnrichment.tsx`); `/environmental` from `backend/app/environmental.py`, `backend/app/environmental_sampler.py` (daily, `/data/environmental_runtime.json`) and `app/data/environmental.json` (`GET /api/environmental`; eGRID staleness in `data_refresh`) |
+| Record boxes ("Boxes, not blocks": ruled grid, box, figures shared with the homepage) and the bill and state ballot pages built from them | `frontend/src/components/shared/BoxGrid.tsx`, `RecordBox.tsx`, `RecordFigure.tsx`, `frontend/src/types/figure.ts`, `frontend/src/components/congress/BillPageView.tsx`, `frontend/src/app/elections/states/[state]/StateBallotClient.tsx`; the bill page's lines from `backend/app/services/bill_boxes.py` (`boxes` on `GET /api/bills/{id}/record`); a member profile's from `backend/app/services/member_boxes.py` (`boxes` on `GET /api/politicians/{id}`) and `committee_record.search`'s `headline`; the ballot page's from `backend/app/services/ballot_boxes.py` (`boxes` on `GET /api/elections/states/{state}`); the Action Center's Today tab (`frontend/src/app/action/page.tsx` `IssueBox`, `OpenComments`; buttons from `issueCommands` in `IssueEnrichment.tsx`); `/environmental` from `backend/app/environmental.py`, `backend/app/environmental_sampler.py` (daily, `/data/environmental_runtime.json`) and `app/data/environmental.json` (`GET /api/environmental`; eGRID staleness in `data_refresh`) |
 | Detail pages' two layers: where a member stands among peers, methods ledger, bill stage ladder and sources, "cite this", held and thin-data marks | `frontend/src/components/scorecard/WhereTheyStand.tsx`, `MethodsLedger.tsx`, `HeldScore.tsx`, `frontend/src/components/congress/StageLadder.tsx`, `BillSources.tsx`, `frontend/src/components/shared/CiteThis.tsx` (a government document or record cites its issuer: `frontend/src/lib/citedSources.ts`); data from `api/politicians.py` (`_chamber_field`, `_scored_on`) and `bill_service.stage_milestones` |
 | Action Center issue parts (shared with `/issue/[id]`: meta, tags, "What you can do", coverage, sources) | `frontend/src/components/action/IssueEnrichment.tsx` |
 | Every dot-per-person strip: nearest-dot hover label (name, seat or years, figure, place on the row), one Tab stop with arrow keys, the tick label at its tick, the big figure's unit line | `frontend/src/components/shared/Strip.tsx` (`StripPoints`, `StripAxis`, `BigFigure`); the place from `backend/app/ordinals.rank_shown` |
@@ -2495,6 +2501,25 @@ the pending list).
   checks its signature, and adds it to `TLS_CONTEXT`, whose partial chains
   are off so the chain must still end at a certifi root. Never
   `verify=False`, and never a root taken from the network.
+- **Distrusted roots** (2026-10). A root whose keys are compromised is
+  removed from every trust store in the images we build, not only from
+  certifi (which drops it upstream; keep the pin current). First case:
+  emSign ECC Root CA - G3 (GHSA-6q48-6c7w-9gw2; emSign's other roots are
+  unaffected). The stores: the Debian/Alpine system store in all three
+  Dockerfiles (a `!` line in `/etc/ca-certificates.conf`, then
+  `update-ca-certificates`); Node in the frontend, whose built-in store
+  can't drop a root, so it runs with `NODE_OPTIONS=--use-openssl-ca` and
+  reads the cleaned system store; and Playwright's Chromium, whose store is
+  compiled in, by managed policy (`backend/chromium-distrusted-roots.json`,
+  `CADistrustedCertificates`), which only the full browser reads, so
+  `senate_ptr` launches `channel=CHROMIUM_CHANNEL`, never the headless
+  shell. To add a root: its CN in `check-trust-stores.sh`'s `DISTRUSTED`,
+  the same `sed` in each Dockerfile, and its DER (base64) in the Chromium
+  policy. `tests/test_distrusted_roots.py` checks the Dockerfiles against
+  that list; `check-trust-stores.sh` reads every store out of the built
+  images, and `check-and-deploy.sh` refuses to deploy when it fails.
+  llama-server is ggml-org's pulled image, outside this (it makes no
+  outbound TLS).
 - All pipeline modules use dependency injection for DB sessions
 - Never store secrets in source code — all credentials come from `.env` via `pydantic-settings`
 - Use parameterized queries via SQLAlchemy ORM; never concatenate user input into SQL
@@ -3005,6 +3030,25 @@ not a paragraph or a box. On a ballot page the box lines are counts and
 labels only: what a measure does, what yes or no means and every deadline
 stay quoted where §7 puts them, never summarised in a box.
 
+A member's profile has its lines served the same way, on the profile itself
+(`boxes` on `GET /api/politicians/{id}`, `services/member_boxes.py`): the
+committee line and chips, a one-line ballot status, each record box's
+kicker, headline, figure and line (money with the funding window's election
+named, votes, bills, votes with the president with its verdict and
+`finding`, approval at home, holdings, trades, positions, the government
+record), counted from the same breakdown, holdings, trade and survey reads
+the rest of the page shows. The page (`MemberScorecard.tsx`) is built from
+them: a compact header (the ballot status as a one-line kicker, the
+committees folded to the backend's line with the chips, the office and the
+sources behind it), "Where <name> stands" as a small multiple of the four
+peer strips (one column on a phone, two from 40rem, four from 62rem; each
+cell's method behind "How this is measured", and the "Stands out" line only
+when `standsOutKey` names a measure), section chips, then two `BoxGrid`s:
+the record behind it (Money, Votes, Bills, With the president, Approval at
+home; `MemberBox`, one per file) and also on record (Holdings as a stacked
+bar, Trades, Positions, donor and vote links, the government record).
+Votes with the president appear once, in their box.
+
 The executive hub (`/executive`) is four boxes, each led by a figure the
 backend counts (the president's documents on record, the open comment
 periods and budget total from `GET /api/sections`, the pending
@@ -3188,6 +3232,10 @@ Patterns that exist because they failed once:
   and runs the stack-deploy command above. There's no separate
   frontend-only/backend-only deploy anymore; Swarm only rolls the services
   whose image tag actually changed.
+- After building, `check-and-deploy.sh` runs `./check-trust-stores.sh`
+  on the three new images and does not deploy if any trust store holds a
+  distrusted root (see "Distrusted roots" under Backend conventions; run
+  it by hand with the three image tags to see each store's emSign roots).
 - nginx's security headers (nosniff, X-Frame-Options, Referrer-Policy,
   Permissions-Policy) live in `nginx/security-headers.conf`. nginx drops the
   server-level `add_header`s from any location that sets one of its own, so
