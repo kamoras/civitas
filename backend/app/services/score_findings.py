@@ -76,7 +76,7 @@ def alignment_finding(facts: dict | None, chamber: str) -> str | None:
         return f"Broke with the party on {breaks:,} of {tally}."
     if breaks == 0:
         # One decimal, as the line beneath it prints the same norm
-        # (AlignmentColumn's percentOneDecimal): "break on 2%" over "do
+        # (VotesBox's percentOneDecimal): "break on 2%" over "do
         # that on 2.5%" read as two different figures.
         return f"Never broke with the party on a party-line vote, though {members} in {seats} break on {expected:.1%}."
     ratio = rate / expected

@@ -246,7 +246,9 @@ export default function AccessibilityPage() {
                     shows the label and a tap on the label opens the page. Each strip is one Tab
                     stop: the arrow keys move from dot to dot in order of value, Home and End go to
                     the ends, Enter opens the page, and a screen reader hears each dot as it is
-                    reached. Every strip also has a table of the same figures with linked names.
+                    reached. Every strip also has a table of the same figures with linked names;
+                    until &ldquo;Show as a table&rdquo; puts it on screen, its links stay out of the
+                    Tab order, so the keyboard never lands on something it can&apos;t see.
                   </P>
                   <P>
                     Other charts work the same way, one chart at a time: a vote&apos;s yea and nay

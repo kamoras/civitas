@@ -1,3 +1,4 @@
+import type { StatFigure } from "./figure";
 export type PoliticianBranch = "senate" | "house" | "president" | "scotus";
 
 export interface PoliticianCard {
@@ -138,6 +139,41 @@ export interface PoliticianProfile {
    * member_seat_race). Null for a seat with no race this cycle, a
    * senator whose class isn't on file, or an older backend. */
   seatRace?: SeatRace | null;
+  /** Every box's title, line and figure on a member's page (backend
+   * services/member_boxes.py). Optional for an older backend, and null for
+   * a president or justice. */
+  boxes?: MemberBoxes | null;
+}
+
+/** One record box as the backend writes it: kicker, title, one line, and a
+ *  figure. Null where the member has nothing on record for it. */
+export interface MemberBox {
+  kicker: string;
+  headline: string;
+  dek: string | null;
+  figure: StatFigure | null;
+}
+
+export interface MemberBoxes {
+  committees: {
+    count: number;
+    /** "5 committees · Ranking Member, Finance" */
+    line: string;
+    posts: string[];
+    items: { name: string; fullName: string; title: string | null; chamber: string | null }[];
+  };
+  /** The header's one-line ballot status and the race it links. */
+  ballot: { line: string; raceId: string | null } | null;
+  fundingElectionYear: number | null;
+  money: MemberBox;
+  votes: MemberBox;
+  bills: MemberBox;
+  president: (MemberBox & { finding: string; verdict: string | null }) | null;
+  approval: MemberBox | null;
+  holdings: MemberBox | null;
+  trades: MemberBox;
+  positions: MemberBox | null;
+  record: MemberBox;
 }
 
 export interface SeatRace {

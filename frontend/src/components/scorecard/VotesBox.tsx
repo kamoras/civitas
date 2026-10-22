@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchRepVotes, fetchSenatorVotes } from "@/lib/api";
 import { rollCallHref } from "@/lib/congress";
 import { voteNominationLine, voteSubjectHref } from "@/lib/nominations";
 import type { AlignmentFacts, BreakVote, ScoreBreakdownDimension } from "@/types/scoreBreakdown";
-import type { ConstituentApproval as Approval } from "@/types/senator";
-import ConstituentApproval from "./ConstituentApproval";
-import ScoreColumn, { Block } from "./ScoreColumn";
+import type { MemberBox as Box } from "@/types/politicians";
+import { SHARE_EXCLUDE_ATTR } from "@/lib/shareImage";
+import ShareSectionButton from "@/components/share/ShareSectionButton";
+import MemberBox, { Block } from "./MemberBox";
 import { count, partyMembers, percentOneDecimal, shortDate, voteTitle } from "./format";
 
 const PARTY_SHORT: Record<string, string> = { R: "Republicans", D: "Democrats" };
@@ -17,9 +18,6 @@ const OTHER_PARTY: Record<string, string> = { R: "Democrats", D: "Republicans" }
 // Breaks shown in the column; the drawer lists every vote.
 const BREAKS_SHOWN = 6;
 const FLANK_SHOWN = 3;
-
-const TOOLTIP =
-  "How often the member broke with the party on this Congress's party-line votes, beside how often members of the same party in seats that lean the same way do. Only breaks toward the other party count; votes against the party from its own flank are listed apart. Below, how the member's own constituents rate them, by party.";
 
 /** A break as the list shows it: the breakdown's (BreakVote) or, before the
  *  member's whole-Congress record is measured, a stored vote. */
@@ -103,7 +101,8 @@ function BreakRow({ vote }: { vote: ListedBreak }) {
   const fallback = vote.billName ?? "";
   // The bill's short title from Congress.gov when the chamber titled the vote
   // by its official one (the chamber's stays on hover and the roll call page).
-  const title = rc?.billShortTitle || voteTitle(rc?.title, rc?.billLabel, fallback);
+  const title =
+    rc?.measureTitle || rc?.billShortTitle || voteTitle(rc?.title, rc?.billLabel, fallback);
   const href = voteSubjectHref(rc, vote.billId);
   const nominationLine = voteNominationLine(rc);
   const parties = rc?.parties.filter((p) => PARTY_SHORT[p.party] && p.yea + p.nay > 0) ?? [];
@@ -127,6 +126,11 @@ function BreakRow({ vote }: { vote: ListedBreak }) {
             <span className="break-words">{title}</span>
           )}
           {nominationLine && <span className="block text-small text-ink-lo">{nominationLine}</span>}
+          {rc?.amendmentPurpose && (
+            <span className="block text-small text-ink-lo">
+              {rc.amendment}: {rc.amendmentPurpose}
+            </span>
+          )}
           {rc?.question && (
             <Link
               href={rollCallHref(rc)}
@@ -157,16 +161,15 @@ function BreakRow({ vote }: { vote: ListedBreak }) {
   );
 }
 
-export default function AlignmentColumn({
+export default function VotesBox({
   memberId,
   chamber,
   name,
   seat,
   breaks,
-  approval,
+  box,
   dimension,
   onMore,
-  note = null,
 }: {
   memberId: string;
   chamber: "senate" | "house";
@@ -177,14 +180,9 @@ export default function AlignmentColumn({
   /** Stored count of votes against the party (the voting record's): the
    *  list's count until the whole-Congress record is measured. */
   breaks: number;
-  /** Survey approval among the member's own constituents, by party
-   *  (informational, not scored); absent when the survey has none. */
-  approval?: Approval | null;
+  box: Box | null | undefined;
   dimension: ScoreBreakdownDimension | undefined;
   onMore: () => void;
-  /** A related line shown under the rate (votes with the president's
-   *  stated positions). */
-  note?: ReactNode;
 }) {
   const facts = dimension?.facts as AlignmentFacts | undefined;
   // The breaks the score counts, served with it. Until the member's
@@ -209,81 +207,91 @@ export default function AlignmentColumn({
   }, [memberId, chamber, breaks, dimension, counted]);
 
   return (
-    <ScoreColumn
-      title="Votes"
-      shareId="constituent-alignment"
-      tooltip={TOOLTIP}
-      finding={dimension?.finding}
-      more={{ label: "Every recorded vote", onClick: onMore }}
+    <MemberBox
+      id="constituent-alignment"
+      label="Votes"
+      box={box}
+      about="How often the member broke with the party on this Congress's party-line votes, beside how often members of the same party in seats that lean the same way do. Only breaks toward the other party count; votes against the party from its own flank are listed apart."
+      fallback={{ kicker: "Votes", title: "Votes", dek: dimension?.finding }}
+      more={{
+        label: "every break and how it is counted",
+        children: (
+          <div className="flex flex-col gap-4">
+            {facts ? (
+              <Lede facts={facts} seat={seat} />
+            ) : (
+              <p className="text-body text-ink-lo">No party-line votes on record yet.</p>
+            )}
+            <Block label={`Votes against party (${total})`}>
+              {total === 0 && (
+                <p className="text-small text-ink-lo">None on record this Congress.</p>
+              )}
+              {total > 0 && failed && (
+                <p className="text-small text-ink-lo">Could not load the votes.</p>
+              )}
+              {total > 0 && !failed && votes === null && (
+                <p className="pulse-subtle text-small text-ink-min">Loading votes...</p>
+              )}
+              {votes && votes.length > 0 && (
+                <>
+                  <ul className="flex flex-col gap-2.5">
+                    {votes.slice(0, BREAKS_SHOWN).map((v, i) => (
+                      <BreakRow key={`${v.rollCall?.number ?? v.billName}-${i}`} vote={v} />
+                    ))}
+                  </ul>
+                  {votes.length > BREAKS_SHOWN && (
+                    <p className="text-small text-ink-min">
+                      and {votes.length - BREAKS_SHOWN} more, in every recorded vote
+                    </p>
+                  )}
+                </>
+              )}
+              <p className="text-small leading-relaxed text-ink-min">
+                What counts as a break: at least 65% of one party voted one way, at most 35% of the
+                other did, and the member sided with the other party. Housekeeping votes (quorum
+                calls, adjourning, approving the Journal, the House&apos;s previous question,
+                motions to table or to recommit, the House&apos;s motion to commit) don&apos;t
+                count.
+                {counted &&
+                  " Each bill or nomination counts once, however many times it came to a vote."}
+              </p>
+            </Block>
+            {facts && flank.length > 0 && (
+              <Block
+                label={`From the ${FLANK[facts.party] ?? "party's"} flank, not counted (${flank.length})`}
+              >
+                <p className="text-small leading-relaxed text-ink-min">
+                  On these votes the {PARTY_SHORT[facts.party] ?? "members"} who broke sit further
+                  from the {OTHER_PARTY[facts.party] ?? "other party"} than the party does, so they
+                  are not counted as breaks toward the other party.
+                </p>
+                <ul className="flex flex-col gap-2.5">
+                  {flank.slice(0, FLANK_SHOWN).map((v, i) => (
+                    <BreakRow key={`${v.rollCall?.number}-${i}`} vote={v} />
+                  ))}
+                </ul>
+                {flank.length > FLANK_SHOWN && (
+                  <p className="text-small text-ink-min">and {flank.length - FLANK_SHOWN} more</p>
+                )}
+              </Block>
+            )}
+            <div className="flex flex-wrap items-center gap-x-4" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
+              <button
+                type="button"
+                onClick={onMore}
+                className="min-h-11 text-left text-small text-ink underline underline-offset-2 hover:text-phos"
+              >
+                Every recorded vote &rarr;
+              </button>
+              <ShareSectionButton label="Votes" />
+            </div>
+          </div>
+        ),
+      }}
     >
-      {facts ? (
-        <Lede facts={facts} seat={seat} />
-      ) : (
-        <p className="text-body text-ink-lo">No party-line votes on record yet.</p>
-      )}
       {facts?.breakRate != null && facts.expectedBreakRate != null && (
         <RateScale rate={facts.breakRate} expected={facts.expectedBreakRate} name={name} />
       )}
-      {note}
-
-      <Block label={`Votes against party (${total})`}>
-        {total === 0 && <p className="text-small text-ink-lo">None on record this Congress.</p>}
-        {total > 0 && failed && <p className="text-small text-ink-lo">Could not load the votes.</p>}
-        {total > 0 && !failed && votes === null && (
-          <p className="pulse-subtle font-mono text-small text-ink-min">Loading votes...</p>
-        )}
-        {votes && votes.length > 0 && (
-          <>
-            <ul className="flex flex-col gap-2.5">
-              {votes.slice(0, BREAKS_SHOWN).map((v, i) => (
-                <BreakRow key={`${v.rollCall?.number ?? v.billName}-${i}`} vote={v} />
-              ))}
-            </ul>
-            {votes.length > BREAKS_SHOWN && (
-              <p className="font-mono text-small text-ink-min">
-                and {votes.length - BREAKS_SHOWN} more, in every recorded vote below
-              </p>
-            )}
-          </>
-        )}
-        <details className="text-small leading-relaxed text-ink-min">
-          <summary className="inline-flex min-h-6 cursor-pointer items-center text-ink-lo hover:text-phos">
-            What counts as a break
-          </summary>
-          <p className="mt-1">
-            At least 65% of one party voted one way, at most 35% of the other did, and the member
-            sided with the other party. Housekeeping votes (quorum calls, adjourning, approving the
-            Journal, the House&apos;s previous question, motions to table or to recommit, the
-            House&apos;s motion to commit) don&apos;t count.
-            {counted &&
-              " Each bill or nomination counts once, however many times it came to a vote."}
-          </p>
-        </details>
-      </Block>
-
-      {facts && flank.length > 0 && (
-        <Block
-          label={`From the ${FLANK[facts.party] ?? "party's"} flank, not counted (${flank.length})`}
-        >
-          <p className="text-small leading-relaxed text-ink-min">
-            On these votes the {PARTY_SHORT[facts.party] ?? "members"} who broke sit further from
-            the {OTHER_PARTY[facts.party] ?? "other party"} than the party does, so they are not
-            counted as breaks toward the other party.
-          </p>
-          <ul className="flex flex-col gap-2.5">
-            {flank.slice(0, FLANK_SHOWN).map((v, i) => (
-              <BreakRow key={`${v.rollCall?.number}-${i}`} vote={v} />
-            ))}
-          </ul>
-          {flank.length > FLANK_SHOWN && (
-            <p className="font-mono text-small text-ink-min">
-              and {flank.length - FLANK_SHOWN} more
-            </p>
-          )}
-        </Block>
-      )}
-
-      <ConstituentApproval approval={approval} />
-    </ScoreColumn>
+    </MemberBox>
   );
 }

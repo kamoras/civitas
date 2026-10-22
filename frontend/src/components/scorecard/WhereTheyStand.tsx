@@ -9,14 +9,10 @@ import { fetchPeerComparison } from "@/lib/api";
 import ChartReadout from "@/components/shared/ChartReadout";
 import type { PeerComparison, PeerGroupKey, PeerMeasure } from "@/types/peers";
 import { onThisPage } from "@/lib/onThisPage";
-import StripPoints, {
-  BigFigure,
-  StripAxis,
-  stripTop,
-  type StripPoint,
-} from "@/components/shared/Strip";
+import StripPoints, { StripAxis, stripTop, type StripPoint } from "@/components/shared/Strip";
 import CountHistogram, { wholeCounts } from "@/components/shared/CountHistogram";
 import { TYPE } from "@/lib/typeStyles";
+import { More } from "@/components/shared/RecordBox";
 
 /** The page's own member's mark, on a strip and a histogram alike. */
 const MEMBER_MARK = { fill: "var(--ink-hi)", ring: "var(--phos)" };
@@ -158,7 +154,7 @@ function OverTime({ m }: { m: PeerMeasure }) {
   if (!t) return null;
   const marks = t.marks.map((mk, i) => ({ ...mk, x: t.points[i].x, yPct: t.points[i].y }));
   return (
-    <div className="flex flex-wrap items-center gap-2 text-small text-ink-lo md:col-span-3">
+    <div className="flex flex-wrap items-center gap-2 text-small text-ink-lo">
       <ChartReadout
         label={`${m.label} over time`}
         marks={marks}
@@ -180,66 +176,84 @@ function OverTime({ m }: { m: PeerMeasure }) {
   );
 }
 
-function Row({ m, memberId, showTable }: { m: PeerMeasure; memberId: string; showTable: boolean }) {
+/** The member's figure, its unit on the same line and smaller ("0 of 493"),
+ *  so the cell spends one line on it. */
+function InlineFigure({ shown }: { shown: string | null }) {
+  const parts = shown == null ? null : /^([+\-−]?[\d.,]+%?)\s+(.+)$/.exec(shown);
+  return (
+    <p className={`${TYPE.figure} text-ink-hi`}>
+      {parts ? (
+        <>
+          {parts[1]} <span className="text-small font-semibold text-ink-lo">{parts[2]}</span>
+        </>
+      ) : (
+        (shown ?? "No record")
+      )}
+    </p>
+  );
+}
+
+/** One measure as a cell of the small multiple: its label and word, the
+ *  member's figure, the strip, and the backend's sentence; why it matters,
+ *  how it is measured and over time sit behind "How this is measured". */
+function Cell({
+  m,
+  memberId,
+  showTable,
+}: {
+  m: PeerMeasure;
+  memberId: string;
+  showTable: boolean;
+}) {
   const strong = (m.word ?? "").startsWith("well");
   const captionId = useId();
   return (
     <figure
       aria-labelledby={captionId}
-      className="grid grid-cols-1 gap-x-6 gap-y-2 border-t border-white/25 px-4 py-4 [h3+&]:border-t-0 sm:px-6 md:grid-cols-[10rem_minmax(0,1fr)_9rem]"
+      className="relative flex min-w-0 flex-col gap-2 border-b border-white/25 pt-3 pb-4 before:absolute before:inset-y-0 before:-left-5 before:w-px before:bg-white/25"
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-x-3 md:block">
-        <div>
-          <div className={TYPE.kicker}>{m.label}</div>
-          <BigFigure shown={m.shown} className={`${TYPE.figure} text-ink-hi`} />
-        </div>
-        <p
-          className={`text-right text-small font-semibold md:hidden ${strong ? "text-signal-orange" : "text-ink-lo"}`}
-        >
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+        <h3 className={TYPE.kicker}>{m.label}</h3>
+        <p className={`text-small font-semibold ${strong ? "text-signal-orange" : "text-ink-lo"}`}>
           {m.thin ? "" : m.word}
         </p>
       </div>
-      <div className="min-w-0">
-        <p className="mb-1 text-small text-ink">{m.why}</p>
-        <Strip m={m} memberId={memberId} />
-      </div>
-      <p
-        className={`hidden self-center text-small font-semibold md:block ${strong ? "text-signal-orange" : "text-ink-lo"}`}
-      >
-        {m.thin ? "" : m.word}
-      </p>
-      <figcaption id={captionId} className="text-small text-ink md:col-span-3">
+      <InlineFigure shown={m.shown} />
+      <Strip m={m} memberId={memberId} />
+      <figcaption id={captionId} className="text-small text-ink">
         <span className="sr-only">{m.label}: </span>
         {m.thin
           ? `Not enough record yet to compare (${m.record != null && m.key === "breaks" ? `${m.record} party-line votes` : `${m.peerGroup.n} with a figure`}).`
           : m.sentence}
-        {!m.thin && m.word && <span className="sr-only"> {m.word}.</span>}{" "}
-        <a
-          href={m.source.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-phos underline underline-offset-2"
-        >
-          {m.source.name} ↗
-        </a>
+        {!m.thin && m.word && <span className="sr-only"> {m.word}.</span>}
       </figcaption>
-      <OverTime m={m} />
-      <details className="group text-small text-ink-lo md:col-span-3">
-        <summary className="inline-flex min-h-6 cursor-pointer items-center gap-1 font-semibold text-ink-hi underline-offset-2 hover:underline">
-          How this is measured
-          <span aria-hidden="true" className="inline-block group-open:rotate-90">
-            ▸
-          </span>
-        </summary>
-        <p className="mt-1 max-w-prose">
-          {m.measured}{" "}
-          <Link href="/about/scores#peers" className="text-phos underline underline-offset-2">
-            Methods and sources
-          </Link>
-        </p>
-      </details>
-      <div className={showTable ? "md:col-span-3" : "sr-only"}>
-        <table className="w-full max-w-md text-small">
+      <More label="How this is measured" bare className="mt-0">
+        <div className="flex flex-col gap-2 text-small text-ink-lo">
+          <p>
+            <span className="font-semibold text-ink-hi">{m.question}</span> {m.why}
+          </p>
+          <p className="max-w-prose">{m.measured}</p>
+          <OverTime m={m} />
+          <p>
+            {m.peerGroup.label}, n = {m.peerGroup.n}
+            {m.percentile != null && ` · percentile ${m.percentile}`} ·{" "}
+            <a
+              href={m.source.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-phos underline underline-offset-2"
+            >
+              {m.source.name} ↗
+            </a>{" "}
+            ·{" "}
+            <Link href="/about/scores#peers" className="text-phos underline underline-offset-2">
+              Methods and sources
+            </Link>
+          </p>
+        </div>
+      </More>
+      <div className={showTable ? "" : "sr-only"}>
+        <table className="w-full text-small">
           <caption className="text-left text-small text-ink-min">
             {m.label}:{" "}
             {m.peerGroup.labelOne
@@ -263,6 +277,10 @@ function Row({ m, memberId, showTable }: { m: PeerMeasure; memberId: string; sho
                 <td className="py-1">
                   <Link
                     href={`/politicians/${m.distributionIds[i]}`}
+                    // Out of the Tab order while the table is only for screen
+                    // readers: a sighted keyboard user otherwise tabbed
+                    // through every peer's link with nothing on screen.
+                    tabIndex={showTable ? undefined : -1}
                     className="underline-offset-2 hover:underline"
                   >
                     {m.distributionNames[i]}
@@ -281,7 +299,7 @@ function Row({ m, memberId, showTable }: { m: PeerMeasure; memberId: string; sho
 const SEGMENT_ON = "bg-ink-hi text-surface-base";
 const SEGMENT_OFF = "bg-surface text-ink-hi";
 const SEGMENT =
-  "inline-flex min-h-11 cursor-pointer items-center border border-ink-hi px-3 text-small font-semibold has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2";
+  "inline-flex min-h-8 cursor-pointer items-center border border-ink-hi px-2.5 text-small font-semibold has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2";
 
 /**
  * "Where they stand": one row per measure, the member among peers on the
@@ -326,43 +344,64 @@ export default function WhereTheyStand({
     (group === "caucus" ? data : initial)?.measures[0]?.peerGroup.label ?? "Same party";
   const whole = chamber === "senate" ? "Whole Senate" : "Whole House";
 
+  // The peer group's choice: beside the heading from sm up; on a phone
+  // under the strips, beside the table and compare buttons, so the first
+  // strip stays on the first screen. One is shown at a time (display), each
+  // its own radio group.
+  // min-w-0: a fieldset is min-content wide by default, and at 200% text the
+  // two segments side by side were wider than a phone.
+  const toggle = (where: "head" | "foot") => (
+    <fieldset
+      className={`${where === "head" ? "hidden sm:flex" : "flex sm:hidden"} min-w-0 max-w-full flex-wrap items-center gap-2`}
+    >
+      <legend className="sr-only">Compare with</legend>
+      <span aria-hidden="true" className="text-small text-ink-lo">
+        Compared with:
+      </span>
+      <span className="inline-flex max-w-full flex-wrap">
+        {(
+          [
+            ["caucus", caucusText],
+            ["chamber", whole],
+          ] as const
+        ).map(([key, label]) => (
+          <label
+            key={key}
+            className={`${SEGMENT} ${group === key ? SEGMENT_ON : SEGMENT_OFF} -ml-px first:ml-0`}
+          >
+            <input
+              type="radio"
+              name={`peers-${memberId}-${where}`}
+              value={key}
+              checked={group === key}
+              onChange={() => choose(key)}
+              className="sr-only"
+            />
+            {key === "chamber" ? (
+              // One word on a phone, so both choices share a line; its
+              // name is the full label everywhere.
+              <>
+                <span aria-hidden="true" className="sm:hidden">
+                  {chamber === "senate" ? "Senate" : "House"}
+                </span>
+                <span className="sr-only sm:not-sr-only">{label}</span>
+              </>
+            ) : (
+              label
+            )}
+          </label>
+        ))}
+      </span>
+    </fieldset>
+  );
+
   return (
     <section id="where-they-stand" aria-labelledby="where-heading" className="font-sans">
-      <div className="flex flex-wrap items-end justify-between gap-3 border-t-[3px] border-ink-hi pt-3">
+      <div className="flex flex-wrap items-end justify-between gap-3 border-t-[3px] border-ink-hi pt-2 sm:pt-3">
         <h2 id="where-heading" {...onThisPage("Where they stand")} className={TYPE.section}>
           Where {name} stands
         </h2>
-        {/* min-w-0: a fieldset is min-content wide by default, and at 200% text
-            the two segments side by side were wider than a phone. */}
-        <fieldset className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
-          <legend className="sr-only">Compare with</legend>
-          <span aria-hidden="true" className="text-small text-ink-lo">
-            Compared with:
-          </span>
-          <span className="inline-flex max-w-full flex-wrap">
-            {(
-              [
-                ["caucus", caucusText],
-                ["chamber", whole],
-              ] as const
-            ).map(([key, label]) => (
-              <label
-                key={key}
-                className={`${SEGMENT} ${group === key ? SEGMENT_ON : SEGMENT_OFF} -ml-px first:ml-0`}
-              >
-                <input
-                  type="radio"
-                  name={`peers-${memberId}`}
-                  value={key}
-                  checked={group === key}
-                  onChange={() => choose(key)}
-                  className="sr-only"
-                />
-                {label}
-              </label>
-            ))}
-          </span>
-        </fieldset>
+        {toggle("head")}
       </div>
 
       {error && !data && (
@@ -372,28 +411,30 @@ export default function WhereTheyStand({
       )}
       {data && (
         <>
-          <div className="mt-4 border border-white/25 border-l-4 border-l-signal-orange bg-surface px-4 py-3 sm:px-6">
-            <p className="text-small font-semibold text-signal-orange">Stands out</p>
-            <p className={TYPE.boxTitle}>{data.standsOut}</p>
-            <p className="mt-1 text-small text-ink-lo">{data.standsOutWhy}</p>
-          </div>
-          <div className="mt-3 border border-white/25 bg-surface">
-            {/* Rows that answer the same question sit under it, once. */}
-            {data.measures.map((m, i) => (
-              <div key={m.key}>
-                {m.question !== data.measures[i - 1]?.question && (
-                  <h3
-                    className={`${TYPE.boxTitle} px-4 pt-4 sm:px-6 ${i ? "border-t-2 border-ink-hi/60" : ""}`}
-                  >
-                    {m.question}
-                  </h3>
-                )}
-                <Row m={m} memberId={memberId} showTable={showTable} />
+          {/* Only a measure that is genuinely unusual earns the line
+              (standsOutKey: the backend's rule); otherwise nothing. */}
+          {/* Under the strips on a phone, so the first strip stays on the
+              first screen; above them from sm up. */}
+          <div className="flex flex-col">
+            {/* One column on a phone, two from 40rem, four from 62rem of the
+                section's own width, ruled like the record's boxes. */}
+            <div className="@container mt-3 -mx-2 overflow-x-clip px-2">
+              <div className="grid grid-cols-[minmax(0,1fr)] gap-x-10 border-t-2 border-ink-hi @min-[40rem]:grid-cols-2 @min-[62rem]:grid-cols-4">
+                {data.measures.map((m) => (
+                  <Cell key={m.key} m={m} memberId={memberId} showTable={showTable} />
+                ))}
               </div>
-            ))}
+            </div>
+            {data.standsOutKey && (
+              <p className={`${TYPE.body} mt-3 sm:order-first`}>
+                <span className="font-semibold text-signal-orange">Stands out:</span>{" "}
+                {data.standsOut}
+              </p>
+            )}
           </div>
           {/* The key, and what a row means, for a reader new to the strips;
               in words, so it is read aloud too (it was an aria-hidden key). */}
+          <div className="mt-3 sm:hidden">{toggle("foot")}</div>
           <HowToRead className="mt-2">
             <p className="flex flex-wrap items-center gap-x-4 gap-y-1">
               <span>
@@ -412,12 +453,13 @@ export default function WhereTheyStand({
               <span>┆ the average for seats like this one, or the peer median</span>
             </p>
             <p>
-              Each row is one measure, with {name} among the members compared. Further right is a
-              larger figure. The word beside the row (above, near or below peers) comes from where{" "}
-              {name} falls among them, by a fixed rule; it says how far, not whether that is good.
+              Each strip is one measure, with {name} among the members compared. Further right is a
+              larger figure. The word beside the measure (above, near or below peers) comes from
+              where {name} falls among them, by a fixed rule; it says how far, not whether that is
+              good.
             </p>
           </HowToRead>
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-3 flex flex-wrap items-center gap-2">
             <button
               type="button"
               aria-pressed={showTable}
@@ -432,13 +474,15 @@ export default function WhereTheyStand({
             >
               Compare with a peer ▸
             </Link>
-            <Link
-              href="/about/scores#peers"
-              className="inline-flex min-h-11 items-center border border-ink-hi bg-surface px-3 text-small font-semibold text-ink-hi hover:bg-white/5"
-            >
-              How peers are chosen ▸
-            </Link>
           </div>
+          <More label="How peers are chosen and what “stands out” means" bare>
+            <p className="max-w-prose text-small text-ink-lo">
+              {data.standsOutKey ? data.standsOutWhy : `${data.standsOut} ${data.standsOutWhy}`}{" "}
+              <Link href="/about/scores#peers" className="text-phos underline underline-offset-2">
+                How peers are chosen
+              </Link>
+            </p>
+          </More>
         </>
       )}
     </section>

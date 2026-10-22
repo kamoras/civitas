@@ -239,8 +239,6 @@ export default function DayReportView({
             <p>{report.sentence}</p>
             <FollowFeed className="mt-2" subject="Congress" feed={TOPIC_FEEDS.congress} />
           </PageMasthead>
-          {strip}
-          {hub}
           <PeriodNav
             active="day"
             hrefs={{
@@ -259,6 +257,8 @@ export default function DayReportView({
                 : null
             }
           />
+          {strip}
+          {hub}
           <div className="mt-8 grid grid-cols-1 gap-8 md:grid-cols-2">
             <FigureGroup name="Senate">
               <Figure

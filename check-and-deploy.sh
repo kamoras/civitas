@@ -333,6 +333,16 @@ RESOLVED=/tmp/civitas-resolved-stack.yml
   docker compose -f docker-compose.yml -f docker-compose.swarm.yml build backend frontend nginx
 } >> deploy-poll.log 2>&1 || deploy_ok=0
 
+# No image ships trusting a distrusted root (AGENTS.md "Distrusted roots"):
+# reads every trust store out of the images just built.
+if [[ "$deploy_ok" == "1" ]]; then
+  ./check-trust-stores.sh "civitas-backend:$IMAGE_TAG" "civitas-frontend:$IMAGE_TAG" \
+    "civitas-nginx:$IMAGE_TAG" >> deploy-poll.log 2>&1 || {
+    deploy_ok=0
+    log "commit ${REMOTE:0:8}: an image trusts a distrusted root (check-trust-stores.sh) — not deploying"
+  }
+fi
+
 if [[ "$deploy_ok" == "1" ]] && pipeline_is_busy; then
   log "commit ${REMOTE:0:8} built but ${_busy_reason} — deferring stack deploy"
   exit 0
