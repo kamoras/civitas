@@ -21,6 +21,7 @@ import type {
   CoverageCell,
   MapAccountability as Data,
 } from "@/types/mapAccountability";
+import HouseStateLabels from "@/components/elections/map/HouseStateLabels";
 import ScrollRegion from "@/components/shared/ScrollRegion";
 import ChartReadout from "@/components/shared/ChartReadout";
 import { MARK_ATTR } from "@/types/readout";
@@ -317,9 +318,6 @@ function HouseSwing({ seats }: { seats: AccountabilitySeat[] }) {
     >
       {layout.blocks.map((b) => (
         <g key={b.state}>
-          <text x={b.x} y={b.y - 2} fontSize="6" className="fill-ink-min font-mono">
-            {b.state}
-          </text>
           {/* The state's mark: its block with a margin, a 24px target. */}
           <rect
             {...{ [MARK_ATTR]: b.state }}
@@ -342,6 +340,7 @@ function HouseSwing({ seats }: { seats: AccountabilitySeat[] }) {
           ))}
         </g>
       ))}
+      <HouseStateLabels blocks={layout.blocks} viewBoxWidth={layout.width + 4} />
     </svg>
   );
 }
