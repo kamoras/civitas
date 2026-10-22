@@ -1,19 +1,21 @@
 "use client";
 
 import { overlay } from "@/lib/chartColors";
-import type { KeyboardEvent, ReactNode } from "react";
-import { useState } from "react";
+import type { ReactNode } from "react";
+import { useMemo, useState } from "react";
 import { FIPS_TO_STATE } from "@/lib/stateCodes";
 import { MAP_LABEL_HALO } from "@/lib/results";
 import { ComposableMap, Geographies, Geography, useMapContext } from "react-simple-maps";
 import { STATE_TILES, TILE_COLS, TILE_ROWS } from "@/lib/electionMap";
 import ScrollRegion from "@/components/shared/ScrollRegion";
+import ChartReadout, { type ChartMark } from "@/components/shared/ChartReadout";
+import { MARK_ATTR, type ReadoutMark } from "@/types/readout";
 
 // Extracted from the Action Center's old elections tab (2026-07), when it and
-// /elections both drew this map; the tab was removed in 2026-09. Coloring is
-// left entirely to the caller via getFillColor/getHoverFillColor — this component only knows how to render the US map
-// and report clicks, not what a given race/state "means" (race type, PVI,
-// results, etc. differ by caller).
+// /elections both drew this map; the tab was removed in 2026-09. Colouring is
+// left entirely to the caller via getFillColor/getHoverFillColor, and what
+// each state's readout says to `marks`: this component only knows how to
+// draw the US map and make each state readable.
 
 // Vendored copy of us-atlas@3's states-10m.json (see public/data/) so the
 // map doesn't depend on a third-party CDN at runtime.
@@ -38,45 +40,43 @@ const CALLOUT_H = 32;
 const CALLOUT_W = 56;
 
 interface RaceMapProps {
-  selectedState: string | null;
-  onStateClick: (state: string) => void;
+  /** The map's accessible name: what its colour means. */
+  label: string;
+  /** Each state's readout (name, figure, page), by code: the API's words. */
+  marks: Record<string, ReadoutMark>;
   /** Fill color for a state's default (non-hover) appearance. */
-  getFillColor: (state: string, isSelected: boolean) => string;
-  /** Fill color for a state on hover. */
-  getHoverFillColor: (state: string, isSelected: boolean) => string;
-  /** Each state's accessible name. Defaults to its code; a map whose fill
-   * means something (the results map) says it here too, so colour is
-   * never the only way to read it. */
-  getStateLabel?: (state: string) => string;
+  getFillColor: (state: string) => string;
+  /** Fill color for a state on hover or focus. */
+  getHoverFillColor: (state: string) => string;
   /** SVG <defs> (patterns) the fills may reference. */
   defs?: ReactNode;
 }
 
+/**
+ * The states, each readable on hover, tap and the keyboard (ChartReadout):
+ * one Tab stop, the arrow keys walking the states west to east, north to
+ * south, and the label naming the state, its figure and its page, which a
+ * click (a second tap on a phone) or Enter opens. On a phone the map is a
+ * grid of equal 24px tiles; from 640px up, the shapes.
+ */
 export default function RaceMap({
-  selectedState,
-  onStateClick,
+  label,
+  marks,
   getFillColor,
   getHoverFillColor,
-  getStateLabel = (state) => state,
   defs,
 }: RaceMapProps) {
-  // react-simple-maps v5 dropped Geography's built-in default/hover/pressed
-  // style object in favor of a plain `style` prop, same as any other SVG
-  // element — hover is now tracked ourselves.
-  const [hoveredFips, setHoveredFips] = useState<string | null>(null);
-  // Keyboard focus gets the hover outline, thicker: the paths set
-  // `outline: none` (a rectangle around a state's bounding box is
-  // meaningless), which left a keyboard user tabbing through 50 states
-  // with no visible focus at all (WCAG 2.4.7).
-  const [focusedFips, setFocusedFips] = useState<string | null>(null);
-
-  const activate = (e: KeyboardEvent, stateCode: string) => {
-    if (e.key === "Enter" || e.key === " ") {
-      if (e.key === " ") e.preventDefault(); // don't scroll the page
-      onStateClick(stateCode);
-    }
-  };
-
+  const [active, setActive] = useState<string | null>(null);
+  // Geographic order: row by row of the tile grid, west to east.
+  const ordered = useMemo<ChartMark[]>(
+    () =>
+      Object.entries(STATE_TILES)
+        .filter(([st]) => marks[st])
+        .sort(([, [ac, ar]], [, [bc, br]]) => ar - br || ac - bc)
+        .map(([st]) => marks[st]),
+    [marks]
+  );
+  const fill = (st: string) => (active === st ? getHoverFillColor(st) : getFillColor(st));
   return (
     <>
       {/* The fills' patterns, once, in an SVG that is never display:none:
@@ -87,25 +87,17 @@ export default function RaceMap({
           {defs}
         </svg>
       )}
-      <StateTiles
-        selectedState={selectedState}
-        onStateClick={onStateClick}
-        getFillColor={getFillColor}
-        getStateLabel={getStateLabel}
-      />
+      <StateTiles label={label} marks={ordered} active={active} onActive={setActive} fill={fill} />
       <div className="hidden sm:block">
-        <ShapeMap
-          selectedState={selectedState}
-          onStateClick={onStateClick}
-          getFillColor={getFillColor}
-          getHoverFillColor={getHoverFillColor}
-          getStateLabel={getStateLabel}
-          hoveredFips={hoveredFips}
-          setHoveredFips={setHoveredFips}
-          focusedFips={focusedFips}
-          setFocusedFips={setFocusedFips}
-          activate={activate}
-        />
+        <ChartReadout
+          label={label}
+          marks={ordered}
+          labelAt="mark"
+          ring={false}
+          onActive={setActive}
+        >
+          <ShapeMap active={active} fill={fill} />
+        </ChartReadout>
       </div>
     </>
   );
@@ -121,17 +113,22 @@ const TILE_STEP = TILE_PX + TILE_GAP;
  * On a phone the shapes are too small to tap (Rhode Island is 4x5 pixels,
  * Alabama 17x27, Indiana 14x23 at 375px), so the map is a grid of equal
  * tiles, each state roughly where it sits (STATE_TILES, the seat map's
- * layout), every tile a 24px button. Same fills, names and clicks as the
+ * layout), every tile a 24px target. Same fills and readouts as the
  * shapes; from 640px up the shapes take over. Narrower than 12 tiles
  * (320px at 200% text), the grid scrolls in its own box.
  */
 function StateTiles({
-  selectedState,
-  onStateClick,
-  getFillColor,
-  getStateLabel,
-}: Pick<RaceMapProps, "selectedState" | "onStateClick" | "getFillColor"> & {
-  getStateLabel: (state: string) => string;
+  label,
+  marks,
+  active,
+  onActive,
+  fill,
+}: {
+  label: string;
+  marks: ChartMark[];
+  active: string | null;
+  onActive: (st: string | null) => void;
+  fill: (st: string) => string;
 }) {
   const states = new Set(Object.values(FIPS_TO_STATE));
   const width = TILE_COLS * TILE_STEP - TILE_GAP;
@@ -139,83 +136,54 @@ function StateTiles({
   return (
     <div className="sm:hidden">
       <ScrollRegion label="Map of the states, as tiles">
-        <svg
-          viewBox={`0 0 ${width} ${height}`}
-          className="block h-auto w-full"
-          style={{ minWidth: width }}
-        >
-          {Object.entries(STATE_TILES)
-            .filter(([st]) => states.has(st))
-            .map(([st, [col, row]]) => {
-              const selected = selectedState === st;
-              const x = col * TILE_STEP;
-              const y = row * TILE_STEP;
-              return (
-                <g
-                  key={st}
-                  role="button"
-                  tabIndex={0}
-                  aria-label={getStateLabel(st)}
-                  onClick={() => onStateClick(st)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      onStateClick(st);
-                    }
-                  }}
-                  className="cursor-pointer outline-none [&:focus-visible>rect]:stroke-[var(--phos)] [&:focus-visible>rect]:[stroke-width:2.5]"
-                >
-                  <rect
-                    x={x}
-                    y={y}
-                    width={TILE_PX}
-                    height={TILE_PX}
-                    style={{
-                      fill: selected ? "var(--signal-cyan)" : getFillColor(st, selected),
-                      stroke: selected ? "var(--phos)" : overlay(0.25),
-                      strokeWidth: 1,
-                    }}
-                  />
-                  <text
-                    x={x + TILE_PX / 2}
-                    y={y + TILE_PX / 2}
-                    textAnchor="middle"
-                    dominantBaseline="central"
-                    fontSize={13}
-                    fill="var(--ink-hi)"
-                    pointerEvents="none"
-                    className={`font-mono ${MAP_LABEL_HALO}`}
-                  >
-                    {st}
-                  </text>
-                </g>
-              );
-            })}
-        </svg>
+        <ChartReadout label={label} marks={marks} labelAt="mark" ring={false} onActive={onActive}>
+          <svg
+            viewBox={`0 0 ${width} ${height}`}
+            className="block h-auto w-full"
+            style={{ minWidth: width }}
+          >
+            {Object.entries(STATE_TILES)
+              .filter(([st]) => states.has(st))
+              .map(([st, [col, row]]) => {
+                const x = col * TILE_STEP;
+                const y = row * TILE_STEP;
+                const on = active === st;
+                return (
+                  <g key={st} {...{ [MARK_ATTR]: st }}>
+                    <rect
+                      x={x}
+                      y={y}
+                      width={TILE_PX}
+                      height={TILE_PX}
+                      style={{
+                        fill: fill(st),
+                        stroke: on ? "var(--phos)" : overlay(0.25),
+                        strokeWidth: on ? 2.5 : 1,
+                      }}
+                    />
+                    <text
+                      x={x + TILE_PX / 2}
+                      y={y + TILE_PX / 2}
+                      textAnchor="middle"
+                      dominantBaseline="central"
+                      fontSize={13}
+                      fill="var(--ink-hi)"
+                      pointerEvents="none"
+                      className={`font-mono ${MAP_LABEL_HALO}`}
+                    >
+                      {st}
+                    </text>
+                  </g>
+                );
+              })}
+          </svg>
+        </ChartReadout>
       </ScrollRegion>
     </div>
   );
 }
 
-function ShapeMap({
-  selectedState,
-  onStateClick,
-  getFillColor,
-  getHoverFillColor,
-  getStateLabel,
-  hoveredFips,
-  setHoveredFips,
-  focusedFips,
-  setFocusedFips,
-  activate,
-}: Omit<RaceMapProps, "getStateLabel" | "defs"> & {
-  getStateLabel: (state: string) => string;
-  hoveredFips: string | null;
-  setHoveredFips: (fips: string | null) => void;
-  focusedFips: string | null;
-  setFocusedFips: (fips: string | null) => void;
-  activate: (e: KeyboardEvent, state: string) => void;
-}) {
+function ShapeMap({ active, fill }: { active: string | null; fill: (st: string) => string }) {
   return (
     <ComposableMap
       projection="geoAlbersUsa"
@@ -227,38 +195,22 @@ function ShapeMap({
       <Geographies geography={GEO_URL}>
         {({ geographies }) => [
           ...geographies.map((geo) => {
-            const fips = geo.id as string;
-            const stateCode = FIPS_TO_STATE[fips];
+            const stateCode = FIPS_TO_STATE[geo.id as string];
             if (!stateCode) return null;
-            const isSelected = selectedState === stateCode;
-            const isHovered = hoveredFips === fips || focusedFips === fips;
-            const isFocused = focusedFips === fips;
-
+            const on = active === stateCode;
             return (
               <Geography
                 key={geo.rsmKey}
                 geography={geo}
-                onClick={() => onStateClick(stateCode)}
-                onMouseEnter={() => setHoveredFips(fips)}
-                onMouseLeave={() => setHoveredFips(null)}
-                onFocus={() => setFocusedFips(fips)}
-                onBlur={() => setFocusedFips(null)}
-                // react-simple-maps hardcodes tabIndex=0 on each path, but
-                // SVG paths don't fire onClick from Enter/Space — wire up
-                // button semantics + keyboard activation ourselves.
-                role="button"
-                aria-label={getStateLabel(stateCode)}
-                onKeyDown={(e: KeyboardEvent) => activate(e, stateCode)}
+                // react-simple-maps makes every path a Tab stop; the map is
+                // one, and moves among the states itself.
+                tabIndex={-1}
+                {...{ [MARK_ATTR]: stateCode }}
                 style={{
-                  fill: isSelected
-                    ? "var(--signal-cyan)"
-                    : isHovered
-                      ? getHoverFillColor(stateCode, isSelected)
-                      : getFillColor(stateCode, isSelected),
-                  stroke: isHovered ? "var(--phos)" : "var(--surface-base)",
-                  strokeWidth: isFocused ? 2.5 : isHovered ? 1 : 0.5,
+                  fill: fill(stateCode),
+                  stroke: on ? "var(--phos)" : "var(--surface-base)",
+                  strokeWidth: on ? 2.5 : 0.5,
                   outline: "none",
-                  cursor: "pointer",
                 }}
               />
             );
@@ -266,16 +218,8 @@ function ShapeMap({
           <SmallStateCallouts
             key="callouts"
             geographies={geographies}
-            selectedState={selectedState}
-            hoveredFips={hoveredFips}
-            focusedFips={focusedFips}
-            setHoveredFips={setHoveredFips}
-            setFocusedFips={setFocusedFips}
-            onStateClick={onStateClick}
-            activate={activate}
-            getFillColor={getFillColor}
-            getHoverFillColor={getHoverFillColor}
-            getStateLabel={getStateLabel}
+            active={active}
+            fill={fill}
           />,
         ]}
       </Geographies>
@@ -285,28 +229,12 @@ function ShapeMap({
 
 function SmallStateCallouts({
   geographies,
-  selectedState,
-  hoveredFips,
-  focusedFips,
-  setHoveredFips,
-  setFocusedFips,
-  onStateClick,
-  activate,
-  getFillColor,
-  getHoverFillColor,
-  getStateLabel,
+  active,
+  fill,
 }: {
   geographies: { id?: string | number; rsmKey: string }[];
-  selectedState: string | null;
-  hoveredFips: string | null;
-  focusedFips: string | null;
-  setHoveredFips: (fips: string | null) => void;
-  setFocusedFips: (fips: string | null) => void;
-  onStateClick: (state: string) => void;
-  activate: (e: KeyboardEvent, state: string) => void;
-  getFillColor: RaceMapProps["getFillColor"];
-  getHoverFillColor: RaceMapProps["getHoverFillColor"];
-  getStateLabel: (state: string) => string;
+  active: string | null;
+  fill: (st: string) => string;
 }) {
   // The map's own path generator, so each leader line starts at the
   // state as drawn — no second projection to keep in step with this one.
@@ -324,46 +252,26 @@ function SmallStateCallouts({
         if (!geo) return null;
         const [cx, cy] = path.centroid(geo);
         const y = CALLOUT_TOP + i * CALLOUT_STEP;
-        const isSelected = selectedState === stateCode;
-        const fips = String(geo.id);
-        const isFocused = focusedFips === fips;
-        const isHovered = hoveredFips === fips || isFocused;
+        const on = active === stateCode;
         return (
-          <g
-            key={stateCode}
-            role="button"
-            tabIndex={0}
-            aria-label={getStateLabel(stateCode)}
-            onClick={() => onStateClick(stateCode)}
-            onKeyDown={(e) => activate(e, stateCode)}
-            onMouseEnter={() => setHoveredFips(fips)}
-            onMouseLeave={() => setHoveredFips(null)}
-            onFocus={() => setFocusedFips(fips)}
-            onBlur={() => setFocusedFips(null)}
-            style={{ cursor: "pointer", outline: "none" }}
-          >
+          <g key={stateCode}>
             <line
               x1={cx}
               y1={cy}
               x2={CALLOUT_X}
               y2={y}
-              stroke={isHovered ? "var(--phos)" : overlay(0.25)}
+              stroke={on ? "var(--phos)" : overlay(0.25)}
               strokeWidth={0.75}
             />
             <rect
+              {...{ [MARK_ATTR]: stateCode }}
               x={CALLOUT_X}
               y={y - CALLOUT_H / 2}
               width={CALLOUT_W}
               height={CALLOUT_H}
-              fill={
-                isSelected
-                  ? "var(--signal-cyan)"
-                  : isHovered
-                    ? getHoverFillColor(stateCode, isSelected)
-                    : getFillColor(stateCode, isSelected)
-              }
-              stroke={isHovered ? "var(--phos)" : overlay(0.35)}
-              strokeWidth={isFocused ? 2.5 : 1}
+              fill={fill(stateCode)}
+              stroke={on ? "var(--phos)" : overlay(0.35)}
+              strokeWidth={on ? 2.5 : 1}
             />
             <text
               x={CALLOUT_X + CALLOUT_W / 2}
@@ -372,6 +280,7 @@ function SmallStateCallouts({
               fontFamily="ui-monospace, monospace"
               fontSize={14}
               fill="var(--ink-hi)"
+              pointerEvents="none"
               className={MAP_LABEL_HALO}
             >
               {stateCode}

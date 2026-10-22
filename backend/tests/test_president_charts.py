@@ -32,6 +32,12 @@ def test_growth_and_jobs_come_from_the_stored_series_against_the_same_era(db_ses
     assert jobs["series"]["points"] == [[0, 0.0], [1, 1.0], [2, 2.0], [3, 3.0]]
     assert jobs["band"][0]["n"] >= MIN_BAND and jobs["table"][3]["value"] == "+3.0M"
 
+    # Every mark a readout: the point's value and the others' band there.
+    assert jobs["marks"][3]["label"] == "Year 4" and jobs["marks"][3]["shown"] == "+3.0M"
+    assert jobs["marks"][0]["context"].startswith("other presidencies' middle half ")
+    assert growth["marks"][0]["shown"] == "3.0% real growth"
+    assert growth["marks"][0]["context"] == "first year of the term, within the other presidencies' middle half"
+
 
 def test_nothing_is_drawn_without_a_stored_series(db_session):
     db_session.add(_president(1, 1953, 1957))

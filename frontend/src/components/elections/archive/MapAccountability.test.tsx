@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import axe from "axe-core";
+import userEvent from "@testing-library/user-event";
 import MapAccountability, { statusSentence } from "./MapAccountability";
 import type {
   AccountabilitySeat,
@@ -54,6 +55,10 @@ const EMPTY: CoverageCell = {
   held95: 0,
   share95: null,
   interval95: null,
+  share80Shown: "n/a",
+  interval80Shown: null,
+  share95Shown: "n/a",
+  interval95Shown: null,
 };
 
 function chamber(seats: AccountabilitySeat[], all: CoverageCell): ChamberAccountability {
@@ -72,14 +77,25 @@ function chamber(seats: AccountabilitySeat[], all: CoverageCell): ChamberAccount
     promised: {
       nominal80: 0.8,
       nominal95: 0.95,
+      nominal80Shown: "80%",
+      nominal95Shown: "95%",
       heldOut: {
         cycles: [1998, 2024],
         races: 300,
         coverage80: 0.81,
         coverage95: 0.94,
         coverage80Fundamentals: 0.79,
+        coverage80Shown: "81%",
+        coverage95Shown: "94%",
       },
-      forward: { cycle: 2024, races: 34, coverage80: 0.82, coverage95: 0.97 },
+      forward: {
+        cycle: 2024,
+        races: 34,
+        coverage80: 0.82,
+        coverage95: 0.97,
+        coverage80Shown: "82%",
+        coverage95Shown: "97%",
+      },
     },
     misses: seats.filter((s) => s.inside80 === false).map((s) => ({ ...s, outsideBy: 15 })),
     swing: {
@@ -90,6 +106,17 @@ function chamber(seats: AccountabilitySeat[], all: CoverageCell): ChamberAccount
       medianLabel: "R+2",
     },
     seats,
+    // What the API's swing_marks says per state.
+    stateMarks: Object.fromEntries(
+      seats.map((s) => [
+        s.state,
+        {
+          id: s.state,
+          label: s.stateName,
+          shown: s.swingLabel ? `swing ${s.swingLabel}` : "waiting",
+        },
+      ])
+    ),
   };
 }
 
@@ -126,6 +153,10 @@ function data(over: Partial<Data> = {}): Data {
         held95: 1,
         share95: 0.5,
         interval95: [0.013, 0.987],
+        share80Shown: "50%",
+        interval80Shown: "1% to 99%",
+        share95Shown: "50%",
+        interval95Shown: "1% to 99%",
       }),
       house: chamber(
         [
@@ -209,5 +240,18 @@ describe("MapAccountability", () => {
       rules: { "color-contrast": { enabled: false } },
     });
     expect(result.violations.map((v) => v.id)).toEqual([]);
+  });
+
+  it("reads each state of the swing map from the keyboard, no tooltip titles", async () => {
+    const { container } = render(
+      <main>
+        <MapAccountability data={data()} pageUrl="https://civitas.example/elections/2026" />
+      </main>
+    );
+    expect(container.querySelectorAll("title")).toHaveLength(0);
+    const senate = screen.getByRole("group", { name: /^Senate swing map: 2 marks/ });
+    senate.focus();
+    await userEvent.keyboard("{Home}");
+    expect(senate.querySelector("[aria-live]")!.textContent).toMatch(/: swing R\+\d+\.$/);
   });
 });

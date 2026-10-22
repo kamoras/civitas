@@ -68,6 +68,7 @@ export function chamberView(r: ElectionMapResponse, chamber: MapChamber): Electi
       polls: r.sources.polls,
     },
     seats: c.seats,
+    stateMarks: c.stateMarks ?? { usual: {}, polls: {}, diff: {} },
   };
 }
 
@@ -359,44 +360,6 @@ export function differenceGlyph(seat: MapSeat): string | null {
 }
 
 /** One seat's accessible name on the map. */
-export function seatAriaLabel(seat: MapSeat, view: MapView): string {
-  const usual = seat.leanLabel ? `usual vote ${seat.leanLabel} lean` : "no usual-vote figure";
-  if (seat.status !== "range") return `${seatName(seat)}: ${usual}. ${seat.reason}`;
-  // A file written before the label existed (the minutes between a deploy
-  // and the next build) names the range by its unit alone.
-  const polls = `${seat.rangeBasisLabel ?? "Margin range"}: ${rangeLabel(seat)}${crossesEven(seat) ? ", too close to tell" : ""}`;
-  const diff =
-    seat.difference.strength > 0
-      ? `, polls point toward ${seat.difference.direction}`
-      : seat.difference.seatPolls
-        ? ""
-        : ", no seat poll";
-  return `${seatName(seat)}: ${view === "usual" ? usual : `${polls}; ${usual}`}${view === "diff" ? diff : ""}.`;
-}
-
-/** A state's name on the House map: "Ohio: 15 seats, 3 too close to tell". */
-export function stateAriaLabel(
-  stateName: string,
-  seats: MapSeat[],
-  view: MapView,
-  leansMax: number
-): string {
-  const n = seats.length;
-  const head = `${stateName}: ${n} ${n === 1 ? "seat" : "seats"}`;
-  if (view === "usual") {
-    const close = seats.filter(
-      (s) => s.usualBin === "close" || s.usualBin === "D_leans" || s.usualBin === "R_leans"
-    ).length;
-    return `${head}, ${close} within ${leansMax} points of even in the usual vote.`;
-  }
-  if (view === "polls") {
-    const close = seats.filter((s) => s.status === "range" && s.pollsBin === "close").length;
-    return `${head}, ${close} too close to tell.`;
-  }
-  const differ = seats.filter((s) => s.status === "range" && s.difference.strength > 0).length;
-  return `${head}, ${differ} where polls disagree with the usual vote.`;
-}
-
 /* ── House tile layout: equal-size tiles, one per seat, each state a
    near-square block, the blocks in rows by STATE_TILES' rough geography. ─ */
 

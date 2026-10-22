@@ -261,26 +261,38 @@ export default function RecordBox(props: RecordBoxProps) {
         )}
       </div>
       {below && <div className={compact ? "mt-2" : "mt-3"}>{below}</div>}
-      {more && (
-        <details
-          open={more.open}
-          onToggle={more.onToggle && ((e) => more.onToggle!(e.currentTarget.open))}
-          className={`group/more text-sm ${compact ? "mt-1.5" : "mt-3"}`}
-        >
-          <summary
-            className={`${INLINE_LINK} inline-flex min-h-6 cursor-pointer list-none items-center gap-1.5 [&::-webkit-details-marker]:hidden`}
-          >
-            <span aria-hidden="true" className="font-id no-underline group-open/more:hidden">
-              +
-            </span>
-            <span aria-hidden="true" className="hidden font-id no-underline group-open/more:inline">
-              −
-            </span>
-            More: {more.label}
-          </summary>
-          <div className={`mt-2 border-t pt-3 text-ink ${RULE}`}>{more.children}</div>
-        </details>
-      )}
+      {more && <More {...more} className={compact ? "mt-1.5" : "mt-3"} />}
     </article>
+  );
+}
+
+/** A box's "More: <label>", a native disclosure: also what a section that
+ *  is a box around a chart (the Court's) keeps its method behind. */
+export function More({
+  label,
+  children,
+  open,
+  onToggle,
+  className = "mt-3",
+}: NonNullable<RecordBoxProps["more"]> & { className?: string }) {
+  return (
+    <details
+      open={open}
+      onToggle={onToggle && ((e) => onToggle(e.currentTarget.open))}
+      className={`group/more text-sm ${className}`}
+    >
+      <summary
+        className={`${INLINE_LINK} inline-flex min-h-6 cursor-pointer list-none items-center gap-1.5 [&::-webkit-details-marker]:hidden`}
+      >
+        <span aria-hidden="true" className="font-id no-underline group-open/more:hidden">
+          +
+        </span>
+        <span aria-hidden="true" className="hidden font-id no-underline group-open/more:inline">
+          −
+        </span>
+        More: {label}
+      </summary>
+      <div className={`mt-2 border-t pt-3 text-ink ${RULE}`}>{children}</div>
+    </details>
   );
 }
