@@ -61,6 +61,15 @@ def _to_schema(h: FinancialHolding) -> HoldingSchema:
     )
 
 
+def value_shown(low: float, high: float, open_ended: bool) -> str:
+    """A sum of disclosed brackets as printed: "$21.0M+" when a bracket in
+    it states only a floor, one figure when the brackets are exact, else
+    the range."""
+    if open_ended:
+        return f"{compact_money(low)}+"
+    return compact_money(low) if low == high else f"{compact_money(low)} \u2013 {compact_money(high)}"
+
+
 def _categories(rows: list[tuple[str, float | None, float | None, str]]) -> list[HoldingCategorySchema]:
     """The breakdown, from (category, low, high, value_text) for every holding.
 
@@ -82,8 +91,7 @@ def _categories(rows: list[tuple[str, float | None, float | None, str]]) -> list
         low, high = sum(low for low, _, _ in valued), sum(high for _, high, _ in valued)
         open_ended = any(is_open_ended(lo, hi, text) for lo, hi, text in valued)
         share = weight / total_weight if total_weight else 0.0
-        value = (f"{compact_money(low)}+" if open_ended else compact_money(low) if low == high
-                 else f"{compact_money(low)} \u2013 {compact_money(high)}")
+        value = value_shown(low, high, open_ended)
         categories.append(HoldingCategorySchema(
             category=key,
             label=meta["label"],
@@ -207,6 +215,7 @@ def _build(db: Session, disclosure: FinancialDisclosure, page: int, per_page: in
         total_low=breakdown.total_low,
         total_high=breakdown.total_high,
         total_open_ended=breakdown.total_open_ended,
+        total_shown=value_shown(breakdown.total_low, breakdown.total_high, breakdown.total_open_ended),
         categories=list(breakdown.categories),
         category_filter=category,
         holdings=[_to_schema(h) for h in page_rows],

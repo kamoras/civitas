@@ -387,6 +387,7 @@ def roll_call_summaries(db: Session, refs: list[str | None]) -> dict[str, dict]:
     for p in db.query(RollCallPosition).filter(RollCallPosition.roll_call_id.in_([rc.id for rc in rows])):
         positions.setdefault(p.roll_call_id, []).append(p)
     short = roll_call_short_titles(db, rows)
+    stored = _stored_bill_titles(db, rows)
     nominations = nomination_votes(db, rows)
     return {
         wanted[(rc.chamber, rc.congress, rc.session, rc.number)]: {
@@ -395,6 +396,7 @@ def roll_call_summaries(db: Session, refs: list[str | None]) -> dict[str, dict]:
             "billId": rc.bill_id, "billLabel": bill_label(rc.bill_id), "sourceUrl": rc.source_url,
             **shape(rc, positions.get(rc.id, [])),
             "billShortTitle": short.get(rc.id),
+            "measureTitle": measure_title(rc, short.get(rc.id), stored.get((rc.congress, canonical_bill_id(rc.bill_id or "")))),
             **amendment_fields(rc),
             # What the vote decided about the nominations its question
             # names (a nomination has no bill); null for any other vote.
@@ -403,6 +405,34 @@ def roll_call_summaries(db: Session, refs: list[str | None]) -> dict[str, dict]:
         }
         for rc in rows
     }
+
+
+def _stored_bill_titles(db: Session, rows: list[RollCall]) -> dict[tuple[int, str], str]:
+    """{(congress, bill id): title} from the site's sponsored-bill rows for
+    the bills these roll calls are on (one query per table)."""
+    wanted = {(rc.congress, canonical_bill_id(rc.bill_id)) for rc in rows if rc.bill_id}
+    found: dict[tuple[int, str], str] = {}
+    if not wanted:
+        return found
+    for model in (SponsoredBill, RepSponsoredBill):
+        for bill_id, congress, title in db.query(model.bill_id, model.congress, model.title).filter(
+            model.bill_id.in_({b for _, b in wanted}), model.congress.in_({c for c, _ in wanted}),
+        ):
+            key = (congress, canonical_bill_id(bill_id))
+            if key in wanted and title:
+                found.setdefault(key, title)
+    return found
+
+
+def measure_title(rc: RollCall, short: str | None, stored: str | None) -> str | None:
+    """What a roll call was on, named for a list of votes: the bill's short
+    title, else its title as the site's sponsored-bill rows hold it, else
+    the chamber's own title. Not the chamber's title for an amendment vote:
+    "Doe Amdt. No. 7" names only the sponsor, and the amendment's
+    stated purpose is served beside it (amendmentPurpose). None when nothing
+    names the measure (an amendment to a bill no sitting member sponsored
+    and Congress.gov's titles weren't read for)."""
+    return short or stored or (None if rc.amendment else (rc.title or None))
 
 
 def roll_call_short_titles(db: Session, rows: list[RollCall]) -> dict[int, str]:

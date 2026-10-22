@@ -181,6 +181,7 @@ from app.config_definitions import (
 from app.models import PromiseAlignment
 from app.ordinals import ordinal
 from app.pipeline.analyze.constituent_approval import senate_approval
+from app.services.constituent_survey import approval_share
 from app.pipeline.analyze.population_reference import (
     CONSTITUENT_REFERENCE,
     FUNDING_REFERENCE,
@@ -2661,7 +2662,7 @@ def _constituent_alignment_core(
         names = {"D": "Democrats", "R": "Republicans", "I": "independents"}
         approval_facts = {
             "groups": [
-                {"group": g, "approve": round(a, 3), "typical": round(t, 3)} for g, a, t in approval["groups"]
+                {"group": g, "approve": approval_share(a), "typical": round(t, 3)} for g, a, t in approval["groups"]
             ],
             "z": round(approval["z"], 2),
             "survey": approval["survey"],

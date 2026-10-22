@@ -87,3 +87,18 @@ def test_house_members_are_never_scored_on_approval(monkeypatch):
     monkeypatch.setattr(score_calculator, "senate_approval", lambda *a, **k: calls.append(a))
     core = _constituent_alignment_core({}, [], {}, state="AA", party="D", district=3, name="Avery Able", years_in_office=6)
     assert calls == [] and all(c["label"] != "Constituent approval" for c in core["components"])
+
+
+def test_the_scorecard_and_the_breakdown_state_one_approval_figure(survey, monkeypatch):
+    """The profile's approval (constituent_survey) and the score breakdown's
+    (score_calculator's facts) read one reading at one precision, so a
+    share never reads 11% on one and 12% on the other."""
+    survey["members"][0]["by_party"]["R"]["shrunk"] = 0.1148
+    survey["members"][0]["by_party"]["I"]["shrunk"] = 0.4808
+    shown = constituent_survey.constituent_approval("senate", "AA", "Avery Able", "D", 6)
+    monkeypatch.setattr(score_calculator, "_state_pvi", lambda: PVI)
+    core = _constituent_alignment_core({}, [], {}, state="AA", party="D", district=None,
+                                       name="Avery Able", years_in_office=6)
+    facts = {g["group"]: g["approve"] for g in core["facts"]["approval"]["groups"]}
+    assert {g["party"]: g["approve"] for g in shown["by_party"]} == facts == {"R": 0.1148, "I": 0.4808}
+

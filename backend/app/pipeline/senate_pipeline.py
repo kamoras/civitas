@@ -235,6 +235,7 @@ def upsert_senator(db: Session, data: dict) -> None:
         "score_held": None,
         "total_raised": funding.get("totalRaised") or 0,
         "total_contributions": funding.get("totalContributions"),
+        "funding_election_year": funding.get("electionYear"),
         "caucus_party": (data.get("votingRecord") or {}).get("effectiveParty"),
         "party_line_record": _record_json((data.get("votingRecord") or {}).get("partyLineRecord")),
         "total_from_pacs": funding.get("totalFromPACs") or 0,

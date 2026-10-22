@@ -150,6 +150,7 @@ def build_rep_response(rep: Representative, _db: Session = None) -> Representati
         funding={
             "totalRaised": rep.total_raised,
             "totalContributions": rep.total_contributions,
+            "electionYear": rep.funding_election_year,
             "totalFromPACs": rep.total_from_pacs,
             "pacSharePct": pac_share_pct(rep),
             "smallDonorPercentage": rep.small_donor_percentage,
@@ -538,6 +539,7 @@ def upsert_representative(db: Session, rep_data: dict) -> Representative:
 
     existing.total_raised = funding.get("totalRaised", 0)
     existing.total_contributions = funding.get("totalContributions")
+    existing.funding_election_year = funding.get("electionYear")
     existing.caucus_party = (rep_data.get("votingRecord") or {}).get("effectiveParty")
     record = (rep_data.get("votingRecord") or {}).get("partyLineRecord")
     existing.party_line_record = json.dumps(record) if record else None

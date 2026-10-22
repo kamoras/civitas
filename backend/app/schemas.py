@@ -148,6 +148,9 @@ class FundingSchema(CamelModel):
     total_contributions: float | None = Field(
         None, description="Contributions (and candidate loans), in dollars: what the shares are taken over; "
                           "null on a record scored before it was kept")
+    election_year: int | None = Field(
+        None, description="The election these figures are from (the member's most recent completed one); null "
+                          "on a record scored before it was kept")
     # Read from the pipeline's "totalFromPACs" key; written as "totalFromPacs",
     # the spelling every other response (the leaderboards) uses.
     total_from_pacs: float = Field(
@@ -398,6 +401,8 @@ class HoldingsSchema(CamelModel):
     total_low: float = 0.0
     total_high: float = 0.0
     total_open_ended: bool = False
+    # The total as printed ("$21.0M+", "$1.2M – $2.5M"): holdings_service.value_shown.
+    total_shown: str | None = None
     categories: list[HoldingCategorySchema] = Field(default_factory=list)
     category_filter: str | None = None
     holdings: list[HoldingSchema] = Field(default_factory=list)
