@@ -450,10 +450,12 @@ export const STATE_LABEL_MAX_UNITS = 10;
 /** The font size, in the map's units, that draws a House map's state
  * labels at STATE_LABEL_PX when the map (`viewBoxWidth` units wide) is
  * `renderedWidth` CSS px wide; null when that would not fit above a block
- * (a map narrower than about 1.3 px a unit), or before the map is measured.
- * At a fixed 6 units the letters were 8.3px at the map's widest (608px). */
+ * (a map narrower than about 1.3 px a unit). Unmeasured (the server's HTML,
+ * or a map hidden on a phone that a share image shows at its widest), the
+ * largest that fits: 13.6px at the map's widest, 608px. At a fixed 6 units
+ * the letters were 8.3px there. */
 export function stateLabelUnits(renderedWidth: number | null, viewBoxWidth: number): number | null {
-  if (!renderedWidth || viewBoxWidth <= 0) return null;
+  if (!renderedWidth || viewBoxWidth <= 0) return STATE_LABEL_MAX_UNITS;
   const units = (STATE_LABEL_PX * viewBoxWidth) / renderedWidth;
   return units <= STATE_LABEL_MAX_UNITS ? units : null;
 }

@@ -23,7 +23,10 @@ describe("stateLabelUnits", () => {
     expect(stateLabelUnits(608, 448)!).toBeLessThanOrEqual(STATE_LABEL_MAX_UNITS);
     // A phone's 343px would need 17 units: too big for the band, so none.
     expect(stateLabelUnits(343, 448)).toBeNull();
-    expect(stateLabelUnits(null, 448)).toBeNull();
+    // Unmeasured (server HTML; hidden on a phone, shown in a share image at
+    // the map's widest): the largest that fits.
+    expect(stateLabelUnits(null, 448)).toBe(STATE_LABEL_MAX_UNITS);
+    expect(stateLabelUnits(0, 448)).toBe(STATE_LABEL_MAX_UNITS);
   });
 });
 
