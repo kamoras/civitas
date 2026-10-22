@@ -20,7 +20,7 @@ export default function VoteList({ votes, member }: { votes: SupportRollCall[]; 
         const bill = billPageHref(v.billId, v.congress);
         return (
           <li key={voteAnchor(v)} id={voteAnchor(v)} className="py-3">
-            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 font-mono text-xs text-ink-min">
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 font-mono text-small text-ink-min">
               <span>{shortDate(v.date)}</span>
               {bill ? (
                 <Link
@@ -38,8 +38,8 @@ export default function VoteList({ votes, member }: { votes: SupportRollCall[]; 
               </Link>
               <span>· {v.result}</span>
             </div>
-            <p className="mt-1 font-sans text-sm text-ink">{v.statement.title}</p>
-            <p className="mt-1 font-mono text-xs text-ink-lo">
+            <p className="mt-1 font-sans text-small text-ink">{v.statement.title}</p>
+            <p className="mt-1 font-mono text-small text-ink-lo">
               President&apos;s side: {v.presidentSide}
               {member && (
                 <>
@@ -51,10 +51,10 @@ export default function VoteList({ votes, member }: { votes: SupportRollCall[]; 
                 </>
               )}
             </p>
-            <blockquote className="mt-2 border-l border-white/[0.09] pl-3 font-sans text-xs text-ink-lo">
+            <blockquote className="mt-2 border-l border-white/[0.09] pl-3 font-sans text-small text-ink-lo">
               &ldquo;{v.statement.sentence}&rdquo;
             </blockquote>
-            <p className="mt-1 flex flex-wrap gap-x-4 font-mono text-xs">
+            <p className="mt-1 flex flex-wrap gap-x-4 font-mono text-small">
               <a
                 href={v.statement.url}
                 target="_blank"

@@ -26,7 +26,7 @@ export default function RelatedVotes({
   return (
     <section className={className}>
       <Heading className={SECTION_HEADING}>Related votes in Congress</Heading>
-      <p className="mt-2 text-[13px] text-ink-lo">
+      <p className="mt-2 text-small text-ink-lo">
         Roll calls taken around this story on what it covers, matched by the words of their record.
         Pick your state below to see how your members voted.
       </p>
@@ -37,10 +37,10 @@ export default function RelatedVotes({
             className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 border-b border-white/[0.07] py-2.5"
           >
             <span className="min-w-0">
-              <span className="block font-sans text-[15px] leading-snug text-ink-hi">
+              <span className="block font-sans text-body leading-snug text-ink-hi">
                 {[v.billLabel, v.title || v.question].filter(Boolean).join(" · ")}
               </span>
-              <span className="mt-0.5 block text-[13px] text-ink-lo">
+              <span className="mt-0.5 block text-small text-ink-lo">
                 {CHAMBER_NAME[v.chamber]} ·{" "}
                 {formatUtcDate(v.date, { month: "short", day: "numeric", year: "numeric" })} ·{" "}
                 {voteResult(v)} {voteTally({ yeas: v.yeas ?? 0, nays: v.nays ?? 0 })}
@@ -48,7 +48,7 @@ export default function RelatedVotes({
             </span>
             <Link
               href={rollCallHref(v)}
-              className="whitespace-nowrap font-mono text-xs text-phos-mid underline-offset-4 hover:text-phos hover:underline"
+              className="whitespace-nowrap font-mono text-small text-phos-mid underline-offset-4 hover:text-phos hover:underline"
               aria-label={`How each member voted: ${CHAMBER_NAME[v.chamber]} roll call ${v.number}`}
             >
               Roll call →

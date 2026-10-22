@@ -95,7 +95,7 @@ export default function RootLayout({
         <ConfigProvider>
           <a
             href="#main-content"
-            className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:top-2 focus-visible:left-2 focus-visible:z-[10000] focus-visible:bg-surface-base focus-visible:text-ink-hi focus-visible:border-2 focus-visible:border-phos/40 focus-visible:px-4 focus-visible:py-2 focus-visible:text-lg focus-visible:font-mono"
+            className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:top-2 focus-visible:left-2 focus-visible:z-[10000] focus-visible:bg-surface-base focus-visible:text-ink-hi focus-visible:border-2 focus-visible:border-phos/40 focus-visible:px-4 focus-visible:py-2 focus-visible:font-mono"
           >
             Skip to main content
           </a>

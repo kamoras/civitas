@@ -66,15 +66,3 @@ export function tabControl(selected: boolean): string {
  */
 export const INLINE_LINK =
   "text-signal-cyan underline decoration-signal-cyan/50 underline-offset-2 hover:text-phos";
-
-/**
- * The size of a mono label (mobile spec P2). Every label is sentence case
- * (2026-10); one of four words or more is 14px on a phone, where it is read
- * as a phrase rather than glanced at, and `text-xs` from 640px up.
- */
-export function labelCase(text: string): string {
-  return text.trim().split(/\s+/).length > 3 ? LONG_LABEL : " text-xs";
-}
-
-/** `labelCase` for a label known to run past three words. */
-export const LONG_LABEL = " text-[0.875rem] sm:text-xs";

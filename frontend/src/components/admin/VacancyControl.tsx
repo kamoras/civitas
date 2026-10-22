@@ -45,13 +45,13 @@ export function VacancyControl({ token }: { token: string }) {
     <div className="panel">
       <TerminalTitlebar title="Seat vacancies" />
       <div className="p-4 space-y-3">
-        <p className="text-ink-min text-xs font-mono">
+        <p className="text-ink-min text-small font-mono">
           Marks a senator/representative&apos;s seat vacant (or restores it) without deleting their
           historical data. No automated detection: this is manual only.
         </p>
         <div className="flex flex-wrap items-end gap-2">
           <div className="flex flex-col gap-1">
-            <label className="text-ink-lo text-xs font-mono" htmlFor="vacancy-politician">
+            <label className="text-ink-lo text-small font-mono" htmlFor="vacancy-politician">
               Politician ID
             </label>
             <input
@@ -59,18 +59,18 @@ export function VacancyControl({ token }: { token: string }) {
               value={politicianId}
               onChange={(e) => setPoliticianId(e.target.value)}
               placeholder="e.g. lindsey-graham"
-              className="bg-surface border border-white/[0.07] text-ink-hi text-xs font-mono px-2 py-1.5 w-48 focus:outline-none focus:border-phos/40"
+              className="bg-surface border border-white/[0.07] text-ink-hi text-small font-mono px-2 py-1.5 w-48 focus:outline-none focus:border-phos/40"
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-ink-lo text-xs font-mono" htmlFor="vacancy-action">
+            <label className="text-ink-lo text-small font-mono" htmlFor="vacancy-action">
               Action
             </label>
             <select
               id="vacancy-action"
               value={action}
               onChange={(e) => setAction(e.target.value as "vacate" | "restore")}
-              className="bg-surface border border-white/[0.07] text-ink-hi text-xs font-mono px-2 py-1.5 focus:outline-none focus:border-phos/40"
+              className="bg-surface border border-white/[0.07] text-ink-hi text-small font-mono px-2 py-1.5 focus:outline-none focus:border-phos/40"
             >
               <option value="vacate">Mark vacant</option>
               <option value="restore">Restore to current</option>
@@ -79,14 +79,14 @@ export function VacancyControl({ token }: { token: string }) {
           {action === "vacate" && (
             <>
               <div className="flex flex-col gap-1">
-                <label className="text-ink-lo text-xs font-mono" htmlFor="vacancy-reason">
+                <label className="text-ink-lo text-small font-mono" htmlFor="vacancy-reason">
                   Reason
                 </label>
                 <select
                   id="vacancy-reason"
                   value={reason}
                   onChange={(e) => setReason(e.target.value as (typeof VACANCY_REASONS)[number])}
-                  className="bg-surface border border-white/[0.07] text-ink-hi text-xs font-mono px-2 py-1.5 focus:outline-none focus:border-phos/40"
+                  className="bg-surface border border-white/[0.07] text-ink-hi text-small font-mono px-2 py-1.5 focus:outline-none focus:border-phos/40"
                 >
                   {VACANCY_REASONS.map((r) => (
                     <option key={r} value={r}>
@@ -96,7 +96,7 @@ export function VacancyControl({ token }: { token: string }) {
                 </select>
               </div>
               <div className="flex flex-col gap-1">
-                <label className="text-ink-lo text-xs font-mono" htmlFor="vacancy-left-office">
+                <label className="text-ink-lo text-small font-mono" htmlFor="vacancy-left-office">
                   Left office
                 </label>
                 <input
@@ -104,7 +104,7 @@ export function VacancyControl({ token }: { token: string }) {
                   type="date"
                   value={leftOfficeDate}
                   onChange={(e) => setLeftOfficeDate(e.target.value)}
-                  className="bg-surface border border-white/[0.07] text-ink-hi text-xs font-mono px-2 py-1.5 focus:outline-none focus:border-phos/40"
+                  className="bg-surface border border-white/[0.07] text-ink-hi text-small font-mono px-2 py-1.5 focus:outline-none focus:border-phos/40"
                 />
               </div>
             </>
@@ -112,13 +112,13 @@ export function VacancyControl({ token }: { token: string }) {
           <button
             onClick={submit}
             disabled={submitting || !politicianId.trim()}
-            className="font-mono text-xs text-signal-cyan border border-white/15 px-3 py-1.5 hover:bg-signal-cyan/10 transition-colors disabled:opacity-40"
+            className="font-mono text-small text-signal-cyan border border-white/15 px-3 py-1.5 hover:bg-signal-cyan/10 transition-colors disabled:opacity-40"
           >
             {submitting ? "Submitting..." : "Submit"}
           </button>
         </div>
-        {result && <p className="text-ink-hi text-xs font-mono">{result}</p>}
-        {error && <p className="text-signal-magenta text-xs font-mono">{error}</p>}
+        {result && <p className="text-ink-hi text-small font-mono">{result}</p>}
+        {error && <p className="text-signal-magenta text-small font-mono">{error}</p>}
       </div>
     </div>
   );

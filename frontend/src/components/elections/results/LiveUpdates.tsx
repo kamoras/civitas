@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { describeUpdate, formatEasternTime, raceLabel } from "@/lib/results";
 import type { ResultEvent } from "@/types/election";
+import { TYPE } from "@/lib/typeStyles";
 
 const TONE: Record<string, string> = {
   flip: "border-signal-amber/60 text-signal-amber",
@@ -36,13 +37,13 @@ export default function LiveUpdates({
       className={`border border-white/[0.09] bg-surface ${className}`}
     >
       <div className="flex items-baseline justify-between border-b border-white/[0.09] px-4 py-3">
-        <h2 id="live-updates-heading" className="font-display text-lg font-semibold text-ink-hi">
+        <h2 id="live-updates-heading" className={TYPE.section}>
           Live updates
         </h2>
-        <span className="font-mono text-xs text-ink-min">Newest first</span>
+        <span className="font-mono text-small text-ink-min">Newest first</span>
       </div>
       {shown.length === 0 ? (
-        <p className="px-4 py-4 text-sm text-ink-lo">
+        <p className="px-4 py-4 text-small text-ink-lo">
           Nothing yet. Updates appear here as states publish their first counts.
         </p>
       ) : (
@@ -52,7 +53,7 @@ export default function LiveUpdates({
             const label = raceLabel(event);
             return (
               <li key={event.id} className="border-b border-white/[0.07] px-4 py-3 last:border-b-0">
-                <p className="flex flex-wrap items-center gap-2 font-mono text-xs">
+                <p className="flex flex-wrap items-center gap-2 font-mono text-small">
                   <time dateTime={event.at} className="text-ink-min">
                     {formatEasternTime(event.at)}
                   </time>
@@ -68,7 +69,7 @@ export default function LiveUpdates({
                     <span className="text-ink-lo">{label}</span>
                   )}
                 </p>
-                <p className="mt-1 text-sm text-ink">{text}</p>
+                <p className="mt-1 text-small text-ink">{text}</p>
               </li>
             );
           })}

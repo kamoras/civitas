@@ -25,6 +25,7 @@ import HouseStateLabels from "@/components/elections/map/HouseStateLabels";
 import ScrollRegion from "@/components/shared/ScrollRegion";
 import ChartReadout from "@/components/shared/ChartReadout";
 import { MARK_ATTR } from "@/types/readout";
+import { TYPE } from "@/lib/typeStyles";
 
 const CHAMBERS: MapChamberKey[] = ["senate", "house"];
 const CHAMBER_NAME: Record<MapChamberKey, string> = { senate: "Senate", house: "House" };
@@ -83,7 +84,7 @@ function CoverageStrip({
   const intervalShown = cell[`interval${level}Shown`];
   return (
     <div className="grid grid-cols-1 gap-1 sm:grid-cols-[8.5rem_minmax(0,1fr)] sm:items-center sm:gap-3">
-      <span className="font-mono text-xs text-ink-lo">
+      <span className="font-mono text-small text-ink-lo">
         {level}% range · {held}/{cell.graded}
       </span>
       <div>
@@ -108,7 +109,7 @@ function CoverageStrip({
             />
           )}
         </div>
-        <p className="mt-1 text-xs text-ink-lo">
+        <p className="mt-1 text-small text-ink-lo">
           {share == null
             ? "None checked yet."
             : shareShown && promisedShown
@@ -126,7 +127,7 @@ const MISSES_SHOWN = 8;
 
 function MissList({ misses }: { misses: ChamberAccountability["misses"] }) {
   return (
-    <ul className="mt-1 space-y-1 text-sm">
+    <ul className="mt-1 space-y-1 text-small">
       {misses.map((s) => (
         <li key={s.id} className="text-ink">
           <a
@@ -152,8 +153,8 @@ function ChamberCheck({ name, c }: { name: string; c: ChamberAccountability }) {
   return (
     <div className="space-y-4 border border-white/[0.09] bg-surface p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="font-display text-lg font-semibold text-ink-hi">{name}</h3>
-        <span className="font-mono text-xs text-ink-min">
+        <h3 className={TYPE.boxTitle}>{name}</h3>
+        <span className="font-mono text-small text-ink-min">
           {c.certified} of {c.ranged} official · {c.counts.counting} counting · {c.counts.no_count}{" "}
           no count
         </span>
@@ -173,7 +174,7 @@ function ChamberCheck({ name, c }: { name: string; c: ChamberAccountability }) {
         />
       </div>
       {held.coverage80 != null && held.coverage80Shown && (
-        <p className="text-xs text-ink-min">
+        <p className="text-small text-ink-min">
           What the map said beforehand: on {held.races} past races
           {held.cycles ? ` (${held.cycles[0]} to ${held.cycles[1]})` : ""} it never saw, its 80%
           ranges held {held.coverage80Shown} and its 95% ranges {held.coverage95Shown}
@@ -185,11 +186,11 @@ function ChamberCheck({ name, c }: { name: string; c: ChamberAccountability }) {
       )}
       {c.byBasis.length > 0 && (
         <ScrollRegion label={`${name} ranges checked`}>
-          <table className="w-full text-left text-sm">
+          <table className="w-full text-left text-small">
             <caption className="sr-only">
               {name} ranges checked, by what each range rested on
             </caption>
-            <thead className="font-mono text-[11px] text-ink-min">
+            <thead className="font-mono text-small text-ink-min">
               <tr>
                 <th scope="col" className="py-1 pr-3 font-normal">
                   Range basis
@@ -227,11 +228,9 @@ function ChamberCheck({ name, c }: { name: string; c: ChamberAccountability }) {
         </ScrollRegion>
       )}
       <div>
-        <h4 className="font-mono text-[11px] text-ink-min">
-          Outside the 80% range, furthest first
-        </h4>
+        <h4 className="font-mono text-small text-ink-min">Outside the 80% range, furthest first</h4>
         {c.misses.length === 0 ? (
-          <p className="mt-1 text-sm text-ink-lo">
+          <p className="mt-1 text-small text-ink-lo">
             {c.all.graded ? "None so far." : "None checked yet."}
           </p>
         ) : (
@@ -239,7 +238,7 @@ function ChamberCheck({ name, c }: { name: string; c: ChamberAccountability }) {
             <MissList misses={c.misses.slice(0, MISSES_SHOWN)} />
             {c.misses.length > MISSES_SHOWN && (
               <details className="mt-1">
-                <summary className="inline-flex min-h-11 cursor-pointer items-center font-mono text-xs text-ink-lo hover:text-ink-hi">
+                <summary className="inline-flex min-h-11 cursor-pointer items-center font-mono text-small text-ink-lo hover:text-ink-hi">
                   All {c.misses.length} misses
                 </summary>
                 <MissList misses={c.misses.slice(MISSES_SHOWN)} />
@@ -360,10 +359,10 @@ function SwingLegend({ bins }: { bins: Data["bins"] }) {
   ];
   return (
     <div className="space-y-2">
-      <p className="font-mono text-[11px] text-ink-min">
+      <p className="font-mono text-small text-ink-min">
         Ran toward, against its usual vote (margin points)
       </p>
-      <ul className="grid grid-cols-4 gap-1 font-mono text-[11px] text-ink-lo sm:grid-cols-8">
+      <ul className="grid grid-cols-4 gap-1 font-mono text-small text-ink-lo sm:grid-cols-8">
         {cells.map((c) => (
           <li key={c.bin} className="flex items-center gap-1.5">
             <span
@@ -412,12 +411,12 @@ function SwingTable({ seats }: { seats: AccountabilitySeat[] }) {
   if (!rows.length) return null;
   return (
     <details className="mt-3" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
-      <summary className="inline-flex min-h-11 cursor-pointer items-center font-mono text-xs text-ink-lo hover:text-ink-hi">
+      <summary className="inline-flex min-h-11 cursor-pointer items-center font-mono text-small text-ink-lo hover:text-ink-hi">
         Table · {rows.length} seats, largest swing first
       </summary>
       <ScrollRegion label="Every seat, largest swing first">
-        <table className="w-full min-w-[30rem] text-left text-sm">
-          <thead className="font-mono text-[11px] text-ink-min">
+        <table className="w-full min-w-[30rem] text-left text-small">
+          <thead className="font-mono text-small text-ink-min">
             <tr>
               <th scope="col" className="py-1 pr-3 font-normal">
                 Seat
@@ -484,10 +483,10 @@ export default function MapAccountability({ data, pageUrl }: { data: Data; pageU
       >
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 id="map-check-title" className="font-mono text-sm text-ink-hi">
+            <h2 id="map-check-title" className={TYPE.kicker}>
               Did the map&apos;s ranges hold?
             </h2>
-            <p className="mt-1 max-w-3xl text-sm text-ink-lo">
+            <p className="mt-1 max-w-3xl text-small text-ink-lo">
               Each official margin against the 80% and 95% ranges the map published before the
               election, as it stood on {asOf}. An honest 80% range holds about 8 results in 10; the
               band is the exact 95% interval for the share measured, the tick what the range
@@ -497,7 +496,7 @@ export default function MapAccountability({ data, pageUrl }: { data: Data; pageU
           <ShareSectionButton label="Did the map's ranges hold?" anchor="map-check" />
         </div>
         <p
-          className={`border px-3 py-2 text-sm ${data.stillCounting ? "border-signal-amber/40 text-ink-hi" : "border-white/[0.09] text-ink-lo"}`}
+          className={`border px-3 py-2 text-small ${data.stillCounting ? "border-signal-amber/40 text-ink-hi" : "border-white/[0.09] text-ink-lo"}`}
         >
           {statusSentence(data)}
         </p>
@@ -506,7 +505,7 @@ export default function MapAccountability({ data, pageUrl }: { data: Data; pageU
             <ChamberCheck key={c} name={CHAMBER_NAME[c]} c={data.chambers[c]!} />
           ))}
         </div>
-        <p className="border-t border-white/[0.07] pt-2 font-mono text-[11px] leading-relaxed text-ink-min">
+        <p className="border-t border-white/[0.07] pt-2 font-mono text-small leading-relaxed text-ink-min">
           {data.units.margin} Source: {ACCOUNTABILITY_SOURCE}.
         </p>
       </section>
@@ -521,10 +520,10 @@ export default function MapAccountability({ data, pageUrl }: { data: Data; pageU
       >
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 id="swing-map-title" className="font-mono text-sm text-ink-hi">
+            <h2 id="swing-map-title" className={TYPE.kicker}>
               Swing from the usual vote
             </h2>
-            <p className="mt-1 max-w-3xl text-sm text-ink-lo">
+            <p className="mt-1 max-w-3xl text-small text-ink-lo">
               Each seat&apos;s official margin minus its usual vote, measured on the same scale: a
               lean is doubled to read as a margin, the margin the seat gives when the country splits
               evenly. A measurement of the count, not a call.
@@ -533,7 +532,7 @@ export default function MapAccountability({ data, pageUrl }: { data: Data; pageU
           <ShareSectionButton label="Swing from the usual vote" anchor="swing-map" />
         </div>
         {data.stillCounting && (
-          <p className="font-mono text-xs text-signal-amber">
+          <p className="font-mono text-small text-signal-amber">
             Still counting · Seats fill in as their states list the count official
           </p>
         )}
@@ -541,8 +540,8 @@ export default function MapAccountability({ data, pageUrl }: { data: Data; pageU
           const ch = data.chambers[c]!;
           return (
             <div key={c} className="space-y-2">
-              <h3 className="font-mono text-xs text-ink-hi">{CHAMBER_NAME[c]}</h3>
-              <p className="text-sm text-ink-lo">{swingSentence(CHAMBER_NAME[c], ch)}</p>
+              <h3 className={TYPE.kicker}>{CHAMBER_NAME[c]}</h3>
+              <p className="text-small text-ink-lo">{swingSentence(CHAMBER_NAME[c], ch)}</p>
               {/* Each state reads its seats' swing (the API's words); the
                   table below lists every seat. */}
               <ChartReadout
@@ -565,12 +564,12 @@ export default function MapAccountability({ data, pageUrl }: { data: Data; pageU
         <div {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
           <a
             href={`/api/elections/archive/${data.cycle}/swing.csv`}
-            className="inline-flex min-h-11 items-center border border-white/20 px-4 font-mono text-xs text-ink-lo hover:text-ink-hi"
+            className="inline-flex min-h-11 items-center border border-white/20 px-4 font-mono text-small text-ink-lo hover:text-ink-hi"
           >
             CSV · Swing and ranges
           </a>
         </div>
-        <p className="border-t border-white/[0.07] pt-2 font-mono text-[11px] leading-relaxed text-ink-min">
+        <p className="border-t border-white/[0.07] pt-2 font-mono text-small leading-relaxed text-ink-min">
           {data.units.lean} {data.units.margin} Source: {ACCOUNTABILITY_SOURCE}.
         </p>
       </section>

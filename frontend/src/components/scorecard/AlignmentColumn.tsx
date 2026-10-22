@@ -34,14 +34,14 @@ function Lede({ facts, seat }: { facts: AlignmentFacts; seat: string }) {
   const members = partyMembers(facts.party);
   if (facts.breakRate == null || facts.breaks == null) {
     return (
-      <p className="text-base leading-relaxed text-ink">
+      <p className="text-body leading-relaxed text-ink">
         {count(facts.partyVotes, "party-line vote", "party-line votes")} on record so far: too few
         to compare with how often {members} in similar seats break with the party.
       </p>
     );
   }
   return (
-    <p className="text-base leading-relaxed text-ink">
+    <p className="text-body leading-relaxed text-ink">
       Voted against most {members} on {facts.breaks} of {facts.partyVotes} party-line votes (
       {percentOneDecimal(facts.breakRate)}).
       {facts.expectedBreakRate != null &&
@@ -72,11 +72,11 @@ function RateScale({ rate, expected, name }: { rate: number; expected: number; n
           style={{ left: at(rate) }}
         />
       </div>
-      <div className="relative h-4 font-mono text-xs" aria-hidden="true">
+      <div className="relative h-4 font-mono text-small" aria-hidden="true">
         <span className="absolute left-0 text-ink-min">0%</span>
         <span className="absolute right-0 text-ink-min">{Math.round(top * 100)}%</span>
       </div>
-      <p className="mt-1 flex flex-wrap gap-x-4 font-mono text-xs" aria-hidden="true">
+      <p className="mt-1 flex flex-wrap gap-x-4 font-mono text-small" aria-hidden="true">
         <span className="text-ink-lo">
           <span className="mr-1 inline-block h-2.5 w-0.5 bg-ink-lo align-middle" /> seat norm{" "}
           {percentOneDecimal(expected)}
@@ -109,7 +109,7 @@ function BreakRow({ vote }: { vote: ListedBreak }) {
   const parties = rc?.parties.filter((p) => PARTY_SHORT[p.party] && p.yea + p.nay > 0) ?? [];
   return (
     <li className="flex flex-col gap-1 border-b border-white/[0.06] pb-2.5">
-      <div className="flex items-start justify-between gap-3 text-sm">
+      <div className="flex items-start justify-between gap-3 text-small">
         <span className="min-w-0 text-ink-hi">
           {href ? (
             // The bill's own page: its text, sponsor and every vote on it.
@@ -126,23 +126,21 @@ function BreakRow({ vote }: { vote: ListedBreak }) {
             // screen, and two lines cut a nomination's office off).
             <span className="break-words">{title}</span>
           )}
-          {nominationLine && (
-            <span className="block text-[13px] text-ink-lo">{nominationLine}</span>
-          )}
+          {nominationLine && <span className="block text-small text-ink-lo">{nominationLine}</span>}
           {rc?.question && (
             <Link
               href={rollCallHref(rc)}
-              className="block min-h-6 text-[13px] leading-6 text-ink-lo underline decoration-white/20 underline-offset-2 hover:text-phos"
+              className="block min-h-6 text-small leading-6 text-ink-lo underline decoration-white/20 underline-offset-2 hover:text-phos"
             >
               {rc.question}
             </Link>
           )}
         </span>
-        <span className="shrink-0 border border-signal-red/45 px-1.5 py-px font-mono text-xs text-signal-red">
+        <span className="shrink-0 border border-signal-red/45 px-1.5 py-px font-mono text-small text-signal-red">
           Voted {vote.vote.toLowerCase()}
         </span>
       </div>
-      <span className="font-mono text-xs leading-relaxed text-ink-min">
+      <span className="font-mono text-small leading-relaxed text-ink-min">
         {rc ? (
           <Link
             href={`/congress/${rc.date}`}
@@ -221,7 +219,7 @@ export default function AlignmentColumn({
       {facts ? (
         <Lede facts={facts} seat={seat} />
       ) : (
-        <p className="text-base text-ink-lo">No party-line votes on record yet.</p>
+        <p className="text-body text-ink-lo">No party-line votes on record yet.</p>
       )}
       {facts?.breakRate != null && facts.expectedBreakRate != null && (
         <RateScale rate={facts.breakRate} expected={facts.expectedBreakRate} name={name} />
@@ -229,10 +227,10 @@ export default function AlignmentColumn({
       {note}
 
       <Block label={`Votes against party (${total})`}>
-        {total === 0 && <p className="text-sm text-ink-lo">None on record this Congress.</p>}
-        {total > 0 && failed && <p className="text-sm text-ink-lo">Could not load the votes.</p>}
+        {total === 0 && <p className="text-small text-ink-lo">None on record this Congress.</p>}
+        {total > 0 && failed && <p className="text-small text-ink-lo">Could not load the votes.</p>}
         {total > 0 && !failed && votes === null && (
-          <p className="pulse-subtle font-mono text-xs text-ink-min">Loading votes...</p>
+          <p className="pulse-subtle font-mono text-small text-ink-min">Loading votes...</p>
         )}
         {votes && votes.length > 0 && (
           <>
@@ -242,13 +240,13 @@ export default function AlignmentColumn({
               ))}
             </ul>
             {votes.length > BREAKS_SHOWN && (
-              <p className="font-mono text-xs text-ink-min">
+              <p className="font-mono text-small text-ink-min">
                 and {votes.length - BREAKS_SHOWN} more, in every recorded vote below
               </p>
             )}
           </>
         )}
-        <details className="text-xs leading-relaxed text-ink-min">
+        <details className="text-small leading-relaxed text-ink-min">
           <summary className="inline-flex min-h-6 cursor-pointer items-center text-ink-lo hover:text-phos">
             What counts as a break
           </summary>
@@ -267,7 +265,7 @@ export default function AlignmentColumn({
         <Block
           label={`From the ${FLANK[facts.party] ?? "party's"} flank, not counted (${flank.length})`}
         >
-          <p className="text-xs leading-relaxed text-ink-min">
+          <p className="text-small leading-relaxed text-ink-min">
             On these votes the {PARTY_SHORT[facts.party] ?? "members"} who broke sit further from
             the {OTHER_PARTY[facts.party] ?? "other party"} than the party does, so they are not
             counted as breaks toward the other party.
@@ -278,7 +276,9 @@ export default function AlignmentColumn({
             ))}
           </ul>
           {flank.length > FLANK_SHOWN && (
-            <p className="font-mono text-xs text-ink-min">and {flank.length - FLANK_SHOWN} more</p>
+            <p className="font-mono text-small text-ink-min">
+              and {flank.length - FLANK_SHOWN} more
+            </p>
           )}
         </Block>
       )}

@@ -36,7 +36,7 @@ export default function BillRow({ bill }: { bill: BillInFlight }) {
           "TO PRESIDENT") measure ~85px, which with the 12px of horizontal
           padding overflowed the old 92px box and truncated. */}
       <span
-        className={`shrink-0 mt-0.5 text-xs font-mono px-1.5 py-0.5 border w-[100px] text-center truncate ${stageStyle.text} ${stageStyle.border} ${stageStyle.bg}`}
+        className={`shrink-0 mt-0.5 text-small font-mono px-1.5 py-0.5 border w-[100px] text-center truncate ${stageStyle.text} ${stageStyle.border} ${stageStyle.bg}`}
         title={stageInfo?.name ?? bill.stage}
       >
         {stageInfo?.name ?? bill.stage}
@@ -49,13 +49,13 @@ export default function BillRow({ bill }: { bill: BillInFlight }) {
             // min-h-6 (24px): WCAG 2.2 target size. The row is deliberately
             // dense, so the height comes from the tap target rather than from
             // padding that would space the list out.
-            className="min-w-0 flex-1 min-h-6 flex items-center text-sm text-ink-hi hover:text-phos hover:underline leading-snug truncate"
+            className="min-w-0 flex-1 min-h-6 flex items-center text-small text-ink-hi hover:text-phos hover:underline leading-snug truncate"
           >
             {bill.shortTitle || bill.title || bill.billId}
           </Link>
           {bill.mentionCount > 0 && (
             <span
-              className="shrink-0 text-xs font-mono text-signal-cyan border border-white/15 bg-signal-cyan/10 px-1.5 py-0.5"
+              className="shrink-0 text-small font-mono text-signal-cyan border border-white/15 bg-signal-cyan/10 px-1.5 py-0.5"
               title={`Referenced in ${bill.mentionCount} current Action Center issue${bill.mentionCount === 1 ? "" : "s"}`}
             >
               Active ×{bill.mentionCount}
@@ -65,11 +65,11 @@ export default function BillRow({ bill }: { bill: BillInFlight }) {
         {/* The official title stays visible under a short one: the short
             title names the bill, the official one says what it does. */}
         {bill.shortTitle && (bill.officialTitle || bill.title) && (
-          <p className="truncate text-xs text-ink-lo" title={bill.officialTitle || bill.title}>
+          <p className="truncate text-small text-ink-lo" title={bill.officialTitle || bill.title}>
             {bill.officialTitle || bill.title}
           </p>
         )}
-        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5 text-xs text-ink-lo">
+        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5 text-small text-ink-lo">
           <Link
             href={`/politicians/${bill.sponsorId}`}
             className="flex min-h-6 min-w-0 items-center gap-1 hover:text-phos"
@@ -83,7 +83,9 @@ export default function BillRow({ bill }: { bill: BillInFlight }) {
                 className="h-4 w-4 shrink-0 border border-white/[0.07] object-cover object-[center_25%]"
               />
             )}
-            <span className={`shrink-0 px-1 border text-xs ${party.className}`}>{party.label}</span>
+            <span className={`shrink-0 px-1 border text-small ${party.className}`}>
+              {party.label}
+            </span>
             <span className="min-w-0 break-words text-ink">{bill.sponsorName}</span>
           </Link>
           <span className="text-ink-min">· {bill.sponsorState}</span>

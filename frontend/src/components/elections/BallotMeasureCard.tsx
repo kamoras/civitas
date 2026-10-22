@@ -1,6 +1,7 @@
 import { measureStatusLabel } from "@/lib/elections";
 import { safeHref } from "@/lib/formatting";
 import type { BallotMeasure } from "@/types/election";
+import { TYPE } from "@/lib/typeStyles";
 
 /** One ballot measure.
  *
@@ -36,7 +37,7 @@ export default function BallotMeasureCard({ measure }: { measure: BallotMeasure 
   // Commission writes both under the Legislature's question, and one
   // "Drafted by" beside the title credited its words to the Legislature.
   const drafted = (by: string | null | undefined) =>
-    by ? <p className="text-[10px] text-ink-min mt-1">Drafted by {by}</p> : null;
+    by ? <p className="text-small text-ink-min mt-1">Drafted by {by}</p> : null;
   const summaryDrafter =
     measure.summaryAuthority || (!measure.officialTitle ? measure.titleAuthority : null);
 
@@ -48,11 +49,11 @@ export default function BallotMeasureCard({ measure }: { measure: BallotMeasure 
       }`}
     >
       <div className="flex items-start justify-between gap-3 flex-wrap mb-2">
-        <h3 tabIndex={-1} className="font-display font-semibold text-sm text-ink-hi">
+        <h3 tabIndex={-1} className={TYPE.boxTitle}>
           {measure.number || measure.title}
         </h3>
         <span
-          className={`text-[9px] font-mono px-1.5 py-0.5 border ${
+          className={`text-small font-mono px-1.5 py-0.5 border ${
             removed ? "border-signal-red/40 text-signal-red" : "border-white/15 text-ink-lo"
           }`}
         >
@@ -64,18 +65,20 @@ export default function BallotMeasureCard({ measure }: { measure: BallotMeasure 
         // Shown, not hidden. Someone who saw this measure last week needs
         // to be told it was struck; a card that simply disappeared cannot
         // say that.
-        <p className="text-xs text-signal-red mb-3">
+        <p className="text-small text-signal-red mb-3">
           This measure is no longer on the ballot. It is kept here so a change since your last visit
           is visible rather than silent.
         </p>
       )}
 
-      {measure.number && measure.title && <p className="text-sm text-ink mb-3">{measure.title}</p>}
+      {measure.number && measure.title && (
+        <p className="text-small text-ink mb-3">{measure.title}</p>
+      )}
 
       {measure.officialTitle && (
         <section className="mb-3">
-          <h4 className="font-mono text-[10px] text-ink-lo mb-1">Official ballot title</h4>
-          <blockquote className="text-xs text-ink border-l-2 border-white/15 pl-3">
+          <h4 className="font-mono text-small text-ink-lo mb-1">Official ballot title</h4>
+          <blockquote className="text-small text-ink border-l-2 border-white/15 pl-3">
             {measure.officialTitle}
           </blockquote>
           {drafted(measure.titleAuthority)}
@@ -84,8 +87,8 @@ export default function BallotMeasureCard({ measure }: { measure: BallotMeasure 
 
       {measure.officialSummary && (
         <section className="mb-3">
-          <h4 className="font-mono text-[10px] text-ink-lo mb-1">Official summary</h4>
-          <p className="text-xs text-ink whitespace-pre-line">{measure.officialSummary}</p>
+          <h4 className="font-mono text-small text-ink-lo mb-1">Official summary</h4>
+          <p className="text-small text-ink whitespace-pre-line">{measure.officialSummary}</p>
           {drafted(summaryDrafter)}
         </section>
       )}
@@ -94,18 +97,18 @@ export default function BallotMeasureCard({ measure }: { measure: BallotMeasure 
         <section className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
           {measure.yesMeans && (
             <div className="border border-white/[0.09] p-2.5">
-              <h4 className="font-mono text-[10px] text-signal-cyan mb-1">A yes vote</h4>
-              <p className="text-xs text-ink">{measure.yesMeans}</p>
+              <h4 className="font-mono text-small text-signal-cyan mb-1">A yes vote</h4>
+              <p className="text-small text-ink">{measure.yesMeans}</p>
             </div>
           )}
           {measure.noMeans && (
             <div className="border border-white/[0.09] p-2.5">
-              <h4 className="font-mono text-[10px] text-signal-cyan mb-1">A no vote</h4>
-              <p className="text-xs text-ink">{measure.noMeans}</p>
+              <h4 className="font-mono text-small text-signal-cyan mb-1">A no vote</h4>
+              <p className="text-small text-ink">{measure.noMeans}</p>
             </div>
           )}
           {measure.framingAuthority && (
-            <p className="text-[10px] text-ink-min sm:col-span-2">
+            <p className="text-small text-ink-min sm:col-span-2">
               Drafted by {measure.framingAuthority}
             </p>
           )}
@@ -114,16 +117,16 @@ export default function BallotMeasureCard({ measure }: { measure: BallotMeasure 
 
       {measure.fiscalImpact && (
         <section className="mb-3">
-          <h4 className="font-mono text-[10px] text-ink-lo mb-1">Fiscal impact</h4>
-          <p className="text-xs text-ink whitespace-pre-line">{measure.fiscalImpact}</p>
+          <h4 className="font-mono text-small text-ink-lo mb-1">Fiscal impact</h4>
+          <p className="text-small text-ink whitespace-pre-line">{measure.fiscalImpact}</p>
           {measure.fiscalAuthority && (
-            <p className="text-[10px] text-ink-min mt-1">Prepared by {measure.fiscalAuthority}</p>
+            <p className="text-small text-ink-min mt-1">Prepared by {measure.fiscalAuthority}</p>
           )}
         </section>
       )}
 
       <footer className="flex items-center justify-between gap-3 flex-wrap pt-2 border-t border-white/[0.07]">
-        <p className="text-[10px] text-ink-min">
+        <p className="text-small text-ink-min">
           Quoted verbatim from {measure.sourceName || "the source"}
           {measure.republishedBy ? `, as republished by ${measure.republishedBy}` : ""}
           {measure.asOf ? ` · as of ${measure.asOf.slice(0, 10)}` : ""}
@@ -134,7 +137,7 @@ export default function BallotMeasureCard({ measure }: { measure: BallotMeasure 
             target="_blank"
             rel="noopener noreferrer"
             aria-label={`Read the full text of ${measure.number || measure.title} at the source (opens in new tab)`}
-            className="text-[10px] font-mono text-signal-cyan hover:text-phos"
+            className="text-small font-mono text-signal-cyan hover:text-phos"
           >
             Full text at source ↗
           </a>

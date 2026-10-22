@@ -15,6 +15,7 @@ import { chamberLabel } from "@/lib/chamber";
 import { exploreHref } from "@/lib/exploreHref";
 import { documentsHref } from "@/lib/routes";
 import { DOCUMENT_LIMIT, asksForDocuments, type DocumentQuery } from "@/lib/documentSearch";
+import { TYPE } from "@/lib/typeStyles";
 
 // Shown before a search: the topical list, plus two exact-term examples,
 // since the keyword channel makes document numbers and "quoted phrases"
@@ -40,7 +41,7 @@ function Snippet({ text }: { text: string }) {
   const segments = splitHighlights(text);
   if (segments.length === 0) return null;
   return (
-    <p className="-mt-2 line-clamp-3 font-sans text-sm leading-relaxed text-ink-lo">
+    <p className="-mt-2 line-clamp-3 font-sans text-small leading-relaxed text-ink-lo">
       {segments.map((segment, i) =>
         segment.match ? (
           // Ink on a light wash, underlined: the ledger green over a tinted card
@@ -146,7 +147,7 @@ function CoverageWindows({ stats }: { stats: ExploreStats | null }) {
   const windows = stats?.coverage ?? [];
   if (windows.length === 0) return null;
   return (
-    <details className="mt-3 font-mono text-xs text-ink-lo">
+    <details className="mt-3 font-mono text-small text-ink-lo">
       <summary className="inline-flex min-h-6 cursor-pointer items-center hover:text-phos">
         What the documents cover, and from when
       </summary>
@@ -171,7 +172,7 @@ function NotHeldNote({ notes, cited }: { notes: ExploreNotHeld[]; cited: boolean
   return (
     <div role="status" className="mb-4 border border-signal-amber/30 bg-signal-amber/5 px-3 py-2">
       {notes.map((n) => (
-        <p key={n.identifier} className="text-sm text-ink-hi">
+        <p key={n.identifier} className="text-small text-ink-hi">
           {n.sentence}{" "}
           <a
             href={n.url}
@@ -182,7 +183,7 @@ function NotHeldNote({ notes, cited }: { notes: ExploreNotHeld[]; cited: boolean
           .
         </p>
       ))}
-      {cited && <p className="mt-1 text-xs text-ink-lo">The results below cite it.</p>}
+      {cited && <p className="mt-1 text-small text-ink-lo">The results below cite it.</p>}
     </div>
   );
 }
@@ -193,7 +194,7 @@ export function IndexCounts({ stats }: { stats: ExploreStats | null }) {
   if (docs === 0) return null;
   const open = stats?.openForComment ?? 0;
   return (
-    <div className="text-right font-mono text-xs">
+    <div className="text-right font-mono text-small">
       <p className="tabular-nums text-ink-lo">{docs.toLocaleString("en-US")} documents indexed</p>
       {open > 0 && <p className="tabular-nums text-signal-cyan">{open} open for comment</p>}
     </div>
@@ -259,7 +260,7 @@ export default function DocumentResults({
       <CoverageWindows stats={stats} />
 
       {d.politicianId && (
-        <p className="mt-4 flex flex-wrap items-center gap-3 text-xs">
+        <p className="mt-4 flex flex-wrap items-center gap-3 text-small">
           <span className="text-ink-lo">
             Only documents from <span className="text-ink-hi">{politicianName}</span>
           </span>
@@ -284,14 +285,14 @@ export default function DocumentResults({
       <div className="mt-6">
         {!asked && (
           <div>
-            <p className="mb-3 text-xs text-ink-lo">Try searching for:</p>
+            <p className="mb-3 text-small text-ink-lo">Try searching for:</p>
             <ul className="flex flex-wrap gap-2">
               {SUGGESTED_QUERIES.map((s) => (
                 <li key={s}>
                   <Link
                     prefetch={false}
                     href={documentsHref({ q: s })}
-                    className="inline-flex min-h-6 items-center border border-white/15 px-3 py-1.5 text-xs text-ink-lo hover:text-phos"
+                    className="inline-flex min-h-6 items-center border border-white/15 px-3 py-1.5 text-small text-ink-lo hover:text-phos"
                   >
                     {s}
                   </Link>
@@ -302,7 +303,7 @@ export default function DocumentResults({
         )}
 
         {asked && (failed || indexEmpty) && (
-          <p role="alert" className="py-8 text-center text-base text-ink-lo">
+          <p role="alert" className="py-8 text-center text-body text-ink-lo">
             {indexEmpty
               ? "The search index is still being built. This happens right after a data refresh: please check back in a few minutes."
               : "The document search didn't answer just now. Try again in a moment."}
@@ -312,7 +313,7 @@ export default function DocumentResults({
         {semanticDown && results.length > 0 && (
           <p
             role="status"
-            className="mb-4 border border-signal-amber/30 bg-signal-amber/5 px-3 py-2 text-xs text-signal-amber"
+            className="mb-4 border border-signal-amber/30 bg-signal-amber/5 px-3 py-2 text-small text-signal-amber"
           >
             Showing keyword matches only: the meaning-based index is rebuilding after a data
             refresh. Searches by topic will return more once it finishes, usually within a few
@@ -327,9 +328,9 @@ export default function DocumentResults({
         {q && !d.politicianId && committeeTotal > 0 && (
           <Link
             href={`/congress/committees?q=${encodeURIComponent(q)}#committee-results`}
-            className="mb-4 block border border-white/15 px-4 py-3 text-sm text-ink-hi hover:border-phos/40"
+            className="mb-4 block border border-white/15 px-4 py-3 text-small text-ink-hi hover:border-phos/40"
           >
-            <span className="font-mono text-xs text-ink-min">Committees</span> {committeeTotal}{" "}
+            <span className="font-mono text-small text-ink-min">Committees</span> {committeeTotal}{" "}
             {committeeTotal === 1
               ? "committee meeting or report"
               : "committee meetings and reports"}{" "}
@@ -339,7 +340,7 @@ export default function DocumentResults({
 
         {asked && results.length > 0 && (
           <section aria-labelledby="document-results">
-            <h2 id="document-results" className="mb-4 text-xs font-normal text-ink-lo">
+            <h2 id="document-results" className={`${TYPE.kicker} mb-4`}>
               {q ? (
                 <>
                   {plural(results.length, "document", "documents")} for &ldquo;{q}&rdquo;
@@ -387,7 +388,7 @@ export default function DocumentResults({
 
         {asked && !failed && !indexEmpty && results.length === 0 && (
           <div className="py-12 text-center">
-            <p className="mb-2 text-base text-ink-lo">
+            <p className="mb-2 text-body text-ink-lo">
               {q
                 ? `No documents found for “${q}”`
                 : d.politicianId
@@ -397,13 +398,13 @@ export default function DocumentResults({
                     : "No comment periods are open right now"}
             </p>
             {!resp?.notHeld?.length && (
-              <p className="text-xs text-ink-lo">Try a broader search term or other filters.</p>
+              <p className="text-small text-ink-lo">Try a broader search term or other filters.</p>
             )}
           </div>
         )}
       </div>
 
-      <p className="mx-auto mt-12 max-w-lg text-center font-sans text-xs text-ink-lo">
+      <p className="mx-auto mt-12 max-w-lg text-center font-sans text-small text-ink-lo">
         Data sourced from the Congressional Record (GovInfo API), the Federal Register
         (federalregister.gov), and Supreme Court opinions (supremecourt.gov via Oyez). Comment links
         go directly to regulations.gov.

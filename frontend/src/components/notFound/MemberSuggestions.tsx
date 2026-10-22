@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { fetchPoliticianSuggestions, type PoliticianSuggestion } from "@/lib/api";
 import { PARTY_COLORS } from "@/lib/partyStyles";
+import { TYPE } from "@/lib/typeStyles";
 
 /**
  * On a member page's 404: the politicians whose addresses are closest to
@@ -32,7 +33,7 @@ export default function MemberSuggestions() {
   if (!found?.length) return null;
   return (
     <div className="mt-5 text-left">
-      <h2 className="font-mono text-xs text-ink-min">Closest names on the record</h2>
+      <h2 className={TYPE.kicker}>Closest names on the record</h2>
       <ul className="mt-2 flex flex-col gap-2">
         {found.map((p) => (
           <li key={p.id}>
@@ -40,10 +41,10 @@ export default function MemberSuggestions() {
               href={`/politicians/${p.id}`}
               className="group flex min-h-11 flex-wrap items-baseline justify-between gap-x-3 border border-white/15 px-3 py-2 transition-colors hover:border-phos/60"
             >
-              <span className="font-sans text-[15px] text-ink-hi group-hover:text-phos">
+              <span className="font-sans text-body text-ink-hi group-hover:text-phos">
                 {p.name}
               </span>
-              <span className="font-mono text-xs text-ink-lo">
+              <span className="font-mono text-small text-ink-lo">
                 {p.role}
                 {p.party && p.state && (
                   <span className={PARTY_COLORS[p.party] ?? "text-ink-lo"}>

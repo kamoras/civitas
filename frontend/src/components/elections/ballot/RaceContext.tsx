@@ -17,6 +17,7 @@ import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR, shareMetaAttrs } from "@/lib/sh
 import { INLINE_LINK } from "@/lib/controlStyles";
 import { MARK_ATTR } from "@/types/readout";
 import ChartReadout from "@/components/shared/ChartReadout";
+import { TYPE } from "@/lib/typeStyles";
 
 /** The seat's lean in words: what R+5 means, for a reader who has never
  * seen a PVI. "The last two presidential elections" is the PVI's own
@@ -68,7 +69,7 @@ function LeanAxis({ context, seatLabel }: { context: LeanContext; seatLabel: str
   return (
     <div className="mt-3">
       <div data-testid="lean-axis">
-        <div className="relative h-5 font-mono text-[10px] text-ink-hi" aria-hidden="true">
+        <div className="relative h-5 font-mono text-small text-ink-hi" aria-hidden="true">
           <span
             className="absolute bottom-0 whitespace-nowrap"
             // The ▼ over the seat's column: half its width back past the edge.
@@ -141,7 +142,7 @@ function LeanAxis({ context, seatLabel }: { context: LeanContext; seatLabel: str
           </svg>
         </ChartReadout>
         <div
-          className="relative mt-1 flex justify-between gap-2 font-mono text-[10px] text-ink-min"
+          className="relative mt-1 flex justify-between gap-2 font-mono text-small text-ink-min"
           aria-hidden="true"
         >
           <span>← {dist[0].label}</span>
@@ -154,7 +155,7 @@ function LeanAxis({ context, seatLabel }: { context: LeanContext; seatLabel: str
         </div>
       </div>
       <details className="mt-2" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
-        <summary className="inline-flex min-h-6 cursor-pointer items-center font-mono text-xs text-signal-cyan hover:text-phos">
+        <summary className="inline-flex min-h-6 cursor-pointer items-center font-mono text-small text-signal-cyan hover:text-phos">
           Seats at each lean, as a table
         </summary>
         <div
@@ -163,7 +164,7 @@ function LeanAxis({ context, seatLabel }: { context: LeanContext; seatLabel: str
           tabIndex={0}
           className="mt-1 max-h-48 overflow-y-auto"
         >
-          <table className="font-mono text-xs text-ink-lo">
+          <table className="font-mono text-small text-ink-lo">
             <thead>
               <tr>
                 <th scope="col" className="pr-6 text-left font-normal text-ink-min">
@@ -206,8 +207,8 @@ export function usualPoints(label: string): number {
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="border-b border-white/[0.07] py-3 last:border-b-0">
-      <dt className="font-mono text-[11px] text-ink-min">{label}</dt>
-      <dd className="mt-1 text-[14px] leading-relaxed text-ink-lo">{children}</dd>
+      <dt className="font-mono text-small text-ink-min">{label}</dt>
+      <dd className="mt-1 text-small leading-relaxed text-ink-lo">{children}</dd>
     </div>
   );
 }
@@ -256,12 +257,12 @@ export default function RaceContext({
       })}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 border-b border-white/[0.09] pb-1">
-        <h3 id={`context-${race.id}`} className="font-mono text-xs text-ink-min">
+        <h3 id={`context-${race.id}`} className={TYPE.kicker}>
           What shapes this race · {seatName}
         </h3>
         {/* The figures below as data, and how they are made: links, so
             left out of a picture of the section. */}
-        <span className="flex items-center gap-x-2 font-mono text-[11px]">
+        <span className="flex items-center gap-x-2 font-mono text-small">
           <ShareSectionButton label={`What shapes this race: ${seatName}`} anchor={null} />
           <span className="flex gap-x-2" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
             <a
@@ -289,7 +290,7 @@ export default function RaceContext({
           </span>
         </span>
       </div>
-      <p className="mt-2 text-[13px] text-ink-lo">
+      <p className="mt-2 text-small text-ink-lo">
         {resultsMode
           ? "Civitas calls no race. A count on this page is the state's own, linked to its source."
           : "Descriptive only: Civitas publishes no odds for this race and calls no race."}
@@ -301,7 +302,7 @@ export default function RaceContext({
             {race.district == null ? "state" : "district"} usually votes.{" "}
             <Link
               href={mapHref("polls", race.district == null ? "senate" : "house", race.id)}
-              className="whitespace-nowrap font-mono text-xs text-signal-cyan underline underline-offset-2 hover:text-phos"
+              className="whitespace-nowrap font-mono text-small text-signal-cyan underline underline-offset-2 hover:text-phos"
               {...{ [SHARE_EXCLUDE_ATTR]: "" }}
             >
               [ {race.district == null ? "Senate" : "House"} map → ]
@@ -314,7 +315,7 @@ export default function RaceContext({
           <Row label={`The seat · ${usual.label}`}>
             {leanSentence(usualPoints(usual.label), lean.unit)} {leanCountsSentence(lean)}
             <LeanAxis context={lean} seatLabel={usual.label} />
-            <p className="mt-2 text-[13px]">
+            <p className="mt-2 text-small">
               {usual.source === "computed"
                 ? `Computed by Civitas from open precinct returns, on this election's district lines: the figure the ${race.cycleYear} map shows, used in no score.`
                 : `Computed by Civitas from each state's official presidential returns: the figure the ${race.cycleYear} map shows.`}{" "}
@@ -335,7 +336,7 @@ export default function RaceContext({
           <Row label={`The seat · Cook PVI ${formatPvi(race.pvi)}`}>
             {leanSentence(race.pvi, lean.unit)} {leanCountsSentence(lean)}
             <LeanAxis context={lean} seatLabel={formatPvi(race.pvi)} />
-            <p className="mt-2 text-[13px]">
+            <p className="mt-2 text-small">
               Cook&apos;s figure: Civitas has no computed lean for this seat on these lines.
             </p>
           </Row>
@@ -351,7 +352,7 @@ export default function RaceContext({
             measure against colleagues in the same party:{" "}
             <Link
               href={`/politicians/${incumbent.incumbentRecord.id}`}
-              className="whitespace-nowrap font-mono text-xs text-signal-cyan underline underline-offset-2 hover:text-phos"
+              className="whitespace-nowrap font-mono text-small text-signal-cyan underline underline-offset-2 hover:text-phos"
             >
               [ Where they stand → ]
             </Link>
@@ -369,7 +370,7 @@ export default function RaceContext({
             )}{" "}
             <Link
               href={`/politicians/${race.seatHolder.id}`}
-              className="whitespace-nowrap font-mono text-xs text-signal-cyan underline underline-offset-2 hover:text-phos"
+              className="whitespace-nowrap font-mono text-small text-signal-cyan underline underline-offset-2 hover:text-phos"
             >
               [ Where they stand → ]
             </Link>

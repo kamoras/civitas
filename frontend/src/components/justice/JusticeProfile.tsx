@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { TYPE } from "@/lib/typeStyles";
 import { onThisPage } from "@/lib/onThisPage";
 import type { Justice } from "@/types/justice";
 import { SectionHeadingLevelProvider } from "@/components/shared/CollapsibleSection";
@@ -18,7 +19,7 @@ const PARTY: Record<string, { label: string; text: string; border: string }> = {
 };
 const NO_PARTY = { label: "", text: "text-ink", border: "border-white/30" };
 
-const LINK = "font-mono text-[13px] text-ink-lo underline underline-offset-2 hover:text-phos";
+const LINK = "font-mono text-small text-ink-lo underline underline-offset-2 hover:text-phos";
 
 function formatDate(iso: string | null) {
   if (!iso) return null;
@@ -43,12 +44,12 @@ function AppointedBy({ justice: j }: { justice: Justice }) {
   const year = by?.year ?? (j.dateStart ? Number(j.dateStart.slice(0, 4)) : null);
   const body = (
     <>
-      <span className="block text-[13px] font-semibold text-ink-lo">Appointed by</span>
-      <span className="block font-display text-2xl font-semibold leading-tight text-ink-hi">
+      <span className={`${TYPE.kicker} block`}>Appointed by</span>
+      <span className={`${TYPE.section} block`}>
         {name}
-        {party.label && <span className={`text-lg ${party.text}`}> ({party.label})</span>}
+        {party.label && <span className={`text-dek ${party.text}`}> ({party.label})</span>}
       </span>
-      {year && <span className="block text-sm text-ink">Joined the Court in {year}</span>}
+      {year && <span className="block text-small text-ink">Joined the Court in {year}</span>}
     </>
   );
   return by?.id ? (
@@ -57,7 +58,7 @@ function AppointedBy({ justice: j }: { justice: Justice }) {
       className="group block border border-white/25 bg-surface-raised px-4 py-3 hover:border-phos"
     >
       {body}
-      <span className="mt-1 block text-sm font-semibold text-phos group-hover:underline">
+      <span className="mt-1 block text-small font-semibold text-phos group-hover:underline">
         The president&apos;s record ▸
       </span>
     </Link>
@@ -116,10 +117,8 @@ export default function JusticeProfile({
                 />
               )}
               <div className="flex min-w-0 flex-col gap-2">
-                <Title className="break-words text-3xl font-semibold leading-tight text-ink-hi sm:text-4xl">
-                  {j.name}
-                </Title>
-                <p className="font-mono text-xs text-ink-lo">
+                <Title className={`${TYPE.title} break-words`}>{j.name}</Title>
+                <p className="font-mono text-small text-ink-lo">
                   {j.roleTitle}
                   {since && ` · since ${since}`}
                 </p>
@@ -156,14 +155,10 @@ export default function JusticeProfile({
               className="flex flex-col gap-3 border border-white/25 bg-surface px-5 py-5 font-sans"
               aria-labelledby="agreement-heading"
             >
-              <h2
-                id="agreement-heading"
-                {...onThisPage("Agreement")}
-                className="text-[19px] font-semibold text-ink-hi"
-              >
+              <h2 id="agreement-heading" {...onThisPage("Agreement")} className={TYPE.section}>
                 Agreement with each justice
               </h2>
-              <p className="text-sm text-ink">
+              <p className="text-small text-ink">
                 Who votes alike: the share of cases both decided where they took the same side.
               </p>
               <figure aria-labelledby="agreement-caption" className="flex flex-col gap-2">
@@ -172,7 +167,7 @@ export default function JusticeProfile({
                     <li key={id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
                       <Link
                         href={`/politicians/${encodeURIComponent(id)}`}
-                        className="w-40 max-w-full truncate text-sm text-ink underline-offset-2 hover:text-phos hover:underline"
+                        className="w-40 max-w-full truncate text-small text-ink underline-offset-2 hover:text-phos hover:underline"
                       >
                         {name}
                       </Link>
@@ -180,14 +175,14 @@ export default function JusticeProfile({
                         <span className="h-2 flex-1 bg-[var(--chart-faint)]" aria-hidden="true">
                           <span className="block h-full bg-ink-lo" style={{ width: `${share}%` }} />
                         </span>
-                        <span className="w-12 text-right font-mono text-sm tabular-nums text-ink-hi">
+                        <span className="w-12 text-right font-mono text-small tabular-nums text-ink-hi">
                           {Math.round(share)}%
                         </span>
                       </span>
                     </li>
                   ))}
                 </ul>
-                <figcaption id="agreement-caption" className="text-sm text-ink">
+                <figcaption id="agreement-caption" className="text-small text-ink">
                   Most often on the same side as {agreement[0].name} (
                   {Math.round(agreement[0].share)}%), least often as{" "}
                   {agreement[agreement.length - 1].name} (

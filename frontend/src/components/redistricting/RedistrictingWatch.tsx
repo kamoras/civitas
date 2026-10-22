@@ -3,6 +3,7 @@ import type { MapKind, RedistrictingWatch as Watch } from "@/types/redistricting
 import { longDate } from "@/lib/specials";
 import { safeHref } from "@/lib/formatting";
 import { REDISTRICTING_HREF } from "@/lib/redistricting";
+import { TYPE } from "@/lib/typeStyles";
 
 /** How each map in force was set, as a label beside it. */
 export const MAP_KIND_LABEL: Record<MapKind, string> = {
@@ -36,13 +37,10 @@ export default function RedistrictingWatch({
       aria-labelledby="redistricting-watch"
       className="mt-6 border font-sans border-phos/20 bg-surface px-4 pb-4"
     >
-      <h2
-        id="redistricting-watch"
-        className="border-b border-white/[0.07] py-2.5 font-mono text-xs text-ink-min"
-      >
+      <h2 id="redistricting-watch" className={`${TYPE.kicker} border-b border-white/[0.07] py-2.5`}>
         Redistricting watch
       </h2>
-      <p className="mt-3 text-sm text-ink-lo">
+      <p className="mt-3 text-small text-ink-lo">
         {status}
         {lastSettled
           ? ` No decision on a House map has been recorded since ${longDate(lastSettled)}.`
@@ -50,7 +48,7 @@ export default function RedistrictingWatch({
       </p>
       {compact ? (
         maps.length > 0 && (
-          <p className="mt-2 text-sm text-ink-lo">
+          <p className="mt-2 text-small text-ink-lo">
             In force:{" "}
             {maps.map((m, i) => (
               <span key={m.state}>
@@ -74,12 +72,12 @@ export default function RedistrictingWatch({
             const url = safeHref(m.source.url ?? "");
             return (
               <li key={m.state} className="border-t border-white/[0.07] py-2">
-                <p className="font-mono text-[11px] text-ink-min">
+                <p className="font-mono text-small text-ink-min">
                   {m.stateName}
                   {m.kind ? ` · ${MAP_KIND_LABEL[m.kind]}` : ""}
                   {m.settled ? ` · ${longDate(m.settled)}` : ""}
                 </p>
-                <p className="text-sm text-ink-lo">
+                <p className="text-small text-ink-lo">
                   {m.reason}
                   {url && (
                     <>
@@ -88,7 +86,7 @@ export default function RedistrictingWatch({
                         href={url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex min-h-6 items-center font-mono text-xs text-signal-cyan hover:text-phos"
+                        className="inline-flex min-h-6 items-center font-mono text-small text-signal-cyan hover:text-phos"
                       >
                         [ {m.source.issuedBy ?? "Official source"} ↗ ]
                       </a>

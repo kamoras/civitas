@@ -53,10 +53,10 @@ const FUNDING: Record<FundingSourceKey, { label: string; color: string }> = {
 function FundingLegend() {
   return (
     <div className="mb-1 border-b border-white/[0.07] pb-3">
-      <p className="font-mono text-[11px] text-ink-min">
+      <p className="font-mono text-small text-ink-min">
         Where this campaign&apos;s contributions came from · 1 block = 5%
       </p>
-      <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-ink-lo">
+      <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-small text-ink-lo">
         {Object.entries(FUNDING).map(([key, f]) => (
           <li key={key} className="flex items-center gap-1.5">
             <span className="h-2 w-2" style={{ backgroundColor: f.color }} aria-hidden="true" />
@@ -74,7 +74,7 @@ function FundingLegend() {
 function FundingStrip({ sources }: { sources: FundingSources }) {
   if (!sources.addsUp) {
     return (
-      <p className="mt-2 text-[12px] text-ink-min">
+      <p className="mt-2 text-small text-ink-min">
         No split shown: the categories in this FEC filing don&apos;t add up to its total.
       </p>
     );
@@ -93,7 +93,7 @@ function FundingStrip({ sources }: { sources: FundingSources }) {
           ))
         )}
       </div>
-      <p className="mt-1 text-[12px] leading-snug text-ink-lo">
+      <p className="mt-1 text-small leading-snug text-ink-lo">
         {shown.map((p) => `${p.shown} from ${FUNDING[p.key].label}`).join(" · ")}
       </p>
     </div>
@@ -138,20 +138,20 @@ export default function RaceMoneyBars({
           return (
             <li key={c.id} className="py-3">
               <div className="flex items-baseline justify-between gap-3">
-                <p className="min-w-0 font-sans text-sm text-ink-hi">
-                  <span className={`font-mono text-xs ${pm.color}`}>{pm.label}</span>
+                <p className="min-w-0 font-sans text-small text-ink-hi">
+                  <span className={`font-mono text-small ${pm.color}`}>{pm.label}</span>
                   <span className="mx-1.5 text-ink-min">·</span>
                   <span className="break-words">{candidateName(c)}</span>
                   {incumbent && (
-                    <span className="ml-2 inline-block whitespace-nowrap bg-ink-hi/90 px-1.5 py-0.5 font-mono text-[10px] text-surface-base">
+                    <span className="ml-2 inline-block whitespace-nowrap bg-ink-hi/90 px-1.5 py-0.5 font-mono text-small text-surface-base">
                       {incumbent}
                     </span>
                   )}
                   {showUnconfirmed && !c.confirmed && (
-                    <span className="ml-2 font-mono text-[10px] text-ink-min">Unconfirmed</span>
+                    <span className="ml-2 font-mono text-small text-ink-min">Unconfirmed</span>
                   )}
                 </p>
-                <p className="shrink-0 font-mono text-xs tabular-nums text-ink-lo">
+                <p className="shrink-0 font-mono text-small tabular-nums text-ink-lo">
                   {raisedLabel(c)}
                 </p>
               </div>
@@ -169,7 +169,7 @@ export default function RaceMoneyBars({
               </div>
 
               {cash && (
-                <p className="mt-1 font-mono text-[11px] text-ink-min">
+                <p className="mt-1 font-mono text-small text-ink-min">
                   {midSentence(cash.label)} {cash.amount}
                   {c.candidateLoans
                     ? ` · lent own campaign ${formatCurrency(c.candidateLoans)}`
@@ -184,7 +184,7 @@ export default function RaceMoneyBars({
                   href={fecCandidateUrl(c.id, cycleYear)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-1.5 inline-block font-mono text-[11px] text-ink-lo hover:text-phos"
+                  className="mt-1.5 inline-block font-mono text-small text-ink-lo hover:text-phos"
                 >
                   {c.financialsThrough
                     ? `FEC figures through ${c.financialsThrough}`
@@ -196,7 +196,7 @@ export default function RaceMoneyBars({
               {c.incumbentRecord && (
                 <Link
                   href={`/politicians/${c.incumbentRecord.id}`}
-                  className="mt-1.5 inline-block font-mono text-[11px] text-ink-lo hover:text-phos"
+                  className="mt-1.5 inline-block font-mono text-small text-ink-lo hover:text-phos"
                 >
                   where this member stands among peers →
                 </Link>
@@ -205,7 +205,7 @@ export default function RaceMoneyBars({
                 // Their record, not this seat's: named as what they are now.
                 <Link
                   href={`/politicians/${c.memberRecord.id}`}
-                  className="mt-1.5 inline-block font-mono text-[11px] text-ink-lo hover:text-phos"
+                  className="mt-1.5 inline-block font-mono text-small text-ink-lo hover:text-phos"
                 >
                   {midSentence(memberRecordLabel(c.memberRecord))} · where this member stands →
                 </Link>

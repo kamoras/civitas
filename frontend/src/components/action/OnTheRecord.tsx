@@ -69,7 +69,7 @@ export function position(v: IssueVote, first: string, last: string, maxAbs: numb
   };
 }
 
-const AXIS = "absolute right-0 font-mono text-[11px] text-ink-min";
+const AXIS = "absolute right-0 font-mono text-small text-ink-min";
 
 function ChamberRow({
   chamber,
@@ -92,7 +92,7 @@ function ChamberRow({
   }.`;
   return (
     <div className="mt-3">
-      <p className="font-mono text-xs text-ink-lo">
+      <p className="font-mono text-small text-ink-lo">
         {CHAMBER_NAME[chamber]} · {votes.length}
       </p>
       <div
@@ -130,7 +130,7 @@ function ChamberRow({
         {closest && pos && (
           <span
             aria-hidden="true"
-            className={`absolute whitespace-nowrap font-mono text-xs text-ink-hi ${
+            className={`absolute whitespace-nowrap font-mono text-small text-ink-hi ${
               pos.left > PLOT_RIGHT / 2 ? "-translate-x-full pr-2" : "pl-2"
             } ${pos.top > 50 ? "-translate-y-full" : ""}`}
             style={{ left: `${pos.left}%`, top: `${pos.top}%` }}
@@ -142,7 +142,7 @@ function ChamberRow({
       {showDates && (
         <p
           aria-hidden="true"
-          className="mt-1 flex justify-between font-mono text-[11px] text-ink-min"
+          className="mt-1 flex justify-between font-mono text-small text-ink-min"
           style={{ width: `${PLOT_RIGHT}%` }}
         >
           <span>{shortDay(first)}</span>
@@ -186,7 +186,7 @@ export default function OnTheRecord({
           <h4 id={`${sectionId}-heading`}>On the record</h4>
           <ShareSectionButton label="On the record" anchor={null} />
         </div>
-        <p className="mt-2 font-sans text-[15px] leading-relaxed text-ink-lo">
+        <p className="mt-2 font-sans text-body leading-relaxed text-ink-lo">
           {votes.length} related vote{votes.length === 1 ? "" : "s"} in Congress, {shortDay(first)}{" "}
           to {fullDay(last)}, matched to this concern&apos;s updates by the words of their record. A
           related vote is not necessarily the one a story reported. Each square is one vote: higher
@@ -206,17 +206,17 @@ export default function OnTheRecord({
             />
           ) : null;
         })}
-        <p className="mt-2 font-mono text-[11px] text-ink-min">
+        <p className="mt-2 font-mono text-small text-ink-min">
           Source: Senate.gov and the Clerk of the House roll-call records.
         </p>
         <details className="mt-2" data-share-exclude>
-          <summary className="inline-flex min-h-[32px] cursor-pointer items-center font-mono text-xs text-phos-mid hover:text-phos">
+          <summary className="inline-flex min-h-[32px] cursor-pointer items-center font-mono text-small text-phos-mid hover:text-phos">
             [ Every vote as a table ]
           </summary>
           <ScrollRegion label="Every vote as a table">
-            <table className="mt-2 w-full text-left text-[13px] text-ink">
+            <table className="mt-2 w-full text-left text-small text-ink">
               <caption className="sr-only">Related votes in Congress, oldest first</caption>
-              <thead className="font-mono text-xs text-ink-min">
+              <thead className="font-mono text-small text-ink-min">
                 <tr>
                   <th scope="col" className="py-1 pr-3 font-normal">
                     Date
@@ -241,7 +241,7 @@ export default function OnTheRecord({
                     key={`${v.chamber}-${v.congress}-${v.session}-${v.number}`}
                     className="border-t border-white/[0.07] align-top"
                   >
-                    <td className="whitespace-nowrap py-1.5 pr-3 font-mono text-xs">
+                    <td className="whitespace-nowrap py-1.5 pr-3 font-mono text-small">
                       {fullDay(v.date)}
                     </td>
                     <td className="py-1.5 pr-3">{CHAMBER_NAME[v.chamber]}</td>
@@ -258,7 +258,7 @@ export default function OnTheRecord({
                     <td className="py-1.5 pr-3">
                       {outcome(v)} {voteTally({ yeas: v.yeas ?? 0, nays: v.nays ?? 0 })}
                     </td>
-                    <td className="py-1.5 font-mono text-xs tabular-nums">{marginText(v)}</td>
+                    <td className="py-1.5 font-mono text-small tabular-nums">{marginText(v)}</td>
                   </tr>
                 ))}
               </tbody>

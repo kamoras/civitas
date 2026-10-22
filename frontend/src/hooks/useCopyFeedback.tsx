@@ -67,7 +67,7 @@ export function CopyStatus({ feedback }: { feedback: CopyFeedback }) {
     <span
       role="status"
       aria-live="polite"
-      className={feedback.failed ? "font-mono text-xs text-signal-amber" : "sr-only"}
+      className={feedback.failed ? "font-mono text-small text-signal-amber" : "sr-only"}
     >
       {feedback.status}
     </span>

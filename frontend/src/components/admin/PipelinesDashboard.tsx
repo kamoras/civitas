@@ -103,7 +103,7 @@ function PipelineStatusPanel({
 
   return (
     <Panel title="Pipeline status">
-      <div className="space-y-1.5 text-sm font-mono">
+      <div className="space-y-1.5 text-small font-mono">
         <StuckAwareRow
           label="Senate"
           isRunning={senateIsRunning(status)}
@@ -331,7 +331,7 @@ function PhaseTimings({ token }: { token: string }) {
       </div>
 
       {!loading && runs.length === 0 ? (
-        <div className="text-ink-min text-xs font-mono">
+        <div className="text-ink-min text-small font-mono">
           {emptyText(
             true,
             timingsFailed,
@@ -362,10 +362,10 @@ function PhaseTimings({ token }: { token: string }) {
             />
             {!loading && runs.every((r) => r.blockedPct === 0) ? (
               <div>
-                <div className="text-xs font-mono text-ink-lo">
+                <div className="text-small font-mono text-ink-lo">
                   Share of run blocked on rate limits
                 </div>
-                <p className="mt-2 text-xs font-mono text-ink-min">
+                <p className="mt-2 text-small font-mono text-ink-min">
                   None: no run in this window waited on an external API&apos;s rate limit, so its
                   time is all local work.
                 </p>
@@ -392,7 +392,7 @@ function PhaseTimings({ token }: { token: string }) {
 
           <div className="mt-6 mb-2 flex flex-wrap gap-x-4 gap-y-1" aria-hidden="true">
             {phases.map((p) => (
-              <span key={p} className="flex items-center gap-1.5 text-xs font-mono text-ink-lo">
+              <span key={p} className="flex items-center gap-1.5 text-small font-mono text-ink-lo">
                 <span
                   className="inline-block h-2 w-3"
                   style={{ background: phaseFill(colors[p]) }}
@@ -411,10 +411,10 @@ function PhaseTimings({ token }: { token: string }) {
                   className="w-full text-left"
                 >
                   <div className="flex items-baseline justify-between gap-3 mb-1">
-                    <span className="text-ink-min text-xs font-mono tabular-nums shrink-0">
+                    <span className="text-ink-min text-small font-mono tabular-nums shrink-0">
                       {runLabel(run)}
                     </span>
-                    <span className="text-ink text-xs font-mono tabular-nums shrink-0">
+                    <span className="text-ink text-small font-mono tabular-nums shrink-0">
                       {formatDuration(run.totalSeconds)}
                       {run.blockedPct > 0 && (
                         <span
@@ -455,23 +455,25 @@ function PhaseTimings({ token }: { token: string }) {
                   <div className="mt-2 pl-2 border-l border-white/[0.07] space-y-1">
                     {run.phases.map((p) => (
                       <div key={p.phase} className="flex justify-between gap-3">
-                        <span className="text-ink-lo text-xs font-mono">
+                        <span className="text-ink-lo text-small font-mono">
                           {phaseLabel(p.phase)} ({p.steps})
                         </span>
-                        <span className="text-ink-lo text-xs font-mono tabular-nums">
+                        <span className="text-ink-lo text-small font-mono tabular-nums">
                           {formatDuration(p.seconds)} · {p.pct}%
                         </span>
                       </div>
                     ))}
                     {run.rateLimitSources.length > 0 && (
                       <div className="pt-1 mt-1 border-t border-white/[0.07] space-y-0.5">
-                        <div className="text-ink-min text-xs font-mono">Blocked on rate limits</div>
+                        <div className="text-ink-min text-small font-mono">
+                          Blocked on rate limits
+                        </div>
                         {run.rateLimitSources.map((s) => (
                           <div key={s.source} className="flex justify-between gap-3">
-                            <span className="text-ink-min text-xs font-mono truncate">
+                            <span className="text-ink-min text-small font-mono truncate">
                               {s.source} · {s.requests.toLocaleString("en-US")} req
                             </span>
-                            <span className="text-ink-min text-xs font-mono tabular-nums shrink-0">
+                            <span className="text-ink-min text-small font-mono tabular-nums shrink-0">
                               {formatDuration(s.blockedSeconds)}
                             </span>
                           </div>
@@ -481,11 +483,11 @@ function PhaseTimings({ token }: { token: string }) {
                     <div className="pt-1 mt-1 border-t border-white/[0.07] space-y-0.5">
                       {run.steps.slice(0, 8).map((s) => (
                         <div key={s.stepKey} className="flex justify-between gap-3">
-                          <span className="text-ink-min text-xs font-mono truncate">
+                          <span className="text-ink-min text-small font-mono truncate">
                             {s.label || s.stepKey}
                             {s.status !== "done" ? ` [${s.status}]` : ""}
                           </span>
-                          <span className="text-ink-min text-xs font-mono tabular-nums shrink-0">
+                          <span className="text-ink-min text-small font-mono tabular-nums shrink-0">
                             {formatDuration(s.seconds)}
                             {s.blockedSeconds > 0 && (
                               <span className="text-ink-min">
@@ -498,7 +500,7 @@ function PhaseTimings({ token }: { token: string }) {
                       ))}
                     </div>
                     {run.untimedSteps > 0 && (
-                      <div className="text-ink-min text-xs font-mono pt-1">
+                      <div className="text-ink-min text-small font-mono pt-1">
                         {run.untimedSteps} step(s) without a duration: excluded from totals.
                       </div>
                     )}
@@ -518,7 +520,7 @@ function PhaseTimings({ token }: { token: string }) {
 function Stat({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
-      <span className="text-ink-lo text-xs block">{label}</span>
+      <span className="text-ink-lo text-small block">{label}</span>
       <span>{children}</span>
     </div>
   );
@@ -700,7 +702,7 @@ export function PipelinesDashboard({
         />
         <StatTile
           label="Next scheduled"
-          value={<span className="text-base">{formatTime(dashboard?.pipeline.nextScheduled)}</span>}
+          value={<span className="text-body">{formatTime(dashboard?.pipeline.nextScheduled)}</span>}
           note={dashboard?.pipeline.cronSchedule}
         />
       </div>
@@ -736,7 +738,7 @@ export function PipelinesDashboard({
       </div>
 
       <Panel title="Run duration">
-        <p className="mb-4 text-xs font-mono text-ink-min">
+        <p className="mb-4 text-small font-mono text-ink-min">
           One chart per pipeline: their run lengths differ by two orders of magnitude, so a shared
           axis would flatten the short ones. Each point is one finished run; failed runs are
           included, since a run that died early is itself worth seeing.
@@ -771,7 +773,7 @@ export function PipelinesDashboard({
                 height={110}
                 headline={
                   last ? (
-                    <span className="text-xs">
+                    <span className="text-small">
                       last{" "}
                       <span className={statusClass(last.status)}>
                         {formatDuration(last.seconds)}

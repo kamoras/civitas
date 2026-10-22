@@ -91,7 +91,7 @@ export function StripAxis({
   tick?: { at: number; text: string } | null;
 }) {
   return (
-    <div aria-hidden="true" className="text-xs text-ink-min">
+    <div aria-hidden="true" className="text-small text-ink-min">
       {tick && (
         <span
           className="relative block w-max max-w-full font-semibold text-ink-lo"
@@ -118,7 +118,9 @@ export function BigFigure({ shown, className }: { shown: string | null; classNam
       {parts ? (
         <>
           {parts[1]}{" "}
-          <span className="block text-sm font-semibold leading-snug text-ink-lo">{parts[2]}</span>
+          <span className="block font-sans text-small font-semibold leading-snug text-ink-lo">
+            {parts[2]}
+          </span>
         </>
       ) : (
         (shown ?? "No record")

@@ -18,6 +18,7 @@ import { useBillsInitial } from "./BillsInitial";
 import type { BillInFlight, PaginatedBills } from "@/types/bill";
 import { formatUtcDate } from "@/lib/formatting";
 import { BOXED_CONTROL } from "@/lib/controlStyles";
+import { TYPE } from "@/lib/typeStyles";
 
 type ChamberFilter = "all" | "senate" | "house";
 type PartyFilter = "ALL" | "D" | "R" | "I";
@@ -137,7 +138,7 @@ function BillsPageContent() {
                 Introduced and Referred — but without this line it reads
                 as a bug next to a "Referred to Committee" count in the
                 tens of thousands sitting directly below it. */}
-            <p className="mt-1 font-sans text-xs text-ink-min">
+            <p className="mt-1 font-sans text-small text-ink-min">
               Excludes bills only introduced or automatically referred to committee: nearly every
               bill clears that step within days; this counts what&apos;s moved further.
             </p>
@@ -150,7 +151,7 @@ function BillsPageContent() {
                 setMode("hot");
               }}
               aria-pressed={mode === "hot"}
-              className={`font-mono text-xs px-4 py-1.5 border transition-colors ${
+              className={`font-mono text-small px-4 py-1.5 border transition-colors ${
                 mode === "hot" ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
               }`}
             >
@@ -159,7 +160,7 @@ function BillsPageContent() {
             <button
               onClick={() => setMode("all")}
               aria-pressed={mode === "all"}
-              className={`font-mono text-xs px-4 py-1.5 border transition-colors ${
+              className={`font-mono text-small px-4 py-1.5 border transition-colors ${
                 mode === "all" ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
               }`}
             >
@@ -189,7 +190,7 @@ function BillsPageContent() {
                   // ?q= deep link already does.
                   if (e.target.value.trim()) setMode("all");
                 }}
-                className="font-mono text-xs bg-surface-base border border-white/[0.07] focus:border-phos/40 text-ink-hi placeholder:text-ink-min px-3 py-1.5 outline-none w-60"
+                className="font-mono text-small bg-surface-base border border-white/[0.07] focus:border-phos/40 text-ink-hi placeholder:text-ink-min px-3 py-1.5 outline-none w-60"
               />
 
               <div className="flex flex-wrap gap-1" role="group" aria-label="Filter by chamber">
@@ -198,7 +199,7 @@ function BillsPageContent() {
                     key={c}
                     onClick={() => setChamber(c)}
                     aria-pressed={chamber === c}
-                    className={`inline-flex min-h-6 min-w-6 items-center justify-center font-mono text-xs px-2 py-1 border transition-colors ${
+                    className={`inline-flex min-h-6 min-w-6 items-center justify-center font-mono text-small px-2 py-1 border transition-colors ${
                       chamber === c ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
                     }`}
                   >
@@ -217,7 +218,7 @@ function BillsPageContent() {
                     key={p}
                     onClick={() => setParty(p)}
                     aria-pressed={party === p}
-                    className={`inline-flex min-h-6 min-w-6 items-center justify-center font-mono text-xs px-2 py-1 border transition-colors ${
+                    className={`inline-flex min-h-6 min-w-6 items-center justify-center font-mono text-small px-2 py-1 border transition-colors ${
                       party === p ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
                     }`}
                   >
@@ -235,7 +236,7 @@ function BillsPageContent() {
                     setParty("ALL");
                     setSearch("");
                   }}
-                  className="font-mono text-xs text-ink-min hover:text-phos transition-colors"
+                  className="font-mono text-small text-ink-min hover:text-phos transition-colors"
                 >
                   Clear
                 </button>
@@ -372,7 +373,7 @@ function ReachedBillsList({
   return (
     <section ref={sectionRef} aria-labelledby="reached-heading">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
-        <h2 id="reached-heading" className="text-lg text-ink-hi">
+        <h2 id="reached-heading" className={TYPE.section}>
           {current?.label ?? "Bills this Congress"}
           {current && !current.error && (
             <>
@@ -386,24 +387,24 @@ function ReachedBillsList({
         <button
           type="button"
           onClick={onClear}
-          className="min-h-6 font-mono text-xs text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
+          className="min-h-6 font-mono text-small text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
         >
           Show every bill in motion instead
         </button>
       </div>
       {current === null ? (
-        <p className="py-16 text-center font-mono text-xs text-ink-min pulse-subtle">Loading…</p>
+        <p className="py-16 text-center font-mono text-small text-ink-min pulse-subtle">Loading…</p>
       ) : current.error && bills.length === 0 ? (
-        <p className="py-16 text-center font-mono text-xs text-signal-red">
+        <p className="py-16 text-center font-mono text-small text-signal-red">
           These bills could not be loaded. Try again in a moment.
         </p>
       ) : bills.length === 0 ? (
-        <p className="py-16 text-center font-mono text-xs text-ink-min">
+        <p className="py-16 text-center font-mono text-small text-ink-min">
           No bills match these filters.
         </p>
       ) : (
         <>
-          <p className="mb-3 font-mono text-xs text-ink-min">
+          <p className="mb-3 font-mono text-small text-ink-min">
             Showing {bills.length.toLocaleString("en-US")} of {total.toLocaleString("en-US")},
             latest action first
           </p>
@@ -413,7 +414,7 @@ function ReachedBillsList({
             ))}
           </div>
           {current.error && (
-            <p role="status" className="mt-4 text-center font-mono text-xs text-signal-red">
+            <p role="status" className="mt-4 text-center font-mono text-small text-signal-red">
               More bills could not be loaded. Try again in a moment.
             </p>
           )}
@@ -423,7 +424,7 @@ function ReachedBillsList({
                 type="button"
                 onClick={() => setWant({ sig, page: current.page + 1 })}
                 disabled={page > current.page}
-                className="min-h-6 border border-white/[0.07] px-4 py-2 font-mono text-xs text-ink-lo transition-colors hover:border-white/15 hover:text-phos disabled:cursor-wait disabled:opacity-40"
+                className="min-h-6 border border-white/[0.07] px-4 py-2 font-mono text-small text-ink-lo transition-colors hover:border-white/15 hover:text-phos disabled:cursor-wait disabled:opacity-40"
               >
                 {page > current.page
                   ? "Loading…"
@@ -460,13 +461,13 @@ function AllBillsGroups({
 
   if (stageTotals === "loading") {
     return (
-      <div className="text-center py-16 font-mono text-xs text-ink-min pulse-subtle">
+      <div className="text-center py-16 font-mono text-small text-ink-min pulse-subtle">
         Loading...
       </div>
     );
   }
   if (stageTotals !== "error" && ALL_STAGE_CODES.every((code) => !(stageTotals[code] > 0))) {
-    return <div className="text-center py-16 font-mono text-xs text-ink-min">No results</div>;
+    return <div className="text-center py-16 font-mono text-small text-ink-min">No results</div>;
   }
 
   // A search opens every stage its matches sit at, so they are on screen
@@ -593,24 +594,27 @@ function HotBillsList({
 
   if (loading) {
     return (
-      <div className="text-center py-16 font-mono text-xs text-ink-min pulse-subtle">
+      <div className="text-center py-16 font-mono text-small text-ink-min pulse-subtle">
         Loading...
       </div>
     );
   }
   if (error) {
-    return <div className="text-center py-16 font-mono text-xs text-signal-red">{error}</div>;
+    return <div className="text-center py-16 font-mono text-small text-signal-red">{error}</div>;
   }
   const moved = current?.shown === "moved";
   const since = current?.movedSince ? shortDay(current.movedSince) : "a week ago";
   if (results.length === 0) {
     return (
-      <div className="text-center py-16 font-mono text-xs text-ink-min space-y-3">
+      <div className="text-center py-16 font-mono text-small text-ink-min space-y-3">
         <p>
           No action center issue names a bill, and none moved past referral since {since} for this
           filter
         </p>
-        <button onClick={onViewAll} className="font-mono text-xs text-signal-cyan hover:underline">
+        <button
+          onClick={onViewAll}
+          className="font-mono text-small text-signal-cyan hover:underline"
+        >
           View all bills instead
         </button>
       </div>
@@ -621,12 +625,12 @@ function HotBillsList({
     <>
       {/* Which list this is: most days no live issue names a bill, and the
           backend then serves what moved this week (bill_service). */}
-      <p className="mb-2 max-w-3xl text-sm leading-relaxed text-ink-lo">
+      <p className="mb-2 max-w-3xl text-small leading-relaxed text-ink-lo">
         {moved
           ? `No Action Center issue names a bill right now, so this lists bills that moved this week: a recorded action since ${since}, past referral to committee, latest first.`
           : "Bills named in today's Action Center issues, most-named first."}
       </p>
-      <p className="font-mono text-xs text-ink-min mb-3">
+      <p className="font-mono text-small text-ink-min mb-3">
         Showing {results.length.toLocaleString("en-US")} of {total.toLocaleString("en-US")} bill
         {total !== 1 ? "s" : ""}
       </p>
@@ -641,7 +645,7 @@ function HotBillsList({
           <button
             onClick={() => setPage((p) => p + 1)}
             disabled={loadingMore}
-            className="font-mono text-xs px-4 py-2 border border-white/[0.07] text-ink-lo hover:text-phos hover:border-white/15 disabled:opacity-40 disabled:cursor-wait transition-colors"
+            className="font-mono text-small px-4 py-2 border border-white/[0.07] text-ink-lo hover:text-phos hover:border-white/15 disabled:opacity-40 disabled:cursor-wait transition-colors"
           >
             {loadingMore
               ? "Loading..."

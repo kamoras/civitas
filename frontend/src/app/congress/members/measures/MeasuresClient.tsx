@@ -15,6 +15,7 @@ import StripPoints, {
   stripTop,
   type StripPoint,
 } from "@/components/shared/Strip";
+import { TYPE } from "@/lib/typeStyles";
 
 const PARTY_FILL: Record<string, string> = {
   D: "var(--dem-blue)",
@@ -53,8 +54,8 @@ function Callout({
   if (points.length === 0) return null;
   return (
     <div>
-      <p className="text-[13px] font-semibold text-ink-lo">{title}</p>
-      <ul className="mt-1 text-sm">
+      <p className="text-small font-semibold text-ink-lo">{title}</p>
+      <ul className="mt-1 text-small">
         {points.map((p) => (
           <li key={p.id}>
             <Link
@@ -94,10 +95,10 @@ function ChamberStrip({ m, house }: { m: ChamberMeasure; house: boolean }) {
       className="border-t border-white/25 px-4 py-5 first:border-t-0 sm:px-6"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id={`m-${m.key}`} className="font-display text-[22px] font-semibold text-ink-hi">
+        <h2 id={`m-${m.key}`} className={TYPE.section}>
           {m.label}
         </h2>
-        <p className="text-sm text-ink-lo">
+        <p className="text-small text-ink-lo">
           {m.median != null && <>Median {m.medianShown} · </>}
           {m.n} members ·{" "}
           <a
@@ -110,7 +111,7 @@ function ChamberStrip({ m, house }: { m: ChamberMeasure; house: boolean }) {
           </a>
         </p>
       </div>
-      <p className="max-w-prose text-sm text-ink">{m.why}</p>
+      <p className="max-w-prose text-small text-ink">{m.why}</p>
       {/* The table below is the full text form of these strips. */}
       <StripPoints
         label={`${m.label}, every ${house ? "representative" : "senator"}`}
@@ -179,7 +180,7 @@ function sortValue(m: ChamberMember, key: SortKey): string | number | null {
 }
 
 // max-w-full: at 200% text the seat-lean options are wider than a phone.
-const SELECT = "min-h-11 max-w-full border border-white/40 bg-surface px-2 text-base text-ink-hi";
+const SELECT = "min-h-11 max-w-full border border-white/40 bg-surface px-2 text-body text-ink-hi";
 
 function FactTable({ members, house }: { members: ChamberMember[]; house: boolean }) {
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "name", dir: 1 });
@@ -209,17 +210,14 @@ function FactTable({ members, house }: { members: ChamberMember[]; house: boolea
 
   return (
     <section aria-labelledby="facts-heading" className="mt-10">
-      <h2
-        id="facts-heading"
-        className="border-t-[3px] border-ink-hi pt-3 font-display text-[22px] font-semibold text-ink-hi sm:text-[26px]"
-      >
+      <h2 id="facts-heading" className={`${TYPE.section} border-t-[3px] border-ink-hi pt-3`}>
         Every member, the plain facts
       </h2>
-      <p className="mt-1 text-sm text-ink-lo">
+      <p className="mt-1 text-small text-ink-lo">
         Alphabetical by default. Sort by any column: a sort is a fact, not a rank.
       </p>
       <div className="mt-3 flex flex-wrap gap-3">
-        <label className="flex min-w-0 max-w-full flex-col text-sm text-ink-lo">
+        <label className="flex min-w-0 max-w-full flex-col text-small text-ink-lo">
           State
           <select value={state} onChange={(e) => setState(e.target.value)} className={SELECT}>
             <option value="">Every state</option>
@@ -230,7 +228,7 @@ function FactTable({ members, house }: { members: ChamberMember[]; house: boolea
             ))}
           </select>
         </label>
-        <label className="flex min-w-0 max-w-full flex-col text-sm text-ink-lo">
+        <label className="flex min-w-0 max-w-full flex-col text-small text-ink-lo">
           Party
           <select value={party} onChange={(e) => setParty(e.target.value)} className={SELECT}>
             <option value="">Every party</option>
@@ -240,7 +238,7 @@ function FactTable({ members, house }: { members: ChamberMember[]; house: boolea
           </select>
         </label>
         {house && (
-          <label className="flex min-w-0 max-w-full flex-col text-sm text-ink-lo">
+          <label className="flex min-w-0 max-w-full flex-col text-small text-ink-lo">
             Seat lean (Cook PVI)
             <select value={lean} onChange={(e) => setLean(e.target.value)} className={SELECT}>
               <option value="">Every seat</option>
@@ -253,14 +251,14 @@ function FactTable({ members, house }: { members: ChamberMember[]; house: boolea
           </label>
         )}
       </div>
-      <p className="mt-2 text-sm text-ink-lo" aria-live="polite">
+      <p className="mt-2 text-small text-ink-lo" aria-live="polite">
         {shown.length} of {members.length} members
       </p>
       <ScrollRegion
         label="Every member, by the numbers"
         className="mt-2 border border-white/25 bg-surface"
       >
-        <table className="w-full min-w-[44rem] text-sm">
+        <table className="w-full min-w-[44rem] text-small">
           <thead>
             <tr className="border-b border-white/25 text-left">
               {COLUMNS.map((c) => {
@@ -349,10 +347,8 @@ export default function MeasuresClient({
       >
         <div className="mx-auto max-w-6xl">
           <SectionTabs section="congress" active="measures" />
-          <h1 className="font-display text-[30px] font-semibold leading-tight sm:text-[44px]">
-            {name} by the numbers
-          </h1>
-          <p className="mt-2 max-w-2xl text-[17px] text-ink">
+          <h1 className={TYPE.title}>{name} by the numbers</h1>
+          <p className="mt-2 max-w-2xl text-body text-ink">
             Four plain measures from FEC filings, roll calls and Congress.gov, every member at once.
             No rank and no overall score: each member page shows where that member stands among
             colleagues in the same party.
@@ -363,7 +359,7 @@ export default function MeasuresClient({
                 key={c}
                 href={`${MEASURES_HREF}?chamber=${c}`}
                 aria-current={c === chamber ? "page" : undefined}
-                className={`-ml-px inline-flex min-h-11 items-center border px-4 text-sm font-semibold first:ml-0 ${c === chamber ? TAB_ON : TAB_OFF}`}
+                className={`-ml-px inline-flex min-h-11 items-center border px-4 text-small font-semibold first:ml-0 ${c === chamber ? TAB_ON : TAB_OFF}`}
               >
                 {c === "senate" ? "Senate" : "House"}
               </Link>
@@ -373,7 +369,7 @@ export default function MeasuresClient({
             <p className="mt-6 text-ink-lo">The measures could not be loaded. Try again shortly.</p>
           ) : (
             <>
-              <p className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink-lo">
+              <p className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-small text-ink-lo">
                 <span>
                   <Mark party="D" /> Democrat
                 </span>

@@ -65,11 +65,7 @@ export default function BackToTop() {
       ref={ref}
       onClick={() => window.scrollTo({ top: 0, behavior: scrollBehavior() })}
       aria-label="Back to top"
-      className={`fixed bottom-20 right-4 z-40 font-mono text-xs
-                 text-signal-cyan hover:text-phos
-                 border border-white/15 hover:border-signal-cyan/40
-                 bg-surface-base px-3 py-1.5 min-h-6
-                 transition-colors backdrop-blur-sm ${shown ? "" : "invisible"}`}
+      className={`fixed bottom-20 right-4 z-40 font-mono text-small text-signal-cyan hover:text-phos border border-white/15 hover:border-signal-cyan/40 bg-surface-base px-3 py-1.5 min-h-6 transition-colors backdrop-blur-sm ${shown ? "" : "invisible"}`}
     >
       ↑ Top
     </button>

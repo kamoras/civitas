@@ -23,7 +23,7 @@ const STATES_BY_NAME = [...STATE_CODES].sort((a, b) =>
 const STATUS_SHOWN_MS = 8000;
 
 const BUTTON =
-  "inline-flex min-h-6 items-center font-mono text-xs text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-ink-hi disabled:no-underline disabled:opacity-80";
+  "inline-flex min-h-6 items-center font-mono text-small text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-ink-hi disabled:no-underline disabled:opacity-80";
 
 /**
  * The reader's state, asked once, in the header, and used by every page
@@ -119,7 +119,7 @@ export default function YourStatePicker({
       ref={boxRef}
       className={`flex flex-wrap items-center gap-x-3 gap-y-1 ${tall ? "" : "relative"}`}
     >
-      <label htmlFor={id} className="font-mono text-xs text-ink-min">
+      <label htmlFor={id} className="font-mono text-small text-ink-min">
         Your state
       </label>
       <select
@@ -130,7 +130,7 @@ export default function YourStatePicker({
           setStatus("");
           setConfirmed(knownCode(e.target.value));
         }}
-        className={`${tall ? "min-h-11" : "min-h-6"} border border-ink-min/60 bg-surface-base px-1 font-mono text-xs text-ink`}
+        className={`${tall ? "min-h-11" : "min-h-6"} border border-ink-min/60 bg-surface-base px-1 font-mono text-small text-ink`}
       >
         <option value="">Not set</option>
         {STATES_BY_NAME.map((code) => (
@@ -158,8 +158,8 @@ export default function YourStatePicker({
           !(status || confirmed)
             ? "sr-only"
             : tall
-              ? "basis-full font-mono text-xs text-ink-lo"
-              : "absolute right-0 top-full z-20 mt-2 w-max max-w-xs border border-white/15 bg-surface-base px-3 py-1.5 font-mono text-xs text-ink-lo"
+              ? "basis-full font-mono text-small text-ink-lo"
+              : "absolute right-0 top-full z-20 mt-2 w-max max-w-xs border border-white/15 bg-surface-base px-3 py-1.5 font-mono text-small text-ink-lo"
         }
       >
         {confirmed ? (

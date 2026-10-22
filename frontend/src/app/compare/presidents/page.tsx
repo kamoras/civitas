@@ -162,7 +162,7 @@ function PresidentSelect({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={`president-${name}`} className="text-sm font-semibold text-ink-lo">
+      <label htmlFor={`president-${name}`} className="text-small font-semibold text-ink-lo">
         {label}
       </label>
       <select
@@ -170,7 +170,7 @@ function PresidentSelect({
         name={name}
         defaultValue={value ?? ""}
         required
-        className="w-full border border-white/15 bg-white/[0.03] px-3 py-2 font-mono text-sm text-ink-hi focus:border-signal-cyan/40 focus:outline-none"
+        className="w-full border border-white/15 bg-white/[0.03] px-3 py-2 font-mono text-small text-ink-hi focus:border-signal-cyan/40 focus:outline-none"
       >
         <option value="">Choose a president</option>
         {presidents.map((p) => (
@@ -185,14 +185,14 @@ function PresidentSelect({
 
 function PresidentHeading({ side: { president: p } }: { side: Side }) {
   return (
-    <th scope="col" className="w-[38%] px-3 py-3 font-sans text-base">
+    <th scope="col" className="w-[38%] px-3 py-3 font-sans text-body">
       <Link
         href={`/politicians/${p.id}`}
         className="underline-offset-4 hover:text-phos hover:underline"
       >
         {p.name}
       </Link>
-      <span className="block font-mono text-xs font-normal text-ink-min">
+      <span className="block font-mono text-small font-normal text-ink-min">
         {ordinal(p.number)} president · {term(p)}
       </span>
     </th>
@@ -207,7 +207,7 @@ function ComparisonTable({ left, right }: { left: Side; right: Side }) {
     rows.map((row) => (
       <tr key={row.label}>
         {cell(row, left)}
-        <th scope="row" className="px-3 py-2 text-center text-sm font-normal text-ink-lo">
+        <th scope="row" className="px-3 py-2 text-center text-small font-normal text-ink-lo">
           {row.label}
         </th>
         {cell(row, right)}
@@ -215,7 +215,7 @@ function ComparisonTable({ left, right }: { left: Side; right: Side }) {
     ));
   return (
     <ScrollRegion label="The two presidencies compared" className="panel">
-      <table className="w-full text-sm">
+      <table className="w-full text-small">
         <caption className="sr-only">
           {left.president.name} and {right.president.name} compared
         </caption>
@@ -293,7 +293,7 @@ export default async function ComparePresidentsPage({
             />
             <button
               type="submit"
-              className="min-h-11 border border-ink-hi bg-surface px-4 text-sm font-semibold text-ink-hi hover:bg-white/5"
+              className="min-h-11 border border-ink-hi bg-surface px-4 text-small font-semibold text-ink-hi hover:bg-white/5"
             >
               Compare
             </button>
@@ -305,7 +305,7 @@ export default async function ComparePresidentsPage({
               right={{ president: rightP, breakdown: rightB }}
             />
           ) : (
-            <p className="panel p-8 text-center font-mono text-sm text-ink-min">
+            <p className="panel p-8 text-center font-mono text-small text-ink-min">
               {leftP || rightP
                 ? "Choose a second president to compare."
                 : "Choose two presidents to compare."}

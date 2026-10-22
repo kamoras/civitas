@@ -19,10 +19,10 @@ export default function PaperworkFold({
   if (count === 0) return null;
   return (
     <details className="mt-3 border-t border-white/[0.07] pt-3">
-      <summary className="inline-flex min-h-6 cursor-pointer items-center font-mono text-xs text-signal-cyan hover:text-phos">
+      <summary className="inline-flex min-h-6 cursor-pointer items-center font-mono text-small text-signal-cyan hover:text-phos">
         Paperwork notices ({count})
       </summary>
-      <p className="mt-2 text-xs text-ink-lo">
+      <p className="mt-2 text-small text-ink-lo">
         Requests to renew or change a form the agency collects, under the Paperwork Reduction Act.
         {shown < count ? ` These are the ${shown} closing soonest.` : ""}
       </p>

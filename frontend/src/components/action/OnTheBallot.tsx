@@ -3,6 +3,7 @@ import type { IssueBallot } from "@/types/action";
 import { stateBallotHref } from "@/lib/elections";
 import { safeHref } from "@/lib/formatting";
 import RegisterLink, { UNCONFIRMED } from "@/components/elections/RegisterLink";
+import { TYPE } from "@/lib/typeStyles";
 
 const LINK =
   "inline-flex min-h-6 items-center text-signal-cyan underline decoration-signal-cyan/40 underline-offset-4 hover:text-phos";
@@ -33,7 +34,7 @@ function Lookup({ lookup, stateName }: { lookup: IssueBallot["lookup"]; stateNam
       >
         {label} ↗
       </a>
-      {lookup.unconfirmed && <span className="text-xs text-ink-lo">{UNCONFIRMED}</span>}
+      {lookup.unconfirmed && <span className="text-small text-ink-lo">{UNCONFIRMED}</span>}
     </>
   );
 }
@@ -52,12 +53,12 @@ export default function OnTheBallot({ ballot }: { ballot: IssueBallot[] | undefi
       {ballot.map((b) => (
         <li
           key={b.state}
-          className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-b border-white/[0.07] py-3 text-[15px] text-ink"
+          className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-b border-white/[0.07] py-3 text-body text-ink"
         >
-          <span className="font-mono text-xs text-ink-min">On the ballot</span>
+          <span className="font-mono text-small text-ink-min">On the ballot</span>
           <Link
             href={stateBallotHref(b.state)}
-            className="font-display text-ink-hi underline decoration-ink-min/60 underline-offset-4 hover:decoration-ink-hi"
+            className={`${TYPE.boxTitle} underline decoration-ink-min/60 underline-offset-4 hover:decoration-ink-hi`}
           >
             {b.stateName}
           </Link>

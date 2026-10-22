@@ -12,11 +12,11 @@ export const OG_COLOR = {
   /** --ink-hi: headings, figures. */
   inkHi: "#1e1a15",
   /** --ink: body prose. */
-  ink: "#362f27",
+  ink: "#1e1a15",
   /** --ink-lo: secondary text. */
-  inkLo: "#4a4238",
+  inkLo: "#433b31",
   /** --ink-min: captions, the floor for any text. */
-  inkMin: "#5a5143",
+  inkMin: "#5c5245",
   /** --phos: ledger green. */
   accent: "#1b5e34",
   /** --signal-amber. */

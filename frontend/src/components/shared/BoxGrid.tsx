@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { BoxAnchor } from "./RecordBox";
+import { TYPE } from "@/lib/typeStyles";
 
 const GRID: Record<1 | 2 | 3, string> = {
   1: "",
@@ -49,13 +50,13 @@ export default function BoxGrid({
     >
       {label && (
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b-2 border-ink-hi pb-1.5">
-          <Heading id={labelId} className="font-display text-xl font-semibold text-ink-hi">
+          <Heading id={labelId} className={TYPE.section}>
             {label}
           </Heading>
           {labelHref && labelHrefText && (
             <BoxAnchor
               href={labelHref}
-              className="inline-flex min-h-6 items-center text-sm text-signal-cyan underline underline-offset-2 hover:text-phos"
+              className="inline-flex min-h-6 items-center text-small text-signal-cyan underline underline-offset-2 hover:text-phos"
             >
               {labelHrefText}
             </BoxAnchor>

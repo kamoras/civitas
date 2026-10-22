@@ -18,6 +18,7 @@
  * these directly.
  */
 
+import { TYPE } from "@/lib/typeStyles";
 import Link from "next/link";
 import {
   describeDaysLeftOn,
@@ -47,8 +48,7 @@ import AgencyLink from "@/components/agencies/AgencyLink";
 import { exploreHref } from "@/lib/exploreHref";
 
 /** Hairline section header: the one used on /elections. */
-export const SECTION_HEADING =
-  "flex items-baseline justify-between gap-3 border-b border-white/15 pb-2 font-mono text-xs text-ink-min";
+export const SECTION_HEADING = `${TYPE.section} flex items-baseline justify-between gap-3 border-b border-white/15 pb-2`;
 
 /** A standalone link's target on a phone: 44px tall (mobile spec P10), its
  *  own height from 640px up. Not for a link inside a sentence. */
@@ -56,7 +56,7 @@ export const TAP_TARGET = "inline-flex min-h-11 items-center sm:min-h-0";
 
 /** An underlined sentence-case link, the records pages' only link treatment. */
 export const TEXT_LINK =
-  "font-sans text-sm text-ink-hi underline decoration-ink-min/60 underline-offset-4 transition-colors hover:decoration-ink-hi";
+  "font-sans text-small text-ink-hi underline decoration-ink-min/60 underline-offset-4 transition-colors hover:decoration-ink-hi";
 
 /** An issue's rights-cleared source photo, in the two sizes it renders at.
  *
@@ -112,7 +112,7 @@ export function IssueImage({
         className="max-h-96 w-full border border-white/[0.07] object-cover"
       />
       {(issue.imageAlt || issue.imageCredit) && (
-        <figcaption className="mt-1.5 font-mono text-xs text-ink-min">
+        <figcaption className="mt-1.5 font-mono text-small text-ink-min">
           {issue.imageAlt}
           {issue.imageAlt && issue.imageCredit && " · "}
           {issue.imageCredit && `Photo: ${issue.imageCredit}`}
@@ -143,7 +143,7 @@ export function IssueMeta({
   as?: "p" | "span";
 }) {
   return (
-    <Tag className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 font-mono text-xs text-ink-min">
+    <Tag className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 font-mono text-small text-ink-min">
       {lead && <span className="border border-white/15 px-2 py-0.5 text-ink-hi">{lead}</span>}
       <span>{issueDateLabel(issue)}</span>
       {withRef && (
@@ -198,7 +198,7 @@ export function DevelopingDisclosure({
   if (retired) {
     const subject = sourceType === "federal_register_significant_rule" ? "rule" : "vote";
     return (
-      <p className="mb-4 font-mono text-xs leading-relaxed text-ink-min">
+      <p className="mb-4 font-mono text-small leading-relaxed text-ink-min">
         {retiredReason === "covered"
           ? `Superseded by broader coverage. Based on ${source}; taken off the Action Center once a reported issue covered the same ${subject}.`
           : retiredReason === "unconfirmed"
@@ -216,7 +216,7 @@ export function DevelopingDisclosure({
     );
   }
   return (
-    <p className="mb-4 font-mono text-xs leading-relaxed text-ink-min">
+    <p className="mb-4 font-mono text-small leading-relaxed text-ink-min">
       Based on {source}; broader news coverage has not yet confirmed this story.
     </p>
   );
@@ -225,7 +225,7 @@ export function DevelopingDisclosure({
 /** Marks a fact added since this issue's last genuine content change (see
  *  backend/app/fact_diff.py). Phosphor: a computed fact about the data. */
 export function NewFactTag() {
-  return <span className="ml-2 font-mono text-xs text-phos-mid">new</span>;
+  return <span className="ml-2 font-mono text-small text-phos-mid">new</span>;
 }
 
 function capitalize(s: string): string {
@@ -257,7 +257,7 @@ export function IssueTags({
   if (areas.length === 0 && monitors.length === 0) return null;
   return (
     <div
-      className={`flex flex-wrap items-baseline gap-x-4 gap-y-1.5 font-mono text-xs text-ink-lo ${className}`}
+      className={`flex flex-wrap items-baseline gap-x-4 gap-y-1.5 font-mono text-small text-ink-lo ${className}`}
     >
       {areas.map((area) => (
         <span key={area}>{policyAreaLabel(area)}</span>
@@ -409,12 +409,12 @@ function actionRows(issue: ActionIssue, today: string, ownMembers = true): Actio
       what: (
         <>
           {title} {m.name}{" "}
-          <span className={`font-mono text-xs ${PARTY_COLORS[m.party] ?? "text-ink-lo"}`}>
+          <span className={`font-mono text-small ${PARTY_COLORS[m.party] ?? "text-ink-lo"}`}>
             {m.party}-{m.state}
           </span>{" "}
           <Link
             href={`/politicians/${m.id}`}
-            className="font-mono text-xs text-phos-mid hover:underline"
+            className="font-mono text-small text-phos-mid hover:underline"
           >
             · record
           </Link>
@@ -489,7 +489,7 @@ function actionRows(issue: ActionIssue, today: string, ownMembers = true): Actio
                 <Link href={`/politicians/${m.id}`} className="underline underline-offset-2">
                   {title} {m.name}
                 </Link>{" "}
-                <span className={`font-mono text-xs ${PARTY_COLORS[m.party] ?? "text-ink-lo"}`}>
+                <span className={`font-mono text-small ${PARTY_COLORS[m.party] ?? "text-ink-lo"}`}>
                   {m.party}-{m.state}
                 </span>
               </span>
@@ -513,7 +513,7 @@ function actionRows(issue: ActionIssue, today: string, ownMembers = true): Actio
       verb: "Follow",
       what: (
         <>
-          <span className="font-mono text-xs text-ink-lo">{bill.id}</span> · {bill.name}
+          <span className="font-mono text-small text-ink-lo">{bill.id}</span> · {bill.name}
         </>
       ),
       detail: bill.stageName
@@ -627,15 +627,15 @@ export function WhatYouCanDo({
               key={row.key}
               className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 gap-y-1 border-b border-white/[0.07] py-3 sm:grid-cols-[5.5rem_minmax(0,1fr)_auto]"
             >
-              <span className="col-span-2 font-mono text-xs text-ink-min sm:col-span-1">
+              <span className="col-span-2 font-mono text-small text-ink-min sm:col-span-1">
                 {row.verb}
               </span>
               <div
-                className={`min-w-0 font-sans text-[15px] leading-snug text-ink-hi ${row.href ? "" : "col-span-2 sm:col-span-2"}`}
+                className={`min-w-0 font-sans text-body leading-snug text-ink-hi ${row.href ? "" : "col-span-2 sm:col-span-2"}`}
               >
                 {row.what}
                 {row.detail && (
-                  <span className="mt-0.5 block text-[13px] text-ink-lo">{row.detail}</span>
+                  <span className="mt-0.5 block text-small text-ink-lo">{row.detail}</span>
                 )}
               </div>
               {!row.href ? null : row.tap ? (
@@ -805,7 +805,7 @@ export function OutletLink({ name, url }: { name: string; url?: string | null })
  *  name ("in November.The Hill"). */
 function OutletCredit({ name, url }: { name: string; url?: string | null }) {
   return (
-    <span className="whitespace-nowrap font-mono text-xs text-ink-min">
+    <span className="whitespace-nowrap font-mono text-small text-ink-min">
       <span aria-hidden="true">· </span>
       <OutletLink name={name} url={url} />
     </span>
@@ -846,10 +846,10 @@ export function Coverage({
       <ol className="mt-1">
         {facts.map((fact, i) => (
           <li key={i} className="grid grid-cols-[2rem_minmax(0,1fr)] gap-3 py-2">
-            <span className="pt-0.5 font-mono text-xs text-ink-min" aria-hidden="true">
+            <span className="pt-0.5 font-mono text-small text-ink-min" aria-hidden="true">
               {String(i + 1).padStart(2, "0")}
             </span>
-            <p className="font-sans text-[15px] leading-relaxed text-ink">
+            <p className="font-sans text-body leading-relaxed text-ink">
               {fact}
               {issue.factSources?.[i] && (
                 <>
@@ -878,7 +878,7 @@ function CountAsOf({ issue }: { issue: ActionIssue }) {
   if (!factsAreTheCount(issue)) return null;
   const when = issue.countAsOf ? formatEasternTime(issue.countAsOf) : "";
   return (
-    <p className="mt-4 text-xs text-ink-min">
+    <p className="mt-4 text-small text-ink-min">
       {countIsOfficial(issue) ? (
         <span className="text-ink-hi">Official count</span>
       ) : (
@@ -896,7 +896,7 @@ export function SourceList({ issue, className = "" }: { issue: ActionIssue; clas
   if (names.length === 0) return null;
   return (
     <p
-      className={`flex flex-wrap items-baseline gap-x-2 gap-y-1 font-mono text-xs text-ink-min ${className}`}
+      className={`flex flex-wrap items-baseline gap-x-2 gap-y-1 font-mono text-small text-ink-min ${className}`}
     >
       <span>Sources</span>
       {names.map((name, i) => {

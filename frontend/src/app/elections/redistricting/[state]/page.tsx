@@ -107,7 +107,7 @@ export default async function StateRedistrictingPage({
         <div className="mx-auto max-w-4xl">
           <SectionTabs section="elections" active="redistricting" className="mb-4" />
           {/* Under 640px the section row above names where this page sits. */}
-          <nav aria-label="Breadcrumb" className="hidden sm:block mb-6 text-sm text-ink-lo">
+          <nav aria-label="Breadcrumb" className="hidden sm:block mb-6 text-small text-ink-lo">
             <Link href="/elections" className="inline-flex min-h-6 items-center hover:text-phos">
               Elections
             </Link>

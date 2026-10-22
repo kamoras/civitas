@@ -166,7 +166,7 @@ export function TrafficDashboard({ token }: { token: string }) {
             stale={stale}
             headline={
               today?.confirmedVisitors != null ? (
-                <span className="text-lg">{today.confirmedVisitors.toLocaleString("en-US")}</span>
+                <span className="text-dek">{today.confirmedVisitors.toLocaleString("en-US")}</span>
               ) : undefined
             }
             emptyMessage={emptyText(
@@ -192,7 +192,7 @@ export function TrafficDashboard({ token }: { token: string }) {
             stale={stale}
             headline={
               today ? (
-                <span className="text-lg">{today.pageViews.toLocaleString("en-US")}</span>
+                <span className="text-dek">{today.pageViews.toLocaleString("en-US")}</span>
               ) : undefined
             }
             emptyMessage={emptyText(
@@ -207,7 +207,7 @@ export function TrafficDashboard({ token }: { token: string }) {
       <Panel title="Load times">
         <div className="mb-4">
           <Segmented label="Metric" options={METRIC_OPTIONS} value={metric} onChange={setMetric} />
-          <p className="mt-2 text-xs font-mono text-ink-min">{metricInfo.blurb}</p>
+          <p className="mt-2 text-small font-mono text-ink-min">{metricInfo.blurb}</p>
         </div>
         <LineChart
           title={`${metricInfo.label}: P50 / P75 / P95 per day`}
@@ -238,8 +238,8 @@ export function TrafficDashboard({ token }: { token: string }) {
           height={180}
           headline={
             ltToday?.p75 != null ? (
-              <span className="text-sm">
-                p75 today <span className="text-lg">{formatMs(ltToday.p75)}</span>
+              <span className="text-small">
+                p75 today <span className="text-dek">{formatMs(ltToday.p75)}</span>
               </span>
             ) : undefined
           }
@@ -251,11 +251,11 @@ export function TrafficDashboard({ token }: { token: string }) {
         />
         {lt && lt.byPath.length > 0 && (
           <div className="mt-6">
-            <div className="text-ink-lo text-xs font-mono mb-1.5">
+            <div className="text-ink-lo text-small font-mono mb-1.5">
               Slowest routes: page load, last {range} days
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-xs font-mono">
+              <table className="w-full text-small font-mono">
                 <caption className="sr-only">
                   Slowest routes by page load, last {range} days
                 </caption>
@@ -302,7 +302,7 @@ export function TrafficDashboard({ token }: { token: string }) {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Panel title="Top pages">
           {data && data.topPages.length === 0 ? (
-            <p className="text-xs font-mono text-ink-min">
+            <p className="text-small font-mono text-ink-min">
               {emptyText(true, data.failed.has("topPages"), "No page views in this range.")}
             </p>
           ) : (
@@ -325,7 +325,7 @@ export function TrafficDashboard({ token }: { token: string }) {
                 unit="loads"
                 labelWidth="w-20"
               />
-              <p className="mt-1 text-xs font-mono text-ink-min">
+              <p className="mt-1 text-small font-mono text-ink-min">
                 Class chosen by the page from its pointer and screen size; unrecorded is a load from
                 before the split.
               </p>
@@ -336,7 +336,7 @@ export function TrafficDashboard({ token }: { token: string }) {
             data.breakdown.os.length > 0 ||
             data.breakdown.devices.length > 0) ? (
             <>
-              <div className="text-ink-lo text-xs font-mono mb-1.5">
+              <div className="text-ink-lo text-small font-mono mb-1.5">
                 Confirmed visitors today, from the user-agent
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
@@ -346,14 +346,14 @@ export function TrafficDashboard({ token }: { token: string }) {
               </div>
             </>
           ) : (
-            <p className="text-xs font-mono text-ink-min">
+            <p className="text-small font-mono text-ink-min">
               {emptyText(!!data, !!data?.failed.has("breakdown"), "No visitors yet today.")}
             </p>
           )}
         </Panel>
       </div>
 
-      <p className="text-ink-min text-xs font-mono">
+      <p className="text-ink-min text-small font-mono">
         Confirmed visitors are counted by a hash under a random salt that is deleted when its day
         ends: no IP addresses are stored, and past days&apos; hashes can&apos;t be traced back to
         one. A visit counts only once the browser that opened the page has run it, so a client that
