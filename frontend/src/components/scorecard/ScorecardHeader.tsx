@@ -102,7 +102,7 @@ export default function ScorecardHeader({
       id="overview"
       {...{ [SHARE_SECTION_ATTR]: "overview" }}
       {...onThisPage("Overview")}
-      className={`grid grid-cols-[minmax(0,1fr)] gap-3 border border-white/25 border-t-[3px] bg-surface px-3 py-3 font-sans sm:px-8 sm:py-6 ${PARTY_BORDER[member.party]}`}
+      className={`grid grid-cols-[minmax(0,1fr)] gap-2.5 sm:gap-3 border border-white/25 border-t-[3px] bg-surface px-3 py-3 font-sans sm:px-8 sm:py-6 ${PARTY_BORDER[member.party]}`}
     >
       {/* Three blocks in reading order for a phone — who, the score, then
           how to reach them; on a desktop the score takes the right column
@@ -169,7 +169,7 @@ export default function ScorecardHeader({
         </div>
       </div>
 
-      <div className="flex min-w-0 flex-col gap-3 sm:pl-[calc(6rem+1.25rem)]">
+      <div className="flex min-w-0 flex-col gap-2.5 sm:gap-3 sm:pl-[calc(6rem+1.25rem)]">
         {/* What the page is for, for a reader new to it: a fixed template
             around the name, no pronoun (AGENTS.md, templated text). Under
             the photo's row, the full width: beside it, three lines on a

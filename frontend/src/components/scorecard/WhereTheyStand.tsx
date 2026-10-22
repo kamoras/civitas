@@ -210,7 +210,7 @@ function Cell({
   return (
     <figure
       aria-labelledby={captionId}
-      className="relative flex min-w-0 flex-col gap-2 border-b border-white/25 py-4 before:absolute before:inset-y-0 before:-left-5 before:w-px before:bg-white/25"
+      className="relative flex min-w-0 flex-col gap-2 border-b border-white/25 pt-3 pb-4 before:absolute before:inset-y-0 before:-left-5 before:w-px before:bg-white/25"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-x-3">
         <h3 className={TYPE.kicker}>{m.label}</h3>
@@ -344,54 +344,64 @@ export default function WhereTheyStand({
     (group === "caucus" ? data : initial)?.measures[0]?.peerGroup.label ?? "Same party";
   const whole = chamber === "senate" ? "Whole Senate" : "Whole House";
 
+  // The peer group's choice: beside the heading from sm up; on a phone
+  // under the strips, beside the table and compare buttons, so the first
+  // strip stays on the first screen. One is shown at a time (display), each
+  // its own radio group.
+  // min-w-0: a fieldset is min-content wide by default, and at 200% text the
+  // two segments side by side were wider than a phone.
+  const toggle = (where: "head" | "foot") => (
+    <fieldset
+      className={`${where === "head" ? "hidden sm:flex" : "flex sm:hidden"} min-w-0 max-w-full flex-wrap items-center gap-2`}
+    >
+      <legend className="sr-only">Compare with</legend>
+      <span aria-hidden="true" className="text-small text-ink-lo">
+        Compared with:
+      </span>
+      <span className="inline-flex max-w-full flex-wrap">
+        {(
+          [
+            ["caucus", caucusText],
+            ["chamber", whole],
+          ] as const
+        ).map(([key, label]) => (
+          <label
+            key={key}
+            className={`${SEGMENT} ${group === key ? SEGMENT_ON : SEGMENT_OFF} -ml-px first:ml-0`}
+          >
+            <input
+              type="radio"
+              name={`peers-${memberId}-${where}`}
+              value={key}
+              checked={group === key}
+              onChange={() => choose(key)}
+              className="sr-only"
+            />
+            {key === "chamber" ? (
+              // One word on a phone, so both choices share a line; its
+              // name is the full label everywhere.
+              <>
+                <span aria-hidden="true" className="sm:hidden">
+                  {chamber === "senate" ? "Senate" : "House"}
+                </span>
+                <span className="sr-only sm:not-sr-only">{label}</span>
+              </>
+            ) : (
+              label
+            )}
+          </label>
+        ))}
+      </span>
+    </fieldset>
+  );
+
   return (
     <section id="where-they-stand" aria-labelledby="where-heading" className="font-sans">
-      <div className="flex flex-wrap items-end justify-between gap-3 border-t-[3px] border-ink-hi pt-3">
+      <div className="flex flex-wrap items-end justify-between gap-3 border-t-[3px] border-ink-hi pt-2 sm:pt-3">
         <h2 id="where-heading" {...onThisPage("Where they stand")} className={TYPE.section}>
           Where {name} stands
         </h2>
-        {/* min-w-0: a fieldset is min-content wide by default, and at 200% text
-            the two segments side by side were wider than a phone. */}
-        <fieldset className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
-          <legend className="sr-only">Compare with</legend>
-          <span aria-hidden="true" className="hidden text-small text-ink-lo sm:inline">
-            Compared with:
-          </span>
-          <span className="inline-flex max-w-full flex-wrap">
-            {(
-              [
-                ["caucus", caucusText],
-                ["chamber", whole],
-              ] as const
-            ).map(([key, label]) => (
-              <label
-                key={key}
-                className={`${SEGMENT} ${group === key ? SEGMENT_ON : SEGMENT_OFF} -ml-px first:ml-0`}
-              >
-                <input
-                  type="radio"
-                  name={`peers-${memberId}`}
-                  value={key}
-                  checked={group === key}
-                  onChange={() => choose(key)}
-                  className="sr-only"
-                />
-                {key === "chamber" ? (
-                  // One word on a phone, so both choices share a line; its
-                  // name is the full label everywhere.
-                  <>
-                    <span aria-hidden="true" className="sm:hidden">
-                      {chamber === "senate" ? "Senate" : "House"}
-                    </span>
-                    <span className="sr-only sm:not-sr-only">{label}</span>
-                  </>
-                ) : (
-                  label
-                )}
-              </label>
-            ))}
-          </span>
-        </fieldset>
+        {toggle("head")}
       </div>
 
       {error && !data && (
@@ -424,6 +434,7 @@ export default function WhereTheyStand({
           </div>
           {/* The key, and what a row means, for a reader new to the strips;
               in words, so it is read aloud too (it was an aria-hidden key). */}
+          <div className="mt-3 sm:hidden">{toggle("foot")}</div>
           <HowToRead className="mt-2">
             <p className="flex flex-wrap items-center gap-x-4 gap-y-1">
               <span>

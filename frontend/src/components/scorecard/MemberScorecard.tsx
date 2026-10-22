@@ -158,7 +158,7 @@ export default function MemberScorecard({
   return (
     <SectionHeadingLevelProvider value="h3">
       <ShareSubjectProvider subject={shareSubject}>
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-4 sm:gap-5">
           <ScorecardHeader
             member={member}
             chamber={chamber}

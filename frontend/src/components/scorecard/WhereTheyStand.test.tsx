@@ -144,7 +144,12 @@ describe("WhereTheyStand", () => {
       "/politicians/sam-ray"
     );
     expect(screen.getAllByRole("link", { name: "Sam Ray" })[0]).not.toHaveAttribute("tabindex");
-    expect(screen.getByRole("radio", { name: "Senate Democrats" })).toBeChecked();
+    // Two copies of the choice (beside the heading from sm up, under the
+    // strips on a phone; CSS shows one), each its own group, both checked.
+    const caucus = screen.getAllByRole("radio", { name: "Senate Democrats" });
+    expect(caucus).toHaveLength(2);
+    caucus.forEach((r) => expect(r).toBeChecked());
+    expect(new Set(caucus.map((r) => r.getAttribute("name"))).size).toBe(2);
     const r = await axe.run(document.body, { rules: { "color-contrast": { enabled: false } } });
     expect(r.violations.map((v) => v.id)).toEqual([]);
   });
@@ -152,7 +157,8 @@ describe("WhereTheyStand", () => {
   it("fetches the whole chamber when asked, and says so in the URL", async () => {
     fetchPeerComparison.mockResolvedValue({ ...DATA, group: "chamber" });
     render(<WhereTheyStand memberId="pat-lee" name="Pat Lee" chamber="senate" initial={DATA} />);
-    await userEvent.click(screen.getByRole("radio", { name: "Whole Senate" }));
+    await userEvent.click(screen.getAllByRole("radio", { name: "Whole Senate" })[1]);
+    screen.getAllByRole("radio", { name: "Whole Senate" }).forEach((r) => expect(r).toBeChecked());
     expect(fetchPeerComparison).toHaveBeenCalledWith("senate", "pat-lee", "chamber");
     expect(window.location.search).toContain("peers=chamber");
   });
