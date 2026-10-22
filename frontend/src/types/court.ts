@@ -1,3 +1,4 @@
+import type { ReadoutMark } from "./readout";
 /** GET /api/court and its pages (backend services/court_service.py). Every
  *  figure is counted by the backend from the stored votes and Martin-Quinn
  *  positions: records and measurements, never a score or a rank. */
@@ -84,6 +85,9 @@ export interface AppointerFinding {
   excludesZero: boolean;
   scdbRelease: string;
   source: string | null;
+  /** The finding stated as fact, written by the API (court_service.
+   *  finding_sentence); absent from an older one, nothing is stated. */
+  sentence?: string;
 }
 
 export interface Court {
@@ -109,7 +113,15 @@ export interface Court {
   lineups: {
     /** Every split seen, lopsided first ("9-0" … "5-4"). */
     splits: string[];
-    terms: { term: number; cases: number; counts: Record<string, number> }[];
+    terms: {
+      term: number;
+      cases: number;
+      counts: Record<string, number>;
+      /** Each split's width, percent of the term's cases (the API's). */
+      shares?: Record<string, number>;
+      /** Each segment's readout, in split order. */
+      marks?: ReadoutMark[];
+    }[];
   };
   decisions: CourtDecisionPage;
   appointerFinding: AppointerFinding | null;

@@ -125,10 +125,10 @@ export default function RaceMoneyBars({
         {ranked.map((c) => {
           const pm = getPartyMeta(c);
           const raised = c.contributions ?? 0;
-          // Width is share-of-leader. A zero leader (nobody has reported)
-          // must not divide — every bar is simply empty, which is the
-          // truthful picture of a race where no money exists yet.
-          const pct = leader > 0 ? Math.round((raised / leader) * 100) : 0;
+          // Width is share-of-leader, the API's. From an older backend it is
+          // drawn from the figures (drawing only); a zero leader (nobody has
+          // reported) draws every bar empty, the truthful picture.
+          const pct = c.raisedShare ?? (leader > 0 ? (raised / leader) * 100 : 0);
           const incumbent =
             c.incumbentChallenge === "I"
               ? incumbencyLabel("I", redrawnSeat, c.incumbentRecord?.seat, resultsMode)
@@ -161,9 +161,7 @@ export default function RaceMoneyBars({
                 role="img"
                 aria-label={
                   leader > 0
-                    ? raised > 0
-                      ? `${formatCurrency(raised)} raised, ${pct}% of the leader in this race`
-                      : raisedLabel(c)
+                    ? (c.raisedShareShown ?? raisedLabel(c))
                     : "no fundraising reported in this race"
                 }
               >

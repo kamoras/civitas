@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { olderApi } from "@/lib/olderApi";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
@@ -96,5 +97,14 @@ describe("MeasuresClient", () => {
     expect(document.body.textContent).not.toMatch(/#\d+ of \d+|ranked/i);
     const r = await axe.run(document.body, { rules: { "color-contrast": { enabled: false } } });
     expect(r.violations.map((v) => v.id)).toEqual([]);
+  });
+});
+
+describe("an older API, during a rolling update", () => {
+  it("draws the chamber strips without the API's axis", () => {
+    const { container } = render(<MeasuresClient chamber="senate" data={olderApi(DATA)} />);
+    expect(screen.getAllByRole("group").length).toBeGreaterThan(0);
+    // Plain: drawn, with no readout, nothing printed from a missing field.
+    expect(container.textContent).not.toMatch(/undefined|NaN/);
   });
 });

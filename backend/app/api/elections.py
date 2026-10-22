@@ -98,7 +98,7 @@ from app.pipeline.fetch.town_directory import address_for_town, towns_for_state
 from app.race_context import funding_sources, lean_context, races_csv
 from app.services.ballot_boxes import ballot_boxes
 from app.ordinals import ordinal
-from app.readout import mark
+from app.readout import compact_money, mark
 from app.services.senator_service import STATE_NAMES
 from app.time_utils import utcnow
 
@@ -357,6 +357,21 @@ def _member_name(cand: Candidate) -> str | None:
         if row and row[0]:
             return row[0]
     return None
+
+
+def with_raised_shares(candidates: list[dict]) -> list[dict]:
+    """Each candidate's contributions against the race's top fundraiser:
+    the money bar's width (percent, whole) and its words, so the page
+    divides nothing. The scale is this race's leader, never a national
+    figure; a race where nobody has reported draws every bar empty."""
+    leader = max((c.get("contributions") or 0 for c in candidates), default=0)
+    for c in candidates:
+        raised = c.get("contributions") or 0
+        share = round(100 * raised / leader) if leader > 0 else 0
+        c["raisedShare"] = share
+        c["raisedShareShown"] = (f"{compact_money(raised)} raised, {share}% of the leader in this race"
+                                 if leader > 0 and raised > 0 else None)
+    return candidates
 
 
 def _candidate_summary(cand: Candidate, stale_incumbent_ids: frozenset[str] = frozenset()) -> dict:
@@ -858,10 +873,10 @@ def _race_full(
         "counties": counties,
         "places": places,
         "candidateSource": _candidate_source(race.candidates, complete),
-        "candidates": [
+        "candidates": with_raised_shares([
             _ballot_candidate(c, race, reps_by_district, senators, namesake_fields, stale_incumbent_ids)
             for c in candidates
-        ],
+        ]),
         # The member who holds this seat now, when not a nominee for it
         # (retiring, running for another office, out in a primary).
         "seatHolder": _seat_holder(race, candidates, reps_by_district, senators, complete),
@@ -2357,7 +2372,7 @@ def race_detail(race_id: str, db: Session = Depends(get_db)):
         "computedLean": _computed_lean(race, pvi_level),
         **_usual_vote_fields(race, pvi, pvi_level, state_pvi, district_pvi),
         "candidateSource": _candidate_source(race.candidates, complete),
-        "candidates": [_candidate_summary(c, stale_incumbent_ids) for c in candidates],
+        "candidates": with_raised_shares([_candidate_summary(c, stale_incumbent_ids) for c in candidates]),
         "seatHolder": _seat_holder(race, candidates, *_seat_members(db, race), complete),
         "coverage": [_coverage_item(item) for item in coverage],
         # The archived election this race belongs to, once the site has

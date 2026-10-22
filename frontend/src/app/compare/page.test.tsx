@@ -36,6 +36,12 @@ function member(id: string, name: string, state: string, party: "D" | "R"): Sena
 }
 
 const NORTH = [member("n-1", "Member One", "NA", "D"), member("n-2", "Member Two", "NA", "R")];
+const HOUSE = [member("h-1", "House Member", "NA", "D")];
+function found(list: Senator[], id: string): Senator {
+  const m = list.find((x) => x.id === id);
+  if (!m) throw new Error("not found");
+  return m;
+}
 
 vi.mock("@/lib/api", () => ({
   fetchChamberMeasures: vi.fn(() => new Promise(() => {})),
@@ -46,8 +52,13 @@ vi.mock("@/lib/api", () => ({
   fetchRepStates: vi.fn(async () => []),
   fetchSenatorsByState: vi.fn(async (state: string) => (state === "NA" ? NORTH : [])),
   fetchRepresentativesByState: vi.fn(async () => ({ entries: [] })),
-  fetchSenator: vi.fn(async (id: string) => NORTH.find((m) => m.id === id)),
-  fetchRepresentative: vi.fn(),
+  // Like the API: an id the chamber doesn't hold is a 404, thrown.
+  fetchSenator: vi.fn(async (id: string) => found(NORTH, id)),
+  fetchRepresentative: vi.fn(async (id: string) => found(HOUSE, id)),
+  fetchPoliticianSuggestions: vi.fn(async () => [
+    { id: "n-2", name: "Member Two", role: "Senator", party: "R", state: "NA" },
+    { id: "able-44", name: "Sam Able", role: "President", party: "D", state: null },
+  ]),
   fetchCompareAgreement: vi.fn(async () => ({
     chamber: "senate",
     congress: 119,

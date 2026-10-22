@@ -92,7 +92,8 @@ function Dots({ f, mini = false }: { f: DotsFigure; mini?: boolean }) {
   const pitch = 12;
   const mark = partyMark(f.party);
   // Who each dot is, in drawing order: the breaker is the last.
-  const marks = f.marks.length === f.voting ? f.marks : [];
+  // None from an older API: the dots are drawn plain.
+  const marks = f.marks?.length === f.voting ? f.marks : [];
   return (
     <div className={mini ? "mt-1.5 max-w-[180px]" : ""}>
       <ChartReadout
@@ -162,7 +163,7 @@ function Countdown({ f, size }: { f: CountdownFigure; size: FigureSize }) {
       {...(bare ? { role: "img", "aria-label": `${daysLeftWords(f)}.` } : {})}
     >
       <div
-        className={`font-display font-semibold leading-none text-signal-amber ${
+        className={`whitespace-nowrap font-display font-semibold leading-none text-signal-amber ${
           size === "lead" ? VALUE.tier : VALUE[size]
         }`}
       >

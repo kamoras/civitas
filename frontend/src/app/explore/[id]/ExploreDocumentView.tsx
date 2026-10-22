@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { documentsHref } from "@/lib/routes";
+import { agencyHref, documentsHref } from "@/lib/routes";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import {
@@ -12,14 +12,15 @@ import {
   safeHref,
   asLabel,
 } from "@/lib/formatting";
-import { chamberColor, chamberBorder, chamberLabel } from "@/lib/chamber";
+import { chamberLabel } from "@/lib/chamber";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import CopyText from "@/components/CopyText";
 import CiteThis from "@/components/shared/CiteThis";
 import { exploreCitedSource } from "@/lib/citedSources";
 import { exploreHref } from "@/lib/exploreHref";
 import { billCanonicalPath } from "@/lib/congress";
-import AgencyLink from "@/components/agencies/AgencyLink";
+import BoxGrid from "@/components/shared/BoxGrid";
+import RecordBox, { type BoxLink } from "@/components/shared/RecordBox";
 import {
   streamExploreDocumentSummary,
   parseExploreSummaryText,
@@ -528,6 +529,43 @@ function CommentsSection({
   );
 }
 
+/** The header box's chips: the issuing agency's page, the speaker's
+ * record, the bills a speech's Record heading names, the executive orders
+ * the text cites that have a page here, the official copy and "Cite". */
+function headerChips(
+  doc: ExploreDocumentDetail,
+  sourceUrl: string,
+  sourceLabel: string
+): BoxLink[] {
+  const scorecard = scorecardHref(doc);
+  const source = safeHref(sourceUrl);
+  return [
+    ...(doc.agencyName && doc.agencySlug
+      ? [{ label: doc.agencyName, href: agencyHref(doc.agencySlug) }]
+      : []),
+    ...(scorecard
+      ? [
+          {
+            label: "Speaker's record",
+            href: scorecard,
+            ariaLabel: `${doc.politicianName}'s record`,
+          },
+        ]
+      : []),
+    ...(doc.bills ?? []).map((b) => ({
+      label: b.label ?? b.billId,
+      href: billCanonicalPath(b.billId, b.congress),
+    })),
+    ...(doc.executiveOrders ?? []).map((o) => ({
+      label: `EO ${o.number}`,
+      href: exploreHref({ id: o.key, key: o.key }),
+      ariaLabel: `Executive Order ${o.number}, cited in the text`,
+    })),
+    ...(source ? [{ label: asLabel(sourceLabel), href: source }] : []),
+    { label: "Cite", href: "#cite", ariaLabel: "Cite this document" },
+  ];
+}
+
 // What the body section is headed, by how much of the document it holds
 // (ExploreDocumentDetail.bodyExtent). "Full text" over every body read as a
 // claim of completeness for Federal Register bodies cut at the stored
@@ -600,7 +638,6 @@ export default function ExploreDocumentView({
   const displayedSummary = summary ?? (liveText ? parseExploreSummaryText(liveText) : null);
 
   const sourceUrl = resolveSourceUrl(doc);
-  const scorecardLink = scorecardHref(doc);
   const sourceLabel =
     doc.docType === "Senate Floor Speech" || doc.docType === "House Floor Speech"
       ? "Congressional Record"
@@ -640,128 +677,63 @@ export default function ExploreDocumentView({
             </Link>
           </p>
 
-          {/* Public Comment CTA — prominent, above everything */}
-          {/* id="comment": every "Comment →" link (search results, the
-              Action Center, the homepage deadlines) points here. */}
-          {commentOpen && (
-            <div id="comment" className="border border-phos/40 p-5 mb-6 bg-phos/5">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div>
-                  <div className="flex flex-wrap items-center gap-x-2 mb-1">
-                    <span className="text-xs font-mono px-2 py-0.5 bg-phos/20 text-phos border border-phos/30">
-                      Open for public comment
-                    </span>
-                    <span className="text-ink-lo text-xs">
-                      {remaining === 0
-                        ? "Closes today!"
-                        : `${remaining} day${remaining !== 1 ? "s" : ""} remaining`}
-                    </span>
-                  </div>
-                  <p className="font-sans text-base leading-relaxed text-ink">
-                    The public can submit comments on this document. Your input is part of the
-                    official record and may influence the final outcome.
-                  </p>
-                  <p className="text-xs text-ink-min mt-1">
-                    Comments close {formatDate(doc.commentsCloseOn)}
-                  </p>
-                </div>
-                {/* The Federal Register still hands out some comment links
-                    as http://; regulations.gov serves the same page over
-                    https, so the reader's comment never starts on plain
-                    http. A new tab, said as the site says it elsewhere. */}
-                <a
-                  href={commentHref(doc.commentUrl)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="Submit your comment at regulations.gov (opens in new tab)"
-                  className="text-sm font-mono px-6 py-3 bg-phos/20 text-phos border border-phos/50
-                             hover:bg-phos/30 hover:border-phos/70
-                             transition-colors shrink-0"
-                >
-                  Submit your comment ↗
-                </a>
-              </div>
-              <HelpMeCommentPanel doc={doc} remaining={remaining} />
-            </div>
-          )}
-
-          {/* Document header */}
-          <div className={`border p-6 mb-6 ${chamberBorder(doc.chamber)} bg-surface-base`}>
-            <div className="flex items-center gap-2 flex-wrap mb-3">
-              <span className={`text-xs font-mono ${chamberColor(doc.chamber)}`}>
-                {chamberLabel(doc.chamber)}
-              </span>
-              <span className="text-ink-min text-xs">|</span>
-              <span className="text-ink-lo text-xs">{doc.docType}</span>
-              {doc.date && (
-                <>
-                  <span className="text-ink-min text-xs">|</span>
-                  <span className="text-ink-lo text-xs">{formatDate(doc.date)}</span>
-                </>
-              )}
-            </div>
-
-            <h1 className="text-lg sm:text-xl text-ink-hi font-semibold leading-snug mb-4">
-              {doc.title}
-            </h1>
-
-            <div className="flex items-center gap-4 flex-wrap text-xs">
-              {doc.agencyName && (
-                <span className="text-signal-orange">
-                  <AgencyLink
-                    name={doc.agencyName}
-                    slug={doc.agencySlug}
-                    className="inline-flex min-h-6 items-center underline decoration-signal-orange/40 underline-offset-2 hover:text-phos"
-                  />
-                </span>
-              )}
-              {doc.politicianName && !doc.agencyName && (
-                <span className="text-ink">{doc.politicianName}</span>
-              )}
-              {scorecardLink && (
-                <Link
-                  href={scorecardLink}
-                  className="font-mono text-xs text-signal-cyan hover:text-phos transition-colors"
-                >
-                  [View record]
-                </Link>
-              )}
-              {sourceUrl && (
-                <a
-                  href={safeHref(sourceUrl) || "#"}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-mono text-xs text-ink-min hover:text-phos transition-colors"
-                >
-                  [{asLabel(sourceLabel)}]
-                </a>
-              )}
-              <a
-                href="#cite"
-                className="font-mono text-xs text-ink-min hover:text-phos transition-colors"
-              >
-                [Cite]
-              </a>
-            </div>
-
-            {/* The bill the Record heading names: the speech's own
-                stated subject, linked to the bill's page. */}
-            {(doc.bills ?? []).length > 0 && (
-              <p className="mt-3 font-mono text-xs text-ink-lo">
-                {(doc.bills ?? []).length > 1 ? "Bills: " : "Bill: "}
-                {(doc.bills ?? []).map((b, i) => (
-                  <span key={b.billId}>
-                    {i > 0 && " · "}
-                    <Link
-                      href={billCanonicalPath(b.billId, b.congress)}
-                      className="text-signal-cyan underline underline-offset-2 hover:text-phos transition-colors"
-                    >
-                      {b.label ?? b.billId}
-                    </Link>
-                  </span>
-                ))}
-              </p>
-            )}
+          {/* The header box: what the document is, who issued it, when,
+              its citation (the backend's templated line), the comment
+              countdown while the period is open, and its bills, cited
+              orders and sources as chips. id="comment" while open: every
+              "Comment →" link (search results, the Action Center, the
+              homepage deadlines) points here, the grid's top where the old
+              comment panel's was. */}
+          <div id={commentOpen ? "comment" : undefined} className="mb-6">
+            <BoxGrid columns={1}>
+              <RecordBox
+                level={1}
+                kicker={commentOpen ? "Open for public comment" : chamberLabel(doc.chamber)}
+                tone={commentOpen ? "deadline" : "neutral"}
+                title={doc.title}
+                dek={doc.headline}
+                figure={
+                  commentOpen && doc.commentWindow
+                    ? { type: "countdown", ...doc.commentWindow }
+                    : null
+                }
+                // The Federal Register still hands out some comment links as
+                // http://; regulations.gov serves the same page over https,
+                // so the reader's comment never starts on plain http.
+                action={
+                  commentOpen
+                    ? {
+                        label: "Submit your comment",
+                        href: commentHref(doc.commentUrl),
+                        ariaLabel: "Submit your comment at regulations.gov",
+                      }
+                    : undefined
+                }
+                links={headerChips(doc, sourceUrl, sourceLabel)}
+                more={
+                  commentOpen
+                    ? {
+                        label: "about commenting",
+                        children: (
+                          <>
+                            <p className="font-sans text-base leading-relaxed">
+                              The public can submit comments on this document. Your input is part of
+                              the official record and may influence the final outcome.
+                            </p>
+                            <p className="mt-2 text-ink-lo">
+                              Comments close {formatDate(doc.commentsCloseOn)}
+                              {remaining === 0 ? " (today)" : ""}.
+                            </p>
+                          </>
+                        ),
+                      }
+                    : null
+                }
+                below={
+                  commentOpen ? <HelpMeCommentPanel doc={doc} remaining={remaining} /> : undefined
+                }
+              />
+            </BoxGrid>
           </div>
 
           {/* AI Analysis section */}

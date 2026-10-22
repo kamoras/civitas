@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { olderApi } from "@/lib/olderApi";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
@@ -119,5 +120,42 @@ describe("RecordFigure readouts", () => {
     expect(readout()).toHaveAttribute("href", "/politicians/y");
     await userEvent.keyboard("{Home}");
     expect(readout()).toHaveAttribute("href", "/politicians/x");
+  });
+});
+
+describe("an older API, during a rolling update", () => {
+  it("draws a chart plain when its marks are missing", () => {
+    const { container } = render(
+      <ChartReadout label="A grid" marks={undefined}>
+        <span>drawing</span>
+      </ChartReadout>
+    );
+    expect(screen.queryByRole("group")).toBeNull();
+    expect(container.querySelector("[tabindex]")).toBeNull();
+    expect(container.textContent).toBe("drawing");
+  });
+
+  it("draws every record figure plain without its marks", () => {
+    const figures = [
+      { type: "dots", party: "R", voting: 3, caption: "1 of 3 Republicans voted Yea" },
+      { type: "split", yeas: 51, nays: 49, yeaShare: 0.51, caption: "Passed" },
+      {
+        type: "countdown",
+        opened: "2026-10-01",
+        closes: "2026-10-31",
+        totalDays: 30,
+        daysLeft: 10,
+        elapsedPercent: 67,
+      },
+    ] as const;
+    for (const f of figures) {
+      const { container, unmount } = render(<RecordFigure size="box" f={olderApi(f) as never} />);
+      expect(screen.queryByRole("group")).toBeNull();
+      // Plain: drawn, with no readout, nothing printed from a missing field.
+      expect(container.textContent).not.toMatch(/undefined|NaN/);
+      unmount();
+    }
+    const { container } = render(<RecordFigure size="box" f={olderApi(figures[0]) as never} />);
+    expect(container.querySelectorAll("circle")).toHaveLength(3);
   });
 });
