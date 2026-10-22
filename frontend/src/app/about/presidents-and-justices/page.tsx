@@ -111,8 +111,10 @@ export default function PresidentsAndJusticesChapter() {
           >
             <P>
               Growth, jobs, unemployment and inflation over the term, leaving out the first year,
-              which mostly reflects the outgoing administration <Cite id="blinder2016" />. Before
-              1947 only growth and, from 1939, jobs can be measured.
+              which mostly reflects the outgoing administration <Cite id="blinder2016" />. A term
+              still running has growth against peer economies for its first year alone until a later
+              year is published; the page says so and draws no word for it. Before 1947 only growth
+              and, from 1939, jobs can be measured.
             </P>
           </Box>
           <Box
@@ -136,7 +138,7 @@ export default function PresidentsAndJusticesChapter() {
           <Box
             title="What each figure sits beside"
             dek="Each figure sits on a strip with every other presidency that has it. A word follows the same fixed rule as members' strips."
-            figure={{ type: "stat", value: 10, caption: "other presidencies at least, for a word" }}
+            figure={{ type: "stat", value: 5, caption: "other presidencies at least, for a word" }}
             more="the rule, and the expected figure"
           >
             <P>
@@ -145,10 +147,12 @@ export default function PresidentsAndJusticesChapter() {
               fixed rule as members&apos; peer strips: outside the middle half of the other
               presidencies reads &ldquo;above&rdquo; or &ldquo;below&rdquo;, outside the top or
               bottom tenth and far from the expected figure reads &ldquo;well above&rdquo; or
-              &ldquo;well below&rdquo;, and no word is drawn with fewer than ten other presidencies
-              or for a term still under way. A dashed tick marks the expected figure: the median, or
-              for these three, what presidents starting from the same level saw, because raw figures
-              would partly rank presidents by their luck.
+              &ldquo;well below&rdquo;, and no word is drawn with fewer than five other presidencies
+              (the fewest with which a figure can fall in the bottom tenth at all) or for a term
+              still under way. These cut points are conventions, not measured values. A dashed tick
+              marks the expected figure: the median, or for these three, what presidents starting
+              from the same level saw, because raw figures would partly rank presidents by their
+              luck.
             </P>
           </Box>
           <Box

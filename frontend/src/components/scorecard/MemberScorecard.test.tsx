@@ -3,6 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import MemberScorecard from "./MemberScorecard";
+import type { MemberBoxes } from "@/types/politicians";
 import { ConfigProvider } from "@/hooks/useConfig";
 import type { AppConfig } from "@/lib/api";
 import type { KeyVote, Senator } from "@/types/senator";
@@ -21,6 +22,7 @@ vi.mock("@/lib/api", () => ({
   fetchRepHoldings: vi.fn().mockResolvedValue({ available: false }),
   fetchPresidentHoldings: vi.fn(),
   fetchSenatorHoldings: vi.fn(),
+  fetchMemberPresidentialSupport: vi.fn().mockResolvedValue(null),
 }));
 
 // A House member as the API served one on 2026-09-28, trimmed and renamed.
@@ -391,7 +393,7 @@ describe("MemberScorecard", () => {
       </main>
     );
     await screen.findByText("H.R. 8800");
-    const column = document.getElementById("constituent-alignment")!;
+    const column = document.getElementById("approval")!;
     const list = within(column).getByRole("list", { name: /Approval among constituents/ });
     expect(
       within(list)
@@ -575,8 +577,8 @@ describe("MemberScorecard", () => {
     ] as const) {
       const column = document.getElementById(id)!;
       const finding = within(column).getByText(withFindings[dimension].finding!);
-      // First in the column's body, before the evidence.
-      expect(finding.parentElement!.firstElementChild).toBe(finding);
+      // The box's line, right under its title, before the evidence.
+      expect(finding.previousElementSibling?.tagName).toMatch(/^H\d$/);
       // No score disclosure and no component bars (redesign 2026-10).
       expect(within(column).queryByText("How this is computed")).not.toBeInTheDocument();
       expect(
@@ -636,6 +638,101 @@ describe("MemberScorecard", () => {
       );
     } finally {
       window.history.replaceState(null, "", "/");
+    }
+  });
+
+  it("draws each box from the backend's words, and counts nothing itself", async () => {
+    const stat = (value: number, text: string, caption: string) => ({
+      type: "stat" as const,
+      value,
+      text,
+      caption,
+    });
+    const line = (kicker: string, text: string, caption: string, dek: string) => ({
+      kicker,
+      headline: `${text} ${caption}`,
+      dek,
+      figure: stat(0, text, caption),
+    });
+    const boxes: MemberBoxes = {
+      committees: {
+        count: 2,
+        line: "2 committees · Ranking Member, Budget",
+        posts: ["Ranking Member, Budget"],
+        items: [
+          {
+            name: "Budget",
+            fullName: "House Committee on the Budget",
+            title: "Ranking Member",
+            chamber: "house",
+          },
+          {
+            name: "Foreign Affairs",
+            fullName: "House Committee on Foreign Affairs",
+            title: null,
+            chamber: "house",
+          },
+        ],
+      },
+      ballot: {
+        line: "Seat on the 2026 ballot; nominees not confirmed yet",
+        raceId: "2026-HOUSE-TN-2",
+      },
+      fundingElectionYear: 2024,
+      money: line("Money · 2024 election", "$1.2M", "in contributions", "Money line."),
+      votes: line(
+        "Votes · this Congress",
+        "6 of 76",
+        "party-line votes against the party",
+        "Votes line."
+      ),
+      bills: line("Bills · this Congress", "4 of 65", "passed the House", "Bills line."),
+      president: null,
+      approval: null,
+      holdings: null,
+      trades: line(
+        "Stock trades · STOCK Act reports",
+        "0",
+        "trades disclosed, 0 late",
+        "Trades line."
+      ),
+      positions: null,
+      record: line(
+        "Government record · verbatim sources",
+        "3",
+        "documents on public record",
+        "Record line."
+      ),
+    };
+    render(
+      <main>
+        <MemberScorecard
+          member={member}
+          chamber="house"
+          breakdown={breakdown}
+          district={2}
+          boxes={boxes}
+        />
+      </main>
+    );
+    expect(screen.getByText("2 committees · Ranking Member, Budget")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Seat on the 2026 ballot; nominees not confirmed yet/ })
+    ).toHaveAttribute("href", expect.stringContaining("#race-2026-HOUSE-TN-2"));
+    const money = document.getElementById("funding-independence")!;
+    expect(within(money).getByText("Money · 2024 election")).toBeInTheDocument();
+    expect(within(money).getByText("$1.2M")).toBeInTheDocument();
+    expect(within(money).getByText("Money line.")).toBeInTheDocument();
+    expect(
+      within(document.getElementById("legislative-effectiveness")!).getByText("passed the House")
+    ).toBeInTheDocument();
+    // No box for what the backend says isn't on record.
+    expect(document.getElementById("with-the-president")).toBeNull();
+    expect(document.getElementById("approval")).toBeNull();
+    // The section chips reach every box.
+    const chips = screen.getByRole("navigation", { name: "On this page" });
+    for (const name of ["Money", "Votes", "Bills", "Holdings", "Trades", "Record", "Methods"]) {
+      expect(within(chips).getByRole("link", { name })).toBeInTheDocument();
     }
   });
 });

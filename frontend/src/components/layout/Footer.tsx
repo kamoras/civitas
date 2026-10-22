@@ -108,14 +108,16 @@ export default function Footer() {
 
           <div>
             <p className="font-sans text-body leading-relaxed text-ink-lo">
-              All data sourced from public records, principally: FEC campaign finance filings
-              (fec.gov); bills and roll-call votes from Congress.gov, Senate.gov and the House
-              Clerk; ideal points from Voteview; Lobbying Disclosure Act filings (lda.gov); the
-              Federal Register and GovInfo; and state election offices. Donor industries are
-              classified by Civitas Research from FEC filings, not taken from a third party.
-              Comparing a member with peers is a measurement, not a finding of illegality or
-              wrongdoing. Correlation between donations and votes does not prove causation. Verify
-              all data at the original sources. Draw your own conclusions.
+              Data from official records and named public sources, each shown with its source,
+              principally: FEC campaign finance filings (fec.gov); bills and roll-call votes from
+              Congress.gov, Senate.gov and the House Clerk; Lobbying Disclosure Act filings
+              (lda.gov); the Federal Register and GovInfo; state election offices; and, outside
+              government, ideal points from Voteview, surveys such as the Cooperative Election
+              Study, and the newsrooms each story credits. Donor industries are classified by
+              Civitas Research from FEC filings, not taken from a third party. Comparing a member
+              with peers is a measurement, not a finding of illegality or wrongdoing. Correlation
+              between donations and votes does not prove causation. Verify all data at the original
+              sources. Draw your own conclusions.
             </p>
           </div>
         </div>

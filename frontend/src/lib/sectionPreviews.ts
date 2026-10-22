@@ -210,6 +210,49 @@ const BLURBS: Record<string, Record<string, string>> = {
   },
 };
 
+/** Where each hub card's live figure comes from, printed under it; `href`
+ *  is the page's own account of its sources where one card's line can't
+ *  hold them all. */
+export interface CardSource {
+  text: string;
+  href?: string;
+}
+
+const RECORD = "Source: the Congressional Record's Daily Digest; Senate and House roll calls";
+
+const CARD_SOURCES: Record<string, Record<string, CardSource>> = {
+  congress: {
+    week: { text: RECORD },
+    month: { text: RECORD },
+    bills: { text: "Source: Congress.gov bill status" },
+    committees: { text: "Source: the Congressional Record's Daily Digest" },
+    president: {
+      text: "Source: OMB statements of administration policy; House roll calls",
+    },
+  },
+  executive: {
+    budget: { text: "Source: USAspending.gov" },
+    comments: { text: "Source: the Federal Register" },
+  },
+  elections: {
+    map: {
+      text: "Sources: polls from Wikipedia; the usual vote computed by Civitas from certified returns",
+      href: "/elections/map#method",
+    },
+    redistricting: {
+      text: "Sources: each state's enacted map, linked state by state",
+      href: "/elections/redistricting#held",
+    },
+    calendar: { text: "Source: the FEC's reporting calendar" },
+    archive: { text: "Source: each state's official count" },
+  },
+};
+
+/** A hub card's figure source, or null for a card with no live figure. */
+export function sectionSource(section: string, tab: string): CardSource | null {
+  return CARD_SOURCES[section]?.[tab] ?? null;
+}
+
 /** A hub card's fixed description, or null for a page without one. */
 export function sectionBlurb(section: string, tab: string): string | null {
   return BLURBS[section]?.[tab] ?? null;

@@ -249,6 +249,26 @@ _TICK = {"peer median": "median {}", "same start": "{} for the same start",
          "same stretch": "{} over the same stretch"}
 
 
+def _measured(fig: _Figure, p: President) -> str:
+    """The figure's method as the row shows it. A term still running has no
+    later year than its first to credit until its second calendar year is
+    over and published, and peer_gdp.peer_relative_growth then uses the
+    first year alone: said so, rather than "leaving out the first year".
+    Once a later year can exist the run may have one or not yet (the World
+    Bank publishes months after a year ends), and the text says either."""
+    if fig.key != "growthVsPeers" or not p.is_current or _start_year(p) is None:
+        return fig.measured
+    if utcnow().year <= _start_year(p) + 1:
+        return ("First year only; no later year published yet. Growth per person in the term's first year, "
+                f"minus the median of {len(PEER_COUNTRIES)} peer economies that year, with the part of the gap "
+                "their catching up with US incomes predicts set aside. Finished terms leave the first year out, "
+                "since it mostly reflects the previous administration.")
+    return ("For a term still running: growth per person a year from the term's second year through the last "
+            "year published, or the first year alone until a later one is, minus the median of "
+            f"{len(PEER_COUNTRIES)} peer economies over the same years, with the part of the gap their catching up "
+            "with US incomes predicts set aside.")
+
+
 def _row(fig: _Figure, p: President, everyone: list[President]) -> dict | None:
     value = fig.value(p)
     if value is None:
@@ -269,7 +289,7 @@ def _row(fig: _Figure, p: President, everyone: list[President]) -> dict | None:
     n_side, verb = (more, fig.more) if pct <= 50 else (less, fig.less)
     return {
         "key": fig.key, "label": fig.label, "question": fig.question, "why": fig.why,
-        "measured": fig.measured, "source": fig.source,
+        "measured": _measured(fig, p), "source": fig.source,
         "value": value, "shown": shown,
         "expected": expected, "expectedBasis": basis,
         "expectedShown": None if expected is None else _TICK[basis].format(fig.shown(expected)),

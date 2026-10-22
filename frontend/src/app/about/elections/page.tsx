@@ -504,9 +504,10 @@ export default async function ElectionsChapter() {
           >
             <P>
               Pick your county and the page narrows to the district covering it. About 13% of
-              counties span more than one district; those offer the two or three as a second tap.
-              Where a county isn&apos;t enough, a map of the districts lets you click yours. It
-              draws the lines the ballot&apos;s House seats are contested on: the Census
+              counties span more than one district on this election&apos;s lines (measured October
+              2026 from the Census Bureau&apos;s block files); those offer the two or three as a
+              second tap. Where a county isn&apos;t enough, a map of the districts lets you click
+              yours. It draws the lines the ballot&apos;s House seats are contested on: the Census
               Bureau&apos;s boundaries for the sitting Congress, and for each state that redrew for
               the election its new lines, built from Census blocks. Districts are shaded by partisan
               lean, and in the redrawn states that is the lean of the new district on the ballot
@@ -723,9 +724,10 @@ export default async function ElectionsChapter() {
             more="what it found, and what changed"
           >
             <P>
-              A second audit compared the pages for twelve states, across most of the systems
-              Civitas reads, with each state&apos;s own certified list. Federal contests matched in
-              all of them apart from how some names were written. What it found, and what changed:
+              A second audit, on 9 October 2026, compared the pages for twelve states, across most
+              of the systems Civitas reads, with each state&apos;s own certified list. Federal
+              contests matched in all of them apart from how some names were written. What it found,
+              and what changed:
             </P>
             <List>
               <Item label="North Carolina’s legislature and courts">
@@ -1216,12 +1218,12 @@ export default async function ElectionsChapter() {
           >
             <P>
               An empty section reads as &ldquo;nothing to research&rdquo;: a damaging thing to imply
-              about a state with seventeen amendments pending. So a state is shown as having no
+              about a state with a long list of amendments pending. So a state is shown as having no
               statewide measures only when its official source establishes it (or, as in Delaware,
               its constitution allows none: amendments there take no popular vote), and a state we
               haven&apos;t covered, or whose ingest failed, says <em>that</em> and points to the
-              official lookup. Measures removed from the ballot (courts have struck about 2.3% since
-              1995) are marked removed and kept for a while, not silently deleted.
+              official lookup. Measures removed from the ballot (a court can strike one after it is
+              certified) are marked removed and kept for a while, not silently deleted.
             </P>
           </Box>
           <Box
