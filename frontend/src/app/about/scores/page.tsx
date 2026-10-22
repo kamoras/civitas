@@ -93,11 +93,11 @@ export default function ScoresChapter() {
           >
             <P>
               <strong>Votes against the party</strong> (how does this member vote?): the share of
-              party-line votes, roll calls where at least 65% of one party voted yes and at most 35%
-              of the other did, on which the member sided with most of the other party. Members from
-              seats that lean toward the other party tend to vote apart from their party more often,
-              and voters hold them to it <Cite id="canes2002" />, so the tick is what the seat
-              predicts, not zero.
+              party-line votes, roll calls where most of one party voted yes and most of the other
+              voted no, on which the member sided with most of the other party. Members from seats
+              that lean toward the other party tend to vote apart from their party more often, and
+              voters hold them to it <Cite id="canes2002" />, so the tick is what the seat predicts,
+              not zero.
             </P>
           </Box>
           <Box
@@ -357,23 +357,24 @@ export default function ScoresChapter() {
           </Box>
           <Box
             title="Pick the party-line votes"
-            dek="A roll call counts when the parties split: at least 65% of one party voting yes and at most 35% of the other."
+            dek="A roll call counts when the parties split: a majority of one party voting against a majority of the other."
             figure={{
               type: "stat",
-              value: 65,
-              text: "65 / 35",
-              caption: "percent yes, one party and the other",
+              value: 50,
+              text: "50%+",
+              caption: "of each party, on opposite sides",
             }}
             more="what is left out"
           >
             <P>
-              Every roll call of the current Congress counts when the parties split on it: at least
-              65% of one party voting yes and at most 35% of the other. Votes with no recorded roll
-              call don&apos;t count, and neither does housekeeping (quorum calls, adjourning,
-              approving the Journal, the House&apos;s previous question, motions to table or to
-              recommit, and the House&apos;s motion to commit), which splits on party lines as a
-              matter of course. Each bill or nomination counts once, however many times it came to a
-              vote: cloture and then confirmation on one nominee is one decision.
+              Every roll call of the current Congress counts when the parties split on it: a
+              majority of one party voting against a majority of the other, Congressional
+              Quarterly&apos;s long-standing definition of a party unity vote. Votes with no
+              recorded roll call don&apos;t count, and neither does housekeeping (quorum calls,
+              adjourning, approving the Journal, the House&apos;s previous question, motions to
+              table or to recommit, and the House&apos;s motion to commit), which splits on party
+              lines as a matter of course. Each bill or nomination counts once, however many times
+              it came to a vote: cloture and then confirmation on one nominee is one decision.
             </P>
           </Box>
           {/* The 200 below is prior_until_votes in backend/app/data/position_confidence.json,

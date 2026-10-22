@@ -47,6 +47,32 @@ function grid() {
 const readout = () => document.querySelector("[aria-hidden='true'].z-20");
 
 describe("ChartReadout", () => {
+  it("rings the copy of a mark under the pointer when it is drawn twice", () => {
+    // One mark drawn in two charts (an election's electoral bar above and
+    // its popular-vote column below): the lower copy is the larger.
+    const marks: ChartMark[] = [{ id: "y", label: "1960", shown: "56%" }];
+    const rect = (top: number, height: number) =>
+      ({ left: 0, top, width: 40, height, right: 40, bottom: top + height }) as DOMRect;
+    render(
+      <main>
+        <ChartReadout label="Two rows" marks={marks}>
+          <span data-row="top" {...{ [MARK_ATTR]: "y" }} />
+          <span data-row="bottom" {...{ [MARK_ATTR]: "y" }} />
+        </ChartReadout>
+      </main>
+    );
+    const group = screen.getByRole("group", { name: /^Two rows/ });
+    group.getBoundingClientRect = () => rect(0, 200);
+    group.querySelector<HTMLElement>("[data-row=top]")!.getBoundingClientRect = () => rect(0, 20);
+    group.querySelector<HTMLElement>("[data-row=bottom]")!.getBoundingClientRect = () =>
+      rect(100, 100);
+    const ring = () => document.querySelector<HTMLElement>(".outline-offset-1");
+    fireEvent.pointerMove(group, { pointerType: "mouse", clientX: 10, clientY: 10 });
+    expect(ring()?.style.top).toBe("0px");
+    fireEvent.pointerMove(group, { pointerType: "mouse", clientX: 10, clientY: 150 });
+    expect(ring()?.style.top).toBe("100px");
+  });
+
   it("picks a shape under the pointer, or the nearest within 24px", () => {
     const group = grid();
     fireEvent.pointerMove(group, { pointerType: "mouse", clientX: 50, clientY: 10 });
