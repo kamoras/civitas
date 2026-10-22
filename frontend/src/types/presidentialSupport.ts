@@ -77,6 +77,10 @@ export interface ChamberSupportMember extends SupportNumbers {
 export interface ChamberSupport {
   chamber: "senate" | "house";
   congress: number;
+  /** Members above, below or within reach of their seat's expected rate,
+   *  counted by the backend (presidential_support_service.chamber_view).
+   *  Optional only for a backend older than the field. */
+  counts?: Record<"more" | "less" | "within" | "total", number>;
   members: ChamberSupportMember[];
   rollCalls: SupportRollCall[];
   method: SupportMethod;

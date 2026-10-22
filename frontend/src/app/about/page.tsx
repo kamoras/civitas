@@ -98,22 +98,27 @@ export default function AboutOverview() {
       href="/about"
       eyebrow="About · how Civitas Research works"
       title="About Civitas Research"
-      lede={
-        <p>
-          Civitas sets the record of the people who represent you (senators, representatives and
-          presidents) beside their peers, using only public records and formulas anyone can check,
-          and keeps the record of Supreme Court justices.
-        </p>
-      }
+      lede={<p>The people in power, beside their peers.</p>}
     >
       <JsonLd data={aboutPageJsonLd(ABOUT_DESCRIPTION)} />
       <LegacyAboutAnchor />
 
       <Section id="principles" title="What we hold ourselves to">
         <Boxes>
-          {PRINCIPLES.map((p) => (
-            <Box key={p.title} title={p.title} dek={p.body} />
-          ))}
+          {/* The page's full standing line, behind the first box's More. */}
+          {PRINCIPLES.map((p, i) =>
+            i === 0 ? (
+              <Box key={p.title} title={p.title} dek={p.body} more="what Civitas is">
+                <P>
+                  Civitas sets the record of the people who represent you (senators, representatives
+                  and presidents) beside their peers, using only public records and formulas anyone
+                  can check, and keeps the record of Supreme Court justices.
+                </P>
+              </Box>
+            ) : (
+              <Box key={p.title} title={p.title} dek={p.body} />
+            )
+          )}
         </Boxes>
       </Section>
 

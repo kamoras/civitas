@@ -7,6 +7,7 @@ from fastapi.responses import StreamingResponse
 
 from app.api.response_helpers import JSONResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.api.auth import check_pipeline_token
@@ -25,11 +26,17 @@ from app.database import get_db, off_loop
 from app.member_ids import resolve_member_id
 from app.api.agencies import agency_options, children_of, descendants
 from app.models import Agency, ExploreDocument, Representative, Senator
-from app.pipeline.analyze.document_authority import congressional_record_identifiers, declared_identifiers
+from app.comment_periods import comment_window
+from app.pipeline.analyze.document_authority import (
+    congressional_record_identifiers,
+    declared_identifiers,
+    extract_citations,
+)
 from app.pipeline.fetch.fr_rulemaking import MAX_BODY_LEN
 from app.services.explore_coverage import coverage_windows
 from app.services.explore_keys import KEY_RE, find_by_key, public_key
 from app.services.explore_search import browse_documents, hybrid_search
+from app.services.bill_journey import long_date
 from app.services.bill_record import SPEECH_DOC_TYPES, speech_bills
 from app.time_utils import comment_period_today
 
@@ -288,6 +295,44 @@ def fr_reference(doc: ExploreDocument) -> dict:
     }
 
 
+# The most executive orders a document's header names: a rule's preamble
+# can cite a dozen (E.O. 12866 and its kin in every one), and a header of
+# chips past this reads as a list, not a header.
+_ORDERS_SHOWN = 6
+NBSP = "\u00a0"
+
+
+def cited_orders(db: Session, doc: ExploreDocument) -> list[dict]:
+    """The executive orders the document's text cites (extract_citations,
+    the citation graph's own reading) that Civitas holds, by number, each
+    with its page's key, lowest number first. An order the corpus lacks has
+    no page to link and is left out; the document's own number is too."""
+    own = declared_identifiers(doc.external_id, doc.title, doc.doc_type, doc.identifiers)
+    numbers = sorted(int(i[3:]) for i in extract_citations(doc.body or "") - own if i.startswith("eo:"))
+    if not numbers:
+        return []
+    rows = db.query(ExploreDocument.external_id, ExploreDocument.id, ExploreDocument.title).filter(
+        ExploreDocument.doc_type == "Executive Order",
+        or_(*(ExploreDocument.title.like(f"EO {n}:%") for n in numbers)),
+    ).all()
+    held = {int(t[3:].split(":", 1)[0]): public_key(ext, rid) for ext, rid, t in rows}
+    return [{"number": n, "key": held[n]} for n in numbers if n in held][:_ORDERS_SHOWN]
+
+
+def document_headline(doc: ExploreDocument, speaker: str, citation: str) -> str:
+    """The header box's line: a fixed template over the record's own fields
+    (its type, issuer, date and citation), no wording of the document's.
+    "Proposed Rule from the Food and Drug Administration, October 9, 2026 ·
+    91 FR 48248"."""
+    by = f" from the {doc.agency_name}" if doc.agency_name else (f" by {speaker}" if speaker else "")
+    try:
+        when = f", {long_date(doc.date)}" if doc.date else ""
+    except ValueError:
+        when = f", {doc.date}"
+    # The citation never breaks across lines ("172 Cong. Rec." / "H5646").
+    return f"{doc.doc_type}{by}{when}" + (f" · {citation.replace(' ', NBSP)}" if citation else "")
+
+
 @router.get("/{doc_ref}")
 async def get_explore_document(doc_ref: str, db: Session = Depends(get_db)):
     """Return full details for a single explore document, by its permanent
@@ -302,6 +347,10 @@ async def get_explore_document(doc_ref: str, db: Session = Depends(get_db)):
     speaker = await off_loop(db, lambda session: _speaker_name(session, doc))
     record_cites = sorted(i.split(":", 1)[1] for i in congressional_record_identifiers(doc.external_id)
                           if i.startswith("crec:"))
+    orders = await off_loop(db, lambda session: cited_orders(session, doc))
+    fr = fr_reference(doc)
+    cr_citation = " Cong. Rec. ".join(record_cites[0].split("-", 1)) if record_cites else ""
+    is_open = bool(doc.comment_url) and (doc.comments_close_on or "") >= comment_period_today()
 
     return JSONResponse(
         content={
@@ -324,11 +373,18 @@ async def get_explore_document(doc_ref: str, db: Session = Depends(get_db)):
             "commentsCloseOn": doc.comments_close_on or "",
             # A floor speech's bill, from the Record heading it was given under.
             "bills": speech_bills(doc.title, doc.date) if doc.doc_type in SPEECH_DOC_TYPES else [],
-            **fr_reference(doc),
+            **fr,
             # A floor speech's Record citation ("172 Cong. Rec. H5836") and
             # speaker, for "Cite this".
-            "crCitation": " Cong. Rec. ".join(record_cites[0].split("-", 1)) if record_cites else "",
+            "crCitation": cr_citation,
             "speakerName": speaker,
+            # The header box: its templated line, the comment period from
+            # publication to deadline while it is open (its countdown), and
+            # the executive orders the text cites that have a page here.
+            "headline": document_headline(doc, speaker, fr["frCitation"] or cr_citation),
+            "commentWindow": comment_window(doc.date, doc.comments_close_on, comment_period_today())
+            if is_open else None,
+            "executiveOrders": orders,
         },
         headers={"Cache-Control": "public, max-age=300, stale-while-revalidate=300"},
     )

@@ -42,7 +42,8 @@ export default async function ElectionsChapter() {
       href="/about/elections"
       eyebrow="Methodology · elections"
       title="Elections & ballots"
-      lede={
+      lede={<p>A ballot page for every state.</p>}
+      intro={
         <p>
           Each state has a ballot page built for researching what&apos;s on the ballot: who is
           running, their money and record, and every statewide measure in the state&apos;s own
