@@ -21,6 +21,7 @@ from the Clerk's or eFD's hosts.
 """
 
 import json
+import os
 import re
 from pathlib import Path
 
@@ -59,5 +60,10 @@ def page_path(filing_id: str, page: int) -> Path | None:
     directory = scan_dir(filing_id)
     if directory is None or not 1 <= page <= MAX_PAGES:
         return None
-    path = directory / f"{page}.webp"
-    return path if path.is_file() else None
+    # The id is already one path segment of safe characters; checked again
+    # on the resolved path, so no request can name a file outside the store.
+    root = os.path.realpath(SCANS_DIR)
+    path = os.path.realpath(os.path.join(root, filing_id, f"{page}.webp"))
+    if not path.startswith(root + os.sep) or not os.path.isfile(path):
+        return None
+    return Path(path)
