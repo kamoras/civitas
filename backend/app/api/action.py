@@ -36,7 +36,7 @@ from app.time_utils import comment_period_today, eastern_date, utcnow
 from app.timeline_entries import without_repeat_leads
 from app.trending import compute_trending_issue_ids
 from app.models import (
-    ActionIssue, ActionIssueStatus, ApiCache, ExploreDocument, IssueView, MonitorStatus,
+    ActionIssue, ActionIssueStatus, ApiCache, ExploreDocument, FeedArticle, IssueView, MonitorStatus,
     MonitorUpdate, NationalMonitor, RepSponsoredBill, RollCall, RollCallPosition, SponsoredBill,
     TimelineEntry, Representative, Senator,
     WeekSummary, MonthSummary, YearSummary,
@@ -427,6 +427,7 @@ def _build_issue_response(
     internal_bills: dict[str, set[int]] | None = None,
     is_trending: bool = False,
     member_facts: dict[str, dict] | None = None,
+    headline_outlet: str | None = None,
 ) -> dict:
     # By stored key (explore_keys.issue_doc_ids): the rows the ids named
     # can have been replaced since.
@@ -613,6 +614,7 @@ def _build_issue_response(
         date=issue.date,
         rank=issue.rank,
         title=issue.title,
+        headline_outlet=headline_outlet,
         summary=issue.summary,
         facts=current_facts,
         fact_sources=_parse_json_field(getattr(issue, "fact_sources", "[]")),
@@ -783,6 +785,7 @@ async def get_action_issues(
     )
 
     trending_ids = _trending_ids_for(issues, db_visits)
+    outlets = headline_outlets(db, issues)
 
     return {
         "date": issue_date,
@@ -791,6 +794,7 @@ async def get_action_issues(
                 i, db, explore_docs_map, internal_bills,
                 is_trending=to_public_id(i.id) in trending_ids,
                 member_facts=member_facts,
+                headline_outlet=outlets[i.id],
             )
             for i in issues
         ],
@@ -846,7 +850,9 @@ async def get_recent_action_issues(
     member_facts = _current_member_facts(
         db, set().union(*(_issue_member_ids(i) for i in issues)),
     )
-    return {"issues": [_build_issue_response(i, db, member_facts=member_facts) for i in issues]}
+    outlets = headline_outlets(db, issues)
+    return {"issues": [_build_issue_response(i, db, member_facts=member_facts, headline_outlet=outlets[i.id])
+                       for i in issues]}
 
 
 def recent_issues(db: Session) -> list[ActionIssue]:
@@ -907,6 +913,36 @@ def monitor_groups(issues: list[ActionIssue], db: Session) -> list[tuple[ActionI
 # (live_results/signals.SOURCE_TYPE; not imported, to keep this module's
 # import graph clear of the live-results package's).
 _ELECTION_RESULTS_SOURCE = "election_results"
+
+
+# The record a drafted issue's title is Civitas's template around, by
+# ActionIssue.source_type (pipeline/analyze/early_signal.py,
+# live_results/signals.py).
+RECORD_PUBLISHER = {
+    "senate_roll_call_vote": "Senate roll call",
+    "house_roll_call_vote": "House roll call",
+    "federal_register_significant_rule": "Federal Register",
+    _ELECTION_RESULTS_SOURCE: "State election results",
+}
+
+
+def headline_outlets(db: Session, issues: list[ActionIssue]) -> dict[int, str | None]:
+    """The newsroom whose headline titles each issue: the outlet of the
+    stored feed article carrying the title, else a news issue's first
+    outlet (its article pruned). None when the title is not a newsroom's:
+    a drafted issue's template around a record (source_type set) that no
+    feed article carries."""
+    titles = sorted({i.title for i in issues if i.title})
+    outlet_of = {(t, u): s for t, u, s in (
+        db.query(FeedArticle.title, FeedArticle.url, FeedArticle.source_name)
+        .filter(FeedArticle.title.in_(titles)))} if titles else {}
+    out = {}
+    for issue in issues:
+        urls = _parse_json_field(issue.source_urls)
+        names = _parse_json_field(issue.source_names)
+        stored = next((outlet_of[(issue.title, u)] for u in urls if (issue.title, u) in outlet_of), None)
+        out[issue.id] = stored or (names[0] if names and not issue.source_type else None)
+    return out
 
 
 def _hidden_as_duplicate(issue: ActionIssue, pool_by_id: dict[int, ActionIssue]) -> bool:
@@ -1034,7 +1070,7 @@ async def get_action_issue(issue_id: str, response: Response, db: Session = Depe
     # explore id to a miss and return no documents at all. None tells it to look
     # them up itself. The list endpoint prefetches across all issues to avoid an
     # N+1; a single issue has nothing to batch.
-    return _build_issue_response(issue, db, None)
+    return _build_issue_response(issue, db, None, headline_outlet=headline_outlets(db, [issue])[issue.id])
 
 
 OPEN_COMMENTS_SHOWN = 8

@@ -297,6 +297,14 @@ class TestCandidates:
         assert first["monitor"] == {"slug": "a-story", "title": "A story"}
         assert first["figure"]["value"] == 2 and got[1]["monitor"] is None
 
+    def test_a_drafted_issue_is_labelled_by_its_record_not_a_newsroom(self, db_session):
+        issue = _issue(db_session, "2026-10-20", 1, "The Senate passed S. 1", outlets=("Outlet A",))
+        issue.source_type = "senate_roll_call_vote"
+        db_session.commit()
+        entry = nt._news(db_session)[0]
+        assert entry["outlet"] is None
+        assert nt.provenance(entry) == {"type": "record", "publisher": "Senate roll call"}
+
     def test_a_confirmation_with_its_vote(self, db_session):
         db_session.add(Nomination(congress=119, citation="PN9-1", number=9, status="confirmed",
                                   status_date="2026-10-16", received_date="2026-06-01",
@@ -333,6 +341,14 @@ class TestFrontPage:
                                         "Congress is out; the Senate next sits Thursday, October 22, pro forma"]
         assert page["voteWeek"] == "2026-08-17"
         assert page["edition"]["weekLabel"] == "The week of August 17"
+        # Each entry says where it came from, and the legend what each label means.
+        assert page["lead"]["source"] == {"type": "news", "publisher": "Outlet A"}
+        assert page["tier"][0]["source"] == {
+            "type": "record", "publisher": f"Senate roll call {page['tier'][0]['vote']['number']}"}
+        assert page["tier"][1]["source"] == {"type": "record", "publisher": "Federal Register"}
+        assert [item["type"] for item in page["edition"]["legend"]] == ["record", "news"]
+        assert "The Hill" in page["edition"]["legend"][1]["sources"]
+        assert page["updatedAt"] == "2026-10-20T16:00:00Z"
 
     def test_nothing_on_record_is_no_front_page(self, db_session):
         assert nt.front_page(db_session, TODAY)["lead"] is None

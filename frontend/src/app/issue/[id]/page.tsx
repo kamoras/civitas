@@ -34,6 +34,7 @@ import {
 import FollowFeed from "@/components/shared/FollowFeed";
 import { CARD_ALT, articleJsonLd } from "@/lib/seo";
 import JsonLd from "@/components/seo/JsonLd";
+import { SourceChip } from "@/components/shared/RecordBox";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import { SHARE_SECTION_ATTR, issueShareMeta } from "@/lib/shareImage";
@@ -200,8 +201,15 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
               {/* The header names the issue itself: no title strip. */}
               <ShareSectionButton label="Issue summary" withStrip={false} />
             </div>
+            {/* A newsroom's headline is credited before it and quoted, so its
+                wording never reads as Civitas's. */}
+            {issue.headlineOutlet && (
+              <div className="mt-3">
+                <SourceChip type="news">Reported by {issue.headlineOutlet}</SourceChip>
+              </div>
+            )}
             <h1 className="mt-3 text-balance font-display text-3xl font-semibold leading-tight tracking-[-0.01em] text-ink-hi sm:text-4xl">
-              {issue.title}
+              {issue.headlineOutlet ? <>&ldquo;{issue.title}&rdquo;</> : issue.title}
             </h1>
             {!restatesTitle(issue.title, issue.summary) && (
               <p className="mt-4 font-sans text-base leading-relaxed text-ink sm:text-[17px]">

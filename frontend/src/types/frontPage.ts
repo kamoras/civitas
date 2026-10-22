@@ -22,8 +22,17 @@ export interface FrontPageVote extends AmendmentFields {
   tieBreaker: { byWhom: string; vote: string } | null;
 }
 
+/** Where an entry came from, for the label before it: an official record
+ *  and its publisher ("Senate roll call 248", "Congress.gov"), or the
+ *  newsroom whose headline it is (null when the backend can't name one). */
+export interface Provenance {
+  type: "record" | "news";
+  publisher: string | null;
+}
+
 interface EntryBase {
   column: "congress" | "agencies" | "news";
+  source: Provenance;
   /** The day the entry is filed under (a comment period's: its deadline). */
   date: string;
   headline: string;
@@ -108,7 +117,14 @@ export interface FrontPage {
   asOf: string;
   /** The nameplate's dateline, one phrase each: the date, Congress, the election. */
   dateline: string[];
-  edition: { sentence: string; week: string | null; weekLabel: string | null };
+  /** When the answer was put together from the stored rows (UTC). */
+  updatedAt: string;
+  edition: {
+    /** What each label means, naming its sources. */
+    legend: { type: Provenance["type"]; label: string; sources: string }[];
+    week: string | null;
+    weekLabel: string | null;
+  };
   /** Monday of the latest week of business, which the Congress entries come from; null before any. */
   voteWeek: string | null;
   lead: FrontPageEntry | null;

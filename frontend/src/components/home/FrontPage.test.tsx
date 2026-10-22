@@ -29,8 +29,16 @@ const vote: FrontPageVote = {
 const data: FrontPage = {
   asOf: "2026-10-20",
   dateline: ["Tuesday, October 20", "In session today", "14 days to Election Day"],
+  updatedAt: "2026-10-20T16:53:00Z",
   edition: {
-    sentence: "From the House and Senate's own records, each in its own words",
+    legend: [
+      {
+        type: "record",
+        label: "Official record",
+        sources: "Votes, laws and rules, from Congress.gov",
+      },
+      { type: "news", label: "News", sources: "Headlines in each newsroom's own words, from NPR" },
+    ],
     week: "2026-10-19",
     weekLabel: "Everything this week",
   },
@@ -38,6 +46,7 @@ const data: FrontPage = {
   lead: {
     kind: "closest",
     column: "congress",
+    source: { type: "record", publisher: "Senate roll call 248" },
     date: "2026-10-14",
     headline: "Decided by 1 vote in the Senate, 49–50: Amendment Rejected.",
     vote,
@@ -57,6 +66,7 @@ const data: FrontPage = {
     {
       kind: "loneBreak",
       column: "congress",
+      source: { type: "record", publisher: "Senate roll call 248" },
       date: "2026-10-14",
       headline:
         "The only Republican to vote Yea: Pat Lone (R-AA), against 40 Republicans voting Nay.",
@@ -94,6 +104,7 @@ const data: FrontPage = {
     {
       kind: "comment",
       column: "agencies",
+      source: { type: "record", publisher: "Federal Register" },
       date: "2026-10-20",
       headline: "A proposed rule",
       agencyName: "An Agency",
@@ -119,6 +130,7 @@ const data: FrontPage = {
       {
         kind: "issue",
         column: "news",
+        source: { type: "news", publisher: "Outlet B" },
         date: "2026-10-20",
         headline: "An outlet's own headline",
         publicId: "i0000001",
@@ -174,11 +186,32 @@ describe("FrontPageView", () => {
       "href",
       "/action?tab=monitors&monitor=a-story"
     );
-    expect(screen.getByText(/Outlet B · Tue, Oct 20 · also Mon, Oct 19/)).toBeTruthy();
+    expect(screen.getByText(/Tue, Oct 20 · also Mon, Oct 19/)).toBeTruthy();
     expect(screen.getByText("No other record votes, laws or confirmations to show.")).toBeTruthy();
     expect(screen.getByRole("link", { name: /The week in Congress/ })).toHaveAttribute(
       "href",
       "/congress/week/2026-10-12"
+    );
+  });
+
+  it("labels every item with where it came from, and quotes a newsroom's headline", () => {
+    render(<FrontPageView data={data} />);
+    expect(screen.getAllByText("Official record · Senate roll call 248")).toHaveLength(2);
+    expect(screen.getByText("Official record · Federal Register")).toBeTruthy();
+    // Credited before the headline, which is in its own words, quoted.
+    const credit = screen.getByText("Reported by Outlet B");
+    const headline = screen.getByRole("link", { name: "\u201cAn outlet's own headline\u201d" });
+    expect(
+      credit.compareDocumentPosition(headline) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    // The legend says what each label means; the time is Eastern.
+    const legend = screen.getByRole("list", { name: "What the labels mean" });
+    expect(within(legend).getByText("Official record")).toBeTruthy();
+    expect(within(legend).getByText("News")).toBeTruthy();
+    expect(screen.getByText("Updated 12:53 PM ET")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "How this page is put together" })).toHaveAttribute(
+      "href",
+      "/about/news#front-page"
     );
   });
 

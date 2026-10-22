@@ -40,14 +40,14 @@ export default async function Home() {
             until the count settles): the count is the news then. */}
         <ElectionNight />
         <Masthead electionPhase={summary?.phase.phase ?? null} />
-        {/* The record first, as a front page (a lead story, a second tier,
-            then Congress, Agencies and the news), its nameplate in the
-            first screen at 1280x900 and 390x844; then the three tasks a
-            visitor comes for, with registration closing soon as one line.
-            Where it all comes from is on /about/data; the header menu is
-            the one list of the site's pages. */}
-        <FrontPage />
+        {/* The three tasks a visitor comes for first, with registration
+            closing soon as one line: under the record they began 3.4 phone
+            screens down (iPhone SE, 2026-10-21). Then the record, as a front
+            page (a lead story, a second tier, then Congress, Agencies and
+            the news). Where it all comes from is on /about/data; the header
+            menu is the one list of the site's pages. */}
         <HomeTasks />
+        <FrontPage />
       </main>
       <Footer />
     </>

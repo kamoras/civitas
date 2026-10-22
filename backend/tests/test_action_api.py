@@ -1314,3 +1314,25 @@ def test_an_issue_names_its_monitors_by_stored_title(db_session):
     body = _build_issue_response(issue, db_session)
 
     assert body["relatedMonitors"] == [{"slug": "senator-talks-trumps-deal", "title": "Senator talks Trump's deal"}]
+
+
+def test_headline_outlet_is_the_newsroom_whose_headline_titles_the_issue(db_session):
+    """The issue page credits the headline to its newsroom: the stored feed
+    article carrying it, else a news issue's first outlet; never an outlet
+    for a drafted issue's template around a record."""
+    from app.api.action import headline_outlets
+    from app.models import FeedArticle
+
+    urls = json.dumps(["https://a.example/1", "https://b.example/2"])
+    news = ActionIssue(date="2026-10-20", rank=1, title="A headline", source_names=json.dumps(["A", "B"]),
+                       source_urls=urls)
+    pruned = ActionIssue(date="2026-10-20", rank=2, title="Pruned", source_names=json.dumps(["A", "B"]),
+                         source_urls=urls)
+    drafted = ActionIssue(date="2026-10-20", rank=3, title="The Senate passed S. 1",
+                          source_names=json.dumps(["A"]), source_urls=urls, source_type="senate_roll_call_vote")
+    db_session.add_all([news, pruned, drafted])
+    db_session.add(FeedArticle(url="https://b.example/2", source_name="B", text="", title="A headline",
+                               embedding=b"", model="m"))
+    db_session.commit()
+    got = headline_outlets(db_session, [news, pruned, drafted])
+    assert got == {news.id: "B", pruned.id: "A", drafted.id: None}
