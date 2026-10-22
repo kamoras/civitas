@@ -593,7 +593,7 @@ export default function Holdings({
   let chart: ReactNode;
   if (!data.parsed && data.unreadableReason === "scanned" && data.scan) {
     chart = (
-      <div className={box}>
+      <div className={frame}>
         <ScannedFiling scan={data.scan} sourceLink={sourceLink} />
       </div>
     );
