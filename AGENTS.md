@@ -407,7 +407,12 @@ The correct pattern, established by `_district_pvi()` /
    records the bundled copy's hash (`_refreshed.bundled`) and a file whose
    bundled copy has changed since is refreshed the next day
    (`bundled_moved`; 2026-10-19's House fit through 2024 otherwise waited a
-   week behind the 2026-10-18 refit). A script the job runs takes an output path and reads no `/data` copy of
+   week behind the 2026-10-18 refit; a refreshed copy with no record,
+   installed before it existed, counts as changed and is refreshed once).
+   A failed try is retried within a week whatever the cadence, and the
+   next day once what it runs has changed (`recipe`: the command line and
+   the backend files it names, the generator script included), since that
+   change is usually the fix. A script the job runs takes an output path and reads no `/data` copy of
    its own output. Files a script can't regenerate unattended — a new
    survey whose question ids change, a model-selection refit that is a
    method decision, a source behind research-only dependencies, a source

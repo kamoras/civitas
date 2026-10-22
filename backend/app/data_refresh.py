@@ -98,6 +98,7 @@ class Context:
     today: date
     last_tried: datetime | None
     last_failed: bool = False  # the last try kept the copy in use
+    last_recipe: str | None = None  # recipe() of the last try's command
 
     def tried_within(self, days: int) -> bool:
         if self.last_failed:
@@ -156,21 +157,41 @@ def content_sha256(doc: dict) -> str:
 RETRY_FAILED_AFTER_DAYS = 7
 
 
-def _last_try(name: str) -> tuple[datetime | None, bool]:
-    """When `name` was last tried, and whether that try kept the copy in use."""
+def recipe(argv: list[str]) -> str:
+    """What a refresh runs: its command line and the content of every file
+    of this backend it names (the generator script, an input it reads). A
+    failed try whose recipe has changed since is tried again the next day,
+    not a week on: the change is usually the fix. All three of 2026-10-18's
+    failed refreshes had their fix deployed within a day and waited out the
+    week (the token table and coverage floors in their scripts, name casing
+    in its command line). A fix only inside a module the script imports is
+    not seen here and waits for the week."""
+    digest = hashlib.sha256()
+    for arg in argv:
+        digest.update(arg.encode() + b"\0")
+        path = pathlib.Path(arg)
+        if path.is_absolute() and path.is_relative_to(BACKEND) and path.is_file():
+            digest.update(path.read_bytes())
+    return digest.hexdigest()[:16]
+
+
+def _last_try(name: str) -> tuple[datetime | None, bool, str | None]:
+    """When `name` was last tried, whether that try kept the copy in use,
+    and its recipe (None for a try recorded before recipes were)."""
     db = SessionLocal()
     try:
         state = api_cache_get(db, _STATE_TIER, name, max_age_hours=24 * 365 * 5) or {}
     finally:
         db.close()
     tried = datetime.fromisoformat(state["triedAt"]) if state.get("triedAt") else None
-    return tried, str(state.get("outcome") or "").startswith("kept")
+    return tried, str(state.get("outcome") or "").startswith("kept"), state.get("recipe")
 
 
-def _record_try(name: str, outcome: str) -> None:
+def _record_try(name: str, outcome: str, recipe: str | None = None) -> None:
     db = SessionLocal()
     try:
-        api_cache_set(db, _STATE_TIER, name, {"triedAt": utcnow().isoformat(), "outcome": outcome},
+        api_cache_set(db, _STATE_TIER, name,
+                      {"triedAt": utcnow().isoformat(), "outcome": outcome, "recipe": recipe},
                       normal_ttl_hours=24 * 365 * 5)
     finally:
         db.close()
@@ -235,10 +256,15 @@ def bundled_moved(name: str, doc: dict) -> bool:
     method now reads), and read() keeps serving the refreshed copy until
     the next refresh. #1113 shipped the House fit through 2024 on
     2026-10-19, and the map kept the 2026-10-18 refit through 2022 for a
-    week. Copies installed before the record existed have none and are not
-    told apart."""
-    recorded = (doc.get("_refreshed") or {}).get("bundled")
-    return recorded is not None and recorded != bundled_sha256(name)
+    week. A refreshed copy installed before the record existed (before
+    2026-10-21) counts as moved: which bundled copy it was measured against
+    is unknown, so it is refreshed once, which records it. Read as unmoved,
+    every copy in production was, and the House fit waited on its weekly
+    refit with the alert open."""
+    provenance = doc.get("_refreshed")
+    if not provenance:
+        return False  # the bundled copy itself
+    return provenance.get("bundled") != bundled_sha256(name)
 
 
 def install(spec: DataFile | str, new: dict, argv: list[str]) -> bool:
@@ -365,12 +391,17 @@ def run_refreshes(files: list[DataFile] | None = None, *, pipeline_busy: bool = 
         try:
             ctx = Context(spec.name, read(spec.name), utcnow().date(), *_last_try(spec.name))
             shipped = any(bundled_moved(n, read(n)) for n in (spec.name, *spec.outputs))
-            if spec.command and (spec.due(ctx) or (shipped and not ctx.tried_within(1))):
+            template = spec.command(ctx) if spec.command else None
+            current = recipe(template) if template is not None else None
+            # A failed try is retried the next day once what it runs has
+            # changed (a try recorded before recipes were counts as changed).
+            fixed = ctx.last_failed and current is not None and current != ctx.last_recipe
+            if spec.command and (spec.due(ctx) or ((shipped or fixed) and not ctx.tried_within(1))):
                 if spec.heavy and pipeline_busy:
                     outcomes[spec.name] = "waiting for the pipeline"
                 else:
                     outcomes[spec.name] = refresh_one(spec, ctx)
-                    _record_try(spec.name, outcomes[spec.name])
+                    _record_try(spec.name, outcomes[spec.name], current)
                     ctx.doc = read(spec.name)
             why = spec.stale(ctx)
             if why is UNCHECKED:
