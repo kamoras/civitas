@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { olderApi } from "@/lib/olderApi";
 import { render, screen, within } from "@testing-library/react";
 import axe from "axe-core";
 import userEvent from "@testing-library/user-event";
@@ -231,5 +232,16 @@ describe("PresidentChartsSection", () => {
   it("draws nothing without a chart", () => {
     const { container } = render(<PresidentChartsSection data={{ minBand: 5, charts: [] }} />);
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe("an older API, during a rolling update", () => {
+  it("draws every chart plain, with its table, and prints nothing missing", () => {
+    const { container } = render(<PresidentChartsSection data={olderApi(data)} />);
+    expect(screen.getAllByRole("figure")).toHaveLength(2);
+    expect(screen.queryByRole("group")).toBeNull();
+    expect(screen.getAllByRole("table")).toHaveLength(2);
+    // Plain: drawn, with no readout, nothing printed from a missing field.
+    expect(container.textContent).not.toMatch(/undefined|NaN/);
   });
 });

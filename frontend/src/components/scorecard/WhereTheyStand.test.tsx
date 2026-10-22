@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { olderApi } from "@/lib/olderApi";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
@@ -150,5 +151,25 @@ describe("WhereTheyStand", () => {
     await userEvent.click(screen.getByRole("radio", { name: "Whole Senate" }));
     expect(fetchPeerComparison).toHaveBeenCalledWith("senate", "pat-lee", "chamber");
     expect(window.location.search).toContain("peers=chamber");
+  });
+});
+
+describe("an older API, during a rolling update", () => {
+  it("draws each strip plain on its own figures, with no axis labels and no line", () => {
+    const { container } = render(
+      <main>
+        <WhereTheyStand
+          memberId="pat-lee"
+          name="Pat Lee"
+          chamber="senate"
+          initial={olderApi(DATA)}
+        />
+      </main>
+    );
+    expect(screen.queryByText(/Over time:/)).toBeNull();
+    // The strips still place every peer.
+    expect(screen.getAllByRole("group", { name: /: 3 marks/ }).length).toBeGreaterThan(0);
+    // Plain: drawn, with no readout, nothing printed from a missing field.
+    expect(container.textContent).not.toMatch(/undefined|NaN/);
   });
 });

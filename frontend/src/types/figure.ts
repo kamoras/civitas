@@ -12,7 +12,7 @@ export interface SplitFigure {
   yeaShare: number;
   caption: string;
   /** The bar's two sides' readouts, yea then nay. */
-  marks: ReadoutMark[];
+  marks?: ReadoutMark[];
 }
 
 /** One dot per member of the party voting Yea or Nay, the breaker's marked. */
@@ -22,7 +22,7 @@ export interface DotsFigure {
   voting: number;
   caption: string;
   /** One readout per dot, in drawing order (the breaker last). */
-  marks: ReadoutMark[];
+  marks?: ReadoutMark[];
 }
 
 /** Days left until a date closes: a comment period (with how much of it
