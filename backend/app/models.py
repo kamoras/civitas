@@ -1654,6 +1654,13 @@ class ActionIssue(Base):
     related_explore_keys: Mapped[str] = mapped_column(Text, default="[]", server_default="[]")
     related_senators: Mapped[str] = mapped_column(Text, default="[]")
     related_officials: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+    # The linking rule the two fields above were matched under
+    # (action_center.member_link_stamp) and the reporting it read (a JSON
+    # list of each article's headline and description): a row whose stamp
+    # is not the current rule's is matched again (relink_issue_members).
+    # NULL for a row stored before these were kept.
+    member_link_stamp: Mapped[str | None] = mapped_column(String(16), nullable=True, default=None)
+    member_link_texts: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     # Who the story is principally about (pipeline/analyze/story_actor.py):
     # "president", "<branch>:<official id>" for the official named earliest
     # in the headline, or "class:<category>" when the headline names none.

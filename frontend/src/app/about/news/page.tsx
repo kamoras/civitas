@@ -448,8 +448,10 @@ export default function NewsChapter() {
             more="the matching bar"
           >
             <P>
-              When a member of Congress or a president is part of a story, it links to their page;
-              related government documents are matched from the Explore index, and only when their
+              When a member of Congress or a president is part of a story, it links to their page.
+              When the rule for finding members changes, every story already published is checked
+              again under the new one, so a link the rule no longer makes (and its contact row)
+              comes off older stories too. Related government documents are matched from the Explore index, and only when their
               titles closely match the story&apos;s: a looser bar once linked boating safety zones
               in Miami to a story about a Florida golf club. Elections, with the countdown to the
               next Election Day, have their own page.

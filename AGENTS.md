@@ -1508,7 +1508,14 @@ summary and facts are the sources' own words, checked verbatim
 (`post_composer.py`), and the recommended actions are built from real bill and
 source URLs (`_build_actions_from_data`), never written by the model. Members
 are linked by full name from the articles' own headlines and descriptions as
-well as the issue's text (a bare surname only from the issue's text). When the
+well as the issue's text (a bare surname only from the issue's text). Each
+issue stores the fingerprint of that rule (`member_link_stamp`, derived from
+the linking code itself, never a number to bump) and the reporting it read;
+every refresh matches a bounded batch of rows with another fingerprint again
+(`relink_issue_members`, current issues first), since the refresh rewrites
+only the rows it matches that run and every issue stays readable. A member
+contact row is built from those links when the issue is served, so a dropped
+link takes its "Contact" row with it. When the
 issue is served, a linked bill's stored stage names who acts next
 (`bill_decider`) and an open comment period names its agency; the reader's own
 members, their phones and their votes on the issue's roll calls come from the
