@@ -69,7 +69,7 @@ export default function DistrictFinder({
   return (
     <div className="mb-4 border border-white/15 p-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="font-mono text-xs text-phos">Find your district</p>
+        <p className="font-mono text-small text-phos">Find your district</p>
         {picked && (
           <button
             type="button"
@@ -77,13 +77,13 @@ export default function DistrictFinder({
               onPick(null);
               setLetter(null);
             }}
-            className="font-mono text-[11px] text-ink-lo underline hover:text-phos"
+            className="font-mono text-small text-ink-lo underline hover:text-phos"
           >
             show all districts
           </button>
         )}
       </div>
-      <p className="mt-1 font-mono text-[11px] leading-relaxed text-ink-min">
+      <p className="mt-1 font-mono text-small leading-relaxed text-ink-min">
         Pick the county you live in. Nothing is typed, sent or stored: it only changes what you see.
       </p>
 
@@ -94,7 +94,7 @@ export default function DistrictFinder({
             type="button"
             aria-pressed={letter === l}
             onClick={() => setLetter(letter === l ? null : l)}
-            className={`h-7 w-7 border font-mono text-xs ${
+            className={`h-7 w-7 border font-mono text-small ${
               letter === l
                 ? "border-phos bg-phos/15 text-phos"
                 : "border-white/15 text-ink-lo hover:border-phos/60 hover:text-phos"
@@ -114,14 +114,14 @@ export default function DistrictFinder({
               <li key={county}>
                 {split ? (
                   <span className="inline-flex flex-wrap items-center gap-1 border border-white/15 px-2 py-1">
-                    <span className="font-mono text-[11px] text-ink-lo">{county}</span>
-                    <span className="font-mono text-[10px] text-ink-min">split:</span>
+                    <span className="font-mono text-small text-ink-lo">{county}</span>
+                    <span className="font-mono text-small text-ink-min">split:</span>
                     {ids.map((id) => (
                       <button
                         key={id}
                         type="button"
                         onClick={() => onPick(id)}
-                        className="border border-white/20 px-1.5 font-mono text-[10px] text-ink-hi hover:border-phos hover:text-phos"
+                        className="border border-white/20 px-1.5 font-mono text-small text-ink-hi hover:border-phos hover:text-phos"
                       >
                         {districtLabel(id)}
                       </button>
@@ -132,7 +132,7 @@ export default function DistrictFinder({
                     type="button"
                     onClick={() => onPick(ids[0])}
                     aria-pressed={picked === ids[0]}
-                    className={`border px-2 py-1 font-mono text-[11px] ${
+                    className={`border px-2 py-1 font-mono text-small ${
                       picked === ids[0]
                         ? "border-phos bg-phos/10 text-phos"
                         : "border-white/15 text-ink-lo hover:border-phos/60 hover:text-phos"

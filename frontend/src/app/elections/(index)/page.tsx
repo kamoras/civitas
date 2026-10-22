@@ -1,5 +1,6 @@
 "use client";
 
+import HowToRead from "@/components/shared/HowToRead";
 import { membersHref } from "@/lib/routes";
 import { fade, overlay, partyMark } from "@/lib/chartColors";
 import { useEffect, useState } from "react";
@@ -44,6 +45,7 @@ import type { PviMap } from "@/types/election";
 import { useElectionsHub, useElectionsInitial } from "./ElectionsInitial";
 import { useYourState } from "@/hooks/useYourState";
 import { STATE_NAMES, byStateName } from "@/lib/stateCodes";
+import { TYPE } from "@/lib/typeStyles";
 
 /*
   Second page onto the records palette, after the homepage. Same recipe:
@@ -113,13 +115,13 @@ function ElectionCountdown({
   if (days === null || days < 0) return null;
   return (
     <div className="text-right">
-      <p className="font-mono text-xs text-ink-min">
+      <p className="font-mono text-small text-ink-min">
         {label} · {formatUtcDate(electionDay, { month: "short", day: "numeric", year: "numeric" })}
       </p>
-      <p className="mt-1 font-display text-3xl font-semibold leading-none tabular-nums text-ink-hi">
+      <p className={`${TYPE.figure} mt-1 tabular-nums text-ink-hi`}>
         {days === 0 ? "Today" : days}
         {days > 0 && (
-          <span className="ml-2 font-mono text-xs font-normal text-ink-lo">
+          <span className="ml-2 font-mono text-small font-normal text-ink-lo">
             day{days !== 1 ? "s" : ""} away
           </span>
         )}
@@ -370,7 +372,7 @@ export default function ElectionsPage() {
                 <p
                   className={
                     status
-                      ? `flex flex-wrap items-center gap-x-2 border px-3 py-1.5 font-mono text-xs ${
+                      ? `flex flex-wrap items-center gap-x-2 border px-3 py-1.5 font-mono text-small ${
                           status.tone === "cyan"
                             ? "border-signal-cyan/40 text-signal-cyan"
                             : status.tone === "amber"
@@ -462,14 +464,14 @@ export default function ElectionsPage() {
           <section aria-labelledby="pick-state-heading" className="mb-6">
             <h2
               id="pick-state-heading"
-              className="flex flex-wrap items-baseline justify-between gap-x-4 border-b-2 border-ink-hi pb-1.5 font-display text-xl font-semibold text-ink-hi"
+              className={`${TYPE.section} flex flex-wrap items-baseline justify-between gap-x-4 border-b-2 border-ink-hi pb-1.5`}
             >
               {resultsMode
                 ? "Pick a state for its count and ballot"
                 : "Pick a state for its ballot"}
             </h2>
             {yours.state && (
-              <p className="mt-2 flex flex-wrap items-center gap-x-5 text-base">
+              <p className="mt-2 flex flex-wrap items-center gap-x-5 text-body">
                 <Link
                   href={stateBallotHref(yours.state)}
                   className={`inline-flex min-h-11 items-center font-semibold ${INLINE_LINK}`}
@@ -478,7 +480,7 @@ export default function ElectionsPage() {
                 </Link>
                 <Link
                   href={membersHref(yours.state)}
-                  className={`inline-flex min-h-11 items-center text-sm ${INLINE_LINK}`}
+                  className={`inline-flex min-h-11 items-center text-small ${INLINE_LINK}`}
                 >
                   {STATE_NAMES[yours.state] ?? yours.state}&apos;s members &rarr;
                 </Link>
@@ -494,11 +496,13 @@ export default function ElectionsPage() {
                     href={stateBallotHref(state)}
                     className="flex min-h-11 items-baseline justify-between gap-2 bg-surface-base px-3 py-2.5 transition-colors hover:bg-surface-raised"
                   >
-                    <span className="min-w-0 text-sm text-ink-hi [overflow-wrap:anywhere]">
+                    <span className="min-w-0 text-small text-ink-hi [overflow-wrap:anywhere]">
                       {STATE_NAMES[state] ?? state}
                     </span>
                     {campaignMode && pvi && (
-                      <span className={`font-mono text-xs ${pviColor(leanByState[state] ?? null)}`}>
+                      <span
+                        className={`font-mono text-small ${pviColor(leanByState[state] ?? null)}`}
+                      >
                         {formatPvi(leanByState[state] ?? null)}
                       </span>
                     )}
@@ -506,6 +510,18 @@ export default function ElectionsPage() {
                 </li>
               ))}
             </ul>
+            {/* The first place the page shows a lean: say what R+5 means. */}
+            {campaignMode && pvi && (
+              <HowToRead className="mt-2">
+                <p>
+                  R+5 means the state&rsquo;s vote for president ran 5 points more Republican than
+                  the nation&rsquo;s, over the last two elections, weighted three to one toward the
+                  latest (the Cook Political Report&rsquo;s formula, computed here from certified
+                  returns). D+5 is the same toward Democrats; EVEN matches the nation. It describes
+                  past votes, not a forecast.
+                </p>
+              </HowToRead>
+            )}
           </section>
 
           {/* Registration closing soon: one line to the calendar, which
@@ -540,14 +556,14 @@ export default function ElectionsPage() {
           {error && campaignMode && (
             <div
               role="alert"
-              className="mt-6 border-l-2 border-signal-red bg-surface px-4 py-3 font-mono text-sm text-signal-red"
+              className="mt-6 border-l-2 border-signal-red bg-surface px-4 py-3 font-mono text-small text-signal-red"
             >
               {error}
             </div>
           )}
 
           {!error && (!pvi || !phaseKnown) && !resultsMode && (
-            <p role="status" aria-live="polite" className="mt-8 font-mono text-sm text-ink-min">
+            <p role="status" aria-live="polite" className="mt-8 font-mono text-small text-ink-min">
               Reading the lean map…
             </p>
           )}
@@ -557,11 +573,9 @@ export default function ElectionsPage() {
               {/* ── Map ── */}
               <section className="mt-6 border border-phos/20 bg-surface">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.07] px-4 py-2.5">
-                  <h2 className="font-mono text-xs text-ink-min">
-                    Partisan lean by state · click one for its ballot
-                  </h2>
+                  <h2 className={TYPE.kicker}>Partisan lean by state · click one for its ballot</h2>
                   <div className="flex flex-wrap items-center gap-4">
-                    <span className="flex items-center gap-2 font-mono text-xs text-ink-lo">
+                    <span className="flex items-center gap-2 font-mono text-small text-ink-lo">
                       <span
                         className="inline-block h-2.5 w-4"
                         style={{ backgroundColor: pviFillColor(-1) }}
@@ -569,7 +583,7 @@ export default function ElectionsPage() {
                       />
                       D-leaning <span className="text-ink-min">{dLean}</span>
                     </span>
-                    <span className="flex items-center gap-2 font-mono text-xs text-ink-lo">
+                    <span className="flex items-center gap-2 font-mono text-small text-ink-lo">
                       <span
                         className="inline-block h-2.5 w-4"
                         style={{ backgroundColor: pviFillColor(1) }}
@@ -577,7 +591,7 @@ export default function ElectionsPage() {
                       />
                       R-leaning <span className="text-ink-min">{rLean}</span>
                     </span>
-                    <span className="flex items-center gap-2 font-mono text-xs text-ink-lo">
+                    <span className="flex items-center gap-2 font-mono text-small text-ink-lo">
                       <span
                         className="inline-block h-2.5 w-4"
                         style={{ backgroundColor: pviFillColor(0) }}

@@ -9,6 +9,7 @@ import SectionTabs from "@/components/layout/SectionTabs";
 import BoxGrid from "@/components/shared/BoxGrid";
 import RecordBox from "@/components/shared/RecordBox";
 import type { CommitteeEntry, CommitteeSummary } from "@/types/congress";
+import { TYPE } from "@/lib/typeStyles";
 
 export const metadata = pageMetadata({
   title: "Committee Hearings, Markups & Reports in Congress",
@@ -104,7 +105,7 @@ function EntryBox({ e, meetings }: { e: CommitteeEntry; meetings: number | null 
                 <>
                   <p className="leading-relaxed">{e.text}</p>
                   {bills.length > BILL_CHIPS && (
-                    <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1 font-id text-xs">
+                    <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1 font-id text-small">
                       {bills.map((b) => (
                         <li key={b.href}>
                           <Link
@@ -127,8 +128,8 @@ function EntryBox({ e, meetings }: { e: CommitteeEntry; meetings: number | null 
 }
 
 const FIELD =
-  "min-h-11 w-full border border-white/15 bg-surface-base px-3 font-mono text-sm text-ink-hi outline-none focus:border-phos/40";
-const LABEL = "font-mono text-xs text-ink-min";
+  "min-h-11 w-full border border-white/15 bg-surface-base px-3 font-mono text-small text-ink-hi outline-none focus:border-phos/40";
+const LABEL = "font-mono text-small text-ink-min";
 
 /**
  * Committee meetings and reports, findable without knowing the date: by
@@ -228,14 +229,14 @@ export default async function CommitteesPage({
             <div className="flex flex-wrap items-center gap-4 sm:col-span-2">
               <button
                 type="submit"
-                className="min-h-11 border border-phos/40 px-5 font-mono text-sm text-phos hover:bg-phos/10"
+                className="min-h-11 border border-phos/40 px-5 font-mono text-small text-phos hover:bg-phos/10"
               >
                 [ Find ]
               </button>
               {filtered && (
                 <Link
                   href="/congress/committees"
-                  className="font-mono text-xs text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
+                  className="font-mono text-small text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
                 >
                   Clear
                 </Link>
@@ -246,7 +247,7 @@ export default async function CommitteesPage({
           <section aria-labelledby="committee-results" className="flex flex-col gap-3">
             <h2
               id="committee-results"
-              className="flex flex-wrap items-baseline justify-between gap-x-4 border-b border-white/15 pb-2 font-mono text-xs text-ink-min"
+              className={`${TYPE.kicker} flex flex-wrap items-baseline justify-between gap-x-4 border-b border-white/15 pb-2`}
             >
               <span>
                 {total.toLocaleString("en-US")} {total === 1 ? "entry" : "entries"}
@@ -282,7 +283,7 @@ export default async function CommitteesPage({
                 {record.page > 1 && (
                   <Link
                     href={href(search, record.page - 1)}
-                    className="flex min-h-11 items-center border border-white/15 px-3 font-mono text-sm text-ink-lo hover:border-white/30 hover:text-ink-hi"
+                    className="flex min-h-11 items-center border border-white/15 px-3 font-mono text-small text-ink-lo hover:border-white/30 hover:text-ink-hi"
                   >
                     ← Newer
                   </Link>
@@ -290,7 +291,7 @@ export default async function CommitteesPage({
                 {record.page < record.totalPages && (
                   <Link
                     href={href(search, record.page + 1)}
-                    className="flex min-h-11 items-center border border-white/15 px-3 font-mono text-sm text-ink-lo hover:border-white/30 hover:text-ink-hi"
+                    className="flex min-h-11 items-center border border-white/15 px-3 font-mono text-small text-ink-lo hover:border-white/30 hover:text-ink-hi"
                   >
                     Older →
                   </Link>

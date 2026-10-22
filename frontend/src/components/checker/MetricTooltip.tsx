@@ -16,6 +16,8 @@ const TRIGGER_GAP_PX = 6;
 // How long a bubble opened by hover outlives the pointer leaving: long enough
 // to cross TRIGGER_GAP_PX onto it, short enough to read as "it closed".
 const HOVER_CLOSE_DELAY_MS = 200;
+// The trigger's words.
+const TRIGGER = "What this means";
 
 interface Coords {
   left: number;
@@ -153,13 +155,17 @@ export default function MetricTooltip({ text, children }: MetricTooltipProps) {
         // This way the box axe measures and the box a thumb hits are the same
         // 24x24, while the line it sits on keeps its original height — which
         // matters at 53 call sites across the scorecards.
-        className="ml-0.5 -my-1.5 inline-flex h-6 w-6 items-center justify-center align-middle text-xs leading-none text-ink-min transition-colors cursor-help hover:text-phos"
-        aria-label={`More info: ${text.slice(0, 60)}${text.length > 60 ? "…" : ""}`}
+        //
+        // Worded, not a bare "[?]" (2026-10): a newcomer read the bracket as
+        // a footnote mark or a broken glyph. The name starts with the words
+        // shown (WCAG 2.5.3, Label in Name), then says which figure.
+        className="ml-1 -my-1.5 inline-flex h-6 min-w-6 items-center justify-center whitespace-nowrap align-middle font-sans text-small font-normal leading-none text-ink-min underline decoration-dotted underline-offset-2 transition-colors cursor-help hover:text-phos"
+        aria-label={`${TRIGGER}: ${text.slice(0, 60)}${text.length > 60 ? "…" : ""}`}
         aria-describedby={tooltipId}
         // A picture can't be hovered: leave the marker out of shared images.
         {...{ [SHARE_EXCLUDE_ATTR]: "" }}
       >
-        [?]
+        {TRIGGER}
       </button>
       {/*
         Screen-reader anchor for aria-describedby — always in the DOM so the
@@ -182,7 +188,7 @@ export default function MetricTooltip({ text, children }: MetricTooltipProps) {
               left: coords ? `${coords.left}px` : "-9999px",
               top: coords ? `${coords.top}px` : "-9999px",
             }}
-            className={`fixed z-[100] w-48 sm:w-56 max-w-[calc(100vw-16px)] px-2.5 py-2 text-xs leading-snug text-ink-hi bg-surface border border-ink-min shadow-lg transition-opacity ${
+            className={`fixed z-[100] w-48 sm:w-56 max-w-[calc(100vw-16px)] px-2.5 py-2 text-small leading-snug text-ink-hi bg-surface border border-ink-min shadow-lg transition-opacity ${
               coords ? "opacity-100" : "opacity-0"
             }`}
           >

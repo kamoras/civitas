@@ -31,6 +31,7 @@ import type {
   NominationStats,
   NominationStatus,
 } from "@/types/nomination";
+import { TYPE } from "@/lib/typeStyles";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 const STATUSES: NominationStatus[] = ["pending", "confirmed", "returned", "withdrawn"];
@@ -120,9 +121,9 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
             {!complete && stats.total > 0 && (
               <p
                 role="status"
-                className="border border-signal-amber/40 bg-signal-amber/10 p-3 text-base text-ink sm:p-4"
+                className="border border-signal-amber/40 bg-signal-amber/10 p-3 text-body text-ink sm:p-4"
               >
-                <span className="font-mono text-xs text-signal-amber">Still reading</span>
+                <span className="font-mono text-small text-signal-amber">Still reading</span>
                 <br />
                 {expected != null
                   ? `${read.toLocaleString("en-US")} of about ${expected.toLocaleString("en-US")} nominations read so far.`
@@ -136,7 +137,7 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
             )}
 
             {stats.total === 0 ? (
-              <p className="text-base text-ink-lo">
+              <p className="text-body text-ink-lo">
                 Not read yet: the first daily sync after this page went live fills it in.
               </p>
             ) : (
@@ -199,18 +200,20 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
                         href={href({ status: s })}
                         className="flex h-full min-h-11 flex-col gap-1 p-3 hover:bg-surface-raised sm:p-4"
                       >
-                        <span className="font-mono text-xs text-ink-min">{STATUS_LABEL[s]}</span>
-                        <span className="font-mono text-3xl tabular-nums leading-none text-ink-hi sm:text-4xl">
+                        <span className="font-mono text-small text-ink-min">{STATUS_LABEL[s]}</span>
+                        <span className={`${TYPE.figure} tabular-nums text-ink-hi`}>
                           {stats.counts[s].toLocaleString("en-US")}
                         </span>
                       </Link>
                     </li>
                   ))}
                 </ul>
-                <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+                <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-small sm:grid-cols-2">
                   {STATUSES.map((s) => (
                     <div key={s}>
-                      <dt className="inline font-mono text-xs text-ink-min">{STATUS_LABEL[s]}:</dt>{" "}
+                      <dt className="inline font-mono text-small text-ink-min">
+                        {STATUS_LABEL[s]}:
+                      </dt>{" "}
                       <dd className="inline text-ink-lo">{STATUS_NOTE[s]}</dd>
                     </div>
                   ))}
@@ -218,24 +221,22 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
 
                 {complete ? (
                   <div className="border border-white/15 bg-surface p-4 sm:p-5">
-                    <h3 className="font-mono text-xs text-ink-min">
-                      Days from nomination to confirmation
-                    </h3>
-                    <p className="mt-1 text-sm text-ink-lo">
+                    <h3 className={TYPE.kicker}>Days from nomination to confirmation</h3>
+                    <p className="mt-1 text-small text-ink-lo">
                       Each bar counts confirmations that took that many days, {stats.binDays} days
                       to a bar. The shaded band is the middle half; the line, the median.
                     </p>
                     <div className="mt-4">
                       <ConfirmTimeChart stats={stats} />
                     </div>
-                    <p className="mt-4 font-mono text-xs text-ink-min">
+                    <p className="mt-4 font-mono text-small text-ink-min">
                       Source: Congress.gov, received date to the &ldquo;Confirmed&rdquo; action ·{" "}
                       {congress}
                       {stats.asOf ? ` · as of ${calendarDate(stats.asOf)}` : ""}
                     </p>
                   </div>
                 ) : (
-                  <p className="border border-white/15 bg-surface p-4 text-sm text-ink-lo sm:p-5">
+                  <p className="border border-white/15 bg-surface p-4 text-small text-ink-lo sm:p-5">
                     Days from nomination to confirmation are shown once every nomination is read.
                     The ones read so far are the oldest updates, so their median would not be this
                     Congress&apos;s.
@@ -245,7 +246,7 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
             )}
 
             <section id="list" aria-labelledby="list-title" className="flex flex-col gap-4">
-              <h2 id="list-title" className="font-display text-2xl font-semibold text-ink-hi">
+              <h2 id="list-title" className={TYPE.section}>
                 {complete ? "Every nomination" : "Nominations read so far"}
               </h2>
               <form
@@ -254,7 +255,7 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
                 className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto]"
               >
                 <div className="flex min-w-0 flex-col gap-1">
-                  <label htmlFor="nom-q" className="font-mono text-xs text-ink-min">
+                  <label htmlFor="nom-q" className="font-mono text-small text-ink-min">
                     Name, office or state
                   </label>
                   <input
@@ -263,18 +264,18 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
                     type="search"
                     defaultValue={f.q ?? ""}
                     placeholder="e.g. Secretary of Labor, or Texas judge"
-                    className="min-h-11 border border-white/15 bg-surface-base px-3 text-base text-ink-hi placeholder:text-ink-min focus:border-ink-lo focus:outline-none"
+                    className="min-h-11 border border-white/15 bg-surface-base px-3 text-body text-ink-hi placeholder:text-ink-min focus:border-ink-lo focus:outline-none"
                   />
                 </div>
                 <div className="flex min-w-0 flex-col gap-1">
-                  <label htmlFor="nom-kind" className="font-mono text-xs text-ink-min">
+                  <label htmlFor="nom-kind" className="font-mono text-small text-ink-min">
                     Kind
                   </label>
                   <select
                     id="nom-kind"
                     name="kind"
                     defaultValue={f.kind ?? ""}
-                    className="min-h-11 w-full min-w-0 border border-white/15 bg-surface-base px-2 text-base text-ink-hi"
+                    className="min-h-11 w-full min-w-0 border border-white/15 bg-surface-base px-2 text-body text-ink-hi"
                   >
                     <option value="">All kinds</option>
                     {KINDS.map((k) => (
@@ -285,14 +286,14 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
                   </select>
                 </div>
                 <div className="flex min-w-0 flex-col gap-1">
-                  <label htmlFor="nom-agency" className="font-mono text-xs text-ink-min">
+                  <label htmlFor="nom-agency" className="font-mono text-small text-ink-min">
                     Agency or body
                   </label>
                   <select
                     id="nom-agency"
                     name="agency"
                     defaultValue={f.agency ?? ""}
-                    className="min-h-11 w-full min-w-0 border border-white/15 bg-surface-base px-2 text-base text-ink-hi"
+                    className="min-h-11 w-full min-w-0 border border-white/15 bg-surface-base px-2 text-body text-ink-hi"
                   >
                     <option value="">All</option>
                     {stats.organizations.map((o) => (
@@ -305,7 +306,7 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
                 {f.status && <input type="hidden" name="status" value={f.status} />}
                 <button
                   type="submit"
-                  className={`min-h-11 self-end border px-4 font-mono text-sm ${BOXED_CONTROL.unselected}`}
+                  className={`min-h-11 self-end border px-4 font-mono text-small ${BOXED_CONTROL.unselected}`}
                 >
                   Show
                 </button>
@@ -315,7 +316,7 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
                 <Link
                   href={href({ ...f, status: undefined, page: 1 })}
                   aria-current={!f.status ? "page" : undefined}
-                  className={`flex min-h-11 items-center border px-3 font-mono text-xs ${
+                  className={`flex min-h-11 items-center border px-3 font-mono text-small ${
                     !f.status ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
                   }`}
                 >
@@ -326,7 +327,7 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
                     key={s}
                     href={href({ ...f, status: s, page: 1 })}
                     aria-current={f.status === s ? "page" : undefined}
-                    className={`flex min-h-11 items-center border px-3 font-mono text-xs ${
+                    className={`flex min-h-11 items-center border px-3 font-mono text-small ${
                       f.status === s ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
                     }`}
                   >
@@ -334,7 +335,7 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
                   </Link>
                 ))}
               </nav>
-              {f.kind && <p className="text-sm text-ink-lo">{KIND_NOTE[f.kind]}</p>}
+              {f.kind && <p className="text-small text-ink-lo">{KIND_NOTE[f.kind]}</p>}
 
               {list.items.length ? (
                 <ul className="border-t border-white/[0.09]">
@@ -343,7 +344,7 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
                   ))}
                 </ul>
               ) : (
-                <p className="text-base text-ink-lo">No nomination matches these filters.</p>
+                <p className="text-body text-ink-lo">No nomination matches these filters.</p>
               )}
 
               {pages > 1 && (
@@ -354,20 +355,20 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
                   {f.page > 1 ? (
                     <Link
                       href={href({ ...f, page: f.page - 1 })}
-                      className="flex min-h-11 items-center border border-white/15 px-3 font-mono text-sm text-ink-lo hover:text-ink-hi"
+                      className="flex min-h-11 items-center border border-white/15 px-3 font-mono text-small text-ink-lo hover:text-ink-hi"
                     >
                       ← Newer
                     </Link>
                   ) : (
                     <span />
                   )}
-                  <span className="font-mono text-xs text-ink-min">
+                  <span className="font-mono text-small text-ink-min">
                     Page {f.page} of {pages} · {list.total.toLocaleString("en-US")} nominations
                   </span>
                   {f.page < pages ? (
                     <Link
                       href={href({ ...f, page: f.page + 1 })}
-                      className="flex min-h-11 items-center border border-white/15 px-3 font-mono text-sm text-ink-lo hover:text-ink-hi"
+                      className="flex min-h-11 items-center border border-white/15 px-3 font-mono text-small text-ink-lo hover:text-ink-hi"
                     >
                       Older →
                     </Link>

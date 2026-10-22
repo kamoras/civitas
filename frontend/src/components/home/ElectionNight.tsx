@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ResultsSummary, ResultsSummaryState } from "@/types/election";
 import { NOT_FINAL, formatEasternTime } from "@/lib/results";
 import { fetchResultsSummary } from "@/lib/resultsSummaryServer";
+import { TYPE } from "@/lib/typeStyles";
 
 // States given in full; the rest are one tap away in the line below them,
 // so any counting state is reachable from the first screen.
@@ -13,7 +14,7 @@ const STATUS: Record<ResultsSummaryState["status"], { tag: string; tone: string 
 };
 
 const COMMAND =
-  "inline-flex min-h-[32px] items-center font-mono text-xs text-phos-mid hover:text-phos";
+  "inline-flex min-h-[32px] items-center font-mono text-small text-phos-mid hover:text-phos";
 
 /**
  * The live count, state by state, at the top of the homepage while the
@@ -35,18 +36,18 @@ function Entry({ entry }: { entry: ResultsSummaryState }) {
   const status = STATUS[entry.status];
   return (
     <li className="grid grid-cols-1 gap-x-8 gap-y-1 border-b border-white/[0.07] py-3 md:grid-cols-[11rem_minmax(0,1fr)_auto]">
-      <p className="font-mono text-xs leading-relaxed">
+      <p className="font-mono text-small leading-relaxed">
         <span className="text-ink-hi md:block">{entry.stateName}</span>
         <span className="md:hidden text-ink-min"> · </span>
         <span className={`md:block ${status.tone}`}>{status.tag}</span>
       </p>
       <div className="min-w-0">
         {entry.lines.map((line) => (
-          <p key={line} className="font-sans text-base leading-snug text-ink-hi">
+          <p key={line} className="font-sans text-body leading-snug text-ink-hi">
             {line}
           </p>
         ))}
-        <p className="mt-0.5 font-mono text-xs text-ink-min">
+        <p className="mt-0.5 font-mono text-small text-ink-min">
           {entry.source} · {formatEasternTime(entry.lastChangeAt)}
         </p>
       </div>
@@ -66,7 +67,7 @@ export function ElectionNightList({ data }: { data: ResultsSummary }) {
     <section aria-labelledby="election-night" className="mx-auto mt-8 max-w-7xl px-4 sm:px-6">
       <h2
         id="election-night"
-        className="flex flex-wrap items-baseline justify-between gap-x-4 border-b border-white/15 pb-2 font-mono text-xs text-ink-min"
+        className={`${TYPE.kicker} flex flex-wrap items-baseline justify-between gap-x-4 border-b border-white/15 pb-2`}
       >
         <span>
           The count · {data.states.length} {data.states.length === 1 ? "state" : "states"} counting
@@ -84,7 +85,7 @@ export function ElectionNightList({ data }: { data: ResultsSummary }) {
         ))}
       </ul>
       {more.length > 0 && (
-        <p className="py-3 font-mono text-xs leading-loose text-ink-min">
+        <p className="py-3 font-mono text-small leading-loose text-ink-min">
           Also counting:{" "}
           {more.map((e, i) => (
             <span key={e.state}>
@@ -99,7 +100,7 @@ export function ElectionNightList({ data }: { data: ResultsSummary }) {
           ))}
         </p>
       )}
-      <p className="pb-1 font-sans text-sm leading-relaxed text-ink-lo">
+      <p className="pb-1 font-sans text-small leading-relaxed text-ink-lo">
         Counts as each state&apos;s election office publishes them. Civitas never calls a race:
         &ldquo;leads&rdquo; is the count so far, not a result.{" "}
         <Link href="/about/elections" className="underline underline-offset-2 hover:text-phos">

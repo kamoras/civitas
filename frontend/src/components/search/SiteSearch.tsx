@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import SearchCombobox from "./SearchCombobox";
 import { trapTab } from "@/lib/focusedDialog";
+import { TYPE } from "@/lib/typeStyles";
 
 /**
  * The header's way into site search: a link to /search (which works with
@@ -77,13 +78,13 @@ export default function SiteSearch({ className = "" }: { className?: string }) {
       >
         <div className="flex flex-col gap-4 p-4 sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-x-4 border-b-2 border-white/15 pb-3">
-            <h2 id={titleId} className="font-wordmark text-sm font-extrabold text-ink-hi">
+            <h2 id={titleId} className={`${TYPE.kicker} font-wordmark font-extrabold`}>
               Search
             </h2>
             <button
               type="button"
               onClick={close}
-              className="inline-flex min-h-11 min-w-11 max-w-full flex-wrap items-center justify-center px-2 font-mono text-xs text-ink-lo hover:text-ink-hi"
+              className="inline-flex min-h-11 min-w-11 max-w-full flex-wrap items-center justify-center px-2 font-mono text-small text-ink-lo hover:text-ink-hi"
             >
               Close <span className="sr-only">search</span>
               <span aria-hidden="true" className="ml-1 text-ink-min">

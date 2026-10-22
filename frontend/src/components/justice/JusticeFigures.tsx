@@ -3,10 +3,12 @@ import { onThisPage } from "@/lib/onThisPage";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { Dot } from "@/components/scorecard/WhereTheyStand";
 import StripPoints, { BigFigure, StripAxis, type StripPoint } from "@/components/shared/Strip";
+import CountHistogram, { wholeCounts } from "@/components/shared/CountHistogram";
 import { overlay } from "@/lib/chartColors";
 import { termsPhrase } from "@/lib/court";
 import { SHARE_SECTION_ATTR, shareMetaAttrs } from "@/lib/shareImage";
 import type { JusticeFigures as Figures, JusticeMeasure } from "@/types/justice";
+import { TYPE } from "@/lib/typeStyles";
 
 /** A dot's height in the band, the same every render, so ties stay
  *  countable without moving. */
@@ -32,6 +34,36 @@ function axisLabel(m: JusticeMeasure, v: number): string {
 }
 
 function Strip({ m, justiceId }: { m: JusticeMeasure; justiceId: string }) {
+  if (
+    wholeCounts(
+      m.unit,
+      m.peers.map((p) => p.value)
+    )
+  ) {
+    // A whole number (opinions written): a dot histogram.
+    return (
+      <div className="min-w-0 px-2">
+        <CountHistogram
+          label={`${m.label}, sitting justices`}
+          points={m.peers.map((p) => ({
+            id: p.id,
+            name: p.name,
+            shown: p.shown,
+            rank: p.rank,
+            href: `/politicians/${encodeURIComponent(p.id)}`,
+            value: p.value,
+          }))}
+          marked={{ [justiceId]: { fill: "var(--ink-hi)", ring: "var(--phos)" } }}
+          startId={justiceId}
+          tick={
+            m.median != null && m.medianShown
+              ? { value: m.median, text: `median ${m.medianShown}` }
+              : null
+          }
+        />
+      </div>
+    );
+  }
   const [lo, hi] = stripDomain(m);
   const at = (v: number) => ((Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo)) * 100;
   const others = m.peers.filter((p) => p.id !== justiceId);
@@ -106,17 +138,14 @@ function Row({ m, justiceId }: { m: JusticeMeasure; justiceId: string }) {
       className="grid grid-cols-1 gap-x-6 gap-y-2 border-t border-white/25 px-4 py-4 [h3+&]:border-t-0 sm:px-6 md:grid-cols-[10rem_minmax(0,1fr)]"
     >
       <div>
-        <div className="text-[13px] font-semibold text-ink-lo">{m.label}</div>
-        <BigFigure
-          shown={m.shown}
-          className="text-[28px] font-semibold leading-tight text-ink-hi"
-        />
+        <div className={TYPE.kicker}>{m.label}</div>
+        <BigFigure shown={m.shown} className={`${TYPE.figure} text-ink-hi`} />
       </div>
       <div className="min-w-0">
-        <p className="mb-1 text-sm text-ink">{m.why}</p>
+        <p className="mb-1 text-small text-ink">{m.why}</p>
         <Strip m={m} justiceId={justiceId} />
       </div>
-      <figcaption id={`figure-${m.key}`} className="text-sm text-ink md:col-span-2">
+      <figcaption id={`figure-${m.key}`} className="text-small text-ink md:col-span-2">
         <span className="sr-only">{m.label}: </span>
         {m.sentence}{" "}
         <a href={m.source.url} className="text-phos underline underline-offset-2">
@@ -179,11 +208,11 @@ export default function JusticeFigures({
         <h2
           id="figures-heading"
           {...onThisPage("Beside the other justices")}
-          className="font-display text-[22px] font-semibold text-ink-hi sm:text-[26px]"
+          className={TYPE.section}
         >
           {name} beside the other justices
         </h2>
-        <p className="mt-1 text-sm text-ink-lo">
+        <p className="mt-1 text-small text-ink-lo">
           Each dot is one of the {figures.peers} sitting justices
           {figures.terms.length ? `, over ${termsPhrase(figures.terms)}` : ""}.
         </p>
@@ -193,7 +222,7 @@ export default function JusticeFigures({
           <div key={m.key}>
             {m.question !== measures[i - 1]?.question && (
               <h3
-                className={`px-4 pt-4 font-display text-lg font-semibold text-ink-hi sm:px-6 ${i ? "border-t-2 border-ink-hi/60" : ""}`}
+                className={`${TYPE.boxTitle} px-4 pt-4 sm:px-6 ${i ? "border-t-2 border-ink-hi/60" : ""}`}
               >
                 {m.question}
               </h3>
@@ -203,7 +232,7 @@ export default function JusticeFigures({
         ))}
       </div>
       <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-        <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-lo" aria-hidden="true">
+        <p className="flex flex-wrap gap-x-4 gap-y-1 text-small text-ink-lo" aria-hidden="true">
           <span>
             <Dot size={8} fill="var(--chart-muted)" className="mr-1 inline-block" />
             another justice

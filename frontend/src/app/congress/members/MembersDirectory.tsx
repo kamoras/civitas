@@ -46,7 +46,7 @@ function partyDot(party: string) {
 function Initials({ name }: { name: string }) {
   return (
     <div className="w-10 h-10 border border-white/[0.07] flex items-center justify-center shrink-0">
-      <span className="font-mono text-xs text-ink-min">
+      <span className="font-mono text-small text-ink-min">
         {name
           .split(" ")
           .map((w) => w[0])
@@ -90,20 +90,20 @@ function PoliticianCardUI({ p }: { p: PoliticianCard }) {
         <div className="min-w-0 flex-[1_1_10rem]">
           <div className="flex items-center gap-2 mb-0.5">
             {partyDot(p.party)}
-            <span className="font-mono text-sm text-ink-hi group-hover:text-phos transition-colors truncate">
+            <span className="font-mono text-small text-ink-hi group-hover:text-phos transition-colors truncate">
               {p.name}
             </span>
           </div>
-          <p className="font-mono text-xs text-ink-min mb-2 truncate">{subtitle}</p>
+          <p className="font-mono text-small text-ink-min mb-2 truncate">{subtitle}</p>
 
           {p.leadershipTitle && (
-            <span className="inline-block max-w-full font-mono text-xs text-signal-amber border border-signal-amber/40 px-1.5 py-0.5 mb-2">
+            <span className="inline-block max-w-full font-mono text-small text-signal-amber border border-signal-amber/40 px-1.5 py-0.5 mb-2">
               {p.leadershipTitle}
             </span>
           )}
 
           {p.isCurrent === false ? (
-            <span className="font-mono text-xs text-ink-lo border border-signal-magenta/40 px-1.5 py-0.5">
+            <span className="font-mono text-small text-ink-lo border border-signal-magenta/40 px-1.5 py-0.5">
               {formerOfficeBadge(p)}
             </span>
           ) : null}
@@ -112,7 +112,7 @@ function PoliticianCardUI({ p }: { p: PoliticianCard }) {
         {p.activeIssueCount > 0 && (
           <div className="shrink-0 flex items-center gap-1 mt-0.5">
             <span className="inline-block w-1.5 h-1.5 bg-signal-cyan animate-pulse" />
-            <span className="font-mono text-xs text-signal-cyan">
+            <span className="font-mono text-small text-signal-cyan">
               In {p.activeIssueCount} {p.activeIssueCount === 1 ? "issue" : "issues"}
             </span>
           </div>
@@ -178,10 +178,10 @@ function CountyFinder({
   );
   return (
     <div className="mb-4 border border-white/[0.07] p-4">
-      <label htmlFor={id} className="block text-sm font-semibold text-ink-hi">
+      <label htmlFor={id} className="block text-small font-semibold text-ink-hi">
         Find your House member by city, town or county
       </label>
-      <p className="mt-1 text-xs text-ink-lo">
+      <p className="mt-1 text-small text-ink-lo">
         Districts as of the current Congress: the ones today&apos;s members were elected in. Nothing
         you type leaves this page.
       </p>
@@ -193,7 +193,7 @@ function CountyFinder({
         onChange={(e) => onQuery(e.target.value)}
         placeholder="City, town or county"
         autoComplete="off"
-        className="mt-2 w-full max-w-xs border border-white/15 bg-surface-base px-3 py-2 font-mono text-sm text-ink-hi placeholder:text-ink-min outline-none focus:border-phos/40"
+        className="mt-2 w-full max-w-xs border border-white/15 bg-surface-base px-3 py-2 font-mono text-small text-ink-hi placeholder:text-ink-min outline-none focus:border-phos/40"
       />
       <datalist id={`${id}-counties`}>
         {finderSuggestions(lines).map((n) => (
@@ -201,12 +201,12 @@ function CountyFinder({
         ))}
       </datalist>
       {status && (
-        <p className="mt-2 text-sm text-ink-lo" role="status">
+        <p className="mt-2 text-small text-ink-lo" role="status">
           {status}
         </p>
       )}
       {picked != null && (
-        <p className="mt-2 text-sm text-ink-hi">
+        <p className="mt-2 text-small text-ink-hi">
           Showing {districtName(picked)}.{" "}
           <button
             type="button"
@@ -226,7 +226,7 @@ function CountyFinder({
         onFound={(found) => onPick(found.state, found.house)}
         onOtherState={onOtherState}
       />
-      <p className="mt-2 text-xs text-ink-min">
+      <p className="mt-2 text-small text-ink-min">
         {/* No cycle year: it would go stale when the ballot page moves on. */}
         Voting in the coming election?{" "}
         <Link
@@ -243,7 +243,9 @@ function CountyFinder({
 
 // The masthead's line, sent with the server's fallback too (PageFallback).
 const MEMBERS_EYEBROW = "Congress · find your members";
-const MEMBERS_TITLE = "Members of Congress";
+// Not "Members of Congress": that is the search group heading and other pages' phrase;
+// the h1 names who is listed, as the page title does.
+const MEMBERS_TITLE = "Senators and representatives";
 const MEMBERS_LEDE = (
   <p>
     Every serving senator and representative. Pick a state for its two senators and its House
@@ -439,7 +441,7 @@ function MembersDirectoryContent() {
                     writeParams({ branch: key === "all" ? "" : key });
                   }}
                   aria-pressed={branch === key}
-                  className={`font-mono text-xs px-3 py-1 border transition-colors ${
+                  className={`font-mono text-small px-3 py-1 border transition-colors ${
                     branch === key ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
                   }`}
                 >
@@ -447,7 +449,7 @@ function MembersDirectoryContent() {
                 </button>
               ))}
               {activeCount > 0 && (
-                <span className="font-mono text-xs text-ink-lo self-center ml-2">
+                <span className="font-mono text-small text-ink-lo self-center ml-2">
                   {activeCount} in action center issues
                 </span>
               )}
@@ -463,7 +465,7 @@ function MembersDirectoryContent() {
                 aria-label="Search members by name"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="font-mono text-xs bg-surface-base border border-white/[0.07] focus:border-phos/40 text-ink-hi placeholder:text-ink-min px-3 py-1.5 outline-none w-48 max-w-full"
+                className="font-mono text-small bg-surface-base border border-white/[0.07] focus:border-phos/40 text-ink-hi placeholder:text-ink-min px-3 py-1.5 outline-none w-48 max-w-full"
               />
 
               {/* Party filter */}
@@ -473,7 +475,7 @@ function MembersDirectoryContent() {
                     key={key}
                     onClick={() => setParty(key)}
                     aria-pressed={party === key}
-                    className={`inline-flex min-h-6 min-w-6 items-center justify-center font-mono text-xs px-2 py-1 border transition-colors ${
+                    className={`inline-flex min-h-6 min-w-6 items-center justify-center font-mono text-small px-2 py-1 border transition-colors ${
                       party === key ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
                     }`}
                   >
@@ -487,7 +489,7 @@ function MembersDirectoryContent() {
                 value={state}
                 onChange={(e) => setState(e.target.value)}
                 aria-label="Filter by state"
-                className="font-mono text-xs bg-surface-base border border-white/[0.07] text-ink-lo px-2 py-1 outline-none"
+                className="font-mono text-small bg-surface-base border border-white/[0.07] text-ink-lo px-2 py-1 outline-none"
               >
                 <option value="">All states</option>
                 {STATES_BY_NAME.map((s) => (
@@ -504,7 +506,7 @@ function MembersDirectoryContent() {
                     setParty("ALL");
                     setState("");
                   }}
-                  className="font-mono text-xs text-ink-min hover:text-phos transition-colors"
+                  className="font-mono text-small text-ink-min hover:text-phos transition-colors"
                 >
                   Clear
                 </button>
@@ -514,22 +516,22 @@ function MembersDirectoryContent() {
 
           {/* Results */}
           {loading ? (
-            <div className="text-center py-16 font-mono text-xs text-ink-min pulse-subtle">
+            <div className="text-center py-16 font-mono text-small text-ink-min pulse-subtle">
               Loading...
             </div>
           ) : error ? (
             <>
               {finder}
-              <div className="text-center py-16 font-mono text-xs text-signal-red">{error}</div>
+              <div className="text-center py-16 font-mono text-small text-signal-red">{error}</div>
             </>
           ) : filtered.length === 0 ? (
             <>
               {finder}
-              <div className="text-center py-16 font-mono text-xs text-ink-min">No results</div>
+              <div className="text-center py-16 font-mono text-small text-ink-min">No results</div>
             </>
           ) : (
             <>
-              <p className="font-mono text-xs text-ink-min mb-3">
+              <p className="font-mono text-small text-ink-min mb-3">
                 {filtered.length} member{filtered.length !== 1 ? "s" : ""}
               </p>
               {senators.length > 0 && (

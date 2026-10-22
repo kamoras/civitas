@@ -7,6 +7,7 @@ import { ordinal } from "@/components/scorecard/format";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import ScrollRegion from "@/components/shared/ScrollRegion";
+import { TYPE } from "@/lib/typeStyles";
 
 const CAL_SOURCE = "Congressional Record (Daily Digest); Senate and House roll calls";
 const PIPE_SOURCE = "Congress.gov bill status, for every bill sitting members sponsored";
@@ -27,7 +28,7 @@ const SWATCH = { senate: "bg-phos", house: "bg-signal-cyan" } as const;
 function Head({ id, title, share }: { id: string; title: string; share: string }) {
   return (
     <div className="flex flex-wrap items-baseline justify-between gap-3 border-b border-white/15 pb-2">
-      <h2 id={id} className="font-mono text-xs text-ink-min">
+      <h2 id={id} className={TYPE.kicker}>
         {title}
       </h2>
       <ShareSectionButton label={share} />
@@ -56,7 +57,7 @@ function SittingCalendar({ cal }: { cal: Glance["calendar"] }) {
       className="min-w-0"
     >
       <Head id="calendar-heading" title="Days in session this Congress" share="Days in session" />
-      <p className="mt-3 text-sm text-ink">
+      <p className="mt-3 text-small text-ink">
         The Senate sat <strong className="text-ink-hi">{n(senate.days)}</strong> days and the House{" "}
         <strong className="text-ink-hi">{n(house.days)}</strong> since {shortDate(cal.start)}.
       </p>
@@ -124,7 +125,7 @@ function SittingCalendar({ cal }: { cal: Glance["calendar"] }) {
           );
         })}
       </svg>
-      <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-lo">
+      <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-small text-ink-lo">
         {(["senate", "house"] as const).map((c) => (
           <span key={c} className="inline-flex items-center gap-1.5">
             <span aria-hidden="true" className={`inline-block h-2 w-3 ${SWATCH[c]}`} />
@@ -132,16 +133,16 @@ function SittingCalendar({ cal }: { cal: Glance["calendar"] }) {
           </span>
         ))}
       </p>
-      <p className="mt-1 text-xs leading-relaxed text-ink-min">
+      <p className="mt-1 text-small leading-relaxed text-ink-min">
         One row a month, one cell a day. Lit when the chamber sat, brighter the more record votes it
         took. Today is outlined.
       </p>
-      <details className="mt-2 text-sm">
+      <details className="mt-2 text-small">
         <summary className="min-h-6 cursor-pointer text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos">
           The calendar as a table
         </summary>
         <ScrollRegion label="The calendar as a table" className="mt-2">
-          <table className="w-full text-left font-mono text-xs tabular-nums">
+          <table className="w-full text-left font-mono text-small tabular-nums">
             <caption className="sr-only">Days in session and record votes by month</caption>
             <thead className="text-ink-min">
               <tr>
@@ -198,12 +199,12 @@ function BillPipeline({ pipe, asOf }: { pipe: NonNullable<Glance["pipeline"]>; a
       className="min-w-0"
     >
       <Head id="pipeline-heading" title="How far this Congress's bills got" share="Bill pipeline" />
-      <p className="mt-3 text-sm text-ink">
+      <p className="mt-3 text-small text-ink">
         Of <strong className="text-ink-hi">{n(pipe.total)}</strong> bills sitting members
         introduced, <strong className="text-ink-hi">{n(law.bills)}</strong> became law (
         {law.shareText}).
       </p>
-      <table className="mt-3 w-full text-sm">
+      <table className="mt-3 w-full text-small">
         <caption className="sr-only">
           Bills that reached each step this Congress, drawn on a log scale
         </caption>
@@ -242,17 +243,17 @@ function BillPipeline({ pipe, asOf }: { pipe: NonNullable<Glance["pipeline"]>; a
                   </span>
                 </Link>
               </th>
-              <td className="py-2 pr-2 text-right font-mono text-base tabular-nums text-ink-hi">
+              <td className="py-2 pr-2 text-right font-mono text-body tabular-nums text-ink-hi">
                 {n(m.bills)}
               </td>
-              <td className="py-2 text-right font-mono text-xs tabular-nums text-ink-lo">
+              <td className="py-2 text-right font-mono text-small tabular-nums text-ink-lo">
                 {m.shareText}
               </td>
             </tr>
           ))}
         </tbody>
       </table>
-      <p className="mt-2 text-xs leading-relaxed text-ink-min">
+      <p className="mt-2 text-small leading-relaxed text-ink-min">
         Bars on a log scale, so the few bills near the end still show. Each share is of every bill
         introduced. Pick a step to list its bills.{" "}
         <Link

@@ -196,8 +196,8 @@ export default function LineChart({
     <figure className="min-w-0">
       <figcaption className="mb-2 flex items-baseline justify-between gap-3">
         <span className="min-w-0">
-          <span className="block text-xs font-mono text-ink-lo">{title}</span>
-          {subtitle && <span className="block text-xs font-mono text-ink-min">{subtitle}</span>}
+          <span className="block text-small font-mono text-ink-lo">{title}</span>
+          {subtitle && <span className="block text-small font-mono text-ink-min">{subtitle}</span>}
         </span>
         {headline && <span className="shrink-0 text-right font-mono text-ink-hi">{headline}</span>}
       </figcaption>
@@ -205,7 +205,7 @@ export default function LineChart({
       {series.length >= 2 && (
         <ul className="mb-2 flex flex-wrap gap-x-4 gap-y-1" aria-label={`${title} legend`}>
           {series.map((s) => (
-            <li key={s.key} className="flex items-center gap-1.5 text-xs font-mono text-ink-lo">
+            <li key={s.key} className="flex items-center gap-1.5 text-small font-mono text-ink-lo">
               <LineKey color={s.color} dashed={s.dashed} />
               {s.label}
             </li>
@@ -219,7 +219,7 @@ export default function LineChart({
       >
         {!hasData ? (
           <div
-            className="flex items-center justify-center border border-white/[0.07] text-xs font-mono text-ink-min"
+            className="flex items-center justify-center border border-white/[0.07] text-small font-mono text-ink-min"
             style={{ height: svgH }}
           >
             {emptyMessage}
@@ -350,7 +350,7 @@ export default function LineChart({
 
             {active != null && (
               <div
-                className="pointer-events-none absolute top-0 z-10 min-w-[8rem] border border-white/15 bg-surface-raised px-2.5 py-1.5 font-mono text-xs shadow-lg"
+                className="pointer-events-none absolute top-0 z-10 min-w-[8rem] border border-white/15 bg-surface-raised px-2.5 py-1.5 font-mono text-small shadow-lg"
                 style={
                   tooltipFlip
                     ? { right: `calc(${100 - tooltipLeft}% + 10px)` }
@@ -375,11 +375,11 @@ export default function LineChart({
 
       {hasData && (
         <details className="mt-1">
-          <summary className="cursor-pointer text-xs font-mono text-ink-min hover:text-ink-lo">
+          <summary className="cursor-pointer text-small font-mono text-ink-min hover:text-ink-lo">
             Table view
           </summary>
           <div className="mt-1 max-h-64 overflow-auto">
-            <table className="w-full text-xs font-mono">
+            <table className="w-full text-small font-mono">
               <caption className="sr-only">{title}</caption>
               <thead>
                 <tr className="border-b border-white/[0.07] text-ink-lo">

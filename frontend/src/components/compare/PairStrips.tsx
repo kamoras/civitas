@@ -10,6 +10,7 @@ import StripPoints, {
   stripTop,
   type StripPoint,
 } from "@/components/shared/Strip";
+import CountHistogram, { wholeCounts } from "@/components/shared/CountHistogram";
 
 type Side = { id: string; name: string };
 
@@ -46,8 +47,8 @@ function PairStrip({
   return (
     <figure className="border-t border-white/25 px-4 py-4 first:border-t-0">
       <figcaption className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="text-[13px] font-semibold text-ink-lo">{m.label}</span>
-        <span className="text-sm text-ink">
+        <span className="text-small font-semibold text-ink-lo">{m.label}</span>
+        <span className="text-small text-ink">
           {left.name}: <strong className="font-semibold">{l?.shown ?? "no record"}</strong> ·{" "}
           {right.name}: <strong className="font-semibold">{r?.shown ?? "no record"}</strong>
           {m.median != null && (
@@ -55,48 +56,80 @@ function PairStrip({
           )}
         </span>
       </figcaption>
-      <StripPoints
-        label={`${m.label}, every ${chamber === "house" ? "representative" : "senator"}`}
-        points={points}
-        startId={left.id}
-        className="mt-2 h-10"
-      >
-        <div className="absolute inset-x-0 top-[22px] h-px bg-white/40" />
-        {m.points.map((p, i) => (
-          <Dot
-            key={p.id}
-            size={5}
-            fill="var(--chart-muted)"
-            className="absolute -translate-x-1/2"
-            style={{ left: `${at(p.value)}%`, top: `${12 + JITTER[i % JITTER.length] / 2}px` }}
+      {wholeCounts(
+        m.unit,
+        m.points.map((p) => p.value)
+      ) ? (
+        <div className="mt-2">
+          <CountHistogram
+            label={`${m.label}, every ${chamber === "house" ? "representative" : "senator"}`}
+            points={m.points.map((p) => ({
+              id: p.id,
+              name: p.name,
+              detail: partySeat(p, chamber === "house"),
+              shown: p.shown,
+              rank: p.rank,
+              href: `/politicians/${p.id}`,
+              value: p.value,
+            }))}
+            marked={{
+              [left.id]: { fill: "var(--ink-hi)", ring: "var(--phos)" },
+              [right.id]: { fill: "var(--surface)", ring: "var(--ink-hi)" },
+            }}
+            startId={left.id}
+            tick={
+              m.median != null && m.medianShown
+                ? { value: m.median, text: `median ${m.medianShown}` }
+                : null
+            }
           />
-        ))}
-        {m.median != null && (
-          <span
-            className="absolute top-1 h-8 -translate-x-1/2 border-l-2 border-ink-hi"
-            style={{ left: `${at(m.median)}%` }}
-          />
-        )}
-        {l && (
-          <Dot
-            size={14}
-            fill="var(--ink-hi)"
-            ring="var(--phos)"
-            className="absolute top-[15px] -translate-x-1/2"
-            style={{ left: `${at(l.value)}%` }}
-          />
-        )}
-        {r && (
-          <Dot
-            size={14}
-            fill="var(--surface)"
-            ring="var(--ink-hi)"
-            className="absolute top-[15px] -translate-x-1/2"
-            style={{ left: `${at(r.value)}%` }}
-          />
-        )}
-      </StripPoints>
-      <StripAxis start={m.axisStartShown} end={m.axisEndShown} />
+        </div>
+      ) : (
+        <>
+          <StripPoints
+            label={`${m.label}, every ${chamber === "house" ? "representative" : "senator"}`}
+            points={points}
+            startId={left.id}
+            className="mt-2 h-10"
+          >
+            <div className="absolute inset-x-0 top-[22px] h-px bg-white/40" />
+            {m.points.map((p, i) => (
+              <Dot
+                key={p.id}
+                size={5}
+                fill="var(--chart-muted)"
+                className="absolute -translate-x-1/2"
+                style={{ left: `${at(p.value)}%`, top: `${12 + JITTER[i % JITTER.length] / 2}px` }}
+              />
+            ))}
+            {m.median != null && (
+              <span
+                className="absolute top-1 h-8 -translate-x-1/2 border-l-2 border-ink-hi"
+                style={{ left: `${at(m.median)}%` }}
+              />
+            )}
+            {l && (
+              <Dot
+                size={14}
+                fill="var(--ink-hi)"
+                ring="var(--phos)"
+                className="absolute top-[15px] -translate-x-1/2"
+                style={{ left: `${at(l.value)}%` }}
+              />
+            )}
+            {r && (
+              <Dot
+                size={14}
+                fill="var(--surface)"
+                ring="var(--ink-hi)"
+                className="absolute top-[15px] -translate-x-1/2"
+                style={{ left: `${at(r.value)}%` }}
+              />
+            )}
+          </StripPoints>
+          <StripAxis start={m.axisStartShown} end={m.axisEndShown} />
+        </>
+      )}
     </figure>
   );
 }
@@ -117,12 +150,12 @@ export default function PairStrips({
 }) {
   const { data, error } = useAsyncData(chamber, () => fetchChamberMeasures(chamber));
   if (error && !data)
-    return <p className="px-4 py-3 text-sm text-ink-lo">The measures could not be loaded.</p>;
-  if (!data) return <p className="px-4 py-3 text-sm text-ink-lo">Loading the measures…</p>;
+    return <p className="px-4 py-3 text-small text-ink-lo">The measures could not be loaded.</p>;
+  if (!data) return <p className="px-4 py-3 text-small text-ink-lo">Loading the measures…</p>;
   return (
     <div>
       <p
-        className="flex flex-wrap gap-x-4 gap-y-1 px-4 pt-3 text-xs text-ink-lo"
+        className="flex flex-wrap gap-x-4 gap-y-1 px-4 pt-3 text-small text-ink-lo"
         aria-hidden="true"
       >
         <span>

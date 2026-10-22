@@ -1,5 +1,6 @@
 "use client";
 
+import HowToRead from "@/components/shared/HowToRead";
 import Link from "next/link";
 import { useId, useMemo, useState } from "react";
 import type { PartySplit, VoteMember } from "@/types/congress";
@@ -18,6 +19,21 @@ const BUCKETS: { key: VoteMember["bucket"]; label: string; tone: string }[] = [
 
 /** One party's split on a roll call, as the chamber recorded it. The bar is
  * display scaling of those counts, not a new figure. */
+/** What the party bars show, once under them (in words: the bars are
+ *  aria-hidden, the counts beside them are read). "Solid" and "paler" hold
+ *  in both themes, where darker and lighter swap. */
+export function PartyBarsHelp({ className = "" }: { className?: string }) {
+  return (
+    <HowToRead className={className}>
+      <p>
+        Each bar is one party&rsquo;s members on this vote: the solid part voted yea, the paler part
+        nay, and the empty rest didn&rsquo;t vote or answered present. The counts beside each bar
+        say the same in numbers (NV is not voting).
+      </p>
+    </HowToRead>
+  );
+}
+
 export function PartyBar({ split }: { split: PartySplit }) {
   const total = split.yea + split.nay + split.present + split.notVoting || 1;
   const party = PARTY_NAME[split.party] ?? split.party;
@@ -39,7 +55,7 @@ export function PartyBar({ split }: { split: PartySplit }) {
   // The figures are abbreviated and dot-separated on screen; a screen reader
   // gets the same counts as a sentence ("Republicans: 50 yea, 3 nay").
   const figures = (
-    <span className="min-w-0 break-words font-mono text-xs tabular-nums text-ink-lo">
+    <span className="min-w-0 break-words font-mono text-small tabular-nums text-ink-lo">
       <span aria-hidden="true">{parts.map((p) => p[0]).join(" · ")}</span>
       <span className="sr-only">
         {party}: {parts.map((p) => p[1]).join(", ")}
@@ -48,7 +64,7 @@ export function PartyBar({ split }: { split: PartySplit }) {
   );
   if (noSplit) {
     return (
-      <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-baseline gap-x-3 text-sm">
+      <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-baseline gap-x-3 text-small">
         <span aria-hidden="true" className="text-ink">
           {party}
         </span>
@@ -57,7 +73,7 @@ export function PartyBar({ split }: { split: PartySplit }) {
     );
   }
   return (
-    <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-center gap-x-3 gap-y-1 text-sm sm:grid-cols-[minmax(0,7rem)_minmax(0,1fr)_minmax(0,10rem)]">
+    <div className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] items-center gap-x-3 gap-y-1 text-small sm:grid-cols-[minmax(0,7rem)_minmax(0,1fr)_minmax(0,10rem)]">
       <span aria-hidden="true" className="text-ink">
         {party}
       </span>
@@ -145,10 +161,10 @@ export default function VoteMembers({
           aria-label={`Your state: ${STATE_NAMES[yours] ?? yours}`}
           className="border border-white/15 bg-surface px-3 py-2"
         >
-          <p className="font-mono text-xs text-ink-min">
+          <p className="font-mono text-small text-ink-min">
             Your state: <span className="text-ink-hi">{STATE_NAMES[yours] ?? yours}</span>
           </p>
-          <ul className="mt-1 flex flex-col text-sm">
+          <ul className="mt-1 flex flex-col text-small">
             {[...mine]
               .sort((a, b) => (a.district ?? 0) - (b.district ?? 0))
               .map((m) => {
@@ -161,13 +177,13 @@ export default function VoteMembers({
                     <span className="flex min-w-0 items-baseline gap-2">
                       {memberLink(m)}
                       <span
-                        className={`whitespace-nowrap font-mono text-xs ${PARTY_COLORS[m.party] ?? "text-ink-lo"}`}
+                        className={`whitespace-nowrap font-mono text-small ${PARTY_COLORS[m.party] ?? "text-ink-lo"}`}
                       >
                         {m.party}
                         {m.district != null ? `-${houseSeatLabel(m.state, m.district)}` : ""}
                       </span>
                     </span>
-                    <span className={`shrink-0 font-mono text-xs ${g?.tone ?? "text-ink-lo"}`}>
+                    <span className={`shrink-0 font-mono text-small ${g?.tone ?? "text-ink-lo"}`}>
                       {g?.label ?? m.position}
                     </span>
                   </li>
@@ -177,14 +193,14 @@ export default function VoteMembers({
         </section>
       )}
       {states.length > 1 && (
-        <label className="flex w-fit max-w-full flex-col gap-1 font-mono text-xs text-ink-min">
+        <label className="flex w-fit max-w-full flex-col gap-1 font-mono text-small text-ink-min">
           State
           <select
             value={state}
             onChange={(e) => setState(e.target.value)}
             // Capped at the column: a 10rem floor ran past an iPhone SE at 200%
             // text (WCAG 1.4.10).
-            className="min-h-11 w-40 max-w-full border border-white/20 bg-surface-base px-2 font-sans text-sm tracking-normal text-ink"
+            className="min-h-11 w-40 max-w-full border border-white/20 bg-surface-base px-2 font-sans text-small tracking-normal text-ink"
           >
             <option value="">All states</option>
             {states.map((s) => (
@@ -201,7 +217,7 @@ export default function VoteMembers({
           aria-expanded={showAll}
           aria-controls={listId}
           onClick={() => setShowAll((v) => !v)}
-          className="min-h-11 w-fit font-mono text-xs text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
+          className="min-h-11 w-fit font-mono text-small text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
         >
           {showAll ? "Hide the names" : `Show all ${members.length} members' votes`}
         </button>
@@ -212,7 +228,7 @@ export default function VoteMembers({
           if (!group.length) return null;
           return (
             <div key={key} className="flex flex-col gap-2">
-              <span className={`font-mono text-xs ${tone}`}>
+              <span className={`font-mono text-small ${tone}`}>
                 <span aria-hidden="true">
                   {label} · {group.length}
                 </span>
@@ -221,7 +237,7 @@ export default function VoteMembers({
                 </span>
               </span>
               {named && (
-                <ul className="flex flex-col gap-1 text-sm">
+                <ul className="flex flex-col gap-1 text-small">
                   {group.map((m) => {
                     const name =
                       m.name ?? (m.firstName ? `${m.firstName} ${m.lastName}` : m.lastName);
@@ -242,7 +258,7 @@ export default function VoteMembers({
                           <span className="text-ink">{name}</span>
                         )}
                         <span
-                          className={`whitespace-nowrap font-mono text-xs ${PARTY_COLORS[m.party] ?? "text-ink-lo"}`}
+                          className={`whitespace-nowrap font-mono text-small ${PARTY_COLORS[m.party] ?? "text-ink-lo"}`}
                         >
                           {m.party}-
                           {m.district != null ? houseSeatLabel(m.state, m.district) : m.state}

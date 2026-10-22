@@ -1,5 +1,6 @@
 "use client";
 
+import HowToRead from "@/components/shared/HowToRead";
 import { useId, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -14,6 +15,11 @@ import StripPoints, {
   stripTop,
   type StripPoint,
 } from "@/components/shared/Strip";
+import CountHistogram, { wholeCounts } from "@/components/shared/CountHistogram";
+import { TYPE } from "@/lib/typeStyles";
+
+/** The page's own member's mark, on a strip and a histogram alike. */
+const MEMBER_MARK = { fill: "var(--ink-hi)", ring: "var(--phos)" };
 
 /** A round mark. Drawn as SVG, not a rounded box: the site's boxes keep
  *  hard corners, and a dot is a data mark, not a box. */
@@ -53,6 +59,30 @@ const JITTER = [10, 4, 16, 7, 13, 1, 19, 10];
 const jitterY = (i: number, size: number) => 12 + JITTER[i % JITTER.length] / 2 + size / 2;
 
 function Strip({ m, memberId }: { m: PeerMeasure; memberId: string }) {
+  if (wholeCounts(m.unit, m.distribution)) {
+    // A whole number: a dot histogram, so ties stand side by side.
+    return (
+      <CountHistogram
+        label={`${m.label}, ${m.peerGroup.label}`}
+        points={m.distribution.map((v, i) => ({
+          id: m.distributionIds[i],
+          name: m.distributionNames[i],
+          detail: m.distributionSeats[i],
+          shown: m.distributionShown[i],
+          rank: m.distributionRanks[i],
+          href: `/politicians/${m.distributionIds[i]}`,
+          value: v,
+        }))}
+        marked={{ [memberId]: MEMBER_MARK }}
+        startId={memberId}
+        tick={
+          m.expected == null || m.expectedShown == null
+            ? null
+            : { value: m.expected, text: m.expectedShown }
+        }
+      />
+    );
+  }
   const max = stripTop(m.axisMax, [...m.distribution, m.value, m.expected]);
   const at = (v: number) => Math.min(100, (v / max) * 100);
   const muted = m.thin;
@@ -128,7 +158,7 @@ function OverTime({ m }: { m: PeerMeasure }) {
   if (!t) return null;
   const marks = t.marks.map((mk, i) => ({ ...mk, x: t.points[i].x, yPct: t.points[i].y }));
   return (
-    <div className="flex flex-wrap items-center gap-2 text-xs text-ink-lo md:col-span-3">
+    <div className="flex flex-wrap items-center gap-2 text-small text-ink-lo md:col-span-3">
       <ChartReadout
         label={`${m.label} over time`}
         marks={marks}
@@ -158,30 +188,27 @@ function Row({ m, memberId, showTable }: { m: PeerMeasure; memberId: string; sho
       aria-labelledby={captionId}
       className="grid grid-cols-1 gap-x-6 gap-y-2 border-t border-white/25 px-4 py-4 [h3+&]:border-t-0 sm:px-6 md:grid-cols-[10rem_minmax(0,1fr)_9rem]"
     >
-      <div className="flex items-baseline justify-between gap-3 md:block">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 md:block">
         <div>
-          <div className="text-[13px] font-semibold text-ink-lo">{m.label}</div>
-          <BigFigure
-            shown={m.shown}
-            className="text-[28px] font-semibold leading-tight text-ink-hi sm:text-[32px]"
-          />
+          <div className={TYPE.kicker}>{m.label}</div>
+          <BigFigure shown={m.shown} className={`${TYPE.figure} text-ink-hi`} />
         </div>
         <p
-          className={`text-right text-[13px] font-semibold md:hidden ${strong ? "text-signal-orange" : "text-ink-lo"}`}
+          className={`text-right text-small font-semibold md:hidden ${strong ? "text-signal-orange" : "text-ink-lo"}`}
         >
           {m.thin ? "" : m.word}
         </p>
       </div>
       <div className="min-w-0">
-        <p className="mb-1 text-sm text-ink">{m.why}</p>
+        <p className="mb-1 text-small text-ink">{m.why}</p>
         <Strip m={m} memberId={memberId} />
       </div>
       <p
-        className={`hidden self-center text-[13px] font-semibold md:block ${strong ? "text-signal-orange" : "text-ink-lo"}`}
+        className={`hidden self-center text-small font-semibold md:block ${strong ? "text-signal-orange" : "text-ink-lo"}`}
       >
         {m.thin ? "" : m.word}
       </p>
-      <figcaption id={captionId} className="text-sm text-ink md:col-span-3">
+      <figcaption id={captionId} className="text-small text-ink md:col-span-3">
         <span className="sr-only">{m.label}: </span>
         {m.thin
           ? `Not enough record yet to compare (${m.record != null && m.key === "breaks" ? `${m.record} party-line votes` : `${m.peerGroup.n} with a figure`}).`
@@ -197,7 +224,7 @@ function Row({ m, memberId, showTable }: { m: PeerMeasure; memberId: string; sho
         </a>
       </figcaption>
       <OverTime m={m} />
-      <details className="group text-sm text-ink-lo md:col-span-3">
+      <details className="group text-small text-ink-lo md:col-span-3">
         <summary className="inline-flex min-h-6 cursor-pointer items-center gap-1 font-semibold text-ink-hi underline-offset-2 hover:underline">
           How this is measured
           <span aria-hidden="true" className="inline-block group-open:rotate-90">
@@ -212,8 +239,8 @@ function Row({ m, memberId, showTable }: { m: PeerMeasure; memberId: string; sho
         </p>
       </details>
       <div className={showTable ? "md:col-span-3" : "sr-only"}>
-        <table className="w-full max-w-md text-sm">
-          <caption className="text-left text-xs text-ink-min">
+        <table className="w-full max-w-md text-small">
+          <caption className="text-left text-small text-ink-min">
             {m.label}:{" "}
             {m.peerGroup.labelOne
               ? `every ${m.peerGroup.labelOne}'s figure`
@@ -221,7 +248,7 @@ function Row({ m, memberId, showTable }: { m: PeerMeasure; memberId: string; sho
             , lowest first
           </caption>
           <thead>
-            <tr className="text-left text-xs text-ink-min">
+            <tr className="text-left text-small text-ink-min">
               <th scope="col" className="py-1 font-semibold">
                 Member
               </th>
@@ -254,7 +281,7 @@ function Row({ m, memberId, showTable }: { m: PeerMeasure; memberId: string; sho
 const SEGMENT_ON = "bg-ink-hi text-surface-base";
 const SEGMENT_OFF = "bg-surface text-ink-hi";
 const SEGMENT =
-  "inline-flex min-h-11 cursor-pointer items-center border border-ink-hi px-3 text-sm font-semibold has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2";
+  "inline-flex min-h-11 cursor-pointer items-center border border-ink-hi px-3 text-small font-semibold has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2";
 
 /**
  * "Where they stand": one row per measure, the member among peers on the
@@ -302,18 +329,14 @@ export default function WhereTheyStand({
   return (
     <section id="where-they-stand" aria-labelledby="where-heading" className="font-sans">
       <div className="flex flex-wrap items-end justify-between gap-3 border-t-[3px] border-ink-hi pt-3">
-        <h2
-          id="where-heading"
-          {...onThisPage("Where they stand")}
-          className="font-display text-[22px] font-semibold text-ink-hi sm:text-[26px]"
-        >
+        <h2 id="where-heading" {...onThisPage("Where they stand")} className={TYPE.section}>
           Where {name} stands
         </h2>
         {/* min-w-0: a fieldset is min-content wide by default, and at 200% text
             the two segments side by side were wider than a phone. */}
         <fieldset className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
           <legend className="sr-only">Compare with</legend>
-          <span aria-hidden="true" className="text-sm text-ink-lo">
+          <span aria-hidden="true" className="text-small text-ink-lo">
             Compared with:
           </span>
           <span className="inline-flex max-w-full flex-wrap">
@@ -343,16 +366,16 @@ export default function WhereTheyStand({
       </div>
 
       {error && !data && (
-        <p className="mt-3 text-sm text-ink-lo">The comparison with peers could not be loaded.</p>
+        <p className="mt-3 text-small text-ink-lo">
+          The comparison with peers could not be loaded.
+        </p>
       )}
       {data && (
         <>
           <div className="mt-4 border border-white/25 border-l-4 border-l-signal-orange bg-surface px-4 py-3 sm:px-6">
-            <p className="text-[13px] font-semibold text-signal-orange">Stands out</p>
-            <p className="font-display text-lg font-semibold leading-snug text-ink-hi">
-              {data.standsOut}
-            </p>
-            <p className="mt-1 text-sm text-ink-lo">{data.standsOutWhy}</p>
+            <p className="text-small font-semibold text-signal-orange">Stands out</p>
+            <p className={TYPE.boxTitle}>{data.standsOut}</p>
+            <p className="mt-1 text-small text-ink-lo">{data.standsOutWhy}</p>
           </div>
           <div className="mt-3 border border-white/25 bg-surface">
             {/* Rows that answer the same question sit under it, once. */}
@@ -360,7 +383,7 @@ export default function WhereTheyStand({
               <div key={m.key}>
                 {m.question !== data.measures[i - 1]?.question && (
                   <h3
-                    className={`px-4 pt-4 font-display text-lg font-semibold text-ink-hi sm:px-6 ${i ? "border-t-2 border-ink-hi/60" : ""}`}
+                    className={`${TYPE.boxTitle} px-4 pt-4 sm:px-6 ${i ? "border-t-2 border-ink-hi/60" : ""}`}
                   >
                     {m.question}
                   </h3>
@@ -369,40 +392,49 @@ export default function WhereTheyStand({
               </div>
             ))}
           </div>
-          <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-lo" aria-hidden="true">
-            <span>
-              <Dot size={6} fill="var(--chart-muted)" className="mr-1 inline-block" />
-              one peer
-            </span>
-            <span>
-              <Dot
-                size={12}
-                fill="var(--ink-hi)"
-                ring="var(--phos)"
-                className="mr-1 inline-block align-middle"
-              />
-              {name}
-            </span>
-            <span>┆ the average for seats like this one, or the peer median</span>
-          </p>
+          {/* The key, and what a row means, for a reader new to the strips;
+              in words, so it is read aloud too (it was an aria-hidden key). */}
+          <HowToRead className="mt-2">
+            <p className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              <span>
+                <Dot size={6} fill="var(--chart-muted)" className="mr-1 inline-block" />
+                one peer
+              </span>
+              <span>
+                <Dot
+                  size={12}
+                  fill="var(--ink-hi)"
+                  ring="var(--phos)"
+                  className="mr-1 inline-block align-middle"
+                />
+                {name}
+              </span>
+              <span>┆ the average for seats like this one, or the peer median</span>
+            </p>
+            <p>
+              Each row is one measure, with {name} among the members compared. Further right is a
+              larger figure. The word beside the row (above, near or below peers) comes from where{" "}
+              {name} falls among them, by a fixed rule; it says how far, not whether that is good.
+            </p>
+          </HowToRead>
           <div className="mt-3 flex flex-wrap gap-2">
             <button
               type="button"
               aria-pressed={showTable}
               onClick={() => setShowTable((v) => !v)}
-              className="min-h-11 border border-ink-hi bg-surface px-3 text-sm font-semibold text-ink-hi hover:bg-white/5"
+              className="min-h-11 border border-ink-hi bg-surface px-3 text-small font-semibold text-ink-hi hover:bg-white/5"
             >
               {showTable ? "Hide the tables" : "Show as a table"}
             </button>
             <Link
               href={`/compare?leftId=${memberId}&leftChamber=${chamber}`}
-              className="inline-flex min-h-11 items-center border border-ink-hi bg-surface px-3 text-sm font-semibold text-ink-hi hover:bg-white/5"
+              className="inline-flex min-h-11 items-center border border-ink-hi bg-surface px-3 text-small font-semibold text-ink-hi hover:bg-white/5"
             >
               Compare with a peer ▸
             </Link>
             <Link
               href="/about/scores#peers"
-              className="inline-flex min-h-11 items-center border border-ink-hi bg-surface px-3 text-sm font-semibold text-ink-hi hover:bg-white/5"
+              className="inline-flex min-h-11 items-center border border-ink-hi bg-surface px-3 text-small font-semibold text-ink-hi hover:bg-white/5"
             >
               How peers are chosen ▸
             </Link>

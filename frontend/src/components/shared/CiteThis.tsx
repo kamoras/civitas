@@ -96,7 +96,7 @@ export default function CiteThis({
   const mounted = useMounted();
   if (!mounted) {
     return (
-      <p className="font-mono text-xs text-ink-min" aria-live="polite">
+      <p className="font-mono text-small text-ink-min" aria-live="polite">
         Preparing the citation…
       </p>
     );

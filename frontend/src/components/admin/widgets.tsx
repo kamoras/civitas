@@ -54,7 +54,7 @@ export function UsageBar({
  *  an empty or zero state, which reads as a finding ("no runs", "0 B",
  *  "unavailable"). The page's error banner says which request failed. */
 export function NotLoaded() {
-  return <p className="text-xs font-mono text-ink-min">Not loaded.</p>;
+  return <p className="text-small font-mono text-ink-min">Not loaded.</p>;
 }
 
 /** Empty-state text for a panel fed by one request: an empty answer is a
@@ -81,7 +81,7 @@ export function Panel({
     <section className={`panel min-w-0 ${className}`} aria-label={title}>
       <TerminalTitlebar title={title}>
         {(live || actions) && (
-          <span className="ml-auto mr-2 flex items-center gap-3 text-xs font-mono text-ink-lo">
+          <span className="ml-auto mr-2 flex items-center gap-3 text-small font-mono text-ink-lo">
             {actions}
             {live && (
               <span>
@@ -114,9 +114,9 @@ export function StatTile({
 }) {
   return (
     <div className="border border-white/[0.07] p-3 min-w-0">
-      <div className="text-xs font-mono text-ink-lo">{label}</div>
-      <div className={`mt-1 font-mono text-xl ${tone}`}>{value}</div>
-      {note && <div className="mt-0.5 text-xs font-mono text-ink-min">{note}</div>}
+      <div className="text-small font-mono text-ink-lo">{label}</div>
+      <div className={`mt-1 font-mono text-section ${tone}`}>{value}</div>
+      {note && <div className="mt-0.5 text-small font-mono text-ink-min">{note}</div>}
     </div>
   );
 }
@@ -137,12 +137,12 @@ export function RankBars({
   const max = Math.max(1, ...entries.map((e) => e.count));
   return (
     <div className="min-w-0">
-      <div className="text-ink-lo text-xs font-mono mb-1.5">{title}</div>
+      <div className="text-ink-lo text-small font-mono mb-1.5">{title}</div>
       <div className="space-y-1">
         {entries.map((e) => (
           <div key={e.name} className="flex items-center gap-2">
             <span
-              className={`text-ink-lo text-xs font-mono ${labelWidth} shrink-0 [overflow-wrap:anywhere]`}
+              className={`text-ink-lo text-small font-mono ${labelWidth} shrink-0 [overflow-wrap:anywhere]`}
             >
               {e.name}
             </span>
@@ -158,7 +158,7 @@ export function RankBars({
                 />
               </div>
             </div>
-            <span className="text-ink-lo text-xs font-mono tabular-nums w-12 text-right shrink-0">
+            <span className="text-ink-lo text-small font-mono tabular-nums w-12 text-right shrink-0">
               {e.count.toLocaleString("en-US")}
             </span>
           </div>
@@ -182,7 +182,7 @@ export function Segmented<T extends string | number>({
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2" role="group" aria-label={label}>
-      <span className="text-xs font-mono text-ink-min">{label}</span>
+      <span className="text-small font-mono text-ink-min">{label}</span>
       <div className="flex gap-1">
         {options.map((o) => (
           <button
@@ -190,7 +190,7 @@ export function Segmented<T extends string | number>({
             type="button"
             onClick={() => onChange(o.value)}
             aria-pressed={value === o.value}
-            className={`px-2 py-1 text-xs font-mono border transition-colors ${
+            className={`px-2 py-1 text-small font-mono border transition-colors ${
               value === o.value
                 ? "border-ink-lo text-ink-hi"
                 : "border-white/[0.07] text-ink-min hover:text-ink-lo"

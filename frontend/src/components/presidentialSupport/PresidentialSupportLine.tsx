@@ -1,7 +1,6 @@
 import { usableRecord } from "@/lib/ssrPayload";
 import { pct } from "@/lib/presidentialSupport";
 import type { MemberSupport } from "@/types/presidentialSupport";
-import { labelCase } from "@/lib/controlStyles";
 
 const LEAD = "With the president's stated position";
 
@@ -41,9 +40,7 @@ export default async function PresidentialSupportLine({ memberId }: { memberId: 
   return (
     // Written in sentence case with the count set bright: on a phone it reads
     // as a sentence (it was three lines of 12px caps), and caps from 640px up.
-    <p
-      className={`border border-white/15 bg-surface px-3 py-2 font-mono text-ink-lo ${labelCase(LEAD)}`}
-    >
+    <p className={`border border-white/15 bg-surface px-3 py-2 text-small text-ink-lo`}>
       {LEAD}:{" "}
       <span className="text-ink-hi">
         {data.withPresident} of {data.votes}

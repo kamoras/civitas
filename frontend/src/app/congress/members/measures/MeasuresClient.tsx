@@ -15,6 +15,8 @@ import StripPoints, {
   stripTop,
   type StripPoint,
 } from "@/components/shared/Strip";
+import CountHistogram, { wholeCounts } from "@/components/shared/CountHistogram";
+import { TYPE } from "@/lib/typeStyles";
 
 const PARTY_FILL: Record<string, string> = {
   D: "var(--dem-blue)",
@@ -39,6 +41,31 @@ function Mark({ party, size = 7 }: { party: string; size?: number }) {
   );
 }
 
+/** Mark's shape as an SVG child centred at (cx, cy): a histogram draws
+ *  every member in one SVG. */
+function PartyShape({
+  party,
+  cx,
+  cy,
+  size,
+}: {
+  party: string;
+  cx: number;
+  cy: number;
+  size: number;
+}) {
+  const fill = PARTY_FILL[party] ?? "var(--ind-purple)";
+  const r = size / 2;
+  if (party === "D") return <circle cx={cx} cy={cy} r={r} fill={fill} />;
+  if (party === "R") return <rect x={cx - r} y={cy - r} width={size} height={size} fill={fill} />;
+  return (
+    <polygon
+      points={`${cx},${cy - r} ${cx + r},${cy} ${cx},${cy + r} ${cx - r},${cy}`}
+      fill={fill}
+    />
+  );
+}
+
 const JITTER = [10, 4, 16, 7, 13, 1, 19, 10, 6, 14];
 
 function Callout({
@@ -53,8 +80,8 @@ function Callout({
   if (points.length === 0) return null;
   return (
     <div>
-      <p className="text-[13px] font-semibold text-ink-lo">{title}</p>
-      <ul className="mt-1 text-sm">
+      <p className="text-small font-semibold text-ink-lo">{title}</p>
+      <ul className="mt-1 text-small">
         {points.map((p) => (
           <li key={p.id}>
             <Link
@@ -74,6 +101,7 @@ function Callout({
 }
 
 function ChamberStrip({ m, house }: { m: ChamberMeasure; house: boolean }) {
+  const parties = new Map(m.points.map((p) => [p.id, p.party]));
   const max = stripTop(m.axisMax, [...m.points.map((p) => p.value), m.median]);
   const at = (v: number) => Math.min(100, (v / max) * 100);
   // A mark is 7px; its centre is 3.5px below its jittered top.
@@ -94,10 +122,10 @@ function ChamberStrip({ m, house }: { m: ChamberMeasure; house: boolean }) {
       className="border-t border-white/25 px-4 py-5 first:border-t-0 sm:px-6"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id={`m-${m.key}`} className="font-display text-[22px] font-semibold text-ink-hi">
+        <h2 id={`m-${m.key}`} className={TYPE.section}>
           {m.label}
         </h2>
-        <p className="text-sm text-ink-lo">
+        <p className="text-small text-ink-lo">
           {m.median != null && <>Median {m.medianShown} · </>}
           {m.n} members ·{" "}
           <a
@@ -110,31 +138,64 @@ function ChamberStrip({ m, house }: { m: ChamberMeasure; house: boolean }) {
           </a>
         </p>
       </div>
-      <p className="max-w-prose text-sm text-ink">{m.why}</p>
+      <p className="max-w-prose text-small text-ink">{m.why}</p>
       {/* The table below is the full text form of these strips. */}
-      <StripPoints
-        label={`${m.label}, every ${house ? "representative" : "senator"}`}
-        points={points}
-        className="mt-2 h-14"
-      >
-        <div className="absolute inset-x-0 top-[30px] h-px bg-white/40" />
-        {m.points.map((p, i) => (
-          <span
-            key={p.id}
-            className="absolute flex -translate-x-1/2"
-            style={{ left: `${at(p.value)}%`, top: `${top(i)}px` }}
-          >
-            <Mark party={p.party} />
-          </span>
-        ))}
-        {m.median != null && (
-          <span
-            className="absolute top-1 h-12 -translate-x-1/2 border-l-2 border-ink-hi"
-            style={{ left: `${at(m.median)}%` }}
+      {wholeCounts(
+        m.unit,
+        m.points.map((p) => p.value)
+      ) ? (
+        <div className="mt-2">
+          <CountHistogram
+            label={`${m.label}, every ${house ? "representative" : "senator"}`}
+            // Ties by party, so each column's stack splits into its parties.
+            points={[...m.points]
+              .sort((a, b) => a.value - b.value || a.party.localeCompare(b.party))
+              .map((p) => ({
+                id: p.id,
+                name: p.name,
+                detail: partySeat(p, house),
+                shown: p.shown,
+                rank: p.rank,
+                href: `/politicians/${p.id}`,
+                value: p.value,
+              }))}
+            tick={
+              m.median != null && m.medianShown
+                ? { value: m.median, text: `median ${m.medianShown}` }
+                : null
+            }
+            dot={(p, cx, cy, d) => (
+              <PartyShape party={parties.get(p.id) ?? ""} cx={cx} cy={cy} size={d} />
+            )}
           />
-        )}
-      </StripPoints>
-      <StripAxis start={m.axisStartShown} end={m.axisEndShown} />
+        </div>
+      ) : (
+        <>
+          <StripPoints
+            label={`${m.label}, every ${house ? "representative" : "senator"}`}
+            points={points}
+            className="mt-2 h-14"
+          >
+            <div className="absolute inset-x-0 top-[30px] h-px bg-white/40" />
+            {m.points.map((p, i) => (
+              <span
+                key={p.id}
+                className="absolute flex -translate-x-1/2"
+                style={{ left: `${at(p.value)}%`, top: `${top(i)}px` }}
+              >
+                <Mark party={p.party} />
+              </span>
+            ))}
+            {m.median != null && (
+              <span
+                className="absolute top-1 h-12 -translate-x-1/2 border-l-2 border-ink-hi"
+                style={{ left: `${at(m.median)}%` }}
+              />
+            )}
+          </StripPoints>
+          <StripAxis start={m.axisStartShown} end={m.axisEndShown} />
+        </>
+      )}
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Callout title="Furthest above expected" points={m.mostAbove} house={house} />
         <Callout title="Furthest below expected" points={m.mostBelow} house={house} />
@@ -179,7 +240,7 @@ function sortValue(m: ChamberMember, key: SortKey): string | number | null {
 }
 
 // max-w-full: at 200% text the seat-lean options are wider than a phone.
-const SELECT = "min-h-11 max-w-full border border-white/40 bg-surface px-2 text-base text-ink-hi";
+const SELECT = "min-h-11 max-w-full border border-white/40 bg-surface px-2 text-body text-ink-hi";
 
 function FactTable({ members, house }: { members: ChamberMember[]; house: boolean }) {
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "name", dir: 1 });
@@ -209,17 +270,14 @@ function FactTable({ members, house }: { members: ChamberMember[]; house: boolea
 
   return (
     <section aria-labelledby="facts-heading" className="mt-10">
-      <h2
-        id="facts-heading"
-        className="border-t-[3px] border-ink-hi pt-3 font-display text-[22px] font-semibold text-ink-hi sm:text-[26px]"
-      >
+      <h2 id="facts-heading" className={`${TYPE.section} border-t-[3px] border-ink-hi pt-3`}>
         Every member, the plain facts
       </h2>
-      <p className="mt-1 text-sm text-ink-lo">
+      <p className="mt-1 text-small text-ink-lo">
         Alphabetical by default. Sort by any column: a sort is a fact, not a rank.
       </p>
       <div className="mt-3 flex flex-wrap gap-3">
-        <label className="flex min-w-0 max-w-full flex-col text-sm text-ink-lo">
+        <label className="flex min-w-0 max-w-full flex-col text-small text-ink-lo">
           State
           <select value={state} onChange={(e) => setState(e.target.value)} className={SELECT}>
             <option value="">Every state</option>
@@ -230,7 +288,7 @@ function FactTable({ members, house }: { members: ChamberMember[]; house: boolea
             ))}
           </select>
         </label>
-        <label className="flex min-w-0 max-w-full flex-col text-sm text-ink-lo">
+        <label className="flex min-w-0 max-w-full flex-col text-small text-ink-lo">
           Party
           <select value={party} onChange={(e) => setParty(e.target.value)} className={SELECT}>
             <option value="">Every party</option>
@@ -240,7 +298,7 @@ function FactTable({ members, house }: { members: ChamberMember[]; house: boolea
           </select>
         </label>
         {house && (
-          <label className="flex min-w-0 max-w-full flex-col text-sm text-ink-lo">
+          <label className="flex min-w-0 max-w-full flex-col text-small text-ink-lo">
             Seat lean (Cook PVI)
             <select value={lean} onChange={(e) => setLean(e.target.value)} className={SELECT}>
               <option value="">Every seat</option>
@@ -253,14 +311,14 @@ function FactTable({ members, house }: { members: ChamberMember[]; house: boolea
           </label>
         )}
       </div>
-      <p className="mt-2 text-sm text-ink-lo" aria-live="polite">
+      <p className="mt-2 text-small text-ink-lo" aria-live="polite">
         {shown.length} of {members.length} members
       </p>
       <ScrollRegion
         label="Every member, by the numbers"
         className="mt-2 border border-white/25 bg-surface"
       >
-        <table className="w-full min-w-[44rem] text-sm">
+        <table className="w-full min-w-[44rem] text-small">
           <thead>
             <tr className="border-b border-white/25 text-left">
               {COLUMNS.map((c) => {
@@ -349,10 +407,8 @@ export default function MeasuresClient({
       >
         <div className="mx-auto max-w-6xl">
           <SectionTabs section="congress" active="measures" />
-          <h1 className="font-display text-[30px] font-semibold leading-tight sm:text-[44px]">
-            {name} by the numbers
-          </h1>
-          <p className="mt-2 max-w-2xl text-[17px] text-ink">
+          <h1 className={TYPE.title}>{name} by the numbers</h1>
+          <p className="mt-2 max-w-2xl text-body text-ink">
             Four plain measures from FEC filings, roll calls and Congress.gov, every member at once.
             No rank and no overall score: each member page shows where that member stands among
             colleagues in the same party.
@@ -363,7 +419,7 @@ export default function MeasuresClient({
                 key={c}
                 href={`${MEASURES_HREF}?chamber=${c}`}
                 aria-current={c === chamber ? "page" : undefined}
-                className={`-ml-px inline-flex min-h-11 items-center border px-4 text-sm font-semibold first:ml-0 ${c === chamber ? TAB_ON : TAB_OFF}`}
+                className={`-ml-px inline-flex min-h-11 items-center border px-4 text-small font-semibold first:ml-0 ${c === chamber ? TAB_ON : TAB_OFF}`}
               >
                 {c === "senate" ? "Senate" : "House"}
               </Link>
@@ -373,7 +429,7 @@ export default function MeasuresClient({
             <p className="mt-6 text-ink-lo">The measures could not be loaded. Try again shortly.</p>
           ) : (
             <>
-              <p className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink-lo">
+              <p className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-small text-ink-lo">
                 <span>
                   <Mark party="D" /> Democrat
                 </span>

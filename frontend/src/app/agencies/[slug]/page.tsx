@@ -21,6 +21,7 @@ import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
 import type { AgencyDetail } from "@/types/agency";
 import type { Figure as BoxFigure } from "@/types/figure";
+import { TYPE } from "@/lib/typeStyles";
 
 type PageProps = { params: Promise<{ slug: string }> };
 
@@ -40,9 +41,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 // is not "none" (the outage-or-incomplete-is-not-none rule).
 const LINKING_TAIL = "Older documents are still being linked to the agency that issued them.";
 
-const H2 = "font-display text-xl font-semibold text-ink-hi";
+const H2 = TYPE.section;
 const MORE =
-  "mt-3 inline-flex min-h-6 items-center font-mono text-xs text-signal-cyan hover:text-phos";
+  "mt-3 inline-flex min-h-6 items-center font-mono text-small text-signal-cyan hover:text-phos";
 
 function paragraphs(text: string | null): string[] {
   return (text ?? "")
@@ -54,9 +55,9 @@ function paragraphs(text: string | null): string[] {
 function Figure({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
     <div className="min-w-0">
-      <dt className="font-mono text-xs text-ink-min">{label}</dt>
-      <dd className="mt-1 font-display text-2xl font-semibold tabular-nums text-ink-hi">{value}</dd>
-      {note && <dd className="text-xs text-ink-lo">{note}</dd>}
+      <dt className="font-mono text-small text-ink-min">{label}</dt>
+      <dd className={`${TYPE.section} mt-1 tabular-nums`}>{value}</dd>
+      {note && <dd className="text-small text-ink-lo">{note}</dd>}
     </div>
   );
 }
@@ -70,7 +71,7 @@ function BudgetBlock({ a }: { a: AgencyDetail }) {
   const LINK = "text-signal-cyan underline underline-offset-2 hover:text-phos";
   if (status === "part_of" && a.budgetOf) {
     return (
-      <p className="mt-3 text-sm text-ink">
+      <p className="mt-3 text-small text-ink">
         Its spending is reported within the budget of the{" "}
         <Link href={agencyHref(a.budgetOf.slug)} className={LINK}>
           {a.budgetOf.name}
@@ -81,22 +82,22 @@ function BudgetBlock({ a }: { a: AgencyDetail }) {
   }
   if (status === "not_read" || !b) {
     return status === "unmatched" ? (
-      <div className="mt-3 text-sm text-ink-lo">
+      <div className="mt-3 text-small text-ink-lo">
         <p>
           No agency in USAspending.gov&apos;s list matched this one by name closely enough to link
           the two, so no budget is shown rather than a guessed one.
         </p>
         {a.unmatchedBudgets.length > 0 && (
           <details className="mt-2" data-share-exclude>
-            <summary className="inline-flex min-h-6 cursor-pointer items-center font-mono text-xs text-ink-min hover:text-phos">
+            <summary className="inline-flex min-h-6 cursor-pointer items-center font-mono text-small text-ink-min hover:text-phos">
               USAspending agencies left unlinked: {a.unmatchedBudgets.length}
             </summary>
-            <p className="mt-1 text-xs leading-relaxed">{a.unmatchedBudgets.join("; ")}.</p>
+            <p className="mt-1 text-small leading-relaxed">{a.unmatchedBudgets.join("; ")}.</p>
           </details>
         )}
       </div>
     ) : (
-      <p className="mt-3 text-sm text-ink-lo">
+      <p className="mt-3 text-small text-ink-lo">
         USAspending.gov&apos;s budgets haven&apos;t been read yet, so none is shown. That is a gap
         on Civitas, not an agency without a budget.
       </p>
@@ -107,19 +108,19 @@ function BudgetBlock({ a }: { a: AgencyDetail }) {
   return (
     <>
       {status === "none" ? (
-        <p className="mt-3 text-sm text-ink-lo">
+        <p className="mt-3 text-small text-ink-lo">
           USAspending.gov lists {b.name} but reports no budget figures for it in any fiscal year.
         </p>
       ) : (
         <>
           {status === "retired" && (
-            <p className="mt-3 text-sm text-ink-lo">
+            <p className="mt-3 text-small text-ink-lo">
               USAspending.gov stopped listing {b.name} on {readOn(b.retiredAt)}. Its last reported
               figures:
             </p>
           )}
           {status === "not_yet_reported" && b.fiscalYear && (
-            <p className="mt-3 text-sm text-ink-lo">
+            <p className="mt-3 text-small text-ink-lo">
               FY{b.fiscalYear} not yet reported by USAspending.gov. The latest year it has:
             </p>
           )}
@@ -150,12 +151,12 @@ function BudgetBlock({ a }: { a: AgencyDetail }) {
       )}
       {b.byYear && b.byYear.length > 1 && (
         <div className="mt-5">
-          <p className="font-mono text-xs text-ink-min">Budgetary resources by fiscal year</p>
+          <p className="font-mono text-small text-ink-min">Budgetary resources by fiscal year</p>
           <ol className="mt-2 space-y-1.5">
             {b.byYear.map((y) => (
               <li
                 key={y.fiscalYear}
-                className="grid grid-cols-[minmax(0,7.5rem)_minmax(2rem,1fr)_auto] items-center gap-2 text-xs sm:grid-cols-[minmax(0,11rem)_minmax(2rem,1fr)_auto]"
+                className="grid grid-cols-[minmax(0,7.5rem)_minmax(2rem,1fr)_auto] items-center gap-2 text-small sm:grid-cols-[minmax(0,11rem)_minmax(2rem,1fr)_auto]"
               >
                 <span className="font-mono text-ink-lo">
                   {fiscalYearLabel(y.fiscalYear, y.throughPeriod)}
@@ -228,7 +229,7 @@ function Overview({ a }: { a: AgencyDetail }) {
       {/* The grid's heading row, drawn here so the share button sits beside
           it rather than on a row of its own under the boxes. */}
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 pb-1.5">
-        <h2 id="overview-heading" className="font-display text-xl font-semibold text-ink-hi">
+        <h2 id="overview-heading" className={TYPE.section}>
           At a glance
         </h2>
         <ShareSectionButton label={`${a.name} at a glance`} />
@@ -259,7 +260,7 @@ function Overview({ a }: { a: AgencyDetail }) {
             children: (
               <>
                 {docs.linking && (
-                  <p className="text-xs leading-relaxed text-ink-lo">
+                  <p className="text-small leading-relaxed text-ink-lo">
                     Counts so far: documents stored before agencies were read are still being linked
                     to the agency that issued them ({docs.linking.linked.toLocaleString("en-US")} of{" "}
                     {docs.linking.total.toLocaleString("en-US")} linked).
@@ -362,7 +363,7 @@ export default async function AgencyPage({ params }: PageProps) {
         <Navbar />
         <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
           <div className="mx-auto max-w-5xl">
-            <nav aria-label="Breadcrumb" className="mb-4 text-sm text-ink-lo">
+            <nav aria-label="Breadcrumb" className="mb-4 text-small text-ink-lo">
               <Link href="/agencies" className="hover:text-phos">
                 Agencies
               </Link>
@@ -413,7 +414,7 @@ export default async function AgencyPage({ params }: PageProps) {
                     )}
                   </>
                 ) : (
-                  <p className="mt-2 text-sm text-ink-lo">
+                  <p className="mt-2 text-small text-ink-lo">
                     {docs.linking
                       ? `None linked to this agency yet. ${LINKING_TAIL}`
                       : "No comment period of this agency is open on Civitas right now."}
@@ -428,7 +429,7 @@ export default async function AgencyPage({ params }: PageProps) {
                 {docs.proposedRules.length > 0 ? (
                   <AgencyDocList docs={docs.proposedRules} today={today} />
                 ) : (
-                  <p className="mt-2 text-sm text-ink-lo">
+                  <p className="mt-2 text-small text-ink-lo">
                     {docs.linking
                       ? `None linked to this agency yet. ${LINKING_TAIL}`
                       : "None on Civitas."}
@@ -443,7 +444,7 @@ export default async function AgencyPage({ params }: PageProps) {
                 {docs.finalRules.length > 0 ? (
                   <AgencyDocList docs={docs.finalRules} today={today} />
                 ) : (
-                  <p className="mt-2 text-sm text-ink-lo">
+                  <p className="mt-2 text-small text-ink-lo">
                     {docs.linking
                       ? `None linked to this agency yet. ${LINKING_TAIL}`
                       : "None on Civitas."}
@@ -456,16 +457,16 @@ export default async function AgencyPage({ params }: PageProps) {
                   <h2 id="issues-heading" className={H2}>
                     In the Action Center
                   </h2>
-                  <p className="mt-1 text-xs text-ink-min">
+                  <p className="mt-1 text-small text-ink-min">
                     Issues that cite one of its documents, newest first
                   </p>
                   <ul className="divide-y divide-white/[0.07]">
                     {a.actionIssues.map((i) => (
                       <li key={i.id} className="py-3">
-                        <p className="font-mono text-xs text-ink-min">{readOn(i.date)}</p>
+                        <p className="font-mono text-small text-ink-min">{readOn(i.date)}</p>
                         <Link
                           href={`/issue/${i.id}`}
-                          className="mt-1 block text-sm leading-snug text-ink-hi hover:text-phos"
+                          className="mt-1 block text-small leading-snug text-ink-hi hover:text-phos"
                         >
                           {i.title}
                         </Link>
@@ -480,12 +481,12 @@ export default async function AgencyPage({ params }: PageProps) {
                   Executive orders naming it
                 </h2>
                 {eos === null ? (
-                  <p className="mt-2 text-sm text-ink-lo">
+                  <p className="mt-2 text-small text-ink-lo">
                     The search index couldn&apos;t be asked just now.
                   </p>
                 ) : eos.items.length > 0 ? (
                   <>
-                    <p className="mt-1 text-xs text-ink-min">
+                    <p className="mt-1 text-small text-ink-min">
                       {eos.count}
                       {eos.capped ? "+" : ""} order{eos.count === 1 ? "" : "s"} whose text says
                       &ldquo;
@@ -494,7 +495,7 @@ export default async function AgencyPage({ params }: PageProps) {
                     <AgencyDocList docs={eos.items} today={today} />
                   </>
                 ) : (
-                  <p className="mt-2 text-sm text-ink-lo">
+                  <p className="mt-2 text-small text-ink-lo">
                     No executive order on Civitas names it.
                   </p>
                 )}
@@ -502,7 +503,7 @@ export default async function AgencyPage({ params }: PageProps) {
             </div>
 
             {docs.total > 0 && (
-              <Link href={agencyDocumentsHref(a.slug)} className={`${MORE} mt-8 text-sm`}>
+              <Link href={agencyDocumentsHref(a.slug)} className={`${MORE} mt-8 text-small`}>
                 [Search all {docs.total.toLocaleString("en-US")} of its documents in Explore] →
               </Link>
             )}
@@ -513,7 +514,7 @@ export default async function AgencyPage({ params }: PageProps) {
                   {a.children.length > 0 ? "Sub-agencies" : "Part of"}
                 </h2>
                 {a.parent && (
-                  <p className="mt-2 text-sm text-ink">
+                  <p className="mt-2 text-small text-ink">
                     Part of the{" "}
                     <Link
                       href={agencyHref(a.parent.slug)}
@@ -533,11 +534,11 @@ export default async function AgencyPage({ params }: PageProps) {
                       >
                         <Link
                           href={agencyHref(c.slug)}
-                          className="text-sm text-ink-hi hover:text-phos"
+                          className="text-small text-ink-hi hover:text-phos"
                         >
                           {c.name}
                         </Link>
-                        <span className="shrink-0 font-mono text-xs tabular-nums text-ink-min">
+                        <span className="shrink-0 font-mono text-small tabular-nums text-ink-min">
                           {c.documents > 0 ? c.documents.toLocaleString("en-US") : "none"}
                         </span>
                       </li>

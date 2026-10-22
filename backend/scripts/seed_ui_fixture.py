@@ -173,11 +173,40 @@ def seed(db) -> None:
     db.commit()
 
 
+def seed_election_map(db) -> None:
+    """The election map (/elections/map), built by its own code (forecast.
+    build) from the races above, so the Senate and House maps are audited
+    with tiles. Wikipedia is not read: the national figure is a fictional
+    one written as the last good build's (the page says it was kept), and
+    every seat says its polls could not be read. Only while the map is
+    shown (the campaign); otherwise the page's own hidden state is
+    audited."""
+    from app.atomic_write import write_text_atomic
+    from app.election_phase import CAMPAIGN, active_election
+    from app.forecast import build as map_build
+    from app.time_utils import utcnow
+
+    election = active_election(db)
+    if election.phase != CAMPAIGN:
+        return
+    path = pathlib.Path(map_build.map_path())
+    path.parent.mkdir(parents=True, exist_ok=True)
+    now = utcnow().isoformat(timespec="seconds") + "Z"
+    write_text_atomic(path, json.dumps({"electionDay": election.election_day.isoformat(), "national": {
+        "margin": 1.0, "label": map_build.margin_label(1.0), "averages": [], "updated": now[:10],
+        "article": "Generic ballot (fictional)", "revid": 0, "timestamp": now, "url": "",
+    }}))
+    data = map_build.build(db, None)
+    if data is not None:
+        write_text_atomic(path, json.dumps(data))
+
+
 def main() -> None:
     init_db()
     db = SessionLocal()
     try:
         seed(db)
+        seed_election_map(db)
     finally:
         db.close()
     print("seeded")

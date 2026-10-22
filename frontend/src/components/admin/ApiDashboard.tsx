@@ -47,7 +47,7 @@ export function ApiDashboard({ token }: { token: string }) {
       <Segmented label="Range" options={RANGE_OPTIONS} value={range} onChange={setRange} />
 
       {failed && (
-        <p role="alert" className="text-xs font-mono text-signal-red">
+        <p role="alert" className="text-small font-mono text-signal-red">
           API usage couldn&apos;t be loaded.
         </p>
       )}
@@ -109,10 +109,10 @@ export function ApiDashboard({ token }: { token: string }) {
 
       <Panel title="By endpoint">
         {usage && usage.byEndpoint.length === 0 ? (
-          <p className="text-xs font-mono text-ink-min">No API requests in this range.</p>
+          <p className="text-small font-mono text-ink-min">No API requests in this range.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-xs font-mono">
+            <table className="w-full text-small font-mono">
               <caption className="sr-only">
                 Public API requests by endpoint, last {range} days
               </caption>
@@ -169,10 +169,10 @@ export function ApiDashboard({ token }: { token: string }) {
 
       <Panel title="Why requests were rejected">
         {usage && usage.rejections.length === 0 ? (
-          <p className="text-xs font-mono text-ink-min">No invalid requests in this range.</p>
+          <p className="text-small font-mono text-ink-min">No invalid requests in this range.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-xs font-mono">
+            <table className="w-full text-small font-mono">
               <caption className="sr-only">
                 Invalid public API requests by parameter and rule, last {range} days
               </caption>
@@ -214,7 +214,7 @@ export function ApiDashboard({ token }: { token: string }) {
         )}
       </Panel>
 
-      <p className="text-ink-min text-xs font-mono">
+      <p className="text-ink-min text-small font-mono">
         Counted per day, endpoint, channel and status only (and for an invalid request, the
         parameter and the rule, never the value sent): nothing about the caller (no IP, no hash, no
         User-Agent). None of this is in the visitor figures on the Traffic tab.

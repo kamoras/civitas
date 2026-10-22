@@ -81,8 +81,8 @@ export default async function PresidentsPage() {
               // sit under the name. At 200% text it can't, so it scrolls in
               // its own box rather than widening the page (WCAG 1.4.10).
               <ScrollRegion label="Every president, with the historians' rank">
-                <table className="w-full border border-white/15 text-left text-sm">
-                  <caption className="px-3 py-2 text-left text-sm text-ink-lo">
+                <table className="w-full border border-white/15 text-left text-small">
+                  <caption className="px-3 py-2 text-left text-small text-ink-lo">
                     Historians&apos; rank: C-SPAN Presidential Historians Survey
                     {presidents[0]?.historiansEdition
                       ? ` (${presidents[0].historiansEdition})`
@@ -90,7 +90,7 @@ export default async function PresidentsPage() {
                     , their ranking by total points among {presidents[0]?.historiansRated ?? "the"}{" "}
                     rated presidencies. A sitting or just-departed president is not yet rated.
                   </caption>
-                  <thead className="border-y border-white/15 font-mono text-xs text-ink-min">
+                  <thead className="border-y border-white/15 font-mono text-small text-ink-min">
                     <tr>
                       <th scope="col" className="px-3 py-2 font-normal">
                         President
@@ -113,7 +113,7 @@ export default async function PresidentsPage() {
                           >
                             {p.name}
                           </Link>
-                          <span className="block text-xs text-ink-lo">
+                          <span className="block text-small text-ink-lo">
                             {ordinal(p.number)} · {presidentParty(p.party).label}
                           </span>
                         </th>

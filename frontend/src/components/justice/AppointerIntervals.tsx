@@ -7,6 +7,7 @@ import ChartReadout from "@/components/shared/ChartReadout";
 import { MARK_ATTR } from "@/types/readout";
 import { SHARE_SECTION_ATTR, shareMetaAttrs } from "@/lib/shareImage";
 import type { JusticeFigures } from "@/types/justice";
+import { TYPE } from "@/lib/typeStyles";
 
 /** The axis, in points either way: the sitting justices' estimates fall
  *  within +-20 and their 95% intervals mostly within +-35
@@ -43,11 +44,11 @@ export default function AppointerIntervals({
       <h2
         id="appointer-heading"
         {...onThisPage("Under the appointing president")}
-        className="text-[19px] font-semibold text-ink-hi"
+        className={TYPE.section}
       >
         Votes for the government under the appointing president
       </h2>
-      <p className="text-sm text-ink">
+      <p className="text-small text-ink">
         Asks whether a justice sided with the federal government more while the appointing
         president&apos;s administration argued its cases.
       </p>
@@ -67,7 +68,7 @@ export default function AppointerIntervals({
                 className="grid grid-cols-1 items-center gap-x-2 sm:grid-cols-[minmax(0,7.5rem)_minmax(0,1fr)]"
               >
                 <span
-                  className={`truncate text-xs ${mine ? "font-semibold text-ink-hi" : "text-ink-lo"}`}
+                  className={`truncate text-small ${mine ? "font-semibold text-ink-hi" : "text-ink-lo"}`}
                 >
                   {r.name}
                 </span>
@@ -88,7 +89,7 @@ export default function AppointerIntervals({
               </div>
             );
           })}
-          <div className="grid grid-cols-1 gap-x-2 text-xs text-ink-min sm:grid-cols-[minmax(0,7.5rem)_minmax(0,1fr)]">
+          <div className="grid grid-cols-1 gap-x-2 text-small text-ink-min sm:grid-cols-[minmax(0,7.5rem)_minmax(0,1fr)]">
             <span className="hidden sm:block" />
             <span className="flex justify-between">
               <span>−{AXIS_POINTS}</span>
@@ -101,7 +102,7 @@ export default function AppointerIntervals({
             </span>
           </div>
         </ChartReadout>
-        <figcaption id="appointer-caption" className="text-sm text-ink">
+        <figcaption id="appointer-caption" className="text-small text-ink">
           {appointer.sentence}
         </figcaption>
         <div className="sr-only">
@@ -130,7 +131,7 @@ export default function AppointerIntervals({
           </table>
         </div>
       </figure>
-      <p className="text-sm text-ink-lo">
+      <p className="text-small text-ink-lo">
         Not a measure of loyalty: a justice&apos;s years under the appointing president are always
         the first, and same-length windows later in a career show differences about as large.{" "}
         <a href={JUSTICE_RESEARCH_URL} className="text-phos underline underline-offset-2">

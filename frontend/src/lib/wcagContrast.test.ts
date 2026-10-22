@@ -321,6 +321,17 @@ function suite(theme: keyof typeof THEMES) {
       );
     });
 
+    it("the dot histogram's marks (shared/CountHistogram): peers, party shapes, rings", () => {
+      check([
+        "var(--chart-muted)",
+        "var(--ink-hi)",
+        "var(--phos)",
+        "var(--dem-blue)",
+        "var(--rep-red)",
+        "var(--ind-purple)",
+      ]);
+    });
+
     it("the categorical series and run status", () => {
       check([...SERIES, ...Object.values(STATUS)]);
     });

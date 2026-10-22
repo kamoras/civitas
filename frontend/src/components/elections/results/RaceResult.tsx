@@ -20,6 +20,7 @@ import { safeHref } from "@/lib/formatting";
 import type { LiveRaceResult } from "@/types/election";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { SHARE_SECTION_ATTR, shareMetaAttrs } from "@/lib/shareImage";
+import { TYPE } from "@/lib/typeStyles";
 
 /** Where the count stands, in the state's own words: leading, tied, or no
  * votes yet — with "official count" once the state lists it so, and "not
@@ -100,16 +101,13 @@ export function RaceResultCard({
       {...shareMetaAttrs({ source: result.sourceName, asOf: result.fetchedAt, scaleMax: null })}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <Heading
-          id={`result-${result.raceId}-title`}
-          className="font-display text-xl font-semibold text-ink-hi"
-        >
+        <Heading id={`result-${result.raceId}-title`} className={TYPE.section}>
           {result.office === "S"
             ? `U.S. Senate${result.isSpecial ? " (special)" : ""}`
             : raceLabel(result)}
         </Heading>
         <span className="flex items-center gap-2">
-          <span className={`border px-2 py-0.5 font-mono text-xs ${tag.className}`}>
+          <span className={`border px-2 py-0.5 font-mono text-small ${tag.className}`}>
             {tag.text}
           </span>
           <ShareSectionButton
@@ -117,7 +115,7 @@ export function RaceResultCard({
           />
         </span>
       </div>
-      <p className="mt-1 font-mono text-xs text-ink-min">
+      <p className="mt-1 font-mono text-small text-ink-min">
         {[
           reporting,
           `${result.votesCounted.toLocaleString("en-US")} votes`,
@@ -139,10 +137,8 @@ export function RaceResultCard({
             <span className="min-w-0">
               {/* Wraps, never cut short: the 14rem column cut a long
                   hyphenated surname short at 320px. */}
-              <span className="block break-words font-display text-base font-semibold text-ink-hi">
-                {c.name}
-              </span>
-              <span className={`font-mono text-xs ${partyTextClass(c.party)}`}>
+              <span className={`${TYPE.boxTitle} block break-words`}>{c.name}</span>
+              <span className={`font-mono text-small ${partyTextClass(c.party)}`}>
                 {c.party ?? asLabel(PARTY_NOT_GIVEN)}
               </span>
             </span>
@@ -155,16 +151,16 @@ export function RaceResultCard({
                 style={{ width: `${c.pct ?? 0}%`, backgroundColor: partyBarColor(c.party) }}
               />
             </span>
-            <span className="text-right font-display text-lg font-semibold tabular-nums text-ink-hi">
+            <span className={`${TYPE.boxTitle} text-right tabular-nums`}>
               {c.pct != null ? `${c.pct.toFixed(1)}%` : "—"}
             </span>
-            <span className="hidden text-right font-mono text-xs tabular-nums text-ink-lo sm:block">
+            <span className="hidden text-right font-mono text-small tabular-nums text-ink-lo sm:block">
               {c.votes.toLocaleString("en-US")}
             </span>
           </li>
         ))}
       </ol>
-      <p className="mt-4 text-sm text-ink-lo">
+      <p className="mt-4 text-small text-ink-lo">
         {[
           result.inLatestRead === false
             ? `The state's latest read didn't include this race; this is its count as read at ${formatEasternTime(result.fetchedAt)}.`
@@ -242,12 +238,12 @@ export function HouseResultRow({ result }: { result: LiveRaceResult }) {
       // name left the name 38px at 320px wide — truncated past reading.
       className={HOUSE_ROW_GRID}
     >
-      <span className="font-mono text-sm text-ink-hi">{raceLabel(result)}</span>
+      <span className="font-mono text-small text-ink-hi">{raceLabel(result)}</span>
       <span className="min-w-0">
         {/* Wraps at every width: truncated, the name ate the cell and cut
             the party and share off — at 1024px, beside the state page's
             side column, it had 94px for a long name with "(D) 52.0%". */}
-        <span className="block break-words text-sm text-ink">
+        <span className="block break-words text-small text-ink">
           {tied ? (
             // Nobody ahead: both names, neither in a party's lead colour.
             <span className="text-ink-lo">
@@ -292,16 +288,14 @@ export function HouseResultRow({ result }: { result: LiveRaceResult }) {
         </span>
         {/* On a phone the reporting column is folded in here: a lead with
             no "how much is in" beside it reads as a result. */}
-        <span className="mt-1 block font-mono text-xs text-ink-min sm:hidden">
+        <span className="mt-1 block font-mono text-small text-ink-min sm:hidden">
           {reportingText(result) || "no reporting figure from the state"}
         </span>
       </span>
-      <span className="hidden font-mono text-xs text-ink-min sm:block">
+      <span className="hidden font-mono text-small text-ink-min sm:block">
         {reportingText(result) || "—"}
       </span>
-      <span
-        className={`${HOUSE_ROW_TAG} border px-2 py-0.5 font-mono text-[11px] ${tag.className}`}
-      >
+      <span className={`${HOUSE_ROW_TAG} border px-2 py-0.5 font-mono text-small ${tag.className}`}>
         {tag.text}
       </span>
     </li>
@@ -327,13 +321,13 @@ export function HouseNoCountRow({
 }) {
   return (
     <li id={`result-${raceId}`} tabIndex={-1} className={HOUSE_ROW_GRID}>
-      <span className="font-mono text-sm text-ink-hi">
+      <span className="font-mono text-small text-ink-hi">
         {raceLabel({ state, office: "H", district })}
       </span>
-      <span className="min-w-0 text-sm text-ink-min">No count shown here</span>
-      <span className="hidden font-mono text-xs text-ink-min sm:block">—</span>
+      <span className="min-w-0 text-small text-ink-min">No count shown here</span>
+      <span className="hidden font-mono text-small text-ink-min sm:block">—</span>
       <span
-        className={`${HOUSE_ROW_TAG} border border-dashed border-white/25 px-2 py-0.5 font-mono text-[11px] text-ink-min`}
+        className={`${HOUSE_ROW_TAG} border border-dashed border-white/25 px-2 py-0.5 font-mono text-small text-ink-min`}
       >
         No count
       </span>
@@ -365,17 +359,14 @@ export function SenateNoCountCard({
       className="border border-white/[0.09] bg-surface p-4 sm:p-5"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <Heading
-          id={`result-${raceId}-title`}
-          className="font-display text-xl font-semibold text-ink-hi"
-        >
+        <Heading id={`result-${raceId}-title`} className={TYPE.section}>
           {`U.S. Senate${isSpecial ? " (special)" : ""}`}
         </Heading>
-        <span className="border border-dashed border-white/25 px-2 py-0.5 font-mono text-xs text-ink-min">
+        <span className="border border-dashed border-white/25 px-2 py-0.5 font-mono text-small text-ink-min">
           No count
         </span>
       </div>
-      <p className="mt-2 text-sm text-ink-min">
+      <p className="mt-2 text-small text-ink-min">
         Civitas shows no count for this race, though it shows one for the state&apos;s other races.
       </p>
     </article>

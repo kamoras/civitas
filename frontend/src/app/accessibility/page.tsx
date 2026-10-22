@@ -175,15 +175,15 @@ export default function AccessibilityPage() {
                 </Box>
                 <Box
                   title="Explanations"
-                  dek="Every score's [?] explanation is in the page text, so a screen reader reads it with the button."
+                  dek="Every figure's &ldquo;What this means&rdquo; explanation is in the page text, so a screen reader reads it with the button."
                   more="the plain sentences"
                 >
                   <P>
-                    Every score has a <span className="font-mono text-sm text-ink-hi">[?]</span>{" "}
-                    button whose explanation is in the page text itself, so a screen reader reads it
-                    with the button. Each of a member&apos;s three scores opens with a plain
-                    sentence giving that member&apos;s own figures. Each <A href="/about">About</A>{" "}
-                    chapter opens with a short version before any method.
+                    Every figure has a &ldquo;What this means&rdquo; button (it was a bare
+                    &ldquo;[?]&rdquo; until 2026-10) whose explanation is in the page text itself,
+                    so a screen reader reads it with the button. Each of a member&apos;s three
+                    scores opens with a plain sentence giving that member&apos;s own figures. Each{" "}
+                    <A href="/about">About</A> chapter opens with a short version before any method.
                   </P>
                 </Box>
                 <Box

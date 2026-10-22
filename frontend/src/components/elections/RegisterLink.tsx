@@ -44,7 +44,7 @@ export default function RegisterLink({
         {label} ↗
       </a>
       {showNote && !link.confirmed && (
-        <span className="ml-1 text-xs text-ink-lo">{UNCONFIRMED}</span>
+        <span className="ml-1 text-small text-ink-lo">{UNCONFIRMED}</span>
       )}
     </>
   );

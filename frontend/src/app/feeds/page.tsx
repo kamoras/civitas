@@ -15,6 +15,7 @@ import {
   Boxes,
   Box,
 } from "@/components/about/AboutPage";
+import { TYPE } from "@/lib/typeStyles";
 
 export const metadata = pageMetadata({
   title: "Feeds",
@@ -112,7 +113,7 @@ export default async function FeedsPage() {
               <ul className="space-y-6">
                 {feeds.map((f) => (
                   <li key={f.slug} className="space-y-2">
-                    <h3 className="font-display text-lg font-semibold text-ink-hi">
+                    <h3 className={TYPE.boxTitle}>
                       <a
                         href={f.path}
                         className="underline decoration-ink-min/50 underline-offset-2 hover:text-phos"
@@ -141,10 +142,10 @@ export default async function FeedsPage() {
                   </ul>
                   <p>
                     Each is at{" "}
-                    <code className="font-mono text-xs">{absoluteUrl("/feed/states/")}</code>{" "}
+                    <code className="font-mono text-small">{absoluteUrl("/feed/states/")}</code>{" "}
                     followed by the state&apos;s two-letter code and{" "}
-                    <code className="font-mono text-xs">.xml</code>, such as{" "}
-                    <code className="font-mono text-xs">GA.xml</code>. Action Center issues and
+                    <code className="font-mono text-small">.xml</code>, such as{" "}
+                    <code className="font-mono text-small">GA.xml</code>. Action Center issues and
                     Congress posts are national, so they are only in the topic feeds.
                   </p>
                 </More>
@@ -171,7 +172,10 @@ export default async function FeedsPage() {
                   {index.followed.map((k) => (
                     <Item key={k.kind} label={k.title}>
                       {k.description} {k.where} Its address is{" "}
-                      <code className="font-mono text-xs break-all">{absoluteUrl(k.pattern)}</code>.
+                      <code className="font-mono text-small break-all">
+                        {absoluteUrl(k.pattern)}
+                      </code>
+                      .
                     </Item>
                   ))}
                 </List>

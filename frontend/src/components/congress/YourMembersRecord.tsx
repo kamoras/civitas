@@ -9,6 +9,7 @@ import { STATE_NAMES } from "@/lib/stateCodes";
 import { PARTY_COLORS } from "@/lib/partyStyles";
 import { billHref, rollCallHref, shortDate } from "@/lib/congress";
 import Photo from "@/components/Photo";
+import { TYPE } from "@/lib/typeStyles";
 
 const n = (x: number) => x.toLocaleString("en-US");
 const LINK = "underline decoration-white/30 underline-offset-4 hover:text-phos";
@@ -32,18 +33,18 @@ function MemberCard({ m }: { m: StateMemberRecord }) {
           />
         )}
         <div className="min-w-0">
-          <h3 className="font-display text-base font-semibold text-ink-hi">
+          <h3 className={TYPE.boxTitle}>
             <Link href={`/politicians/${m.id}`} className="hover:text-phos">
               {m.name}
             </Link>{" "}
-            <span className={`font-mono text-xs ${PARTY_COLORS[m.party] ?? "text-ink-lo"}`}>
+            <span className={`font-mono text-small ${PARTY_COLORS[m.party] ?? "text-ink-lo"}`}>
               ({m.party})
             </span>
           </h3>
-          <p className="font-mono text-xs text-ink-min">{seat(m)}</p>
+          <p className="font-mono text-small text-ink-min">{seat(m)}</p>
         </div>
       </div>
-      <p className="text-sm text-ink">
+      <p className="text-small text-ink">
         Voted on <strong className="text-ink-hi">{n(m.voted)}</strong> of {n(m.chamberRollCalls)}{" "}
         roll calls this Congress, missed <strong className="text-ink-hi">{n(m.missed)}</strong>;
         sponsored <strong className="text-ink-hi">{n(m.billsSponsored)}</strong>{" "}
@@ -51,11 +52,11 @@ function MemberCard({ m }: { m: StateMemberRecord }) {
       </p>
       {m.votes.length > 0 && (
         <div>
-          <h4 className="font-mono text-xs text-ink-min">Latest votes</h4>
+          <h4 className="font-mono text-small text-ink-min">Latest votes</h4>
           <ul className="mt-1 flex flex-col">
             {m.votes.map((v, i) => (
-              <li key={i} className="border-t border-white/[0.07] py-1.5 text-sm text-ink">
-                <span className="font-mono text-xs text-ink-min">{shortDate(v.date)}</span>{" "}
+              <li key={i} className="border-t border-white/[0.07] py-1.5 text-small text-ink">
+                <span className="font-mono text-small text-ink-min">{shortDate(v.date)}</span>{" "}
                 <strong className="text-ink-hi">{v.vote}</strong>
                 {v.votedWithParty !== null && (
                   <span className="text-ink-lo">
@@ -78,10 +79,13 @@ function MemberCard({ m }: { m: StateMemberRecord }) {
       )}
       {m.bills.length > 0 && (
         <div>
-          <h4 className="font-mono text-xs text-ink-min">Latest bills</h4>
+          <h4 className="font-mono text-small text-ink-min">Latest bills</h4>
           <ul className="mt-1 flex flex-col">
             {m.bills.map((b) => (
-              <li key={b.billId} className="border-t border-white/[0.07] py-1.5 text-sm text-ink">
+              <li
+                key={b.billId}
+                className="border-t border-white/[0.07] py-1.5 text-small text-ink"
+              >
                 <Link href={billHref(b.billId, b.congress)} className={`font-mono ${LINK}`}>
                   {b.billLabel ?? b.billId}
                 </Link>{" "}
@@ -91,7 +95,7 @@ function MemberCard({ m }: { m: StateMemberRecord }) {
           </ul>
         </div>
       )}
-      <Link href={`/politicians/${m.id}`} className={`mt-auto text-sm text-signal-cyan ${LINK}`}>
+      <Link href={`/politicians/${m.id}`} className={`mt-auto text-small text-signal-cyan ${LINK}`}>
         {m.name}&apos;s full record
       </Link>
     </li>
@@ -128,21 +132,18 @@ export default function YourMembersRecord() {
   const failed = failedFor === state && !members;
   return (
     <section aria-labelledby="your-members-heading" className="mb-8">
-      <h2
-        id="your-members-heading"
-        className="border-b border-white/15 pb-2 font-mono text-xs text-ink-min"
-      >
+      <h2 id="your-members-heading" className={`${TYPE.kicker} border-b border-white/15 pb-2`}>
         Your members this Congress · {name}
       </h2>
       {failed ? (
-        <p className="mt-3 text-sm text-ink-lo">
+        <p className="mt-3 text-small text-ink-lo">
           {name}&apos;s members couldn&apos;t be loaded just now.{" "}
           <Link href={membersHref(state)} className={LINK}>
             Find them in the directory
           </Link>
         </p>
       ) : !members ? (
-        <p className="mt-3 text-sm text-ink-min" aria-live="polite">
+        <p className="mt-3 text-small text-ink-min" aria-live="polite">
           Loading {name}&apos;s members…
         </p>
       ) : (

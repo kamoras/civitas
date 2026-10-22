@@ -85,7 +85,7 @@ export default function SeatChart({
         <div className="relative min-w-0">
           {/* The y labels live in a box exactly the drawing's height. */}
           <div
-            className="absolute inset-y-0 -left-9 w-9 font-mono text-xs text-ink-min"
+            className="absolute inset-y-0 -left-9 w-9 font-mono text-small text-ink-min"
             aria-hidden="true"
           >
             {Y_TICKS.map((t) => (
@@ -163,7 +163,7 @@ export default function SeatChart({
           </svg>
         </div>
         <div>
-          <div className="relative h-5 font-mono text-xs text-ink-min" aria-hidden="true">
+          <div className="relative h-5 font-mono text-small text-ink-min" aria-hidden="true">
             {X_TICKS.map((l) => (
               <span
                 key={l}
@@ -174,12 +174,12 @@ export default function SeatChart({
               </span>
             ))}
           </div>
-          <p className="font-mono text-xs text-ink-min">
+          <p className="font-mono text-small text-ink-min">
             Seat lean (Cook PVI) · Up: share of counted votes on the president&apos;s side
           </p>
         </div>
       </div>
-      <figcaption className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs text-ink-min">
+      <figcaption className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-small text-ink-min">
         <span>
           <svg width="8" height="8" className="mr-1 inline align-middle" aria-hidden="true">
             <rect x="0.5" y="0.5" width="7" height="7" className="fill-ink-lo stroke-ink-lo" />

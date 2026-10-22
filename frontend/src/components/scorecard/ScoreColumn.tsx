@@ -4,7 +4,7 @@ import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import MetricTooltip from "@/components/checker/MetricTooltip";
 import { onThisPage } from "@/lib/onThisPage";
-import { LONG_LABEL, labelCase } from "@/lib/controlStyles";
+import { TYPE } from "@/lib/typeStyles";
 
 /** One column of a record: a member's money, votes or bills, or a
  *  president's scored dimension (with its score), and the evidence behind
@@ -24,7 +24,7 @@ export default function ScoreColumn({
   children,
 }: {
   title: string;
-  /** What the column's score measures, in plain words (the [?] beside the title). */
+  /** What the column's score measures, in plain words ("What this means" beside the title). */
   tooltip?: string;
   /** The column's anchor id; also what its shared image and link are named by. */
   shareId: string;
@@ -49,16 +49,14 @@ export default function ScoreColumn({
     >
       <header className="flex items-end justify-between gap-3 border-b border-white/25 bg-surface-raised px-5 py-4">
         <div className="min-w-0">
-          <h2 className="text-[19px] font-semibold leading-tight text-ink-hi">
+          <h2 className={TYPE.section}>
             {tooltip ? <MetricTooltip text={tooltip}>{title}</MetricTooltip> : title}
           </h2>
         </div>
-        {aside ? <span className="shrink-0 font-mono text-xs text-ink-min">{aside}</span> : null}
+        {aside ? <span className="shrink-0 font-mono text-small text-ink-min">{aside}</span> : null}
       </header>
       <div className="flex flex-1 flex-col gap-5 px-5 py-4">
-        {finding && (
-          <p className="font-display text-lg font-semibold leading-snug text-ink-hi">{finding}</p>
-        )}
+        {finding && <p className={TYPE.boxTitle}>{finding}</p>}
         {children}
         {(method || shown != null) && (
           <details
@@ -66,7 +64,7 @@ export default function ScoreColumn({
             className="group border-t border-white/[0.08] pt-4"
           >
             <summary
-              className={`flex min-h-[44px] cursor-pointer list-none items-center gap-2 font-mono text-ink-lo hover:text-phos [&::-webkit-details-marker]:hidden ${LONG_LABEL}`}
+              className={`flex min-h-[44px] cursor-pointer list-none items-center gap-2 text-small text-ink-lo hover:text-phos [&::-webkit-details-marker]:hidden`}
             >
               <span aria-hidden="true" className="inline-block group-open:rotate-90">
                 &#9656;
@@ -75,7 +73,7 @@ export default function ScoreColumn({
             </summary>
             <div className="flex flex-col gap-4 pt-2">
               {shown != null && (
-                <p className="text-sm text-ink-lo">
+                <p className="text-small text-ink-lo">
                   The scorer&apos;s arithmetic puts this at {shown} out of 100.
                 </p>
               )}
@@ -89,7 +87,7 @@ export default function ScoreColumn({
               type="button"
               onClick={more.onClick}
               {...{ [SHARE_EXCLUDE_ATTR]: "" }}
-              className="min-h-[44px] text-left font-mono text-[13px] text-ink-lo underline underline-offset-2 hover:text-phos"
+              className="min-h-[44px] text-left font-mono text-small text-ink-lo underline underline-offset-2 hover:text-phos"
             >
               {more.label} &rarr;
             </button>
@@ -103,12 +101,9 @@ export default function ScoreColumn({
   );
 }
 
-/** A small mono label over a block inside a column: caps, or sentence case
- *  on a phone when it runs past three words (labelCase). `words` is the
- *  label's text when the children aren't plain text (a tooltip around it). */
-export function BlockLabel({ children, words }: { children: ReactNode; words?: string }) {
-  const text = typeof children === "string" ? children : (words ?? "");
-  return <h3 className={`font-mono text-ink-min ${labelCase(text)}`}>{children}</h3>;
+/** A short label over a block inside a column, in the kicker style. */
+export function BlockLabel({ children }: { children: ReactNode }) {
+  return <h3 className={TYPE.kicker}>{children}</h3>;
 }
 
 /** A column block set off by a hairline above it. */

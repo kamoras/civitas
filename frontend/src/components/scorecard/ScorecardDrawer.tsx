@@ -6,6 +6,7 @@ import {
   SectionHeadingLevelProvider,
   SectionsOpenProvider,
 } from "@/components/shared/CollapsibleSection";
+import { TYPE } from "@/lib/typeStyles";
 
 /** Everything behind one of the scorecard's "all of it" links — every vote,
  *  every donor, every bill — over the scorecard: a panel beside it on a
@@ -49,12 +50,12 @@ export default function ScorecardDrawer({
       >
         <div className="flex items-start justify-between gap-3 border-b border-white/25 bg-surface-raised px-5 py-4">
           <div className="min-w-0">
-            <p className="font-mono text-xs text-ink-min">{subtitle}</p>
+            <p className="font-mono text-small text-ink-min">{subtitle}</p>
             <h2
               id="scorecard-drawer-title"
               ref={heading}
               tabIndex={-1}
-              className="mt-1 text-2xl font-semibold leading-tight text-ink-hi outline-none"
+              className={`${TYPE.section} mt-1 outline-none`}
             >
               {title}
             </h2>
@@ -62,7 +63,7 @@ export default function ScorecardDrawer({
           <button
             type="button"
             onClick={onClose}
-            className="min-h-[44px] min-w-[44px] shrink-0 border border-white/25 px-3 font-mono text-xs text-ink hover:border-white/50 hover:text-phos"
+            className="min-h-[44px] min-w-[44px] shrink-0 border border-white/25 px-3 font-mono text-small text-ink hover:border-white/50 hover:text-phos"
           >
             Close
           </button>

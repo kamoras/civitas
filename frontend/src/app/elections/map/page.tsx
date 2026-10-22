@@ -17,30 +17,44 @@ const PATH = ELECTION_MAP_HREF.split("?")[0];
 type MapState =
   | { kind: "map"; data: ElectionMapResponse }
   | { kind: "hidden"; detail: string }
-  | { kind: "not_built"; detail: string };
+  | { kind: "not_built"; detail: string }
+  | { kind: "unavailable"; detail: string };
+
+/** Said when the backend can't be reached or answers with an error: an
+ * outage, worded as one, never as a map that doesn't exist. */
+const UNAVAILABLE =
+  "The map could not be reached just now. This is an outage on this site, not a missing map, and it is usually over within a minute or two.";
 
 /** The map's data; "hidden" from election day on (the backend answers
- * 404), "not_built" before the pipeline first writes it (503). Anything
- * else — the backend unreachable, another error — throws to error.tsx. */
+ * 404), "not_built" before the pipeline first writes it (503), and
+ * "unavailable" when the backend is unreachable or answers any other error.
+ * A section page, not a record (fetchRecord): its tabs and links still
+ * help, so an outage is said inside the page rather than thrown to
+ * error.tsx as a 500. */
 async function fetchMap(chamber: MapChamber = "senate"): Promise<MapState> {
   // One chamber: the other is fetched by the page when a reader asks for it.
-  const res = await fetch(`${BACKEND}/api/elections/map?chamber=${chamber}`, {
-    next: { revalidate: 300 },
-  });
-  if (res.status === 404 || res.status === 503) {
-    const body = (await res.json().catch(() => ({}))) as { detail?: string };
-    return { kind: res.status === 404 ? "hidden" : "not_built", detail: body.detail ?? "" };
+  try {
+    const res = await fetch(`${BACKEND}/api/elections/map?chamber=${chamber}`, {
+      next: { revalidate: 300 },
+    });
+    if (res.status === 404 || res.status === 503) {
+      const body = (await res.json().catch(() => ({}))) as { detail?: string };
+      return { kind: res.status === 404 ? "hidden" : "not_built", detail: body.detail ?? "" };
+    }
+    if (res.ok) return { kind: "map", data: (await res.json()) as ElectionMapResponse };
+  } catch {
+    // Unreachable, or a body that isn't JSON: the same outage.
   }
-  if (!res.ok) throw new Error(`election map: HTTP ${res.status}`);
-  return { kind: "map", data: (await res.json()) as ElectionMapResponse };
+  return { kind: "unavailable", detail: UNAVAILABLE };
 }
 
 export async function generateMetadata() {
-  const state = await fetchMap().catch(() => null);
+  const state = await fetchMap();
   return pageMetadata({
-    ...describeElectionMap(state?.kind === "map" ? state.data.cycle : undefined),
+    ...describeElectionMap(state.kind === "map" ? state.data.cycle : undefined),
     path: PATH,
-    noindex: state?.kind === "hidden",
+    // Not an outage: a crawler that meets one shouldn't drop the page.
+    noindex: state.kind === "hidden",
   });
 }
 

@@ -5,6 +5,7 @@ import { fetchAdminTrendPosts } from "@/lib/api";
 import type { PartyCounts, TrendPartyAudit, TrendPostsAudit } from "@/types/trendPosts";
 import { formatTime } from "./format";
 import { Panel, StatTile } from "./widgets";
+import { TYPE } from "@/lib/typeStyles";
 
 const DAYS = 30;
 const NOT_MEASURED = "—";
@@ -47,7 +48,7 @@ function AuditBlock({ title, audit }: { title: string; audit: TrendPartyAudit })
   const status = auditStatus(audit);
   return (
     <div className="space-y-3">
-      <h3 className="text-xs font-mono text-ink-lo">{title}</h3>
+      <h3 className={TYPE.kicker}>{title}</h3>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile label="Status" value={status.label} tone={status.tone} />
         <StatTile
@@ -97,12 +98,12 @@ export function TrendPostsDashboard({ token }: { token: string }) {
 
   if (failed) {
     return (
-      <p role="alert" className="text-xs font-mono text-signal-red">
+      <p role="alert" className="text-small font-mono text-signal-red">
         The trend posts audit couldn&apos;t be loaded.
       </p>
     );
   }
-  if (!audit) return <p className="text-xs font-mono text-ink-min">Loading…</p>;
+  if (!audit) return <p className="text-small font-mono text-ink-min">Loading…</p>;
 
   const life = audit.lifetimes;
   const decisions = Object.entries(audit.decisions).sort((a, b) => b[1] - a[1]);
@@ -113,7 +114,7 @@ export function TrendPostsDashboard({ token }: { token: string }) {
         <div className="space-y-6 p-4">
           <AuditBlock title={`Last ${DAYS} days`} audit={audit.partyAudit} />
           <AuditBlock title="All time" audit={audit.partyAuditAllTime} />
-          <p className="text-xs font-mono text-ink-min">
+          <p className="text-small font-mono text-ink-min">
             Each candidate counts once, by the lean of its named members and sponsors. Selection is
             party-blind; the test is the posted Democratic count against the pool&apos;s share.
           </p>
@@ -140,7 +141,7 @@ export function TrendPostsDashboard({ token }: { token: string }) {
 
       <Panel title="Image vs link card">
         <div className="overflow-x-auto p-4">
-          <table className="w-full text-xs font-mono">
+          <table className="w-full text-small font-mono">
             <caption className="sr-only">
               Trend posts sent to Bluesky by what they carried, with engagement
             </caption>
@@ -193,13 +194,13 @@ export function TrendPostsDashboard({ token }: { token: string }) {
       <Panel title="Decisions">
         <div className="p-4">
           {decisions.length === 0 ? (
-            <p className="text-xs font-mono text-ink-min">No candidates yet.</p>
+            <p className="text-small font-mono text-ink-min">No candidates yet.</p>
           ) : (
             <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">
               {decisions.map(([decision, n]) => (
                 <div key={decision} className="border border-white/[0.07] p-3 min-w-0">
-                  <dt className="text-xs font-mono text-ink-lo">{decision}</dt>
-                  <dd className="mt-1 font-mono text-xl text-ink-hi">
+                  <dt className="text-small font-mono text-ink-lo">{decision}</dt>
+                  <dd className="mt-1 font-mono text-section text-ink-hi">
                     {n.toLocaleString("en-US")}
                   </dd>
                 </div>
@@ -211,10 +212,10 @@ export function TrendPostsDashboard({ token }: { token: string }) {
 
       <Panel title="Candidates">
         {audit.candidates.length === 0 ? (
-          <p className="p-4 text-xs font-mono text-ink-min">No candidates yet.</p>
+          <p className="p-4 text-small font-mono text-ink-min">No candidates yet.</p>
         ) : (
           <div className="overflow-x-auto p-4">
-            <table className="w-full text-xs font-mono">
+            <table className="w-full text-small font-mono">
               <caption className="sr-only">
                 Trend candidates, newest decision first, with match, record, parties and scores
               </caption>

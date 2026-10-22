@@ -41,6 +41,7 @@ import {
   FAINT,
 } from "@/lib/results";
 import type { ListedSenateRace, LiveRaceResult, LiveResults } from "@/types/election";
+import { TYPE } from "@/lib/typeStyles";
 
 const DC_FILL = overlay(0.06);
 
@@ -109,7 +110,9 @@ function LedTally({ led }: { led: Record<string, number> }) {
     // As formatLed orders them: real parties, then leaders with no party given.
     .sort(([a], [b]) => Number(ledParty(a) === null) - Number(ledParty(b) === null));
   return (
-    <span className="flex flex-wrap items-baseline gap-x-4 font-display text-3xl font-semibold tabular-nums">
+    <span
+      className={`${TYPE.figure} flex flex-wrap items-baseline gap-x-4 tabular-nums text-ink-hi`}
+    >
       <span className="text-dem-blue">D {led.DEM ?? 0}</span>
       <span className="text-rep-red">R {led.REP ?? 0}</span>
       {others.map(([p, n]) => (
@@ -293,7 +296,7 @@ export default function ResultsOverview({
             <h2 id="results-map-heading" className="sr-only">
               Results map
             </h2>
-            <div role="group" aria-label="Chamber" className="flex flex-wrap font-mono text-xs">
+            <div role="group" aria-label="Chamber" className="flex flex-wrap font-mono text-small">
               {(["S", "H"] as const).map((c) => (
                 <button
                   key={c}
@@ -310,7 +313,7 @@ export default function ResultsOverview({
                 </button>
               ))}
             </div>
-            <ul className="flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-xs text-ink-lo">
+            <ul className="flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-small text-ink-lo">
               <li className="flex items-center gap-1.5">
                 <Swatch color={fade(partyMark("DEM"), 0.85)} /> D leads
               </li>
@@ -367,7 +370,7 @@ export default function ResultsOverview({
               defs={defs}
             />
           </div>
-          <p className="border-t border-white/[0.07] px-4 py-3 text-xs text-ink-min">
+          <p className="border-t border-white/[0.07] px-4 py-3 text-small text-ink-min">
             Colour is who leads each state&apos;s own count, not a projection. Fainter means fewer
             than half the precincts or counties are in; solid means the state lists its count as
             official, and a race there still only leads: Civitas calls no race.{" "}
@@ -397,21 +400,21 @@ export default function ResultsOverview({
 
       <section aria-label="Totals" className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="border border-white/[0.09] bg-surface p-4">
-          <p className="font-mono text-xs text-ink-min">Senate seats led</p>
+          <p className="font-mono text-small text-ink-min">Senate seats led</p>
           <div className="mt-2">
             <LedTally led={seatsLed(senate)} />
           </div>
-          <p className="mt-1 text-sm text-ink-lo">
+          <p className="mt-1 text-small text-ink-lo">
             Read live in {liveSenate} of the {senateStates.size}{" "}
             {senateStates.size === 1 ? "state" : "states"} electing a senator
           </p>
         </div>
         <div className="border border-white/[0.09] bg-surface p-4">
-          <p className="font-mono text-xs text-ink-min">House seats led</p>
+          <p className="font-mono text-small text-ink-min">House seats led</p>
           <div className="mt-2">
             <LedTally led={seatsLed(house)} />
           </div>
-          <p className="mt-1 text-sm text-ink-lo">
+          <p className="mt-1 text-small text-ink-lo">
             {houseCounted} {houseCounted === 1 ? "district" : "districts"} with a count so far
             {houseCounted > 0 && `, in ${houseStates} ${houseStates === 1 ? "state" : "states"}`},
             of {liveRead} {liveRead === 1 ? "state" : "states"} read live
@@ -420,11 +423,9 @@ export default function ResultsOverview({
         <div
           className={`border bg-surface p-4 ${flips.length ? "border-signal-amber/60" : "border-white/[0.09]"}`}
         >
-          <p className="font-mono text-xs text-signal-amber">Seats changing party</p>
-          <p className="mt-2 font-display text-3xl font-semibold tabular-nums text-ink-hi">
-            {flips.length}
-          </p>
-          <p className="mt-1 text-sm text-ink-lo">
+          <p className="font-mono text-small text-signal-amber">Seats changing party</p>
+          <p className={`${TYPE.figure} mt-2 tabular-nums text-ink-hi`}>{flips.length}</p>
+          <p className="mt-1 text-small text-ink-lo">
             Leader from a different party than the holder, with enough of the count in (
             <Link
               href="/about/elections#election-night"
@@ -435,14 +436,14 @@ export default function ResultsOverview({
             )
           </p>
           {flipsNotShown.length > 0 && (
-            <p className="mt-2 text-xs text-ink-min">
+            <p className="mt-2 text-small text-ink-min">
               Not counted: {flipsNotShown.length}{" "}
               {flipsNotShown.length === 1 ? "change" : "changes"} of party announced earlier that
               the latest count doesn&apos;t show; each race&apos;s card says what its count shows
             </p>
           )}
           {redrawn.length > 0 && (
-            <p className="mt-2 text-xs text-ink-min">
+            <p className="mt-2 text-small text-ink-min">
               Not counted: House seats in the{" "}
               {redrawn.length === 1 ? "state" : `${redrawn.length} states`} voting on new district
               lines ({redrawn.join(", ")}), which have no previous holder
@@ -457,7 +458,7 @@ export default function ResultsOverview({
       <section aria-labelledby="results-by-state">
         <h2
           id="results-by-state"
-          className="flex items-baseline justify-between border-b border-white/15 pb-2 font-mono text-xs text-ink-min"
+          className={`${TYPE.kicker} flex items-baseline justify-between border-b border-white/15 pb-2`}
         >
           <span>By state</span>
           <span>Ballot research stays on every state page</span>
@@ -501,9 +502,9 @@ export default function ResultsOverview({
                   className="flex h-full flex-col gap-1 bg-surface-base px-3 py-3 transition-colors hover:bg-surface-raised"
                 >
                   <span className="flex items-baseline justify-between gap-2">
-                    <span className="font-mono text-sm text-ink-hi">{state}</span>
+                    <span className="font-mono text-small text-ink-hi">{state}</span>
                     <span
-                      className={`flex items-center gap-1 border px-1.5 font-mono text-[11px] ${badge.className}`}
+                      className={`flex items-center gap-1 border px-1.5 font-mono text-small ${badge.className}`}
                     >
                       {"texture" in badge && badge.texture && (
                         <span
@@ -522,7 +523,7 @@ export default function ResultsOverview({
                     // special election each get a line, the regular first,
                     // and one with no count shown says so.
                     senateRows(summary.senate, results.senateRaces?.[state]).map((row) => (
-                      <span key={row.raceId} className="text-sm text-ink-lo">
+                      <span key={row.raceId} className="text-small text-ink-lo">
                         {row.result
                           ? senateLine(row.result, row.several)
                           : `${senateName(row.isSpecial, true)}: ${
@@ -531,7 +532,7 @@ export default function ResultsOverview({
                       </span>
                     ))
                   ) : (
-                    <span className="text-sm text-ink-lo">
+                    <span className="text-small text-ink-lo">
                       {senateStates.has(state)
                         ? isLive
                           ? refreshFailed
@@ -550,21 +551,25 @@ export default function ResultsOverview({
                     </span>
                   )}
                   {summary.house.length > 0 ? (
-                    <span className="font-mono text-xs text-ink-min">
+                    <span className="font-mono text-small text-ink-min">
                       House {formatLed(summary.houseLeads)} leading
                       {anyCountNotFinal(summary.house) ? ` · ${NOT_FINAL}` : ""}
                     </span>
                   ) : (
                     isLive &&
                     hasCount && (
-                      <span className="font-mono text-xs text-ink-min">House: {NO_COUNT_TEXT}</span>
+                      <span className="font-mono text-small text-ink-min">
+                        House: {NO_COUNT_TEXT}
+                      </span>
                     )
                   )}
                   {failed && hasCount && !stillVoting && (
-                    <span className="font-mono text-xs text-signal-amber">{staleNote(state)}</span>
+                    <span className="font-mono text-small text-signal-amber">
+                      {staleNote(state)}
+                    </span>
                   )}
                   {refreshFailed && isLive && hasCount && countReadAt(results, state) && (
-                    <span className="font-mono text-xs text-ink-min">
+                    <span className="font-mono text-small text-ink-min">
                       Count from {formatEasternTime(countReadAt(results, state) ?? "")}
                     </span>
                   )}
@@ -573,7 +578,7 @@ export default function ResultsOverview({
             );
           })}
         </ul>
-        <p className="mt-3 max-w-3xl text-sm text-ink-min">
+        <p className="mt-3 max-w-3xl text-small text-ink-min">
           Live counts come from the {live.size} states whose election offices publish a results feed
           this page can read. For every other state, its own election office publishes the count;
           each state page links there.

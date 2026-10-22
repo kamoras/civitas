@@ -25,6 +25,7 @@ import {
 import { describeInterval, RESULTS_POLL_MS, RETRY_BACKOFF_MS } from "@/hooks/useLiveResults";
 import type { LiveRaceResult, LiveResults, StateBallot } from "@/types/election";
 import { scrollBehavior } from "@/lib/motion";
+import { TYPE } from "@/lib/typeStyles";
 
 /**
  * The top of a state page from election day on: this state's count, read
@@ -154,10 +155,8 @@ export default function StateResults({
   if (!results && error) {
     return (
       <section role="alert" className="mb-8 border border-signal-red/40 bg-surface p-4">
-        <h2 className="font-display text-lg font-semibold text-ink-hi">
-          The live count couldn&apos;t be loaded
-        </h2>
-        <p className="mt-1 max-w-3xl text-sm text-ink-lo">
+        <h2 className={TYPE.section}>The live count couldn&apos;t be loaded</h2>
+        <p className="mt-1 max-w-3xl text-small text-ink-lo">
           This page retries {describeInterval(retryMs ?? RETRY_BACKOFF_MS[0])}.{" "}
           <OfficeLink
             href={lookupHref}
@@ -172,7 +171,7 @@ export default function StateResults({
 
   if (!results) {
     return (
-      <p role="status" className="mb-6 font-mono text-sm text-ink-min">
+      <p role="status" className="mb-6 font-mono text-small text-ink-min">
         Reading the count…
       </p>
     );
@@ -184,10 +183,8 @@ export default function StateResults({
   if (!showsResults(results.phase)) {
     return (
       <section role="status" className="mb-8 border border-white/[0.09] bg-surface p-4">
-        <h2 className="font-display text-lg font-semibold text-ink-hi">
-          The live count has ended here
-        </h2>
-        <p className="mt-1 max-w-3xl text-sm text-ink-lo">
+        <h2 className={TYPE.section}>The live count has ended here</h2>
+        <p className="mt-1 max-w-3xl text-small text-ink-lo">
           This election&apos;s results are no longer followed live on this page.{" "}
           <OfficeLink
             href={lookupHref}
@@ -203,10 +200,8 @@ export default function StateResults({
   if (!isLive) {
     return (
       <section className="mb-8 border border-white/[0.09] bg-surface p-4">
-        <h2 className="font-display text-lg font-semibold text-ink-hi">
-          No live count for {stateName} here
-        </h2>
-        <p className="mt-1 max-w-3xl text-sm text-ink-lo">
+        <h2 className={TYPE.section}>No live count for {stateName} here</h2>
+        <p className="mt-1 max-w-3xl text-small text-ink-lo">
           {results?.rankedChoiceStates?.includes(ballot.state) ? (
             // The feed exists; reading it would mislead. A first-choice
             // leader is not necessarily who the ranked-choice rounds elect.
@@ -244,7 +239,7 @@ export default function StateResults({
           announcement for the live-updates feed below, which is
           deliberately not live itself. */}
       <p
-        className={`flex flex-wrap gap-x-2 font-mono text-xs ${
+        className={`flex flex-wrap gap-x-2 font-mono text-small ${
           error || (failed && races.length > 0) ? "text-signal-amber" : "text-ink-min"
         }`}
       >
@@ -287,7 +282,7 @@ export default function StateResults({
       </p>
       {races.length === 0 &&
         (stillVoting ? (
-          <p className="border border-white/[0.09] bg-surface p-4 text-sm text-ink-lo">
+          <p className="border border-white/[0.09] bg-surface p-4 text-small text-ink-lo">
             {pollsClose && Date.parse(pollsClose) > now
               ? `${stateName}'s last polls close at ${formatEasternTime(pollsClose)}. Nothing of its count is shown before then.`
               : `${stateName}'s polls haven't closed yet. Nothing of its count is shown before they do.`}
@@ -295,7 +290,7 @@ export default function StateResults({
         ) : failed ? (
           // Not "hasn't started": a feed that's down or refused says
           // nothing about whether counting has begun.
-          <p className="border border-signal-amber/40 bg-surface p-4 text-sm text-ink-lo">
+          <p className="border border-signal-amber/40 bg-surface p-4 text-small text-ink-lo">
             {behind ? (
               feed?.checkedAt ? (
                 <>
@@ -323,14 +318,14 @@ export default function StateResults({
             />
           </p>
         ) : (
-          <p className="border border-white/[0.09] bg-surface p-4 text-sm text-ink-lo">
+          <p className="border border-white/[0.09] bg-surface p-4 text-small text-ink-lo">
             {`${stateName}'s count hasn't started yet. Results appear here as the state publishes them.`}
           </p>
         ))}
       {/* Not while this page's own refreshes fail: the line above then
           says so, and when the count was read — the only statement. */}
       {races.length > 0 && failed && !error && (
-        <p className="font-mono text-xs text-signal-amber">
+        <p className="font-mono text-small text-signal-amber">
           {behind ? (
             feed?.checkedAt ? (
               <>
@@ -373,13 +368,10 @@ export default function StateResults({
             className="min-w-0 border border-white/[0.09] bg-surface"
           >
             <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-white/[0.09] px-4 py-3">
-              <h2
-                id="house-results-heading"
-                className="font-display text-xl font-semibold text-ink-hi"
-              >
+              <h2 id="house-results-heading" className={TYPE.section}>
                 U.S. House
               </h2>
-              <span className="font-mono text-xs text-ink-lo">
+              <span className="font-mono text-small text-ink-lo">
                 {formatLed(led)} leading{anyCountNotFinal(house) ? ` · ${NOT_FINAL}` : ""}
               </span>
             </div>
@@ -387,7 +379,7 @@ export default function StateResults({
               // The live sync gives these seats no holder (heldBy null),
               // so none is ever marked FLIP; say why, or the absence of
               // flips in a state that redrew reads as none happening.
-              <p className="border-b border-white/[0.09] px-4 py-2 text-xs text-ink-min">
+              <p className="border-b border-white/[0.09] px-4 py-2 text-small text-ink-min">
                 New district lines: no seat has a previous holder, so none is marked as changing
                 party.
               </p>

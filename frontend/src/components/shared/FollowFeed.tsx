@@ -21,7 +21,7 @@ export default function FollowFeed({
   className?: string;
 }) {
   return (
-    <p className={`font-mono text-xs text-ink-lo ${className}`}>
+    <p className={`font-mono text-small text-ink-lo ${className}`}>
       <a
         href={feed.url}
         type="application/atom+xml"

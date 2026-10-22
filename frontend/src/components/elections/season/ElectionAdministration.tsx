@@ -1,6 +1,7 @@
 import type { ElectionAdministration as Admin } from "@/types/nextCycle";
 import { safeHref } from "@/lib/formatting";
 import ScrollRegion from "@/components/shared/ScrollRegion";
+import { TYPE } from "@/lib/typeStyles";
 
 type RateKey = keyof Admin["national"];
 
@@ -27,7 +28,7 @@ export default function ElectionAdministration({ data }: { data: Admin | null })
     >
       <h2
         id="election-administration"
-        className="border-b border-white/[0.07] py-2.5 font-mono text-xs text-ink-min"
+        className={`${TYPE.kicker} border-b border-white/[0.07] py-2.5`}
       >
         How the {data.year} election was run
       </h2>
@@ -35,10 +36,8 @@ export default function ElectionAdministration({ data }: { data: Admin | null })
         {RATES.map(({ key, label }) => (
           <div key={key} className="bg-surface px-3 py-2.5">
             <dt className="sr-only">{label}</dt>
-            <dd className="font-display text-2xl font-semibold leading-none tabular-nums text-ink-hi">
-              {pct(data.national[key].rate)}
-            </dd>
-            <dd className="mt-1 text-sm leading-snug text-ink-lo">
+            <dd className={`${TYPE.section} tabular-nums`}>{pct(data.national[key].rate)}</dd>
+            <dd className="mt-1 text-small leading-snug text-ink-lo">
               {label}{" "}
               <span className="text-ink-min">
                 ({data.national[key].states} of {data.of} states fully reporting)
@@ -47,7 +46,7 @@ export default function ElectionAdministration({ data }: { data: Admin | null })
           </div>
         ))}
       </dl>
-      <p className="mt-3 text-sm text-ink-lo">
+      <p className="mt-3 text-small text-ink-lo">
         From the U.S. Election Assistance Commission&apos;s Election Administration and Voting
         Survey, which every state and local election office answers after each federal general.
         Summed by state from each office&apos;s answers; a rate is shown only where every office in
@@ -62,16 +61,16 @@ export default function ElectionAdministration({ data }: { data: Admin | null })
         )}
       </p>
       <details className="mt-2">
-        <summary className="flex min-h-11 cursor-pointer items-center font-mono text-xs text-ink-min">
+        <summary className="flex min-h-11 cursor-pointer items-center font-mono text-small text-ink-min">
           Every state
         </summary>
         <ScrollRegion label="Every state">
-          <table className="mt-1 w-full min-w-[32rem] text-left text-sm">
+          <table className="mt-1 w-full min-w-[32rem] text-left text-small">
             <caption className="sr-only">
               Election administration by state, {data.year}, from the EAC&apos;s survey
             </caption>
             <thead>
-              <tr className="font-mono text-[11px] text-ink-min">
+              <tr className="font-mono text-small text-ink-min">
                 <th scope="col" className="py-1.5 pr-3 font-normal">
                   State
                 </th>
@@ -110,7 +109,7 @@ export default function ElectionAdministration({ data }: { data: Admin | null })
             </tbody>
           </table>
         </ScrollRegion>
-        <p className="mt-2 text-xs text-ink-min">
+        <p className="mt-2 text-small text-ink-min">
           A dash: not every election office in the state reported both counts.
         </p>
       </details>

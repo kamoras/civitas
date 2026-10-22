@@ -435,6 +435,31 @@ export function houseLayout<T extends TileSeat = MapSeat>(
   return { blocks: placed, width, height: y - ROW_GAP };
 }
 
+/** The smallest a House map's state letters are drawn, in CSS px: the
+ * site's phone minimum for text a reader reads (globals.css, "A phone's
+ * type scale"). */
+export const STATE_LABEL_PX = 13;
+/** The largest a state label can be in the map's units and still sit in
+ * its band above the block: LABEL_H plus ROW_GAP is 11 units from the row
+ * above to the label's baseline 2 units over its block, and Fira Sans caps
+ * at 10 units stand 6.9 tall (the first row's top meets the viewBox's
+ * 2-unit margin); two letters are 12 wide, inside a one-column block and
+ * its gap (16). */
+export const STATE_LABEL_MAX_UNITS = 10;
+
+/** The font size, in the map's units, that draws a House map's state
+ * labels at STATE_LABEL_PX when the map (`viewBoxWidth` units wide) is
+ * `renderedWidth` CSS px wide; null when that would not fit above a block
+ * (a map narrower than about 1.3 px a unit). Unmeasured (the server's HTML,
+ * or a map hidden on a phone that a share image shows at its widest), the
+ * largest that fits: 13.6px at the map's widest, 608px. At a fixed 6 units
+ * the letters were 8.3px there. */
+export function stateLabelUnits(renderedWidth: number | null, viewBoxWidth: number): number | null {
+  if (!renderedWidth || viewBoxWidth <= 0) return STATE_LABEL_MAX_UNITS;
+  const units = (STATE_LABEL_PX * viewBoxWidth) / renderedWidth;
+  return units <= STATE_LABEL_MAX_UNITS ? units : null;
+}
+
 /* ── Tile layout: one tile per state, roughly where the state sits ──── */
 
 export const STATE_TILES: Record<string, [col: number, row: number]> = {

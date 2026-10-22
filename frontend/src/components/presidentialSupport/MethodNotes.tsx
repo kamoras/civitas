@@ -11,9 +11,9 @@ export default function MethodNotes({
 }) {
   const fits = Object.entries(method.fits);
   return (
-    <div className="space-y-3 font-sans text-sm leading-relaxed text-ink-lo">
+    <div className="space-y-3 font-sans text-small leading-relaxed text-ink-lo">
       <p>
-        <span className="font-mono text-xs text-ink-min">Source · </span>
+        <span className="font-mono text-small text-ink-min">Source · </span>
         <a
           href={method.sourceUrl}
           target="_blank"
@@ -24,19 +24,19 @@ export default function MethodNotes({
         </a>
       </p>
       <p>
-        <span className="font-mono text-xs text-ink-min">Counted · </span>
+        <span className="font-mono text-small text-ink-min">Counted · </span>
         {method.counted}
       </p>
       <p>
-        <span className="font-mono text-xs text-ink-min">Position · </span>
+        <span className="font-mono text-small text-ink-min">Position · </span>
         {method.position}
       </p>
       <p>
-        <span className="font-mono text-xs text-ink-min">Expected · </span>
+        <span className="font-mono text-small text-ink-min">Expected · </span>
         {method.expected}
       </p>
       <p>
-        <span className="font-mono text-xs text-ink-min">Range · </span>
+        <span className="font-mono text-small text-ink-min">Range · </span>
         {method.interval}
       </p>
       <p>{method.neutral}</p>
@@ -49,7 +49,7 @@ export default function MethodNotes({
           role="region"
           aria-label="This Congress's fit, by party"
         >
-          <table className="w-full border-collapse font-mono text-xs text-ink-lo">
+          <table className="w-full border-collapse font-mono text-small text-ink-lo">
             <caption className="mb-1 text-left text-ink-min">
               This Congress&apos;s fit: logit(rate) = a + b·alignment + b<sub>opp</sub>
               ·min(alignment, 0)
@@ -79,7 +79,7 @@ export default function MethodNotes({
           </table>
         </div>
       )}
-      <p className="font-mono text-xs">
+      <p className="font-mono text-small">
         <a
           href={jsonHref}
           download

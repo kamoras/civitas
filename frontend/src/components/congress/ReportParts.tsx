@@ -9,6 +9,7 @@ import {
   voteTally,
 } from "@/lib/congress";
 import AmendmentPurpose from "./AmendmentPurpose";
+import { TYPE } from "@/lib/typeStyles";
 
 export function Figure({
   value,
@@ -21,12 +22,10 @@ export function Figure({
 }) {
   return (
     <div className="flex flex-col gap-1.5 border-l border-white/[0.09] px-4 py-3">
-      <span
-        className={`font-mono text-3xl leading-none tabular-nums ${muted ? "text-ink-min" : "text-ink-hi"}`}
-      >
+      <span className={`${TYPE.figure} tabular-nums ${muted ? "text-ink-min" : "text-ink-hi"}`}>
         {value}
       </span>
-      <span className="font-mono text-xs text-ink-min">{label}</span>
+      <span className="font-mono text-small text-ink-min">{label}</span>
     </div>
   );
 }
@@ -34,7 +33,7 @@ export function Figure({
 export function FigureGroup({ name, children }: { name: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-2">
-      <span className="font-mono text-xs text-ink-lo">{name}</span>
+      <span className="font-mono text-small text-ink-lo">{name}</span>
       <div className="grid grid-cols-2 sm:grid-cols-4">{children}</div>
     </div>
   );
@@ -58,10 +57,10 @@ export function Section({
 }) {
   const Heading = level === 2 ? "h2" : "h3";
   const heading = (
-    <Heading className="inline font-display text-base font-semibold text-ink-hi">
+    <Heading className={`${TYPE.boxTitle} inline`}>
       {title}
       {count !== undefined && count !== null && (
-        <span className="ml-2 font-mono text-sm font-normal text-ink-min">
+        <span className="ml-2 font-mono text-small font-normal text-ink-min">
           <span className="sr-only">, </span>
           {count}
         </span>
@@ -74,7 +73,7 @@ export function Section({
         <details className="group">
           <summary className="flex min-h-6 cursor-pointer items-baseline gap-2 hover:text-phos">
             {heading}
-            <span className="font-mono text-xs text-ink-min group-open:hidden">Show</span>
+            <span className="font-mono text-small text-ink-min group-open:hidden">Show</span>
           </summary>
           <div className="mt-3">{children}</div>
         </details>
@@ -90,7 +89,7 @@ const TONE_CLASS = { yes: "text-phos-mid", no: "text-signal-red", neutral: "text
 
 export function ResultLabel({ result, rejected }: { result: string; rejected: boolean | null }) {
   return (
-    <span className={`font-mono text-xs ${TONE_CLASS[resultTone(rejected)]}`}>
+    <span className={`font-mono text-small ${TONE_CLASS[resultTone(rejected)]}`}>
       {result || "Recorded"}
     </span>
   );
@@ -98,19 +97,19 @@ export function ResultLabel({ result, rejected }: { result: string; rejected: bo
 
 /** A roll call's count: yeas to nays in figures, with a broken tie named
  * under it; a quorum call's or a Speaker election's count in words
- * (roll_call_shape). `size` is the figures' class. */
+ * (roll_call_shape). `lead`: the page's own vote, at the large figure. */
 export function VoteCount({
   vote,
-  size = "text-lg",
+  lead = false,
 }: {
   vote: RollCallShape & { yeas: number; nays: number };
-  size?: string;
+  lead?: boolean;
 }) {
   const isQuestion = !vote.kind || vote.kind === "question";
   return (
     <>
       <span
-        className={`font-mono tabular-nums text-ink-hi ${isQuestion ? `${size} leading-none` : "text-sm"}`}
+        className={`tabular-nums text-ink-hi ${isQuestion ? (lead ? TYPE.figureLg : TYPE.boxTitle) : "text-small"}`}
       >
         {isQuestion ? (
           <>
@@ -122,7 +121,7 @@ export function VoteCount({
         )}
       </span>
       {vote.tieBreaker && (
-        <span className="text-xs text-ink-lo">
+        <span className="text-small text-ink-lo">
           Tie broken: {vote.tieBreaker.byWhom} voted {vote.tieBreaker.vote}
         </span>
       )}
@@ -157,12 +156,12 @@ function TallyBar({ yeas, nays }: { yeas: number; nays: number }) {
 export function VoteRow({ vote, showDate = false }: { vote: RollCallSummary; showDate?: boolean }) {
   return (
     <li className="grid grid-cols-[minmax(0,4.5rem)_minmax(0,1fr)] gap-x-4 gap-y-2 border-b border-white/[0.09] py-3 sm:grid-cols-[minmax(0,4.5rem)_minmax(0,1fr)_minmax(0,9.5rem)]">
-      <div className="flex flex-col gap-1 font-mono text-xs text-ink-lo">
+      <div className="flex flex-col gap-1 font-mono text-small text-ink-lo">
         <span>No. {vote.number}</span>
         {showDate && <span className="text-ink-min">{vote.date.slice(5)}</span>}
       </div>
       <div className="flex min-w-0 flex-col gap-1.5">
-        <p className="text-[15px] leading-snug text-ink">
+        <p className="text-body leading-snug text-ink">
           <Link
             href={rollCallHref(vote)}
             className="underline decoration-white/30 underline-offset-4 hover:text-phos"
@@ -171,13 +170,13 @@ export function VoteRow({ vote, showDate = false }: { vote: RollCallSummary; sho
           </Link>
         </p>
         {vote.title && vote.title !== vote.question && (
-          <p className="text-sm leading-snug text-ink-lo">{vote.title}</p>
+          <p className="text-small leading-snug text-ink-lo">{vote.title}</p>
         )}
         <AmendmentPurpose vote={vote} chamber={vote.chamber} compact />
         {vote.billId && vote.billLabel && (
           <Link
             href={billHref(vote.billId, vote.congress)}
-            className="w-fit font-mono text-sm text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
+            className="w-fit font-mono text-small text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
           >
             {vote.billLabel}
           </Link>
@@ -199,7 +198,7 @@ export function MeasureRow({ event, tag }: { event: CongressEvent; tag?: string 
   return (
     <li className="flex flex-col gap-1.5 border-b border-white/[0.09] py-3">
       <div className="flex items-baseline justify-between gap-3">
-        <p className="min-w-0 text-base font-semibold text-ink-hi">
+        <p className={`${TYPE.boxTitle} min-w-0`}>
           {event.billId && event.billLabel ? (
             <Link href={billHref(event.billId, event.congress)} className="hover:text-phos">
               <span className="mr-2 font-mono font-normal text-ink-lo">{event.billLabel}</span>
@@ -210,12 +209,12 @@ export function MeasureRow({ event, tag }: { event: CongressEvent; tag?: string 
           )}
         </p>
         {tag && (
-          <span className="shrink-0 border border-white/20 px-2 py-0.5 font-mono text-xs text-ink-lo">
+          <span className="shrink-0 border border-white/20 px-2 py-0.5 font-mono text-small text-ink-lo">
             {tag}
           </span>
         )}
       </div>
-      <p className="text-sm leading-relaxed text-ink-lo">{event.text}</p>
+      <p className="text-small leading-relaxed text-ink-lo">{event.text}</p>
     </li>
   );
 }
@@ -225,5 +224,5 @@ export function EventList({ children }: { children: React.ReactNode }) {
 }
 
 export function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="text-[15px] text-ink-lo">{children}</p>;
+  return <p className="text-body text-ink-lo">{children}</p>;
 }

@@ -173,3 +173,57 @@ describe("an older API, during a rolling update", () => {
     expect(container.textContent).not.toMatch(/undefined|NaN/);
   });
 });
+
+describe("a whole-number measure", () => {
+  const BILLS = measure({
+    key: "billsMoved",
+    label: "Bills past committee",
+    unit: "count",
+    value: 3,
+    shown: "3 of 20",
+    expected: 3,
+    expectedBasis: "peer median",
+    expectedShown: "median 3",
+    distribution: [0, 3, 3],
+    distributionIds: ["sam-ray", "pat-lee", "ari-cole"],
+    distributionShown: ["0 of 9", "3 of 20", "3 of 41"],
+  });
+  const one = (m: PeerMeasure) => ({ ...DATA, measures: [m] });
+
+  it("is drawn as a dot histogram: ties side by side, the member ringed", () => {
+    const { container } = render(
+      <WhereTheyStand memberId="pat-lee" name="Pat Lee" chamber="senate" initial={one(BILLS)} />
+    );
+    // One circle per peer in one drawing, the member's ringed.
+    const circles = container.querySelectorAll("figure svg circle");
+    expect(circles).toHaveLength(3);
+    expect([...circles].filter((c) => c.getAttribute("stroke") === "var(--phos)")).toHaveLength(1);
+    expect(screen.getByText("median 3")).toBeInTheDocument();
+    // The table stays the text form.
+    expect(screen.getAllByRole("table")).toHaveLength(1);
+  });
+
+  it("keeps the strip for a response without the unit", () => {
+    const noUnit = { ...BILLS, unit: undefined } as unknown as PeerMeasure;
+    const { container } = render(
+      <WhereTheyStand memberId="pat-lee" name="Pat Lee" chamber="senate" initial={one(noUnit)} />
+    );
+    // The strip: a small SVG per peer, and the member's larger dot.
+    expect(container.querySelectorAll("figure svg circle")).toHaveLength(4);
+    expect(screen.queryByText("median 3")).toBeInTheDocument();
+  });
+
+  it("still draws from an older API, its tick unlabelled", () => {
+    const { container } = render(
+      <WhereTheyStand
+        memberId="pat-lee"
+        name="Pat Lee"
+        chamber="senate"
+        initial={olderApi(one(BILLS))}
+      />
+    );
+    expect(container.querySelectorAll("figure svg circle")).toHaveLength(3);
+    expect(screen.queryByText("median 3")).toBeNull();
+    expect(container.textContent).not.toMatch(/undefined|NaN/);
+  });
+});

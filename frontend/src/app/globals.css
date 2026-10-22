@@ -1,6 +1,61 @@
 @import "tailwindcss";
 @config "../../tailwind.config.ts";
 
+/* ===== ONE STYLE PER ROLE (lib/typeStyles.ts) =====
+   The type scale's sizes, one `text-<role>` utility each: the desktop size
+   here, the phone size (under 640px) in the media query below. In rem, so
+   a reader's own text size scales them. TYPE in lib/typeStyles.ts pairs
+   each with its face, weight and colour. */
+@theme {
+  /* Only the scale: Tailwind's own sizes (text-xs to text-9xl) are off. */
+  --text-*: initial;
+  --text-display: 2.75rem;
+  --text-display--line-height: 1.1;
+  --text-title: 2.25rem;
+  --text-title--line-height: 1.1;
+  --text-section: 1.5rem;
+  --text-section--line-height: 1.25;
+  --text-box: 1.125rem;
+  --text-box--line-height: 1.35;
+  --text-dek: 1.125rem;
+  --text-dek--line-height: 1.5;
+  --text-body: 1rem;
+  --text-body--line-height: 1.6;
+  --text-small: 0.875rem;
+  --text-small--line-height: 1.45;
+  --text-figure: 1.875rem;
+  --text-figure--line-height: 1;
+  --text-figure-lg: 3.5rem;
+  --text-figure-lg--line-height: 1;
+}
+@media (max-width: 639.98px) {
+  :root {
+    --text-display: 1.875rem;
+    --text-title: 1.75rem;
+    --text-section: 1.375rem;
+    --text-box: 1.0625rem;
+    --text-dek: 1.0625rem;
+    --text-figure: 1.625rem;
+    --text-figure-lg: 2.5rem;
+  }
+}
+
+/* A table header and bold text are the label weight: only 400 and 600 are
+   loaded, so the browser's 700 for <th>, <b> and <strong> was synthesised.
+   A table header is the label size too, whatever its table's body text is
+   (a class on the cell still wins: this is the base layer). */
+@layer base {
+  th,
+  b,
+  strong {
+    font-weight: 600;
+  }
+  th {
+    font-size: var(--text-small);
+    line-height: var(--text-small--line-height);
+  }
+}
+
 :root {
   /* The palette. Tailwind's colours (tailwind.config.ts) point at these, so a
      theme is these values and nothing else: same type, same layout.
@@ -24,10 +79,15 @@
   /* A search match inside a snippet (<mark>), opaque so its ratio with
      --ink-hi holds on any card it sits in (wcagContrast.test.ts). */
   --highlight: #ecdc8f;
-  --ink-hi: #1e1a15; /* 15.1:1 on parchment: headings, figures */
-  --ink: #362f27; /* body prose */
-  --ink-lo: #4a4238; /* 8.6:1: secondary text */
-  --ink-min: #5a5143; /* 6.9:1: captions, the floor for any text */
+  /* Three ink levels, far enough apart to read as levels (2026-10): the
+     four there were sat 1.27-1.34:1 apart, so secondary text read as body.
+     `ink` is the same as `ink-hi`: headings and prose share the darkest
+     ink and differ by face and size. Adjacent levels 1.57:1 and 1.44:1
+     apart, APCA Lc 9 (was 5-6; inkContrast.test.ts). */
+  --ink-hi: #1e1a15; /* 15.1:1 on parchment: headings, figures, prose */
+  --ink: #1e1a15; /* body prose: the same ink as headings */
+  --ink-lo: #433b31; /* 9.6:1: secondary text */
+  --ink-min: #5c5245; /* 6.7:1: captions, the floor for any text */
   --phos: #1b5e34; /* ledger green: links, live data, focus */
   --phos-mid: #18552f;
   --signal-cyan: #1b5e34; /* links take the ledger green */
@@ -151,8 +211,8 @@ html[data-header-hidden] {
     --surface-raised: #24201b;
     --highlight: #4a4220;
     --ink-hi: #f4efe6;
-    --ink: #e2dacd;
-    --ink-lo: #cfc6b6;
+    --ink: #f4efe6;
+    --ink-lo: #d8cfc0;
     --ink-min: #c2b8a5;
     --phos: #7fd49a;
     --phos-mid: #5db97b;
@@ -209,8 +269,8 @@ html[data-header-hidden] {
   --surface-raised: #24201b;
   --highlight: #4a4220;
   --ink-hi: #f4efe6;
-  --ink: #e2dacd;
-  --ink-lo: #cfc6b6;
+  --ink: #f4efe6;
+  --ink-lo: #d8cfc0;
   --ink-min: #c2b8a5;
   --phos: #7fd49a;
   --phos-mid: #5db97b;
@@ -575,29 +635,12 @@ input:focus-visible {
 }
 
 /* ===== A PHONE'S TYPE SCALE (mobile spec P1) =====
-   On a phone nothing a reader must read is under 13px. The site's data and
-   labels were 12px mono caps at 0.12-0.16em tracking: 72% of the
-   directory's text and half of a member page (2026-10-16). Labels are now
-   sentence case with no tracking (2026-10, "Letter case" in AGENTS.md).
-   Under 640px `text-xs` is 13px and the 9-12px one-offs are too (text
-   boxes and menus excepted: they take 16px, "Form controls on a phone"
-   below). Unlayered, so they beat the utilities. SVG text keeps its size: a
-   chart's labels are laid out for it. The tracked capitals left (the shared
-   eyebrow and the logotype) tighten to 0.08em, where wider would take the
-   width of 17px text. Labels of four words or more also go to 14px
-   (`labelCase` in lib/controlStyles.ts). */
+   On a phone nothing a reader must read is under 13px: the scale's
+   smallest step is 14px everywhere (`--text-small`, "One style per role"
+   above), and Tailwind's own sizes are switched off there, so a 9-12px
+   one-off can't come back. The tracked capitals left (the logotype)
+   tighten to 0.08em, where wider would take the width of 17px text. */
 @media (max-width: 639.98px) {
-  :root {
-    --text-xs: 0.8125rem;
-  }
-  :is(.text-\[9px\], .text-\[10px\], .text-\[11px\], .text-\[12px\]):not(
-    svg *,
-    input,
-    select,
-    textarea
-  ) {
-    font-size: 0.8125rem;
-  }
   :is(.tracking-\[0\.12em\], .tracking-\[0\.14em\], .tracking-\[0\.18em\]) {
     letter-spacing: 0.08em;
   }

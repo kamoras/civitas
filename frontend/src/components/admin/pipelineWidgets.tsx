@@ -47,7 +47,7 @@ function ElapsedTimer({ startedAt }: { startedAt: string | null | undefined }) {
 function PhaseSteps({ currentPhase }: { currentPhase: string | null | undefined }) {
   const activeIdx = PHASE_ORDER.indexOf((currentPhase ?? "fetch") as (typeof PHASE_ORDER)[number]);
   return (
-    <div className="flex items-center gap-1 text-xs font-mono">
+    <div className="flex items-center gap-1 text-small font-mono">
       {PHASE_ORDER.map((p, i) => {
         const done = i < activeIdx;
         const active = i === activeIdx;
@@ -169,7 +169,7 @@ function StepProgressMini({ step }: { step: PipelineStepInfo }) {
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="text-xs font-mono text-ink-min tabular-nums">
+      <span className="text-small font-mono text-ink-min tabular-nums">
         {done}/{step.total}
       </span>
     </div>
@@ -252,11 +252,11 @@ export function PipelineProgressBar({
   return (
     <div className="border border-signal-cyan/40 p-4 bg-signal-cyan/10">
       <div className="flex items-center justify-between mb-3">
-        <span className="text-signal-cyan text-sm font-mono font-semibold flex items-center gap-2">
+        <span className="text-signal-cyan text-small font-mono font-semibold flex items-center gap-2">
           <span className="inline-block w-2 h-2 bg-signal-cyan animate-pulse" />
           {title}
         </span>
-        <span className="text-ink text-xs font-mono">
+        <span className="text-ink text-small font-mono">
           <ElapsedTimer startedAt={run.startedAt} />
         </span>
       </div>
@@ -266,10 +266,10 @@ export function PipelineProgressBar({
       {/* Overall progress bar */}
       <div className="mt-3">
         <div className="flex items-center justify-between mb-1">
-          <span className="text-ink-lo text-xs font-mono">
+          <span className="text-ink-lo text-small font-mono">
             {activeStep ? asLabel(activeStep.label) : "Initializing"}
           </span>
-          <span className="text-ink-hi text-xs font-mono tabular-nums">
+          <span className="text-ink-hi text-small font-mono tabular-nums">
             {doneSteps}/{totalSteps} steps ({overallPct}%)
           </span>
         </div>
@@ -288,8 +288,8 @@ export function PipelineProgressBar({
         </div>
         {isAnalyze && eta && (
           <div className="flex items-center justify-between mt-1">
-            <span className="text-ink-min text-xs font-mono tabular-nums">{rate}</span>
-            <span className="text-signal-amber text-xs font-mono tabular-nums">ETA: {eta}</span>
+            <span className="text-ink-min text-small font-mono tabular-nums">{rate}</span>
+            <span className="text-signal-amber text-small font-mono tabular-nums">ETA: {eta}</span>
           </div>
         )}
       </div>
@@ -305,7 +305,7 @@ export function PipelineProgressBar({
             return (
               <div key={group.phase}>
                 <div
-                  className={`text-xs font-mono mb-1.5 ${
+                  className={`text-small font-mono mb-1.5 ${
                     groupActive ? "text-signal-cyan" : groupDone ? "text-ink" : "text-ink-min"
                   }`}
                 >
@@ -316,7 +316,7 @@ export function PipelineProgressBar({
                   {group.steps.map((step) => (
                     <div key={step.key} className="flex items-start gap-2 min-h-[20px]">
                       <span
-                        className={`mt-0.5 flex-shrink-0 w-3 text-center text-xs ${
+                        className={`mt-0.5 flex-shrink-0 w-3 text-center text-small ${
                           step.status === "done"
                             ? "text-ink-hi"
                             : step.status === "active"
@@ -337,7 +337,7 @@ export function PipelineProgressBar({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span
-                            className={`text-xs font-mono truncate ${
+                            className={`text-small font-mono truncate ${
                               step.status === "active"
                                 ? "text-signal-cyan"
                                 : step.status === "done"
@@ -350,7 +350,7 @@ export function PipelineProgressBar({
                             {step.label}
                           </span>
                           {step.detail && (step.status === "done" || step.status === "active") && (
-                            <span className="text-xs font-mono text-ink-min truncate">
+                            <span className="text-small font-mono text-ink-min truncate">
                               {step.detail}
                             </span>
                           )}
@@ -367,7 +367,7 @@ export function PipelineProgressBar({
       )}
 
       {statsRow && (
-        <div className="flex gap-4 mt-3 pt-2 border-t border-white/[0.07] text-xs text-ink-lo font-mono">
+        <div className="flex gap-4 mt-3 pt-2 border-t border-white/[0.07] text-small text-ink-lo font-mono">
           {statsRow}
         </div>
       )}
@@ -394,12 +394,12 @@ export function RunHistory({ runs: allRuns }: { runs: PipelineHistoryRun[] | nul
   const [showAll, setShowAll] = useState(false);
   if (allRuns === null) return <NotLoaded />;
   if (allRuns.length === 0)
-    return <p className="text-ink-min text-xs">No pipeline runs recorded.</p>;
+    return <p className="text-ink-min text-small">No pipeline runs recorded.</p>;
   const preview = historyPreview(allRuns, HISTORY_PREVIEW_PER_TYPE);
   const runs = showAll ? allRuns : preview;
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-xs font-mono">
+      <table className="w-full text-small font-mono">
         <caption className="sr-only">Pipeline run history</caption>
         <thead>
           <tr className="text-ink-lo border-b border-white/[0.07]">
@@ -458,7 +458,7 @@ export function RunHistory({ runs: allRuns }: { runs: PipelineHistoryRun[] | nul
                   <span className={statusColor}>{asLabel(r.status)}</span>
                   {r.errorMessage && (
                     <span
-                      className="ml-2 text-ink-lo text-xs"
+                      className="ml-2 text-ink-lo text-small"
                       title={r.errorDetail?.split("\n", 1)[0] ?? r.errorMessage}
                     >
                       ⚠
@@ -488,7 +488,7 @@ export function RunHistory({ runs: allRuns }: { runs: PipelineHistoryRun[] | nul
           type="button"
           onClick={() => setShowAll((v) => !v)}
           aria-expanded={showAll}
-          className="mt-2 text-xs font-mono text-ink-min hover:text-ink-lo"
+          className="mt-2 text-small font-mono text-ink-min hover:text-ink-lo"
         >
           {showAll
             ? `Show the newest ${HISTORY_PREVIEW_PER_TYPE} of each pipeline only`
@@ -546,7 +546,7 @@ export function PipelineStatusRow({
           <button
             disabled={clearing}
             onClick={onClear}
-            className="text-xs font-mono text-signal-amber hover:text-signal-amber border border-signal-amber/30 hover:border-signal-amber/60
+            className="text-small font-mono text-signal-amber hover:text-signal-amber border border-signal-amber/30 hover:border-signal-amber/60
                        px-2 py-0.5  transition-colors disabled:opacity-40"
           >
             {clearing ? "Clearing..." : "[Clear stuck run]"}
@@ -592,9 +592,9 @@ export function PipelineRunDetailCard({
     <div className="panel">
       <TerminalTitlebar title={title} />
       <div className="p-4">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm font-mono">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-small font-mono">
           <div>
-            <span className="text-ink-lo text-xs block">Status</span>
+            <span className="text-ink-lo text-small block">Status</span>
             <span
               className={
                 run.status === "completed"
@@ -608,18 +608,20 @@ export function PipelineRunDetailCard({
             </span>
           </div>
           <div>
-            <span className="text-ink-lo text-xs block">Started</span>
+            <span className="text-ink-lo text-small block">Started</span>
             <span>{formatTime(run.startedAt)}</span>
           </div>
           <div>
-            <span className="text-ink-lo text-xs block">Duration</span>
+            <span className="text-ink-lo text-small block">Duration</span>
             <span>{formatDuration(run.elapsedSeconds)}</span>
           </div>
           {extraStats}
         </div>
         {run.errorMessage && (
           <div className="mt-3 p-2 border border-signal-magenta/40 bg-signal-magenta/10">
-            <span className="text-signal-magenta text-xs font-mono">Error: {run.errorMessage}</span>
+            <span className="text-signal-magenta text-small font-mono">
+              Error: {run.errorMessage}
+            </span>
           </div>
         )}
         <ErrorDetail detail={run.errorDetail} />
@@ -635,7 +637,7 @@ export function PipelineRunDetailCard({
 function ErrorDetail({ detail }: { detail?: string | null }) {
   if (!detail) return null;
   return (
-    <details className="mt-2 text-xs font-mono">
+    <details className="mt-2 text-small font-mono">
       <summary className="cursor-pointer text-signal-magenta">
         Cause: {detail.split("\n", 1)[0]}
       </summary>
@@ -656,14 +658,14 @@ export function LastRunSteps({ steps }: { steps?: PipelineStepInfo[] | null }) {
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
         aria-label={`Step breakdown, ${steps.length} steps`}
-        className="text-xs font-mono text-ink-lo hover:text-phos transition-colors"
+        className="text-small font-mono text-ink-lo hover:text-phos transition-colors"
       >
         {expanded ? "▼" : "▶"} step breakdown ({steps.length} steps)
       </button>
       {expanded && (
         <div className="mt-2 space-y-0.5">
           {steps.map((step) => (
-            <div key={step.key} className="flex items-center gap-2 text-xs font-mono py-0.5">
+            <div key={step.key} className="flex items-center gap-2 text-small font-mono py-0.5">
               <span
                 className={`w-3 text-center flex-shrink-0 ${
                   step.status === "done"

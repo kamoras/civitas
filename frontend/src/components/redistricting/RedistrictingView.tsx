@@ -39,6 +39,7 @@ import {
   redistrictingHref,
 } from "@/lib/redistricting";
 import { SERIES } from "@/components/admin/charts/palette";
+import { TYPE } from "@/lib/typeStyles";
 
 /**
  * "Is my district different this year, and how much?" for one state that
@@ -90,7 +91,7 @@ export function SeatStrip({
     .join(", ");
   return (
     <div className="grid grid-cols-[52px_1fr] items-baseline gap-2">
-      <span className="font-mono text-[11px] text-ink-min">{label}</span>
+      <span className="font-mono text-small text-ink-min">{label}</span>
       <span className="min-w-0">
         <span aria-hidden="true" className="flex flex-wrap gap-[2px]">
           {order.flatMap((k) =>
@@ -99,7 +100,7 @@ export function SeatStrip({
             ))
           )}
         </span>
-        <span className="mt-1 block text-xs text-ink-lo">{words}</span>
+        <span className="mt-1 block text-small text-ink-lo">{words}</span>
       </span>
     </div>
   );
@@ -158,7 +159,7 @@ function ShareBar({ rows, prefix }: { rows: DistrictShare[]; prefix: "old" | "ne
           <span key={`rest${j}`} className="h-3 w-2.5 border border-white/[0.09]" />
         ))}
       </span>
-      <span className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-[11px] text-ink-lo">
+      <span className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-small text-ink-lo">
         {shown.map((r, i) => (
           <span key={r.district}>
             <span aria-hidden="true" style={{ color: SERIES[i] }}>
@@ -175,7 +176,7 @@ function ShareBar({ rows, prefix }: { rows: DistrictShare[]; prefix: "old" | "ne
 
 function Num({ n }: { n: number }) {
   return (
-    <span className="self-start border border-white/15 py-0.5 text-center font-mono text-sm text-ink-hi">
+    <span className="self-start border border-white/15 py-0.5 text-center font-mono text-small text-ink-hi">
       {n === 0 ? "AL" : n}
     </span>
   );
@@ -190,10 +191,10 @@ function NewRow({ d, filter }: { d: NewDistrict; filter: string }) {
     >
       <Num n={d.number} />
       <div className="min-w-0">
-        {areas && <p className="truncate text-[11px] text-ink-min">{areas}</p>}
-        <p className="text-sm leading-relaxed text-ink">{newDistrictSentence(d)}</p>
+        {areas && <p className="truncate text-small text-ink-min">{areas}</p>}
+        <p className="text-small leading-relaxed text-ink">{newDistrictSentence(d)}</p>
         {!d.unchanged && <ShareBar rows={d.sources} prefix="old" />}
-        <p className="mt-1 font-mono text-[11px] text-ink-min">
+        <p className="mt-1 font-mono text-small text-ink-min">
           Lean <span className={pviColor(d.pviBefore)}>{formatPvi(d.pviBefore)}</span> →{" "}
           <span className={pviColor(d.pviAfter)}>{formatPvi(d.pviAfter)}</span>
           {d.pviShift != null && d.pviShift !== 0 && (
@@ -208,7 +209,7 @@ function NewRow({ d, filter }: { d: NewDistrict; filter: string }) {
           )}
         </p>
         {(d.computedLeanBefore != null || d.computedLeanAfter != null) && (
-          <p className="font-mono text-[11px] text-ink-min">
+          <p className="font-mono text-small text-ink-min">
             Civitas-computed {formatComputedLean(d.computedLeanBefore)} →{" "}
             {formatComputedLean(d.computedLeanAfter)}
           </p>
@@ -227,10 +228,10 @@ function OldRow({ d, filter }: { d: OldDistrict; filter: string }) {
     >
       <Num n={d.number} />
       <div className="min-w-0">
-        {areas && <p className="truncate text-[11px] text-ink-min">{areas}</p>}
-        <p className="text-sm leading-relaxed text-ink">{oldDistrictSentence(d)}</p>
+        {areas && <p className="truncate text-small text-ink-min">{areas}</p>}
+        <p className="text-small leading-relaxed text-ink">{oldDistrictSentence(d)}</p>
         <ShareBar rows={d.destinations} prefix="new" />
-        <p className="mt-1 font-mono text-[11px] text-ink-min">
+        <p className="mt-1 font-mono text-small text-ink-min">
           Old lean <span className={pviColor(d.pvi)}>{formatPvi(d.pvi)}</span>
           {d.computedLean != null && (
             <span> · Civitas-computed {formatComputedLean(d.computedLean)}</span>
@@ -252,7 +253,7 @@ function OverlapMatrix({ data }: { data: StateRedistricting }) {
       tabIndex={0}
       aria-label="Overlap matrix, scrollable"
     >
-      <table className="border-collapse font-mono text-[10px] text-ink-lo">
+      <table className="border-collapse font-mono text-small text-ink-lo">
         <caption className="sr-only">
           Census residents in each pair of an old ({congressOrdinal(data.fromCongress)} Congress)
           and a new ({congressOrdinal(data.toCongress)} Congress) district. Rows are old districts,
@@ -428,10 +429,10 @@ function MethodAndData({ data }: { data: StateRedistricting }) {
       aria-labelledby="method"
       className="mt-10 border-t-3 border-ink-min/60 pt-5"
     >
-      <h2 id="method" className="font-mono text-xs text-ink-min">
+      <h2 id="method" className={TYPE.kicker}>
         Method &amp; data
       </h2>
-      <div className="mt-3 max-w-3xl space-y-3 text-[13px] leading-relaxed text-ink-lo">
+      <div className="mt-3 max-w-3xl space-y-3 text-small leading-relaxed text-ink-lo">
         <p>
           How residents are counted, what a predecessor is and what &ldquo;seats by lean&rdquo;
           counts are behind each figure&apos;s &ldquo;More&rdquo; at the top of the page.
@@ -486,7 +487,7 @@ function MethodAndData({ data }: { data: StateRedistricting }) {
             )}
           </ul>
         </NoteLine>
-        <p className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs">
+        <p className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-small">
           <a
             href={downloads.csv}
             download
@@ -505,7 +506,7 @@ function MethodAndData({ data }: { data: StateRedistricting }) {
         </p>
       </div>
       <details className="mt-4" onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
-        <summary className="min-h-[44px] cursor-pointer py-2 font-mono text-xs text-signal-cyan hover:text-phos">
+        <summary className="min-h-[44px] cursor-pointer py-2 font-mono text-small text-signal-cyan hover:text-phos">
           [ Overlap matrix · {data.cells.length} cells ]
         </summary>
         {open && <OverlapMatrix data={data} />}
@@ -548,16 +549,16 @@ export default function RedistrictingStateView({ data }: { data: StateRedistrict
 
   return (
     <>
-      <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-ink-lo">
+      <p className="mt-4 max-w-2xl text-body leading-relaxed text-ink-lo">
         {data.stateName} votes on a new U.S. House map in {data.cycle}.
       </p>
       {data.map && (
-        <p className="mt-2 max-w-2xl font-mono text-[11px] leading-relaxed text-ink-min">
+        <p className="mt-2 max-w-2xl font-mono text-small leading-relaxed text-ink-min">
           The map: {data.map.title ?? data.map.reason}
           {data.map.issuedBy && <> · {data.map.issuedBy}</>}
         </p>
       )}
-      <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs">
+      <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-small">
         {actUrl && (
           <a
             href={actUrl}
@@ -586,7 +587,7 @@ export default function RedistrictingStateView({ data }: { data: StateRedistrict
       >
         <div className="mt-4" {...{ [SHARE_SECTION_ATTR]: "at-a-glance" }}>
           <div className="flex flex-wrap items-baseline justify-between gap-3 border-b-2 border-ink-hi pb-1.5">
-            <h2 id="at-a-glance" className="font-display text-xl font-semibold text-ink-hi">
+            <h2 id="at-a-glance" className={TYPE.section}>
               The delegation, by lean
             </h2>
             <ShareSectionButton label="The delegation, by lean" />
@@ -636,7 +637,7 @@ export default function RedistrictingStateView({ data }: { data: StateRedistrict
       </ShareSubjectProvider>
 
       <section aria-labelledby="districts" className="mt-8">
-        <h2 id="districts" className="font-mono text-xs text-ink-min">
+        <h2 id="districts" className={TYPE.kicker}>
           Find your district
         </h2>
         <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Which map to list">
@@ -651,7 +652,7 @@ export default function RedistrictingStateView({ data }: { data: StateRedistrict
               type="button"
               aria-pressed={view === key}
               onClick={() => setView(key)}
-              className={`min-h-[44px] border px-3 font-mono text-xs ${
+              className={`min-h-[44px] border px-3 font-mono text-small ${
                 view === key
                   ? "border-signal-cyan text-signal-cyan"
                   : "border-white/[0.09] text-ink-lo hover:text-ink-hi"
@@ -667,9 +668,9 @@ export default function RedistrictingStateView({ data }: { data: StateRedistrict
           onChange={(e) => setFilter(e.target.value)}
           placeholder="Filter by city, town, county or district number"
           aria-label={`Filter ${view} districts by city, town, county or district number`}
-          className="mt-3 w-full min-w-0 border border-white/15 bg-surface-base px-3 py-2 font-mono text-xs text-ink-hi placeholder:text-ink-min"
+          className="mt-3 w-full min-w-0 border border-white/15 bg-surface-base px-3 py-2 font-mono text-small text-ink-hi placeholder:text-ink-min"
         />
-        <p className="mt-1.5 text-[11px] text-ink-min">
+        <p className="mt-1.5 text-small text-ink-min">
           {view === "new"
             ? `Districts on the ${data.cycle} ballot, and where their residents lived before.`
             : `Districts the members now serving were elected in, and where their residents went.`}{" "}
@@ -683,7 +684,7 @@ export default function RedistrictingStateView({ data }: { data: StateRedistrict
         {placeSummary.length > 0 && (
           <div
             aria-hidden="true"
-            className="mt-2 border border-white/15 px-3 py-2 text-[13px] text-ink"
+            className="mt-2 border border-white/15 px-3 py-2 text-small text-ink"
           >
             {placeSummary.map((line) => (
               <p key={line}>{line}</p>
@@ -698,12 +699,12 @@ export default function RedistrictingStateView({ data }: { data: StateRedistrict
               ))}
         </ol>
         {shown.length === 0 && (
-          <p className="border border-white/[0.09] p-4 text-xs text-ink-min">
+          <p className="border border-white/[0.09] p-4 text-small text-ink-min">
             No district matches &ldquo;{filter}&rdquo;. Try the name of your city, town or county,
             or a district number.
           </p>
         )}
-        <p className="mt-4 flex flex-wrap gap-x-6 font-mono text-xs">
+        <p className="mt-4 flex flex-wrap gap-x-6 font-mono text-small">
           <Link
             href={stateBallotHref(data.state)}
             className="inline-flex min-h-6 items-center text-signal-cyan hover:text-phos"
@@ -717,7 +718,7 @@ export default function RedistrictingStateView({ data }: { data: StateRedistrict
             [ Every redrawn state ]
           </Link>
         </p>
-        <p className="mt-2 font-mono text-xs">
+        <p className="mt-2 font-mono text-small">
           <Link
             href={mapHref("usual", "house")}
             className="inline-flex min-h-6 items-center text-signal-cyan hover:text-phos"

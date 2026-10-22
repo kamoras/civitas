@@ -6,6 +6,7 @@ import { NOT_FINAL, reportingText } from "@/lib/results";
 import { PARTY_COLORS } from "@/lib/partyStyles";
 import { CALENDAR_HREF } from "@/lib/routes";
 import { INLINE_LINK } from "@/lib/controlStyles";
+import { TYPE } from "@/lib/typeStyles";
 
 /*
   Special elections as the backend serves them (app/special_elections.py):
@@ -47,12 +48,12 @@ function SpecialCountLines({ s }: { s: SpecialElection }) {
   const source = safeHref(c.sourceUrl);
   return (
     <div className="mt-2">
-      <p className="font-mono text-[11px] text-signal-amber">
+      <p className="font-mono text-small text-signal-amber">
         {c.official ? "Leads · Official count" : `Leading · ${NOT_FINAL}`}
       </p>
       <ul className="mt-1 space-y-0.5">
         {c.tallies.slice(0, 3).map((t) => (
-          <li key={t.name} className="flex justify-between gap-3 font-mono text-xs text-ink-lo">
+          <li key={t.name} className="flex justify-between gap-3 font-mono text-small text-ink-lo">
             <span>
               {t.name}
               {t.party && (
@@ -63,7 +64,7 @@ function SpecialCountLines({ s }: { s: SpecialElection }) {
           </li>
         ))}
       </ul>
-      <p className="mt-1 text-xs text-ink-min">
+      <p className="mt-1 text-small text-ink-min">
         {[reporting, c.sourceName].filter(Boolean).join(" · ")}
         {source && (
           <>
@@ -83,18 +84,18 @@ export function SpecialItem({ s }: { s: SpecialElection }) {
   return (
     <li id={`special-${s.id}`} className="border-t border-white/[0.07] py-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <p className="font-display text-base font-semibold text-ink-hi">{s.seat}</p>
-        <p className="font-mono text-[11px] text-ink-min">
+        <p className={TYPE.boxTitle}>{s.seat}</p>
+        <p className="font-mono text-small text-ink-min">
           {longDate(s.date)} · {dayText(s.status, s.daysLeft)}
         </p>
       </div>
-      <p className="mt-0.5 text-sm text-ink-lo">
+      <p className="mt-0.5 text-small text-ink-lo">
         {s.label ?? "Special election"}
         {s.note && <span className="text-ink-min"> · {s.note}</span>}
       </p>
       <SpecialCountLines s={s} />
-      {s.swing && <p className="mt-2 text-sm text-ink-hi">{s.swing.sentence}</p>}
-      {absent && <p className="mt-1 text-xs text-ink-min">{absent}</p>}
+      {s.swing && <p className="mt-2 text-small text-ink-hi">{s.swing.sentence}</p>}
+      {absent && <p className="mt-1 text-small text-ink-min">{absent}</p>}
     </li>
   );
 }
@@ -104,12 +105,12 @@ function VacancyItem({ v }: { v: SeatVacancy }) {
   return (
     <li className="border-t border-white/[0.07] py-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <p className="font-display text-base font-semibold text-ink-hi">{v.seat}</p>
+        <p className={TYPE.boxTitle}>{v.seat}</p>
         {v.vacatedOn && (
-          <p className="font-mono text-[11px] text-ink-min">Vacant since {longDate(v.vacatedOn)}</p>
+          <p className="font-mono text-small text-ink-min">Vacant since {longDate(v.vacatedOn)}</p>
         )}
       </div>
-      <p className="mt-0.5 text-sm text-ink-lo">
+      <p className="mt-0.5 text-small text-ink-lo">
         {v.footnote ?? (v.office === "S" ? "No senator is listed for this seat." : "Vacant.")}{" "}
         {source && (
           <a href={source} className={INLINE_LINK} rel="noopener">
@@ -117,7 +118,7 @@ function VacancyItem({ v }: { v: SeatVacancy }) {
           </a>
         )}
       </p>
-      <p className="mt-1 text-xs text-ink-min">
+      <p className="mt-1 text-small text-ink-min">
         {v.nextSpecial ? (
           <>
             Next: {v.nextSpecial.label ?? "special election"}, {longDate(v.nextSpecial.date)}.
@@ -135,7 +136,7 @@ function VacancyItem({ v }: { v: SeatVacancy }) {
 const RECENT_OPEN = 5;
 
 function H3({ children }: { children: React.ReactNode }) {
-  return <h3 className="mt-6 font-mono text-xs text-ink-min">{children}</h3>;
+  return <h3 className={`${TYPE.kicker} mt-6`}>{children}</h3>;
 }
 
 /** The board: vacancies, specials ahead, the year's held specials with the
@@ -160,7 +161,7 @@ export default function SpecialsBoardView({
           ))}
         </ul>
       ) : (
-        <p className="mt-2 text-sm text-ink-lo">
+        <p className="mt-2 text-small text-ink-lo">
           Every seat in Congress is filled, by the House Clerk&apos;s and the Senate&apos;s own
           member lists.
         </p>
@@ -174,7 +175,7 @@ export default function SpecialsBoardView({
           ))}
         </ul>
       ) : (
-        <p className="mt-2 text-sm text-ink-lo">
+        <p className="mt-2 text-small text-ink-lo">
           No federal special election is on the FEC&apos;s calendar.
         </p>
       )}
@@ -182,7 +183,7 @@ export default function SpecialsBoardView({
       <H3>Held in the last year</H3>
       {board.recent.length ? (
         <>
-          <p className="mt-2 text-sm text-ink-lo">
+          <p className="mt-2 text-small text-ink-lo">
             {avg.sentence}
             {avg.swing != null &&
               " A seat's usual vote is its presidential lean, so a swing mixes the national mood with the race itself."}
@@ -196,7 +197,7 @@ export default function SpecialsBoardView({
           </ul>
           {cap(board.recent).length > RECENT_OPEN && (
             <details>
-              <summary className="flex min-h-11 cursor-pointer items-center font-mono text-xs text-ink-min">
+              <summary className="flex min-h-11 cursor-pointer items-center font-mono text-small text-ink-min">
                 {cap(board.recent).length - RECENT_OPEN} more held in the last year
               </summary>
               <ul>
@@ -210,17 +211,17 @@ export default function SpecialsBoardView({
           )}
         </>
       ) : board.lastSpecial ? (
-        <p className="mt-2 text-sm text-ink-lo">
+        <p className="mt-2 text-small text-ink-lo">
           None. The last federal special election on file was for {board.lastSpecial.seat}, on{" "}
           {longDate(board.lastSpecial.date)}.
         </p>
       ) : (
-        <p className="mt-2 text-sm text-ink-lo">None on file.</p>
+        <p className="mt-2 text-small text-ink-lo">None on file.</p>
       )}
       {limit && (
         <Link
           href={`${CALENDAR_HREF}#specials-board`}
-          className="mt-3 inline-flex min-h-11 items-center font-mono text-xs text-signal-cyan hover:text-phos"
+          className="mt-3 inline-flex min-h-11 items-center font-mono text-small text-signal-cyan hover:text-phos"
         >
           [ Every special election → ]
         </Link>

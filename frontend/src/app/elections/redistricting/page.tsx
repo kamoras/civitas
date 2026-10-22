@@ -11,6 +11,7 @@ import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
 import { SeatStrip } from "@/components/redistricting/RedistrictingView";
 import RedistrictingWatch from "@/components/redistricting/RedistrictingWatch";
+import { TYPE } from "@/lib/typeStyles";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
@@ -62,7 +63,7 @@ export default async function RedistrictingIndexPage() {
                   <li key={s.state}>
                     <Link
                       href={redistrictingHref(s.state)}
-                      className="flex min-h-11 min-w-11 items-center justify-center border border-white/15 px-3 font-mono text-sm text-ink-lo transition-colors hover:border-phos/40 hover:text-phos"
+                      className="flex min-h-11 min-w-11 items-center justify-center border border-white/15 px-3 font-mono text-small text-ink-lo transition-colors hover:border-phos/40 hover:text-phos"
                     >
                       {s.state}
                       <span className="sr-only"> {s.stateName}</span>
@@ -79,11 +80,11 @@ export default async function RedistrictingIndexPage() {
                 <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                   <Link
                     href={redistrictingHref(s.state)}
-                    className="font-display text-lg font-semibold text-ink-hi hover:text-phos"
+                    className={`${TYPE.boxTitle} hover:text-phos`}
                   >
                     {s.stateName}
                   </Link>
-                  <span className="font-mono text-[11px] text-ink-min">
+                  <span className="font-mono text-small text-ink-min">
                     {s.summary.seats} seats · {s.summary.residentsMovedPct}% in a mostly new
                     district · R-leaning {s.summary.seatsByLeanBefore.R} →{" "}
                     {s.summary.seatsByLeanAfter.R} {netWord(s.summary.netSeatChangeByLean.R)} ·
@@ -91,14 +92,14 @@ export default async function RedistrictingIndexPage() {
                     {netWord(s.summary.netSeatChangeByLean.D)}
                   </span>
                 </div>
-                {s.map?.title && <p className="mt-0.5 text-xs text-ink-lo">{s.map.title}</p>}
+                {s.map?.title && <p className="mt-0.5 text-small text-ink-lo">{s.map.title}</p>}
                 <div className="mt-2 space-y-2">
                   <SeatStrip label="Before" counts={s.summary.seatsByLeanBefore} />
                   <SeatStrip label="After" counts={s.summary.seatsByLeanAfter} />
                 </div>
                 <Link
                   href={redistrictingHref(s.state)}
-                  className="mt-2 inline-block min-h-[44px] py-2 font-mono text-xs text-signal-cyan hover:text-phos"
+                  className="mt-2 inline-block min-h-[44px] py-2 font-mono text-small text-signal-cyan hover:text-phos"
                   aria-label={`What changed in ${s.stateName}`}
                 >
                   [ What changed → ]
@@ -109,10 +110,10 @@ export default async function RedistrictingIndexPage() {
 
           {(index?.heldMaps ?? []).length > 0 && (
             <section aria-labelledby="held" className="mt-8 border-t border-white/[0.09] pt-4">
-              <h2 id="held" className="font-mono text-xs text-ink-min">
+              <h2 id="held" className={TYPE.kicker}>
                 Kept their old lines
               </h2>
-              <ul className="mt-2 space-y-2 text-sm text-ink-lo">
+              <ul className="mt-2 space-y-2 text-small text-ink-lo">
                 {index!.heldMaps.map((h) => {
                   const url = safeHref(h.url);
                   return (
@@ -125,7 +126,7 @@ export default async function RedistrictingIndexPage() {
                             href={url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="font-mono text-xs text-signal-cyan hover:text-phos"
+                            className="font-mono text-small text-signal-cyan hover:text-phos"
                           >
                             [ Official source ↗ ]
                           </a>
@@ -140,7 +141,7 @@ export default async function RedistrictingIndexPage() {
 
           <RedistrictingWatch watch={index?.watch} />
 
-          <p className="mt-8 max-w-2xl text-xs leading-relaxed text-ink-min">
+          <p className="mt-8 max-w-2xl text-small leading-relaxed text-ink-min">
             Lean is Cook PVI: how a district voted for president relative to the nation, on the same
             presidential elections before and after, so a change in lean is a change in the lines.
             It is not a forecast. Each state page explains the method and lists every source.

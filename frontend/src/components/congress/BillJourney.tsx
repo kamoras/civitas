@@ -44,7 +44,7 @@ export default function BillJourney({
   );
   return (
     <div className="flex flex-col gap-4">
-      <p className="font-mono text-xs text-ink-min">Its path</p>
+      <p className="font-mono text-small text-ink-min">Its path</p>
       <ol className="flex flex-col lg:flex-row">
         {journey.stops.map((s, i) => {
           const reached = s.status !== "ahead";
@@ -72,7 +72,7 @@ export default function BillJourney({
                   and the hollow mark say "not yet". */}
               <span className="flex min-w-0 flex-col">
                 <span
-                  className={`text-sm font-semibold ${reached ? "text-ink-hi" : "text-ink-lo"}`}
+                  className={`text-small font-semibold ${reached ? "text-ink-hi" : "text-ink-lo"}`}
                 >
                   {s.label}
                   <span className="sr-only">{STATUS_TEXT[s.status]}</span>
@@ -80,13 +80,13 @@ export default function BillJourney({
                 {s.status === "current" && (
                   <span
                     aria-hidden="true"
-                    className="w-fit border border-signal-cyan/50 px-1 font-mono text-[11px] text-signal-cyan"
+                    className="w-fit border border-signal-cyan/50 px-1 font-mono text-small text-signal-cyan"
                   >
                     Now
                   </span>
                 )}
                 {s.detail && (
-                  <span className="text-xs text-ink-lo">
+                  <span className="text-small text-ink-lo">
                     {s.detail}
                     {s.date && s.key === "committee" && s.status === "current"
                       ? ` ${calendarDate(s.date)}`
@@ -94,12 +94,12 @@ export default function BillJourney({
                   </span>
                 )}
                 {s.date && !(s.key === "committee" && s.status === "current") && (
-                  <span className="font-mono text-xs tabular-nums text-ink">
+                  <span className="font-mono text-small tabular-nums text-ink">
                     {calendarDate(s.date)}
                   </span>
                 )}
-                {s.after && <span className="text-xs text-ink-min">{s.after}</span>}
-                {!reached && <span className="text-xs text-ink-min">Not yet</span>}
+                {s.after && <span className="text-small text-ink-min">{s.after}</span>}
+                {!reached && <span className="text-small text-ink-min">Not yet</span>}
               </span>
             </li>
           );
@@ -107,14 +107,14 @@ export default function BillJourney({
       </ol>
       {passage.length > 0 && (
         <div className="flex flex-col gap-2">
-          <p className="font-mono text-xs text-ink-min">How it passed</p>
-          <ul className="flex flex-col gap-1.5 text-sm leading-relaxed text-ink">
+          <p className="font-mono text-small text-ink-min">How it passed</p>
+          <ul className="flex flex-col gap-1.5 text-small leading-relaxed text-ink">
             {passage.map((p) => (
               <li key={`${p.chamber}-${p.date}-${p.kind}`}>{p.sentence}</li>
             ))}
           </ul>
           {methods.size > 0 && (
-            <dl className="flex flex-col gap-1 text-sm leading-relaxed text-ink-lo">
+            <dl className="flex flex-col gap-1 text-small leading-relaxed text-ink-lo">
               {[...methods.values()].map((p) => (
                 <div key={p.methodTerm}>
                   <dt className="inline font-semibold text-ink">{p.methodTerm}:</dt>{" "}
