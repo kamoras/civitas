@@ -4,6 +4,8 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import BackToTop from "@/components/BackToTop";
 import PageMasthead from "@/components/layout/PageMasthead";
+import BoxGrid from "@/components/shared/BoxGrid";
+import RecordBox from "@/components/shared/RecordBox";
 import SectionTabs from "@/components/layout/SectionTabs";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
@@ -112,14 +114,7 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
           <div className="mx-auto flex max-w-6xl flex-col gap-10">
             <div>
               <SectionTabs section="congress" active="nominations" />
-              <PageMasthead eyebrow={`The Senate · ${congress}`} title="Nominations">
-                <p>
-                  The president nominates; the Senate confirms.{" "}
-                  {complete
-                    ? "Every nomination sent this Congress, from cabinet secretaries and judges to military promotions, as Congress.gov records it."
-                    : "The nominations sent this Congress, from cabinet secretaries and judges to military promotions, as Congress.gov records them, read a few hundred a day."}
-                </p>
-              </PageMasthead>
+              <PageMasthead eyebrow={`The Senate · ${congress}`} title="Nominations" />
             </div>
 
             {!complete && stats.total > 0 && (
@@ -151,29 +146,51 @@ export default async function NominationsPage({ searchParams }: { searchParams: 
                 aria-labelledby="glance-title"
                 className="flex flex-col gap-6"
               >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <h2
-                    id="glance-title"
-                    className="max-w-3xl font-display text-xl leading-snug text-ink sm:text-2xl"
-                  >
-                    {stats.total.toLocaleString("en-US")} nominations
-                    {complete ? "" : " read so far"}, naming {stats.people.toLocaleString("en-US")}{" "}
-                    people.{" "}
-                    {complete && civilian.median != null && (
+                {/* The page's figure leads, in one box: the count as its
+                    figure, the old intro's first sentence as its title and
+                    the rest behind its More. */}
+                <BoxGrid columns={1}>
+                  <RecordBox
+                    level={2}
+                    headingAttrs={{ id: "glance-title" }}
+                    title="The president nominates; the Senate confirms."
+                    figure={{
+                      type: "stat",
+                      value: stats.total,
+                      caption: complete ? "nominations" : "nominations read so far",
+                    }}
+                    dek={
                       <>
-                        A civilian nomination took a median of{" "}
-                        <span className="text-ink-hi">{days(civilian.median)}</span> to confirm
-                        {judicial.median != null && (
+                        Naming {stats.people.toLocaleString("en-US")} people.{" "}
+                        {complete && civilian.median != null && (
                           <>
-                            ; a judge, <span className="text-ink-hi">{days(judicial.median)}</span>
+                            A civilian nomination took a median of{" "}
+                            <span className="text-ink-hi">{days(civilian.median)}</span> to confirm
+                            {judicial.median != null && (
+                              <>
+                                ; a judge,{" "}
+                                <span className="text-ink-hi">{days(judicial.median)}</span>
+                              </>
+                            )}
+                            .
                           </>
                         )}
-                        .
                       </>
-                    )}
-                  </h2>
-                  <ShareSectionButton label="Nominations at a glance" />
-                </div>
+                    }
+                    more={{
+                      label: "what is counted",
+                      children: (
+                        <p>
+                          {complete
+                            ? "Every nomination sent this Congress, from cabinet secretaries and judges to military promotions, as Congress.gov records it."
+                            : "The nominations sent this Congress, from cabinet secretaries and judges to military promotions, as Congress.gov records them, read a few hundred a day."}
+                        </p>
+                      ),
+                    }}
+                  >
+                    <ShareSectionButton label="Nominations at a glance" />
+                  </RecordBox>
+                </BoxGrid>
 
                 <ul className="grid grid-cols-2 gap-px border border-white/15 bg-white/15 sm:grid-cols-4">
                   {STATUSES.map((s) => (

@@ -26,7 +26,8 @@ export default function ScoresChapter() {
       href="/about/scores"
       eyebrow="Methodology · Senate & House"
       title="How Congress is compared"
-      lede={
+      lede={<p>Every member, measured the same way.</p>}
+      intro={
         <p>
           Every senator and representative is measured the same way, from FEC filings, roll-call
           votes and Congress.gov bill records, and set beside colleagues in the same party. This is

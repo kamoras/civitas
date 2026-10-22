@@ -37,7 +37,8 @@ export default async function LimitationsChapter() {
       href="/about/limitations"
       eyebrow="Methodology · disclosures"
       title="Known limitations"
-      lede={
+      lede={<p>What the figures can&apos;t tell you.</p>}
+      intro={
         <p>
           What the figures and pages can&apos;t tell you. Where a gap can be fixed, we fix it and
           remove it from this list; where it can&apos;t yet, we say exactly why, so it can be
