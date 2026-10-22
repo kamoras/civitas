@@ -396,12 +396,13 @@ export default function DataChapter() {
           </Box>
           <Box
             title="What AI does not do"
-            dek="No model writes a score, anything on a ballot page, or a member write-up. Bills and donors are classified by embeddings, not a language model."
+            dek="No model writes a figure on a member page, anything on a ballot page, or a member write-up. Bills and donors are classified by embeddings, not a language model."
             more="each, and why"
           >
             <List>
-              <Item label="Scores">
-                Every score is a deterministic formula with no model input.
+              <Item label="Member figures">
+                Every figure compared on a member page is a deterministic formula with no model
+                input.
               </Item>
               <Item label="Ballot content">
                 Nothing on a ballot page is model-written, at any stage (
@@ -503,15 +504,15 @@ export default function DataChapter() {
         <Boxes>
           <Box
             title="Cook's figure, checked"
-            dek="Scores use Cook's published PVI. Beside it, Civitas shows the same formula worked out from open precinct returns, used in no score."
+            dek="Member comparisons use Cook's published PVI. Beside it, Civitas shows the same formula worked out from open precinct returns, used in no comparison."
             more="where it is shown"
           >
             <P>
               Every House district&apos;s lean on the site is Cook&apos;s published PVI, and that is
-              the figure the scores use. Beside it, the race pages, the redistricting pages and each
-              member page&apos;s methods section show a Civitas-computed lean: the same formula,
-              worked out here from open precinct returns, so anyone can check where the number comes
-              from. It is shown for comparison and used in no score.
+              the figure member comparisons use. Beside it, the race pages, the redistricting pages
+              and each member page&apos;s methods section show a Civitas-computed lean: the same
+              formula, worked out here from open precinct returns, so anyone can check where the
+              number comes from. It is shown for comparison and used in no member comparison.
             </P>
           </Box>
           <Box
