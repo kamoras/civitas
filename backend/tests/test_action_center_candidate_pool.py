@@ -62,7 +62,7 @@ def refresh(monkeypatch):
     monkeypatch.setattr(ac, "_filter_policy_relevant", lambda db, arts: [(a, None) for a in arts])
     monkeypatch.setattr(ac, "fetch_trending_topics", lambda: [])
     monkeypatch.setattr(ac, "_cluster_articles", lambda arts: CLUSTERS)
-    monkeypatch.setattr(ac, "_rank_clusters", lambda cl, tr, db: (cl, [1.0 - i / 10 for i in range(len(cl))]))
+    monkeypatch.setattr(ac, "_rank_clusters", lambda cl, tr, db: (cl, [ac.RankSignals(True, len(cl) - i, 1, 0.0, 0.0) for i in range(len(cl))]))
     pool = {}
 
     def dedupe(ranked, scores, n, published):

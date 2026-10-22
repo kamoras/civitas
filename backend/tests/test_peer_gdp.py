@@ -1,9 +1,11 @@
 """Peer-relative GDP growth (president v8, app.pipeline.fetch.peer_gdp)."""
 
+import json
 import math
 import statistics
 
 from app.pipeline.fetch.peer_gdp import (
+    _BUNDLED,
     _MIN_PEERS,
     PEER_COUNTRIES,
     US,
@@ -89,4 +91,17 @@ def test_too_few_years_fits_no_rate():
 def test_bundled_file_covers_1946_through_the_world_bank_era():
     bundled = bundled_per_capita()
     assert set(bundled) == {US, *PEER_COUNTRIES}
-    assert all(min(years) == 1946 and max(years) >= 2020 for years in bundled.values())
+    late = json.loads(_BUNDLED.read_text())["_first_year"]
+    assert min(bundled[US]) == 1946
+    assert all(min(years) == late.get(c, 1946) and max(years) >= 2020 for c, years in bundled.items())
+    # A peer that starts late never leaves the median without a majority.
+    assert len(PEER_COUNTRIES) - len(late) >= len(PEER_COUNTRIES) // 2 + 1
+
+
+def test_the_peers_are_the_files_rule_not_a_typed_list():
+    # scripts/fetch_peer_gdp.py writes the list by its rule (the OECD's
+    # members before its 1994 enlargement, the US aside); the module reads it.
+    doc = json.loads(_BUNDLED.read_text())
+    assert PEER_COUNTRIES == tuple(doc["peers"]) and "1994" in doc["_peer_rule"]
+    assert US not in PEER_COUNTRIES and "MEX" not in PEER_COUNTRIES
+    assert {"JPN", "NZL", "TUR"} <= set(PEER_COUNTRIES) and len(PEER_COUNTRIES) == 23
