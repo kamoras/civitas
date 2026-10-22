@@ -1,10 +1,19 @@
 import { act, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import HouseStateLabels from "./HouseStateLabels";
-import { STATE_LABEL_MAX_UNITS, STATE_LABEL_PX, houseLayout, stateLabelUnits } from "@/lib/electionMap";
+import {
+  STATE_LABEL_MAX_UNITS,
+  STATE_LABEL_PX,
+  houseLayout,
+  stateLabelUnits,
+} from "@/lib/electionMap";
 
 const seats = ["CA", "OR", "WA", "WY"].flatMap((state, s) =>
-  Array.from({ length: [52, 6, 10, 1][s] }, (_, i) => ({ id: `${state}-${i + 1}`, state, district: i + 1 }))
+  Array.from({ length: [52, 6, 10, 1][s] }, (_, i) => ({
+    id: `${state}-${i + 1}`,
+    state,
+    district: i + 1,
+  }))
 );
 
 describe("stateLabelUnits", () => {
