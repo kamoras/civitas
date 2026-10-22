@@ -161,7 +161,7 @@ export interface PublicMandateFacts {
 
 /** President: effectiveness.facts. Jobs per attributed year (the first year
  *  set aside) against presidencies since 1939. GDP: since 1947, growth per
- *  person against 13 peer economies' median over the same years, catch-up
+ *  person against the peer economies' median over the same years, catch-up
  *  set aside (gdpRelative, scored against gdpRelativeMean); before, total growth
  *  against other prewar presidencies (gdpGrowth vs gdpMean). gdpSince:
  *  since 1947, else before. */

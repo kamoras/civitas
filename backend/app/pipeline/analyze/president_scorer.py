@@ -248,8 +248,10 @@ def dimensions_available(entity) -> int:
 # (approval_vs_era); v10 = since 1947 the economy is also judged on
 # unemployment and inflation, each against what its starting rate predicts,
 # four parts weighed equally (POSTWAR_ECONOMY_WEIGHTS); v11 = jobs from
-# the roster's own term dates, which gives Truman a jobs figure.
-PRESIDENT_ALGORITHM_VERSION = "v11"
+# the roster's own term dates, which gives Truman a jobs figure; v12 = the
+# peer economies by a stated rule (the OECD's members before its 1994
+# enlargement), not a hand-picked thirteen.
+PRESIDENT_ALGORITHM_VERSION = "v12"
 
 
 # Full credit/deficit approached asymptotically at this many population
@@ -381,10 +383,10 @@ def _effectiveness_core(
       - GDP growth. Since 1947: average annual real growth per
         person over the years after the term's first (an annual stand-in
         for Blinder & Watson 2016's attribution lag), minus the median of
-        13 peer economies over the same years, with the part of that gap
+        the peer economies (PEER_COUNTRIES) over the same years, with the part of that gap
         the peers' catch-up growth predicts set aside (fetch/peer_gdp.py),
         compared with other postwar presidencies' figure. Most of a term's
-        growth is shared with those economies (68% of the variance since
+        growth is shared with those economies (55% of the variance since
         1961, docs/research/president-scores.md), so raw growth measured
         the world economy a president presided over; the difference is
         what was particular to the US (president v8). Before 1947 no peer
