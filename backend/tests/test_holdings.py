@@ -736,6 +736,60 @@ class TestHouseNewFilerReports:
         await _ingest_house(db_session, index, reports)
         assert db_session.query(FinancialDisclosure).one().filing_id == "CY25"
 
+    async def test_a_candidate_report_is_shown_for_a_member_with_nothing_else(self, db_session, rep):
+        """Seated in a special election, filed as a candidate, nothing since
+        (four sitting members, 2026-10-22). The cover says "Congressional
+        Candidate"; the filer's first name is the member's."""
+        index = {
+            2025: [_house_filing("ELSE", last="Somebody")],
+            2026: [{**_house_filing("C26", year=2026, filing_date="2026-08-13"), "filing_type": "C"}],
+        }
+        count, _ = await _ingest_house(db_session, index, {"C26": AnnualReport("Congressional Candidate", [_row()])})
+        assert count == 1
+        disclosure = db_session.query(FinancialDisclosure).one()
+        assert (disclosure.filing_id, disclosure.as_of_date, disclosure.report_label) == (
+            "C26", None, "candidate report filed 2026-08-13",
+        )
+
+    async def test_a_namesakes_candidate_report_is_never_the_members(self, db_session, rep):
+        index = {2025: [_house_filing("ELSE", last="Somebody")], 2026: [{**_house_filing("C26", year=2026, first="Jane"), "filing_type": "C"}]}
+        _, fetch = await _ingest_house(db_session, index, {"C26": AnnualReport("Congressional Candidate", [_row()])})
+        assert db_session.query(FinancialDisclosure).count() == 0 and not fetch.called
+
+    async def test_a_candidate_reports_amendment_supersedes_it(self, db_session, rep):
+        """Gallagher-shaped: a candidate report, then its amendment filed as
+        a member ("Hon."), both indexed this year."""
+        original = {**_house_filing("10074472", year=2026, filing_date="2026-05-05"), "filing_type": "C"}
+        amended = {**_house_filing("10082786", year=2026, filing_date="2026-09-05"), "filing_type": "A", "prefix": "Hon."}
+        reports = {
+            "10074472": AnnualReport("Congressional Candidate", [_row()]),
+            "10082786": AnnualReport("Congressional Candidate", [_row(), _row("Bank", "CASH", asset_type="BA")]),
+        }
+        await _ingest_house(db_session, {2025: [_house_filing("ELSE", last="Somebody")], 2026: [original, amended]}, reports)
+        disclosure = db_session.query(FinancialDisclosure).one()
+        assert (disclosure.filing_id, disclosure.report_label) == ("10082786", "candidate report (amended) filed 2026-09-05")
+
+    async def test_a_later_campaigns_report_outranks_an_earlier_ones_amendment(self, db_session, rep):
+        """Mejia-shaped: last year's candidate report and its amendment, then
+        this year's candidate report."""
+        index = {
+            2025: [{**_house_filing("10073067", filing_date="2026-01-20"), "filing_type": "C"},
+                   {**_house_filing("10073236", filing_date="2026-01-21"), "filing_type": "A"}],
+            2026: [{**_house_filing("10081605", year=2026, filing_date="2026-08-12"), "filing_type": "C"}],
+        }
+        reports = {doc: AnnualReport("Congressional Candidate", [_row()]) for doc in ("10073067", "10073236", "10081605")}
+        await _ingest_house(db_session, index, reports)
+        assert db_session.query(FinancialDisclosure).one().filing_id == "10081605"
+
+    async def test_an_annual_report_outranks_a_later_candidate_report(self, db_session, rep):
+        index = {
+            2025: [_house_filing("CY25", filing_date="2026-05-10")],
+            2026: [{**_house_filing("C26", year=2026, filing_date="2026-08-13"), "filing_type": "C"}],
+        }
+        reports = {"CY25": AnnualReport("Member", [_row()]), "C26": AnnualReport("Congressional Candidate", [_row()])}
+        await _ingest_house(db_session, index, reports)
+        assert db_session.query(FinancialDisclosure).one().filing_id == "CY25"
+
     async def test_this_years_index_failing_costs_only_its_new_filer_reports(self, db_session, rep):
         index = {2025: [_house_filing("CY25")], 2026: None}
         count, _ = await _ingest_house(db_session, index, {"CY25": AnnualReport("Member", [_row()])})
