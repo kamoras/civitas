@@ -6,6 +6,7 @@ import { splitLabel, termsPhrase } from "@/lib/court";
 import { CaseSources } from "@/components/court/RecentDecisions";
 import type { JusticeCasePage } from "@/types/court";
 import { onThisPage } from "@/lib/onThisPage";
+import { TYPE } from "@/lib/typeStyles";
 
 const OPINION: Record<string, string> = {
   majority: "Wrote the opinion of the Court",
@@ -48,7 +49,7 @@ export default function JusticeCases({ justiceId }: { justiceId: string }) {
         <h2
           id="cases-heading"
           {...onThisPage("Every case")}
-          className="text-[19px] font-semibold text-ink-hi"
+          className={TYPE.section}
         >
           Every case on the record
         </h2>

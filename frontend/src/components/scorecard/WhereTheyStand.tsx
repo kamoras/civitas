@@ -14,6 +14,7 @@ import StripPoints, {
   stripTop,
   type StripPoint,
 } from "@/components/shared/Strip";
+import { TYPE } from "@/lib/typeStyles";
 
 /** A round mark. Drawn as SVG, not a rounded box: the site's boxes keep
  *  hard corners, and a dot is a data mark, not a box. */
@@ -160,7 +161,7 @@ function Row({ m, memberId, showTable }: { m: PeerMeasure; memberId: string; sho
     >
       <div className="flex items-baseline justify-between gap-3 md:block">
         <div>
-          <div className="text-[13px] font-semibold text-ink-lo">{m.label}</div>
+          <div className={TYPE.section}>{m.label}</div>
           <BigFigure
             shown={m.shown}
             className="text-[28px] font-semibold leading-tight text-ink-hi sm:text-[32px]"
@@ -305,7 +306,7 @@ export default function WhereTheyStand({
         <h2
           id="where-heading"
           {...onThisPage("Where they stand")}
-          className="font-display text-[22px] font-semibold text-ink-hi sm:text-[26px]"
+          className={TYPE.section}
         >
           Where {name} stands
         </h2>
@@ -349,7 +350,7 @@ export default function WhereTheyStand({
         <>
           <div className="mt-4 border border-white/25 border-l-4 border-l-signal-orange bg-surface px-4 py-3 sm:px-6">
             <p className="text-[13px] font-semibold text-signal-orange">Stands out</p>
-            <p className="font-display text-lg font-semibold leading-snug text-ink-hi">
+            <p className={`${TYPE.section} leading-snug`}>
               {data.standsOut}
             </p>
             <p className="mt-1 text-sm text-ink-lo">{data.standsOutWhy}</p>
@@ -360,7 +361,7 @@ export default function WhereTheyStand({
               <div key={m.key}>
                 {m.question !== data.measures[i - 1]?.question && (
                   <h3
-                    className={`px-4 pt-4 font-display text-lg font-semibold text-ink-hi sm:px-6 ${i ? "border-t-2 border-ink-hi/60" : ""}`}
+                    className={`${TYPE.section} px-4 pt-4 sm:px-6 ${i ? "border-t-2 border-ink-hi/60" : ""}`}
                   >
                     {m.question}
                   </h3>

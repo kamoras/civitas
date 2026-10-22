@@ -1,4 +1,5 @@
 import React from "react";
+import { PageTitle } from "@/components/shared/Type";
 import { labelCase } from "@/lib/controlStyles";
 
 /**
@@ -49,9 +50,7 @@ export default function PageMasthead({
           {/* Caps from 640px up; a phone's title is set as written, in
               sentence case, where caps at 30px wrapped "TODAY ON THE
               RECORD" to two lines (mobile spec P1). */}
-          <h1 className="mt-3 font-display text-3xl font-semibold leading-[1.1] tracking-[-0.02em] text-ink-hi sm:text-4xl sm:leading-none">
-            {title}
-          </h1>
+          <PageTitle className="mt-3">{title}</PageTitle>
         </div>
         {aside && <div className="min-w-0 max-w-full shrink-0">{aside}</div>}
       </div>

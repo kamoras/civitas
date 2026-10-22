@@ -7,6 +7,7 @@ import { overlay } from "@/lib/chartColors";
 import { termsPhrase } from "@/lib/court";
 import { SHARE_SECTION_ATTR, shareMetaAttrs } from "@/lib/shareImage";
 import type { JusticeFigures as Figures, JusticeMeasure } from "@/types/justice";
+import { TYPE } from "@/lib/typeStyles";
 
 /** A dot's height in the band, the same every render, so ties stay
  *  countable without moving. */
@@ -106,7 +107,7 @@ function Row({ m, justiceId }: { m: JusticeMeasure; justiceId: string }) {
       className="grid grid-cols-1 gap-x-6 gap-y-2 border-t border-white/25 px-4 py-4 [h3+&]:border-t-0 sm:px-6 md:grid-cols-[10rem_minmax(0,1fr)]"
     >
       <div>
-        <div className="text-[13px] font-semibold text-ink-lo">{m.label}</div>
+        <div className={TYPE.section}>{m.label}</div>
         <BigFigure
           shown={m.shown}
           className="text-[28px] font-semibold leading-tight text-ink-hi"
@@ -179,7 +180,7 @@ export default function JusticeFigures({
         <h2
           id="figures-heading"
           {...onThisPage("Beside the other justices")}
-          className="font-display text-[22px] font-semibold text-ink-hi sm:text-[26px]"
+          className={TYPE.section}
         >
           {name} beside the other justices
         </h2>
@@ -193,7 +194,7 @@ export default function JusticeFigures({
           <div key={m.key}>
             {m.question !== measures[i - 1]?.question && (
               <h3
-                className={`px-4 pt-4 font-display text-lg font-semibold text-ink-hi sm:px-6 ${i ? "border-t-2 border-ink-hi/60" : ""}`}
+                className={`${TYPE.section} px-4 pt-4 sm:px-6 ${i ? "border-t-2 border-ink-hi/60" : ""}`}
               >
                 {m.question}
               </h3>

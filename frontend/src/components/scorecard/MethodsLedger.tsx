@@ -17,6 +17,7 @@ import { formatCurrency } from "@/lib/formatting";
 import { currentCongressLabel } from "@/lib/sources";
 import { COMPUTED_LEAN_HREF, formatComputedLean, formatPvi } from "@/lib/elections";
 import { onThisPage } from "@/lib/onThisPage";
+import { TYPE } from "@/lib/typeStyles";
 
 type Dimension = "fundingIndependence" | "constituentAlignment" | "legislativeEffectiveness";
 
@@ -208,7 +209,7 @@ export default function MethodsLedger({
     >
       {/* The toggle inside the heading, as CollapsibleSection does it: a
           heading inside a button drops out of the heading list. */}
-      <h2 className="text-[19px] font-semibold leading-tight text-ink-hi">
+      <h2 className={TYPE.section}>
         <button
           type="button"
           onClick={() => setOpen(!open)}
@@ -251,7 +252,7 @@ export default function MethodsLedger({
               key={m.key}
               className="flex flex-col gap-3 border-t border-white/[0.09] pt-5 first-of-type:border-t-0 first-of-type:pt-0"
             >
-              <h3 className="font-display text-lg font-semibold text-ink-hi">{m.name}</h3>
+              <h3 className={TYPE.section}>{m.name}</h3>
               <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-[8rem_minmax(0,1fr)]">
                 <dt className={DT}>Source</dt>
                 <dd className="text-ink-lo">{m.source(chamber)}</dd>

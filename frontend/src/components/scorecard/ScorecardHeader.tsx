@@ -1,4 +1,5 @@
 import type { Senator } from "@/types/senator";
+import { TYPE } from "@/lib/typeStyles";
 import type { Committee } from "@/types/politicians";
 import { asLabel, safeHref } from "@/lib/formatting";
 import { districtName } from "@/lib/elections";
@@ -108,7 +109,7 @@ export default function ScorecardHeader({
         <div className="flex min-w-0 flex-1 basis-48 flex-col gap-2">
           <Title
             lang="en"
-            className="break-words text-2xl font-semibold leading-tight text-ink-hi [hyphens:auto] sm:text-4xl"
+            className={`${TYPE.title} break-words [hyphens:auto]`}
           >
             {member.name}
           </Title>

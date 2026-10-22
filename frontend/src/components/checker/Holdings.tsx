@@ -15,6 +15,7 @@ import ChartReadout from "@/components/shared/ChartReadout";
 import { MARK_ATTR } from "@/types/readout";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR, shareMetaAttrs } from "@/lib/shareImage";
 import { onThisPage } from "@/lib/onThisPage";
+import { TYPE } from "@/lib/typeStyles";
 
 const HOLDINGS_PER_PAGE = 15;
 // The scorecard's panel sets the list beside the pie: a page about as tall
@@ -511,7 +512,7 @@ export default function Holdings({
       >
         <header className="flex flex-wrap items-end justify-between gap-3 border-b border-white/25 bg-surface-raised px-5 py-4">
           <div className="min-w-0">
-            <h2 className="text-[19px] font-semibold leading-tight text-ink-hi">Holdings</h2>
+            <h2 className={TYPE.section}>Holdings</h2>
             <p className="mt-1 font-mono text-xs text-ink-min">
               {reportLabel}
               {data.filedDate && data.asOfDate && ` · filed ${data.filedDate}`} · not part of the

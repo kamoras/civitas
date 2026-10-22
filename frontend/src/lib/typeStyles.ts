@@ -1,4 +1,55 @@
 /**
+ * One style per role (2026-10): the site's type scale.
+ *
+ * Every piece of text plays one of these roles, and each role has exactly
+ * one look, so a reader learns the page's structure once. Two faces carry
+ * meaning: the serif (Source Serif 4) means "a heading or a figure", the
+ * sans (Fira Sans) means "read this". Colour is never the only difference
+ * between two roles.
+ *
+ * The sizes are the `--text-<role>` steps in globals.css's `@theme`, each a
+ * desktop size and a phone size (under 640px), in rem so they follow a
+ * reader's own text size. Measured before this scale: 46 family/size/weight
+ * combinations in the main column of 26 pages, 22 font sizes, 51 distinct
+ * h2 class strings (research mockup type-scale.html, 2026-10-21).
+ *
+ *   role       face    weight  desktop / phone   use
+ *   display    serif   600     44 / 30           the homepage's own title only
+ *   title      serif   600     36 / 28           the page's h1
+ *   section    serif   600     24 / 22           h2, a part of the page
+ *   boxTitle   serif   600     18 / 17           h3, a box or a list item's title
+ *   kicker     sans    600     14                a short label over a title
+ *   dek        sans    400     18 / 17           one line under the title: what the page is for
+ *   body       sans    400     16                running text
+ *   small      sans    400     14                source lines, captions, units, dates
+ *   label      sans    600     14                table headers, chips, controls
+ *   figure     serif   600     30 / 26           a headline number
+ *   figureLg   serif   600     56 / 40           the lead's number
+ *   id         DM Mono 400     0.92em            a record number, in its context
+ *   quote      sans    400     16                a source's own words, ruled, in curly quotes
+ *
+ * `typeScale.test.ts` holds the code to it: no `text-[Npx]`, an h1 to h3
+ * sized only from here, and `font-display` only in this file.
+ */
+export const TYPE = {
+  display: "font-display text-display font-semibold tracking-[-0.02em] text-ink-hi",
+  title: "font-display text-title font-semibold tracking-[-0.02em] text-ink-hi",
+  section: "font-display text-section font-semibold text-ink-hi",
+  boxTitle: "font-display text-box font-semibold text-ink-hi",
+  kicker: "font-sans text-small font-semibold text-ink-lo",
+  dek: "font-sans text-dek text-ink",
+  body: "font-sans text-body text-ink",
+  small: "font-sans text-small text-ink-min",
+  label: "font-sans text-small font-semibold text-ink-hi",
+  figure: "font-display text-figure font-semibold tabular-nums text-ink-hi",
+  figureLg: "font-display text-figure-lg font-semibold tabular-nums text-ink-hi",
+  id: "font-id text-[0.92em] font-normal",
+  quote: "border-l-3 border-ink-min/60 pl-3 font-sans text-body text-ink",
+} as const;
+
+export type TypeRole = keyof typeof TYPE;
+
+/**
  * The one small-caps label style the site keeps (2026-10).
  *
  * Labels, buttons, links, nav items, tabs, tags and table headers are in

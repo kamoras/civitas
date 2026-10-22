@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { TYPE } from "@/lib/typeStyles";
 import { onThisPage } from "@/lib/onThisPage";
 import type { Justice } from "@/types/justice";
 import { SectionHeadingLevelProvider } from "@/components/shared/CollapsibleSection";
@@ -43,7 +44,7 @@ function AppointedBy({ justice: j }: { justice: Justice }) {
   const year = by?.year ?? (j.dateStart ? Number(j.dateStart.slice(0, 4)) : null);
   const body = (
     <>
-      <span className="block text-[13px] font-semibold text-ink-lo">Appointed by</span>
+      <span className={`${TYPE.section} block`}>Appointed by</span>
       <span className="block font-display text-2xl font-semibold leading-tight text-ink-hi">
         {name}
         {party.label && <span className={`text-lg ${party.text}`}> ({party.label})</span>}
@@ -116,7 +117,7 @@ export default function JusticeProfile({
                 />
               )}
               <div className="flex min-w-0 flex-col gap-2">
-                <Title className="break-words text-3xl font-semibold leading-tight text-ink-hi sm:text-4xl">
+                <Title className={`${TYPE.title} break-words`}>
                   {j.name}
                 </Title>
                 <p className="font-mono text-xs text-ink-lo">
@@ -159,7 +160,7 @@ export default function JusticeProfile({
               <h2
                 id="agreement-heading"
                 {...onThisPage("Agreement")}
-                className="text-[19px] font-semibold text-ink-hi"
+                className={TYPE.section}
               >
                 Agreement with each justice
               </h2>

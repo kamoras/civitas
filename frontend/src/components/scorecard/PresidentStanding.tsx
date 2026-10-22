@@ -8,6 +8,7 @@ import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import StripPoints, { BigFigure, StripAxis, type StripPoint } from "@/components/shared/Strip";
 import { Dot } from "./WhereTheyStand";
+import { TYPE } from "@/lib/typeStyles";
 
 const JITTER = [10, 4, 16, 7, 13, 1, 19, 10];
 
@@ -109,7 +110,7 @@ function Row({ m, me, showTable }: { m: PresidentPeerMeasure; me: Self; showTabl
     >
       <div className="flex items-baseline justify-between gap-3 md:block">
         <div>
-          <p className="text-[13px] font-semibold text-ink-lo">{m.label}</p>
+          <p className={TYPE.section}>{m.label}</p>
           <BigFigure
             shown={m.shown}
             className="text-2xl font-semibold leading-tight text-ink-hi sm:text-[28px]"
@@ -223,7 +224,7 @@ export default function PresidentStanding({
         <h2
           id="president-standing-heading"
           {...onThisPage("Among presidents")}
-          className="font-display text-[22px] font-semibold text-ink-hi sm:text-[26px]"
+          className={TYPE.section}
         >
           Where {name} stands among presidents
         </h2>
@@ -232,7 +233,7 @@ export default function PresidentStanding({
       {measures.length > 0 && (
         <div className="mt-4 border border-white/25 border-l-4 border-l-signal-orange bg-surface px-4 py-3 sm:px-6">
           <p className="text-[13px] font-semibold text-signal-orange">Stands out</p>
-          <p className="font-display text-lg font-semibold leading-snug text-ink-hi">
+          <p className={`${TYPE.section} leading-snug`}>
             {peers.standsOut}
           </p>
           <p className="mt-1 text-sm text-ink-lo">{peers.standsOutWhy}</p>
@@ -244,7 +245,7 @@ export default function PresidentStanding({
             <div key={m.key}>
               {m.question !== measures[i - 1]?.question && (
                 <h3
-                  className={`px-4 pt-4 font-display text-lg font-semibold text-ink-hi sm:px-6 ${i ? "border-t-2 border-ink-hi/60" : ""}`}
+                  className={`${TYPE.section} px-4 pt-4 sm:px-6 ${i ? "border-t-2 border-ink-hi/60" : ""}`}
                 >
                   {m.question}
                 </h3>

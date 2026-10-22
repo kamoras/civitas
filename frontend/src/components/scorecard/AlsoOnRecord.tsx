@@ -5,7 +5,7 @@ import { fetchRepStockTrades, fetchSenatorStockTrades } from "@/lib/api";
 import { countLobbiedBills } from "@/lib/lobbying";
 import type { Senator } from "@/types/senator";
 import { onThisPage } from "@/lib/onThisPage";
-import { labelCase } from "@/lib/controlStyles";
+import { TYPE } from "@/lib/typeStyles";
 
 export type RecordView = "trades" | "donorVotes" | "positions";
 
@@ -79,7 +79,7 @@ export default function AlsoOnRecord({
       <h2
         id="also-on-record"
         {...onThisPage("Also on record")}
-        className={`font-mono text-ink-min ${labelCase(ALSO)}`}
+        className={TYPE.section}
       >
         {ALSO}
       </h2>
