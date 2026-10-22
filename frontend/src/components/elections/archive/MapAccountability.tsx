@@ -73,7 +73,7 @@ function CoverageStrip({
   level: 80 | 95;
   cell: CoverageCell;
   promised: number;
-  promisedShown: string;
+  promisedShown?: string;
 }) {
   const share = cell[`share${level}`];
   const interval = cell[`interval${level}`];
@@ -110,7 +110,9 @@ function CoverageStrip({
         <p className="mt-1 text-xs text-ink-lo">
           {share == null
             ? "None checked yet."
-            : `${shareShown} inside (exact 95% interval ${intervalShown ?? "n/a"}); promised ${promisedShown}.`}
+            : shareShown && promisedShown
+              ? `${shareShown} inside (exact 95% interval ${intervalShown ?? "n/a"}); promised ${promisedShown}.`
+              : null}
         </p>
       </div>
     </div>
@@ -169,12 +171,12 @@ function ChamberCheck({ name, c }: { name: string; c: ChamberAccountability }) {
           promisedShown={c.promised.nominal95Shown}
         />
       </div>
-      {held.coverage80 != null && (
+      {held.coverage80 != null && held.coverage80Shown && (
         <p className="text-xs text-ink-min">
           What the map said beforehand: on {held.races} past races
           {held.cycles ? ` (${held.cycles[0]} to ${held.cycles[1]})` : ""} it never saw, its 80%
           ranges held {held.coverage80Shown} and its 95% ranges {held.coverage95Shown}
-          {fw
+          {fw?.coverage80Shown
             ? `; on ${fw.cycle}, fitted on earlier cycles only, ${fw.coverage80Shown} and ${fw.coverage95Shown}`
             : ""}
           .
@@ -212,10 +214,10 @@ function ChamberCheck({ name, c }: { name: string; c: ChamberAccountability }) {
                     {b.graded} of {b.ranged}
                   </td>
                   <td className="py-1.5 pr-3 text-right text-ink-hi">
-                    {b.graded ? `${b.held80} · ${b.share80Shown}` : "n/a"}
+                    {b.graded ? `${b.held80} · ${b.share80Shown ?? "\u2014"}` : "n/a"}
                   </td>
                   <td className="py-1.5 text-right text-ink-hi">
-                    {b.graded ? `${b.held95} · ${b.share95Shown}` : "n/a"}
+                    {b.graded ? `${b.held95} · ${b.share95Shown ?? "\u2014"}` : "n/a"}
                   </td>
                 </tr>
               ))}

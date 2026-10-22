@@ -46,3 +46,19 @@ describe("BillStageFlow", () => {
     expect(enacted).not.toHaveAttribute("title");
   });
 });
+
+describe("an older API, during a rolling update", () => {
+  it("lists every stage with its count when the API sends no flow", () => {
+    const { container } = render(
+      <BillStageFlow
+        stageCounts={{ REFERRED: 90 }}
+        stageFlow={undefined}
+        activeStage={null}
+        onSelectStage={() => {}}
+      />
+    );
+    expect(screen.getByRole("button", { name: /^REFERRED\s*90/ })).toBeInTheDocument();
+    // Plain: drawn, with no readout, nothing printed from a missing field.
+    expect(container.textContent).not.toMatch(/undefined|NaN/);
+  });
+});

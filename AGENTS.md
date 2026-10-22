@@ -2973,6 +2973,14 @@ Site search's results (`/search?q=`) are compact boxes: the kind as the
 kicker, the index's context line as the line, and a document's `snippet`
 (its own words around the query, matches marked) behind "More".
 
+An Explore document page (`/explore/[key]`) leads with one header box over
+the source text, which stays as it is: its type, issuer, date and citation
+in the backend's templated line (`api/explore.py` `document_headline`), the
+comment countdown while the period is open (`commentWindow`), and chips for
+the agency, the speaker's record, the bills a speech names and the executive
+orders the text cites that have a page here (`cited_orders`). The box's grid
+is `#comment`, where every "Comment" link lands.
+
 #### Empty defaults are content (2026-10)
 
 A default view that renders zeros or "nothing found" on an ordinary day is a

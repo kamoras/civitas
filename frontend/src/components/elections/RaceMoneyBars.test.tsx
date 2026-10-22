@@ -40,6 +40,28 @@ describe("RaceMoneyBars", () => {
     expect(widths(container)).toEqual(["100%", "10%"]);
   });
 
+  it("draws the API's share of the leader and says it in the API's words", () => {
+    const { container } = render(
+      <RaceMoneyBars
+        cycleYear={2026}
+        candidates={[
+          cand({ id: "a", contributions: 1_900_000, raisedShare: 100 }),
+          cand({
+            id: "b",
+            party: "REP",
+            contributions: 130_000,
+            raisedShare: 7,
+            raisedShareShown: "$130K raised, 7% of the leader in this race",
+          }),
+        ]}
+      />
+    );
+    expect(widths(container)).toEqual(["100%", "7%"]);
+    expect(
+      screen.getByRole("img", { name: "$130K raised, 7% of the leader in this race" })
+    ).toBeInTheDocument();
+  });
+
   it("orders by money raised regardless of input order", () => {
     render(
       <RaceMoneyBars

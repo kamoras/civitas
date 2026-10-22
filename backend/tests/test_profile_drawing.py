@@ -1,6 +1,6 @@
-"""The partisan-depth chart's words and geometry come from the API, so the
-page draws without arithmetic (frontend PlatformTracker)."""
-from app.schemas import PartisanDepthSchema
+"""A profile's charts take their words and geometry from the API, so the
+page draws without arithmetic (frontend PlatformTracker, IndustryBreakdown)."""
+from app.schemas import FundingSchema, PartisanDepthSchema
 
 
 def _depth(lean: float, party: str, strength: float = 0.63) -> PartisanDepthSchema:
@@ -25,3 +25,13 @@ def test_each_policy_area_reads_out_with_a_visible_floor():
     assert (area["strengthShown"], area["barPercent"]) == ("2%", 4)
     assert area["mark"] == {"id": "foreign_policy", "label": "Foreign Policy", "detail": None,
                             "shown": "leans Republican", "context": "strength 2%", "href": None}
+
+
+def test_each_industry_bar_is_drawn_against_the_largest():
+    f = FundingSchema(total_raised=0, total_from_individuals=0, totalFromPACs=0, small_donor_percentage=None,
+                      top_donors=[], industry_breakdown=[
+                          {"industry": "A", "name": "A", "total": 200.0, "percentage": 67},
+                          {"industry": "B", "name": "B", "total": 50.0, "percentage": 17}])
+    assert [i.bar_percent for i in f.industry_breakdown] == [100.0, 25.0]
+    assert FundingSchema(total_raised=0, total_from_individuals=0, totalFromPACs=0, small_donor_percentage=None,
+                         top_donors=[], industry_breakdown=[]).industry_breakdown == []
