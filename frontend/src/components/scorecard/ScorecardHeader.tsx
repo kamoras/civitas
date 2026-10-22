@@ -128,11 +128,14 @@ export default function ScorecardHeader({
             broke mid-word (WCAG 1.4.10). */}
         <div className="flex min-w-0 flex-1 basis-48 flex-col gap-2">
           {ballot && (
-            <p className={TYPE.kicker}>
+            // One line on a phone, cut with an ellipsis where it runs long
+            // (the whole line is the link's name, and the ballot's full
+            // lines sit behind the committee line); whole from sm up.
+            <p className={`${TYPE.kicker} min-w-0 truncate sm:whitespace-normal`}>
               {ballot.raceId ? (
                 <Link
                   href={`${stateBallotHref(member.state)}#race-${ballot.raceId}`}
-                  className="inline-flex min-h-6 items-center underline underline-offset-2 hover:text-phos"
+                  className="leading-6 underline underline-offset-2 hover:text-phos"
                 >
                   {ballot.line} →
                 </Link>
@@ -172,8 +175,15 @@ export default function ScorecardHeader({
             the photo's row, the full width: beside it, three lines on a
             phone. */}
         <Dek className="max-w-2xl">
-          {member.name}&rsquo;s votes, money and bills this Congress, each beside members in similar
-          seats.
+          {/* On a phone without the name, which the title above already
+              gives: two lines rather than three. */}
+          <span className="sm:hidden">
+            Votes, money and bills this Congress, each beside members in similar seats.
+          </span>
+          <span className="hidden sm:inline">
+            {member.name}&rsquo;s votes, money and bills this Congress, each beside members in
+            similar seats.
+          </span>
         </Dek>
         {/* Phone, message and source links are only useful clicked; a
             picture of them is noise. */}

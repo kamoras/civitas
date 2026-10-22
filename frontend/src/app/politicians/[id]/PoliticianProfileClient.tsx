@@ -130,14 +130,17 @@ export default function PoliticianProfileClient({
               the <head> names first: votes, sponsored bills' actions, score
               changes and disclosures). One row, not two lines before the
               member's name. */}
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4">
+          <div className="mb-3 flex items-center justify-between gap-x-4 sm:flex-wrap">
             {/* The branch's own trail (lib/routes.ts recordTrail): the
                 record's URL is the same for every branch, so the path
                 can't say which section the reader is in. */}
-            <nav aria-label="Breadcrumb">
-              <ol className="flex min-h-11 flex-wrap items-center font-mono text-small text-ink-min">
+            {/* On a phone one row: the page's own name, last, is cut with an
+                ellipsis rather than pushing the feed link to a row of its
+                own (the name is the page's title just below). */}
+            <nav aria-label="Breadcrumb" className="min-w-0">
+              <ol className="flex min-h-11 items-center font-mono text-small text-ink-min sm:flex-wrap">
                 {trail.crumbs.map((c) => (
-                  <li key={c.href} className="flex items-center">
+                  <li key={c.href} className="flex shrink-0 items-center">
                     <Link
                       href={c.href}
                       className="inline-flex min-h-11 items-center hover:text-phos transition-colors"
@@ -149,13 +152,17 @@ export default function PoliticianProfileClient({
                     </span>
                   </li>
                 ))}
-                <li aria-current="page" className="text-ink-lo">
+                <li aria-current="page" className="min-w-0 truncate text-ink-lo">
                   {identity.name}
                 </li>
               </ol>
             </nav>
             {isMember && (
-              <FollowFeed subject={identity.name} feed={memberFeed(profile.id, identity.name)} />
+              <FollowFeed
+                subject={identity.name}
+                feed={memberFeed(profile.id, identity.name)}
+                className="shrink-0 whitespace-nowrap sm:whitespace-normal"
+              />
             )}
           </div>
 
