@@ -164,12 +164,13 @@ describe("RecordsBand rendering", () => {
     expect(screen.queryByText(/Complete/)).not.toBeInTheDocument();
   });
 
-  it("prints the FILED stamp and COMPLETE when every link completed", async () => {
+  it("says when the record was updated, Eastern, when every link completed", async () => {
     fetchPipelineStatus.mockResolvedValue(status());
     render(<RecordsBand />);
 
-    expect(await screen.findByText(/Filed 2026-08-18 07:26 UTC/)).toBeInTheDocument();
-    expect(screen.getByText("Complete")).toBeInTheDocument();
+    // 07:26 UTC in August is 3:26 AM Eastern (EDT).
+    expect(await screen.findByText("Updated Aug 18, 3:26 AM ET")).toBeInTheDocument();
+    expect(screen.queryByText(/Complete|UTC/)).not.toBeInTheDocument();
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
@@ -190,10 +191,10 @@ describe("RecordsBand rendering", () => {
     fetchPipelineStatus.mockResolvedValue(status());
 
     const first = render(<RecordsBand />);
-    await screen.findByText(/Filed/);
+    await screen.findByText(/Updated/);
     first.unmount();
     render(<RecordsBand />);
-    await screen.findByText(/Filed/);
+    await screen.findByText(/Updated/);
 
     expect(fetchPipelineStatus).toHaveBeenCalledTimes(1);
   });
@@ -206,7 +207,7 @@ describe("RecordsBand rendering", () => {
         <RecordsBand />
       </>
     );
-    await screen.findAllByText(/Filed/);
+    await screen.findAllByText(/Updated/);
 
     expect(fetchPipelineStatus).toHaveBeenCalledTimes(1);
   });
@@ -224,7 +225,7 @@ describe("RunStatusSquare (the band on a phone)", () => {
     fetchPipelineStatus.mockResolvedValue(status());
     render(<RunStatusSquare />);
     const button = await screen.findByRole("button", {
-      name: "Data status: Filed 2026-08-18 07:26 UTC, complete",
+      name: "Data status: Updated Aug 18, 3:26 AM ET",
     });
     expect(button.className).toContain("min-h-11");
     expect(button.querySelector("[aria-hidden]")!.className).toContain("bg-phos");
@@ -250,7 +251,7 @@ describe("RunStatusSquare (the band on a phone)", () => {
     fireEvent.click(button);
     expect(button).toHaveAttribute("aria-expanded", "true");
     expect(line.hidden).toBe(false);
-    expect(line).toHaveTextContent("Filed 2026-08-18 07:26 UTC");
+    expect(line).toHaveTextContent("Updated Aug 18, 3:26 AM ET");
     fireEvent.keyDown(document, { key: "Escape" });
     expect(line.hidden).toBe(true);
   });

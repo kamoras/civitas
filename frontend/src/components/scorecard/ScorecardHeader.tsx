@@ -1,4 +1,5 @@
 import type { Senator } from "@/types/senator";
+import { Dek } from "@/components/shared/Type";
 import { TYPE, toned } from "@/lib/typeStyles";
 import type { Committee } from "@/types/politicians";
 import { asLabel, safeHref } from "@/lib/formatting";
@@ -112,6 +113,12 @@ export default function ScorecardHeader({
           <p className={`text-small text-ink-lo`}>
             {office} · {place} · {PARTY_LABELS[member.party] ?? member.party} · {tenure}
           </p>
+          {/* What the page is for, for a reader new to it: a fixed template
+              around the name, no pronoun (AGENTS.md, templated text). */}
+          <Dek className="max-w-2xl">
+            {member.name}&rsquo;s votes, money and bills this Congress, each beside members in
+            similar seats.
+          </Dek>
           {(leadershipTitle || member.sponsorshipDescription) && (
             <p className="flex flex-wrap items-center gap-2 text-small text-ink-lo">
               {leadershipTitle && (
@@ -134,7 +141,7 @@ export default function ScorecardHeader({
           <ul aria-label="Committees" className="flex flex-wrap gap-1.5 text-small text-ink">
             {committees.map((c) => (
               <li key={c.committeeName} className="border border-white/30 px-2 py-0.5">
-                {c.committeeName.replace(/^(House|Senate) Committee on /, "")}
+                {committeeShortName(c.committeeName)}
                 {c.title && <span className="font-semibold"> · {c.title}</span>}
               </li>
             ))}
@@ -204,4 +211,11 @@ export default function ScorecardHeader({
       </div>
     </header>
   );
+}
+
+/** "Senate Committee on the Budget" as "Budget": the chamber and "Committee
+ *  on" are the chip's context, and so is the article ("the Budget" read as a
+ *  stray word). */
+function committeeShortName(name: string): string {
+  return name.replace(/^(House|Senate) Committee on (the )?/, "");
 }

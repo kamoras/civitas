@@ -33,6 +33,11 @@ export function BoxTitle({ as: Tag = "h3", className, ...rest }: Props<Level>) {
   return <Tag className={join(TYPE.boxTitle, className)} {...rest} />;
 }
 
+/** One line under the title saying what the page is for. */
+export function Dek({ className, ...rest }: Omit<Props<never>, "as">) {
+  return <p className={join(TYPE.dek, className)} {...rest} />;
+}
+
 /** Where a figure or a section's data came from, and as of when. */
 export function SourceLine({ className, ...rest }: Omit<Props<never>, "as">) {
   return <p className={join(TYPE.small, className)} {...rest} />;

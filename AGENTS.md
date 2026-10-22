@@ -2721,7 +2721,12 @@ the pending list).
 - Every metric shown on scorecards has a `MetricTooltip` component providing
   plain-English explanation (hover on desktop, tap on mobile). When adding new
   metrics, always add a corresponding tooltip so users can understand what they
-  are seeing. The component is at `src/components/checker/MetricTooltip.tsx`.
+  are seeing. The component is at `src/components/checker/MetricTooltip.tsx`;
+  its trigger is worded ("What this means", 2026-10), not a bare "[?]". A
+  chart a newcomer may not know how to read (a peer strip, a lean, a party
+  bar) carries `HowToRead` (`components/shared/HowToRead.tsx`), and a
+  member, president or justice page opens with a `Dek` saying what the page
+  is for, a template around the name with no pronoun.
 - An About chapter's top-level parts are `Section`s, direct children of
   `AboutPage`: that is how its "On this page" list finds them (four or
   more), so a part wrapped in a fragment or another component drops out of

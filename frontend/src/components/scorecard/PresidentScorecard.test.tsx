@@ -140,6 +140,9 @@ describe("PresidentScorecard", () => {
     );
     expect(screen.getByRole("heading", { level: 1, name: "Jane Doe" })).toBeInTheDocument();
     expect(
+      screen.getByText(/^Jane Doe\u2019s time in office, from approval to the economy/)
+    ).toBeInTheDocument();
+    expect(
       screen.getByRole("heading", { name: "Where Jane Doe stands among presidents" })
     ).toBeInTheDocument();
     // No composite, part score, breakdown or rank of Civitas's own.

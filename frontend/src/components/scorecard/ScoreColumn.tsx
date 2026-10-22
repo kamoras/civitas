@@ -24,7 +24,7 @@ export default function ScoreColumn({
   children,
 }: {
   title: string;
-  /** What the column's score measures, in plain words (the [?] beside the title). */
+  /** What the column's score measures, in plain words ("What this means" beside the title). */
   tooltip?: string;
   /** The column's anchor id; also what its shared image and link are named by. */
   shareId: string;

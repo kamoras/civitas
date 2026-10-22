@@ -1,5 +1,6 @@
 "use client";
 
+import { Dek } from "@/components/shared/Type";
 import { TYPE } from "@/lib/typeStyles";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -123,6 +124,10 @@ export default function PresidentScorecard({
                   {ordinal(president.number)} President · {party.label} ·{" "}
                   {president.termStart.slice(0, 4)} to {termEnd}
                 </p>
+                <Dek className="max-w-2xl">
+                  {president.name}&rsquo;s time in office, from approval to the economy, each beside
+                  the other presidents.
+                </Dek>
                 {/* Source links are only useful clicked; a picture of them is
                   noise. */}
                 <p className="flex flex-wrap gap-x-4 gap-y-1" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>

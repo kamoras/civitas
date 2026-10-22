@@ -243,7 +243,9 @@ function CountyFinder({
 
 // The masthead's line, sent with the server's fallback too (PageFallback).
 const MEMBERS_EYEBROW = "Congress · find your members";
-const MEMBERS_TITLE = "Members of Congress";
+// Not "Members of Congress": that is the search group heading and other pages' phrase;
+// the h1 names who is listed, as the page title does.
+const MEMBERS_TITLE = "Senators and representatives";
 const MEMBERS_LEDE = (
   <p>
     Every serving senator and representative. Pick a state for its two senators and its House

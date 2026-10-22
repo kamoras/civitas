@@ -1,5 +1,6 @@
 "use client";
 
+import HowToRead from "@/components/shared/HowToRead";
 import { useId, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -363,25 +364,31 @@ export default function WhereTheyStand({
               </div>
             ))}
           </div>
-          <p
-            className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-small text-ink-lo"
-            aria-hidden="true"
-          >
-            <span>
-              <Dot size={6} fill="var(--chart-muted)" className="mr-1 inline-block" />
-              one peer
-            </span>
-            <span>
-              <Dot
-                size={12}
-                fill="var(--ink-hi)"
-                ring="var(--phos)"
-                className="mr-1 inline-block align-middle"
-              />
-              {name}
-            </span>
-            <span>┆ the average for seats like this one, or the peer median</span>
-          </p>
+          {/* The key, and what a row means, for a reader new to the strips;
+              in words, so it is read aloud too (it was an aria-hidden key). */}
+          <HowToRead className="mt-2">
+            <p className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              <span>
+                <Dot size={6} fill="var(--chart-muted)" className="mr-1 inline-block" />
+                one peer
+              </span>
+              <span>
+                <Dot
+                  size={12}
+                  fill="var(--ink-hi)"
+                  ring="var(--phos)"
+                  className="mr-1 inline-block align-middle"
+                />
+                {name}
+              </span>
+              <span>┆ the average for seats like this one, or the peer median</span>
+            </p>
+            <p>
+              Each row is one measure, with {name} among the members compared. Further right is a
+              larger figure. The word beside the row (above, near or below peers) comes from where{" "}
+              {name} falls among them, by a fixed rule; it says how far, not whether that is good.
+            </p>
+          </HowToRead>
           <div className="mt-3 flex flex-wrap gap-2">
             <button
               type="button"

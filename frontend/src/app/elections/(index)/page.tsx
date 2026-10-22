@@ -1,5 +1,6 @@
 "use client";
 
+import HowToRead from "@/components/shared/HowToRead";
 import { membersHref } from "@/lib/routes";
 import { fade, overlay, partyMark } from "@/lib/chartColors";
 import { useEffect, useState } from "react";
@@ -509,6 +510,18 @@ export default function ElectionsPage() {
                 </li>
               ))}
             </ul>
+            {/* The first place the page shows a lean: say what R+5 means. */}
+            {campaignMode && pvi && (
+              <HowToRead className="mt-2">
+                <p>
+                  R+5 means the state&rsquo;s vote for president ran 5 points more Republican than
+                  the nation&rsquo;s, over the last two elections, weighted three to one toward the
+                  latest (the Cook Political Report&rsquo;s formula, computed here from certified
+                  returns). D+5 is the same toward Democrats; EVEN matches the nation. It describes
+                  past votes, not a forecast.
+                </p>
+              </HowToRead>
+            )}
           </section>
 
           {/* Registration closing soon: one line to the calendar, which
