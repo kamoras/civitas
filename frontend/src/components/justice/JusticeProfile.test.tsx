@@ -122,6 +122,12 @@ describe("JusticeProfile", () => {
   it("links the appointing president's page, with the year, and shows no score", () => {
     page();
     expect(screen.getByRole("heading", { level: 1, name: "Jane Q. Example" })).toBeInTheDocument();
+    // What the page is for, a template around the name.
+    expect(
+      screen.getByText(
+        "Jane Q. Example\u2019s votes on the Court, case by case, each beside the other justices."
+      )
+    ).toBeInTheDocument();
     const link = screen.getByRole("link", { name: /Appointed by\s*A\. President.*2006/ });
     expect(link).toHaveAttribute("href", "/politicians/a-president-1");
     expect(document.body.textContent).not.toMatch(/scored|scorecard|\bscore\b/i);

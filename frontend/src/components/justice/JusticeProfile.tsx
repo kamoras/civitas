@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Dek } from "@/components/shared/Type";
 import { TYPE } from "@/lib/typeStyles";
 import { onThisPage } from "@/lib/onThisPage";
 import type { Justice } from "@/types/justice";
@@ -122,6 +123,9 @@ export default function JusticeProfile({
                   {j.roleTitle}
                   {since && ` · since ${since}`}
                 </p>
+                <Dek className="max-w-2xl">
+                  {j.name}&rsquo;s votes on the Court, case by case, each beside the other justices.
+                </Dek>
                 <p className="flex flex-wrap gap-x-4 gap-y-1" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
                   <Link href={COURT_HREF} className={LINK}>
                     The whole Court

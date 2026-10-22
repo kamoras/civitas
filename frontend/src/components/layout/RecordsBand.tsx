@@ -5,6 +5,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { fetchPipelineStatus } from "@/lib/api";
 import type { PipelineStatus } from "@/lib/api";
 import { parseUtc, asLabel, midSentence } from "@/lib/formatting";
+import { formatEasternTime } from "@/lib/results";
 
 /**
  * The document header band that sits above every page.
@@ -36,6 +37,14 @@ export function formatRunTimestamp(iso: string): string | null {
     `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ` +
     `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`
   );
+}
+
+/** "Updated Oct 17, 11:34 AM ET": when every run is in, the band says when
+ *  the record was last brought up to date, in the clock most readers keep
+ *  (2026-10; it read "Filed 2026-10-17 11:34 UTC · Complete"). */
+export function updatedLine(iso: string): string | null {
+  const d = parseUtc(iso);
+  return d ? `Updated ${formatEasternTime(d.toISOString())}` : null;
 }
 
 /** "HH:MM" (UTC), for the phone line: the failed run's day is almost always
@@ -197,7 +206,7 @@ function useRunStatus(): { status: PipelineStatus | null; loaded: boolean } {
   return { status, loaded };
 }
 
-/** The status line: "FILED … · COMPLETE", or the link that failed and when. */
+/** The status line: "Updated … ET", or the link that failed and when. */
 function StatusLine({ status, loaded }: { status: PipelineStatus | null; loaded: boolean }) {
   const state = describeRunState(status);
   // Only a run that actually completed gets a "FILED" stamp, and with a link
@@ -225,15 +234,9 @@ function StatusLine({ status, loaded }: { status: PipelineStatus | null; loaded:
               every link and state, one to five failed, at 320, 360, 375,
               640, 1024 and 1280. */}
           {state.complete ? (
-            <>
-              {filedAt && (
-                <>
-                  Filed {filedAt}
-                  <Dot />
-                </>
-              )}
+            (status?.filedAt && updatedLine(status.filedAt)) || (
               <span className={state.tone}>{state.label}</span>
-            </>
+            )
           ) : total > 0 ? (
             <>
               <Link
@@ -326,11 +329,10 @@ export function RunStatusSquare() {
   const box = useRef<HTMLSpanElement>(null);
   const id = useId();
   const state = describeRunState(status);
-  const filedAt = status?.filedAt ? formatRunTimestamp(status.filedAt) : null;
   const words = !loaded
     ? "Reading run status"
     : state.complete
-      ? `${filedAt ? `Filed ${filedAt}, ` : ""}${midSentence(state.label)}`
+      ? ((status?.filedAt && updatedLine(status.filedAt)) ?? midSentence(state.label))
       : `${midSentence(state.label)}${state.everyName ? ` (${state.everyName})` : ""}, ${status?.linksCompleted ?? 0} of ${status?.links?.length ?? 0} filed`;
   const tone = !loaded
     ? "border-ink-min"

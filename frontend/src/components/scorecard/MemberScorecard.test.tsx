@@ -213,6 +213,7 @@ function renderCard(cardBreakdown: RepresentationScoreBreakdown = breakdown) {
 
         committees={[
           { committeeName: "House Committee on Foreign Affairs", chamber: "house", title: null },
+          { committeeName: "House Committee on the Budget", chamber: "house", title: null },
         ]}
       />
     </main>
@@ -237,6 +238,18 @@ describe("MemberScorecard", () => {
   it("states each score's evidence without anything to expand", async () => {
     renderCard();
     expect(screen.getByRole("heading", { level: 1, name: "Jordan Hale" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Jordan Hale\u2019s votes, money and bills this Congress, each beside members in similar seats."
+      )
+    ).toBeInTheDocument();
+    // Each figure's explanation is behind worded help, not a bare "[?]".
+    expect(screen.getAllByRole("button", { name: /^What this means: / }).length).toBeGreaterThan(0);
+    expect(screen.queryByText("[?]")).not.toBeInTheDocument();
+    // A committee chip names the committee, not "the Budget".
+    const committees = screen.getByRole("list", { name: "Committees" });
+    expect(within(committees).getByText("Budget")).toBeInTheDocument();
+    expect(within(committees).getByText("Foreign Affairs")).toBeInTheDocument();
     // No composite or rank on the page (redesign 2026-10).
     expect(screen.queryByText(/of 433 representatives/)).not.toBeInTheDocument();
     expect(
