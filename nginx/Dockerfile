@@ -4,6 +4,13 @@
 # floating tag re-resolves silently on the next unrelated commit).
 FROM nginx:1.31.3-alpine
 
+# Distrusted roots (AGENTS.md "Distrusted roots"): emSign ECC Root CA - G3
+# (GHSA-6q48-6c7w-9gw2). nginx makes no outbound TLS; the store is cleaned
+# anyway so no image of ours trusts it. check-trust-stores.sh asserts it.
+RUN apk add --no-cache ca-certificates && \
+    sed -i 's|^mozilla/emSign_ECC_Root_CA_-_G3\.crt$|!&|' /etc/ca-certificates.conf && \
+    update-ca-certificates
+
 RUN rm -f /etc/nginx/conf.d/default.conf \
     && mkdir -p /var/cache/nginx/civitas /var/cache/nginx/civitas-action /var/cache/nginx/civitas-photos /etc/nginx/cache-epoch \
     && chown -R nginx:nginx /var/cache/nginx/civitas /var/cache/nginx/civitas-action /var/cache/nginx/civitas-photos
