@@ -79,6 +79,7 @@ const DATA: PeerComparison = {
     }),
   ],
   standsOut: "Money from small donors: Donors who gave $200 or less gave 13% of the money.",
+  standsOutKey: "smallGifts",
   standsOutWhy:
     "Picked by rule: of the four figures, this one is furthest from the middle of the group.",
 };
@@ -93,13 +94,13 @@ describe("WhereTheyStand", () => {
     expect(screen.getByRole("heading", { name: "Where Pat Lee stands" })).toBeInTheDocument();
     expect(screen.getByText(DATA.standsOut)).toBeInTheDocument();
     expect(screen.getByText(DATA.standsOutWhy)).toBeInTheDocument();
-    // Each question heads its rows once; each row says why it is there.
+    // Each cell is headed by its measure; its question and why it is there
+    // sit behind "How this is measured".
     expect(
-      screen.getByRole("heading", { level: 3, name: "Who funds the campaign?" })
+      screen.getByRole("heading", { level: 3, name: DATA.measures[0].label })
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { level: 3, name: "How does this member vote?" })
-    ).toBeInTheDocument();
+    expect(screen.getAllByText("Who funds the campaign?")[0]).toBeInTheDocument();
+    expect(screen.getAllByText("How does this member vote?")[0]).toBeInTheDocument();
     expect(screen.getByText(DATA.measures[0].why)).toBeInTheDocument();
     expect(screen.getAllByText("How this is measured")).toHaveLength(2);
     const caption = screen.getByText(/Gifts of \$200 or less were 13% of the money\. 2 of/);
@@ -131,6 +132,8 @@ describe("WhereTheyStand", () => {
     ).toBeInTheDocument();
     // The table is there for screen readers before it is shown.
     expect(screen.getAllByRole("table")).toHaveLength(2);
+    // Its links stay out of the Tab order until the table is on screen.
+    expect(screen.getAllByRole("link", { name: "Sam Ray" })[0]).toHaveAttribute("tabindex", "-1");
     await userEvent.click(screen.getByRole("button", { name: "Show as a table" }));
     expect(screen.getByRole("button", { name: "Hide the tables" })).toHaveAttribute(
       "aria-pressed",
@@ -140,7 +143,13 @@ describe("WhereTheyStand", () => {
       "href",
       "/politicians/sam-ray"
     );
-    expect(screen.getByRole("radio", { name: "Senate Democrats" })).toBeChecked();
+    expect(screen.getAllByRole("link", { name: "Sam Ray" })[0]).not.toHaveAttribute("tabindex");
+    // Two copies of the choice (beside the heading from sm up, under the
+    // strips on a phone; CSS shows one), each its own group, both checked.
+    const caucus = screen.getAllByRole("radio", { name: "Senate Democrats" });
+    expect(caucus).toHaveLength(2);
+    caucus.forEach((r) => expect(r).toBeChecked());
+    expect(new Set(caucus.map((r) => r.getAttribute("name"))).size).toBe(2);
     const r = await axe.run(document.body, { rules: { "color-contrast": { enabled: false } } });
     expect(r.violations.map((v) => v.id)).toEqual([]);
   });
@@ -148,9 +157,26 @@ describe("WhereTheyStand", () => {
   it("fetches the whole chamber when asked, and says so in the URL", async () => {
     fetchPeerComparison.mockResolvedValue({ ...DATA, group: "chamber" });
     render(<WhereTheyStand memberId="pat-lee" name="Pat Lee" chamber="senate" initial={DATA} />);
-    await userEvent.click(screen.getByRole("radio", { name: "Whole Senate" }));
+    await userEvent.click(screen.getAllByRole("radio", { name: "Whole Senate" })[1]);
+    screen.getAllByRole("radio", { name: "Whole Senate" }).forEach((r) => expect(r).toBeChecked());
     expect(fetchPeerComparison).toHaveBeenCalledWith("senate", "pat-lee", "chamber");
     expect(window.location.search).toContain("peers=chamber");
+  });
+});
+
+describe("stands out", () => {
+  it("says nothing when no measure is genuinely unusual", () => {
+    render(
+      <main>
+        <WhereTheyStand
+          memberId="pat-lee"
+          name="Pat Lee"
+          chamber="senate"
+          initial={{ ...DATA, standsOut: "Close to peers on every measure.", standsOutKey: null }}
+        />
+      </main>
+    );
+    expect(screen.queryByText(/Stands out/)).toBeNull();
   });
 });
 
@@ -170,6 +196,60 @@ describe("an older API, during a rolling update", () => {
     // The strips still place every peer.
     expect(screen.getAllByRole("group", { name: /: 3 marks/ }).length).toBeGreaterThan(0);
     // Plain: drawn, with no readout, nothing printed from a missing field.
+    expect(container.textContent).not.toMatch(/undefined|NaN/);
+  });
+});
+
+describe("a whole-number measure", () => {
+  const BILLS = measure({
+    key: "billsMoved",
+    label: "Bills past committee",
+    unit: "count",
+    value: 3,
+    shown: "3 of 20",
+    expected: 3,
+    expectedBasis: "peer median",
+    expectedShown: "median 3",
+    distribution: [0, 3, 3],
+    distributionIds: ["sam-ray", "pat-lee", "ari-cole"],
+    distributionShown: ["0 of 9", "3 of 20", "3 of 41"],
+  });
+  const one = (m: PeerMeasure) => ({ ...DATA, measures: [m] });
+
+  it("is drawn as a dot histogram: ties side by side, the member ringed", () => {
+    const { container } = render(
+      <WhereTheyStand memberId="pat-lee" name="Pat Lee" chamber="senate" initial={one(BILLS)} />
+    );
+    // One circle per peer in one drawing, the member's ringed.
+    const circles = container.querySelectorAll("figure svg circle");
+    expect(circles).toHaveLength(3);
+    expect([...circles].filter((c) => c.getAttribute("stroke") === "var(--phos)")).toHaveLength(1);
+    expect(screen.getByText("median 3")).toBeInTheDocument();
+    // The table stays the text form.
+    expect(screen.getAllByRole("table")).toHaveLength(1);
+  });
+
+  it("keeps the strip for a response without the unit", () => {
+    const noUnit = { ...BILLS, unit: undefined } as unknown as PeerMeasure;
+    const { container } = render(
+      <WhereTheyStand memberId="pat-lee" name="Pat Lee" chamber="senate" initial={one(noUnit)} />
+    );
+    // The strip: a small SVG per peer, and the member's larger dot.
+    expect(container.querySelectorAll("figure svg circle")).toHaveLength(4);
+    expect(screen.queryByText("median 3")).toBeInTheDocument();
+  });
+
+  it("still draws from an older API, its tick unlabelled", () => {
+    const { container } = render(
+      <WhereTheyStand
+        memberId="pat-lee"
+        name="Pat Lee"
+        chamber="senate"
+        initial={olderApi(one(BILLS))}
+      />
+    );
+    expect(container.querySelectorAll("figure svg circle")).toHaveLength(3);
+    expect(screen.queryByText("median 3")).toBeNull();
     expect(container.textContent).not.toMatch(/undefined|NaN/);
   });
 });

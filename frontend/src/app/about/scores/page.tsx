@@ -93,8 +93,8 @@ export default function ScoresChapter() {
           >
             <P>
               <strong>Votes against the party</strong> (how does this member vote?): the share of
-              party-line votes, roll calls where most Democrats and most Republicans voted on
-              opposite sides, on which the member sided with most of the other party. Members from
+              party-line votes, roll calls where at least 65% of one party voted yes and at most 35%
+              of the other did, on which the member sided with most of the other party. Members from
               seats that lean toward the other party tend to vote apart from their party more often,
               and voters hold them to it <Cite id="canes2002" />, so the tick is what the seat
               predicts, not zero.
@@ -530,7 +530,7 @@ export default function ScoresChapter() {
               build the same weight as signing onto laws. Network position takes years to build, so
               for members with under six years in office the label is pulled toward the middle in
               proportion to tenure: a newcomer reads as &ldquo;not enough track record yet&rdquo;,
-              not as a follower.
+              not as a follower. Six years is a convention, not a measured point.
             </P>
           </Box>
           <Box
@@ -701,7 +701,7 @@ export default function ScoresChapter() {
               type: "stat",
               value: 185,
               text: "185 of 193",
-              caption: "statements agreed with a reading",
+              caption: "statements agreed with a reading (October 2026)",
             }}
             more="the check, the expected rate and the ranges"
           >
@@ -709,10 +709,11 @@ export default function ScoresChapter() {
               Whether a statement supports or opposes the bill is read from its opening and closing
               paragraphs by comparing each sentence with written descriptions of support, opposition
               and neither <Cite id="yin2019" />; the sentence it was read from is shown. Checked
-              against a reading of every statement, it agreed on 185 of 193, and none of the eight
-              others had support and opposition swapped. The expected rate is fitted each night, per
-              chamber and party, on the members&apos; own rates against their seat&apos;s partisan
-              lean <Cite id="papke1996" />. Each rate carries a 95% range <Cite id="wilson1927" />
+              against a reading of every statement, it agreed on 185 of 193 (measured October 2026),
+              and none of the eight others had support and opposition swapped. The expected rate is
+              fitted each night, per chamber and party, on the members&apos; own rates against their
+              seat&apos;s partisan lean <Cite id="papke1996" />. Each rate carries a 95% range{" "}
+              <Cite id="wilson1927" />
               <Cite id="agresti1998" />, and a member reads as voting with the president more or
               less often than expected only when that range misses the expected rate. Voting with or
               against the president is neither good nor bad.

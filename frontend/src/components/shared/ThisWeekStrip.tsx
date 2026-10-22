@@ -4,8 +4,9 @@ import { OPEN_COMMENTS_HREF } from "@/lib/routes";
 import { connection } from "next/server";
 import type { CommentDeadline, StateNextDeadline, ThisWeek } from "@/types/thisWeek";
 import { countdownText } from "@/components/elections/VoterCalendar";
-import { rollCallHref, shortDate, voteResult, weekHref } from "@/lib/congress";
-import { stateBallotHref } from "@/lib/elections";
+import { RECORD_SOURCE, rollCallHref, shortDate, voteResult, weekHref } from "@/lib/congress";
+import { ELECTION_DAY_LAW, stateBallotHref } from "@/lib/elections";
+import { SourceLine } from "@/components/shared/Type";
 import ClosingSoon from "@/components/elections/ClosingSoon";
 import RegisterLink from "@/components/elections/RegisterLink";
 import { STATE_NAMES, byStateName } from "@/lib/stateCodes";
@@ -352,6 +353,13 @@ function CompactStrip({ data, pageDate }: { data: ThisWeek; pageDate?: string })
           </div>
         </details>
       </div>
+      <SourceLine className="mt-2">
+        Sources: Election Day by law (
+        <a href={ELECTION_DAY_LAW.url} className={LINK}>
+          {ELECTION_DAY_LAW.name}
+        </a>
+        ); {RECORD_SOURCE}; comment deadlines from the Federal Register.
+      </SourceLine>
     </aside>
   );
 }

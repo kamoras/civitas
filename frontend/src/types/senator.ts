@@ -83,6 +83,8 @@ export interface Senator {
     totalRaised: number;
     /** The base PAC and small-donor shares are taken over (contributions). */
     totalContributions?: number | null;
+    /** The election these figures are from; null before it was kept. */
+    electionYear?: number | null;
     totalFromPacs: number;
     /** Backend-computed PAC share of contributions, 0-100 unrounded — never re-derive. */
     pacSharePct: number;
@@ -242,6 +244,12 @@ export interface VoteRollCall {
   billLabel: string | null;
   /** The bill's short or popular title from Congress.gov, when the chamber's title isn't it. */
   billShortTitle?: string | null;
+  /** What the vote was on, named by the backend (the short title, else the
+   *  stored bill title; never an amendment's sponsor-only title). */
+  measureTitle?: string | null;
+  /** An amendment vote's amendment and its purpose as the record states it. */
+  amendment?: string | null;
+  amendmentPurpose?: string | null;
   sourceUrl: string;
   /** What the vote decided about the nominations its question names; null
    *  for any other vote. Optional for a backend image older than this field. */
@@ -466,6 +474,8 @@ export interface Holdings {
   unvaluedCount: number;
   totalLow: number;
   totalHigh: number;
+  /** The total as printed ("$21.0M+"); absent from an older backend. */
+  totalShown?: string | null;
   totalOpenEnded: boolean;
   categories: HoldingCategory[];
   categoryFilter: string | null;
@@ -485,6 +495,9 @@ export interface ConstituentApprovalParty {
    * the rest is what a typical member of their party gets. */
   ownWeight?: number | null;
   respondents: number;
+  /** `approve` as every surface prints it ("88%"); absent from an older
+   *  backend. */
+  approveShown?: string | null;
 }
 
 export interface ConstituentApproval {

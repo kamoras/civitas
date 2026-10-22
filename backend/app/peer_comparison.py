@@ -363,6 +363,10 @@ def with_drawing(db: Session, member_id: str, result: dict) -> dict:
     axis ends, the tick's label, and the measure over time with a readout
     per night."""
     history = _snapshots(db, member_id)
+    # Which row stands out, or None: the profile shows the "stands out"
+    # line only for a measure that is genuinely unusual.
+    top = standout(result["measures"])
+    result["standsOutKey"] = top["key"] if top else None
     for m, row in zip(MEASURES, result["measures"]):
         expected, unit = row["expected"], m.unit
         row["expectedShown"] = None if expected is None else (
@@ -440,13 +444,19 @@ NONE_STANDS_OUT_WHY = ("A figure is picked only when it is in the top or bottom 
                        "and far from what is expected. None is.")
 
 
-def stands_out(measures: list[dict]) -> tuple[str, str]:
-    """The one line above the stack and why it was picked: the measure
-    furthest from the middle of its peers, in percentile terms, when its
-    word is a "well" word, with that measure's own reason to care; else
-    that the member is close to peers on every measure, and the rule."""
+def standout(measures: list[dict]) -> dict | None:
+    """The measure that stands out: the one furthest from the middle of its
+    peers, in percentile terms, among those whose word is a "well" word;
+    None when no word is."""
     strong = [m for m in measures if (m.get("word") or "").startswith("well")]
-    if not strong:
+    return max(strong, key=lambda m: abs(m["percentile"] - 50)) if strong else None
+
+
+def stands_out(measures: list[dict]) -> tuple[str, str]:
+    """The one line above the stack and why it was picked: the standout
+    measure with its own reason to care; else that the member is close to
+    peers on every measure, and the rule."""
+    top = standout(measures)
+    if top is None:
         return "Close to peers on every measure.", NONE_STANDS_OUT_WHY
-    top = max(strong, key=lambda m: abs(m["percentile"] - 50))
     return f"{top['label']}: {top['sentence']}", f"{STANDS_OUT_WHY} {top['why']}"

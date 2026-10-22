@@ -3,8 +3,9 @@
 
 import json
 
-from app.measures import snapshot_facts
+from app.measures import BY_KEY, snapshot_facts
 from app.models import ScoreSnapshot, Senator
+from app.pipeline.transform.normalize_votes import PARTY_SIDE_MAX, PARTY_SIDE_MIN, compute_party_vote_split
 
 BREAKDOWN = {"scoredAt": "2026-10-19T03:00Z", "dimensions": {
     "fundingIndependence": {"facts": {"contributions": 100, "smallDonorShare": 0.13, "pacShare": 0.26}},
@@ -35,3 +36,22 @@ def test_snapshot_keeps_the_members_measures(db_session):
 def test_snapshot_facts_none_without_figures():
     assert snapshot_facts(None) is None
     assert snapshot_facts({"fundingIndependence": {"facts": {}}}) is None
+
+
+def test_the_breaks_method_states_the_rule_the_label_uses():
+    """The party-line definition shown on the page is the code's own
+    thresholds (normalize_votes.compute_party_vote_split), not "most of each
+    party", which is CQ's party unity rule and not this one."""
+    measured = BY_KEY["breaks"].measured
+    assert f"at least {PARTY_SIDE_MIN:.0%} of one party" in measured
+    assert f"at most {PARTY_SIDE_MAX:.0%} of the other" in measured
+    assert "most Democrats and most Republicans" not in measured
+
+    def roll(r_yea, d_yea):
+        members = ([{"party": "R", "voteCast": "Yea"}] * r_yea + [{"party": "R", "voteCast": "Nay"}] * (10 - r_yea)
+                   + [{"party": "D", "voteCast": "Yea"}] * d_yea + [{"party": "D", "voteCast": "Nay"}] * (10 - d_yea))
+        return compute_party_vote_split({"members": members})["label"]
+
+    # Majorities opposed (CQ's party unity vote) but short of the threshold.
+    assert roll(6, 4) == "bipartisan"
+    assert roll(7, 3) == "R"

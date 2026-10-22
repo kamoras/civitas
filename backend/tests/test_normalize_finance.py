@@ -137,6 +137,8 @@ class TestNormalizeFinance:
             pac_receipts=[],
         )
         assert result["totalRaised"] == 100  # 2024 only, not 2018 or 2012
+        # The election the window holds, for the page to name.
+        assert result["electionYear"] == 2024
 
     @pytest.mark.slow
     def test_non_contribution_receipts_excluded_from_donors(self):

@@ -9,6 +9,13 @@
       "url": "/politicians"
     },
     {
+      "id": "member-page-boxes",
+      "date": "2026-10-22",
+      "title": "Member pages at a glance",
+      "summary": "Each member page now leads with where the member stands on four measures side by side, then the money, votes, bills, votes with the president and approval at home as boxes, with every detail one tap away under More.",
+      "url": "/congress/members"
+    },
+    {
       "id": "newcomer-guidance",
       "date": "2026-10-21",
       "title": "Help for a first visit",

@@ -72,7 +72,12 @@ export default function NewsChapter() {
           <Box
             title="About U.S. policy?"
             dek="Each article is compared with articles already read, each marked the way its publisher filed it. Nobody labels articles by hand."
-            figure={{ type: "stat", value: 88, text: "88-96%", caption: "of what it keeps" }}
+            figure={{
+              type: "stat",
+              value: 88,
+              text: "88-96%",
+              caption: "of what it keeps (October 2026)",
+            }}
             more="how an article is judged"
           >
             <P>
@@ -84,11 +89,12 @@ export default function NewsChapter() {
               resembles, weighted by how closely, are mostly U.S. policy news; how many it compares
               with and how much is mostly are worked out again each day from the stored articles.
               Nobody labels articles by hand. Checked against the 827 articles a person had labelled
-              before, 88 to 96% of what it keeps is U.S. policy news, about the same as the
-              hand-labelled version it replaced. The rule before that, closeness to two dozen
-              written descriptions of policy topics, kept 61 to 67% relevant articles: storm and
-              flood coverage, foreign politics and crime passed, while campaign coverage was
-              dropped. Foreign news with no U.S. government role is not kept.
+              before, 88 to 96% of what it keeps is U.S. policy news (measured October 2026), about
+              the same as the hand-labelled version it replaced. The rule before that, closeness to
+              two dozen written descriptions of policy topics, kept 61 to 67% relevant articles
+              (measured October 2026): storm and flood coverage, foreign politics and crime passed,
+              while campaign coverage was dropped. Foreign news with no U.S. government role is not
+              kept.
             </P>
           </Box>
           <Box
@@ -318,18 +324,23 @@ export default function NewsChapter() {
               hand (642 stories from April to October 2026), at the point where the site is most
               confident that the links shown are right, which has to clear its bar for anything
               stated as fact (being confident at least 80% are right). Tested on months the setting
-              never saw, 53 of 57 links were right, and it found about one related vote in five: it
-              prefers saying nothing to guessing. People&apos;s names are left out of both texts
-              before they are compared, so a story is matched by what it is about, not who is in it.
-              A monitor&apos;s &ldquo;On the record&rdquo; chart shows every vote linked to its
-              updates over its life, one square per vote, higher for more yeas than nays, with the
-              same votes in a table.
+              never saw, 53 of 57 links were right (measured October 2026), and it found about one
+              related vote in five: it prefers saying nothing to guessing. People&apos;s names are
+              left out of both texts before they are compared, so a story is matched by what it is
+              about, not who is in it. A monitor&apos;s &ldquo;On the record&rdquo; chart shows
+              every vote linked to its updates over its life, one square per vote, higher for more
+              yeas than nays, with the same votes in a table.
             </P>
           </Box>
           <Box
             title="The committee"
             dek="A committee is named only when two measurements agree. The row says likely, because it falls short of the bar for fact."
-            figure={{ type: "stat", value: 82, text: "82%", caption: "named right, newer issues" }}
+            figure={{
+              type: "stat",
+              value: 82,
+              text: "82%",
+              caption: "named right, newer issues (October 2026)",
+            }}
             more="how the committee is chosen"
           >
             <P>
@@ -341,13 +352,14 @@ export default function NewsChapter() {
               read and labelled by hand with the committees that handle it, or with none. Their
               chair and ranking member come from the committee rosters the site already keeps, as
               they stand when you read the issue. Tested on issues newer than every labelled one it
-              learned from, the committee named was one of the right ones 82% of the time, and a
-              committee was named for about one issue in five; the rest say nothing rather than
-              guess. That is short of the bar the site sets for stating it as fact (being confident
-              precision is at least 80%), and asking for more certainty didn&apos;t raise it, so the
-              row says &ldquo;likely&rdquo;. Most of the misses were stories no committee clearly
-              handles. The rules&apos; wording alone did much worse (38%): it dates from 1946 in
-              places and reads nothing like the news.
+              learned from (measured October 2026), the committee named was one of the right ones
+              82% of the time, and a committee was named for about one issue in five; the rest say
+              nothing rather than guess. That is short of the bar the site sets for stating it as
+              fact (being confident precision is at least 80%), and asking for more certainty
+              didn&apos;t raise it, so the row says &ldquo;likely&rdquo;. Most of the misses were
+              stories no committee clearly handles. The rules&apos; wording alone did much worse
+              (38%, measured October 2026): it dates from 1946 in places and reads nothing like the
+              news.
             </P>
           </Box>
           <Box
@@ -431,12 +443,12 @@ export default function NewsChapter() {
               monitor&apos;s own description and it names someone or something the monitor names
               that most stories don&apos;t: a name in a third of all stories, like the
               president&apos;s, doesn&apos;t count on its own. A language-model check on borderline
-              matches was removed after a replay showed it let 17 of 18 off-topic stories through.
-              Two monitors are merged only when their titles are near-identical, since a merge
-              can&apos;t be undone. A monitor goes quiet (&ldquo;watching&rdquo;) after a week
-              without coverage and wakes when it returns; after a month it closes, and is listed
-              under this tab&apos;s closed monitors for 60 days, with when it was tracked and when
-              it closed, and in the Archive.
+              matches was removed after a replay in October 2026 showed it let 17 of 18 off-topic
+              stories through. Two monitors are merged only when their titles are near-identical,
+              since a merge can&apos;t be undone. A monitor goes quiet (&ldquo;watching&rdquo;)
+              after a week without coverage and wakes when it returns; after a month it closes, and
+              is listed under this tab&apos;s closed monitors for 60 days, with when it was tracked
+              and when it closed, and in the Archive.
             </P>
           </Box>
           <Box

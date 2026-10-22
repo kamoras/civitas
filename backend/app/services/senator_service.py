@@ -266,6 +266,7 @@ def build_senator_response(senator: Senator, db: Session) -> SenatorSchema:
         funding=FundingSchema(
             total_raised=senator.total_raised,
             total_contributions=senator.total_contributions,
+            election_year=senator.funding_election_year,
             total_from_pacs=senator.total_from_pacs,
             pac_share_pct=pac_share_pct(senator),
             small_donor_percentage=senator.small_donor_percentage,
