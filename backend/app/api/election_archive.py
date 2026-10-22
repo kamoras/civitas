@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app.api.election_map import csv_text
+from app.api.election_map import csv_text, leans_max, state_marks
 from app.api.elections import phase_cache_s
 from app.api.response_helpers import CACHE_TTL_LIST_S, cached_json
 from app.database import get_db
@@ -123,7 +123,8 @@ def archive_map(cycle: int = CYCLE,
     """The election's map as its last campaign build left it, in
     GET /api/elections/map's shape, with `frozen` true."""
     data = _map(db, cycle)
-    chambers = {name: c for name, c in data["chambers"].items() if chamber in (None, name)}
+    chambers = {name: dict(c, stateMarks=state_marks(name, c["seats"], leans_max(data)))
+                for name, c in data["chambers"].items() if chamber in (None, name)}
     return cached_json(dict(data, chambersAvailable=list(data["chambers"]), chambers=chambers),
                        max_age=CACHE_TTL_LIST_S)
 

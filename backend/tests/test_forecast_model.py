@@ -813,3 +813,29 @@ def test_api_gives_a_states_seats_and_one_seat_in_a_line_each(db_session, freeze
 def test_api_hides_the_seat_lines_from_election_day(db_session, freeze_utcnow, monkeypatch):
     data = _built(db_session, freeze_utcnow)
     assert _client(monkeypatch, data, phase=ELECTION_DAY).get("/api/elections/map/seats?state=OH").status_code == 404
+
+
+def _seat(**over) -> dict:
+    s = {"id": "x", "state": "OH", "stateName": "Ohio", "special": False, "district": None,
+         "leanLabel": "R+6", "usualBin": "R_usually", "status": "range", "rangeBasisLabel": "Margin range, from polls",
+         "range80Label": "D+2 to R+9", "close": True, "pollsBin": "close",
+         "difference": {"strength": 1, "direction": "D", "seatPolls": True}}
+    return {**s, **over}
+
+
+def test_each_state_on_the_tile_map_reads_out_in_each_view():
+    senate = api.state_marks("senate", [_seat(), _seat(id="y", state="FL", stateName="Florida", special=True,
+                                                     status="not_contested", reason="No Democrat filed.")], 3)
+    assert senate["usual"]["OH"]["shown"] == "usual vote R+6 lean"
+    assert senate["polls"]["OH"]["shown"] == "Margin range, from polls: D+2 to R+9, too close to tell; usual vote R+6 lean"
+    assert senate["diff"]["OH"]["shown"].endswith("usual vote R+6 lean, polls point toward D")
+    assert senate["polls"]["FL"]["label"] == "Florida (special)"
+    assert senate["polls"]["FL"]["shown"] == "usual vote R+6 lean. No Democrat filed."
+    two = api.state_marks("senate", [_seat(), _seat(id="z", special=True)], 3)["usual"]["OH"]
+    assert two["label"] == "Ohio" and two["shown"].startswith("2 races: Ohio, usual vote R+6 lean; Ohio (special),")
+    house = api.state_marks("house", [_seat(district=1), _seat(id="h2", district=2, usualBin="D_leans",
+                                                                    pollsBin="R_usually")], 3)
+    assert house["usual"]["OH"] == {"id": "OH", "label": "Ohio", "detail": None, "shown": "2 seats",
+                                    "context": "1 within 3 points of even in the usual vote", "href": None}
+    assert house["polls"]["OH"]["context"] == "1 too close to tell"
+    assert house["diff"]["OH"]["context"] == "2 where polls disagree with the usual vote"

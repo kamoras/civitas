@@ -18,6 +18,7 @@ Read path only: no model, no fetch.
 from datetime import date
 
 from app.pipeline.fetch.fr_rulemaking import FR_TYPE_LABELS, RULE_DOC_TYPES
+from app.readout import period_marks
 from app.sentences import SENTENCE_END, ends_sentence
 
 # The Register's table-of-contents subject for Paperwork Reduction Act
@@ -67,7 +68,8 @@ def first_sentence(summary: str | None) -> str | None:
 def comment_window(opened: str | None, closes: str | None, today: str) -> dict | None:
     """The period from publication to its deadline, as of `today` (the
     deadline's zone, time_utils.comment_period_today): {opened, closes,
-    totalDays, daysLeft, elapsedPercent}. None without both dates."""
+    totalDays, daysLeft, elapsedPercent, marks}, `marks` being what the
+    bar's readout says. None without both dates."""
     try:
         start, end, now = date.fromisoformat(opened or ""), date.fromisoformat(closes or ""), date.fromisoformat(today)
     except ValueError:
@@ -75,4 +77,5 @@ def comment_window(opened: str | None, closes: str | None, today: str) -> dict |
     total = max((end - start).days, 1)
     left = min(max((end - now).days, 0), total)
     return {"opened": opened, "closes": closes, "totalDays": total, "daysLeft": left,
-            "elapsedPercent": round(100 * (total - left) / total)}
+            "elapsedPercent": round(100 * (total - left) / total),
+            "marks": period_marks(opened, closes, total, left)}

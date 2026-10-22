@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import ActionPage from "./page";
 import { fetchActionIssues, fetchOpenComments } from "@/lib/api";
@@ -261,6 +261,14 @@ describe("issue boxes", () => {
           totalDays: 69,
           daysLeft: 19,
           elapsedPercent: 72,
+          marks: [
+            {
+              id: "elapsed",
+              label: "Comment period",
+              shown: "50 of 69 days gone",
+              context: "opened Sep 1, 2026, closes Nov 9, 2026",
+            },
+          ],
         },
         agencyName: "Homeland Security Department",
         agencySlug: null,
@@ -275,7 +283,7 @@ describe("issue boxes", () => {
     const box = (
       await screen.findByRole("heading", { name: "Optional Practical Training Fees" })
     ).closest("article")!;
-    expect(box.querySelector('[role="img"]')).not.toBeNull();
+    expect(within(box).getByRole("group", { name: /^Comment period, 19 days left/ })).toBeTruthy();
     expect(box.textContent).toMatch(/19/);
     expect(
       screen.getByRole("link", { name: "Comment on Optional Practical Training Fees" })

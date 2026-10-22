@@ -26,7 +26,11 @@ async function readOverview(): Promise<BillsInitial | null> {
     if (!res.ok) return null;
     const body = (await res.json()) as Partial<BillsInitial> | null;
     if (!body || typeof body.stageCounts !== "object" || body.stageCounts === null) return null;
-    return { stageCounts: body.stageCounts, inMotion: body.inMotion ?? 0 };
+    return {
+      stageCounts: body.stageCounts,
+      stageFlow: body.stageFlow ?? {},
+      inMotion: body.inMotion ?? 0,
+    };
   } catch {
     return null;
   }

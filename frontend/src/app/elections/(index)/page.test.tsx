@@ -88,10 +88,10 @@ const mapFill = vi.hoisted(() => ({
 vi.mock("@/components/elections/RaceMap", () => ({
   default: (props: {
     getFillColor: (s: string) => string;
-    getStateLabel?: (s: string) => string;
+    marks: Record<string, { shown: string }>;
   }) => {
     mapFill.current = props.getFillColor;
-    mapFill.label = props.getStateLabel ?? null;
+    mapFill.label = (s: string) => props.marks[s]?.shown;
     mapFill.renders += 1;
     return <div data-testid="race-map" />;
   },

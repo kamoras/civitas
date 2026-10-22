@@ -17,6 +17,8 @@ import { absoluteUrl, pageMetadata } from "@/lib/site";
 import { fetchRecord } from "@/lib/ssrPayload";
 import type { Court, CourtDecisionPage } from "@/types/court";
 import OnThisPage from "@/components/shared/OnThisPage";
+import BoxGrid from "@/components/shared/BoxGrid";
+import RecordBox from "@/components/shared/RecordBox";
 import { onThisPage } from "@/lib/onThisPage";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
@@ -162,73 +164,120 @@ export default async function CourtPage({ searchParams }: { searchParams: Promis
               </div>
             </section>
 
-            <section
-              id="methods"
-              {...onThisPage("Methods and sources")}
-              aria-labelledby="methods-heading"
-              className="flex flex-col gap-3 border border-white/25 bg-surface px-4 py-5 text-base leading-relaxed text-ink sm:px-6"
-            >
-              <h2 id="methods-heading" className="text-xl font-semibold text-ink-hi">
-                Methods and sources
-              </h2>
-              <p>
-                <strong className="text-ink-hi">The cases.</strong> Orally argued cases the Court
-                decided, with each justice&apos;s side and the opinions they wrote: from the Supreme
-                Court Database for every term its newest release covers, and from Oyez for a term
-                after that. Unanimous means no justice dissented; a case a justice sat out counts
-                the justices who voted (8&ndash;0).
-              </p>
-              <p>
-                <strong className="text-ink-hi">Agreement.</strong> For each pair, the share of the
-                cases both took part in where they were on the same side, majority or dissent. A
-                concurrence is on the majority&apos;s side.
-              </p>
-              <p>
-                <strong className="text-ink-hi">Martin-Quinn positions.</strong> Andrew Martin and
-                Kevin Quinn&apos;s estimate of each justice&apos;s position per term, from the votes
-                of every justice in every case (Martin and Quinn, 2002, <em>Political Analysis</em>
-                ), with its 95% credible interval. Published a term or more after the term ends, so
-                it can trail the cases above.
-              </p>
-              <p>
-                <strong className="text-ink-hi">Votes under the appointing president.</strong>{" "}
-                {courtFinding(court.appointerFinding)} Each justice&apos;s own estimate is on their
-                page, beside every sitting justice&apos;s, as information, not a measure of loyalty:
-                a justice&apos;s years under the appointing president are always the first, and
-                windows of the same length later in a career produce differences about as large.{" "}
-                <Link href="/about/presidents-and-justices#justices" className={LINK}>
-                  How justices are covered
-                </Link>
-              </p>
-              <ul className="flex flex-col gap-1 text-sm text-ink-lo">
-                <li>
-                  <a href="https://scdb.la.psu.edu" className={LINK}>
-                    The Supreme Court Database
-                  </a>{" "}
-                  (Spaeth, Epstein, Martin and others): Creative Commons Attribution-NonCommercial
-                  3.0 United States.
-                </li>
-                <li>
-                  <a href="https://www.oyez.org" className={LINK}>
-                    Oyez
-                  </a>
-                  : Creative Commons Attribution-NonCommercial 4.0 International.
-                </li>
-                <li>
-                  <a href="https://mqscores.wustl.edu" className={LINK}>
-                    Martin-Quinn scores
-                  </a>
-                  : published by the authors with no licence stated; cited as Martin and Quinn
-                  (2002).
-                </li>
-                <li>
-                  Slip opinions:{" "}
-                  <a href="https://www.supremecourt.gov/opinions/opinions.aspx" className={LINK}>
-                    supremecourt.gov
-                  </a>{" "}
-                  (public domain).
-                </li>
-              </ul>
+            <section id="methods" {...onThisPage("Methods and sources")}>
+              <BoxGrid columns={2} label="Methods and sources" labelId="methods-heading">
+                <RecordBox
+                  compact
+                  title="The cases"
+                  dek="Orally argued cases, from the Supreme Court Database and Oyez."
+                  more={{
+                    label: "which cases, and how they count",
+                    children: (
+                      <p className="leading-relaxed">
+                        Orally argued cases the Court decided, with each justice&apos;s side and the
+                        opinions they wrote: from the Supreme Court Database for every term its
+                        newest release covers, and from Oyez for a term after that. Unanimous means
+                        no justice dissented; a case a justice sat out counts the justices who voted
+                        (8&ndash;0).
+                      </p>
+                    ),
+                  }}
+                />
+                <RecordBox
+                  compact
+                  title="Agreement"
+                  dek="For each pair, how often both were on the same side."
+                  more={{
+                    label: "how a side is counted",
+                    children: (
+                      <p className="leading-relaxed">
+                        For each pair, the share of the cases both took part in where they were on
+                        the same side, majority or dissent. A concurrence is on the majority&apos;s
+                        side.
+                      </p>
+                    ),
+                  }}
+                />
+                <RecordBox
+                  compact
+                  title="Martin-Quinn positions"
+                  dek="Each justice's position per term, with a 95% interval."
+                  more={{
+                    label: "the model and when it is published",
+                    children: (
+                      <p className="leading-relaxed">
+                        Andrew Martin and Kevin Quinn&apos;s estimate of each justice&apos;s
+                        position per term, from the votes of every justice in every case (Martin and
+                        Quinn, 2002, <em>Political Analysis</em>), with its 95% credible interval.
+                        Published a term or more after the term ends, so it can trail the cases
+                        above.
+                      </p>
+                    ),
+                  }}
+                />
+                <RecordBox
+                  compact
+                  title="Votes under the appointing president"
+                  dek="Information on each justice's page, not a measure of loyalty."
+                  more={{
+                    label: "what was measured",
+                    children: (
+                      <p className="leading-relaxed">
+                        {courtFinding(court.appointerFinding)} Each justice&apos;s own estimate is
+                        on their page, beside every sitting justice&apos;s, as information, not a
+                        measure of loyalty: a justice&apos;s years under the appointing president
+                        are always the first, and windows of the same length later in a career
+                        produce differences about as large.{" "}
+                        <Link href="/about/presidents-and-justices#justices" className={LINK}>
+                          How justices are covered
+                        </Link>
+                      </p>
+                    ),
+                  }}
+                />
+                <RecordBox
+                  compact
+                  title="Sources and licences"
+                  dek="The Supreme Court Database, Oyez, Martin-Quinn scores and the slip opinions."
+                  more={{
+                    label: "each source and its licence",
+                    children: (
+                      <ul className="flex flex-col gap-1 text-ink-lo">
+                        <li>
+                          <a href="https://scdb.la.psu.edu" className={LINK}>
+                            The Supreme Court Database
+                          </a>{" "}
+                          (Spaeth, Epstein, Martin and others): Creative Commons
+                          Attribution-NonCommercial 3.0 United States.
+                        </li>
+                        <li>
+                          <a href="https://www.oyez.org" className={LINK}>
+                            Oyez
+                          </a>
+                          : Creative Commons Attribution-NonCommercial 4.0 International.
+                        </li>
+                        <li>
+                          <a href="https://mqscores.wustl.edu" className={LINK}>
+                            Martin-Quinn scores
+                          </a>
+                          : published by the authors with no licence stated; cited as Martin and
+                          Quinn (2002).
+                        </li>
+                        <li>
+                          Slip opinions:{" "}
+                          <a
+                            href="https://www.supremecourt.gov/opinions/opinions.aspx"
+                            className={LINK}
+                          >
+                            supremecourt.gov
+                          </a>{" "}
+                          (public domain).
+                        </li>
+                      </ul>
+                    ),
+                  }}
+                />
+              </BoxGrid>
             </section>
           </div>
         </main>

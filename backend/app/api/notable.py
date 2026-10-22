@@ -58,6 +58,7 @@ from app.api.action import monitor_groups, recent_issues
 from app.api.response_helpers import JSONResponse, cached_json
 from app.comment_periods import comment_window, is_paperwork, salience
 from app.database import get_db
+from app.readout import mark, split_marks, vote_page
 from app.election_phase import CAMPAIGN, ELECTION_DAY, active_election
 from app.issue_ids import to_public_id
 from app.models import (
@@ -128,7 +129,8 @@ def _vote_ref(rc: RollCall) -> dict:
 def _split(rc: RollCall, caption: str) -> dict:
     total = (rc.yeas or 0) + (rc.nays or 0)
     return {"type": "split", "yeas": rc.yeas, "nays": rc.nays,
-            "yeaShare": round(rc.yeas / total, 4) if total else 0, "caption": caption}
+            "yeaShare": round(rc.yeas / total, 4) if total else 0, "caption": caption,
+            "marks": split_marks(rc.yeas, rc.nays, vote_page(rc))}
 
 
 def _simple_majority(votes: list[RollCall]) -> list[RollCall]:
@@ -193,6 +195,25 @@ def _majority_leaders(db: Session) -> set[str]:
     return ids
 
 
+def _dot_marks(rest: list[RollCallPosition], breaker: RollCallPosition, page_of, names: dict,
+               districts: dict, house: bool, breaker_context: str) -> list[dict]:
+    """The dots' readouts, in the order they are drawn: the party's members
+    who voted the other way, by state and name, then the breaker last."""
+    def dot(p: RollCallPosition, context: str | None) -> dict:
+        href = page_of(p)
+        member_id = href.rsplit("/", 1)[-1] if href else None
+        name = names.get(member_id) or f"{p.first_name} {p.last_name}".strip()
+        seat = f"{p.party}-{p.state}"
+        if house:
+            district = districts.get(member_id)
+            seat += f"-{district or 'AL'}" if member_id in districts else ""
+        return mark(member_id or p.member_id, name, f"Voted {p.position}", detail=seat,
+                    context=context, href=href)
+
+    ordered = sorted(rest, key=lambda p: (p.state, p.last_name, p.first_name))
+    return [dot(p, None) for p in ordered] + [dot(breaker, breaker_context)]
+
+
 def _lone_breaks(db: Session, votes: list[RollCall]) -> list[dict]:
     if not votes:
         return []
@@ -203,6 +224,7 @@ def _lone_breaks(db: Session, votes: list[RollCall]) -> list[dict]:
     links = MemberLinks(db)
     leaders = _majority_leaders(db)
     names = {i: n for model in (Senator, Representative) for i, n in db.query(model.id, model.name)}
+    districts = dict(db.query(Representative.id, Representative.district))
     senators = defaultdict(list)
     for sid, state in db.query(Senator.id, Senator.state).filter(Senator.is_current.is_(True)):
         senators[state].append(sid)
@@ -233,8 +255,12 @@ def _lone_breaks(db: Session, votes: list[RollCall]) -> list[dict]:
             if not lone or 2 * (voting - 1) <= members:
                 continue
             breaker = sides[lone[0]][0]
-            href = (links.page(bioguide=breaker.member_id) if rc.chamber == "house"
-                    else links.page(last_name=breaker.last_name, state=breaker.state, lis_id=breaker.member_id))
+
+            def page_of(p: RollCallPosition, chamber: str = rc.chamber) -> str | None:
+                return (links.page(bioguide=p.member_id) if chamber == "house"
+                        else links.page(last_name=p.last_name, state=p.state, lis_id=p.member_id))
+
+            href = page_of(breaker)
             member_id = href.rsplit("/", 1)[-1] if href else None
             prevailing = None if rc.rejected is None else ("nay" if rc.rejected else "yea")
             if member_id in leaders and lone[0] == prevailing:
@@ -265,7 +291,10 @@ def _lone_breaks(db: Session, votes: list[RollCall]) -> list[dict]:
                 # One dot per member of the party voting Yea or Nay, the
                 # breaker's marked.
                 "figure": {"type": "dots", "party": party, "voting": voting,
-                           "caption": f"1 of {voting} {_PARTY_PLURAL[party]} voted {breaker.position}"},
+                           "caption": f"1 of {voting} {_PARTY_PLURAL[party]} voted {breaker.position}",
+                           "marks": _dot_marks(sides[others], breaker, page_of, names, districts,
+                                               rc.chamber == "house",
+                                               f"The only {_PARTY_NOUN[party]} to vote {breaker.position}")},
             }
         if len(newest) == len(_PARTY_NOUN):
             break

@@ -41,7 +41,17 @@ const data: FrontPage = {
     date: "2026-10-14",
     headline: "Decided by 1 vote in the Senate, 49–50: Amendment Rejected.",
     vote,
-    figure: { type: "split", yeas: 49, nays: 50, yeaShare: 0.4949, caption: "Decided by 1 vote" },
+    figure: {
+      type: "split",
+      yeas: 49,
+      nays: 50,
+      yeaShare: 0.4949,
+      caption: "Decided by 1 vote",
+      marks: [
+        { id: "yea", label: "Yea", shown: "49 votes", context: "49% of the 99 voting" },
+        { id: "nay", label: "Nay", shown: "50 votes", context: "51% of the 99 voting" },
+      ],
+    },
   },
   tier: [
     {
@@ -57,7 +67,29 @@ const data: FrontPage = {
       state: "AA",
       compareWithId: null,
       compareWithName: null,
-      figure: { type: "dots", party: "R", voting: 41, caption: "1 of 41 Republicans voted Yea" },
+      figure: {
+        type: "dots",
+        party: "R",
+        voting: 41,
+        caption: "1 of 41 Republicans voted Yea",
+        marks: [
+          ...Array.from({ length: 40 }, (_, i) => ({
+            id: `r${i}`,
+            label: `Member ${i}`,
+            detail: "R-ZZ",
+            shown: "Voted Nay",
+            href: `/politicians/r${i}`,
+          })),
+          {
+            id: "pat-lone",
+            label: "Pat Lone",
+            detail: "R-AA",
+            shown: "Voted Yea",
+            context: "The only Republican to vote Yea",
+            href: "/politicians/pat-lone",
+          },
+        ],
+      },
     },
     {
       kind: "comment",
@@ -111,7 +143,7 @@ describe("FrontPageView", () => {
     );
     const lead = screen.getByRole("article", { name: "Lead story" });
     expect(
-      within(lead).getByRole("img", { name: "49 yea to 50 nay. Decided by 1 vote." })
+      within(lead).getByRole("group", { name: /^49 yea to 50 nay, Decided by 1 vote: 2 marks/ })
     ).toBeTruthy();
     expect(within(lead).getByText("To do a thing.")).toBeTruthy();
     expect(within(lead).getByRole("link", { name: "How your senators voted" })).toHaveAttribute(
@@ -123,7 +155,11 @@ describe("FrontPageView", () => {
 
   it("says each figure in words and never shows an internal id", () => {
     const { container } = render(<FrontPageView data={data} />);
-    expect(screen.getByRole("img", { name: "1 of 41 Republicans voted Yea." })).toBeTruthy();
+    expect(
+      screen.getByRole("group", {
+        name: /^1 of 41 Republicans voted Yea: one dot per Republican voting: 41 marks/,
+      })
+    ).toBeTruthy();
     expect(screen.getByText("Today")).toBeTruthy();
     expect(screen.getByRole("link", { name: /Comment on regulations.gov/ })).toHaveAttribute(
       "href",
