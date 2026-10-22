@@ -553,6 +553,25 @@ def _coverage_gate(new: dict, old: dict) -> list[str]:
     return failures
 
 
+def _grades_gate(new: dict, old: dict) -> list[str]:
+    """Constituent Alignment's data-grade vote counts: both chambers, Partial
+    below Full, and no count more than doubled or halved since the copy in
+    use (a jump that size is a broken read, not a month's new votes)."""
+    failures = []
+    for chamber in ("house", "senate"):
+        entry = (new.get("chambers") or {}).get(chamber) or {}
+        partial, full = entry.get("partial"), entry.get("full")
+        if not (isinstance(partial, int) and isinstance(full, int) and 0 < partial <= full):
+            failures.append(f"{chamber}: partial {partial}, full {full}")
+            continue
+        prior = (old.get("chambers") or {}).get(chamber) or {}
+        for key, value in (("partial", partial), ("full", full)):
+            was = prior.get(key)
+            if was and not was / 2 <= value <= was * 2:
+                failures.append(f"{chamber} {key} moved {was} -> {value}")
+    return failures
+
+
 # More than a year's weekdays: build_name_casing.py stops at the year's end.
 NAME_CASING_ISSUES = 366
 
@@ -941,6 +960,9 @@ DATA_FILES: list[DataFile] = [
                                   "--days", str(NAME_CASING_ISSUES), "--output", "{out}", "--cache", "{tmp}"],
              due=lambda ctx: not ctx.tried_within(365) and ctx.today >= date(ctx.today.year, 2, 1),
              gate=_casing_gate, heavy=True, timeout_s=4 * 3600),
+    DataFile("confidence_grades.json",
+             command=lambda ctx: [PY, _script("calibrate_confidence_grades.py"), "--out", "{out}"],
+             due=_every(30), gate=_grades_gate, timeout_s=1800),
     DataFile(training_polls.FILE_NAME, command=_training_polls_command, due=_training_polls_due,
              gate=training_polls.gate, timeout_s=900),
     DataFile("forecast_model.json", command=_forecast_command, due=_forecast_due, gate=_forecast_gate,
