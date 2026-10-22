@@ -15,7 +15,11 @@ import StripPoints, {
   stripTop,
   type StripPoint,
 } from "@/components/shared/Strip";
+import CountHistogram, { wholeCounts } from "@/components/shared/CountHistogram";
 import { TYPE } from "@/lib/typeStyles";
+
+/** The page's own member's mark, on a strip and a histogram alike. */
+const MEMBER_MARK = { fill: "var(--ink-hi)", ring: "var(--phos)" };
 
 /** A round mark. Drawn as SVG, not a rounded box: the site's boxes keep
  *  hard corners, and a dot is a data mark, not a box. */
@@ -55,6 +59,30 @@ const JITTER = [10, 4, 16, 7, 13, 1, 19, 10];
 const jitterY = (i: number, size: number) => 12 + JITTER[i % JITTER.length] / 2 + size / 2;
 
 function Strip({ m, memberId }: { m: PeerMeasure; memberId: string }) {
+  if (wholeCounts(m.unit, m.distribution)) {
+    // A whole number: a dot histogram, so ties stand side by side.
+    return (
+      <CountHistogram
+        label={`${m.label}, ${m.peerGroup.label}`}
+        points={m.distribution.map((v, i) => ({
+          id: m.distributionIds[i],
+          name: m.distributionNames[i],
+          detail: m.distributionSeats[i],
+          shown: m.distributionShown[i],
+          rank: m.distributionRanks[i],
+          href: `/politicians/${m.distributionIds[i]}`,
+          value: v,
+        }))}
+        marked={{ [memberId]: MEMBER_MARK }}
+        startId={memberId}
+        tick={
+          m.expected == null || m.expectedShown == null
+            ? null
+            : { value: m.expected, text: m.expectedShown }
+        }
+      />
+    );
+  }
   const max = stripTop(m.axisMax, [...m.distribution, m.value, m.expected]);
   const at = (v: number) => Math.min(100, (v / max) * 100);
   const muted = m.thin;
