@@ -9,6 +9,8 @@ import {
 } from "@/lib/elections";
 import { getPartyMeta } from "@/components/elections/CandidateCard";
 import { TYPE } from "@/lib/typeStyles";
+import { INLINE_LINK } from "@/lib/controlStyles";
+import { SourceLine } from "@/components/shared/Type";
 
 /** A federal race's candidates as ballot rows: name, party in words and
  * colour, money raised, and a bar scaled to this race's top fundraiser
@@ -126,6 +128,15 @@ export default function BallotRaceRows({
           + {tail.length} more filed with the FEC
         </li>
       )}
+      <li>
+        <SourceLine className="px-4 py-2">
+          Source: money raised is the contributions each candidate reported to the{" "}
+          <a href="https://www.fec.gov/data/candidates/" className={INLINE_LINK}>
+            FEC
+          </a>{" "}
+          for this election.
+        </SourceLine>
+      </li>
     </ul>
   );
 }

@@ -233,10 +233,12 @@ export default function MethodsLedger({
 
       <div id={bodyId} hidden={!open} className="flex flex-col gap-8 px-5 py-5">
         <p className="max-w-3xl text-small leading-relaxed text-ink-lo">
-          Every figure on this page is read from public records by fixed rules, with no model
+          Every figure on this page is read from public sources by fixed rules, with no model
           judging the member, and refreshed each night. &ldquo;Record behind it&rdquo; says how much
           record the figures rest on (full, partial or thin, by fixed counts of votes, bills and
-          donors).{" "}
+          donors; where those counts fall is a convention, not a measurement). Years in office, in
+          the header, count from the start of the member&apos;s first term in this chamber on the
+          member&apos;s Congress.gov record.{" "}
           <Link href="/about/scores" className="text-signal-cyan underline underline-offset-2">
             How each figure is measured
           </Link>

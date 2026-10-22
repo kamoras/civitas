@@ -1,16 +1,33 @@
 import Link from "next/link";
 import type { CongressGlance as Glance } from "@/types/congress";
-import { monthHref, monthLabel, reachedHref, shortDate } from "@/lib/congress";
+import {
+  BILL_STATUS_SOURCE,
+  RECORD_SOURCE,
+  monthHref,
+  monthLabel,
+  reachedHref,
+  shortDate,
+} from "@/lib/congress";
 import { shareMetaAttrs, SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import { absoluteUrl } from "@/lib/site";
 import { ordinal } from "@/components/scorecard/format";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import ScrollRegion from "@/components/shared/ScrollRegion";
+import { SourceLine } from "@/components/shared/Type";
 import { TYPE } from "@/lib/typeStyles";
 
-const CAL_SOURCE = "Congressional Record (Daily Digest); Senate and House roll calls";
-const PIPE_SOURCE = "Congress.gov bill status, for every bill sitting members sponsored";
+const CAL_SOURCE = RECORD_SOURCE;
+const PIPE_SOURCE = BILL_STATUS_SOURCE;
+
+/** A box's source in words, under it and inside its share image. */
+function Source({ source, asOf }: { source: string; asOf: string }) {
+  return (
+    <SourceLine className="mt-2">
+      Source: {source}; through {shortDate(asOf)}.
+    </SourceLine>
+  );
+}
 
 // The calendar's grid, in SVG units: a month per row, a day per column,
 // each cell split into the Senate (top) and the House (bottom).
@@ -184,6 +201,7 @@ function SittingCalendar({ cal }: { cal: Glance["calendar"] }) {
           </table>
         </ScrollRegion>
       </details>
+      <Source source={CAL_SOURCE} asOf={cal.today} />
     </section>
   );
 }
@@ -263,6 +281,7 @@ function BillPipeline({ pipe, asOf }: { pipe: NonNullable<Glance["pipeline"]>; a
           Every bill in motion
         </Link>
       </p>
+      <Source source={PIPE_SOURCE} asOf={asOf} />
     </section>
   );
 }

@@ -40,6 +40,8 @@ def test_summary_counts_and_lean():
     assert summary["candidates"]["dek"] == "Nominees from the August 11, 2026 primary results."
     assert summary["lean"]["title"] == "Connecticut leans D+8"
     assert summary["lean"]["figure"]["text"] == "D+8"
+    # A state's lean is Civitas's computation with Cook's formula, never Cook's own figure.
+    assert "computed by Civitas" in summary["lean"]["dek"] and "Cook PVI" not in summary["lean"]["dek"]
     assert "electoral" not in summary
 
 

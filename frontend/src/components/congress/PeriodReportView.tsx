@@ -9,8 +9,10 @@ import type { StatFigure } from "@/types/figure";
 import FollowFeed from "@/components/shared/FollowFeed";
 import { TOPIC_FEEDS } from "@/lib/site";
 import type { MonthReport, PeriodDay, PeriodReport } from "@/types/congress";
+import { SourceLine } from "@/components/shared/Type";
 import {
   CHAMBER_NAME,
+  RECORD_SOURCE,
   billHref,
   dayHref,
   longDate,
@@ -192,7 +194,9 @@ export default function PeriodReportView({
                 dek={report.sentence}
                 figure={lead.figure ?? null}
                 more={{ label: "when Congress sits next", children: lead.body }}
-              />
+              >
+                <SourceLine>Source: {RECORD_SOURCE}.</SourceLine>
+              </RecordBox>
             </BoxGrid>
           )}
           <PeriodNav
@@ -233,6 +237,9 @@ export default function PeriodReportView({
               />
             </FigureGroup>
           </div>
+          <SourceLine className="mt-3">
+            Source: {RECORD_SOURCE}. Each day&apos;s page links its record.
+          </SourceLine>
 
           {kind === "week" ? (
             <div className="mt-10">

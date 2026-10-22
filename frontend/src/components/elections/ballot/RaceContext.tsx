@@ -250,7 +250,10 @@ export default function RaceContext({
       className="mb-5 bg-surface-base"
       {...{ [SHARE_SECTION_ATTR]: `context-${race.id}` }}
       {...shareMetaAttrs({
-        source: "Cook PVI; Civitas-computed lean from open precinct returns",
+        source:
+          race.district == null
+            ? "State lean computed by Civitas from certified presidential returns"
+            : "Cook PVI; Civitas-computed lean from open precinct returns",
         // Read when the page loads.
         asOf: null,
         scaleMax: null,
@@ -319,13 +322,15 @@ export default function RaceContext({
               {usual.source === "computed"
                 ? `Computed by Civitas from open precinct returns, on this election's district lines: the figure the ${race.cycleYear} map shows, used in no score.`
                 : `Computed by Civitas from each state's official presidential returns: the figure the ${race.cycleYear} map shows.`}{" "}
-              {race.pvi != null &&
-                race.pviLevel === (race.district == null ? "state" : "district") && (
-                  <>
-                    Cook PVI, as a cross-check:{" "}
-                    <span className="font-mono text-ink">{formatPvi(race.pvi)}</span>.{" "}
-                  </>
-                )}
+              {/* Cook's only where the figure is Cook's: a district's pinned
+                  PVI. A state's (state_pvi.json) is Civitas's own, the
+                  figure above. */}
+              {race.pvi != null && race.district != null && race.pviLevel === "district" && (
+                <>
+                  Cook PVI, as a cross-check:{" "}
+                  <span className="font-mono text-ink">{formatPvi(race.pvi)}</span>.{" "}
+                </>
+              )}
               <Link href={COMPUTED_LEAN_HREF} className={INLINE_LINK}>
                 How it is computed
               </Link>
@@ -333,11 +338,15 @@ export default function RaceContext({
           </Row>
         )}
         {lean && !usual && race.pvi != null && (
-          <Row label={`The seat · Cook PVI ${formatPvi(race.pvi)}`}>
+          <Row
+            label={`The seat · ${race.pviLevel === "district" ? "Cook PVI" : "State lean"} ${formatPvi(race.pvi)}`}
+          >
             {leanSentence(race.pvi, lean.unit)} {leanCountsSentence(lean)}
             <LeanAxis context={lean} seatLabel={formatPvi(race.pvi)} />
             <p className="mt-2 text-small">
-              Cook&apos;s figure: Civitas has no computed lean for this seat on these lines.
+              {race.pviLevel === "district"
+                ? "Cook's figure: Civitas has no computed lean for this seat on these lines."
+                : "The state's lean, computed by Civitas with Cook's formula from certified presidential returns: no district figure is on file for these lines."}
             </p>
           </Row>
         )}
