@@ -320,7 +320,7 @@ export default function RaceContext({
             <LeanAxis context={lean} seatLabel={usual.label} />
             <p className="mt-2 text-small">
               {usual.source === "computed"
-                ? `Computed by Civitas from open precinct returns, on this election's district lines: the figure the ${race.cycleYear} map shows, used in no score.`
+                ? `Computed by Civitas from open precinct returns, on this election's district lines: the figure the ${race.cycleYear} map shows, used in no member comparison.`
                 : `Computed by Civitas from each state's official presidential returns: the figure the ${race.cycleYear} map shows.`}{" "}
               {/* Cook's only where the figure is Cook's: a district's pinned
                   PVI. A state's (state_pvi.json) is Civitas's own, the

@@ -1,11 +1,14 @@
-"""Real GDP per person for the US and 13 peer economies, so a president's
+"""Real GDP per person for the US and its peer economies, so a president's
 growth can be compared with the economies that faced the same world.
 
-Since 1961, 68% of the variation in a presidency's per-person growth is
-shared with the median of these 13 economies over the same years, and the
-Democratic-Republican growth gap disappears relative to them (World Bank
-data, docs/research/president-scores.md; Blinder & Watson 2016, AER
-106(4), on oil shocks, productivity and world growth). Effectiveness
+The peers are every member of the OECD before its 1994 enlargement, the US
+aside (president v12; scripts/fetch_peer_gdp.py states the rule and writes
+the list into the data file this module reads). Since 1961, 55% of the
+variation in a presidency's per-person growth is shared with their median
+over the same years (Maddison through 2022, the World Bank after,
+measured October 2026; 64% with the thirteen countries a research note had
+picked before, docs/research/president-scores.md; Blinder & Watson 2016,
+AER 106(4), on oil shocks, productivity and world growth). Effectiveness
 scores US growth relative to the peers, which removes those shared shocks
 (president v8).
 
@@ -14,13 +17,13 @@ catching up with a richer one (beta convergence: Baumol 1986, AER 76(5);
 Barro & Sala-i-Martin 1992, JPE 100(2)), and in the 1950s and 1960s
 Western Europe and Japan were far poorer than the US, so their faster
 growth then was not a shock the US shared. Raw, it made a postwar
-presidency's relative growth rise with its start year (r = +0.73 over the
+presidency's relative growth rise with its start year (r = +0.67 over the
 13 completed postwar terms). Each year's US-minus-peers growth is set
 against the peers' median income gap with the US the year before, the
-slope fitted every run over every year since 1947 (convergence_rate, 8.9
+slope fitted every run over every year since 1947 (convergence_rate, 9.1
 points per log gap in October 2026), and the part that gap predicts is
-taken off. That brings the era trend to +0.41; what is left comes from
-the three terms since 2017, the years the US outgrew Europe and Japan.
+taken off. That brings the era trend to +0.28; what is left comes from
+the terms since 2017, the years the US outgrew Europe and Japan.
 A slope fitted across peer-years instead (each peer's growth on its own
 gap) moved from -3.3 to -5.3 with the sample and over-credited every
 recent term, and one fitted per term followed noise
@@ -57,10 +60,10 @@ from app.pipeline.fetch.http_utils import DEFAULT_FETCH_TIMEOUT_S
 
 logger = logging.getLogger(__name__)
 
-# The same 13 advanced economies as the research note: Britain, France,
-# Germany, the Netherlands, Canada, Australia, Sweden, Italy, Belgium,
-# Denmark, Switzerland, Norway, Japan.
-PEER_COUNTRIES = ("GBR", "FRA", "DEU", "NLD", "CAN", "AUS", "SWE", "ITA", "BEL", "DNK", "CHE", "NOR", "JPN")
+_BUNDLED = pathlib.Path(__file__).resolve().parent.parent.parent / "data" / "peer_gdp_per_capita.json"
+# The peers, by the rule scripts/fetch_peer_gdp.py states (`_peer_rule` in the
+# file): the OECD's members before its 1994 enlargement, the US aside.
+PEER_COUNTRIES = tuple(json.loads(_BUNDLED.read_text())["peers"])
 US = "USA"
 # Fewest peers with a growth rate over a window before their median is used:
 # most of them, so the median is the peers' and not a few of theirs.
@@ -78,7 +81,6 @@ _WB_URL = (
     "https://api.worldbank.org/v2/country/{countries}/indicator/NY.GDP.PCAP.KD"
     "?format=json&date={first}:{last}&per_page=2000"
 )
-_BUNDLED = pathlib.Path(__file__).resolve().parent.parent.parent / "data" / "peer_gdp_per_capita.json"
 _CACHE_TIER = "world_bank_gdp_per_capita"
 _CACHE_TTL_HOURS = 24 * 30  # annual figures, revised a few times a year
 

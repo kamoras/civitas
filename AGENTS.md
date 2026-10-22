@@ -844,8 +844,11 @@ date from the House Clerk's member list (`fetch/house_clerk.py`). No source
 gives a senator's date, so the Senate is not prorated.
 
 Narrower windows mean less data backs each dimension by design, not because
-coverage got worse — `calculate_confidence`'s vote/bill thresholds are
-recalibrated accordingly (see `score_calculator.py`), and `ground_truth.py`'s
+coverage got worse — `calculate_confidence`'s vote grade is measured per
+chamber (split-half reliability of break rates reaching 0.70 and 0.80,
+`scripts/calibrate_confidence_grades.py` → `confidence_grades.json`, refreshed
+monthly), its other counts are stated conventions with their reasons
+(`docs/methodology/confidence-grades.md`), and `ground_truth.py`'s
 population-distribution checks are the backstop that would catch a real
 collapse. The gate derives every expectation from the current population's
 own raw data (rank consistency against FEC/roll-call metrics, point-mass and

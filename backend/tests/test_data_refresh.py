@@ -300,6 +300,14 @@ def test_calibrations_tied_to_a_congress_are_flagged_when_the_next_one_is_comple
     assert "119th" in dr._commemorative_stale(_ctx(doc={"les_spearman_118th": 0.9}))
 
 
+def test_the_vote_grades_gate():
+    good = {"chambers": {"senate": {"partial": 33, "full": 53}, "house": {"partial": 15, "full": 30}}}
+    assert dr._grades_gate(good, good) == []
+    assert dr._grades_gate({"chambers": {"senate": {"partial": 60, "full": 53}}}, {})
+    doubled = {"chambers": {"senate": {"partial": 70, "full": 120}, "house": {"partial": 15, "full": 30}}}
+    assert any("moved" in f for f in dr._grades_gate(doubled, good))
+
+
 def test_the_district_lean_window_goes_stale_after_the_next_presidential_election():
     doc = {"_window": "2020+2024"}
     assert dr._district_lean_stale(_ctx(doc=doc, today=date(2028, 12, 14))) is None

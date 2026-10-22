@@ -184,16 +184,17 @@ export default function PresidentsAndJusticesChapter() {
             </P>
           </Box>
           <Box
-            title="Growth, against 13 peer economies"
-            dek="From 1947 on, growth per person sits beside the median of 13 peer economies over the same years."
-            figure={{ type: "stat", value: 13, caption: "peer economies" }}
+            title="Growth, against 23 peer economies"
+            dek="From 1947 on, growth per person sits beside the median of 23 peer economies over the same years: the OECD's members before 1994."
+            figure={{ type: "stat", value: 23, caption: "peer economies" }}
             more="the method, and before 1947"
           >
             <P>
               Oil shocks, financial crises and the pandemic hit every advanced economy in the same
-              years, so from 1947 on growth per person sits beside the median of 13 peer economies
-              over the same years <Cite id="bolt2024" />, with the part of the gap that the
-              peers&apos; catching up with US incomes predicts set aside <Cite id="baumol1986" />
+              years, so from 1947 on growth per person sits beside the median of 23 peer economies
+              (the OECD&apos;s members before its 1994 enlargement) over the same years{" "}
+              <Cite id="bolt2024" />, with the part of the gap that the peers&apos; catching up with
+              US incomes predicts set aside <Cite id="baumol1986" />
               <Cite id="barro1992" />. Before 1947 no peer series covers the terms, so growth is
               total real growth beside other presidents before 1947 <Cite id="romer1989" />.
             </P>

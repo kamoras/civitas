@@ -807,7 +807,7 @@ class President(Base):
     election_margin: Mapped[float | None] = mapped_column(Float, nullable=True)
     gdp_growth_avg: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Average annual real GDP growth per person over the years Effectiveness
-    # credits, the 13 peer economies' median over the same years, and US
+    # credits, the peer economies' median over the same years, and US
     # minus peers with the peers' catch-up growth set aside
     # (app.pipeline.fetch.peer_gdp.peer_relative_growth) — what a postwar
     # term's GDP component scores since president v8. NULL before 1947 (no
