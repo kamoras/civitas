@@ -939,7 +939,11 @@ Corollaries that follow from the same rule, all enforced in code:
   plain 4xx that way), so nothing is crawled past it
   (`state_source_crawler.WALLED`). Walls already investigated go in
   `state_candidate_sources.json`'s `_robots_walls` with their evidence, so
-  the crawl's ops alert names only a new wall or an unreachable file.
+  the crawl's ops alert names only a new wall or an unreachable file. A
+  measure source walled the same way is written up as the state's `wall`
+  in `ballot_measure_pdf_sources.json` (host, date measured, evidence):
+  the state stays `ingest_failed` and its page says the read failed, but
+  the nightly ingest alert names only new problems (Ohio, 2026-10-21).
 - The source is the state's own document, but not always the state's own
   server. Where a state's whole site sits behind a bot wall (Georgia's
   Cloudflare, Nevada's Imperva), the reader raises `SourceBlocked` and the
