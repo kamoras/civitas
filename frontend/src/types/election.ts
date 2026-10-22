@@ -784,7 +784,7 @@ export interface PviMap {
   /** "ST" -> signed int PVI, e.g. { "GA": 3 }. */
   states: Record<string, number>;
   /** The lean map's readout per state: name, lean, place, ballot page. */
-  stateMarks: Record<string, ReadoutMark>;
+  stateMarks?: Record<string, ReadoutMark>;
   /** "ST-N" -> signed int PVI, e.g. { "CA-12": -13 }. */
   districts: Record<string, number>;
   /** Methodology/provenance — treat as possibly missing. */

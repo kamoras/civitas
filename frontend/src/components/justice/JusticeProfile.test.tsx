@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { olderApi } from "@/lib/olderApi";
 import { render, screen, within } from "@testing-library/react";
 import axe from "axe-core";
 import JusticeProfile from "./JusticeProfile";
@@ -180,5 +181,15 @@ describe("stripDomain", () => {
     expect(stripDomain({ unit: "position", peers: [{ ...peers[0], value: -2.4 }] })).toEqual([
       -3, 3,
     ]);
+  });
+});
+
+describe("an older API, during a rolling update", () => {
+  it("draws the appointer intervals plain, every row still in the table", () => {
+    const { container } = page(olderApi(justice));
+    expect(screen.queryByRole("group", { name: /^Each sitting justice/ })).toBeNull();
+    expect(screen.getByRole("figure", { name: /19\.2 points more often/ })).toBeInTheDocument();
+    // Plain: drawn, with no readout, nothing printed from a missing field.
+    expect(container.textContent).not.toMatch(/undefined|NaN/);
   });
 });

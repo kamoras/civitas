@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { olderApi } from "@/lib/olderApi";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import Holdings from "./Holdings";
@@ -331,5 +332,17 @@ describe("Holdings — paging while a filter request is in flight", () => {
     fetchSenatorHoldings.mockReturnValueOnce(new Promise<HoldingsData>(() => {}));
     const { container } = render(<Holdings memberId="S1" />);
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe("an older API, during a rolling update", () => {
+  it("draws the pie plain and the legend in the form's own brackets", async () => {
+    fetchSenatorHoldings.mockResolvedValueOnce(olderApi(holdings()));
+    const { container } = render(<Holdings memberId="S1" />);
+    await screen.findByRole("button", { name: /^Stocks/ });
+    expect(screen.queryByRole("group", { name: /^Holdings by asset type/ })).toBeNull();
+    expect(container.textContent).toMatch(/\$1K – \$15K/);
+    // Plain: drawn, with no readout, nothing printed from a missing field.
+    expect(container.textContent).not.toMatch(/undefined|NaN/);
   });
 });

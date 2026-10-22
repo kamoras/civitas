@@ -43,7 +43,8 @@ export default function BillStageFlow({
         {MAIN_FLOW_STAGES.map((code) => {
           const info = stages[code];
           const count = stageCounts[code] || 0;
-          const flow = stageFlow[code];
+          // An older API sends no flow: the row keeps its count, no bar.
+          const flow = stageFlow?.[code];
           const style = billStageStyle(code);
           const isActive = activeStage === code;
 

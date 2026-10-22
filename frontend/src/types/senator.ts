@@ -309,9 +309,9 @@ export interface PolicyAlignment {
   alignment: "R" | "D" | "bipartisan";
   strength: number;
   /** As printed ("63%"), the bar's width (percent, at least 4) and the readout. */
-  strengthShown: string;
-  barPercent: number;
-  mark: ReadoutMark;
+  strengthShown?: string;
+  barPercent?: number;
+  mark?: ReadoutMark;
 }
 
 export interface PartisanDepth {
@@ -323,11 +323,11 @@ export interface PartisanDepth {
   policyBreakdown: PolicyAlignment[];
   /** The spectrum bar, from the API: the lean as printed ("+0.21"), the bar
    *  in words, the marker's place and the fill from the centre (percent). */
-  leanShown: string;
-  leanSentence: string;
-  leanMarkerPercent: number;
-  leanBarLeft: number;
-  leanBarWidth: number;
+  leanShown?: string;
+  leanSentence?: string;
+  leanMarkerPercent?: number;
+  leanBarLeft?: number;
+  leanBarWidth?: number;
 }
 
 export interface CampaignPromise {
@@ -413,10 +413,10 @@ export interface HoldingCategory {
   weight: number;
   share: number;
   /** As printed: the share ("34%", "<1%") and the disclosed sum ("$1.2M – $3.4M"). */
-  shareShown: string;
-  valueShown: string;
+  shareShown?: string;
+  valueShown?: string;
   /** The slice's readout; none for a category that draws no slice. */
-  mark: ReadoutMark | null;
+  mark?: ReadoutMark | null;
 }
 
 export interface Holdings {
