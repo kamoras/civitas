@@ -562,13 +562,20 @@ def recess(db: Session, report: dict) -> dict | None:
         nxt.append(f"the {_CHAMBER_NAME[c]} at {when}" + (", in a pro forma session" if pro_forma else ""))
     if nxt:
         sentences.append(f"Next sittings on the record: {'; '.join(nxt)}.")
-    return {
+    out = {
         "headline": "Congress is out",
         "sentence": " ".join(sentences),
         "lastBusinessDay": last.isoformat() if last else None,
         # The week to open: the last one with business, else the latest day's.
         "week": week_bounds(last or day)[0].isoformat(),
+        # The page's lead figure: whole days, Eastern, since that business.
+        "figure": None,
     }
+    if last:
+        days = (eastern_today() - last).days
+        out["figure"] = {"type": "stat", "value": days,
+                         "caption": f"day{'' if days == 1 else 's'} since a record vote or a measure passed"}
+    return out
 
 
 def day_report(db: Session, day: date) -> dict:

@@ -525,7 +525,11 @@ def fused_order(ranked: list[Hit], documents: list[dict], f: Fusion) -> tuple[li
         score[url] = score.get(url, 0.0) + f.document_weight / (f.k + r)
         item[url] = {"kind": "document", "group": KIND_GROUPS["document"], "label": doc.get("title") or "",
                      "context": _document_context(doc, today),
-                     "url": document_url(quote(doc.get("key") or str(doc["id"]), safe=""))}
+                     "url": document_url(quote(doc.get("key") or str(doc["id"]), safe="")),
+                     # The document's own words around the query (the keyword
+                     # channel's excerpt, matches marked), else its summary:
+                     # the results page keeps it behind each box's "More".
+                     "snippet": doc.get("snippet") or ""}
     return sorted(score, key=lambda u: (-score[u], item[u]["label"])), item
 
 

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import RedistrictingStateView from "./RedistrictingView";
@@ -168,14 +168,19 @@ describe("RedistrictingStateView", () => {
 
   it("leads with the net seat change the strips show, and keeps the predecessor count in the method", () => {
     render(<RedistrictingStateView data={data} />);
-    const r = screen.getByText("R-leaning seats").closest("div")!;
-    expect(r).toHaveTextContent("1 → 2 (+1)");
-    expect(screen.getByText("D-leaning seats").closest("div")).toHaveTextContent("1 → 0 (−1)");
-    expect(screen.queryByText("Even seats")).not.toBeInTheDocument();
+    const seats = screen.getByRole("heading", { name: "Seats by lean" }).closest("article")!;
+    expect(seats).toHaveTextContent("R 1 → 2 (+1) · D 1 → 0 (−1)");
+    expect(seats).not.toHaveTextContent("Even");
     expect(screen.queryByText(/Changed lean/)).not.toBeInTheDocument();
+    // The method is behind the box's More, not dropped.
+    expect(within(seats).getByText("More: what this counts")).toBeInTheDocument();
     expect(
-      screen.getByText(/1 of 2 new districts lean differently from their predecessor/)
+      within(seats).getByText(/1 of 2 new districts lean differently from their predecessor/)
     ).toBeInTheDocument();
+    const moved = screen.getByRole("heading", { name: "Residents moved" }).closest("article")!;
+    expect(within(moved).getByRole("img")).toHaveAccessibleName(/% of residents moved\.$/);
+    expect(within(moved).getByText("More: how these are counted")).toBeInTheDocument();
+    expect(moved).toHaveTextContent(/Unchanged districts: \d+ of 2\./);
   });
 
   it("lists where each old district went", async () => {

@@ -2,7 +2,9 @@
 
 import { congressOrdinal } from "@/lib/sources";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
+import BoxGrid from "@/components/shared/BoxGrid";
+import RecordBox from "@/components/shared/RecordBox";
 import TerminalTitlebar from "@/components/TerminalTitlebar";
 import SeatChart from "@/components/presidentialSupport/SeatChart";
 import RateTrack from "@/components/presidentialSupport/RateTrack";
@@ -12,6 +14,7 @@ import { STATE_NAMES } from "@/lib/stateCodes";
 import { BOXED_CONTROL } from "@/lib/controlStyles";
 import { PARTY_COLORS } from "@/lib/partyStyles";
 import {
+  chamberCounts,
   chamberSentence,
   expectationSentence,
   furthest,
@@ -33,7 +36,14 @@ type SortKey = "name" | "difference" | "rate";
  * record out, the members furthest from their seat's norm either way, and,
  * one step down, the full list, every counted vote and the method.
  */
-export default function ChamberView({ view }: { view: ChamberSupport }) {
+export default function ChamberView({
+  view,
+  intro,
+}: {
+  view: ChamberSupport;
+  /** What the page is, kept behind the lead box's More. */
+  intro?: ReactNode;
+}) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const [sort, setSort] = useState<SortKey>("difference");
@@ -45,6 +55,7 @@ export default function ChamberView({ view }: { view: ChamberSupport }) {
   const highlighted = useMemo(() => new Set(matches.map((m) => m.id)), [matches]);
   const member = view.members.find((m) => m.id === selected) ?? null;
   const summary = chamberSentence(view);
+  const counts = chamberCounts(view);
   const chamberWord = view.chamber === "senate" ? "Senate" : "House";
   const sorted = useMemo(() => {
     const rows = [...view.members];
@@ -73,7 +84,30 @@ export default function ChamberView({ view }: { view: ChamberSupport }) {
 
   return (
     <div className="space-y-8">
-      <p className="max-w-3xl font-sans text-lg leading-relaxed text-ink">{summary}</p>
+      {/* One box led by the chamber's figure: members who voted the
+          president's way more often than similar seats, the others in its
+          line, the whole sentence and what the page is behind its More. */}
+      <BoxGrid columns={1}>
+        <RecordBox
+          level={2}
+          title={`${counts.total} ${chamberWord === "Senate" ? "senators" : "House members"}, beside similar seats`}
+          figure={{
+            type: "stat",
+            value: counts.more,
+            caption: "with the president more often than similar seats",
+          }}
+          dek={`${counts.less} voted with the president less often; for ${counts.within}, the gap is within chance.`}
+          more={{
+            label: "about this page",
+            children: (
+              <div className="space-y-2">
+                {intro}
+                <p>{summary}</p>
+              </div>
+            ),
+          }}
+        />
+      </BoxGrid>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <div className="min-w-0">

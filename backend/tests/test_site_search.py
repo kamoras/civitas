@@ -227,6 +227,14 @@ def test_results_rank_matches_and_documents_together(index):
     assert doc["group"] == "Documents" and "Proposed Rule" in doc["context"]
 
 
+def test_a_document_carries_its_own_words_for_the_results_more():
+    """The hybrid ranker's excerpt, verbatim (matches marked), for the box's
+    "More"; a document without one carries an empty string, never a made-up line."""
+    with_snip = {**_doc(7), "snippet": "the \x02warren\x03 county grant"}
+    out = site_search.fuse([], [with_snip, _doc(8)], site_search.Fusion(k=1.0, document_weight=1.0))
+    assert [i["snippet"] for i in out] == ["the \x02warren\x03 county grant", ""]
+
+
 def test_a_document_in_both_lists_is_listed_once_and_ranked_higher():
     hits = [site_search.Hit("member", "M", "", "/politicians/m", 0.5, ("m",), match=0.9),
             site_search.Hit("document", "Rule", "", "/explore/7", 0.4, ("rule",), match=0.5)]

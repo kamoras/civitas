@@ -23,6 +23,9 @@ import {
 import { safeHref } from "@/lib/formatting";
 import { mapHref } from "@/lib/electionMap";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
+import BoxGrid from "@/components/shared/BoxGrid";
+import RecordBox from "@/components/shared/RecordBox";
+import NoteLine from "@/components/elections/NoteLine";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import { absoluteUrl } from "@/lib/site";
@@ -65,9 +68,9 @@ const LEAN_WORD: Record<LeanCategory, string> = {
 
 /** The headline seat figures: the same counts the strips draw. */
 const SEAT_TILES: [LeanCategory, string][] = [
-  ["R", "R-leaning seats"],
-  ["D", "D-leaning seats"],
-  ["EVEN", "Even seats"],
+  ["R", "R"],
+  ["D", "D"],
+  ["EVEN", "Even"],
 ];
 
 /** One block per seat, coloured by its lean: the state's whole delegation
@@ -100,6 +103,21 @@ export function SeatStrip({
       </span>
     </div>
   );
+}
+
+/** The old figure tiles as one line: each lean's seats before → after
+ *  and the net change ("R 9 → 5 (−4) · D 43 → 47 (+4)"), Even only where a
+ *  map has one; each letter's word is in the strips' lines under it.
+ *  Counts are the backend's. */
+function leanTiles(s: StateRedistricting["summary"]): string {
+  return SEAT_TILES.filter(
+    ([k]) => k !== "EVEN" || s.seatsByLeanBefore.EVEN > 0 || s.seatsByLeanAfter.EVEN > 0
+  )
+    .map(
+      ([k, label]) =>
+        `${label} ${s.seatsByLeanBefore[k]} → ${s.seatsByLeanAfter[k]} ${netWord(s.netSeatChangeByLean[k])}`
+    )
+    .join(" · ");
 }
 
 const BAR_BLOCKS = 20;
@@ -346,13 +364,64 @@ function PviSourceLine({
   );
 }
 
+/** How the residents are counted: the "Residents moved" box's More. */
+function CountingMethod({ data }: { data: StateRedistricting }) {
+  return (
+    <p>
+      Every block of the Census the maps were drawn to is assigned to one district on each map by
+      the Census Bureau&apos;s block equivalency files. Each block&apos;s Census population is
+      counted in the pair of districts (old, new) it falls in, so every resident is counted exactly
+      once and each state&apos;s cells add up to its Census population (
+      {data.summary.population.toLocaleString("en-US")}). The sentences below leave out overlaps
+      under {data.minResidents} residents: a block the line cuts through is assigned whole to one
+      side, so an overlap that small can be the block file&apos;s rounding rather than people who
+      moved. The matrix and the downloads keep every overlap.
+    </p>
+  );
+}
+
+/** Predecessors and the leans compared: the shift box's More. */
+function LeanMethod({ data }: { data: StateRedistricting }) {
+  const leanYears = leanWindowWords(
+    data.sources.pviAfter?.window ?? data.sources.pviBefore?.window
+  );
+  return (
+    <p>
+      A new district&apos;s <span className="text-ink-hi">predecessor</span> is the old district
+      most of its residents came from; its &quot;before&quot; lean is the predecessor&apos;s. The
+      weighted figure averages the leans of every old district its residents came from, by
+      residents. The average resident&apos;s shift is how far each resident&apos;s district lean
+      moved, either way, averaged over residents. Both leans are Cook PVI on the same presidential
+      elections{leanYears ? ` (${leanYears})` : ""}, so the change is the lines, not new elections.
+    </p>
+  );
+}
+
+/** What "seats by lean" counts, and why it differs from the predecessor
+ *  comparison: the seats box's More. */
+function SeatsMethod({ data }: { data: StateRedistricting }) {
+  return (
+    <p>
+      <span className="text-ink-hi">Seats by lean</span> count each map&apos;s districts by the sign
+      of their lean: R, D or even. A different count:{" "}
+      <span className="text-ink-hi">
+        {data.summary.districtsLeaningDifferentlyFromPredecessor} of {data.summary.seats} new
+        districts lean differently from their predecessor
+      </span>
+      . The two need not match: a new district built from several old ones is compared with its
+      largest source only, an old district split up with no successor (
+      {data.summary.oldWithoutSuccessor} here) is compared with nothing, and an even seat is a
+      category of its own. Average district lean: {formatPvi(data.summary.meanPviBefore)} before,{" "}
+      {formatPvi(data.summary.meanPviAfter)} after; a redraw moves residents between districts, not
+      out of the state, so the average barely moves while single seats can move a lot.
+    </p>
+  );
+}
+
 function MethodAndData({ data }: { data: StateRedistricting }) {
   const [open, setOpen] = useState(false);
   const downloads = redistrictingDownloads(data.state);
   const actUrl = safeHref(data.map?.url ?? null);
-  const leanYears = leanWindowWords(
-    data.sources.pviAfter?.window ?? data.sources.pviBefore?.window
-  );
   return (
     <section
       id="method-and-data"
@@ -364,86 +433,59 @@ function MethodAndData({ data }: { data: StateRedistricting }) {
       </h2>
       <div className="mt-3 max-w-3xl space-y-3 text-[13px] leading-relaxed text-ink-lo">
         <p>
-          Every block of the Census the maps were drawn to is assigned to one district on each map
-          by the Census Bureau&apos;s block equivalency files. Each block&apos;s Census population
-          is counted in the pair of districts (old, new) it falls in, so every resident is counted
-          exactly once and each state&apos;s cells add up to its Census population (
-          {data.summary.population.toLocaleString("en-US")}). The sentences above leave out overlaps
-          under {data.minResidents} residents: a block the line cuts through is assigned whole to
-          one side, so an overlap that small can be the block file&apos;s rounding rather than
-          people who moved. The matrix and the downloads keep every overlap.
-        </p>
-        <p>
-          A new district&apos;s <span className="text-ink-hi">predecessor</span> is the old district
-          most of its residents came from; its &quot;before&quot; lean is the predecessor&apos;s.
-          The weighted figure averages the leans of every old district its residents came from, by
-          residents. The average resident&apos;s shift is how far each resident&apos;s district lean
-          moved, either way, averaged over residents. Both leans are Cook PVI on the same
-          presidential elections{leanYears ? ` (${leanYears})` : ""}, so the change is the lines,
-          not new elections.
-        </p>
-        <p>
-          <span className="text-ink-hi">Seats by lean</span> (the figures at the top) count each
-          map&apos;s districts by the sign of their lean: R, D or even. A different count:{" "}
-          <span className="text-ink-hi">
-            {data.summary.districtsLeaningDifferentlyFromPredecessor} of {data.summary.seats} new
-            districts lean differently from their predecessor
-          </span>
-          . The two need not match: a new district built from several old ones is compared with its
-          largest source only, an old district split up with no successor (
-          {data.summary.oldWithoutSuccessor} here) is compared with nothing, and an even seat is a
-          category of its own. Average district lean: {formatPvi(data.summary.meanPviBefore)}{" "}
-          before, {formatPvi(data.summary.meanPviAfter)} after; a redraw moves residents between
-          districts, not out of the state, so the average barely moves while single seats can move a
-          lot.
+          How residents are counted, what a predecessor is and what &ldquo;seats by lean&rdquo;
+          counts are behind each figure&apos;s &ldquo;More&rdquo; at the top of the page.
         </p>
         <p>
           Population is the decennial Census the maps were drawn to; it does not track moves since.
           Lean is how a district voted for president relative to the nation, not a forecast.
         </p>
-        <ul className="list-none space-y-1.5 border-l border-white/[0.09] pl-3">
-          <li>
-            <span className="text-ink-hi">The new map:</span> {data.map?.title ?? data.map?.reason}
-            {data.map?.issuedBy && <> ({data.map.issuedBy})</>}
-            {actUrl && (
-              <>
-                {" "}
-                <a
-                  href={actUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="whitespace-nowrap text-signal-cyan underline decoration-signal-cyan/40 underline-offset-4 hover:text-phos"
-                >
-                  [ Official source ↗ ]
-                </a>
-              </>
-            )}
-          </li>
-          <li>
-            <span className="text-ink-hi">Residents:</span> {data.sources.overlap}
-          </li>
-          <PviSourceLine
-            label={`Old lean (${congressOrdinal(data.fromCongress)} Congress lines)`}
-            meta={data.sources.pviBefore}
-          />
-          <PviSourceLine
-            label={`New lean (${congressOrdinal(data.toCongress)} Congress lines)`}
-            meta={data.sources.pviAfter}
-          />
-          {data.sources.computedLean && (
+        <NoteLine lead="Sources: the new map's official record, the Census block files and Cook PVI's pinned tables.">
+          <ul className="list-none space-y-1.5 border-l border-white/[0.09] pl-3">
             <li>
-              <span className="text-ink-hi">Civitas-computed lean (both maps):</span>{" "}
-              {data.sources.computedLean.source} Shown beside Cook&apos;s figures; the counts above
-              are Cook&apos;s.{" "}
-              <Link
-                href={data.sources.computedLean.href}
-                className="text-signal-cyan underline decoration-signal-cyan/40 underline-offset-4 hover:text-phos"
-              >
-                How it is computed
-              </Link>
+              <span className="text-ink-hi">The new map:</span>{" "}
+              {data.map?.title ?? data.map?.reason}
+              {data.map?.issuedBy && <> ({data.map.issuedBy})</>}
+              {actUrl && (
+                <>
+                  {" "}
+                  <a
+                    href={actUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="whitespace-nowrap text-signal-cyan underline decoration-signal-cyan/40 underline-offset-4 hover:text-phos"
+                  >
+                    [ Official source ↗ ]
+                  </a>
+                </>
+              )}
             </li>
-          )}
-        </ul>
+            <li>
+              <span className="text-ink-hi">Residents:</span> {data.sources.overlap}
+            </li>
+            <PviSourceLine
+              label={`Old lean (${congressOrdinal(data.fromCongress)} Congress lines)`}
+              meta={data.sources.pviBefore}
+            />
+            <PviSourceLine
+              label={`New lean (${congressOrdinal(data.toCongress)} Congress lines)`}
+              meta={data.sources.pviAfter}
+            />
+            {data.sources.computedLean && (
+              <li>
+                <span className="text-ink-hi">Civitas-computed lean (both maps):</span>{" "}
+                {data.sources.computedLean.source} Shown beside Cook&apos;s figures; the counts
+                above are Cook&apos;s.{" "}
+                <Link
+                  href={data.sources.computedLean.href}
+                  className="text-signal-cyan underline decoration-signal-cyan/40 underline-offset-4 hover:text-phos"
+                >
+                  How it is computed
+                </Link>
+              </li>
+            )}
+          </ul>
+        </NoteLine>
         <p className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs">
           <a
             href={downloads.csv}
@@ -507,9 +549,7 @@ export default function RedistrictingStateView({ data }: { data: StateRedistrict
   return (
     <>
       <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-ink-lo">
-        {data.stateName} votes on a new U.S. House map in {data.cycle}. {s.residentsMovedPct}% of
-        residents now live in a district made up mostly of people from another old district.
-        Unchanged districts: {s.unchangedSeats} of {s.seats}.
+        {data.stateName} votes on a new U.S. House map in {data.cycle}.
       </p>
       {data.map && (
         <p className="mt-2 max-w-2xl font-mono text-[11px] leading-relaxed text-ink-min">
@@ -544,49 +584,55 @@ export default function RedistrictingStateView({ data }: { data: StateRedistrict
           asOf: data.sources.pviAfter?.revision?.timestamp ?? null,
         }}
       >
-        <section
-          aria-labelledby="at-a-glance"
-          className="mt-6 border border-white/[0.09] bg-surface-base p-4"
-          {...{ [SHARE_SECTION_ATTR]: "at-a-glance" }}
-        >
-          <div className="flex flex-wrap items-baseline justify-between gap-3">
-            <h2 id="at-a-glance" className="font-mono text-xs text-ink-min">
+        <div className="mt-4" {...{ [SHARE_SECTION_ATTR]: "at-a-glance" }}>
+          <div className="flex flex-wrap items-baseline justify-between gap-3 border-b-2 border-ink-hi pb-1.5">
+            <h2 id="at-a-glance" className="font-display text-xl font-semibold text-ink-hi">
               The delegation, by lean
             </h2>
             <ShareSectionButton label="The delegation, by lean" />
           </div>
-          <div className="mt-3 space-y-3">
-            <SeatStrip label="Before" counts={s.seatsByLeanBefore} />
-            <SeatStrip label="After" counts={s.seatsByLeanAfter} />
-          </div>
-          <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-white/[0.07] pt-3 sm:grid-cols-4">
-            {SEAT_TILES.filter(
-              ([k]) => k !== "EVEN" || s.seatsByLeanBefore.EVEN > 0 || s.seatsByLeanAfter.EVEN > 0
-            ).map(([k, label]) => (
-              <div key={k}>
-                <dt className="font-mono text-[11px] text-ink-min">{label}</dt>
-                <dd className="font-mono text-lg text-ink-hi">
-                  {s.seatsByLeanBefore[k]} → {s.seatsByLeanAfter[k]}
-                  <span className="text-xs text-ink-min"> {netWord(s.netSeatChangeByLean[k])}</span>
-                </dd>
+          <BoxGrid columns={2}>
+            <RecordBox
+              compact
+              title="Seats by lean"
+              dek={leanTiles(s)}
+              more={{ label: "what this counts", children: <SeatsMethod data={data} /> }}
+            >
+              <div className="space-y-2">
+                <SeatStrip label="Before" counts={s.seatsByLeanBefore} />
+                <SeatStrip label="After" counts={s.seatsByLeanAfter} />
               </div>
-            ))}
-            <div>
-              <dt className="font-mono text-[11px] text-ink-min">Avg. Resident&apos;s shift</dt>
-              <dd className="font-mono text-lg text-ink-hi">
-                {s.meanResidentShift ?? "N/A"}
-                <span className="text-xs text-ink-min"> Pts</span>
-              </dd>
-            </div>
-            <div>
-              <dt className="font-mono text-[11px] text-ink-min">Unchanged</dt>
-              <dd className="font-mono text-lg text-ink-hi">
-                {s.unchangedSeats}
-                <span className="text-xs text-ink-min"> of {s.seats}</span>
-              </dd>
-            </div>
-          </dl>
-        </section>
+            </RecordBox>
+            <RecordBox
+              compact
+              title="Residents moved"
+              dek={`Unchanged districts: ${s.unchangedSeats} of ${s.seats}.${
+                s.meanResidentShift != null
+                  ? ` Average resident's shift: ${s.meanResidentShift} ${s.meanResidentShift === 1 ? "point" : "points"}.`
+                  : ""
+              }`}
+              figure={{
+                type: "stat",
+                value: s.residentsMovedPct,
+                text: `${s.residentsMovedPct}%`,
+                caption: "of residents moved",
+              }}
+              more={{
+                label: "how these are counted",
+                children: (
+                  <div className="space-y-2">
+                    <p>
+                      {s.residentsMovedPct}% of residents now live in a district made up mostly of
+                      people from another old district.
+                    </p>
+                    <CountingMethod data={data} />
+                    <LeanMethod data={data} />
+                  </div>
+                ),
+              }}
+            />
+          </BoxGrid>
+        </div>
       </ShareSubjectProvider>
 
       <section aria-labelledby="districts" className="mt-8">
