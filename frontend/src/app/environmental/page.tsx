@@ -233,7 +233,7 @@ export default async function EnvironmentalPage() {
                 figure={b.figure}
                 more={b.figure ? moreFor(b.id, env) : null}
               >
-                {b.source && <p className="text-sm text-ink-min">Source: {b.source}.</p>}
+                {b.source && <p className="text-small text-ink-min">Source: {b.source}.</p>}
               </RecordBox>
             ))}
             <RecordBox
@@ -265,7 +265,9 @@ export default async function EnvironmentalPage() {
               }}
             />
           </BoxGrid>
-          <p className="mt-6 font-mono text-xs text-ink-min">Last reviewed: {day(env.reviewed)}.</p>
+          <p className="mt-6 font-mono text-small text-ink-min">
+            Last reviewed: {day(env.reviewed)}.
+          </p>
         </div>
       </main>
       <Footer />

@@ -12,6 +12,7 @@ import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import ChartReadout from "@/components/shared/ChartReadout";
 import { MARK_ATTR } from "@/types/readout";
+import { TYPE } from "@/lib/typeStyles";
 
 // Drawn in a fixed box and stretched to the column: strokes keep their
 // width (non-scaling-stroke) and every label is HTML beside the drawing.
@@ -32,7 +33,7 @@ function Axis({ c, children }: { c: PresidentChart; children: React.ReactNode })
     <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2">
       <div
         aria-hidden="true"
-        className="flex flex-col justify-between py-0.5 text-right text-xs text-ink-min"
+        className="flex flex-col justify-between py-0.5 text-right text-small text-ink-min"
       >
         <span>{c.yTop}</span>
         <span>{c.yBottom}</span>
@@ -132,11 +133,11 @@ function Lines({ c }: { c: LineChart }) {
           </svg>
         </ChartReadout>
       </Axis>
-      <div className="ml-10 flex justify-between text-xs text-ink-min" aria-hidden="true">
+      <div className="ml-10 flex justify-between text-small text-ink-min" aria-hidden="true">
         <span>{c.xLabel} 1</span>
         <span>{c.xMax + 1}</span>
       </div>
-      <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-lo" aria-hidden="true">
+      <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-small text-ink-lo" aria-hidden="true">
         <span>
           <span className="mr-1 inline-block h-[3px] w-5 bg-ink-hi align-middle" />
           {c.series.name}
@@ -213,14 +214,14 @@ function Bars({ c }: { c: BarsChart }) {
           </div>
         </ChartReadout>
       </Axis>
-      <div className="ml-10 flex gap-1 text-[11px] text-ink-min" aria-hidden="true">
+      <div className="ml-10 flex gap-1 text-small text-ink-min" aria-hidden="true">
         {c.bars.map((b) => (
           <span key={b.label} className="min-w-0 flex-1 truncate text-center">
             {c.bars.length > 6 ? `'${b.label.slice(2)}` : b.label}
           </span>
         ))}
       </div>
-      <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-lo" aria-hidden="true">
+      <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-small text-ink-lo" aria-hidden="true">
         <span>
           <span className="mr-1 inline-block h-2.5 w-3 bg-ink-hi align-middle" />
           each year of the term
@@ -281,7 +282,7 @@ function Elections({ c }: { c: ElectionsChart }) {
           startId={String(mineMark?.year ?? last)}
           className="flex flex-col gap-1"
         >
-          <p className="text-xs text-ink-lo">Electoral votes won, share</p>
+          <p className="text-small text-ink-lo">Electoral votes won, share</p>
           <div className="relative h-24 border-b border-ink-lo">
             <div
               className="absolute inset-x-0 border-t-2 border-dashed border-[var(--chart-muted)]"
@@ -298,9 +299,9 @@ function Elections({ c }: { c: ElectionsChart }) {
               ))}
             </div>
           </div>
-          <p className="mt-2 text-xs text-ink-lo">Popular vote margin, points</p>
+          <p className="mt-2 text-small text-ink-lo">Popular vote margin, points</p>
           <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2">
-            <div className="flex h-24 flex-col justify-between text-right text-xs text-ink-min">
+            <div className="flex h-24 flex-col justify-between text-right text-small text-ink-min">
               <span>{c.yTop}</span>
               <span>{c.yBottom}</span>
             </div>
@@ -333,12 +334,12 @@ function Elections({ c }: { c: ElectionsChart }) {
               </div>
             </div>
           </div>
-          <div className="flex justify-between text-xs text-ink-min">
+          <div className="flex justify-between text-small text-ink-min">
             <span>{first}</span>
             <span>{last}</span>
           </div>
         </ChartReadout>
-        <p aria-hidden="true" className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-lo">
+        <p aria-hidden="true" className="flex flex-wrap gap-x-4 gap-y-1 text-small text-ink-lo">
           {c.rows.some((r) => r.mine) && (
             <span>
               <span className="mr-1 inline-block h-2.5 w-3 bg-ink-hi align-middle" />
@@ -401,8 +402,8 @@ function Chart({ c }: { c: PresidentChart }) {
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="font-display text-lg font-semibold text-ink-hi">{c.title}</h3>
-          <p className="text-sm text-ink">{c.why}</p>
+          <h3 className={TYPE.boxTitle}>{c.title}</h3>
+          <p className="text-small text-ink">{c.why}</p>
         </div>
         <ShareSectionButton label={c.title} />
       </div>
@@ -413,11 +414,11 @@ function Chart({ c }: { c: PresidentChart }) {
       ) : (
         <Elections c={c} />
       )}
-      <figcaption id={`${id}-caption`} className="text-sm text-ink">
+      <figcaption id={`${id}-caption`} className="text-small text-ink">
         {c.caption}
       </figcaption>
       {/* Inside the captured area, so a shared image carries its source. */}
-      <p className="text-xs text-ink-lo">
+      <p className="text-small text-ink-lo">
         {c.window} Source:{" "}
         <a href={c.source.url} className="text-phos underline underline-offset-2">
           {c.source.name}
@@ -446,11 +447,11 @@ export default function PresidentChartsSection({ data }: { data: PresidentCharts
       <h2
         id="president-charts-heading"
         {...onThisPage("Through the term")}
-        className="border-t-[3px] border-ink-hi pt-3 font-display text-[22px] font-semibold text-ink-hi sm:text-[26px]"
+        className={`${TYPE.section} border-t-[3px] border-ink-hi pt-3`}
       >
         Through the term
       </h2>
-      <p className="mt-1 max-w-prose text-sm text-ink-lo">
+      <p className="mt-1 max-w-prose text-small text-ink-lo">
         Each line or bar is what happened during the term, beside other presidencies over the same
         stretch of theirs. The middle half is drawn where at least {data.minBand} of them reach that
         point. It shows when, not why.

@@ -1,5 +1,6 @@
 import type { OddYearStates as Odd } from "@/types/nextCycle";
 import { safeHref } from "@/lib/formatting";
+import { TYPE } from "@/lib/typeStyles";
 
 /** The states holding regular state elections in the coming odd year (by
  * the constitution or law Civitas's scope file cites), and plainly what
@@ -12,15 +13,12 @@ export default function OddYearStates({ data }: { data: Odd | null }) {
       aria-labelledby="odd-year"
       className="mt-6 border font-sans border-phos/20 bg-surface px-4 pb-4"
     >
-      <h2
-        id="odd-year"
-        className="border-b border-white/[0.07] py-2.5 font-mono text-xs text-ink-min"
-      >
+      <h2 id="odd-year" className={`${TYPE.kicker} border-b border-white/[0.07] py-2.5`}>
         State elections in {data.year}
       </h2>
       {data.states.length ? (
         <>
-          <p className="mt-3 text-sm text-ink-lo">
+          <p className="mt-3 text-small text-ink-lo">
             {data.states.length} {data.states.length === 1 ? "state holds" : "states hold"} regular
             state elections in {data.year}, by their own constitutions and laws. Civitas
             doesn&apos;t list these contests&apos; candidates or read their counts: its state
@@ -32,7 +30,10 @@ export default function OddYearStates({ data }: { data: Odd | null }) {
             {data.states.map((s) => {
               const url = safeHref(s.office.url);
               return (
-                <li key={s.state} className="border-t border-white/[0.07] py-2 text-sm text-ink-lo">
+                <li
+                  key={s.state}
+                  className="border-t border-white/[0.07] py-2 text-small text-ink-lo"
+                >
                   <span className="text-ink-hi">{s.stateName}</span> votes on{" "}
                   {new Intl.ListFormat("en-US").format(s.words)}.{" "}
                   {url && (
@@ -51,7 +52,7 @@ export default function OddYearStates({ data }: { data: Odd | null }) {
           </ul>
         </>
       ) : (
-        <p className="mt-3 text-sm text-ink-lo">
+        <p className="mt-3 text-small text-ink-lo">
           No state holds a regular November state election in {data.year} by the record Civitas
           keeps; every state votes in the federal cycle&apos;s even years.
         </p>

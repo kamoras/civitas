@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { RecordId } from "@/components/shared/Type";
 import { connection } from "next/server";
 import type { ReactNode } from "react";
 import type { FrontPage as FrontPageData, FrontPageEntry, FrontPageVote } from "@/types/frontPage";
@@ -17,6 +18,7 @@ import { formatEasternClock } from "@/lib/formatting";
 import type { BoxTone } from "@/types/figure";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import YourMembersLink from "./YourMembersLink";
+import { TYPE } from "@/lib/typeStyles";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
@@ -59,7 +61,7 @@ async function fetchFrontPage(): Promise<FrontPageData | null> {
 // The selection rule in plain words (api/notable.py's docstring).
 const HOW_HREF = "/about/news#front-page";
 
-const MORE = `${INLINE_LINK} mt-3 inline-flex min-h-6 items-center text-sm`;
+const MORE = `${INLINE_LINK} mt-3 inline-flex min-h-6 items-center text-small`;
 const RULE = "border-white/25";
 
 const CHAMBER = { senate: "Senate", house: "House" } as const;
@@ -92,12 +94,11 @@ function kicker(e: FrontPageEntry, lead: boolean): string {
 
 /** The label before an item: where it came from (a record's glyph, or ¶
  *  for a newsroom's headline). */
-function Source({ entry, small = false }: { entry: FrontPageEntry; small?: boolean }) {
+function Source({ entry }: { entry: FrontPageEntry }) {
   return (
     <SourceChip
       type={entry.source.type}
       glyph={entry.kind === "issue" ? undefined : KIND[entry.kind].glyph}
-      small={small}
     >
       {sourceWords(entry.source)}
     </SourceChip>
@@ -108,7 +109,7 @@ function Kicker({ entry, lead = false }: { entry: FrontPageEntry; lead?: boolean
   return (
     <div className="mb-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
       <Source entry={entry} />
-      <span className={`text-sm font-semibold ${TONE[KIND[entry.kind].tone]}`}>
+      <span className={`text-small font-semibold ${TONE[KIND[entry.kind].tone]}`}>
         {kicker(entry, lead)}
       </span>
     </div>
@@ -121,7 +122,7 @@ function withRecordId(text: string, id: string | null | undefined): ReactNode {
   if (!id || !text.startsWith(id)) return text;
   return (
     <>
-      <span className="font-id">{id}</span>
+      <RecordId>{id}</RecordId>
       {text.slice(id.length)}
     </>
   );
@@ -158,7 +159,7 @@ function voteSubject(v: FrontPageVote): string {
 }
 
 function Dek({ entry, lead }: { entry: FrontPageEntry; lead: boolean }) {
-  const cls = lead ? "mb-3 max-w-2xl text-base text-ink-lo" : "text-sm text-ink-lo";
+  const cls = lead ? "mb-3 max-w-2xl text-body text-ink-lo" : "text-small text-ink-lo";
   switch (entry.kind) {
     case "closest":
     case "loneBreak":
@@ -216,7 +217,7 @@ function OngoingTag({ monitor }: { monitor: { slug: string; title: string } }) {
     <Link
       href={monitorHref(monitor.slug)}
       aria-label={`Ongoing story: ${monitor.title}`}
-      className="inline-flex min-h-6 items-center bg-surface-raised px-1.5 text-xs text-ink-hi hover:text-phos"
+      className="inline-flex min-h-6 items-center bg-surface-raised px-1.5 text-small text-ink-hi hover:text-phos"
     >
       Ongoing story
     </Link>
@@ -247,7 +248,7 @@ function Links({ entry }: { entry: FrontPageEntry }) {
     if (vote.billId && vote.billLabel)
       items.push(
         <Link key="bill" href={billHref(vote.billId, vote.congress)} className={CHIP}>
-          <span className="font-id">{vote.billLabel}</span>
+          <RecordId>{vote.billLabel}</RecordId>
         </Link>
       );
   }
@@ -271,7 +272,7 @@ function Links({ entry }: { entry: FrontPageEntry }) {
   if (entry.kind === "law" && entry.billLabel)
     items.push(
       <Link key="bill" href={billHref(entry.billId, entry.congress)} className={CHIP}>
-        <span className="font-id">{entry.billLabel}</span>
+        <RecordId>{entry.billLabel}</RecordId>
       </Link>
     );
   if (entry.kind === "confirmed")
@@ -314,7 +315,7 @@ function Headline({
   as: "h3" | "h4";
 }) {
   return (
-    <Tag className={`font-display font-semibold text-ink-hi ${className}`}>
+    <Tag className={className}>
       <Link href={primaryHref(entry)} className="hover:text-phos hover:underline">
         {headlineText(entry)}
       </Link>
@@ -330,11 +331,7 @@ function Lead({ entry }: { entry: FrontPageEntry }) {
     >
       <div className={`border-b pb-4 md:border-b-0 md:border-r md:pb-0 md:pr-6 ${RULE}`}>
         <Kicker entry={entry} lead />
-        <Headline
-          entry={entry}
-          as="h3"
-          className="mb-2.5 text-[1.5625rem] leading-tight sm:text-[1.875rem]"
-        />
+        <Headline entry={entry} as="h3" className={`${TYPE.section} mb-2.5`} />
         <Dek entry={entry} lead />
         <Links entry={entry} />
       </div>
@@ -357,7 +354,7 @@ function TierStory({ entry, second }: { entry: FrontPageEntry; second: boolean }
       <div className="grid grid-cols-[minmax(0,1fr)] items-center gap-4 @min-[26rem]:grid-cols-[minmax(0,1fr)_9.5rem]">
         <div className="min-w-0">
           <Kicker entry={entry} />
-          <Headline entry={entry} as="h3" className="mb-1 text-[1.1875rem] leading-snug" />
+          <Headline entry={entry} as="h3" className={`${TYPE.boxTitle} mb-1`} />
           <Dek entry={entry} lead={false} />
           <Links entry={entry} />
         </div>
@@ -397,14 +394,16 @@ function ColumnItem({ entry }: { entry: FrontPageEntry }) {
   return (
     <li className={`border-b py-2.5 last:border-b-0 ${RULE}`}>
       <div className="mb-1">
-        <Source entry={entry} small />
+        <Source entry={entry} />
       </div>
-      <Headline entry={entry} as="h4" className="mb-1 text-base leading-snug" />
+      <Headline entry={entry} as="h4" className={`${TYPE.boxTitle} mb-1`} />
       {entry.kind === "law" && (
-        <div className="mt-0.5 text-sm text-ink-lo">{withRecordId(entry.dek, entry.billLabel)}</div>
+        <div className="mt-0.5 text-small text-ink-lo">
+          {withRecordId(entry.dek, entry.billLabel)}
+        </div>
       )}
       <InlineRecordFigure f={entry.figure} />
-      <div className="mt-0.5 text-sm text-ink-min">
+      <div className="mt-0.5 text-small text-ink-min">
         {itemMeta(entry)}
         {entry.kind === "issue" && entry.alsoDates.length > 0 && (
           <> · also {entry.alsoDates.map(shortDate).join(", ")}</>
@@ -460,7 +459,7 @@ function Column({
     <section aria-labelledby={id} className={`min-w-0 pt-3 ${className}`}>
       <h3
         id={id}
-        className="mb-1 flex items-center gap-2 border-b-2 border-ink-hi pb-1.5 text-sm font-semibold text-ink-hi"
+        className={`${TYPE.kicker} mb-1 flex items-center gap-2 border-b-2 border-ink-hi pb-1.5`}
       >
         <Glyph>{column.glyph}</Glyph>
         {column.title}
@@ -472,7 +471,7 @@ function Column({
           ))}
         </ul>
       ) : (
-        <div className="py-2.5 text-sm text-ink-lo">{column.none}</div>
+        <div className="py-2.5 text-small text-ink-lo">{column.none}</div>
       )}
       <Link href={href} className={MORE}>
         {column.more} &rarr;
@@ -507,15 +506,12 @@ export function FrontPageView({ data }: { data: FrontPageData }) {
         className="mx-auto mt-10 max-w-7xl px-4 sm:px-6"
       >
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-y border-ink-hi py-2 [border-top-style:double] [border-top-width:4px]">
-          <h2
-            id="front-page"
-            className="font-display text-[1.625rem] font-semibold leading-tight text-ink-hi sm:text-[1.875rem]"
-          >
+          <h2 id="front-page" className={TYPE.section}>
             Entered into the record
           </h2>
-          <div className="text-sm text-ink-lo">{data.dateline.join(" · ")}</div>
+          <div className="text-small text-ink-lo">{data.dateline.join(" · ")}</div>
         </div>
-        <div className="mb-5 grid gap-2 border-b-[3px] border-ink-hi pb-2.5 pt-2 text-sm">
+        <div className="mb-5 grid gap-2 border-b-[3px] border-ink-hi pb-2.5 pt-2 text-small">
           <ul
             aria-label="What the labels mean"
             className="grid gap-1.5 text-ink lg:grid-cols-2 lg:gap-x-6"

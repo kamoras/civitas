@@ -30,7 +30,7 @@ export default function Pagination({
 
   // 44px on a phone (mobile spec P10).
   const step =
-    "min-h-11 sm:min-h-0 text-xs px-2 py-1 font-mono text-ink-lo hover:text-phos disabled:text-ink-min disabled:cursor-not-allowed";
+    "min-h-11 sm:min-h-0 text-small px-2 py-1 font-mono text-ink-lo hover:text-phos disabled:text-ink-min disabled:cursor-not-allowed";
   return (
     <div
       className={`flex flex-wrap items-center justify-center mt-4 ${numbered ? "gap-1" : "gap-2"}`}
@@ -46,7 +46,7 @@ export default function Pagination({
       {numbered ? (
         pages.map((p, i) =>
           p === "..." ? (
-            <span key={`dot-${i}`} className="text-ink-min text-xs px-1">
+            <span key={`dot-${i}`} className="text-ink-min text-small px-1">
               ...
             </span>
           ) : (
@@ -56,7 +56,7 @@ export default function Pagination({
               disabled={disabled}
               aria-label={`Page ${p}`}
               aria-current={p === page ? "page" : undefined}
-              className={`text-xs h-11 w-11 sm:w-7 sm:h-7 font-mono border transition-all disabled:cursor-not-allowed ${
+              className={`text-small h-11 w-11 sm:w-7 sm:h-7 font-mono border transition-all disabled:cursor-not-allowed ${
                 p === page
                   ? "text-ink-hi border-white/15 bg-white/[0.03]"
                   : "text-ink-min border-transparent hover:border-white/[0.07]"
@@ -67,7 +67,7 @@ export default function Pagination({
           )
         )
       ) : (
-        <span className="text-xs text-ink-min">
+        <span className="text-small text-ink-min">
           page {page}/{totalPages}
         </span>
       )}

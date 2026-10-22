@@ -24,24 +24,24 @@ export default function AgencyDocList({
     <ul className="divide-y divide-white/[0.07]">
       {docs.map((d) => (
         <li key={d.id} className="py-3">
-          <p className="font-mono text-xs text-ink-min">
+          <p className="font-mono text-small text-ink-min">
             {d.docType} · {day(d.date)}
           </p>
           <Link
             href={exploreHref(d)}
-            className="mt-1 block text-sm leading-snug text-ink-hi hover:text-phos"
+            className="mt-1 block text-small leading-snug text-ink-hi hover:text-phos"
           >
             {d.title}
           </Link>
           {showDeadline && d.firstSentence && (
             // The abstract's opening sentence, as the Register printed it.
-            <p className="mt-1 text-sm leading-snug text-ink">{d.firstSentence}</p>
+            <p className="mt-1 text-small leading-snug text-ink">{d.firstSentence}</p>
           )}
           {showDeadline && d.commentWindow && (
             <CommentWindowBar period={d.commentWindow} className="mt-2" />
           )}
           {showDeadline && d.commentsCloseOn && (
-            <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+            <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-small">
               <span className="text-signal-cyan">
                 Comments close {day(d.commentsCloseOn)}
                 {d.commentWindow ? "" : ` (${describeDaysLeftOn(d.commentsCloseOn, today)})`}

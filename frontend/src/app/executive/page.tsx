@@ -70,10 +70,10 @@ function MoreList({
     <ul>
       {items.map((it) => (
         <li key={it.key} className="border-b border-white/[0.07] py-1.5 last:border-0">
-          <Link href={it.href} className={`text-sm ${LINK}`}>
+          <Link href={it.href} className={`text-small ${LINK}`}>
             {it.title}
           </Link>
-          <span className="block font-mono text-xs text-ink-min">{it.line}</span>
+          <span className="block font-mono text-small text-ink-min">{it.line}</span>
         </li>
       ))}
     </ul>
@@ -186,7 +186,7 @@ export default async function ExecutivePage() {
                           actions === null ? (
                             unavailable("The president's documents")
                           ) : actions.length === 0 ? (
-                            <p className="text-sm text-ink-lo">
+                            <p className="text-small text-ink-lo">
                               None in the Federal Register for this term yet.
                             </p>
                           ) : (

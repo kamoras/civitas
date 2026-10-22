@@ -16,13 +16,13 @@ export default function CopyText({ text, label }: { text: string; label: string 
   });
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <code className="min-w-0 break-all border border-white/[0.07] bg-white/[0.02] px-2 py-1 font-mono text-xs text-ink-hi">
+      <code className="min-w-0 break-all border border-white/[0.07] bg-white/[0.02] px-2 py-1 font-mono text-small text-ink-hi">
         {text}
       </code>
       <button
         type="button"
         onClick={() => copy(text)}
-        className={`shrink-0 border px-2 py-1 font-mono text-xs transition-colors ${
+        className={`shrink-0 border px-2 py-1 font-mono text-small transition-colors ${
           copied ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
         }`}
         // A fixed name: the result is announced by CopyStatus, since a

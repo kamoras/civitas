@@ -41,14 +41,16 @@ function TransactionBadge({ type }: { type: StockTrade["transactionType"] }) {
         ? "text-signal-amber bg-signal-amber/10 border-signal-amber/40"
         : "text-signal-red bg-signal-red/10 border-signal-red/40";
   return (
-    <span className={`font-mono text-xs px-2 py-1 border ${styles}`}>{TXN_TYPE_LABEL[type]}</span>
+    <span className={`font-mono text-small px-2 py-1 border ${styles}`}>
+      {TXN_TYPE_LABEL[type]}
+    </span>
   );
 }
 
 function TimelinessBadge({ late, daysToDisclose }: { late: boolean; daysToDisclose: number }) {
   return (
     <span
-      className={`text-xs px-1.5 py-0.5 border font-mono ${
+      className={`text-small px-1.5 py-0.5 border font-mono ${
         late
           ? "text-signal-magenta border-signal-magenta/40 bg-signal-magenta/10 font-semibold"
           : "text-ink-lo border-white/[0.07] bg-white/[0.03]"
@@ -68,32 +70,32 @@ function TradeRow({ trade }: { trade: StockTrade }) {
         {/* min-w-0 and anywhere, as in Holdings: an asset name copied from
             a filing can be one long unspaced token, which would otherwise
             widen the row past its panel and the drawer past the screen. */}
-        <span className="min-w-0 text-ink text-sm [overflow-wrap:anywhere]">
+        <span className="min-w-0 text-ink text-small [overflow-wrap:anywhere]">
           {trade.ticker ? `${trade.ticker}: ${trade.assetName}` : trade.assetName}
         </span>
         {trade.parseConfidence === "ocr" && (
           <MetricTooltip text="Read by OCR from a scanned filing. The amount is one of the form's own ranges, but a digit of the date may be misread, so no timeliness is shown. A president's scanned periodic reports are replaced by the annual report, which lists the year's transactions as text, once it is filed.">
-            <span className="block text-xs px-1 py-0.5 border text-signal-amber border-signal-amber/40">
+            <span className="block text-small px-1 py-0.5 border text-signal-amber border-signal-amber/40">
               Read from a scan
             </span>
           </MetricTooltip>
         )}
         {trade.reportKind === "annual" && (
           <MetricTooltip text="From the annual report (OGE Form 278e), which lists every transaction of the year. It does not say when each was first reported, so no timeliness is shown.">
-            <span className="block text-xs px-1 py-0.5 border text-ink-lo border-white/15">
+            <span className="block text-small px-1 py-0.5 border text-ink-lo border-white/15">
               Annual report
             </span>
           </MetricTooltip>
         )}
         {trade.beforeTermStart && (
           <MetricTooltip text="Dated before this term began. The annual report covers the whole calendar year, so the first one also lists the weeks before the inauguration.">
-            <span className="block text-xs px-1 py-0.5 border text-ink-lo border-white/15">
+            <span className="block text-small px-1 py-0.5 border text-ink-lo border-white/15">
               Before taking office
             </span>
           </MetricTooltip>
         )}
       </div>
-      <div className="flex items-center gap-2 flex-wrap text-xs text-ink-min">
+      <div className="flex items-center gap-2 flex-wrap text-small text-ink-min">
         <span>{OWNER_LABEL[trade.owner]}</span>
         <span
           title={
@@ -172,7 +174,7 @@ export default function StockTrades({ politicianId, filer = "senate" }: StockTra
   if (error && !data) {
     return (
       <div className="panel p-4 text-center" role="alert">
-        <span className="text-signal-red text-sm">{error}</span>
+        <span className="text-signal-red text-small">{error}</span>
       </div>
     );
   }
@@ -187,14 +189,14 @@ export default function StockTrades({ politicianId, filer = "senate" }: StockTra
       source={SOURCE_LABEL[filer]}
     >
       <div className="space-y-3 mt-4">
-        <p className="text-xs text-ink-min">
+        <p className="text-small text-ink-min">
           <MetricTooltip text={filer === "president" ? ABOUT_DATA.president : ABOUT_DATA.congress}>
             About this data
           </MetricTooltip>
         </p>
         {error && (
           // A failed page change keeps the last page that loaded on screen.
-          <p className="text-signal-red text-sm" role="alert">
+          <p className="text-signal-red text-small" role="alert">
             {error}
           </p>
         )}

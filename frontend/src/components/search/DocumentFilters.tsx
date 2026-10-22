@@ -11,9 +11,9 @@ const LEGEND = EYEBROW;
 // but stays focusable; its label shows the state (inverted when checked)
 // and the focus ring (WCAG 2.4.7).
 const PILL =
-  "inline-flex min-h-6 cursor-pointer items-center border border-white/15 px-3 py-1 text-xs text-ink-lo hover:text-phos peer-checked:border-ink-hi peer-checked:bg-ink-hi peer-checked:text-surface-base peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-signal-cyan";
+  "inline-flex min-h-6 cursor-pointer items-center border border-white/15 px-3 py-1 text-small text-ink-lo hover:text-phos peer-checked:border-ink-hi peer-checked:bg-ink-hi peer-checked:text-surface-base peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-signal-cyan";
 const SELECT =
-  "min-h-11 w-full min-w-0 border border-white/15 bg-surface-base px-2 text-base text-ink-hi focus:border-signal-cyan/60 sm:text-sm";
+  "min-h-11 w-full min-w-0 border border-white/15 bg-surface-base px-2 text-body text-ink-hi focus:border-signal-cyan/60";
 
 /**
  * The Documents filter's controls: a GET form to /search, so each choice
@@ -77,7 +77,7 @@ export default function DocumentFilters({
 
       <div className="grid gap-3 sm:grid-cols-2">
         {types.length > 0 && (
-          <label className="flex flex-col gap-1 text-xs text-ink-lo">
+          <label className="flex flex-col gap-1 text-small text-ink-lo">
             <span className={LEGEND}>Type</span>
             <select
               name="type"
@@ -95,7 +95,7 @@ export default function DocumentFilters({
           </label>
         )}
         {(agencies.length > 0 || d.agency) && (
-          <label className="flex flex-col gap-1 text-xs text-ink-lo">
+          <label className="flex flex-col gap-1 text-small text-ink-lo">
             <span className={LEGEND}>Agency</span>
             <select
               name="agency"
@@ -156,7 +156,7 @@ export default function DocumentFilters({
       <noscript>
         <button
           type="submit"
-          className="min-h-11 border border-white/25 px-4 font-mono text-xs text-ink-hi"
+          className="min-h-11 border border-white/25 px-4 font-mono text-small text-ink-hi"
         >
           Apply filters
         </button>

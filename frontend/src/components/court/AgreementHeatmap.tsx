@@ -8,6 +8,7 @@ import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import { heatColor, heatDomain, pairLookup, surname, termsPhrase } from "@/lib/court";
 import { onThisPage } from "@/lib/onThisPage";
 import { More } from "@/components/shared/RecordBox";
+import { TYPE } from "@/lib/typeStyles";
 
 /**
  * How often each pair of sitting justices voted the same way: a grid in
@@ -34,10 +35,10 @@ export default function AgreementHeatmap({ court }: { court: Court }) {
         aria-labelledby="agreement-heading"
         className="border border-white/25 bg-surface px-4 py-5 sm:px-6"
       >
-        <h2 id="agreement-heading" className="text-xl font-semibold text-ink-hi">
+        <h2 id="agreement-heading" className={TYPE.section}>
           Who votes with whom
         </h2>
-        <p className="mt-2 text-base text-ink">
+        <p className="mt-2 text-body text-ink">
           No decided case with two sitting justices voting is stored yet.
         </p>
       </section>
@@ -99,14 +100,14 @@ export default function AgreementHeatmap({ court }: { court: Court }) {
       className="flex flex-col gap-4 border border-white/25 bg-surface px-4 py-5 sm:px-6"
     >
       <div>
-        <h2 id="agreement-heading" className="text-xl font-semibold text-ink-hi">
+        <h2 id="agreement-heading" className={TYPE.section}>
           Who votes with whom
         </h2>
-        <p className="mt-1 font-mono text-xs text-ink-min">
+        <p className="mt-1 font-mono text-small text-ink-min">
           Share of cases both decided the same way · {termsPhrase(court.record.terms)}
         </p>
       </div>
-      <p className="max-w-prose text-base text-ink">
+      <p className="max-w-prose text-body text-ink">
         Each square is one pair: how often both were on the same side.
       </p>
       <More label="how agreement is counted" className="mt-0">
@@ -123,7 +124,7 @@ export default function AgreementHeatmap({ court }: { court: Court }) {
           aria-labelledby="agreement-heading"
           aria-describedby="agreement-detail"
           onKeyDown={onKeyDown}
-          className="mx-auto border-separate border-spacing-0.5 font-mono text-xs"
+          className="mx-auto border-separate border-spacing-0.5 font-mono text-small"
         >
           <thead>
             <tr>
@@ -173,7 +174,7 @@ export default function AgreementHeatmap({ court }: { court: Court }) {
                       onMouseEnter={() => setHover([r, c])}
                       onMouseLeave={() => setHover(null)}
                       onClick={() => move(r, c)}
-                      className="h-7 w-7 cursor-default text-center tabular-nums text-ink-hi outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-signal-amber sm:h-11 sm:w-11 sm:text-sm"
+                      className="h-7 w-7 cursor-default text-center tabular-nums text-ink-hi outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-signal-amber sm:h-11 sm:w-11"
                       style={{ background: p ? heatColor(p.share, domain) : "transparent" }}
                     >
                       {r === c ? (
@@ -194,12 +195,12 @@ export default function AgreementHeatmap({ court }: { court: Court }) {
         </table>
       </div>
 
-      <p id="agreement-detail" aria-live="polite" className="min-h-12 text-sm text-ink">
+      <p id="agreement-detail" aria-live="polite" className="min-h-12 text-small text-ink">
         {describe(shown)}.
       </p>
 
       <div
-        className="flex flex-wrap items-center gap-3 font-mono text-xs text-ink-lo"
+        className="flex flex-wrap items-center gap-3 font-mono text-small text-ink-lo"
         aria-hidden="true"
       >
         <span>{domain[0]}%</span>
@@ -212,8 +213,8 @@ export default function AgreementHeatmap({ court }: { court: Court }) {
         <span>{domain[1]}% of cases together</span>
       </div>
 
-      <details className="text-sm" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
-        <summary className="inline-flex min-h-6 cursor-pointer items-center font-mono text-xs text-ink-lo hover:text-phos">
+      <details className="text-small" {...{ [SHARE_EXCLUDE_ATTR]: "" }}>
+        <summary className="inline-flex min-h-6 cursor-pointer items-center font-mono text-small text-ink-lo hover:text-phos">
           Every pair as a table
         </summary>
         <div className="mt-3 overflow-x-auto" tabIndex={0} role="region" aria-label="Every pair">
@@ -222,7 +223,7 @@ export default function AgreementHeatmap({ court }: { court: Court }) {
               Agreement between each pair of sitting justices, most first
             </caption>
             <thead>
-              <tr className="border-b border-white/15 text-left font-mono text-xs text-ink-min">
+              <tr className="border-b border-white/15 text-left font-mono text-small text-ink-min">
                 <th scope="col" className="py-1.5 pr-3 font-normal">
                   Pair
                 </th>

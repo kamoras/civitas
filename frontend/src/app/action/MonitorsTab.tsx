@@ -44,14 +44,14 @@ function MonitorUpdates({ slug, title }: { slug: string; title: string }) {
 
   if (request.loading) {
     return (
-      <p role="status" className="py-3 font-mono text-xs text-ink-min">
+      <p role="status" className="py-3 font-mono text-small text-ink-min">
         Reading updates…
       </p>
     );
   }
   if (request.error !== null || !request.data) {
     return (
-      <p role="alert" className="py-3 font-mono text-xs text-signal-red">
+      <p role="alert" className="py-3 font-mono text-small text-signal-red">
         Could not load this monitor&apos;s updates.{" "}
         <button
           onClick={retryKeepingFocus(request.retry, (b) =>
@@ -82,10 +82,10 @@ function MonitorUpdates({ slug, title }: { slug: string; title: string }) {
     <>
       <OnTheRecord slug={slug} title={title} votes={votes} />
       {updates.length === 0 ? (
-        <p className="py-3 font-sans text-sm text-ink-lo">No updates recorded yet.</p>
+        <p className="py-3 font-sans text-small text-ink-lo">No updates recorded yet.</p>
       ) : (
         <>
-          <h4 className="mt-6 font-mono text-xs text-ink-lo">
+          <h4 className="mt-6 font-mono text-small text-ink-lo">
             Updates, newest first · {Math.min(shown, updates.length)} of {updates.length}
           </h4>
           <ol ref={listRef} className="mt-2 border-l border-white/15 pl-4">
@@ -95,13 +95,13 @@ function MonitorUpdates({ slug, title }: { slug: string; title: string }) {
                 tabIndex={-1}
                 className="py-2.5 outline-none focus-visible:ring-1 focus-visible:ring-ink-lo"
               >
-                <span className="font-mono text-xs text-ink-min">{updateTime(u)}</span>
-                <p className="mt-1 font-sans text-[15px] leading-relaxed text-ink">{u.summary}</p>
+                <span className="font-mono text-small text-ink-min">{updateTime(u)}</span>
+                <p className="mt-1 font-sans text-body leading-relaxed text-ink">{u.summary}</p>
                 <a
                   href={safeHref(u.sourceUrl) || "#"}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-1 inline-block font-mono text-xs text-ink-lo underline decoration-white/20 underline-offset-4 hover:text-ink-hi"
+                  className="mt-1 inline-block font-mono text-small text-ink-lo underline decoration-white/20 underline-offset-4 hover:text-ink-hi"
                 >
                   {u.sourceName || u.articleTitle || "Source"} <span aria-hidden="true">↗</span>
                 </a>
@@ -112,7 +112,7 @@ function MonitorUpdates({ slug, title }: { slug: string; title: string }) {
             <button
               type="button"
               onClick={showMore}
-              className="mt-1 inline-flex min-h-[32px] items-center font-mono text-xs text-phos-mid hover:text-phos"
+              className="mt-1 inline-flex min-h-[32px] items-center font-mono text-small text-phos-mid hover:text-phos"
             >
               [ Show {Math.min(rest, UPDATES_PAGE)} more of {rest} ]
             </button>
@@ -217,7 +217,7 @@ function MonitorRow({
         children: (
           <div id={`monitor-detail-${monitor.slug}`}>
             {description && (
-              <p className="max-w-3xl font-sans text-[15px] leading-relaxed text-ink">
+              <p className="max-w-3xl font-sans text-body leading-relaxed text-ink">
                 {description}
               </p>
             )}
@@ -259,7 +259,7 @@ function OffListMonitor({ slug }: { slug: string }) {
         ref={noteRef}
         tabIndex={-1}
         role="status"
-        className="mb-6 border-l-2 border-ink-min/60 py-2 pl-4 font-sans text-base text-ink-lo"
+        className="mb-6 border-l-2 border-ink-min/60 py-2 pl-4 font-sans text-body text-ink-lo"
       >
         {gone ? (
           "That concern is no longer tracked, and its record has been removed."
@@ -291,7 +291,7 @@ export default function MonitorsTab({ initialSlug }: { initialSlug?: string | nu
 
   if (request.loading) {
     return (
-      <p role="status" aria-live="polite" className="py-10 font-mono text-sm text-ink-min">
+      <p role="status" aria-live="polite" className="py-10 font-mono text-small text-ink-min">
         Reading the national monitors…
       </p>
     );
@@ -301,7 +301,7 @@ export default function MonitorsTab({ initialSlug }: { initialSlug?: string | nu
     return (
       <div
         role="alert"
-        className="flex flex-wrap items-baseline justify-between gap-3 border-l-2 border-signal-red bg-surface px-4 py-3 font-mono text-sm text-signal-red"
+        className="flex flex-wrap items-baseline justify-between gap-3 border-l-2 border-signal-red bg-surface px-4 py-3 font-mono text-small text-signal-red"
       >
         <span>Could not load the national monitors.</span>
         <button onClick={retryKeepingFocus(request.retry)} className={TEXT_LINK}>
@@ -338,7 +338,7 @@ export default function MonitorsTab({ initialSlug }: { initialSlug?: string | nu
           </span>
         </h2>
         {monitors.length === 0 ? (
-          <p className="py-4 font-sans text-base text-ink-lo">
+          <p className="py-4 font-sans text-body text-ink-lo">
             Nothing is being tracked right now. A monitor opens when a story comes back on five
             separate days within two weeks.
           </p>

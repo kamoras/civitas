@@ -1,9 +1,11 @@
 import Link from "next/link";
+import { BoxTitle, PageTitle, SectionHeading } from "./Type";
 import type { ReactNode } from "react";
 import type { BoxTone, Figure } from "@/types/figure";
 import { INLINE_LINK } from "@/lib/controlStyles";
 import { SHARE_SECTION_ATTR } from "@/lib/shareImage";
 import RecordFigure from "./RecordFigure";
+import { TYPE } from "@/lib/typeStyles";
 
 /**
  * One box of the record: a kicker, a title, one short line, an optional
@@ -31,11 +33,11 @@ export const TONE: Record<BoxTone, string> = {
 /** One command, set by weight, not a fill: the palette keeps fills off
  *  commands. A 32px target. */
 export const ACTION =
-  "inline-flex min-h-8 items-center border-2 border-ink-hi px-3 text-sm font-semibold text-ink-hi hover:border-phos hover:text-phos";
+  "inline-flex min-h-8 items-center border-2 border-ink-hi px-3 text-small font-semibold text-ink-hi hover:border-phos hover:text-phos";
 
 /** A bordered command, the front page's chip, a 32px target. */
 export const CHIP =
-  "inline-flex min-h-8 items-center border border-ink-hi/60 px-2.5 text-sm text-ink-hi hover:border-phos hover:text-phos";
+  "inline-flex min-h-8 items-center border border-ink-hi/60 px-2.5 text-small text-ink-hi hover:border-phos hover:text-phos";
 
 export interface BoxLink {
   label: string;
@@ -49,7 +51,7 @@ export function Glyph({ children }: { children: ReactNode }) {
   return (
     <span
       aria-hidden="true"
-      className="grid h-5 w-5 flex-none place-items-center border-[1.5px] border-current font-id text-[0.6875rem] leading-none"
+      className="grid h-5 w-5 flex-none place-items-center border-[1.5px] border-current font-id text-[0.92em] font-normal leading-none"
     >
       {children}
     </span>
@@ -67,19 +69,17 @@ const PROVENANCE = {
 export function SourceChip({
   type,
   glyph,
-  small = false,
   children,
 }: {
   type: keyof typeof PROVENANCE;
   /** A record's own mark (a vote's "=", a rule's "✎"); § by default. */
   glyph?: string;
-  small?: boolean;
   children: ReactNode;
 }) {
   const p = PROVENANCE[type];
   return (
     <span
-      className={`inline-flex min-h-6 max-w-full items-center gap-1.5 border-[1.5px] px-1.5 font-semibold ${small ? "text-xs" : "text-sm"} ${p.className}`}
+      className={`inline-flex min-h-6 max-w-full items-center gap-1.5 border-[1.5px] px-1.5 ${TYPE.kickerToned} ${p.className}`}
     >
       <Glyph>{type === "news" ? p.glyph : (glyph ?? p.glyph)}</Glyph>
       <span className="min-w-0 [overflow-wrap:anywhere]">{children}</span>
@@ -104,7 +104,7 @@ export function Kicker({
   tone?: BoxTone;
 }) {
   return (
-    <div className={`mb-1.5 flex items-center gap-2 text-sm font-semibold ${TONE[tone]}`}>
+    <div className={`mb-1.5 flex items-center gap-2 text-small font-semibold ${TONE[tone]}`}>
       {mark && <Glyph>{mark}</Glyph>}
       <span className="min-w-0 [overflow-wrap:anywhere]">{children}</span>
     </div>
@@ -215,6 +215,8 @@ export default function RecordBox(props: RecordBoxProps) {
     below,
   } = props;
   const Heading = `h${level}` as const;
+  // A box that heads its page (level 1, an Explore document) has the page title.
+  const Title = level === 1 ? PageTitle : lead ? SectionHeading : BoxTitle;
   return (
     <article
       id={id}
@@ -242,15 +244,10 @@ export default function RecordBox(props: RecordBoxProps) {
               {kicker}
             </Kicker>
           )}
-          <Heading
+          <Title
+            as={Heading}
             {...headingAttrs}
-            className={`font-display font-semibold text-ink-hi [overflow-wrap:anywhere] ${
-              lead
-                ? "mb-2 text-[1.5rem] leading-tight @min-[40rem]:text-[1.875rem]"
-                : compact
-                  ? "mb-0.5 text-[1.0625rem] leading-snug"
-                  : "mb-1 text-[1.1875rem] leading-snug"
-            }`}
+            className={`${lead ? "mb-2" : compact ? "mb-0.5" : "mb-1"} [overflow-wrap:anywhere]`}
           >
             {href ? (
               <BoxAnchor href={href} className="hover:text-phos hover:underline">
@@ -259,18 +256,16 @@ export default function RecordBox(props: RecordBoxProps) {
             ) : (
               title
             )}
-          </Heading>
+          </Title>
           {props.quote ? (
             <figure className="max-w-prose">
-              <blockquote className={`text-ink ${lead ? "text-base" : "text-[0.9375rem]"}`}>
+              <blockquote className={TYPE.body}>
                 <p>&ldquo;{props.quote.text}&rdquo;</p>
               </blockquote>
-              <figcaption className="mt-1 text-sm text-ink-min">{props.quote.source}</figcaption>
+              <figcaption className="mt-1 text-small text-ink-min">{props.quote.source}</figcaption>
             </figure>
           ) : props.dek ? (
-            <p className={`max-w-prose text-ink ${lead ? "text-base" : "text-[0.9375rem]"}`}>
-              {props.dek}
-            </p>
+            <p className={`${TYPE.body} max-w-prose`}>{props.dek}</p>
           ) : null}
           {children && <div className="mt-3">{children}</div>}
           {(links?.length || action) && (
@@ -318,15 +313,15 @@ export function More({
     <details
       open={open}
       onToggle={onToggle && ((e) => onToggle(e.currentTarget.open))}
-      className={`group/more text-sm ${className}`}
+      className={`group/more text-small ${className}`}
     >
       <summary
         className={`${INLINE_LINK} inline-flex min-h-6 cursor-pointer list-none items-center gap-1.5 [&::-webkit-details-marker]:hidden`}
       >
-        <span aria-hidden="true" className="font-id no-underline group-open/more:hidden">
+        <span aria-hidden="true" className="no-underline group-open/more:hidden">
           +
         </span>
-        <span aria-hidden="true" className="hidden font-id no-underline group-open/more:inline">
+        <span aria-hidden="true" className="hidden no-underline group-open/more:inline">
           −
         </span>
         More: {label}

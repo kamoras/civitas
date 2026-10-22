@@ -262,7 +262,7 @@ export default function CountHistogram({
         className="pointer-events-none invisible absolute left-0 top-0 h-0 w-[1rem]"
       />
       {tick && (
-        <div aria-hidden="true" className="relative h-5 text-xs">
+        <div aria-hidden="true" className="relative h-5 text-small">
           <span
             className="absolute block w-max font-semibold text-ink-lo"
             style={slid(tickX, width)}
@@ -327,7 +327,7 @@ export default function CountHistogram({
           ))}
         </div>
       </ChartReadout>
-      <div aria-hidden="true" className="relative mt-0.5 h-5 text-xs text-ink-min">
+      <div aria-hidden="true" className="relative mt-0.5 h-5 text-small text-ink-min">
         {L.ticks.map((t) => (
           <span
             key={t.value}

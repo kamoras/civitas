@@ -18,7 +18,7 @@ export default function ConstituentApproval({
   if (!approval || approval.byParty.length === 0) return null;
   return (
     <div className="flex flex-col gap-2 border-t border-white/[0.08] pt-4">
-      <BlockLabel words="Approval among their own constituents">
+      <BlockLabel>
         <MetricTooltip text={TOOLTIP}>Approval among their own constituents</MetricTooltip>
       </BlockLabel>
       <ul className="flex flex-col gap-1.5" aria-label="Approval among constituents, by party">
@@ -27,14 +27,14 @@ export default function ConstituentApproval({
           // rather than running past the column (WCAG 1.4.10).
           <li
             key={g.party}
-            className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm"
+            className="flex flex-wrap items-baseline justify-between gap-x-3 text-small"
           >
             <span className="text-ink-lo">{GROUP_LABELS[g.party]}</span>
             <span className="ml-auto min-w-0 text-right text-ink-hi [overflow-wrap:anywhere]">
               {g.approve === null
                 ? "too few respondents to measure"
                 : `${Math.round(g.approve * 100)}% approve`}
-              <span className="block font-mono text-xs text-ink-min">
+              <span className="block font-mono text-small text-ink-min">
                 {g.respondents} with an opinion
                 {g.approve !== null && g.ownWeight != null && g.ownWeight < 0.5
                   ? " · mostly based on similar members"
@@ -44,7 +44,7 @@ export default function ConstituentApproval({
           </li>
         ))}
       </ul>
-      <p className="text-xs leading-relaxed text-ink-min">
+      <p className="text-small leading-relaxed text-ink-min">
         {approval.survey}, rating &ldquo;{approval.surveyedAs}&rdquo;.
       </p>
     </div>

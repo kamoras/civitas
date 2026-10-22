@@ -18,6 +18,7 @@ import { longDate } from "@/lib/specials";
 import CalendarList from "@/components/elections/specials/CalendarList";
 import ClosingSoon from "@/components/elections/ClosingSoon";
 import { INLINE_LINK } from "@/lib/controlStyles";
+import { TYPE } from "@/lib/typeStyles";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
@@ -180,7 +181,7 @@ export default async function ElectionCalendarPage() {
           )}
 
           <section aria-labelledby="dates" className="mt-8">
-            <h2 id="dates" className="border-b border-white/15 pb-2 font-mono text-xs text-ink-min">
+            <h2 id="dates" className={`${TYPE.kicker} border-b border-white/15 pb-2`}>
               Every date
             </h2>
             <div className="mt-4">
@@ -193,10 +194,7 @@ export default async function ElectionCalendarPage() {
             aria-labelledby="specials"
             className="mt-10 border border-phos/20 bg-surface px-4 pb-4"
           >
-            <h2
-              id="specials"
-              className="border-b border-white/[0.07] py-2.5 font-mono text-xs text-ink-min"
-            >
+            <h2 id="specials" className={`${TYPE.kicker} border-b border-white/[0.07] py-2.5`}>
               Special elections
             </h2>
             <SpecialsBoardView board={board} />

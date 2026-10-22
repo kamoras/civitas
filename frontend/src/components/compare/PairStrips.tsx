@@ -47,8 +47,8 @@ function PairStrip({
   return (
     <figure className="border-t border-white/25 px-4 py-4 first:border-t-0">
       <figcaption className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="text-[13px] font-semibold text-ink-lo">{m.label}</span>
-        <span className="text-sm text-ink">
+        <span className="text-small font-semibold text-ink-lo">{m.label}</span>
+        <span className="text-small text-ink">
           {left.name}: <strong className="font-semibold">{l?.shown ?? "no record"}</strong> ·{" "}
           {right.name}: <strong className="font-semibold">{r?.shown ?? "no record"}</strong>
           {m.median != null && (
@@ -150,12 +150,12 @@ export default function PairStrips({
 }) {
   const { data, error } = useAsyncData(chamber, () => fetchChamberMeasures(chamber));
   if (error && !data)
-    return <p className="px-4 py-3 text-sm text-ink-lo">The measures could not be loaded.</p>;
-  if (!data) return <p className="px-4 py-3 text-sm text-ink-lo">Loading the measures…</p>;
+    return <p className="px-4 py-3 text-small text-ink-lo">The measures could not be loaded.</p>;
+  if (!data) return <p className="px-4 py-3 text-small text-ink-lo">Loading the measures…</p>;
   return (
     <div>
       <p
-        className="flex flex-wrap gap-x-4 gap-y-1 px-4 pt-3 text-xs text-ink-lo"
+        className="flex flex-wrap gap-x-4 gap-y-1 px-4 pt-3 text-small text-ink-lo"
         aria-hidden="true"
       >
         <span>

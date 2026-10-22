@@ -49,7 +49,7 @@ export function PollRangeSource({
   source: { attribution: string; license: string; url: string };
 }) {
   return (
-    <p className="mt-1 text-xs text-ink-min">
+    <p className="mt-1 text-small text-ink-min">
       Poll ranges are 80% ranges built on poll tables by {source.attribution} (
       {source.url ? (
         <a

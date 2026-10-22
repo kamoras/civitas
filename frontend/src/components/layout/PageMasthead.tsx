@@ -1,5 +1,6 @@
 import React from "react";
-import { labelCase } from "@/lib/controlStyles";
+import { TYPE } from "@/lib/typeStyles";
+import { PageTitle } from "@/components/shared/Type";
 
 /**
  * The standing page header: eyebrow, title, optional standing line, and the
@@ -45,19 +46,17 @@ export default function PageMasthead({
     <header className={`border-b-3 border-ink-min/60 pb-5 ${className}`.trim()}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className={`font-mono text-ink-min ${labelCase(eyebrow)}`}>{eyebrow}</p>
+          <p className={TYPE.kicker}>{eyebrow}</p>
           {/* Caps from 640px up; a phone's title is set as written, in
               sentence case, where caps at 30px wrapped "TODAY ON THE
               RECORD" to two lines (mobile spec P1). */}
-          <h1 className="mt-3 font-display text-3xl font-semibold leading-[1.1] tracking-[-0.02em] text-ink-hi sm:text-4xl sm:leading-none">
-            {title}
-          </h1>
+          <PageTitle className="mt-3">{title}</PageTitle>
         </div>
         {aside && <div className="min-w-0 max-w-full shrink-0">{aside}</div>}
       </div>
       {(children || more) && (
         <div
-          className={`mt-3 max-w-2xl font-sans text-base leading-relaxed text-ink-lo ${children ? "" : "hidden sm:block"}`}
+          className={`mt-3 max-w-2xl font-sans text-body leading-relaxed text-ink-lo ${children ? "" : "hidden sm:block"}`}
         >
           {children}
           {more && (
@@ -70,10 +69,10 @@ export default function PageMasthead({
       )}
       {more && (
         <details className="mt-1 sm:hidden">
-          <summary className="inline-flex min-h-11 cursor-pointer items-center font-mono text-[0.8125rem] text-ink-lo hover:text-phos">
+          <summary className="inline-flex min-h-11 cursor-pointer items-center font-mono text-small text-ink-lo hover:text-phos">
             More about this page
           </summary>
-          <p className="max-w-2xl font-sans text-base leading-relaxed text-ink-lo">{more}</p>
+          <p className="max-w-2xl font-sans text-body leading-relaxed text-ink-lo">{more}</p>
         </details>
       )}
     </header>

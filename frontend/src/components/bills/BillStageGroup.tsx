@@ -167,10 +167,10 @@ export default function BillStageGroup({
         className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white/[0.02] transition-colors text-left"
         aria-expanded={expanded}
       >
-        <span className="font-mono text-xs w-3 text-ink-min">{expanded ? "▼" : "▶"}</span>
+        <span className="font-mono text-small w-3 text-ink-min">{expanded ? "▼" : "▶"}</span>
         <span className="w-2 h-2 shrink-0" style={{ backgroundColor: color }} />
-        <span className="font-mono text-xs text-ink flex-1">{stageInfo?.name ?? stageCode}</span>
-        <span className="font-mono text-xs tabular-nums text-ink-min">
+        <span className="font-mono text-small text-ink flex-1">{stageInfo?.name ?? stageCode}</span>
+        <span className="font-mono text-small tabular-nums text-ink-min">
           {total === null ? "…" : total.toLocaleString("en-US")}
         </span>
       </button>
@@ -178,7 +178,7 @@ export default function BillStageGroup({
       {expanded && (
         <div className="border-t border-white/[0.07]">
           <div className="flex items-center justify-end gap-1 px-3 py-1.5 border-b border-white/[0.07]">
-            <span className="font-mono text-xs text-ink-min mr-1">Sort</span>
+            <span className="font-mono text-small text-ink-min mr-1">Sort</span>
             {[
               { value: "recent" as const, label: "Newest" },
               { value: "stale" as const, label: "Stuck longest" },
@@ -188,7 +188,7 @@ export default function BillStageGroup({
                 type="button"
                 onClick={() => setSort(opt.value)}
                 aria-pressed={sort === opt.value}
-                className={`inline-flex min-h-6 min-w-6 items-center justify-center font-mono text-xs px-2 py-0.5 border transition-colors ${
+                className={`inline-flex min-h-6 min-w-6 items-center justify-center font-mono text-small px-2 py-0.5 border transition-colors ${
                   sort === opt.value ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
                 }`}
               >
@@ -202,7 +202,7 @@ export default function BillStageGroup({
               <BillRow key={`${bill.chamber}-${bill.billId}-${bill.sponsorId}`} bill={bill} />
             ))}
             {(loading || loadingMore) && (
-              <div className="py-4 text-center font-mono text-xs text-ink-min">
+              <div className="py-4 text-center font-mono text-small text-ink-min">
                 {loading ? "Loading…" : "Loading more…"}
               </div>
             )}
@@ -210,7 +210,7 @@ export default function BillStageGroup({
               <div className="flex justify-center py-3">
                 <button
                   onClick={loadMore}
-                  className="border border-white/[0.07] px-3 py-1.5 font-mono text-xs text-ink-lo transition-colors hover:border-white/15 hover:text-phos"
+                  className="border border-white/[0.07] px-3 py-1.5 font-mono text-small text-ink-lo transition-colors hover:border-white/15 hover:text-phos"
                 >
                   Load more ({((total ?? 0) - bills.length).toLocaleString("en-US")} remaining)
                 </button>

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ELECTION_MAP_HREF } from "@/lib/electionMap";
 import { REDISTRICTING_HREF } from "@/lib/redistricting";
 import type { ElectionPhase } from "@/types/election";
+import { TYPE } from "@/lib/typeStyles";
 
 const VOTER_LINK =
   "inline-flex min-h-11 sm:min-h-[24px] items-center border-b border-phos-mid/40 text-phos-mid hover:text-phos";
@@ -51,19 +52,17 @@ export default function Masthead({
     <section className="mx-auto max-w-7xl px-4 pt-8 sm:px-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0 max-w-2xl">
-          <h1 className="font-display text-[30px] font-semibold leading-[1.1] text-ink-hi sm:text-[44px]">
-            Who holds power, who pays for it, how they vote.
-          </h1>
+          <h1 className={TYPE.title}>Who holds power, who pays for it, how they vote.</h1>
           {/* What the site holds itself to, as one plain line: the rotated,
               bordered stamp that carried it was a novelty prop, removed in
               #1061 and kept out. What the record is and how it is built is
               on About: the first screen is for the record itself. */}
-          <p className="mt-3 text-sm leading-relaxed text-ink-lo">
+          <p className="mt-3 text-small leading-relaxed text-ink-lo">
             No party money. No PAC money. No ads, no accounts. Open source, self-hosted, run by
             volunteers.
           </p>
           {extra.length > 0 && (
-            <p className="mt-2 flex flex-wrap gap-x-4 text-sm">
+            <p className="mt-2 flex flex-wrap gap-x-4 text-small">
               {extra.map(({ href, label }) => (
                 <Link key={label} href={href} className={VOTER_LINK}>
                   {label}

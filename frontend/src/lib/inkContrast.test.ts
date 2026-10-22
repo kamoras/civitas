@@ -103,13 +103,17 @@ for (const theme of ["light", "dark"] as const) {
       });
     }
 
-    it("keeps the ramp's steps distinguishable", () => {
+    it("keeps three levels, each far enough from the next to read as a level", () => {
       // A ramp that is legible but flat is a different failure: hierarchy has
-      // to survive lifting the floor.
-      const onBase = Object.keys(INK_MIN).map((n) => ({ n, lc: apcaLc(rgb(v[n]), SURFACES.base) }));
+      // to survive lifting the floor. Four levels Lc 5-6 apart read as
+      // one (2026-10); body prose now shares the heading ink, and the three
+      // levels left are at least Lc 8 apart on the page.
+      expect(v["--ink"]).toBe(v["--ink-hi"]);
+      const levels = ["--ink-hi", "--ink-lo", "--ink-min"];
+      const onBase = levels.map((n) => ({ n, lc: apcaLc(rgb(v[n]), SURFACES.base) }));
       for (let i = 1; i < onBase.length; i++) {
         const gap = onBase[i - 1].lc - onBase[i].lc;
-        expect(gap, `${onBase[i - 1].n} -> ${onBase[i].n}`).toBeGreaterThan(3);
+        expect(gap, `${onBase[i - 1].n} -> ${onBase[i].n}`).toBeGreaterThanOrEqual(8);
       }
     });
   });

@@ -50,7 +50,7 @@ import { scrollBehavior } from "@/lib/motion";
 /** Plain status line, the loading state the records pages use: no pulse. */
 function Status({ children }: { children: React.ReactNode }) {
   return (
-    <p role="status" aria-live="polite" className="py-10 font-mono text-sm text-ink-min">
+    <p role="status" aria-live="polite" className="py-10 font-mono text-small text-ink-min">
       {children}
     </p>
   );
@@ -61,7 +61,7 @@ function LoadError({ message, onRetry }: { message: string; onRetry?: () => void
   return (
     <div
       role="alert"
-      className="flex flex-wrap items-baseline justify-between gap-3 border-l-2 border-signal-red bg-surface px-4 py-3 font-mono text-sm text-signal-red"
+      className="flex flex-wrap items-baseline justify-between gap-3 border-l-2 border-signal-red bg-surface px-4 py-3 font-mono text-small text-signal-red"
     >
       <span>{message}</span>
       {onRetry && (
@@ -391,7 +391,7 @@ function IssuesTab({
           ))}
         </BoxGrid>
       ) : (
-        <p className="border-l-2 border-ink-min/60 py-2 pl-4 font-sans text-base text-ink-lo">
+        <p className="border-l-2 border-ink-min/60 py-2 pl-4 font-sans text-body text-ink-lo">
           {selectedDate
             ? // Issues are kept for 14 days unless they were posted
               // (action_center._cleanup_old_unposted_issues); the Archive
@@ -453,7 +453,7 @@ function DayPager({
     "inline-flex min-h-11 items-center sm:min-h-0 text-ink-lo hover:text-ink-hi disabled:cursor-not-allowed disabled:text-ink-min/50";
 
   return (
-    <nav aria-label="Day" className="grid justify-items-end gap-1.5 font-mono text-xs">
+    <nav aria-label="Day" className="grid justify-items-end gap-1.5 font-mono text-small">
       <div className="flex items-baseline gap-4">
         <button
           onClick={() => prev && onSelect(prev)}
@@ -709,7 +709,7 @@ function ActionPageInner() {
                 aria-controls={activeTab === tab.id ? `tabpanel-${tab.id}` : undefined}
                 tabIndex={activeTab === tab.id ? 0 : -1}
                 onClick={() => setActiveTab(tab.id)}
-                className={`-mb-px whitespace-nowrap border-b-3 px-3 py-3 font-mono text-xs transition-colors sm:px-5 ${tabControl(
+                className={`-mb-px whitespace-nowrap border-b-3 px-3 py-3 font-mono text-small transition-colors sm:px-5 ${tabControl(
                   activeTab === tab.id
                 )}`}
               >

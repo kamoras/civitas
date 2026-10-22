@@ -87,11 +87,11 @@ export default function FeedbackPage() {
           <div className="border border-t-0 border-white/[0.07] bg-surface-base p-6">
             {status === "success" ? (
               <div className="text-center py-8 space-y-4">
-                <p ref={thanks} tabIndex={-1} className="font-mono text-base text-ink-hi">
+                <p ref={thanks} tabIndex={-1} className="font-mono text-body text-ink-hi">
                   Thanks: your feedback has been received.
                 </p>
                 {issueUrl && (
-                  <p className="font-mono text-xs text-ink-min">
+                  <p className="font-mono text-small text-ink-min">
                     Filed as a public issue:{" "}
                     <a
                       href={issueUrl}
@@ -110,7 +110,7 @@ export default function FeedbackPage() {
                     setMessage("");
                     setIssueUrl(null);
                   }}
-                  className="font-mono text-xs text-signal-cyan hover:underline"
+                  className="font-mono text-small text-signal-cyan hover:underline"
                 >
                   Submit more feedback
                 </button>
@@ -118,14 +118,17 @@ export default function FeedbackPage() {
             ) : (
               <form onSubmit={handleSubmit} className="space-y-5">
                 <div>
-                  <label htmlFor="category" className="block font-mono text-xs text-ink-lo mb-1.5">
+                  <label
+                    htmlFor="category"
+                    className="block font-mono text-small text-ink-lo mb-1.5"
+                  >
                     Category
                   </label>
                   <select
                     id="category"
                     value={category}
                     onChange={(e) => setCategory(e.target.value as FeedbackSubmission["category"])}
-                    className="w-full font-mono text-sm bg-surface-base border border-white/[0.07] focus:border-phos/40 text-ink-hi px-3 py-2 outline-none"
+                    className="w-full font-mono text-small bg-surface-base border border-white/[0.07] focus:border-phos/40 text-ink-hi px-3 py-2 outline-none"
                   >
                     {CATEGORIES.map((c) => (
                       <option key={c.value} value={c.value}>
@@ -136,7 +139,10 @@ export default function FeedbackPage() {
                 </div>
 
                 <div>
-                  <label htmlFor="message" className="block font-mono text-xs text-ink-lo mb-1.5">
+                  <label
+                    htmlFor="message"
+                    className="block font-mono text-small text-ink-lo mb-1.5"
+                  >
                     What&apos;s on your mind?
                   </label>
                   <textarea
@@ -149,11 +155,11 @@ export default function FeedbackPage() {
                     rows={6}
                     aria-describedby="message-hint"
                     placeholder="Describe what you were trying to do, what happened, and what you expected instead."
-                    className="w-full font-mono text-sm bg-surface-base border border-white/[0.07] focus:border-phos/40 text-ink-hi placeholder:text-ink-min px-3 py-2 outline-none resize-y"
+                    className="w-full font-mono text-small bg-surface-base border border-white/[0.07] focus:border-phos/40 text-ink-hi placeholder:text-ink-min px-3 py-2 outline-none resize-y"
                   />
                   <p
                     id="message-hint"
-                    className="font-mono text-xs mt-1 flex items-center justify-between"
+                    className="font-mono text-small mt-1 flex items-center justify-between"
                   >
                     {/* The button disables below MESSAGE_MIN with nothing on
                         the page saying why — reported live as "blocked from
@@ -173,7 +179,7 @@ export default function FeedbackPage() {
                 </div>
 
                 {status === "error" && (
-                  <p role="alert" className="font-mono text-xs text-signal-red">
+                  <p role="alert" className="font-mono text-small text-signal-red">
                     {errorMessage}
                   </p>
                 )}
@@ -181,12 +187,12 @@ export default function FeedbackPage() {
                 <button
                   type="submit"
                   disabled={!canSubmit}
-                  className="w-full font-mono text-xs px-4 py-2.5 border border-signal-cyan/40 text-signal-cyan hover:bg-signal-cyan/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  className="w-full font-mono text-small px-4 py-2.5 border border-signal-cyan/40 text-signal-cyan hover:bg-signal-cyan/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
                   {status === "submitting" ? "Submitting..." : "Submit feedback"}
                 </button>
 
-                <p className="font-mono text-xs text-ink-min text-center">
+                <p className="font-mono text-small text-ink-min text-center">
                   Filed as a public issue in our{" "}
                   <a
                     href="https://github.com/kamoras/civitas"

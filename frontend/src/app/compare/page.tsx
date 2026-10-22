@@ -26,6 +26,7 @@ import VotingAgreement from "@/components/compare/VotingAgreement";
 import PairStrips from "@/components/compare/PairStrips";
 import CiteThis from "@/components/shared/CiteThis";
 import { useYourState } from "@/hooks/useYourState";
+import { TYPE } from "@/lib/typeStyles";
 
 type Chamber = "senate" | "house";
 
@@ -110,14 +111,14 @@ function SenatorSelector({
 
   return (
     <div className="panel p-4 space-y-3">
-      <div className="font-mono text-xs text-ink-lo">{label} · Select legislator</div>
+      <div className="font-mono text-small text-ink-lo">{label} · Select legislator</div>
 
       {/* Chamber toggle */}
       <div className="flex gap-2">
         <button
           onClick={() => handleChamberToggle("senate")}
           aria-pressed={chamber === "senate"}
-          className={`inline-flex min-h-6 min-w-6 items-center justify-center font-mono text-xs px-2 py-1 border transition-colors ${
+          className={`inline-flex min-h-6 min-w-6 items-center justify-center font-mono text-small px-2 py-1 border transition-colors ${
             chamber === "senate" ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
           }`}
         >
@@ -126,7 +127,7 @@ function SenatorSelector({
         <button
           onClick={() => handleChamberToggle("house")}
           aria-pressed={chamber === "house"}
-          className={`inline-flex min-h-6 min-w-6 items-center justify-center font-mono text-xs px-2 py-1 border transition-colors ${
+          className={`inline-flex min-h-6 min-w-6 items-center justify-center font-mono text-small px-2 py-1 border transition-colors ${
             chamber === "house" ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
           }`}
         >
@@ -149,7 +150,7 @@ function SenatorSelector({
             onSelect(null, chamber);
             if (e.target.value) loadMembers(e.target.value, chamber);
           }}
-          className="w-full bg-white/[0.03] border border-white/15 text-ink-hi px-3 py-2 font-mono text-xs focus:outline-none focus:border-signal-cyan/40"
+          className="w-full bg-white/[0.03] border border-white/15 text-ink-hi px-3 py-2 font-mono text-small focus:outline-none focus:border-signal-cyan/40"
         >
           <option value="">Select a state</option>
           {stateOptions.map((s) => (
@@ -160,7 +161,7 @@ function SenatorSelector({
         </select>
       </div>
 
-      {loading && <div className="text-ink-min font-mono text-xs pulse-subtle">Loading...</div>}
+      {loading && <div className="text-ink-min font-mono text-small pulse-subtle">Loading...</div>}
 
       {members.length > 0 && (
         <div className="space-y-1.5">
@@ -169,7 +170,7 @@ function SenatorSelector({
               key={s.id}
               onClick={() => onSelect(s, chamber)}
               aria-pressed={s.id === selectedId}
-              className={`w-full text-left px-3 py-2 border transition-colors font-mono text-xs ${
+              className={`w-full text-left px-3 py-2 border transition-colors font-mono text-small ${
                 s.id === selectedId ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
               }`}
             >
@@ -244,16 +245,16 @@ function ComparePresets({
 
   return (
     <div className="panel mb-4 flex flex-col gap-3 p-4">
-      <div className="font-mono text-xs text-ink-lo">Quick comparisons</div>
+      <div className="font-mono text-small text-ink-lo">Quick comparisons</div>
       <div className="flex flex-wrap items-center gap-2">
-        <label htmlFor="preset-state" className="font-mono text-xs text-ink">
+        <label htmlFor="preset-state" className="font-mono text-small text-ink">
           Both senators from
         </label>
         <select
           id="preset-state"
           value={state}
           onChange={(e) => pairState(e.target.value)}
-          className="bg-white/[0.03] border border-white/15 text-ink-hi px-3 py-2 font-mono text-xs focus:outline-none focus:border-signal-cyan/40"
+          className="bg-white/[0.03] border border-white/15 text-ink-hi px-3 py-2 font-mono text-small focus:outline-none focus:border-signal-cyan/40"
         >
           <option value="">Select a state</option>
           {states
@@ -264,16 +265,16 @@ function ComparePresets({
               </option>
             ))}
         </select>
-        {busy && <span className="font-mono text-xs text-ink-min">Loading…</span>}
+        {busy && <span className="font-mono text-small text-ink-min">Loading…</span>}
         {failed && (
-          <span role="alert" className="font-mono text-xs text-signal-red">
+          <span role="alert" className="font-mono text-small text-signal-red">
             Could not load that state&apos;s senators.
           </span>
         )}
       </div>
       {chosen && colleagues.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-xs text-ink">
+          <span className="font-mono text-small text-ink">
             {chosen.member.name} against {chosen.chamber === "senate" ? "the other" : "a"}{" "}
             {chosen.member.state} senator:
           </span>
@@ -281,7 +282,7 @@ function ComparePresets({
             <button
               key={s.id}
               onClick={() => onPair(chosen.member, s, chosen.chamber, "senate")}
-              className={`font-mono text-xs px-3 py-1.5 border transition-colors ${BOXED_CONTROL.unselected}`}
+              className={`font-mono text-small px-3 py-1.5 border transition-colors ${BOXED_CONTROL.unselected}`}
             >
               <span className={`mr-2 ${PARTY_COLORS[s.party]}`}>[{s.party}]</span>
               {s.name}
@@ -315,28 +316,24 @@ function ComparisonTable({
       {/* Header */}
       <div className="grid grid-cols-3 border-b border-white/[0.07] bg-white/[0.03]">
         <div className="p-3 text-center">
-          <div className={`font-mono text-xs ${PARTY_COLORS[left.party]}`}>
+          <div className={`font-mono text-small ${PARTY_COLORS[left.party]}`}>
             [{left.party}] {left.state}
           </div>
-          <div className="font-display text-lg font-semibold leading-snug text-ink-hi">
-            {left.name}
-          </div>
-          <div className="text-ink-min font-mono text-xs mt-0.5">
+          <div className={TYPE.boxTitle}>{left.name}</div>
+          <div className="text-ink-min font-mono text-small mt-0.5">
             {leftChamber === "house" ? "House" : "Senate"}
           </div>
           <ScoredOn member={left} />
         </div>
         <div className="p-3 flex items-center justify-center">
-          <span className="text-ink-min font-mono text-xs">vs</span>
+          <span className="text-ink-min font-mono text-small">vs</span>
         </div>
         <div className="p-3 text-center">
-          <div className={`font-mono text-xs ${PARTY_COLORS[right.party]}`}>
+          <div className={`font-mono text-small ${PARTY_COLORS[right.party]}`}>
             [{right.party}] {right.state}
           </div>
-          <div className="font-display text-lg font-semibold leading-snug text-ink-hi">
-            {right.name}
-          </div>
-          <div className="text-ink-min font-mono text-xs mt-0.5">
+          <div className={TYPE.boxTitle}>{right.name}</div>
+          <div className="text-ink-min font-mono text-small mt-0.5">
             {rightChamber === "house" ? "House" : "Senate"}
           </div>
           <ScoredOn member={right} />
@@ -352,7 +349,7 @@ function ComparisonTable({
           a like-for-like comparison the methodology doesn't support. */}
       {leftChamber !== rightChamber && (
         <div className="px-3 py-2 border-b border-signal-amber/40 bg-signal-amber/10 text-center">
-          <span className="text-signal-amber font-mono text-xs">
+          <span className="text-signal-amber font-mono text-small">
             Different chambers: each is measured among their own chamber, so the strips are left
             out; the plain figures are below
           </span>
@@ -391,9 +388,9 @@ function ComparisonTable({
           { label: "PAC %", lv: `${leftPacPct}%`, rv: `${rightPacPct}%` },
         ].map(({ label, lv, rv }) => (
           <div key={label} className="grid grid-cols-3 items-center px-3 py-1.5">
-            <div className="text-right font-mono text-xs text-ink-lo">{lv}</div>
-            <div className="text-center text-xs text-ink-min font-mono">{label}</div>
-            <div className="text-left font-mono text-xs text-ink-lo">{rv}</div>
+            <div className="text-right font-mono text-small text-ink-lo">{lv}</div>
+            <div className="text-center text-small text-ink-min font-mono">{label}</div>
+            <div className="text-left font-mono text-small text-ink-lo">{rv}</div>
           </div>
         ))}
       </div>
@@ -402,20 +399,20 @@ function ComparisonTable({
       <div className="grid grid-cols-2 border-t border-white/[0.07]">
         <a
           href={leftScorecardUrl}
-          className="p-3 text-center font-mono text-xs text-ink-lo hover:bg-signal-cyan/10 hover:text-phos transition-colors border-r border-white/[0.07]"
+          className="p-3 text-center font-mono text-small text-ink-lo hover:bg-signal-cyan/10 hover:text-phos transition-colors border-r border-white/[0.07]"
         >
           Member page →
         </a>
         <a
           href={rightScorecardUrl}
-          className="p-3 text-center font-mono text-xs text-ink-lo hover:bg-signal-cyan/10 hover:text-phos transition-colors"
+          className="p-3 text-center font-mono text-small text-ink-lo hover:bg-signal-cyan/10 hover:text-phos transition-colors"
         >
           Member page →
         </a>
       </div>
 
       <div className="border-t border-white/[0.07] p-3">
-        <h3 className="mb-2 font-mono text-xs text-ink-min">Cite this comparison</h3>
+        <h3 className={`${TYPE.kicker} mb-2`}>Cite this comparison</h3>
         <CiteThis
           title={`${left.name} and ${right.name} compared${methodNote(left, right)}`}
           date={[left.scoredOn, right.scoredOn].filter(Boolean).sort().pop() ?? null}
@@ -431,7 +428,7 @@ function ComparisonTable({
 function ScoredOn({ member }: { member: Senator }) {
   if (!member.scoredOn) return null;
   return (
-    <div className="mt-0.5 font-mono text-xs text-ink-min">
+    <div className="mt-0.5 font-mono text-small text-ink-min">
       Updated {member.scoredOn}
       {member.algorithmVersion ? ` · ${member.algorithmVersion}` : ""}
     </div>
@@ -631,7 +628,7 @@ function ComparePageInner() {
               {COMPARE_LEDE}
             </PageMasthead>
             <div className="panel p-8 text-center">
-              <div className="font-mono text-xs text-ink-min pulse-subtle">Loading...</div>
+              <div className="font-mono text-small text-ink-min pulse-subtle">Loading...</div>
             </div>
           </div>
         </main>
@@ -654,10 +651,10 @@ function ComparePageInner() {
             <div
               key={u.side}
               role="status"
-              className="mb-4 border-l-2 border-signal-amber pl-3 text-sm"
+              className="mb-4 border-l-2 border-signal-amber pl-3 text-small"
             >
               <p className="text-ink">
-                The link&rsquo;s {u.side} member, <span className="font-id">{u.id}</span>, matched
+                The link&rsquo;s {u.side} member, <span className={TYPE.id}>{u.id}</span>, matched
                 no one in the Senate or the House.
                 {u.closest.length > 0 && " Closest addresses on the record:"}
               </p>
@@ -719,7 +716,7 @@ function ComparePageInner() {
             />
           ) : (
             <div className="panel p-8 text-center space-y-4">
-              <div className="font-mono text-sm text-ink-min">
+              <div className="font-mono text-small text-ink-min">
                 {!leftSenator && !rightSenator
                   ? "Select two legislators above to compare"
                   : "Select a second legislator to compare"}

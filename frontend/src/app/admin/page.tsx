@@ -28,6 +28,7 @@ import { TrafficDashboard } from "@/components/admin/TrafficDashboard";
 import { TrendPostsDashboard } from "@/components/admin/TrendPostsDashboard";
 import { useHostHistory } from "@/components/admin/useHostHistory";
 import { VacancyControl } from "@/components/admin/VacancyControl";
+import { TYPE } from "@/lib/typeStyles";
 
 const TOKEN_KEY = "civitas_admin_token";
 
@@ -105,9 +106,9 @@ function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
         <div className="panel">
           <TerminalTitlebar title="Sign in" />
           <div className="p-6">
-            <h1 className="font-mono text-sm text-ink-hi mb-6 text-center">Civitas admin</h1>
+            <h1 className={`${TYPE.title} mb-6 text-center`}>Civitas admin</h1>
             <form onSubmit={handleSubmit}>
-              <label htmlFor="admin-token" className="block text-ink-lo text-xs font-mono mb-2">
+              <label htmlFor="admin-token" className="block text-ink-lo text-small font-mono mb-2">
                 Admin token:
               </label>
               <input
@@ -117,14 +118,18 @@ function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Enter admin token..."
                 className="w-full bg-transparent border border-white/15 px-3 py-2
-                           text-ink-hi text-sm font-mono placeholder:text-ink-min
+                           text-ink-hi text-small font-mono placeholder:text-ink-min
                            outline-none focus:border-phos/40"
                 autoFocus
                 aria-invalid={!!error}
                 aria-describedby={error ? "admin-token-error" : undefined}
               />
               {error && (
-                <p id="admin-token-error" className="text-signal-magenta text-xs mt-2" role="alert">
+                <p
+                  id="admin-token-error"
+                  className="text-signal-magenta text-small mt-2"
+                  role="alert"
+                >
                   {error}
                 </p>
               )}
@@ -137,7 +142,7 @@ function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
                 // an operator sees, with an unreadable word on it. WCAG exempts
                 // inactive controls from contrast, so nothing flagged it; it
                 // still looked like a rendering fault.
-                className="mt-4 w-full border border-transparent bg-phos py-2 font-mono text-xs text-surface-base transition-colors hover:bg-signal-cyan disabled:border-white/15 disabled:bg-transparent disabled:text-ink-min"
+                className="mt-4 w-full border border-transparent bg-phos py-2 font-mono text-small text-surface-base transition-colors hover:bg-signal-cyan disabled:border-white/15 disabled:bg-transparent disabled:text-ink-min"
               >
                 {loading ? "Authenticating..." : "Authenticate"}
               </button>
@@ -358,18 +363,18 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <h1 className="font-mono text-sm sm:text-lg">Civitas admin</h1>
+          <h1 className={TYPE.title}>Civitas admin</h1>
           <div className="flex items-center gap-3">
             <button
               onClick={loadDashboard}
-              className="text-xs font-mono text-ink-min hover:text-ink-lo transition-colors"
+              className="text-small font-mono text-ink-min hover:text-ink-lo transition-colors"
             >
               [Refresh]
             </button>
             <button
               onClick={onLogout}
               aria-label="Log out of admin"
-              className="text-xs font-mono text-ink-lo hover:text-signal-magenta border border-signal-magenta/40 hover:border-signal-magenta/40
+              className="text-small font-mono text-ink-lo hover:text-signal-magenta border border-signal-magenta/40 hover:border-signal-magenta/40
                          px-3 py-1  transition-colors"
             >
               [Logout]
@@ -380,7 +385,7 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
         {pipelineRestarting && (
           <p
             role="status"
-            className="mb-6 border border-signal-amber/40 bg-signal-amber/10 p-4 text-sm"
+            className="mb-6 border border-signal-amber/40 bg-signal-amber/10 p-4 text-small"
           >
             The pipeline service is restarting (a deploy). The figures below are from before it
             stopped and will refresh when it is back, usually within a minute.
@@ -390,7 +395,7 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
         {(loadErrors.dashboard || loadErrors.history) && (
           <div
             role="alert"
-            className="mb-6 border border-signal-magenta/40 bg-signal-magenta/10 p-4 text-sm"
+            className="mb-6 border border-signal-magenta/40 bg-signal-magenta/10 p-4 text-small"
           >
             {loadErrors.dashboard && (
               <p>
@@ -404,7 +409,7 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
                 {history ? "It shows the last load that worked." : "It is missing."}
               </p>
             )}
-            <p className="mt-1 text-xs text-ink-lo">Retried with the next refresh.</p>
+            <p className="mt-1 text-small text-ink-lo">Retried with the next refresh.</p>
           </div>
         )}
 
@@ -426,7 +431,7 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
               {finishedRuns.map((r) => (
                 <li key={r.key} className="flex flex-wrap items-baseline gap-x-4">
                   <span
-                    className={`text-sm font-mono font-semibold ${
+                    className={`text-small font-mono font-semibold ${
                       r.status === "failed" || r.status === "stuck"
                         ? "text-signal-magenta"
                         : r.status === "partial"
@@ -443,7 +448,7 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
                           ? "Finished partial"
                           : "Completed"}
                   </span>
-                  <span className="text-ink-lo text-xs font-mono">
+                  <span className="text-ink-lo text-small font-mono">
                     {formatDuration(r.elapsedSeconds)}
                   </span>
                 </li>
@@ -451,7 +456,7 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
             </ul>
             <button
               onClick={() => setFinishedRuns([])}
-              className="text-ink-min hover:text-phos text-xs"
+              className="text-ink-min hover:text-phos text-small"
               aria-label="Dismiss"
             >
               [x]
@@ -479,7 +484,7 @@ function AdminDashboardView({ token, onLogout }: { token: string; onLogout: () =
               aria-controls={`admin-tabpanel-${t.id}`}
               tabIndex={tab === t.id ? 0 : -1}
               onClick={() => selectTab(t.id)}
-              className={`-mb-px whitespace-nowrap border-b-3 px-3 py-3 font-mono text-xs transition-colors sm:px-4 ${tabControl(
+              className={`-mb-px whitespace-nowrap border-b-3 px-3 py-3 font-mono text-small transition-colors sm:px-4 ${tabControl(
                 tab === t.id
               )}`}
             >

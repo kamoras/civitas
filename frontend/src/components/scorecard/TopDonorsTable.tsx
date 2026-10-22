@@ -14,7 +14,7 @@ const NO_SPONSOR = new Set(["unclear", "unknown", "n/a", "none", ""]);
 function DonorType({ donor }: { donor: Donor }) {
   return (
     <>
-      <div className="text-xs text-ink-min">
+      <div className="text-small text-ink-min">
         {donor.type === "CandidateAffiliated"
           ? "Own Committee"
           : donor.type === "Self-Funded"
@@ -22,7 +22,7 @@ function DonorType({ donor }: { donor: Donor }) {
             : donor.type}
       </div>
       {donor.pacIndustry && donor.pacIndustry !== "OTHER" && (
-        <div className="mt-0.5 text-xs text-ink-lo">{donor.pacIndustry.replace("_", " ")}</div>
+        <div className="mt-0.5 text-small text-ink-lo">{donor.pacIndustry.replace("_", " ")}</div>
       )}
     </>
   );
@@ -34,12 +34,12 @@ export default function TopDonorsTable({ donors }: { donors: Donor[] }) {
   if (donors.length === 0) return null;
   return (
     <ScrollRegion label="Top donors">
-      <table className="w-full text-sm">
-        <caption className="mb-2 text-left font-mono text-xs text-ink-min">
+      <table className="w-full text-small">
+        <caption className="mb-2 text-left font-mono text-small text-ink-min">
           Top donors · fec.gov
         </caption>
         <thead>
-          <tr className="border-b border-white/[0.07] text-xs text-ink-min">
+          <tr className="border-b border-white/[0.07] text-small text-ink-min">
             <th scope="col" className="py-2 pr-2 sm:pr-4 text-left">
               Rank
             </th>
@@ -85,12 +85,12 @@ export default function TopDonorsTable({ donors }: { donors: Donor[] }) {
                   donor.pacSponsor.toLowerCase() !== donor.name.toLowerCase() &&
                   !NO_SPONSOR.has(donor.pacSponsor.toLowerCase().trim()) &&
                   donor.pacSponsor.length > 2 && (
-                    <div className="mt-0.5 text-xs text-ink-lo [overflow-wrap:anywhere]">
+                    <div className="mt-0.5 text-small text-ink-lo [overflow-wrap:anywhere]">
                       Behind the PAC: {donor.pacSponsor}
                     </div>
                   )}
                 {donor.pacAnalysis && !EMPTY_ANALYSIS.test(donor.pacAnalysis) && (
-                  <div className="mt-0.5 text-xs text-ink-min [overflow-wrap:anywhere]">
+                  <div className="mt-0.5 text-small text-ink-min [overflow-wrap:anywhere]">
                     {donor.pacAnalysis}
                   </div>
                 )}

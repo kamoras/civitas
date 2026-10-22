@@ -11,6 +11,7 @@ import BoxGrid from "@/components/shared/BoxGrid";
 import RecordBox, { type BoxLink } from "@/components/shared/RecordBox";
 import type { Figure } from "@/types/figure";
 import { INLINE_LINK } from "@/lib/controlStyles";
+import { TYPE } from "@/lib/typeStyles";
 
 /**
  * Shared frame and prose parts for the About section (see lib/aboutPages.ts
@@ -121,10 +122,10 @@ function withContents(children: ReactNode, intro?: ReactNode): ReactNode {
 function Contents({ sections }: { sections: { id: string; title: string }[] }) {
   return (
     <nav aria-labelledby="on-this-page" className="border-l-3 border-l-signal-cyan/60 pl-5">
-      <h2 id="on-this-page" className="font-mono text-xs text-signal-cyan">
+      <h2 id="on-this-page" className={`${TYPE.kickerToned} text-signal-cyan`}>
         On this page
       </h2>
-      <ol className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1 text-base sm:grid-cols-2">
+      <ol className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1 text-body sm:grid-cols-2">
         {sections.map((s) => (
           <li key={s.id}>
             <a
@@ -156,8 +157,8 @@ function PagerLink({
       href={href}
       className={`panel block p-4 hover:border-ink-min transition-colors ${alignEnd ? "sm:text-right sm:col-start-2" : ""}`}
     >
-      <span className="block font-mono text-xs text-ink-min">{dir}</span>
-      <span className="mt-1 block font-display text-lg font-semibold text-ink-hi">{title}</span>
+      <span className="block font-mono text-small text-ink-min">{dir}</span>
+      <span className={`${TYPE.boxTitle} mt-1 block`}>{title}</span>
     </Link>
   );
 }
@@ -170,7 +171,7 @@ function ChapterNav({ current }: { current: string }) {
   const items = [{ href: ABOUT_OVERVIEW_HREF, title: "Overview" }, ...ABOUT_CHAPTERS];
   return (
     <nav aria-label="About this site">
-      <ul className="-mx-4 flex gap-x-1 overflow-x-auto px-4 pb-1 font-mono text-xs sm:mx-0 sm:flex-wrap sm:gap-y-2 sm:overflow-visible sm:px-0 sm:pb-0">
+      <ul className="-mx-4 flex gap-x-1 overflow-x-auto px-4 pb-1 font-mono text-small sm:mx-0 sm:flex-wrap sm:gap-y-2 sm:overflow-visible sm:px-0 sm:pb-0">
         {items.map((c) => {
           const active = c.href === current;
           return (
@@ -207,27 +208,24 @@ export function Summary({ children, intro }: SummaryProps) {
       aria-labelledby="short-version"
       className="panel border-l-3 border-l-signal-amber p-5 sm:p-6"
     >
-      <h2 id="short-version" className="font-mono text-xs text-signal-amber">
+      <h2 id="short-version" className={`${TYPE.kickerToned} text-signal-amber`}>
         The short version
       </h2>
-      <ul className="mt-3 space-y-2.5 text-base leading-relaxed text-ink">{children}</ul>
+      <ul className="mt-3 space-y-2.5 text-body leading-relaxed text-ink">{children}</ul>
       {intro && (
-        <details className="group/intro mt-3 text-sm">
+        <details className="group/intro mt-3 text-small">
           <summary
             className={`${INLINE_LINK} inline-flex min-h-6 cursor-pointer list-none items-center gap-1.5 [&::-webkit-details-marker]:hidden`}
           >
-            <span aria-hidden="true" className="font-id no-underline group-open/intro:hidden">
+            <span aria-hidden="true" className="no-underline group-open/intro:hidden">
               +
             </span>
-            <span
-              aria-hidden="true"
-              className="hidden font-id no-underline group-open/intro:inline"
-            >
+            <span aria-hidden="true" className="hidden no-underline group-open/intro:inline">
               −
             </span>
             More: the chapter&apos;s introduction
           </summary>
-          <div className="mt-2 border-t border-white/25 pt-3 text-base leading-relaxed text-ink">
+          <div className="mt-2 border-t border-white/25 pt-3 text-body leading-relaxed text-ink">
             {intro}
           </div>
         </details>
@@ -259,12 +257,8 @@ export function Section({
 }) {
   return (
     <section id={id} aria-labelledby={`${id}-h`}>
-      {kicker && <p className="font-mono text-xs text-signal-cyan">{kicker}</p>}
-      <h2
-        id={`${id}-h`}
-        {...onThisPage(title)}
-        className="mt-1 font-display text-2xl font-semibold leading-tight tracking-[-0.01em] text-ink-hi"
-      >
+      {kicker && <p className="font-mono text-small text-signal-cyan">{kicker}</p>}
+      <h2 id={`${id}-h`} {...onThisPage(title)} className={`${TYPE.section} mt-1`}>
         {title}
       </h2>
       <div className="mt-4 space-y-4">{children}</div>
@@ -275,14 +269,14 @@ export function Section({
 export function Sub({ title, id, children }: { title: string; id?: string; children: ReactNode }) {
   return (
     <div id={id} className="space-y-3 pt-2">
-      <h3 className="font-display text-lg font-semibold text-ink-hi">{title}</h3>
+      <h3 className={TYPE.boxTitle}>{title}</h3>
       {children}
     </div>
   );
 }
 
 export function P({ children }: { children: ReactNode }) {
-  return <p className="text-base leading-relaxed text-ink">{children}</p>;
+  return <p className="text-body leading-relaxed text-ink">{children}</p>;
 }
 
 /**
@@ -338,7 +332,7 @@ export function Box({
 
 /** A plain bulleted list inside prose. */
 export function List({ children }: { children: ReactNode }) {
-  return <ul className="space-y-2 text-base leading-relaxed text-ink">{children}</ul>;
+  return <ul className="space-y-2 text-body leading-relaxed text-ink">{children}</ul>;
 }
 
 export function Item({ label, children }: { label?: string; children: ReactNode }) {
@@ -361,7 +355,7 @@ export function Item({ label, children }: { label?: string; children: ReactNode 
 
 /** Numbered steps: a method that happens in order. */
 export function Steps({ children }: { children: ReactNode }) {
-  return <ol className="space-y-3 text-base leading-relaxed text-ink">{children}</ol>;
+  return <ol className="space-y-3 text-body leading-relaxed text-ink">{children}</ol>;
 }
 
 export function Step({ n, title, children }: { n: number; title: string; children: ReactNode }) {
@@ -369,7 +363,7 @@ export function Step({ n, title, children }: { n: number; title: string; childre
     <li className="flex gap-3">
       <span
         aria-hidden="true"
-        className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center border border-signal-cyan/60 font-mono text-xs text-signal-cyan"
+        className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center border border-signal-cyan/60 font-mono text-small text-signal-cyan"
       >
         {n}
       </span>
@@ -399,7 +393,7 @@ export function More({
 }) {
   return (
     <details className="group border border-white/[0.09] bg-white/[0.015]">
-      <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 text-sm text-ink-lo hover:text-ink-hi [&::-webkit-details-marker]:hidden">
+      <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 text-small text-ink-lo hover:text-ink-hi [&::-webkit-details-marker]:hidden">
         <span aria-hidden="true" className="font-mono text-signal-cyan">
           <span className="group-open:hidden">+</span>
           <span className="hidden group-open:inline">−</span>
@@ -412,7 +406,7 @@ export function More({
           {context && <span className="sr-only"> {context}</span>}
         </span>
       </summary>
-      <div className="space-y-3 px-4 pb-4 text-[0.95rem] leading-relaxed text-ink-lo [&_p]:text-[0.95rem] [&_p]:text-ink-lo">
+      <div className="space-y-3 px-4 pb-4 text-body leading-relaxed text-ink-lo [&_p]:text-body [&_p]:text-ink-lo">
         {children}
       </div>
     </details>
@@ -427,8 +421,8 @@ export function Facts({ children }: { children: ReactNode }) {
 export function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="grid grid-cols-1 gap-1 py-3 sm:grid-cols-[13rem_1fr] sm:gap-4">
-      <dt className="font-mono text-xs text-signal-amber sm:pt-0.5">{label}</dt>
-      <dd className="text-sm leading-relaxed text-ink-lo">{children}</dd>
+      <dt className="font-mono text-small text-signal-amber sm:pt-0.5">{label}</dt>
+      <dd className="text-small leading-relaxed text-ink-lo">{children}</dd>
     </div>
   );
 }
@@ -442,7 +436,7 @@ export function Cite({ id }: { id: RefId }) {
   return (
     <>
       {" "}
-      <span className="text-sm text-ink-lo">
+      <span className="text-small text-ink-lo">
         (
         <a
           href={`/about/references#${id}`}

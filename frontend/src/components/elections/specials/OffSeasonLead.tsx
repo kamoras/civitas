@@ -3,6 +3,7 @@ import type { ElectionCalendar, SpecialsBoard } from "@/types/specials";
 import { CALENDAR_HREF } from "@/lib/routes";
 import { calendarEntries, longDate } from "@/lib/specials";
 import SpecialsBoardView from "./Specials";
+import { TYPE } from "@/lib/typeStyles";
 
 /** How many calendar lines the lead shows before linking the rest. */
 const NEXT_DATES = 6;
@@ -31,13 +32,10 @@ export default function OffSeasonLead({
       aria-labelledby="between-cycles"
       className="mt-6 border border-phos/20 bg-surface px-4 pb-4 font-sans"
     >
-      <h2
-        id="between-cycles"
-        className="border-b border-white/[0.07] py-2.5 font-mono text-xs text-ink-min"
-      >
+      <h2 id="between-cycles" className={`${TYPE.kicker} border-b border-white/[0.07] py-2.5`}>
         Between general elections
       </h2>
-      <p className="mt-3 text-sm text-ink-lo">
+      <p className="mt-3 text-small text-ink-lo">
         {season.firstPrimary
           ? `The ${season.cycle} primaries begin on ${longDate(season.firstPrimary)}, by the FEC's calendar.`
           : `The ${season.cycle} primaries are not on the FEC's calendar yet.`}{" "}
@@ -47,20 +45,20 @@ export default function OffSeasonLead({
       <div className="grid grid-cols-1 gap-x-8 lg:grid-cols-[3fr_2fr]">
         <SpecialsBoardView board={board} limit={SPECIALS_SHOWN} />
         <div>
-          <h3 className="mt-6 font-mono text-xs text-ink-min">Next on the calendar</h3>
+          <h3 className={`${TYPE.kicker} mt-6`}>Next on the calendar</h3>
           {next.length ? (
             <ul className="mt-1">
               {next.map((e) => (
                 <li key={e.key} className="border-t border-white/[0.07] py-2">
-                  <p className="font-mono text-[11px] text-ink-min">
+                  <p className="font-mono text-small text-ink-min">
                     {longDate(e.date)} · {e.tag} · {e.status}
                   </p>
-                  <p className="text-sm text-ink-lo">{e.text}</p>
+                  <p className="text-small text-ink-lo">{e.text}</p>
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="mt-2 text-sm text-ink-lo">
+            <p className="mt-2 text-small text-ink-lo">
               {cal
                 ? "Nothing is on the calendar for the year ahead."
                 : "The calendar couldn't be read just now."}
@@ -68,7 +66,7 @@ export default function OffSeasonLead({
           )}
           <Link
             href={CALENDAR_HREF}
-            className="mt-3 inline-flex min-h-11 items-center font-mono text-xs text-signal-cyan hover:text-phos"
+            className="mt-3 inline-flex min-h-11 items-center font-mono text-small text-signal-cyan hover:text-phos"
           >
             [ The full calendar → ]
           </Link>

@@ -7,6 +7,7 @@ import { ABOUT_CHAPTERS } from "@/lib/aboutPages";
 import { ACTION_CENTER_HREF, MEMBERS_HREF, PRESIDENTS_HREF } from "@/lib/routes";
 import { AboutPage, Section, Boxes, Box, P, A } from "@/components/about/AboutPage";
 import LegacyAboutAnchor from "@/components/about/LegacyAboutAnchor";
+import { TYPE } from "@/lib/typeStyles";
 
 const ABOUT_DESCRIPTION =
   "What Civitas Research is, how it sets each member of Congress beside peers from public records, how presidents are measured (and why not justices), and the rules it holds itself to.";
@@ -154,10 +155,8 @@ export default function AboutOverview() {
                 href={c.href}
                 className="group grid grid-cols-1 gap-1 py-3 sm:grid-cols-[12rem_1fr_auto] sm:items-baseline sm:gap-4"
               >
-                <span className="font-display font-semibold text-ink-hi group-hover:text-phos">
-                  {c.what}
-                </span>
-                <span className="text-sm text-ink-lo">{c.detail}</span>
+                <span className={`${TYPE.boxTitle} group-hover:text-phos`}>{c.what}</span>
+                <span className="text-small text-ink-lo">{c.detail}</span>
                 <span aria-hidden="true" className="hidden font-mono text-ink-min sm:inline">
                   →
                 </span>
@@ -204,8 +203,8 @@ export default function AboutOverview() {
                 href={c.href}
                 className="panel flex h-full flex-col p-4 transition-colors hover:border-ink-min"
               >
-                <span className="font-display text-base font-semibold text-ink-hi">{c.title}</span>
-                <span className="mt-1 text-sm leading-relaxed text-ink-lo">{c.blurb}</span>
+                <span className={TYPE.boxTitle}>{c.title}</span>
+                <span className="mt-1 text-small leading-relaxed text-ink-lo">{c.blurb}</span>
               </Link>
             </li>
           ))}
@@ -256,7 +255,7 @@ function PillLink({
   children: ReactNode;
 }) {
   const cls =
-    "inline-block border border-white/[0.09] px-3 py-2 font-mono text-xs text-ink-lo transition-colors hover:border-ink-min hover:text-ink-hi";
+    "inline-block border border-white/[0.09] px-3 py-2 font-mono text-small text-ink-lo transition-colors hover:border-ink-min hover:text-ink-hi";
   return external ? (
     <a href={href} target="_blank" rel="noopener noreferrer" className={cls}>
       {children}

@@ -11,7 +11,7 @@ export default function ExploreOfficialSource() {
   const official = officialSourceForKey(key);
   if (!official) return null;
   return (
-    <p className="mt-4 text-sm text-ink-lo">
+    <p className="mt-4 text-small text-ink-lo">
       The address names {official.identifier}.{" "}
       <a
         href={official.url}

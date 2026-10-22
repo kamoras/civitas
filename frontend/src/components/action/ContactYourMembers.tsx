@@ -43,7 +43,7 @@ import type { ActionIssue, IssueMember, IssueVote } from "@/types/action";
 // 44px on a phone, where call, write and what to say are the issue's point
 // (mobile spec P10); 32px beside the text from 640px up.
 const COMMAND =
-  "inline-flex min-h-11 sm:min-h-[32px] items-center font-mono text-xs text-phos-mid hover:text-phos";
+  "inline-flex min-h-11 sm:min-h-[32px] items-center font-mono text-small text-phos-mid hover:text-phos";
 
 const STATES_BY_NAME = [...STATE_CODES].sort((a, b) =>
   STATE_NAMES[a].localeCompare(STATE_NAMES[b])
@@ -156,14 +156,14 @@ function Script({
               type="button"
               aria-pressed={position === value}
               onClick={() => setPosition(value)}
-              className={`min-h-[32px] min-w-[5.5rem] border px-2 font-mono text-xs ${boxedControl(position === value)}`}
+              className={`min-h-[32px] min-w-[5.5rem] border px-2 font-mono text-small ${boxedControl(position === value)}`}
             >
               {label}
             </button>
           ))}
         </div>
       )}
-      <p className="whitespace-pre-line font-sans text-[15px] leading-relaxed text-ink">{text}</p>
+      <p className="whitespace-pre-line font-sans text-body leading-relaxed text-ink">{text}</p>
       <div className="mt-1 flex flex-wrap items-center gap-x-4">
         <button
           type="button"
@@ -178,7 +178,7 @@ function Script({
         </button>
         <CopyStatus feedback={feedback} />
       </div>
-      <p className="mt-1 text-xs text-ink-min">
+      <p className="mt-1 text-small text-ink-min">
         Fill in the bracketed parts. Offices count calls from their own state or district.
       </p>
     </div>
@@ -206,15 +206,15 @@ function MemberRow({
   return (
     <li className="border-t border-white/[0.07] py-2.5">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <span className="font-sans text-[15px] text-ink-hi">
+        <span className="font-sans text-body text-ink-hi">
           <Link href={`/politicians/${member.id}`} className="underline-offset-4 hover:underline">
             {who}
           </Link>{" "}
-          <span className={`font-mono text-xs ${PARTY_COLORS[member.party] ?? "text-ink-lo"}`}>
+          <span className={`font-mono text-small ${PARTY_COLORS[member.party] ?? "text-ink-lo"}`}>
             {member.party}
           </span>
           {member.chamber === "house" && member.district != null && (
-            <span className="font-mono text-xs text-ink-min">
+            <span className="font-mono text-small text-ink-min">
               {" "}
               · {districtName(member.district)}
             </span>
@@ -258,8 +258,8 @@ function MemberRow({
       {record.map(({ v, position }) => {
         const what = [v.billLabel, v.question].filter(Boolean).join(" · ");
         return (
-          <p key={v.number + v.chamber} className="mt-0.5 text-[13px] text-ink-lo">
-            <span className="font-mono text-xs text-ink-hi">{position}</span> on{" "}
+          <p key={v.number + v.chamber} className="mt-0.5 text-small text-ink-lo">
+            <span className="font-mono text-small text-ink-hi">{position}</span> on{" "}
             <Link
               href={rollCallHref(v)}
               className="underline decoration-white/20 underline-offset-4"
@@ -353,12 +353,12 @@ export default function ContactYourMembers({
 
   return (
     <div>
-      <p className="font-sans text-[15px] leading-snug text-ink-hi">
+      <p className="font-sans text-body leading-snug text-ink-hi">
         {afterNamed
           ? "Or contact your own senators and representative"
           : "Your senators and representative"}
       </p>
-      <p className="mt-0.5 text-[13px] text-ink-lo">
+      <p className="mt-0.5 text-small text-ink-lo">
         Pick your state for each office&apos;s phone and contact form
         {(issue.voteCount ?? 0) > 0 ? ", and how each member voted on this" : ""}. Your pick stays
         in this tab only.
@@ -378,7 +378,7 @@ export default function ContactYourMembers({
           setShowAllHouse(false);
           if (picked) sendActionTap(issue.publicId, "pick");
         }}
-        className="mt-2 min-h-[36px] w-full max-w-xs border border-white/15 bg-surface-base px-2 font-mono text-sm text-ink-hi outline-none focus:border-ink-lo"
+        className="mt-2 min-h-[36px] w-full max-w-xs border border-white/15 bg-surface-base px-2 font-mono text-small text-ink-hi outline-none focus:border-ink-lo"
       >
         <option value="">Pick your state…</option>
         {STATES_BY_NAME.map((code) => (
@@ -388,9 +388,9 @@ export default function ContactYourMembers({
         ))}
       </select>
 
-      {state && members.loading && <p className="mt-2 text-[13px] text-ink-min">Loading…</p>}
+      {state && members.loading && <p className="mt-2 text-small text-ink-min">Loading…</p>}
       {state && members.error && (
-        <p className="mt-2 text-[13px] text-signal-amber" role="alert">
+        <p className="mt-2 text-small text-signal-amber" role="alert">
           Couldn&apos;t load {stateName}&apos;s members. Try again, or use the{" "}
           <Link href={membersHref(state)} className="underline underline-offset-2">
             directory
@@ -408,7 +408,7 @@ export default function ContactYourMembers({
           </ul>
           {finder && (
             <div className="mt-3">
-              <label htmlFor={placeId} className="block text-[13px] text-ink-lo">
+              <label htmlFor={placeId} className="block text-small text-ink-lo">
                 {stateName} has {reps.length} representatives. Type your city, town or county to
                 find yours:
               </label>
@@ -423,7 +423,7 @@ export default function ContactYourMembers({
                 }}
                 placeholder="City, town or county"
                 autoComplete="off"
-                className="mt-1 min-h-[36px] w-full max-w-xs border border-white/15 bg-surface-base px-2 font-mono text-sm text-ink-hi placeholder:text-ink-min outline-none focus:border-ink-lo"
+                className="mt-1 min-h-[36px] w-full max-w-xs border border-white/15 bg-surface-base px-2 font-mono text-small text-ink-hi placeholder:text-ink-min outline-none focus:border-ink-lo"
               />
               <datalist id={`${placeId}-places`}>
                 {finderSuggestions(lines).map((n) => (
@@ -431,7 +431,7 @@ export default function ContactYourMembers({
                 ))}
               </datalist>
               {status && (
-                <p className="mt-1 text-[13px] text-ink-lo" role="status">
+                <p className="mt-1 text-small text-ink-lo" role="status">
                   {status}
                 </p>
               )}

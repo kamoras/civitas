@@ -2665,8 +2665,21 @@ the pending list).
   map's state) passes `ring={false}`. Where a public API schema forbids
   extra fields, the drawing fields go on the internal route instead
   (`peer_comparison.with_drawing`).
+- **One style per role** (2026-10, `src/lib/typeStyles.ts`): every piece of
+  text plays one of TYPE's roles (display, title, section, box title,
+  kicker, dek, body, small, label, figure, large figure, record id, quote),
+  each one class string, with `PageTitle`, `SectionHeading`, `BoxTitle`,
+  `SourceLine` and `RecordId` in `components/shared/Type.tsx`. Sizes exist
+  only as the scale's `text-<role>` steps (globals.css `@theme`, desktop and
+  phone, in rem): Tailwind's own sizes are off. No `text-[Npx]`; an h1 to h3
+  takes its role from TYPE (h1 title or display; h2 section, box title or
+  kicker; h3 box title, a lead box's section, kicker or label); the serif
+  only through TYPE. `typeScale.test.ts` holds the code to it and
+  `scripts/axe-routes.mjs` the page (each h1, h2, h3 and th as computed).
+  Three ink levels: `ink` is `ink-hi`, then `ink-lo`, then `ink-min`, at
+  least APCA Lc 8 apart (`inkContrast.test.ts`).
 - **Type** (2026-10, `src/app/fonts.ts`): Source Serif 4 600 for titles
-  (`font-display`), Fira Sans 400/600 for everything else (`font-sans`; the
+  (`font-display`, through TYPE), Fira Sans 400/600 for everything else (`font-sans`; the
   long-standing `font-mono` class maps to Fira Sans too, so a label keeps its
   class and loses the monospace), DM Mono for record identifiers only
   (`font-id`, never prose), Archivo 800 for the wordmark (`font-wordmark`).
@@ -2683,9 +2696,8 @@ the pending list).
   `president_scorer.py`, and `backend/tests/test_shown_text_style.py` fails on
   an em dash in any string there that isn't a docstring or a log message.
 - **On a phone nothing a reader must read is under 13px** (`globals.css`, "A
-  phone's type scale", 2026-10): `text-xs` and the 9-12px one-offs are 13px
-  under 640px. A label of four words or more is 14px there (`labelCase` /
-  `LONG_LABEL`, `lib/controlStyles.ts`).
+  phone's type scale", 2026-10): the scale's smallest step is 14px, and the
+  sizes under it no longer exist.
 - **Letter case: sentence case, not capitals** (2026-10). A reader said the
   site's capitals felt intimidating, and the evidence agrees for anything
   longer than a word or two: capitals slow reading as text gets longer

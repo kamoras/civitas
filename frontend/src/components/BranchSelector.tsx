@@ -58,7 +58,7 @@ export default function BranchSelector({ selected, onChange }: BranchSelectorPro
           aria-controls={`branch-panel-${key}`}
           tabIndex={selected === key ? 0 : -1}
           onClick={() => onChange(key)}
-          className={`border px-3 py-2 font-mono text-xs transition-colors sm:px-5 sm:text-sm ${boxedControl(
+          className={`border px-3 py-2 font-mono text-small transition-colors sm:px-5 ${boxedControl(
             selected === key
           )}`}
         >

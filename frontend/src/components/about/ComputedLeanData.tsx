@@ -57,7 +57,7 @@ export default async function ComputedLeanData() {
   const title = `Computed partisan lean of U.S. House districts, ${lines.replace(/^the /, "")}`;
   const years = leanWindowWords(table?.window);
   return (
-    <div className="space-y-3 border border-white/15 p-4 text-base leading-relaxed text-ink">
+    <div className="space-y-3 border border-white/15 p-4 text-body leading-relaxed text-ink">
       <JsonLd
         data={{
           "@context": "https://schema.org",
@@ -84,7 +84,7 @@ export default async function ComputedLeanData() {
         }}
       />
       <p>
-        <span className="font-mono text-xs text-ink-min">Every district, both maps: </span>
+        <span className="font-mono text-small text-ink-min">Every district, both maps: </span>
         <a href={CSV_PATH} download className={LINK}>
           CSV
         </a>
@@ -95,7 +95,7 @@ export default async function ComputedLeanData() {
         <span className="text-ink-lo">
           (the JSON adds the method, each input with its license, every correction with its
           certified source, and the agreement with Cook; it is also the public API&apos;s{" "}
-          <code className="font-mono text-sm">/district-lean</code>)
+          <code className="font-mono text-small">/district-lean</code>)
         </span>
       </p>
       <p className="text-ink-lo">
@@ -116,13 +116,13 @@ export default async function ComputedLeanData() {
           <>
             {" "}
             The file served now has SHA-256{" "}
-            <code className="font-mono text-sm break-all">{table.sha256}</code>, which names the
+            <code className="font-mono text-small break-all">{table.sha256}</code>, which names the
             exact version a citation used.
           </>
         )}
       </p>
       <div>
-        <p className="mb-1 font-mono text-xs text-ink-min">Cite this</p>
+        <p className="mb-1 font-mono text-small text-ink-min">Cite this</p>
         <CiteThis title={title} date={table?.asOf} path={JSON_PATH} />
       </div>
     </div>
