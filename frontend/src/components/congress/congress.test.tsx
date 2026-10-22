@@ -371,14 +371,29 @@ describe("week report", () => {
       <PeriodReportView
         report={week}
         kind="week"
-        lead={{ title: "Congress is out", body: <p>Neither chamber has voted since then.</p> }}
+        lead={{
+          title: "Congress is out",
+          body: <p>Neither chamber has voted since then.</p>,
+          figure: {
+            type: "stat",
+            value: 8,
+            caption: "days since a record vote or a measure passed",
+          },
+        }}
       />
     );
     expect(screen.getByRole("heading", { level: 1, name: "Congress is out" })).toBeTruthy();
+    // One box led by the backend's figure, the week as its title and line,
+    // the recess sentence behind its More.
+    const box = screen
+      .getByRole("heading", { level: 2, name: "Week of September 21, 2026" })
+      .closest("article")!;
+    expect(box.textContent).toContain(week.sentence);
     expect(
-      screen.getByRole("heading", { level: 2, name: "Week of September 21, 2026" })
+      screen.getByRole("img", { name: "8 days since a record vote or a measure passed." })
     ).toBeTruthy();
-    expect(screen.getByText(week.sentence)).toBeTruthy();
+    expect(box.textContent).toContain("More: when Congress sits next");
+    expect(box.textContent).toContain("Neither chamber has voted since then.");
     expect(await violations()).toEqual([]);
   });
 });

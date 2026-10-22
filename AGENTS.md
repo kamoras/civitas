@@ -2080,8 +2080,11 @@ it keeps, each enforced by a test (`tests/test_forecast_model.py`,
   and the same with the parties swapped. Nothing shown frames a figure
   around one party ("went to the Democrat", a raw signed margin); the
   internal R-positive sign convention stays inside the math. The method
-  section leads with a short plain summary; the full method sits behind a
-  disclosure.
+  section leads with a short plain summary (its first paragraph one line,
+  the rest behind "More"; "not a call" and the poll attributions stay
+  shown); the full method sits behind a disclosure. The map leads at every
+  width: on a phone the House's tile map comes first, with the state picker
+  and list after it as the full-size way into a state.
 - **No year in the code.** Article titles, the fieldwork floor, the House
   lines and every label (CSV header and filename, page titles, the method's
   presidential window) come from `active_election().cycle` and the data
@@ -2968,6 +2971,28 @@ one line with the rest behind "More" (`components/elections/NoteLine.tsx`),
 not a paragraph or a box. On a ballot page the box lines are counts and
 labels only: what a measure does, what yes or no means and every deadline
 stay quoted where §7 puts them, never summarised in a box.
+
+A page whose intro was a paragraph above its figure (`/congress` in a
+recess, `/congress/nominations`, `/congress/president/*`) leads with one box
+instead: the page's figure (served by the backend: `recess.figure`, the
+nominations count, `counts` on the presidential-support view), a one-line
+line, and the intro behind "More".
+
+A redrawn state's page (`/elections/redistricting/[ST]`) leads with two
+boxes: seats by lean (the strips) and residents moved (a stat), each
+figure's method behind its own "More".
+
+Site search's results (`/search?q=`) are compact boxes: the kind as the
+kicker, the index's context line as the line, and a document's `snippet`
+(its own words around the query, matches marked) behind "More".
+
+An Explore document page (`/explore/[key]`) leads with one header box over
+the source text, which stays as it is: its type, issuer, date and citation
+in the backend's templated line (`api/explore.py` `document_headline`), the
+comment countdown while the period is open (`commentWindow`), and chips for
+the agency, the speaker's record, the bills a speech names and the executive
+orders the text cites that have a page here (`cited_orders`). The box's grid
+is `#comment`, where every "Comment" link lands.
 
 #### Empty defaults are content (2026-10)
 

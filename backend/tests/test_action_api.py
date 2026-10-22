@@ -1266,6 +1266,41 @@ def test_ongoing_lists_monitors_closed_in_the_last_sixty_days(db_session, freeze
     assert body["monitors"][0]["closedOn"] is None
 
 
+def test_a_monitors_box_quotes_its_newest_update_only_with_the_outlet_it_is_from(db_session, freeze_utcnow):
+    """The newest update's text is quoted, credited to the outlet the issue
+    quoted it from (not the update's first source); an update no claim-layer
+    issue wrote names its headline and quotes nothing."""
+    freeze_utcnow(datetime(2026, 10, 10, 12))
+    quoted = NationalMonitor(slug="quoted", title="Quoted", status=MonitorStatus.ACTIVE,
+                             created_at=datetime(2026, 9, 1), updated_at=datetime(2026, 10, 9))
+    legacy = NationalMonitor(slug="legacy", title="Legacy", status=MonitorStatus.ACTIVE,
+                             created_at=datetime(2026, 9, 1), updated_at=datetime(2026, 10, 8))
+    db_session.add_all([quoted, legacy])
+    db_session.flush()
+    db_session.add_all([
+        ActionIssue(date="2026-10-09", rank=1, title="Senate votes on the bill",
+                    summary="The Senate voted 51-49 on the bill.", summary_source="Outlet B",
+                    summary_source_url="https://b.example/story"),
+        MonitorUpdate(monitor_id=quoted.id, date="2026-10-01", summary="Older.", source_url="https://a.example/1",
+                      source_name="Outlet A", article_title="Older"),
+        MonitorUpdate(monitor_id=quoted.id, date="2026-10-09", summary="The Senate voted 51-49 on the bill.",
+                      source_url="https://a.example/2", source_name="Outlet A",
+                      article_title="Senate votes on the bill"),
+        MonitorUpdate(monitor_id=legacy.id, date="2026-09-20", summary="A model-written summary.",
+                      source_url="https://c.example/3", source_name="Outlet C", article_title="A headline"),
+    ])
+    db_session.commit()
+
+    body = asyncio.run(list_monitors(Response(), db_session))
+    latest = {m["slug"]: m["latest"] for m in body["monitors"]}
+
+    assert latest["quoted"] == {"date": "2026-10-09", "text": "The Senate voted 51-49 on the bill.",
+                                "source": "Outlet B", "sourceUrl": "https://b.example/story",
+                                "headline": "Senate votes on the bill"}
+    assert latest["legacy"] == {"date": "2026-09-20", "text": None, "source": "Outlet C",
+                                "sourceUrl": "https://c.example/3", "headline": "A headline"}
+
+
 def test_an_issue_names_its_monitors_by_stored_title(db_session):
     """Pages printed the slug back out as a name, losing apostrophes and
     capitals; a slug whose monitor was merged away linked nowhere."""

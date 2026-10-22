@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
+import { olderApi } from "@/lib/olderApi";
 import { describe, expect, it } from "vitest";
 import axe from "axe-core";
 import ElectionMap from "./ElectionMap";
@@ -446,8 +447,14 @@ describe("election map", () => {
     expect(summary.textContent).toContain("Nothing here feeds any member");
     expect(summary.textContent).toContain("Wikipedia contributors, CC BY-SA 4.0");
     expect(summary.textContent).toContain("Silver Bulletin");
-    const details = container.querySelector("details");
-    expect(details).not.toBeNull();
+    // The summary's first paragraph is one line with the rest behind its
+    // More; the full method is the disclosure after the summary.
+    expect(within(summary).getByText(/Each seat shows how it usually votes/)).toBeInTheDocument();
+    expect(summary.querySelector("details")).not.toBeNull();
+    const details = [...container.querySelectorAll("details")].find((d) =>
+      d.textContent?.includes("Full method")
+    );
+    expect(details).toBeDefined();
     expect(details!.open).toBe(false);
     expect(details!.textContent).toContain("Held-out checks");
     expect(details!.textContent).toContain("Inputs, sources and licences");
@@ -748,5 +755,27 @@ describe("labels come from the API's cycle, never a year in the code", () => {
     expect(text).toContain("placed on the 2028 district lines");
     expect(text).toContain("Wikipedia's 2028 race articles");
     expect(text).not.toContain("2026");
+  });
+});
+
+describe("an older API, during a rolling update", () => {
+  it("draws both chambers' maps plain without the state readouts", () => {
+    for (const chamber of ["senate", "house"] as const) {
+      const { container, unmount } = render(
+        <main>
+          <ElectionMap
+            response={olderApi(response)}
+            initialView="polls"
+            initialChamber={chamber}
+            pageUrl="https://example.org/elections/map"
+          />
+        </main>
+      );
+      expect(screen.queryByRole("group", { name: /seats by state|grouped by state/ })).toBeNull();
+      expect(container.querySelectorAll("svg rect").length).toBeGreaterThan(0);
+      // Plain: drawn, with no readout, nothing printed from a missing field.
+      expect(container.textContent).not.toMatch(/undefined|NaN/);
+      unmount();
+    }
   });
 });

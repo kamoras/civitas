@@ -55,10 +55,10 @@ export interface CoverageCell {
   share95: number | null;
   interval95: [number, number] | null;
   /** As printed ("62%", "n/a"; "35% to 88%"). */
-  share80Shown: string;
-  interval80Shown: string | null;
-  share95Shown: string;
-  interval95Shown: string | null;
+  share80Shown?: string;
+  interval80Shown?: string | null;
+  share95Shown?: string;
+  interval95Shown?: string | null;
 }
 
 export interface BasisCell extends CoverageCell {
@@ -78,24 +78,24 @@ export interface ChamberAccountability {
   promised: {
     nominal80: number;
     nominal95: number;
-    nominal80Shown: string;
-    nominal95Shown: string;
+    nominal80Shown?: string;
+    nominal95Shown?: string;
     heldOut: {
       cycles: [number, number] | null;
       races: number | null;
       coverage80: number | null;
       coverage95: number | null;
       coverage80Fundamentals: number | null;
-      coverage80Shown: string;
-      coverage95Shown: string;
+      coverage80Shown?: string;
+      coverage95Shown?: string;
     };
     forward: {
       cycle: number;
       races: number;
       coverage80: number;
       coverage95: number;
-      coverage80Shown: string;
-      coverage95Shown: string;
+      coverage80Shown?: string;
+      coverage95Shown?: string;
     } | null;
   };
   /** Furthest outside the 80% range first; outsideBy in margin points. */
@@ -109,7 +109,7 @@ export interface ChamberAccountability {
   };
   seats: AccountabilitySeat[];
   /** Each state's readout on the swing map (accountability.swing_marks). */
-  stateMarks: Record<string, ReadoutMark>;
+  stateMarks?: Record<string, ReadoutMark>;
 }
 
 export interface MapAccountability {

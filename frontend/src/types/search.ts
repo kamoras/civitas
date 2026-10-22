@@ -6,6 +6,10 @@ export interface SearchItem {
   label: string;
   context: string;
   url: string;
+  /** A document's own words around the query (Explore's keyword excerpt,
+   *  matches marked with EXPLORE_HIGHLIGHT_START/END), else its summary;
+   *  kept behind its result box's "More". Documents only. */
+  snippet?: string;
 }
 
 /** GET /api/search/suggest */

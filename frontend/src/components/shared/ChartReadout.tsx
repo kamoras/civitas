@@ -86,21 +86,13 @@ function placeOf(m: ChartMark, box: HTMLDivElement, r: DOMRect): Shape | null {
  * itself (`children`) stays hidden from assistive technology: each chart
  * keeps a table, list or text that is its full text form.
  */
-export default function ChartReadout({
-  label,
-  marks,
-  startId,
-  cols,
-  labelAt = "top",
-  className = "",
-  onActive,
-  ring = true,
-  onOpen,
-  children,
-}: {
+type ReadoutProps = {
   /** The chart's accessible name: what it measures, and of whom. */
   label: string;
-  marks: ChartMark[];
+  /** The marks' readouts, from the API. Absent (a backend older than the
+   *  page, for the minutes a rolling update keeps the two apart) or empty,
+   *  the chart is drawn plain, with no readout: never an error. */
+  marks?: ChartMark[] | null;
   /** Where the arrow keys start: the page's own mark. */
   startId?: string;
   /** Marks per row, for a grid: Up and Down move by a row. */
@@ -118,7 +110,31 @@ export default function ChartReadout({
    *  filters the list beside it). */
   onOpen?: (id: string) => void;
   children: React.ReactNode;
-}) {
+};
+
+export default function ChartReadout(props: ReadoutProps) {
+  if (!props.marks?.length) {
+    return (
+      <div className={`relative ${props.className ?? ""}`}>
+        <div aria-hidden="true">{props.children}</div>
+      </div>
+    );
+  }
+  return <Readout {...props} marks={props.marks} />;
+}
+
+function Readout({
+  label,
+  marks,
+  startId,
+  cols,
+  labelAt = "top",
+  className = "",
+  onActive,
+  ring = true,
+  onOpen,
+  children,
+}: ReadoutProps & { marks: ChartMark[] }) {
   const [active, setActiveIndex] = useState<number | null>(null);
   const [announce, setAnnounce] = useState("");
   const [place, setPlace] = useState<{ b: Box; circle: boolean; w: number; h: number } | null>(
