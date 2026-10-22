@@ -834,10 +834,12 @@ export type TownBallotItem = TownContest | TownMeasure;
 
 export interface TownBallot {
   /** not_yet_covered: town isn't curated (or no source is configured).
-   * ingest_failed: the live lookup failed. covered: succeeded — an empty
-   * `contests` is real information ("nothing local at this address"),
-   * not a failure. */
-  status: "not_yet_covered" | "ingest_failed" | "covered";
+   * ingest_failed: the live lookup failed. pending: Google Civic answered
+   * a federal general with no contest while the state's races are on file,
+   * so the ballot isn't loaded yet (never "nothing on the ballot").
+   * covered: succeeded; an empty `contests` for any other election is
+   * read as empty. */
+  status: "not_yet_covered" | "ingest_failed" | "pending" | "covered";
   /** The representative address results were resolved against, when the
    * source is Google Civic — WE chose this, never a visitor's own
    * address. Null when status isn't "covered". */

@@ -29,6 +29,7 @@ from app.election_calendar import (
     class_up,
     federal_states,
     next_election_day,
+    previous_election_day,
     next_senate_election_year,
     seats_up_for_year,
     senator_class,
@@ -2213,11 +2214,13 @@ async def town_ballot(_rl: UpstreamRouteLimit, state: str, town: str, db: Sessio
     list is small and curated (not user-typed free text), and each lookup
     is cached so repeat visits don't re-fetch.
 
-    `status` mirrors MeasureCoverage's tri-state discipline: not_yet_
-    covered when the town isn't in the directory (or Google Civic isn't
-    configured), ingest_failed on a fetch/parse error, covered on success
-    (an empty contests list on success is real information, "nothing
-    local at this address this cycle", unlike a fetch failure).
+    `status` mirrors MeasureCoverage's "which absence" discipline:
+    not_yet_covered when the town isn't in the directory (or Google Civic
+    isn't configured), ingest_failed on a fetch/parse error, pending when
+    Civic answers for a federal general with no contest although the
+    state's races are on file (Civic hasn't loaded the ballot:
+    _ballot_not_loaded), covered otherwise (an empty list for any other
+    election is read as empty).
 
     Until 2026-10 one town (Somerville, MA) was read from its own sample
     ballot PDF first. That needed a hand-typed URL and hand-measured
@@ -2241,7 +2244,7 @@ async def town_ballot(_rl: UpstreamRouteLimit, state: str, town: str, db: Sessio
     if result is None:
         return retry_soon_json(_uncovered_town_ballot("ingest_failed"))
     return cached_json({
-        "status": "covered",
+        "status": "pending" if _ballot_not_loaded(db, state, result) else "covered",
         "address": result["address"],
         "source": "Google Civic Information API",
         "sourceUrl": None,
@@ -2249,6 +2252,29 @@ async def town_ballot(_rl: UpstreamRouteLimit, state: str, town: str, db: Sessio
         "electionDate": result["election_date"],
         "contests": result["contests"],
     }, max_age=CACHE_TTL_DETAIL_S)
+
+
+def _ballot_not_loaded(db: Session, state: str, result: dict) -> bool:
+    """Whether an empty answer from Google Civic means it hasn't loaded the
+    town's ballot yet, rather than that nothing is on it. On a federal
+    general's date every town in the state votes for a U.S. House seat (and
+    the Senate in a Senate year), so when Civic answers for that day with no
+    contest while the state's races for that election are on file, the
+    ballot simply isn't loaded: Cambridge, MA read `covered` with no contest
+    twelve days before the 2026 general, with a House race and nine
+    statewide questions on its ballot. An empty answer for any other
+    election (a local special, a primary) is still read as empty."""
+    if result.get("contests"):
+        return False
+    try:
+        day = date.fromisoformat(result.get("election_date") or "")
+    except ValueError:
+        return False
+    if previous_election_day(day) != day:
+        return False
+    return db.query(Race.id).filter(
+        Race.state == state, Race.cycle_year == day.year, Race.office.in_(("S", "H")),
+    ).first() is not None
 
 
 @router.get("/races/{race_id}")
