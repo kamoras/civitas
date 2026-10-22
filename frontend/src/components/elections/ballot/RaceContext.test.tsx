@@ -98,7 +98,9 @@ describe("RaceContext", () => {
     render(
       <RaceContext race={race({ usualVote: { lean: 5.34, label: "R+5", source: "computed" } })} />
     );
-    expect(screen.getByText(/the figure the 2026 map shows, used in no score/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/the figure the 2026 map shows, used in no member comparison/)
+    ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "How it is computed" })).toHaveAttribute(
       "href",
       "/about/data#computed-lean"
