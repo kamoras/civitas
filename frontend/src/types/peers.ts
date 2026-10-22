@@ -46,13 +46,13 @@ export interface PeerMeasure {
   /** The strip's right end (on the measure's scale), its two ends as
    *  printed, and the tick's label ("11% seat average"); the internal
    *  /peers route's (peer_comparison.with_drawing). */
-  axisMax: number;
-  axisStartShown: string;
-  axisEndShown: string;
-  expectedShown: string | null;
+  axisMax?: number;
+  axisStartShown?: string;
+  axisEndShown?: string;
+  expectedShown?: string | null;
   /** The measure night by night this Congress, once it has changed: each
    *  point placed 0-100 (x across, y down), its readout, and in words. */
-  overTime: {
+  overTime?: {
     points: { x: number; y: number }[];
     marks: ReadoutMark[];
     sentence: string;
@@ -91,10 +91,10 @@ export interface ChamberMeasure {
   direction: string;
   unit: PeerMeasure["unit"];
   median: number | null;
-  medianShown: string | null;
-  axisMax: number;
-  axisStartShown: string;
-  axisEndShown: string;
+  medianShown?: string | null;
+  axisMax?: number;
+  axisStartShown?: string;
+  axisEndShown?: string;
   n: number;
   source: { name: string; url: string };
   points: ChamberPoint[];

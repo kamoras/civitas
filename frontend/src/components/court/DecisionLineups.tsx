@@ -1,5 +1,7 @@
 import type { Court } from "@/types/court";
 import { splitLabel, termsPhrase } from "@/lib/court";
+import ChartReadout from "@/components/shared/ChartReadout";
+import { MARK_ATTR } from "@/types/readout";
 
 // Lopsided splits light, close ones dark, in the order the API gives
 // them; a split past the end takes the darkest. Each shade is a theme
@@ -21,8 +23,9 @@ export function shade(i: number): { background: string; color: string } {
 
 /**
  * How the Court split, term by term: one bar per term, each segment a
- * split (9–0 … 5–4) sized by its share of the term's cases. The bars are
- * drawn; the table under them is the same counts in rows.
+ * split (9–0 … 5–4) sized by its share of the term's cases. Each segment
+ * reads its split, count and share on hover, tap and the keyboard, in the
+ * API's words; the table under them is the same counts in rows.
  */
 export default function DecisionLineups({ court }: { court: Court }) {
   const { splits, terms } = court.lineups;
@@ -30,37 +33,49 @@ export default function DecisionLineups({ court }: { court: Court }) {
   return (
     <div className="flex flex-col gap-4">
       <h3 className="text-lg font-semibold text-ink-hi">How the Court split, by term</h3>
-      <div aria-hidden="true" className="flex flex-col gap-2">
-        {terms.map((t) => (
-          <div key={t.term} className="flex items-center gap-3">
-            <span className="w-12 shrink-0 font-mono text-sm text-ink-lo">{t.term}</span>
-            <div className="flex h-7 flex-1 gap-0.5">
-              {splits.map((s, i) => {
-                const count = t.counts[s] ?? 0;
-                if (!count) return null;
-                const share = count / t.cases;
-                return (
-                  <span
-                    key={s}
-                    className="@container flex items-center justify-center overflow-hidden font-mono text-xs"
-                    style={{ ...shade(i), width: `${share * 100}%` }}
-                  >
-                    {/* Shown only where the segment is wide enough for it, a
+      <div className="flex flex-col gap-2">
+        <ChartReadout
+          label="How the Court split, by term"
+          marks={terms.flatMap((t) => t.marks ?? [])}
+          startId={terms.at(-1)?.marks?.[0]?.id}
+          className="flex flex-col gap-2"
+        >
+          {terms.map((t) => (
+            <div key={t.term} className="flex items-center gap-3">
+              <span className="w-12 shrink-0 font-mono text-sm text-ink-lo">{t.term}</span>
+              <div className="flex h-7 flex-1 gap-0.5">
+                {splits.map((s, i) => {
+                  const count = t.counts[s] ?? 0;
+                  if (!count) return null;
+                  // The API's width; from an older one, the counts' (drawing only).
+                  const width = t.shares?.[s] ?? (100 * count) / t.cases;
+                  return (
+                    <span
+                      key={s}
+                      {...{ [MARK_ATTR]: `${t.term}-${s}` }}
+                      className="@container flex items-center justify-center overflow-hidden font-mono text-xs"
+                      style={{ ...shade(i), width: `${width}%` }}
+                    >
+                      {/* Shown only where the segment is wide enough for it, a
                         container query in rem, so it follows the text size:
                         on a phone, and at 200% text, labels were cut off
                         mid-figure ("7–2 · 1"). The table below has them. */}
-                    {share >= MIN_LABEL_SHARE && (
-                      <span className="hidden whitespace-nowrap @min-[5.5rem]:inline">
-                        {`${splitLabel(s)} · ${count}`}
-                      </span>
-                    )}
-                  </span>
-                );
-              })}
+                      {width >= MIN_LABEL_SHARE * 100 && (
+                        <span className="hidden whitespace-nowrap @min-[5.5rem]:inline">
+                          {`${splitLabel(s)} · ${count}`}
+                        </span>
+                      )}
+                    </span>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        ))}
-        <div className="flex flex-wrap gap-x-4 gap-y-1 pl-[3.75rem] font-mono text-xs text-ink-lo">
+          ))}
+        </ChartReadout>
+        <div
+          aria-hidden="true"
+          className="flex flex-wrap gap-x-4 gap-y-1 pl-[3.75rem] font-mono text-xs text-ink-lo"
+        >
           {splits.map((s, i) => (
             <span key={s} className="inline-flex items-center gap-1.5">
               <span className="h-3 w-3" style={{ background: shade(i).background }} />

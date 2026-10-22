@@ -32,7 +32,9 @@ export default function IndustryBreakdown({ industries, donors }: IndustryBreakd
           const info = industryMap[ind.industry];
           const displayName = info?.name || ind.name || ind.industry.replace(/_/g, " ");
           const color = info?.color ? chartMark(info.color) : "var(--chart-muted)";
-          const barWidth = Math.round((ind.total / maxTotal) * 100);
+          // The API's width against the largest industry; from an older
+          // backend, drawn from the totals (drawing only).
+          const barWidth = ind.barPercent ?? (ind.total / maxTotal) * 100;
           const isExpanded = expandedIndustry === ind.industry;
           const industryDonors = getDonorsForIndustry(ind.industry);
           const hasDonerBreakdown = industryDonors.length > 0;

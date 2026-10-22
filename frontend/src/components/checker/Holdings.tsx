@@ -155,9 +155,12 @@ function HoldingsDonut({
       >
         {focus ? (
           <>
-            <span className="text-ink-hi text-xl font-mono">{focus.shareShown}</span>
+            <span className="text-ink-hi text-xl font-mono">{focus.shareShown ?? ""}</span>
             <span className="text-ink text-xs leading-tight">{focus.label}</span>
-            <span className="text-ink-min text-[11px] font-mono mt-0.5">{focus.valueShown}</span>
+            <span className="text-ink-min text-[11px] font-mono mt-0.5">
+              {focus.valueShown ??
+                formatBracket(focus.valueLow, focus.valueHigh, focus.openEnded, formatCurrency)}
+            </span>
           </>
         ) : (
           <>
@@ -176,7 +179,12 @@ function HoldingsDonut({
  * ("Undetermined"). The two are different disclosures and are named apart. */
 function legendDetail(c: HoldingCategory, when: string): string {
   const parts = [`${c.count} asset${c.count !== 1 ? "s" : ""}`];
-  parts.push(c.weight > 0 ? c.valueShown : "not charted");
+  // An older API sends no value text: the bracket in the form's own terms.
+  parts.push(
+    c.weight > 0
+      ? (c.valueShown ?? formatBracket(c.valueLow, c.valueHigh, c.openEnded, formatCurrency))
+      : "not charted"
+  );
   if (c.zeroValueCount > 0) parts.push(`${c.zeroValueCount} none ${when}`);
   if (c.unvaluedCount > 0) parts.push(`${c.unvaluedCount} no value stated`);
   return parts.join(" · ");
@@ -230,7 +238,7 @@ function CategoryLegend({
                 <span className="block text-ink-min text-xs">{legendDetail(c, when)}</span>
               </span>
               <span className="text-ink-hi text-sm font-mono">
-                {c.weight > 0 ? c.shareShown : "—"}
+                {(c.weight > 0 && c.shareShown) || "—"}
               </span>
             </button>
           </li>
