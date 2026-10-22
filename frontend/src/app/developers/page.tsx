@@ -29,6 +29,7 @@ import {
   type Schema,
   type Spec,
 } from "@/lib/openapi";
+import { TYPE } from "@/lib/typeStyles";
 
 export const metadata = pageMetadata({
   title: "Public API and MCP server",
@@ -59,7 +60,7 @@ async function fetchSpec(): Promise<Spec | null> {
   }
 }
 
-const CODE = "font-mono text-xs text-ink-hi";
+const CODE = "font-mono text-small text-ink-hi";
 
 /** A tag group's heading id: no spaces, since aria-labelledby reads a
  *  space as a list of ids ("Votes with the president" named nothing). */
@@ -92,12 +93,12 @@ function Params({ params }: { params: Parameter[] }) {
         >
           <dt>
             <code className={CODE}>{p.name}</code>
-            <span className="ml-2 font-mono text-[11px] text-ink-min">
+            <span className="ml-2 font-mono text-small text-ink-min">
               {p.in === "path" ? "in path" : p.required ? "required" : "optional"}
             </span>
           </dt>
-          <dd className="space-y-0.5 text-sm text-ink-mid">
-            <p className="font-mono text-xs text-ink-lo">
+          <dd className="space-y-0.5 text-small text-ink-mid">
+            <p className="font-mono text-small text-ink-lo">
               {paramTypeLabel(p.schema)}
               {p.schema.default !== undefined &&
                 p.schema.default !== null &&
@@ -141,8 +142,8 @@ function Fields({
             <dt>
               <code className={`${CODE} break-all`}>{name}</code>
             </dt>
-            <dd className="min-w-0 space-y-1 text-sm text-ink-mid">
-              <p className="font-mono text-xs text-ink-lo">{typeLabel(field)}</p>
+            <dd className="min-w-0 space-y-1 text-small text-ink-mid">
+              <p className="font-mono text-small text-ink-lo">{typeLabel(field)}</p>
               {field.description && (
                 <p>
                   <Prose text={field.description} />
@@ -170,9 +171,9 @@ function EndpointBlock({ endpoint, spec }: { endpoint: Endpoint; spec: Spec }) {
   const openable = !path.includes("{");
   return (
     <article id={op.operationId} className="space-y-3">
-      <h4 className="font-display text-lg font-semibold text-ink-hi">{op.summary}</h4>
+      <h4 className={TYPE.boxTitle}>{op.summary}</h4>
       <div className="space-y-0.5 font-mono">
-        <p className="break-all text-sm">
+        <p className="break-all text-small">
           <span className="text-signal-cyan">{method}</span>{" "}
           {openable ? (
             <a
@@ -185,12 +186,12 @@ function EndpointBlock({ endpoint, spec }: { endpoint: Endpoint; spec: Spec }) {
             <span className="text-ink-hi">{path}</span>
           )}
         </p>
-        <p className="text-xs text-ink-min">
+        <p className="text-small text-ink-min">
           {isCsv(op) ? "CSV download (not an MCP tool)" : `MCP tool: ${op.operationId}`}
         </p>
       </div>
       {op.description && (
-        <div className="space-y-2 text-sm text-ink-mid">
+        <div className="space-y-2 text-small text-ink-mid">
           {op.description.split("\n\n").map((para) => (
             <p key={para}>
               <Prose text={para.replace(/\s*\n\s*/g, " ")} />
@@ -200,7 +201,7 @@ function EndpointBlock({ endpoint, spec }: { endpoint: Endpoint; spec: Spec }) {
       )}
       {params.length > 0 && (
         <div className="space-y-1">
-          <h5 className="font-mono text-xs text-ink-lo">Parameters</h5>
+          <h5 className="font-mono text-small text-ink-lo">Parameters</h5>
           <Params params={params} />
         </div>
       )}
@@ -434,7 +435,7 @@ export default async function DevelopersPage() {
                     <a
                       href={`${API}/${file}`}
                       download
-                      className="font-mono text-xs text-signal-cyan underline underline-offset-2 hover:text-phos"
+                      className="font-mono text-small text-signal-cyan underline underline-offset-2 hover:text-phos"
                     >
                       {`${API}/${file}`}
                     </a>
@@ -482,7 +483,7 @@ export default async function DevelopersPage() {
                       (axe scrollable-region-focusable, WCAG 2.1.1). */}
                   <pre
                     tabIndex={0}
-                    className="mt-1 overflow-x-auto border border-white/[0.07] bg-white/[0.02] p-2 font-mono text-xs text-ink-hi"
+                    className="mt-1 overflow-x-auto border border-white/[0.07] bg-white/[0.02] p-2 font-mono text-small text-ink-hi"
                   >
                     {JSON.stringify(
                       { mcpServers: { civitas: { type: "http", url: MCP_URL } } },
@@ -500,10 +501,10 @@ export default async function DevelopersPage() {
                   {groups.map(({ tag, description, endpoints }) => (
                     <section key={tag} aria-labelledby={tagId(tag)} className="space-y-8">
                       <div className="space-y-1 border-b border-white/[0.07] pb-2">
-                        <h3 id={tagId(tag)} className="font-mono text-xs text-ink-lo">
+                        <h3 id={tagId(tag)} className={TYPE.kicker}>
                           {tag}
                         </h3>
-                        {description && <p className="text-sm text-ink-mid">{description}</p>}
+                        {description && <p className="text-small text-ink-mid">{description}</p>}
                       </div>
                       {endpoints.map((e) => (
                         <EndpointBlock key={`${e.method} ${e.path}`} endpoint={e} spec={spec} />

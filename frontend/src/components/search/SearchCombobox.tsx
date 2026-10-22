@@ -180,14 +180,17 @@ export default function SearchCombobox({
       {Object.entries(hidden ?? {}).map(([name, v]) => (
         <input key={name} type="hidden" name={name} value={v} />
       ))}
-      <label htmlFor={inputId} className="mb-2 block font-mono text-xs text-ink-lo">
+      <label htmlFor={inputId} className="mb-2 block font-mono text-small text-ink-lo">
         {label}
       </label>
       {/* GO under the field in a narrow box (a 320 px phone, or a doubled
           text size), beside it from 20rem: side by side there, the field
           was left a few characters wide (WCAG 1.4.10). */}
       <div className="flex flex-wrap items-stretch border-2 border-ink-lo bg-surface-base focus-within:border-ink-hi @[20rem]:flex-nowrap">
-        <span aria-hidden="true" className="flex items-center pl-3 font-mono text-sm text-ink-lo">
+        <span
+          aria-hidden="true"
+          className="flex items-center pl-3 font-mono text-small text-ink-lo"
+        >
           &gt;
         </span>
         <input
@@ -216,16 +219,16 @@ export default function SearchCombobox({
           onBlur={() => setOpen(false)}
           onFocus={() => items.length > 0 && value.trim().length >= MIN_CHARS && setOpen(true)}
           placeholder="A member, bill, agency, district, page…"
-          className="min-h-11 min-w-0 flex-1 basis-0 bg-transparent px-2 font-mono text-base text-ink-hi caret-phos placeholder:text-ink-min"
+          className="min-h-11 min-w-0 flex-1 basis-0 bg-transparent px-2 font-mono text-body text-ink-hi caret-phos placeholder:text-ink-min"
         />
         <button
           type="submit"
-          className="min-h-11 w-full border-t-2 border-ink-lo px-3 font-mono text-xs text-ink-hi hover:bg-white/10 @[20rem]:w-auto @[20rem]:min-w-16 @[20rem]:border-t-0 @[20rem]:border-l-2"
+          className="min-h-11 w-full border-t-2 border-ink-lo px-3 font-mono text-small text-ink-hi hover:bg-white/10 @[20rem]:w-auto @[20rem]:min-w-16 @[20rem]:border-t-0 @[20rem]:border-l-2"
         >
           Go
         </button>
       </div>
-      <p id={`${id}-hint`} className="mt-2 font-mono text-xs text-ink-min">
+      <p id={`${id}-hint`} className="mt-2 font-mono text-small text-ink-min">
         Names, bill numbers (HR 1), districts (TX-23), agencies (EPA), FR citations. Enter on an
         exact match goes straight there.
       </p>
@@ -252,9 +255,9 @@ export default function SearchCombobox({
             className={`flex min-h-11 cursor-pointer flex-col justify-center gap-0.5 border-b border-white/15 px-3 py-2 last:border-b-0 ${i === active ? OPTION_ACTIVE : OPTION}`}
           >
             <span className="flex items-baseline justify-between gap-3">
-              <span className="min-w-0 font-sans text-sm font-semibold">{item.label}</span>
+              <span className="min-w-0 font-sans text-small font-semibold">{item.label}</span>
               <span
-                className={`shrink-0 font-mono text-[11px] ${
+                className={`shrink-0 font-mono text-small ${
                   i === active ? "text-surface-base" : "text-ink-lo"
                 }`}
               >
@@ -263,7 +266,7 @@ export default function SearchCombobox({
             </span>
             {item.context && (
               <span
-                className={`font-mono text-xs ${i === active ? "text-surface-base" : "text-ink-min"}`}
+                className={`font-mono text-small ${i === active ? "text-surface-base" : "text-ink-min"}`}
               >
                 {item.context}
               </span>

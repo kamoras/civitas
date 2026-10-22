@@ -4,6 +4,7 @@ import { INLINE_LINK } from "@/lib/controlStyles";
 import { countdownText } from "@/components/elections/VoterCalendar";
 import RecordFigure from "@/components/shared/RecordFigure";
 import type { CountdownFigure } from "@/types/figure";
+import { TYPE } from "@/lib/typeStyles";
 
 /** The verb on each step's button. No two share a label (WCAG 2.4.6). */
 export const STEP_LABEL: Record<VoteTask, string> = {
@@ -77,15 +78,15 @@ function Step({ step, n }: { step: VoteStep; n: number }) {
   const where = destination(step);
   const body = (
     <>
-      <span aria-hidden="true" className="w-6 shrink-0 font-mono text-lg text-ink-lo">
+      <span aria-hidden="true" className="w-6 shrink-0 font-mono text-dek text-ink-lo">
         {n}
       </span>
       <span className="min-w-0 flex-1 wrap-anywhere">
-        <span className="block text-[17px] font-semibold leading-snug text-ink-hi">{label}</span>
-        {where && <span className="block text-sm text-ink-lo">{where}</span>}
+        <span className="block text-body font-semibold leading-snug text-ink-hi">{label}</span>
+        {where && <span className="block text-small text-ink-lo">{where}</span>}
         {deadline && (
           <span
-            className={`block text-sm font-semibold ${closed ? "text-ink-lo" : "text-signal-amber"}`}
+            className={`block text-small font-semibold ${closed ? "text-ink-lo" : "text-signal-amber"}`}
           >
             {deadline}
           </span>
@@ -116,7 +117,7 @@ function Step({ step, n }: { step: VoteStep; n: number }) {
       )}
       <Unconfirmed
         step={step}
-        className="border-t border-white/[0.09] px-4 py-2 pl-[52px] text-xs text-ink-lo"
+        className="border-t border-white/[0.09] px-4 py-2 pl-[52px] text-small text-ink-lo"
       />
     </li>
   );
@@ -158,7 +159,7 @@ export function VoteStepsLead({
       href={hasSteps ? "#vote-steps" : "#voter-deadlines"}
       // Inline, in the sentence: as an inline-flex box it would not wrap
       // at 200% text on a 320px screen.
-      className="text-sm font-semibold text-ink-hi underline underline-offset-2 [overflow-wrap:anywhere] hover:text-phos"
+      className="text-small font-semibold text-ink-hi underline underline-offset-2 [overflow-wrap:anywhere] hover:text-phos"
     >
       {hasSteps ? "Your vote, step by step, and every deadline" : "Every voter deadline"}
       <span aria-hidden="true">&nbsp;↓</span>
@@ -178,11 +179,11 @@ export function VoteStepsLead({
           >
             <span className="min-w-0 flex-1 wrap-anywhere">
               <span className="block font-semibold">{stepLabel(ballotStep)}</span>
-              <span className="block text-sm">Opens {destination(ballotStep)}</span>
+              <span className="block text-small">Opens {destination(ballotStep)}</span>
             </span>
             <span aria-hidden="true">↗</span>
           </a>
-          <Unconfirmed step={ballotStep} className="mt-1 text-xs text-ink-lo" />
+          <Unconfirmed step={ballotStep} className="mt-1 text-small text-ink-lo" />
         </div>
       )}
       {/* The next deadline in one line (#1160's form), with the days left
@@ -199,7 +200,7 @@ export function VoteStepsLead({
             <RecordFigure f={figure} size="box" />
           </div>
         )}
-        <p className="min-w-0 text-sm">
+        <p className="min-w-0 text-small">
           {next && (
             <span className="text-ink-hi">
               Next deadline: {next.sentence}
@@ -230,13 +231,10 @@ export default function VoteSteps({ steps, stateName }: { steps: VoteStep[]; sta
   if (steps.length === 0) return null;
   return (
     <section id="vote-steps" aria-labelledby="vote-steps-heading" className="mb-6 min-w-0">
-      <h2
-        id="vote-steps-heading"
-        className="border-t-[3px] border-ink-hi pt-2 font-display text-xl font-semibold text-ink-hi"
-      >
+      <h2 id="vote-steps-heading" className={`${TYPE.section} border-t-[3px] border-ink-hi pt-2`}>
         Your vote, step by step
       </h2>
-      <p className="mb-3 mt-1 text-sm text-ink-lo">
+      <p className="mb-3 mt-1 text-small text-ink-lo">
         Each button opens an official site for {stateName}, named under it.
       </p>
       <ol className="grid grid-cols-1 gap-3 lg:grid-cols-2">
@@ -244,7 +242,7 @@ export default function VoteSteps({ steps, stateName }: { steps: VoteStep[]; sta
           <Step key={s.task} step={s} n={i + 1} />
         ))}
       </ol>
-      <p className="mt-3 text-sm text-ink-lo">
+      <p className="mt-3 text-small text-ink-lo">
         This page is research, not your official ballot. Your sample ballot also lists county, city
         and local questions this page leaves out.
       </p>

@@ -6,7 +6,9 @@ import type { NominationStatus, NominationSummary } from "@/types/nomination";
 
 export function StatusBadge({ status }: { status: NominationStatus }) {
   return (
-    <span className={`inline-block border px-2 py-0.5 font-mono text-xs ${STATUS_STYLE[status]}`}>
+    <span
+      className={`inline-block border px-2 py-0.5 font-mono text-small ${STATUS_STYLE[status]}`}
+    >
       {STATUS_LABEL[status]}
     </span>
   );
@@ -20,14 +22,14 @@ export default function NominationRow({ n }: { n: NominationSummary }) {
     <li className="border-b border-white/[0.09] py-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <StatusBadge status={n.status} />
-        <span className="font-mono text-xs text-ink-min">
+        <span className="font-mono text-small text-ink-min">
           {n.citation} · <AgencyLink name={n.organization} slug={n.agencySlug} />
           {n.daysToConfirm != null && ` · confirmed in ${n.daysToConfirm} days`}
         </span>
       </div>
       <Link
         href={nominationHref(n)}
-        className="mt-1 block text-base text-ink underline decoration-white/20 underline-offset-4 hover:text-phos"
+        className="mt-1 block text-body text-ink underline decoration-white/20 underline-offset-4 hover:text-phos"
       >
         {isList
           ? `${n.nomineeCount.toLocaleString("en-US")} nominees: ${[n.positionTitle, n.organization].filter(Boolean).join(", ")}`
@@ -36,7 +38,7 @@ export default function NominationRow({ n }: { n: NominationSummary }) {
             [n.nominees[0], n.positionTitle || n.organization].filter(Boolean).join(": ") ||
             `Nomination ${n.citation}`}
       </Link>
-      <p className="mt-1 text-sm text-ink-lo">
+      <p className="mt-1 text-small text-ink-lo">
         {n.latestAction.date && (
           <span className="font-mono">{shortDate(n.latestAction.date)}: </span>
         )}

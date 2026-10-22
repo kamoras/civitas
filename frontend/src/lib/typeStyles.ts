@@ -18,12 +18,12 @@
  *   title      serif   600     36 / 28           the page's h1
  *   section    serif   600     24 / 22           h2, a part of the page
  *   boxTitle   serif   600     18 / 17           h3, a box or a list item's title
- *   kicker     sans    600     14                a short label over a title
+ *   kicker     sans    600     14                a short label over a title (kickerToned: in a tone)
  *   dek        sans    400     18 / 17           one line under the title: what the page is for
  *   body       sans    400     16                running text
  *   small      sans    400     14                source lines, captions, units, dates
  *   label      sans    600     14                table headers, chips, controls
- *   figure     serif   600     30 / 26           a headline number
+ *   figure     serif   600     30 / 26           a headline number (colour from its context)
  *   figureLg   serif   600     56 / 40           the lead's number
  *   id         DM Mono 400     0.92em            a record number, in its context
  *   quote      sans    400     16                a source's own words, ruled, in curly quotes
@@ -37,12 +37,14 @@ export const TYPE = {
   section: "font-display text-section font-semibold text-ink-hi",
   boxTitle: "font-display text-box font-semibold text-ink-hi",
   kicker: "font-sans text-small font-semibold text-ink-lo",
+  /** A kicker in a tone (RecordBox TONE) or another set colour. */
+  kickerToned: "font-sans text-small font-semibold",
   dek: "font-sans text-dek text-ink",
   body: "font-sans text-body text-ink",
   small: "font-sans text-small text-ink-min",
   label: "font-sans text-small font-semibold text-ink-hi",
-  figure: "font-display text-figure font-semibold tabular-nums text-ink-hi",
-  figureLg: "font-display text-figure-lg font-semibold tabular-nums text-ink-hi",
+  figure: "font-display text-figure font-semibold tabular-nums",
+  figureLg: "font-display text-figure-lg font-semibold tabular-nums",
   id: "font-id text-[0.92em] font-normal",
   quote: "border-l-3 border-ink-min/60 pl-3 font-sans text-body text-ink",
 } as const;
@@ -64,4 +66,4 @@ export type TypeRole = keyof typeof TYPE;
  *
  * `noAllCaps.test.ts` fails on an `uppercase` class anywhere else.
  */
-export const EYEBROW = "font-mono text-xs text-ink-min";
+export const EYEBROW = TYPE.kicker;

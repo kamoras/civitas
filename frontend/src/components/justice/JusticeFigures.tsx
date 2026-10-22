@@ -107,17 +107,17 @@ function Row({ m, justiceId }: { m: JusticeMeasure; justiceId: string }) {
       className="grid grid-cols-1 gap-x-6 gap-y-2 border-t border-white/25 px-4 py-4 [h3+&]:border-t-0 sm:px-6 md:grid-cols-[10rem_minmax(0,1fr)]"
     >
       <div>
-        <div className={TYPE.section}>{m.label}</div>
+        <div className={TYPE.kicker}>{m.label}</div>
         <BigFigure
           shown={m.shown}
-          className="text-[28px] font-semibold leading-tight text-ink-hi"
+          className="text-figure font-semibold leading-tight text-ink-hi"
         />
       </div>
       <div className="min-w-0">
-        <p className="mb-1 text-sm text-ink">{m.why}</p>
+        <p className="mb-1 text-small text-ink">{m.why}</p>
         <Strip m={m} justiceId={justiceId} />
       </div>
-      <figcaption id={`figure-${m.key}`} className="text-sm text-ink md:col-span-2">
+      <figcaption id={`figure-${m.key}`} className="text-small text-ink md:col-span-2">
         <span className="sr-only">{m.label}: </span>
         {m.sentence}{" "}
         <a href={m.source.url} className="text-phos underline underline-offset-2">
@@ -184,7 +184,7 @@ export default function JusticeFigures({
         >
           {name} beside the other justices
         </h2>
-        <p className="mt-1 text-sm text-ink-lo">
+        <p className="mt-1 text-small text-ink-lo">
           Each dot is one of the {figures.peers} sitting justices
           {figures.terms.length ? `, over ${termsPhrase(figures.terms)}` : ""}.
         </p>
@@ -194,7 +194,7 @@ export default function JusticeFigures({
           <div key={m.key}>
             {m.question !== measures[i - 1]?.question && (
               <h3
-                className={`${TYPE.section} px-4 pt-4 sm:px-6 ${i ? "border-t-2 border-ink-hi/60" : ""}`}
+                className={`${TYPE.boxTitle} px-4 pt-4 sm:px-6 ${i ? "border-t-2 border-ink-hi/60" : ""}`}
               >
                 {m.question}
               </h3>
@@ -204,7 +204,7 @@ export default function JusticeFigures({
         ))}
       </div>
       <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-        <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-lo" aria-hidden="true">
+        <p className="flex flex-wrap gap-x-4 gap-y-1 text-small text-ink-lo" aria-hidden="true">
           <span>
             <Dot size={8} fill="var(--chart-muted)" className="mr-1 inline-block" />
             another justice

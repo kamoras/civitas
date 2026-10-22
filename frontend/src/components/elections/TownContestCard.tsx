@@ -1,5 +1,6 @@
 import { safeHref } from "@/lib/formatting";
 import type { TownBallotItem } from "@/types/election";
+import { TYPE } from "@/lib/typeStyles";
 
 /** One local contest or measure from a town-level lookup.
  *
@@ -13,13 +14,13 @@ export default function TownContestCard({ item }: { item: TownBallotItem }) {
   if (item.kind === "contest") {
     return (
       <article className="border border-white/[0.09] bg-surface p-4">
-        <h3 className="font-display font-semibold text-sm text-ink-hi mb-2">{item.office}</h3>
+        <h3 className={`${TYPE.boxTitle} mb-2`}>{item.office}</h3>
         {item.candidates.length > 0 ? (
           <ul className="space-y-1">
             {item.candidates.map((c, i) => {
               const href = safeHref(c.candidateUrl);
               return (
-                <li key={i} className="text-xs text-ink flex items-center gap-2">
+                <li key={i} className="text-small text-ink flex items-center gap-2">
                   <span>{c.name}</span>
                   {c.party && <span className="text-ink-min">({c.party})</span>}
                   {href && (
@@ -28,7 +29,7 @@ export default function TownContestCard({ item }: { item: TownBallotItem }) {
                       target="_blank"
                       rel="noopener noreferrer"
                       aria-label={`${c.name}'s campaign site (opens in new tab)`}
-                      className="text-signal-cyan hover:text-phos text-[10px]"
+                      className="text-signal-cyan hover:text-phos text-small"
                     >
                       Site ↗
                     </a>
@@ -38,7 +39,7 @@ export default function TownContestCard({ item }: { item: TownBallotItem }) {
             })}
           </ul>
         ) : (
-          <p className="text-xs text-ink-min">No candidates listed.</p>
+          <p className="text-small text-ink-min">No candidates listed.</p>
         )}
       </article>
     );
@@ -47,11 +48,11 @@ export default function TownContestCard({ item }: { item: TownBallotItem }) {
   const measureHref = safeHref(item.url);
   return (
     <article className="border border-white/[0.09] bg-surface p-4">
-      <h3 className="font-display font-semibold text-sm text-ink-hi mb-2">{item.title}</h3>
-      {item.subtitle && <p className="text-sm text-ink mb-3">{item.subtitle}</p>}
-      {item.text && <p className="text-xs text-ink whitespace-pre-line mb-3">{item.text}</p>}
+      <h3 className={`${TYPE.boxTitle} mb-2`}>{item.title}</h3>
+      {item.subtitle && <p className="text-small text-ink mb-3">{item.subtitle}</p>}
+      {item.text && <p className="text-small text-ink whitespace-pre-line mb-3">{item.text}</p>}
       {item.passageThreshold && (
-        <p className="text-[10px] text-ink-min mb-2">Passage threshold: {item.passageThreshold}</p>
+        <p className="text-small text-ink-min mb-2">Passage threshold: {item.passageThreshold}</p>
       )}
       {measureHref && (
         <a
@@ -59,7 +60,7 @@ export default function TownContestCard({ item }: { item: TownBallotItem }) {
           target="_blank"
           rel="noopener noreferrer"
           aria-label={`Read the full text of ${item.title} at the source (opens in new tab)`}
-          className="text-[10px] font-mono text-signal-cyan hover:text-phos"
+          className="text-small font-mono text-signal-cyan hover:text-phos"
         >
           Full text at source ↗
         </a>

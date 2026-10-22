@@ -42,7 +42,7 @@ export function UptimeTracker({
   return (
     <div className="panel">
       <TerminalTitlebar title="Uptime">
-        <span className="ml-auto text-ink-lo text-xs font-mono mr-2">
+        <span className="ml-auto text-ink-lo text-small font-mono mr-2">
           live
           <span className="inline-block w-1.5 h-1.5 bg-phos ml-1 animate-pulse" />
         </span>
@@ -54,11 +54,11 @@ export function UptimeTracker({
               there), so this is its start: the process whose restart ends a
               running pipeline, not the API workers serving pages. */}
           <div className="sm:col-span-2">
-            <div className="text-xs font-mono text-ink-lo mb-2">Pipeline process uptime</div>
-            <div className="font-mono text-2xl sm:text-3xl text-signal-cyan tabular-nums">
+            <div className="text-small font-mono text-ink-lo mb-2">Pipeline process uptime</div>
+            <div className="font-mono text-section text-signal-cyan tabular-nums">
               {appUptimeSec != null ? tickingUptime(appUptimeSec) : "—"}
             </div>
-            <div className="text-xs font-mono text-ink-min mt-1.5">
+            <div className="text-small font-mono text-ink-min mt-1.5">
               {uptime?.processStartedAt
                 ? `started ${formatTime(uptime.processStartedAt)}`
                 : "unknown start time"}
@@ -68,19 +68,19 @@ export function UptimeTracker({
           {/* Sidebar stats */}
           <div className="space-y-3">
             <div>
-              <div className="text-xs font-mono text-ink-lo mb-0.5">Host uptime</div>
-              <div className="font-mono text-sm text-ink-hi tabular-nums">
+              <div className="text-small font-mono text-ink-lo mb-0.5">Host uptime</div>
+              <div className="font-mono text-small text-ink-hi tabular-nums">
                 {hostUptime != null ? tickingUptime(hostUptime) : "—"}
               </div>
             </div>
             <div>
-              <div className="text-xs font-mono text-ink-lo mb-0.5">Service age</div>
-              <div className="font-mono text-sm text-ink-hi">
+              <div className="text-small font-mono text-ink-lo mb-0.5">Service age</div>
+              <div className="font-mono text-small text-ink-hi">
                 {totalServiceDays != null
                   ? `${totalServiceDays} day${totalServiceDays !== 1 ? "s" : ""}`
                   : "—"}
               </div>
-              <div className="text-xs font-mono text-ink-min mt-0.5">
+              <div className="text-small font-mono text-ink-min mt-0.5">
                 {uptime?.firstPipelineRun ? `since ${formatTime(uptime.firstPipelineRun)}` : ""}
               </div>
             </div>
@@ -91,8 +91,8 @@ export function UptimeTracker({
         {appUptimeSec != null && (
           <div className="mt-4 pt-3 border-t border-white/[0.07]">
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-xs font-mono text-ink-min">Session health</span>
-              <span className="text-xs font-mono text-ink-lo tabular-nums">
+              <span className="text-small font-mono text-ink-min">Session health</span>
+              <span className="text-small font-mono text-ink-lo tabular-nums">
                 {appUptimeSec >= 86400
                   ? `${Math.floor(appUptimeSec / 86400)}d`
                   : appUptimeSec >= 3600
@@ -116,7 +116,7 @@ export function UptimeTracker({
                 }}
               />
             </div>
-            <div className="flex justify-between text-xs font-mono text-ink-min mt-0.5">
+            <div className="flex justify-between text-small font-mono text-ink-min mt-0.5">
               <span>0h</span>
               <span>6h</span>
               <span>12h</span>
@@ -158,8 +158,8 @@ function HostMeters({ stats, net }: { stats: HostStats; net: HostSample | undefi
     <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
       <div>
         <div className="flex items-center justify-between mb-1">
-          <span className="text-ink-lo text-xs font-mono">CPU</span>
-          <span className="text-ink-hi text-xs font-mono tabular-nums">
+          <span className="text-ink-lo text-small font-mono">CPU</span>
+          <span className="text-ink-hi text-small font-mono tabular-nums">
             {cpuPct != null ? formatPct(cpuPct) : "—"}
           </span>
         </div>
@@ -171,7 +171,7 @@ function HostMeters({ stats, net }: { stats: HostStats; net: HostSample | undefi
         {/* Load average is a different quantity (runnable tasks, smoothed
             over 1/5/15 min), so it's shown as the number it is — not as a
             percentage, where an idle multi-core host rounds to 0%. */}
-        <div className="text-xs text-ink-min font-mono mt-1 tabular-nums">
+        <div className="text-small text-ink-min font-mono mt-1 tabular-nums">
           {stats.loadAvg
             ? `load ${stats.loadAvg[0].toFixed(2)} · ${stats.loadAvg[1].toFixed(2)} · ${stats.loadAvg[2].toFixed(2)} (${stats.cpuCount} cores)`
             : ""}
@@ -179,22 +179,24 @@ function HostMeters({ stats, net }: { stats: HostStats; net: HostSample | undefi
       </div>
       <div>
         <div className="flex items-center justify-between mb-1">
-          <span className="text-ink-lo text-xs font-mono">Memory</span>
-          <span className="text-ink-hi text-xs font-mono tabular-nums">{stats.memUsedPct}%</span>
+          <span className="text-ink-lo text-small font-mono">Memory</span>
+          <span className="text-ink-hi text-small font-mono tabular-nums">{stats.memUsedPct}%</span>
         </div>
         <UsageBar
           pct={stats.memUsedPct}
           ariaLabel="Memory usage"
           valueText={`${stats.memUsedPct}%`}
         />
-        <div className="text-xs text-ink-min font-mono mt-1 tabular-nums">
+        <div className="text-small text-ink-min font-mono mt-1 tabular-nums">
           {formatBytes(stats.memUsedBytes)} / {formatBytes(stats.memTotalBytes)}
         </div>
       </div>
       <div>
         <div className="flex items-center justify-between mb-1">
-          <span className="text-ink-lo text-xs font-mono">Disk</span>
-          <span className="text-ink-hi text-xs font-mono tabular-nums">{stats.diskUsedPct}%</span>
+          <span className="text-ink-lo text-small font-mono">Disk</span>
+          <span className="text-ink-hi text-small font-mono tabular-nums">
+            {stats.diskUsedPct}%
+          </span>
         </div>
         <UsageBar
           pct={stats.diskUsedPct}
@@ -203,14 +205,14 @@ function HostMeters({ stats, net }: { stats: HostStats; net: HostSample | undefi
           ariaLabel="Disk usage"
           valueText={`${stats.diskUsedPct}%`}
         />
-        <div className="text-xs text-ink-min font-mono mt-1 tabular-nums">
+        <div className="text-small text-ink-min font-mono mt-1 tabular-nums">
           {formatBytes(stats.diskFreeBytes)} free
         </div>
       </div>
       <div>
         <div className="flex items-center justify-between mb-1">
-          <span className="text-ink-lo text-xs font-mono">CPU temp</span>
-          <span className={`text-xs font-mono tabular-nums ${tempColor}`}>
+          <span className="text-ink-lo text-small font-mono">CPU temp</span>
+          <span className={`text-small font-mono tabular-nums ${tempColor}`}>
             {stats.cpuTempC != null ? `${stats.cpuTempC}°C` : "—"}
           </span>
         </div>
@@ -223,7 +225,7 @@ function HostMeters({ stats, net }: { stats: HostStats; net: HostSample | undefi
             valueText={`${stats.cpuTempC}°C`}
           />
         )}
-        <div className="text-xs text-ink-min font-mono mt-1">
+        <div className="text-small text-ink-min font-mono mt-1">
           uptime {formatUptime(stats.uptimeSeconds)}
         </div>
       </div>
@@ -233,16 +235,16 @@ function HostMeters({ stats, net }: { stats: HostStats; net: HostSample | undefi
               interfaces plus the rate the API containers record
               (net_stats.py) — a container sees only its own. The byte
               totals below are the pipeline container's alone. */}
-          <span className="text-ink-lo text-xs font-mono">Network</span>
-          <span className="text-ink-hi text-xs font-mono tabular-nums">
+          <span className="text-ink-lo text-small font-mono">Network</span>
+          <span className="text-ink-hi text-small font-mono tabular-nums">
             {rx != null && tx != null ? formatRate(rx + tx) : "—"}
           </span>
         </div>
-        <div className="text-xs text-ink-lo font-mono tabular-nums space-y-0.5">
+        <div className="text-small text-ink-lo font-mono tabular-nums space-y-0.5">
           <div>▼ RX {rx != null ? formatRate(rx) : "—"}</div>
           <div>▲ TX {tx != null ? formatRate(tx) : "—"}</div>
         </div>
-        <div className="text-xs text-ink-min font-mono mt-1 tabular-nums">
+        <div className="text-small text-ink-min font-mono mt-1 tabular-nums">
           {stats.netRxBytes != null
             ? `pipeline ↓${formatBytes(stats.netRxBytes)} ↑${formatBytes(stats.netTxBytes ?? 0)}`
             : ""}
@@ -256,7 +258,7 @@ function HostMeters({ stats, net }: { stats: HostStats; net: HostSample | undefi
 export function ServiceHealth({ d }: { d: AdminDashboard | null }) {
   if (!d) return <NotLoaded />;
   return (
-    <div className="space-y-2 text-sm font-mono">
+    <div className="space-y-2 text-small font-mono">
       <div className="flex justify-between">
         <span className="text-ink-lo">Database</span>
         <span className="flex items-center gap-2">
@@ -311,9 +313,9 @@ export function SystemDashboard({
         {stats ? (
           <HostMeters stats={stats} net={latest} />
         ) : (
-          <p className="text-xs font-mono text-ink-min">Waiting for the first reading…</p>
+          <p className="text-small font-mono text-ink-min">Waiting for the first reading…</p>
         )}
-        <p className="mt-4 text-xs font-mono text-ink-min">
+        <p className="mt-4 text-small font-mono text-ink-min">
           The charts below cover the time since this dashboard was opened (one reading every 5s,
           last 10 minutes). Host readings aren&apos;t stored server-side, so a reload starts them
           again.

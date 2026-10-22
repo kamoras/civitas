@@ -17,6 +17,7 @@ import Link from "next/link";
 import { shortDate, voteTitle } from "@/components/scorecard/format";
 import Pagination from "@/components/shared/Pagination";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
+import { TYPE } from "@/lib/typeStyles";
 
 const VOTES_PER_PAGE = 15;
 // The search box asks the server once typing pauses this long.
@@ -41,7 +42,7 @@ function VoteBadge({ vote }: { vote: string }) {
       : vote === "Nay"
         ? "text-signal-red bg-signal-red/10 border-signal-red/40"
         : "text-signal-amber bg-signal-amber/10 border-signal-amber/40";
-  return <span className={`font-mono text-xs px-2 py-1 border ${styles}`}>{asLabel(vote)}</span>;
+  return <span className={`font-mono text-small px-2 py-1 border ${styles}`}>{asLabel(vote)}</span>;
 }
 
 /** One vote, on one line: what was voted on (linked to the bill's page,
@@ -71,7 +72,7 @@ export function VoteRow({
         {href ? (
           <Link
             href={href}
-            className="line-clamp-2 text-sm text-ink underline decoration-white/20 underline-offset-2 hover:text-phos"
+            className="line-clamp-2 text-small text-ink underline decoration-white/20 underline-offset-2 hover:text-phos"
             title={rc?.title || vote.billName}
           >
             {title}
@@ -80,10 +81,10 @@ export function VoteRow({
           // Not clamped: with no bill page to open, this is the only place
           // to read the title. A nomination's names the office, which two
           // lines cut off on a phone.
-          <span className="block text-sm text-ink break-words">{title}</span>
+          <span className="block text-small text-ink break-words">{title}</span>
         )}
-        {nominationLine && <p className="mt-0.5 text-xs text-ink-lo">{nominationLine}</p>}
-        <p className="mt-0.5 text-xs text-ink-min">
+        {nominationLine && <p className="mt-0.5 text-small text-ink-lo">{nominationLine}</p>}
+        <p className="mt-0.5 text-small text-ink-min">
           {rc ? (
             // Every roll call has a page with each member's position,
             // nominations and procedural votes included.
@@ -102,7 +103,7 @@ export function VoteRow({
           left a title 121px at 320px, which split or clipped long words. */}
       <div className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
         {vote.votedWithParty === false && (
-          <span className="border border-signal-magenta/40 bg-signal-magenta/10 px-1.5 py-0.5 font-mono text-xs text-signal-magenta">
+          <span className="border border-signal-magenta/40 bg-signal-magenta/10 px-1.5 py-0.5 font-mono text-small text-signal-magenta">
             Against party
           </span>
         )}
@@ -127,7 +128,7 @@ function VoteFilter({
     <button
       onClick={onClick}
       aria-pressed={active}
-      className={`inline-flex min-h-6 min-w-6 items-center justify-center text-xs px-2 py-1 border font-mono transition-all ${
+      className={`inline-flex min-h-6 min-w-6 items-center justify-center text-small px-2 py-1 border font-mono transition-all ${
         active
           ? "text-ink-hi border-white/15 bg-white/[0.03]"
           : "text-ink-min border-white/[0.07] hover:border-white/15"
@@ -198,7 +199,7 @@ function PaginatedVoteList({
   if (!data && loading) {
     return (
       <div className="panel p-4 text-center" role="status" aria-live="polite">
-        <span className="text-ink-lo text-sm pulse-subtle">Loading votes...</span>
+        <span className="text-ink-lo text-small pulse-subtle">Loading votes...</span>
       </div>
     );
   }
@@ -206,7 +207,7 @@ function PaginatedVoteList({
   if (error && !data) {
     return (
       <div className="panel p-4 text-center" role="alert">
-        <span className="text-signal-red text-sm">{error}</span>
+        <span className="text-signal-red text-small">{error}</span>
       </div>
     );
   }
@@ -217,7 +218,7 @@ function PaginatedVoteList({
 
   if (narrowed && counts.all === 0) {
     return (
-      <p className={`text-sm text-ink-lo ${loading ? "opacity-60" : ""}`} role="status">
+      <p className={`text-small text-ink-lo ${loading ? "opacity-60" : ""}`} role="status">
         {q
           ? "No vote on record matches this search. Try a bill number (such as H.R. 1) or a word from its title."
           : PERIODS.find((x) => x.key === period)?.empty}
@@ -230,7 +231,7 @@ function PaginatedVoteList({
       {/* Not naming the query: while the next one loads, these counts are
           still the last one's. */}
       {narrowed && (
-        <p className="mb-2 text-xs text-ink-lo" role="status">
+        <p className="mb-2 text-small text-ink-lo" role="status">
           {counts.all.toLocaleString("en-US")} {counts.all === 1 ? "vote" : "votes"}
           {q ? (counts.all === 1 ? " matches this search" : " match this search") : ""}
         </p>
@@ -263,7 +264,7 @@ function PaginatedVoteList({
               onClick={() => handleFilterChange("against-party")}
             />
           )}
-          <span className="text-xs text-ink-min ml-auto">
+          <span className="text-small text-ink-min ml-auto">
             {data.total} votes &middot; page {data.page}/{data.totalPages}
           </span>
         </div>
@@ -271,7 +272,7 @@ function PaginatedVoteList({
 
       {error && (
         // A failed filter or page change keeps the last votes that loaded.
-        <p className="text-signal-red text-sm mb-2" role="alert">
+        <p className="text-signal-red text-small mb-2" role="alert">
           {error}
         </p>
       )}
@@ -323,40 +324,36 @@ export default function VotingRecord({
   // other party only), so this panel and the column beside it agree.
 
   const statBoxes = (
-    <div className="grid grid-cols-3 gap-2 mb-2 text-center text-sm">
+    <div className="grid grid-cols-3 gap-2 mb-2 text-center text-small">
       <div className="panel px-2 py-3 sm:p-3">
-        <div className="text-xl font-display font-semibold text-ink-hi">
-          {totalVotes.toLocaleString("en-US")}
-        </div>
-        <div className="[&>span]:justify-center text-ink-min text-[11px] sm:text-xs">
+        <div className={TYPE.section}>{totalVotes.toLocaleString("en-US")}</div>
+        <div className="[&>span]:justify-center text-ink-min text-small">
           <MetricTooltip text="Roll-call votes listed below for this member: the chamber's latest votes and the key bills Civitas follows, from Congress.gov and Senate.gov. The party-line figures beside it cover every party-line vote of this Congress, not only these.">
             Total tracked
           </MetricTooltip>
         </div>
       </div>
       <div className="panel px-2 py-3 sm:p-3">
-        <div className="text-xl font-display font-semibold text-signal-cyan">
-          {Math.round(partyLoyaltyPct)}%
-        </div>
-        <div className="[&>span]:justify-center text-ink-min text-[11px] sm:text-xs">
+        <div className={`${TYPE.section} text-signal-cyan!`}>{Math.round(partyLoyaltyPct)}%</div>
+        <div className="[&>span]:justify-center text-ink-min text-small">
           <MetricTooltip text="The share of this Congress's party-line votes (at least 65% of one party voting yes and at most 35% of the other) on which the member voted with most of their own party. Each bill or nomination counts once, however many times it came to a vote, and a vote against the party from its own flank isn't counted against it: the same count the profile's breaks figure uses.">
             Party loyalty
           </MetricTooltip>
         </div>
-        <div className="text-xs text-ink-lo">
+        <div className="text-small text-ink-lo">
           with the party on {votedWithPartyCount.toLocaleString("en-US")}
         </div>
       </div>
       <div className="panel px-2 py-3 sm:p-3">
-        <div className="text-xl font-display font-semibold text-signal-amber">
+        <div className={`${TYPE.section} text-signal-amber!`}>
           {votedAgainstPartyCount.toLocaleString("en-US")}
         </div>
-        <div className="[&>span]:justify-center text-ink-min text-[11px] sm:text-xs">
+        <div className="[&>span]:justify-center text-ink-min text-small">
           <MetricTooltip text="Party-line votes this Congress on which the member sided with the other party, each bill or nomination once: the breaks figure the profile compares with peers. Breaks from the party's own flank are listed on the member page but not counted.">
             Broke party line
           </MetricTooltip>
         </div>
-        <div className="text-xs text-ink-lo">toward the other party</div>
+        <div className="text-small text-ink-lo">toward the other party</div>
       </div>
     </div>
   );
@@ -371,7 +368,7 @@ export default function VotingRecord({
       <div className="space-y-6 mt-4">
         {totalVotes > 0 && (
           <div role="group" aria-labelledby={periodId} className="flex flex-col gap-1">
-            <span id={periodId} className="font-mono text-xs text-ink-lo">
+            <span id={periodId} className="font-mono text-small text-ink-lo">
               When
             </span>
             <div className="flex flex-wrap gap-1.5">
@@ -381,7 +378,7 @@ export default function VotingRecord({
                   type="button"
                   onClick={() => setPeriod(key)}
                   aria-pressed={period === key}
-                  className={`min-h-[36px] border px-2.5 font-mono text-xs transition-all ${
+                  className={`min-h-[36px] border px-2.5 font-mono text-small transition-all ${
                     period === key
                       ? "border-white/15 bg-white/[0.03] text-ink-hi"
                       : "border-white/[0.07] text-ink-min hover:border-white/15"
@@ -395,7 +392,7 @@ export default function VotingRecord({
         )}
         {totalVotes > VOTES_PER_PAGE && (
           <div className="flex flex-col gap-1">
-            <label htmlFor={searchId} className="font-mono text-xs text-ink-lo">
+            <label htmlFor={searchId} className="font-mono text-small text-ink-lo">
               Search these votes
             </label>
             <input
@@ -404,7 +401,7 @@ export default function VotingRecord({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Bill number, title or question"
-              className="w-full max-w-md border border-white/15 bg-white/[0.03] px-3 py-2 font-mono text-sm text-ink-hi placeholder:text-ink-min focus:border-phos/40 focus:outline-none"
+              className="w-full max-w-md border border-white/15 bg-white/[0.03] px-3 py-2 font-mono text-small text-ink-hi placeholder:text-ink-min focus:border-phos/40 focus:outline-none"
             />
           </div>
         )}
@@ -419,7 +416,7 @@ export default function VotingRecord({
           />
         ) : (
           <>
-            <p className="text-xs text-ink-lo">
+            <p className="text-small text-ink-lo">
               Each vote links to its bill.{" "}
               <span className="font-mono text-signal-magenta">Against party</span> marks a vote with
               the other side on a roll call the parties split on, including votes against the party
@@ -427,7 +424,7 @@ export default function VotingRecord({
             </p>
             {keyVoteCount > 0 && (
               <div>
-                <div className="text-xs text-ink-lo mb-2 font-mono">
+                <div className="text-small text-ink-lo mb-2 font-mono">
                   Key votes: long-term summary
                 </div>
                 <PaginatedVoteList
@@ -441,7 +438,7 @@ export default function VotingRecord({
 
             {recentVoteCount > 0 && (
               <div>
-                <div className="text-xs text-ink-lo mb-2 font-mono">
+                <div className="text-small text-ink-lo mb-2 font-mono">
                   Recent votes ({recentVoteCount})
                 </div>
                 <PaginatedVoteList

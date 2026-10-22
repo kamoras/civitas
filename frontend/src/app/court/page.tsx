@@ -20,6 +20,7 @@ import OnThisPage from "@/components/shared/OnThisPage";
 import BoxGrid from "@/components/shared/BoxGrid";
 import RecordBox from "@/components/shared/RecordBox";
 import { onThisPage } from "@/lib/onThisPage";
+import { TYPE } from "@/lib/typeStyles";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 const PER_PAGE = 10;
@@ -107,20 +108,20 @@ export default async function CourtPage({ searchParams }: { searchParams: Promis
               </h2>
               {lead ? (
                 <div className="flex flex-col gap-x-6 gap-y-2 sm:flex-row sm:items-center">
-                  <p className="shrink-0 font-display text-6xl font-semibold leading-none tabular-nums text-ink-hi sm:text-7xl">
+                  <p className={`${TYPE.figureLg} shrink-0 tabular-nums text-ink-hi`}>
                     {lead.figure}
                   </p>
                   <div className="flex flex-col gap-1">
-                    <p className="max-w-prose text-xl font-semibold leading-snug text-ink-hi">
+                    <p className="max-w-prose text-section font-semibold leading-snug text-ink-hi">
                       {lead.headline}
                     </p>
-                    <p className="max-w-prose text-base leading-relaxed text-ink">{lead.detail}</p>
+                    <p className="max-w-prose text-body leading-relaxed text-ink">{lead.detail}</p>
                   </div>
                 </div>
               ) : (
-                <p className="text-base text-ink">No decided case is stored yet.</p>
+                <p className="text-body text-ink">No decided case is stored yet.</p>
               )}
-              <p role="status" className="font-mono text-sm text-ink-lo">
+              <p role="status" className="font-mono text-small text-ink-lo">
                 {currentTermLine(court)}
               </p>
               <div className="flex justify-end">
@@ -137,16 +138,14 @@ export default async function CourtPage({ searchParams }: { searchParams: Promis
               aria-labelledby="decisions-heading"
               className="flex flex-col gap-6 border border-white/25 bg-surface px-4 py-5 sm:px-6"
             >
-              <h2 id="decisions-heading" className="text-xl font-semibold text-ink-hi">
+              <h2 id="decisions-heading" className={TYPE.section}>
                 Decisions
               </h2>
               <DecisionLineups court={court} />
               <div className="flex flex-col gap-3">
-                <h3 className="text-lg font-semibold text-ink-hi">
-                  Latest decisions and who joined
-                </h3>
+                <h3 className={TYPE.boxTitle}>Latest decisions and who joined</h3>
                 <p
-                  className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-ink-lo"
+                  className="flex flex-wrap gap-x-4 gap-y-1 text-small text-ink-lo"
                   aria-hidden="true"
                 >
                   <span className="inline-flex items-center gap-1.5">

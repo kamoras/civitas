@@ -20,7 +20,7 @@ function Entry({ j }: { j: AppointedJustice }) {
       >
         {j.name}
       </span>
-      <span className="block text-sm text-ink-lo">
+      <span className="block text-small text-ink-lo">
         {j.seat} ·{" "}
         {j.isActive
           ? `on the Court since ${year(j.dateStart)}`
@@ -72,7 +72,7 @@ export default function JusticesAppointed({ presidentId }: { presidentId: string
       <h2 id="justices-appointed-heading" className={TYPE.section}>
         Justices appointed
       </h2>
-      <p className="mt-1 text-sm text-ink-lo">
+      <p className="mt-1 text-small text-ink-lo">
         {data.length} Supreme Court appointment{data.length === 1 ? "" : "s"}, from the Federal
         Judicial Center.
       </p>
@@ -83,7 +83,7 @@ export default function JusticesAppointed({ presidentId }: { presidentId: string
           </li>
         ))}
       </ul>
-      <p className="mt-3 text-sm">
+      <p className="mt-3 text-small">
         <Link href={COURT_HREF} className="text-phos underline underline-offset-2">
           The whole Court
         </Link>

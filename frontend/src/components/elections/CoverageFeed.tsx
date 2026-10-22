@@ -44,7 +44,7 @@ export default function CoverageFeed({ items }: { items: RaceCoverageItem[] }) {
 
   if (items.length === 0) {
     return (
-      <p className="font-mono text-base text-ink-min">No coverage ingested for this race yet.</p>
+      <p className="font-mono text-body text-ink-min">No coverage ingested for this race yet.</p>
     );
   }
 
@@ -71,7 +71,7 @@ export default function CoverageFeed({ items }: { items: RaceCoverageItem[] }) {
             {/* Docket line: when, what kind, from whom — the same shape the
                 homepage index uses, so an entry looks the same wherever it
                 appears. */}
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-xs">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-small">
               {timeLabel && (
                 <time
                   dateTime={item.publishedAt || undefined}
@@ -98,19 +98,19 @@ export default function CoverageFeed({ items }: { items: RaceCoverageItem[] }) {
               {isRecent && <span className="text-phos-mid">Last 24H</span>}
             </div>
 
-            <p className="mt-2 font-sans text-base leading-relaxed text-ink">{item.summary}</p>
+            <p className="mt-2 font-sans text-body leading-relaxed text-ink">{item.summary}</p>
 
             {href ? (
               <a
                 href={href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-1.5 inline-block border-b border-phos-mid/40 font-mono text-xs text-phos-mid transition-colors hover:text-phos"
+                className="mt-1.5 inline-block border-b border-phos-mid/40 font-mono text-small text-phos-mid transition-colors hover:text-phos"
               >
                 {item.title || "Source"} <span aria-hidden="true">↗</span>
               </a>
             ) : (
-              <span className="mt-1.5 inline-block font-mono text-xs text-ink-min">
+              <span className="mt-1.5 inline-block font-mono text-small text-ink-min">
                 {item.title || "Source"}
               </span>
             )}

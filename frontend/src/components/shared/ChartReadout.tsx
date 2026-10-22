@@ -297,7 +297,7 @@ export default function ChartReadout({
             top: (place?.b.top ?? 0) - 6,
             transform: `translate(-${share}%, -100%)`,
           };
-  const labelClass = `absolute z-20 block w-max max-w-[min(18rem,calc(100vw-2rem))] border border-ink-hi bg-surface px-2 py-1 text-left text-xs leading-snug text-ink ${
+  const labelClass = `absolute z-20 block w-max max-w-[min(18rem,calc(100vw-2rem))] border border-ink-hi bg-surface px-2 py-1 text-left text-small leading-snug text-ink ${
     labelAt === "top" ? "bottom-full" : ""
   }`;
   const body = m && (

@@ -5,6 +5,7 @@ import DeadlineRibbon from "@/components/elections/DeadlineRibbon";
 import RegisterLink from "@/components/elections/RegisterLink";
 import { INLINE_LINK } from "@/lib/controlStyles";
 import { onThisPage } from "@/lib/onThisPage";
+import { TYPE } from "@/lib/typeStyles";
 
 /** "6 days left", "last day", "in 6 days": the backend's countdown, worded
  *  for a deadline or for a window that hasn't opened. */
@@ -36,17 +37,17 @@ function Row({ d, register }: { d: VoterDeadline; register?: Calendar["register"
   return (
     <li className="border-t border-white/[0.09] py-2 first:border-t-0">
       <p className={closed ? "text-ink-lo" : "text-ink-hi"}>
-        {closed && <span className="mr-2 font-mono text-xs text-ink-min">Closed</span>}
+        {closed && <span className="mr-2 font-mono text-small text-ink-min">Closed</span>}
         {d.sentence}
-        {left && <span className="ml-2 font-mono text-xs text-phos">{left}</span>}
+        {left && <span className="ml-2 font-mono text-small text-phos">{left}</span>}
         {register && d.kind === "registration" && !closed && (
           <>
             {" "}
-            <RegisterLink link={register} showNote={false} className="ml-1 text-sm" />
+            <RegisterLink link={register} showNote={false} className="ml-1 text-small" />
           </>
         )}
       </p>
-      <p className="mt-0.5 text-xs text-ink-lo">
+      <p className="mt-0.5 text-small text-ink-lo">
         {d.rule}
         {d.adjustment && ` ${d.adjustment}`}{" "}
         {href ? (
@@ -86,9 +87,7 @@ function Registration({
   if (!line) {
     if (part === "rest") return null;
     return calendar.registrationSummary ? (
-      <p className="mt-1 font-display text-lg font-semibold text-ink-hi">
-        {calendar.registrationSummary}
-      </p>
+      <p className={`${TYPE.boxTitle} mt-1`}>{calendar.registrationSummary}</p>
     ) : null;
   }
   const left =
@@ -97,28 +96,28 @@ function Registration({
   const canRegister = line.status === "open" || line.status === "same_day";
   if (part === "rest")
     return line.sameDay ? (
-      <p className="mt-1 text-sm text-ink">After that: {line.sameDay}</p>
+      <p className="mt-1 text-small text-ink">After that: {line.sameDay}</p>
     ) : null;
   return (
     <div className="mt-1">
-      <p className="font-display text-xl font-semibold text-ink-hi">
+      <p className={TYPE.section}>
         {line.sentence}
-        {left && <span className="ml-2 font-mono text-sm text-phos">{left}</span>}
+        {left && <span className="ml-2 font-mono text-small text-phos">{left}</span>}
       </p>
       {line.sameDay && part === "all" && (
-        <p className="mt-0.5 text-sm text-ink">After that: {line.sameDay}</p>
+        <p className="mt-0.5 text-small text-ink">After that: {line.sameDay}</p>
       )}
       {link && canRegister && (
-        <p className="mt-1 text-sm">
+        <p className="mt-1 text-small">
           <RegisterLink
             link={link}
             label={line.status === "open" ? "Register to vote" : "How to register"}
-            className="font-mono text-sm"
+            className="font-mono text-small"
           />
         </p>
       )}
       {link && line.status === "open" && !link.statePage && (
-        <p className="mt-0.5 text-xs text-ink-lo">
+        <p className="mt-0.5 text-small text-ink-lo">
           vote.gov is the federal government&apos;s registration directory.
         </p>
       )}
@@ -153,7 +152,7 @@ export default function VoterCalendar({
   const { next } = calendar;
   const left = next ? countdownText(next) : null;
   const heading = (
-    <h2 id="voter-deadlines-heading" className="font-mono text-xs text-ink-min">
+    <h2 id="voter-deadlines-heading" className={TYPE.kicker}>
       Voter deadlines · {stateName}
     </h2>
   );
@@ -171,7 +170,7 @@ export default function VoterCalendar({
         className="mb-6 border border-white/15 bg-surface px-4 py-3"
       >
         {heading}
-        <p className="mt-1 text-base text-ink">
+        <p className="mt-1 text-body text-ink">
           {calendar.unread} Check your deadlines with your county board of elections, or use{" "}
           <a
             href={lookupHref}
@@ -188,7 +187,7 @@ export default function VoterCalendar({
     );
   }
   const items = (
-    <ul className="mt-2 text-sm">
+    <ul className="mt-2 text-small">
       {calendar.items.map((d) => (
         <Row
           key={`${d.kind}-${d.method}-${d.basis}-${d.date}`}
@@ -205,7 +204,7 @@ export default function VoterCalendar({
   const details = (list: boolean) => (
     <>
       {calendar.republished && (
-        <p className="mt-1 border-l-2 border-signal-amber/60 pl-2 text-sm text-ink">
+        <p className="mt-1 border-l-2 border-signal-amber/60 pl-2 text-small text-ink">
           {calendar.republished}
         </p>
       )}
@@ -220,18 +219,18 @@ export default function VoterCalendar({
         />
       )}
       {next && !isRegistration(next) && (
-        <p className="mt-1 text-base text-ink">
+        <p className="mt-1 text-body text-ink">
           Next deadline: {next.sentence}
-          {left && <span className="ml-2 font-mono text-sm text-phos">{left}</span>}
+          {left && <span className="ml-2 font-mono text-small text-phos">{left}</span>}
         </p>
       )}
       {!next && (
-        <p className="mt-1 text-base text-ink">Every deadline for this election has passed.</p>
+        <p className="mt-1 text-body text-ink">Every deadline for this election has passed.</p>
       )}
-      {calendar.note && <p className="mt-1 text-sm text-ink-lo">{calendar.note}</p>}
+      {calendar.note && <p className="mt-1 text-small text-ink-lo">{calendar.note}</p>}
       {list ? (
         <details className="group mt-2" open>
-          <summary className="cursor-pointer list-none font-mono text-xs text-signal-cyan hover:text-phos [&::-webkit-details-marker]:hidden">
+          <summary className="cursor-pointer list-none font-mono text-small text-signal-cyan hover:text-phos [&::-webkit-details-marker]:hidden">
             Every deadline, with its source{" "}
             <span aria-hidden="true" className="inline-block group-open:rotate-180">
               &#9662;
@@ -259,7 +258,7 @@ export default function VoterCalendar({
       <div className="lg:hidden" data-calendar="phone">
         <Registration calendar={calendar} showRegister={showRegister} part="lead" />
         <details className="group mt-1">
-          <summary className="inline-flex min-h-11 cursor-pointer list-none items-center font-mono text-xs text-signal-cyan hover:text-phos [&::-webkit-details-marker]:hidden">
+          <summary className="inline-flex min-h-11 cursor-pointer list-none items-center font-mono text-small text-signal-cyan hover:text-phos [&::-webkit-details-marker]:hidden">
             Every deadline, with its source{" "}
             <span aria-hidden="true" className="ml-1 inline-block group-open:rotate-180">
               &#9662;

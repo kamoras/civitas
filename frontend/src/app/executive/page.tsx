@@ -26,6 +26,7 @@ import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
 import type { OpenCommentItem } from "@/lib/api";
 import type { NominationList } from "@/types/nomination";
 import type { PoliticianProfile } from "@/types/politicians";
+import { TYPE } from "@/lib/typeStyles";
 
 export const metadata: Metadata = pageMetadata({ ...describeExecutive(), path: EXECUTIVE_HREF });
 
@@ -39,7 +40,7 @@ const AGENCIES_SHOWN = 5;
 const NOMINATIONS_SHOWN = 3;
 
 const LINK = "underline underline-offset-2 hover:text-phos";
-const MORE = "inline-flex min-h-11 items-center font-mono text-xs text-ink-lo hover:text-phos";
+const MORE = "inline-flex min-h-11 items-center font-mono text-small text-ink-lo hover:text-phos";
 
 /** One panel's data, or null when its source can't answer right now: the
  *  hub shows the other panels and says which one is missing, rather than
@@ -71,7 +72,7 @@ function Panel({
 }) {
   return (
     <section aria-labelledby={`${id}-heading`} className="border border-white/15 bg-surface p-4">
-      <h2 id={`${id}-heading`} className="font-display text-xl font-semibold text-ink-hi">
+      <h2 id={`${id}-heading`} className={TYPE.section}>
         {title}
       </h2>
       <div className="mt-3">{children}</div>
@@ -84,7 +85,9 @@ function Panel({
 
 function Unavailable({ what }: { what: string }) {
   return (
-    <p className="text-sm text-ink-lo">{what} can&apos;t be read right now. Try again shortly.</p>
+    <p className="text-small text-ink-lo">
+      {what} can&apos;t be read right now. Try again shortly.
+    </p>
   );
 }
 
@@ -150,10 +153,10 @@ export default async function ExecutivePage() {
                 {!presidents ? (
                   <Unavailable what="The presidents" />
                 ) : !president ? (
-                  <p className="text-sm text-ink-lo">No sitting president is on record yet.</p>
+                  <p className="text-small text-ink-lo">No sitting president is on record yet.</p>
                 ) : (
                   <>
-                    <p className="text-lg">
+                    <p className="text-dek">
                       <Link
                         href={`/politicians/${encodeURIComponent(president.id)}`}
                         className={LINK}
@@ -161,17 +164,15 @@ export default async function ExecutivePage() {
                         {president.name}
                       </Link>
                     </p>
-                    <p className="text-sm text-ink-lo">
+                    <p className="text-small text-ink-lo">
                       {ordinal(president.number)} president, in office since{" "}
                       {calendarDate(president.termStart)}
                     </p>
-                    <h3 className="mt-4 font-mono text-xs text-ink-min">
-                      Latest presidential documents
-                    </h3>
+                    <h3 className={`${TYPE.kicker} mt-4`}>Latest presidential documents</h3>
                     {actions === null ? (
                       <Unavailable what="The president's documents" />
                     ) : actions.length === 0 ? (
-                      <p className="text-sm text-ink-lo">
+                      <p className="text-small text-ink-lo">
                         None in the Federal Register for this term yet.
                       </p>
                     ) : (
@@ -181,10 +182,10 @@ export default async function ExecutivePage() {
                             key={d.id}
                             className="border-b border-white/[0.07] py-1.5 last:border-0"
                           >
-                            <Link href={exploreHref(d)} className={`text-sm ${LINK}`}>
+                            <Link href={exploreHref(d)} className={`text-small ${LINK}`}>
                               {d.title}
                             </Link>
-                            <span className="block font-mono text-xs text-ink-min">
+                            <span className="block font-mono text-small text-ink-min">
                               {d.docType} · {calendarDate(d.date)}
                             </span>
                           </li>
@@ -206,17 +207,17 @@ export default async function ExecutivePage() {
                 {!comments ? (
                   <Unavailable what="The comment periods" />
                 ) : comments.length === 0 ? (
-                  <p className="text-sm text-ink-lo">
+                  <p className="text-small text-ink-lo">
                     No Federal Register document takes public comments today.
                   </p>
                 ) : (
                   <ul>
                     {comments.slice(0, COMMENTS_SHOWN).map((c) => (
                       <li key={c.id} className="border-b border-white/[0.07] py-1.5 last:border-0">
-                        <Link href={exploreHref(c)} className={`text-sm ${LINK}`}>
+                        <Link href={exploreHref(c)} className={`text-small ${LINK}`}>
                           {c.title}
                         </Link>
-                        <span className="block font-mono text-xs text-ink-min">
+                        <span className="block font-mono text-small text-ink-min">
                           {c.agencyName ? `${c.agencyName} · ` : ""}comments close{" "}
                           {calendarDate(c.commentsCloseOn)}
                         </span>
@@ -234,12 +235,12 @@ export default async function ExecutivePage() {
                 {!agencies ? (
                   <Unavailable what="The agency budgets" />
                 ) : !budgetRows?.length ? (
-                  <p className="text-sm text-ink-lo">
+                  <p className="text-small text-ink-lo">
                     USAspending.gov&apos;s budgets haven&apos;t been read yet.
                   </p>
                 ) : (
                   <>
-                    <p className="text-sm text-ink-lo">
+                    <p className="text-small text-ink-lo">
                       Budgetary resources, fiscal year {agencies.budget!.fiscalYear}:
                     </p>
                     <BudgetBars rows={budgetRows} />
@@ -258,12 +259,12 @@ export default async function ExecutivePage() {
                 {!nominations ? (
                   <Unavailable what="The nominations" />
                 ) : nominations.counts.pending === 0 ? (
-                  <p className="text-sm text-ink-lo">
+                  <p className="text-small text-ink-lo">
                     No nomination is pending in the Senate this Congress.
                   </p>
                 ) : (
                   <>
-                    <p className="text-sm text-ink-lo">
+                    <p className="text-small text-ink-lo">
                       {nominations.counts.pending}{" "}
                       {nominations.counts.pending === 1 ? "nomination is" : "nominations are"}{" "}
                       pending in the Senate. The latest:
@@ -274,10 +275,10 @@ export default async function ExecutivePage() {
                           key={n.citation}
                           className="border-b border-white/[0.07] py-1.5 last:border-0"
                         >
-                          <Link href={nominationHref(n)} className={`text-sm ${LINK}`}>
+                          <Link href={nominationHref(n)} className={`text-small ${LINK}`}>
                             {n.nominees.join(", ") || n.citation}
                           </Link>
-                          <span className="block font-mono text-xs text-ink-min">
+                          <span className="block font-mono text-small text-ink-min">
                             {[n.positionTitle, n.organization].filter(Boolean).join(", ")}
                             {" · "}received {calendarDate(n.receivedDate)}
                           </span>

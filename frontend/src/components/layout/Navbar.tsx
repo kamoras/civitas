@@ -48,8 +48,8 @@ const ACCENT: SectionKey = "action";
  * against `px-2 py-0.5` against `self-start px-2 py-0.5` — for no reason
  * anyone recorded.
  */
-function navLinkClass(active: boolean, accent: boolean | undefined, size: "sm" | "xs"): string {
-  const base = `font-mono ${size === "xs" ? "text-xs" : "text-sm"} whitespace-nowrap border-b-2 pb-0.5 transition-colors`;
+function navLinkClass(active: boolean, accent: boolean | undefined): string {
+  const base = "font-mono text-small whitespace-nowrap border-b-2 pb-0.5 transition-colors";
   if (active) return `${base} border-ink-hi text-ink-hi`;
   return `${base} border-transparent ${accent ? "text-ink-hi hover:text-phos" : "text-ink-lo hover:text-ink-hi"}`;
 }
@@ -104,7 +104,7 @@ export function useRowFits(
   return fits;
 }
 
-const SUBLINK = "flex min-h-11 items-center font-mono text-xs transition-colors";
+const SUBLINK = "flex min-h-11 items-center font-mono text-small transition-colors";
 
 /**
  * A section in the desktop row: one trigger, the section's name, that opens
@@ -171,7 +171,7 @@ function SectionItem({
     };
   }, [open, onClose]);
 
-  const labelClass = `tracking-normal ${navLinkClass(active, section === ACCENT, "xs")}`;
+  const labelClass = `tracking-normal ${navLinkClass(active, section === ACCENT)}`;
   if (tabs.length < 2) {
     return (
       <Link href={href} aria-current={active ? "page" : undefined} className={labelClass}>
@@ -200,7 +200,7 @@ function SectionItem({
         {active && <span className="sr-only">{", current section"}</span>}
         <span
           aria-hidden="true"
-          className={`inline-block text-[0.6rem] text-ink-min transition-transform ${open ? "rotate-180" : ""}`}
+          className={`inline-block text-small text-ink-min transition-transform ${open ? "rotate-180" : ""}`}
         >
           &#9662;
         </span>
@@ -232,7 +232,7 @@ function SectionItem({
                     href={t.href}
                     aria-current={current}
                     onClick={() => onClose()}
-                    className={`flex min-h-11 items-center border-l-2 pl-3 font-sans text-sm transition-colors ${
+                    className={`flex min-h-11 items-center border-l-2 pl-3 font-sans text-small transition-colors ${
                       current
                         ? "border-ink-hi text-ink-hi"
                         : "border-white/15 text-ink-lo hover:border-ink-lo hover:text-ink-hi"
@@ -408,7 +408,7 @@ export default function Navbar({
         aside={
           <div className="flex items-center gap-4">
             <YourStatePicker />
-            <ThemeToggle className="min-h-6 text-sm" />
+            <ThemeToggle className="min-h-6 text-small" />
           </div>
         }
       />
@@ -441,14 +441,14 @@ export default function Navbar({
               aria-label="Civitas Research"
               className="group inline-flex min-h-6 items-center gap-2.5 text-ink-hi"
             >
-              <span className="font-wordmark text-base font-extrabold tracking-[0.14em] transition-colors group-hover:text-phos min-[56rem]:text-sm xl:text-base">
+              <span className="font-wordmark text-body font-extrabold tracking-[0.14em] transition-colors group-hover:text-phos">
                 CIVITAS
               </span>
               <span
                 aria-hidden="true"
                 className="hidden h-3.5 border-l border-ink-min/60 @min-[20rem]:inline sm:h-4"
               />
-              <span className="hidden font-mono text-xs tracking-[0.18em] text-ink-lo @min-[20rem]:inline sm:tracking-[0.3em]">
+              <span className="hidden font-mono text-small tracking-[0.18em] text-ink-lo @min-[20rem]:inline sm:tracking-[0.3em]">
                 RESEARCH
               </span>
             </Link>
@@ -498,11 +498,11 @@ export default function Navbar({
               rel="noopener noreferrer"
               aria-label="Civitas on Bluesky (opens in new tab)"
               title="Follow Civitas on Bluesky"
-              className="hidden xl:inline text-ink-lo hover:text-phos font-mono text-xs transition-colors"
+              className="hidden xl:inline text-ink-lo hover:text-phos font-mono text-small transition-colors"
             >
               [BSKY]
             </a>
-            <SiteSearch className="min-h-6 text-xs" />
+            <SiteSearch className="min-h-6 text-small" />
           </div>
 
           {/* Mobile hamburger. A 44x44 target (WCAG 2.5.8 asks 24, 2.5.5 44)
@@ -511,10 +511,10 @@ export default function Navbar({
               move. It was the 36x20 word alone, in the hardest thumb zone. */}
           {/* The MENU layout's search, beside MENU: the same dialog. */}
           <div className={`${menuOnly} -my-3 flex items-center`}>
-            <SiteSearch className="min-h-11 min-w-11 justify-center px-2 text-sm" />
+            <SiteSearch className="min-h-11 min-w-11 justify-center px-2 text-small" />
             <button
               ref={toggleRef}
-              className={`-mr-2 inline-flex min-h-11 min-w-11 items-center justify-center px-2 text-ink-lo hover:text-ink-hi font-mono text-sm transition-colors`}
+              className={`-mr-2 inline-flex min-h-11 min-w-11 items-center justify-center px-2 text-ink-lo hover:text-ink-hi font-mono text-small transition-colors`}
               onClick={() => {
                 if (menuOpen) closeMenu();
                 else setMenuOpen(true);
@@ -561,7 +561,7 @@ export default function Navbar({
                         href={href}
                         aria-current={active ? "page" : undefined}
                         onClick={closeMenu}
-                        className={`flex min-h-13 flex-1 items-center font-sans text-lg ${
+                        className={`flex min-h-13 flex-1 items-center font-sans text-dek ${
                           active
                             ? "text-ink-hi underline decoration-2 underline-offset-[6px]"
                             : section === ACCENT
@@ -622,7 +622,7 @@ export default function Navbar({
             </div>
             {/* Light or dark, at the top of every page (a reader asked for it
                 here rather than in the footer). */}
-            <div className="border-b border-white/[0.07] py-2 text-sm">
+            <div className="border-b border-white/[0.07] py-2 text-small">
               <ThemeToggle />
             </div>
             <a
@@ -631,7 +631,7 @@ export default function Navbar({
               rel="noopener noreferrer"
               aria-label="Civitas on Bluesky (opens in new tab)"
               onClick={closeMenu}
-              className="mt-2 inline-flex min-h-11 items-center text-ink-lo hover:text-phos font-mono text-sm transition-colors"
+              className="mt-2 inline-flex min-h-11 items-center text-ink-lo hover:text-phos font-mono text-small transition-colors"
             >
               [BSKY]
             </a>

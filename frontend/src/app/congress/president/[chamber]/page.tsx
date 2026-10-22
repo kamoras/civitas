@@ -70,7 +70,7 @@ export default async function PresidentSupportPage({
                     key={c}
                     href={presidentSupportHref(c)}
                     aria-current={c === chamber ? "page" : undefined}
-                    className={`flex min-h-11 items-center justify-center border px-4 font-mono text-sm ${
+                    className={`flex min-h-11 items-center justify-center border px-4 font-mono text-small ${
                       c === chamber ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
                     }`}
                   >
@@ -91,7 +91,7 @@ export default async function PresidentSupportPage({
             {view ? (
               <ChamberView view={view} />
             ) : (
-              <p className="font-sans text-base text-ink-lo">
+              <p className="font-sans text-body text-ink-lo">
                 Not measured yet: the first nightly run after this page went live fills it in.
               </p>
             )}

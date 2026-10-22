@@ -10,6 +10,7 @@ import { CHAMBER_NAME, dayHref, longDate, monthHref, shortDate, weekHref } from 
 import { PeriodNav } from "./CongressNav";
 import SectionTabs from "@/components/layout/SectionTabs";
 import { Empty, EventList, Figure, FigureGroup, MeasureRow, Section, VoteRow } from "./ReportParts";
+import { TYPE } from "@/lib/typeStyles";
 
 const STATUS_LINE: Record<ChamberDay["status"], string> = {
   final: "Final record",
@@ -51,11 +52,9 @@ function ChamberHead({ day }: { day: ChamberDay }) {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h2 className="font-display text-3xl font-semibold text-ink-hi">
-          {CHAMBER_NAME[day.chamber]}
-        </h2>
+        <h2 className={TYPE.section}>{CHAMBER_NAME[day.chamber]}</h2>
         <span
-          className={`border px-2 py-1 font-mono text-xs ${
+          className={`border px-2 py-1 font-mono text-small ${
             live ? "border-phos-mid text-phos-mid" : "border-white/20 text-ink-lo"
           }`}
         >
@@ -64,21 +63,21 @@ function ChamberHead({ day }: { day: ChamberDay }) {
         </span>
       </div>
       {day.status === "not_in_session" && day.adjournmentText && (
-        <p className="text-sm leading-relaxed text-ink-lo">{day.adjournmentText}</p>
+        <p className="text-small leading-relaxed text-ink-lo">{day.adjournmentText}</p>
       )}
       {day.nextMeeting && (
-        <p className="text-sm leading-relaxed text-ink-lo">
+        <p className="text-small leading-relaxed text-ink-lo">
           Next meeting: {day.nextMeeting}.{day.nextProgram ? ` ${day.nextProgram}` : ""}
         </p>
       )}
       {awaitingLog(day) && (
-        <p className="text-sm leading-relaxed text-ink-lo">
+        <p className="text-small leading-relaxed text-ink-lo">
           {LOG_POSTED[day.chamber]}, and it isn&apos;t out yet for this day. Its record votes are
           below as they are cast; the log follows here when it is published.
         </p>
       )}
       {day.floorLogStatus === "failed" && day.status !== "final" && (
-        <p className="text-sm text-signal-amber">
+        <p className="text-small text-signal-amber">
           The {CHAMBER_NAME[day.chamber]}&apos;s floor log could not be read on the last check. What
           is shown may be incomplete.
         </p>
@@ -108,7 +107,7 @@ function ChamberColumn({ day }: { day: ChamberDay }) {
         </Section>
       )}
       {day.status === "live" && (
-        <p className="border border-white/15 bg-surface px-3 py-2 text-sm text-ink-lo">
+        <p className="border border-white/15 bg-surface px-3 py-2 text-small text-ink-lo">
           Measures passed, reported and confirmed appear here when the Congressional Record&apos;s
           Daily Digest for this day is published, usually the next day. Until then this is what the
           chamber itself has published{awaitingLog(day) ? "" : ": its floor log"}.
@@ -152,7 +151,7 @@ function ChamberColumn({ day }: { day: ChamberDay }) {
       )}
       {introduced && (
         <Section title="Introduced">
-          <p className="text-[15px] leading-relaxed text-ink">{introduced}</p>
+          <p className="text-body leading-relaxed text-ink">{introduced}</p>
         </Section>
       )}
       {day.status === "final" && (
@@ -161,8 +160,8 @@ function ChamberColumn({ day }: { day: ChamberDay }) {
             <ul className="flex flex-col">
               {day.committees.map((e, i) => (
                 <li key={i} className="flex flex-col gap-1 border-b border-white/[0.09] py-2.5">
-                  <span className="text-[15px] font-semibold text-ink">{e.name}</span>
-                  <span className="text-sm leading-relaxed text-ink-lo">{e.text}</span>
+                  <span className="text-body font-semibold text-ink">{e.name}</span>
+                  <span className="text-small leading-relaxed text-ink-lo">{e.text}</span>
                 </li>
               ))}
             </ul>
@@ -174,7 +173,7 @@ function ChamberColumn({ day }: { day: ChamberDay }) {
       {day.floorLog.length > 0 && (
         <Section title="Floor log" count={day.floorLog.length}>
           <details open={day.status === "live"} className="group">
-            <summary className="cursor-pointer font-mono text-sm text-ink-lo hover:text-ink-hi">
+            <summary className="cursor-pointer font-mono text-small text-ink-lo hover:text-ink-hi">
               {day.status === "live" ? "Hide" : "Show"} the {CHAMBER_NAME[day.chamber]}&apos;s floor
               log
             </summary>
@@ -184,8 +183,10 @@ function ChamberColumn({ day }: { day: ChamberDay }) {
                   key={i}
                   className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-3 border-b border-white/[0.09] py-2"
                 >
-                  <span className="font-mono text-xs tabular-nums text-ink-lo">{e.time ?? ""}</span>
-                  <span className="text-sm leading-relaxed text-ink">
+                  <span className="font-mono text-small tabular-nums text-ink-lo">
+                    {e.time ?? ""}
+                  </span>
+                  <span className="text-small leading-relaxed text-ink">
                     {e.name && <span className="font-semibold">{e.name} </span>}
                     {e.text}
                   </span>
@@ -298,8 +299,8 @@ export default function DayReportView({
             <ChamberColumn day={senate} />
             <ChamberColumn day={house} />
           </div>
-          <footer className="mt-12 border-t border-white/15 pt-5 text-sm leading-relaxed text-ink-lo">
-            <p className="font-mono text-xs text-ink-min">Source</p>
+          <footer className="mt-12 border-t border-white/15 pt-5 text-small leading-relaxed text-ink-lo">
+            <p className="font-mono text-small text-ink-min">Source</p>
             <p className="mt-2 max-w-4xl">
               The Congressional Record&apos;s Daily Digest (Government Publishing Office) once
               published, and each chamber&apos;s own floor log and roll-call votes until then.

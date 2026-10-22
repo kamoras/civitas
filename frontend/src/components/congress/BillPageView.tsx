@@ -26,6 +26,7 @@ import { onThisPage } from "@/lib/onThisPage";
 import { INLINE_LINK } from "@/lib/controlStyles";
 import { ordinal } from "@/components/scorecard/format";
 import { exploreHref } from "@/lib/exploreHref";
+import { TYPE } from "@/lib/typeStyles";
 
 /** Cosponsors listed before the "All N cosponsors" disclosure. */
 const COSPONSORS_SHOWN = 8;
@@ -45,8 +46,8 @@ const PART_NAME: Record<string, string> = {
 
 // A row of a list inside a box's "More".
 const ROW = "border-b border-white/[0.09] py-2.5 last:border-b-0";
-const DATE = "font-mono text-xs tabular-nums text-ink-lo";
-const NOTE = "text-sm text-ink-lo";
+const DATE = "font-mono text-small tabular-nums text-ink-lo";
+const NOTE = "text-small text-ink-lo";
 
 function Person({ p }: { p: BillPerson }) {
   const label = `${p.party}-${p.state}${p.district ? `-${p.district}` : ""}`;
@@ -60,7 +61,7 @@ function Person({ p }: { p: BillPerson }) {
         <span className="text-ink-hi">{p.name}</span>
       )}
       <span
-        className={`whitespace-nowrap font-mono text-sm ${PARTY_COLORS[p.party] ?? "text-ink-lo"}`}
+        className={`whitespace-nowrap font-mono text-small ${PARTY_COLORS[p.party] ?? "text-ink-lo"}`}
       >
         {label}
       </span>
@@ -176,7 +177,7 @@ export default function BillPageView({
           <div className="mx-auto max-w-6xl">
             <SectionTabs section="congress" active="bills" />
             {/* Under 640px the section row above names where this page sits. */}
-            <nav aria-label="Breadcrumb" className="hidden sm:block mb-4 text-sm text-ink-lo">
+            <nav aria-label="Breadcrumb" className="hidden sm:block mb-4 text-small text-ink-lo">
               <Link href="/congress" className="hover:text-phos">
                 Congress
               </Link>
@@ -194,7 +195,7 @@ export default function BillPageView({
               className="flex min-w-0 flex-col gap-3 pb-5"
             >
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-ink-lo">
+                <p className="text-small font-semibold text-ink-lo">
                   <span className="font-id">{label}</span>
                   {record?.congress ? ` · ${ordinal(record.congress)} Congress` : ""}
                   {record?.originChamber ? ` · ${record.originChamber}` : ""}
@@ -202,7 +203,7 @@ export default function BillPageView({
                 <span className="flex items-center gap-3">
                   <a
                     href="#sources"
-                    className="inline-flex min-h-6 items-center text-sm text-ink-lo underline underline-offset-2 hover:text-phos"
+                    className="inline-flex min-h-6 items-center text-small text-ink-lo underline underline-offset-2 hover:text-phos"
                   >
                     Data &amp; citation
                   </a>
@@ -210,26 +211,24 @@ export default function BillPageView({
                   <ShareSectionButton label="Bill overview" withStrip={false} />
                 </span>
               </div>
-              <h1 className="font-display text-[1.75rem] font-semibold leading-tight text-ink-hi sm:text-4xl">
-                {title}
-              </h1>
+              <h1 className={TYPE.title}>{title}</h1>
               {shortTitle && under && (
                 <div className="flex flex-col gap-1">
                   {/* The title type exactly as Congress.gov's titles list
                       names it, so a reader can tell a short title as
                       enacted from a popular name. */}
-                  <p className="text-sm text-ink-min">
+                  <p className="text-small text-ink-min">
                     {shortTitleType || "Short title"} · Congress.gov
                   </p>
-                  <p className="max-w-3xl text-[0.9375rem] text-ink">
-                    <span className="mr-2 text-sm text-ink-min">
+                  <p className="max-w-3xl text-body text-ink">
+                    <span className="mr-2 text-small text-ink-min">
                       {officialTitle ? "Official title" : "Listed as"}
                     </span>
                     {under}
                   </p>
                 </div>
               )}
-              <nav aria-label="On this page" className="text-sm text-ink-lo">
+              <nav aria-label="On this page" className="text-small text-ink-lo">
                 <ul className="flex flex-wrap items-center gap-x-1">
                   {jumps.map(([id, name, count], i) => (
                     <li key={id} className="flex items-center gap-x-1">
@@ -252,7 +251,7 @@ export default function BillPageView({
                 </ul>
               </nav>
               {unavailable.length > 0 && (
-                <p className="text-sm text-signal-amber">
+                <p className="text-small text-signal-amber">
                   {/* Not asked, or not answered: the site's hourly share of
                       Congress.gov can be spent, and the page then shows
                       what it has stored (api/bills.py). */}
@@ -334,12 +333,12 @@ export default function BillPageView({
                         label: `the full summary${boxes?.summary ? `, ${boxes.summary.words.toLocaleString("en-US")} words` : ""}`,
                         children: (
                           <div className="flex flex-col gap-3">
-                            <p className="text-sm text-ink-min">
+                            <p className="text-small text-ink-min">
                               Congressional Research Service · {summary.actionDesc},{" "}
                               {longDate(summary.actionDate)}
                             </p>
                             {summary.paragraphs.map((p, i) => (
-                              <p key={i} className="max-w-prose text-[0.9375rem] text-ink">
+                              <p key={i} className="max-w-prose text-body text-ink">
                                 {p}
                               </p>
                             ))}
@@ -785,7 +784,7 @@ export default function BillPageView({
 
               {detail && detail.policyAreas.length > 0 && (
                 <RecordBox kicker="Policy areas · Civitas" title="What it touches">
-                  <ul className="flex flex-col gap-1 text-[0.9375rem] text-ink">
+                  <ul className="flex flex-col gap-1 text-body text-ink">
                     {detail.policyAreas.map((a) => (
                       <li key={a.area}>{policyAreaLabel(a.area)}</li>
                     ))}
@@ -798,16 +797,12 @@ export default function BillPageView({
                 member's position a pick away. Its own shared picture. */}
             <section className="mt-10 flex flex-col gap-3" {...shareSection("votes")}>
               <div className="flex flex-wrap items-baseline justify-between gap-3 border-b-2 border-ink-hi pb-1.5">
-                <h2
-                  id="votes"
-                  {...onThisPage("Votes", votesCount)}
-                  className="font-display text-xl font-semibold text-ink-hi"
-                >
+                <h2 id="votes" {...onThisPage("Votes", votesCount)} className={TYPE.section}>
                   Votes
                   {votesCount !== undefined && (
                     // The comma is for a screen reader, which ran the two
                     // together ("Votesnot held").
-                    <span className="ml-2 font-mono text-sm font-normal text-ink-min">
+                    <span className="ml-2 font-mono text-small font-normal text-ink-min">
                       <span className="sr-only">, </span>
                       {votesCount}
                     </span>

@@ -71,11 +71,11 @@ export default function ShareButtons({
 
   // 44px on a phone (mobile spec P10).
   const linkCls =
-    "inline-flex min-h-11 items-center sm:min-h-0 font-mono text-xs text-ink-lo underline decoration-white/20 underline-offset-4 transition-colors hover:text-ink-hi";
+    "inline-flex min-h-11 items-center sm:min-h-0 font-mono text-small text-ink-lo underline decoration-white/20 underline-offset-4 transition-colors hover:text-ink-hi";
 
   return (
     <div
-      className={`flex flex-wrap items-baseline gap-x-3 gap-y-2 font-mono text-xs text-ink-min ${className}`}
+      className={`flex flex-wrap items-baseline gap-x-3 gap-y-2 font-mono text-small text-ink-min ${className}`}
       {...{ [SHARE_EXCLUDE_ATTR]: "" }}
     >
       <span>Share</span>
@@ -121,7 +121,7 @@ export default function ShareButtons({
             }}
             placeholder="mastodon.social"
             aria-label="Mastodon instance"
-            className="w-36 border border-white/15 bg-surface-base px-2 py-1 font-mono text-xs text-ink-hi focus:border-ink-lo focus:outline-none"
+            className="w-36 border border-white/15 bg-surface-base px-2 py-1 font-mono text-small text-ink-hi focus:border-ink-lo focus:outline-none"
             autoFocus
           />
           <button onClick={handleMastodonShare} className={linkCls}>

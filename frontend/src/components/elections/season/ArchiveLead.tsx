@@ -3,8 +3,10 @@ import type { ArchiveIndex } from "@/types/electionArchive";
 import type { Season } from "@/types/specials";
 import { electionArchiveHref } from "@/lib/routes";
 import { longDate } from "@/lib/specials";
+import { TYPE } from "@/lib/typeStyles";
 
-const LINK = "inline-flex min-h-11 items-center font-mono text-xs text-signal-cyan hover:text-phos";
+const LINK =
+  "inline-flex min-h-11 items-center font-mono text-small text-signal-cyan hover:text-phos";
 
 /** The day after the season's last, as an ISO date: post-certification ends
  * the day before the new Congress is seated. */
@@ -34,26 +36,23 @@ export default function ArchiveLead({
       aria-labelledby="season-archive"
       className="mt-6 border border-phos/20 bg-surface px-4 pb-4 font-sans"
     >
-      <h2
-        id="season-archive"
-        className="border-b border-white/[0.07] py-2.5 font-mono text-xs text-ink-min"
-      >
+      <h2 id="season-archive" className={`${TYPE.kicker} border-b border-white/[0.07] py-2.5`}>
         The {held} election, on the record
       </h2>
       {kept ? (
         <>
-          <p className="mt-3 font-display text-2xl font-semibold leading-tight text-ink-hi">
+          <p className={`${TYPE.section} mt-3`}>
             {kept.counted > 0
               ? `${kept.official} of ${kept.counted} counted races listed official by their states`
               : `${kept.races} federal races on the record; no state's count was read`}
           </p>
-          <p className="mt-2 text-sm text-ink-lo">
+          <p className="mt-2 text-small text-ink-lo">
             {kept.races} federal races, {kept.counted} with a count read from the state&apos;s own
             feed{kept.measures ? `, and ${kept.measures} statewide measures, quoted` : ""}. A count
             &ldquo;leads&rdquo; until its state lists it as official; Civitas calls no race.
           </p>
           {a && (
-            <p className="mt-2 text-sm text-ink-lo">
+            <p className="mt-2 text-small text-ink-lo">
               {a.graded > 0
                 ? `The seat map's ranges, checked against the official count so far: ${a.held80} of ${a.graded} margins inside the 80% range, ${a.held95} inside the 95%.`
                 : `The seat map's ranges are checked seat by seat once each count is official: none of ${a.ranged} is yet.`}
@@ -61,14 +60,14 @@ export default function ArchiveLead({
           )}
         </>
       ) : (
-        <p className="mt-3 text-sm text-ink-lo">
+        <p className="mt-3 text-small text-ink-lo">
           {archive
             ? `No record of the ${held} election was kept here.`
             : `The record of the ${held} election couldn't be read just now.`}
         </p>
       )}
       {season.until && (
-        <p className="mt-2 text-sm text-ink-lo">
+        <p className="mt-2 text-small text-ink-lo">
           The new Congress is seated on {longDate(dayAfter(season.until))} (20th Amendment).
         </p>
       )}

@@ -23,7 +23,7 @@ export default function IndustryBreakdown({ industries, donors }: IndustryBreakd
 
   return (
     <div>
-      <div className="text-xs text-ink-lo mb-3">
+      <div className="text-small text-ink-lo mb-3">
         Where this member&apos;s money comes from, classified by industry using AI embedding
         similarity. Click an industry to see individual donors.
       </div>
@@ -38,7 +38,7 @@ export default function IndustryBreakdown({ industries, donors }: IndustryBreakd
           const hasDonerBreakdown = industryDonors.length > 0;
 
           return (
-            <div key={ind.industry} className="text-sm">
+            <div key={ind.industry} className="text-small">
               {hasDonerBreakdown ? (
                 <button
                   className="flex justify-between mb-1 w-full text-left cursor-pointer hover:text-phos transition-colors"
@@ -47,7 +47,7 @@ export default function IndustryBreakdown({ industries, donors }: IndustryBreakd
                   aria-label={`${displayName}: ${formatCurrency(ind.total)} (${ind.percentage}%). ${isExpanded ? "Collapse" : "Expand"} donor list`}
                 >
                   <span className="text-ink flex items-center gap-1">
-                    <span className="text-xs text-ink-min" aria-hidden="true">
+                    <span className="text-small text-ink-min" aria-hidden="true">
                       {isExpanded ? "−" : "+"}
                     </span>
                     {displayName}
@@ -77,7 +77,7 @@ export default function IndustryBreakdown({ industries, donors }: IndustryBreakd
               {isExpanded && industryDonors.length > 0 && (
                 <div className="ml-4 mb-3 space-y-1 border-l-2 border-white/[0.07] pl-3">
                   {industryDonors.map((donor) => (
-                    <div key={donor.name} className="flex justify-between gap-3 text-xs">
+                    <div key={donor.name} className="flex justify-between gap-3 text-small">
                       {/* A donor name is the employer a contributor typed on
                           the FEC form and can be one long unspaced token:
                           wrap it rather than widen the drawer. */}

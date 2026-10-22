@@ -12,6 +12,7 @@ import SourceLine from "@/components/agencies/SourceLine";
 import SectionCards from "@/components/sections/SectionCards";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
 import type { AgencySummary } from "@/types/agency";
+import { TYPE } from "@/lib/typeStyles";
 
 const { title, description } = describeAgencyIndex();
 export const metadata = pageMetadata({ title, description, path: "/agencies" });
@@ -19,14 +20,14 @@ export const metadata = pageMetadata({ title, description, path: "/agencies" });
 const RESULTS = "#agency-directory";
 
 const FIELD =
-  "min-h-11 w-full border border-white/15 bg-surface-base px-3 font-mono text-sm text-ink-hi outline-none focus:border-phos/40";
+  "min-h-11 w-full border border-white/15 bg-surface-base px-3 font-mono text-small text-ink-hi outline-none focus:border-phos/40";
 
 function one(v: string | string[] | undefined): string {
   return (Array.isArray(v) ? v[0] : v)?.trim() ?? "";
 }
 
 const DISCLOSURE =
-  "inline-flex min-h-6 cursor-pointer items-center font-mono text-xs text-ink-lo hover:text-phos";
+  "inline-flex min-h-6 cursor-pointer items-center font-mono text-small text-ink-lo hover:text-phos";
 
 /** Rows in two columns from a laptop up: half the page's height. */
 function AgencyList({
@@ -67,15 +68,15 @@ function AgencyRow({
   return (
     <li className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-white/[0.07] py-2.5">
       <span className="min-w-0">
-        <Link href={agencyHref(a.slug)} className="text-sm text-ink-hi hover:text-phos">
+        <Link href={agencyHref(a.slug)} className="text-small text-ink-hi hover:text-phos">
           {a.name}
         </Link>
         {a.shortName && a.shortName !== a.name && (
-          <span className="ml-2 font-mono text-xs text-ink-min">{a.shortName}</span>
+          <span className="ml-2 font-mono text-small text-ink-min">{a.shortName}</span>
         )}
-        {parentName && <span className="block text-xs text-ink-min">Part of {parentName}</span>}
+        {parentName && <span className="block text-small text-ink-min">Part of {parentName}</span>}
       </span>
-      <span className="font-mono text-xs tabular-nums text-ink-lo">
+      <span className="font-mono text-small tabular-nums text-ink-lo">
         {a.documents > 0
           ? `${a.documents.toLocaleString("en-US")} document${a.documents === 1 ? "" : "s"}`
           : linking
@@ -151,7 +152,7 @@ export default async function AgenciesPage({
               />
               <button
                 type="submit"
-                className="min-h-11 shrink-0 border border-phos/40 px-4 font-mono text-sm text-phos hover:bg-phos/10"
+                className="min-h-11 shrink-0 border border-phos/40 px-4 font-mono text-small text-phos hover:bg-phos/10"
               >
                 [ Find ]
               </button>
@@ -160,10 +161,10 @@ export default async function AgenciesPage({
             <SectionCards section="executive" current="agencies" className="mb-10" />
 
             <section aria-labelledby="agency-directory">
-              <h2 id="agency-directory" className="font-display text-xl font-semibold text-ink-hi">
+              <h2 id="agency-directory" className={TYPE.section}>
                 Every agency
               </h2>
-              <p className="mt-3 font-mono text-xs text-ink-min">
+              <p className="mt-3 font-mono text-small text-ink-min">
                 {index.agencies.length === 0
                   ? "Agency list not read yet"
                   : q
@@ -179,7 +180,7 @@ export default async function AgenciesPage({
                 )}
               </p>
               {linking && index.agencies.length > 0 && (
-                <p className="mt-3 max-w-2xl text-sm text-ink-lo">
+                <p className="mt-3 max-w-2xl text-small text-ink-lo">
                   Documents stored before agencies were read are still being linked to the agency
                   that issued them: {linking.linked.toLocaleString("en-US")} of{" "}
                   {linking.total.toLocaleString("en-US")} so far. Until then a document count here
@@ -187,14 +188,14 @@ export default async function AgenciesPage({
                 </p>
               )}
               {index.agencies.length === 0 && (
-                <p className="mt-3 text-sm text-ink-lo">
+                <p className="mt-3 text-small text-ink-lo">
                   The Federal Register&apos;s agency list hasn&apos;t been read yet. Civitas reads
                   it when the pipeline starts and tries again every hour until it has it; this is a
                   gap on Civitas, not a government without agencies.
                 </p>
               )}
               {!q && departments.length > 0 && (
-                <h3 className="mt-4 font-mono text-xs text-ink-lo">
+                <h3 className={`${TYPE.kicker} mt-4`}>
                   Departments and other agencies with sub-agencies
                 </h3>
               )}

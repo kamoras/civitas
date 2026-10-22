@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SourceLine } from "@/components/shared/Type";
 import ElectionMap from "@/components/elections/map/ElectionMap";
 import MapAccountability from "@/components/elections/archive/MapAccountability";
 import BallotMeasureCard from "@/components/elections/BallotMeasureCard";
@@ -17,6 +18,7 @@ import type { ArchiveRecord, ArchivedRace, ArchivedStateContests } from "@/types
 import type { StatewideNominee } from "@/types/election";
 import type { ElectionMapResponse } from "@/types/electionMap";
 import type { MapAccountability as Accountability } from "@/types/mapAccountability";
+import { TYPE } from "@/lib/typeStyles";
 
 /** Whose list a race's candidates are, in words (candidateSource, decided
  * by the backend when the record was copied). */
@@ -55,7 +57,7 @@ function NomineeList({ nominees }: { nominees: StatewideNominee[] }) {
       {nominees.map((n, i) => (
         <span key={`${i}-${n.name}`}>
           {i > 0 && " · "}
-          {n.name} <span className="font-mono text-xs text-ink-lo">({nomineeParty(n)})</span>
+          {n.name} <span className="font-mono text-small text-ink-lo">({nomineeParty(n)})</span>
         </span>
       ))}
     </span>
@@ -73,9 +75,9 @@ function sourceLine(src: { sourceName: string | null; ballotList: boolean }): st
  * judgeships) as its ballot page showed them: who was on the ballot, from
  * whose list. Civitas read no count for these. */
 function StateContests({ contests }: { contests: ArchivedStateContests }) {
-  const heading = "font-mono text-xs text-ink-min";
+  const heading = "font-mono text-small text-ink-min";
   const row =
-    "grid gap-x-4 gap-y-0.5 border-b border-white/[0.07] px-4 py-2.5 text-sm last:border-b-0 sm:grid-cols-[14rem_minmax(0,1fr)]";
+    "grid gap-x-4 gap-y-0.5 border-b border-white/[0.07] px-4 py-2.5 text-small last:border-b-0 sm:grid-cols-[14rem_minmax(0,1fr)]";
   return (
     <div className="space-y-4">
       {contests.statewideRaces.length > 0 && (
@@ -89,7 +91,7 @@ function StateContests({ contests }: { contests: ArchivedStateContests }) {
               </li>
             ))}
           </ul>
-          <p className="text-xs text-ink-min">{sourceLine(contests.statewideSource)}</p>
+          <SourceLine>{sourceLine(contests.statewideSource)}</SourceLine>
         </div>
       )}
       {contests.stateLegRaces.map((chamber) => (
@@ -103,7 +105,7 @@ function StateContests({ contests }: { contests: ArchivedStateContests }) {
               </li>
             ))}
           </ul>
-          <p className="text-xs text-ink-min">{sourceLine(contests.statewideSource)}</p>
+          <SourceLine>{sourceLine(contests.statewideSource)}</SourceLine>
         </div>
       ))}
       {contests.judicialRaces.map((court) => (
@@ -117,10 +119,10 @@ function StateContests({ contests }: { contests: ArchivedStateContests }) {
               </li>
             ))}
           </ul>
-          <p className="text-xs text-ink-min">{sourceLine(contests.judicialSource)}</p>
+          <p className="text-small text-ink-min">{sourceLine(contests.judicialSource)}</p>
         </div>
       ))}
-      <p className="text-xs text-ink-min">
+      <p className="text-small text-ink-min">
         Civitas read no count for the state&apos;s own contests: the state&apos;s results pages have
         them.
       </p>
@@ -139,13 +141,13 @@ function RaceEntry({ race, record }: { race: ArchivedRace; record: ArchiveRecord
       className="border-b border-white/[0.07] px-4 py-4 last:border-b-0 focus:outline-none focus-visible:ring-1 focus-visible:ring-phos/60"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h4 className="font-display text-base font-semibold text-ink-hi">
+        <h4 className={TYPE.boxTitle}>
           {race.office === "S"
             ? `U.S. Senate${race.isSpecial ? " (special)" : ""}`
             : `U.S. House · ${raceLabel(race)}`}
         </h4>
         <span
-          className={`border px-2 py-0.5 font-mono text-[11px] ${
+          className={`border px-2 py-0.5 font-mono text-small ${
             tag ? tag.className : "border-dashed border-white/25 text-ink-min"
           }`}
         >
@@ -158,24 +160,24 @@ function RaceEntry({ race, record }: { race: ArchivedRace; record: ArchiveRecord
             {r.candidates.map((c, i) => (
               <li
                 key={c.candidateId ?? `${i}-${c.name}`}
-                className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 text-sm sm:grid-cols-[minmax(0,1fr)_5rem_8rem]"
+                className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 text-small sm:grid-cols-[minmax(0,1fr)_5rem_8rem]"
               >
                 <span className="min-w-0 break-words text-ink">
                   {c.name}{" "}
-                  <span className={`font-mono text-xs ${partyTextClass(c.party)}`}>
+                  <span className={`font-mono text-small ${partyTextClass(c.party)}`}>
                     ({partyTag(c.party)})
                   </span>
                 </span>
                 <span className="text-right font-mono tabular-nums text-ink-hi">
                   {c.pct != null ? `${c.pct.toFixed(1)}%` : "—"}
                 </span>
-                <span className="hidden text-right font-mono text-xs tabular-nums text-ink-lo sm:block">
+                <span className="hidden text-right font-mono text-small tabular-nums text-ink-lo sm:block">
                   {c.votes.toLocaleString("en-US")}
                 </span>
               </li>
             ))}
           </ol>
-          <p className="mt-2 font-mono text-xs leading-relaxed text-ink-min">
+          <p className="mt-2 font-mono text-small leading-relaxed text-ink-min">
             {[reportingText(r), `${r.votesCounted.toLocaleString("en-US")} votes`]
               .filter(Boolean)
               .join(" · ")}{" "}
@@ -196,16 +198,16 @@ function RaceEntry({ race, record }: { race: ArchivedRace; record: ArchiveRecord
           </p>
         </>
       ) : (
-        <p className="mt-2 text-sm text-ink-min">{noCountText(race, record)}</p>
+        <p className="mt-2 text-small text-ink-min">{noCountText(race, record)}</p>
       )}
       {race.candidates.length > 0 ? (
-        <p className="mt-2 text-sm text-ink-lo">
-          <span className="font-mono text-[11px] text-ink-min">On the ballot</span>{" "}
+        <p className="mt-2 text-small text-ink-lo">
+          <span className="font-mono text-small text-ink-min">On the ballot</span>{" "}
           {race.candidates.map((c, i) => (
             <span key={c.id}>
               {i > 0 && " · "}
               <span className="text-ink">{candidateName(c)}</span>{" "}
-              <span className="font-mono text-xs">
+              <span className="font-mono text-small">
                 (
                 {c.partyLabel && !["DEM", "REP"].includes(c.partyGroup ?? "")
                   ? c.partyLabel
@@ -214,12 +216,12 @@ function RaceEntry({ race, record }: { race: ArchivedRace; record: ArchiveRecord
               </span>
             </span>
           ))}
-          <span className="block text-xs text-ink-min">
+          <span className="block text-small text-ink-min">
             From {BALLOT_SOURCE[race.candidateSource]}.
           </span>
         </p>
       ) : (
-        <p className="mt-2 text-sm text-ink-min">No candidate list was on file for this race.</p>
+        <p className="mt-2 text-small text-ink-min">No candidate list was on file for this race.</p>
       )}
     </li>
   );
@@ -254,7 +256,7 @@ export default function CycleArchive({
   return (
     <div className="space-y-12">
       {record.stillCounting && (
-        <p className="border border-signal-amber/40 px-4 py-3 text-sm text-ink-hi">
+        <p className="border border-signal-amber/40 px-4 py-3 text-small text-ink-hi">
           The count is still coming in. This record is copied from it as it moves, and is final once
           the results window closes.{" "}
           <Link href="/elections" className="text-phos underline underline-offset-4">
@@ -272,18 +274,18 @@ export default function CycleArchive({
           ["Statewide measures", t.measures],
         ].map(([label, n]) => (
           <div key={label} className="bg-surface-base px-4 py-3">
-            <dt className="text-[11px] text-ink-min">{label}</dt>
-            <dd className="mt-1 text-2xl font-semibold tabular-nums text-ink-hi">{n}</dd>
+            <dt className="text-small text-ink-min">{label}</dt>
+            <dd className="mt-1 text-section font-semibold tabular-nums text-ink-hi">{n}</dd>
           </div>
         ))}
       </dl>
 
       <section id="final-map" aria-labelledby="final-map-title" className="space-y-4">
         <div>
-          <h2 id="final-map-title" className="font-mono text-sm text-ink-hi">
+          <h2 id="final-map-title" className={TYPE.kicker}>
             The map before election day
           </h2>
-          <p className="mt-1 max-w-3xl text-sm text-ink-lo">
+          <p className="mt-1 max-w-3xl text-small text-ink-lo">
             {map
               ? `As the campaign's last refresh left it, ${formatAsOf(map.asOf)}: how each seat usually votes and the range the polls suggested. Ranges, not results; kept here as it stood, so it can be read beside the count below.`
               : "No pre-election map was kept for this election: none was on file when the campaign ended."}
@@ -306,10 +308,10 @@ export default function CycleArchive({
 
       <section id="by-state" aria-labelledby="by-state-title" className="space-y-6">
         <div>
-          <h2 id="by-state-title" className="font-mono text-sm text-ink-hi">
+          <h2 id="by-state-title" className={TYPE.kicker}>
             Count and ballot, by state
           </h2>
-          <p className="mt-1 max-w-3xl text-sm text-ink-lo">
+          <p className="mt-1 max-w-3xl text-small text-ink-lo">
             Each federal race&apos;s count as its state&apos;s own results system last reported it,
             and the whole ballot the site showed: federal candidates, statewide offices, the
             legislature, elected judgeships and statewide measures, quoted from their sources. A
@@ -318,7 +320,7 @@ export default function CycleArchive({
           </p>
         </div>
         <nav aria-label="States">
-          <ul className="flex flex-wrap gap-1.5 font-mono text-xs">
+          <ul className="flex flex-wrap gap-1.5 font-mono text-small">
             {record.states.map((s) => (
               <li key={s.state}>
                 <a
@@ -344,12 +346,12 @@ export default function CycleArchive({
             >
               <h3
                 id={`state-${s.state}-title`}
-                className="border-b border-phos/20 pb-1 font-display text-xl font-semibold text-ink-hi"
+                className={`${TYPE.boxTitle} border-b border-phos/20 pb-1`}
               >
                 {s.stateName}
               </h3>
               {s.candidateListSource && (
-                <p className="text-xs text-ink-min">
+                <p className="text-small text-ink-min">
                   Candidate names as printed by {s.candidateListSource}.
                 </p>
               )}
@@ -363,7 +365,7 @@ export default function CycleArchive({
               {s.stateContests && <StateContests contests={s.stateContests} />}
               {measures.length > 0 && (
                 <div className="space-y-3">
-                  <h4 className="font-mono text-xs text-ink-min">Statewide ballot measures</h4>
+                  <h4 className="font-mono text-small text-ink-min">Statewide ballot measures</h4>
                   {measures.map((m) => (
                     <BallotMeasureCard key={m.id} measure={m} />
                   ))}

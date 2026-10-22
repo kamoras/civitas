@@ -1,3 +1,4 @@
+import { SourceLine } from "@/components/shared/Type";
 import type { AmendmentFields } from "@/types/congress";
 
 /** Whose record states the purpose: the Senate's roll-call XML, or
@@ -24,30 +25,30 @@ export default function AmendmentPurpose({
   compact?: boolean;
 }) {
   if (!vote.amendment || vote.amendmentPurpose == null) return null;
-  const label = <span className="mr-2 font-mono text-xs text-ink-min">Official purpose</span>;
+  const label = <span className="mr-2 font-mono text-small text-ink-min">Official purpose</span>;
   if (!vote.amendmentPurpose)
     return (
-      <p className={compact ? "text-sm text-ink-lo" : "text-base text-ink-lo"}>
+      <p className={compact ? "text-small text-ink-lo" : "text-body text-ink-lo"}>
         {label}
         No statement of purpose on file for {vote.amendment}.
       </p>
     );
   if (compact)
     return (
-      <p className="text-sm leading-snug text-ink">
+      <p className="text-small leading-snug text-ink">
         {label}
         <q>{vote.amendmentPurpose}</q>
       </p>
     );
   return (
     <figure className="max-w-3xl border-l-2 border-signal-cyan/60 pl-3">
-      <figcaption className="font-mono text-xs text-ink-min">
+      <figcaption className="font-mono text-small text-ink-min">
         Official purpose of {vote.amendment}
       </figcaption>
-      <blockquote className="mt-1 text-lg leading-snug text-ink-hi">
+      <blockquote className="mt-1 text-dek leading-snug text-ink-hi">
         {vote.amendmentPurpose}
       </blockquote>
-      <p className="mt-1 font-mono text-xs text-ink-min">Quoted from the {SOURCE[chamber]}</p>
+      <SourceLine className="mt-1">Quoted from the {SOURCE[chamber]}</SourceLine>
     </figure>
   );
 }

@@ -21,7 +21,7 @@ import { absoluteUrl } from "@/lib/site";
 import { ordinal } from "./format";
 import { presidentParty } from "@/lib/presidentParty";
 
-const LINK = "font-mono text-[13px] text-ink-lo underline underline-offset-2 hover:text-phos";
+const LINK = "font-mono text-small text-ink-lo underline underline-offset-2 hover:text-phos";
 
 /**
  * A president's page, at a glance: who, the historians' own rank (theirs,
@@ -77,8 +77,8 @@ export default function PresidentScorecard({
       className={`flex h-24 w-20 shrink-0 flex-col items-center justify-center border-2 sm:h-28 sm:w-24 ${party.border} ${party.text}`}
       aria-hidden="true"
     >
-      <span className="font-display text-4xl font-semibold leading-none">{president.number}</span>
-      <span className="mt-1 text-xs">President</span>
+      <span className={TYPE.title}>{president.number}</span>
+      <span className="mt-1 text-small">President</span>
     </div>
   );
 
@@ -118,10 +118,8 @@ export default function PresidentScorecard({
                 numberMark
               )}
               <div className="flex min-w-0 flex-col gap-2">
-                <Title className={`${TYPE.title} break-words`}>
-                  {president.name}
-                </Title>
-                <p className="text-sm text-ink-lo">
+                <Title className={`${TYPE.title} break-words`}>{president.name}</Title>
+                <p className="text-small text-ink-lo">
                   {ordinal(president.number)} President · {party.label} ·{" "}
                   {president.termStart.slice(0, 4)} to {termEnd}
                 </p>
@@ -153,7 +151,7 @@ export default function PresidentScorecard({
                   </Link>
                 </p>
                 {president.photoCredit && (
-                  <p className="text-xs text-ink-lo">
+                  <p className="text-small text-ink-lo">
                     {president.photoCredit.url ? (
                       <a href={president.photoCredit.url} className="underline underline-offset-2">
                         {president.photoCredit.text}
@@ -169,17 +167,18 @@ export default function PresidentScorecard({
               <p className={TYPE.kicker}>Historians&apos; rank</p>
               {legacy?.rank != null ? (
                 <>
-                  <p className="font-display text-5xl font-semibold leading-none text-ink-hi">
-                    #{legacy.rank} <span className="text-2xl text-ink-lo">of {legacy.rated}</span>
+                  <p className={TYPE.display}>
+                    #{legacy.rank}{" "}
+                    <span className="text-section text-ink-lo">of {legacy.rated}</span>
                   </p>
-                  <p className="text-sm leading-relaxed text-ink-lo">
+                  <p className="text-small leading-relaxed text-ink-lo">
                     Their ranking, not Civitas&apos;s: the {survey}, by total points (
                     {legacy.points} points).
                   </p>
                 </>
               ) : (
                 legacy && (
-                  <p className="text-sm leading-relaxed text-ink-lo">
+                  <p className="text-small leading-relaxed text-ink-lo">
                     Not rated. C-SPAN&apos;s Presidential Historians Survey rates only completed
                     terms, and the newest edition published does not rate this presidency.
                   </p>
@@ -195,7 +194,7 @@ export default function PresidentScorecard({
           {peers ? (
             <PresidentStanding presidentId={president.id} name={president.name} peers={peers} />
           ) : (
-            <p className="text-sm text-ink-lo">
+            <p className="text-small text-ink-lo">
               The comparison with other presidents could not be loaded.
             </p>
           )}
@@ -220,8 +219,8 @@ export default function PresidentScorecard({
                   disabled={!trades?.total}
                   className="flex min-h-24 flex-col gap-1.5 border border-white/[0.18] bg-surface px-5 py-4 text-left disabled:cursor-default"
                 >
-                  <span className="text-base font-semibold text-ink-hi">Stock trades</span>
-                  <span className="text-sm text-ink-lo">
+                  <span className="text-body font-semibold text-ink-hi">Stock trades</span>
+                  <span className="text-small text-ink-lo">
                     {trades === undefined
                       ? "Loading…"
                       : trades === null
@@ -230,18 +229,18 @@ export default function PresidentScorecard({
                           ? "None disclosed this term"
                           : `${trades.total.toLocaleString("en-US")} disclosed this term`}
                   </span>
-                  <span className="font-mono text-xs text-ink-min">
+                  <span className="font-mono text-small text-ink-min">
                     OGE annual report and periodic transaction reports
                   </span>
                 </button>
               )}
               {peers?.recentApproval != null && (
                 <div className="flex min-h-24 flex-col gap-1.5 border border-white/[0.18] bg-surface px-5 py-4">
-                  <span className="text-base font-semibold text-ink-hi">
+                  <span className="text-body font-semibold text-ink-hi">
                     Approval, last 90 days
                   </span>
-                  <span className="text-sm text-ink-lo">{peers.recentApproval.toFixed(1)}%</span>
-                  <span className="font-mono text-xs text-ink-min">
+                  <span className="text-small text-ink-lo">{peers.recentApproval.toFixed(1)}%</span>
+                  <span className="font-mono text-small text-ink-min">
                     American Presidency Project
                   </span>
                 </div>
@@ -252,20 +251,20 @@ export default function PresidentScorecard({
                   href={`/politicians/${t.id}`}
                   className="flex min-h-24 flex-col gap-1.5 border border-white/[0.18] bg-surface px-5 py-4 hover:border-ink-min"
                 >
-                  <span className="text-base font-semibold text-ink-hi">
+                  <span className="text-body font-semibold text-ink-hi">
                     The {ordinal(t.number)}-president term
                   </span>
-                  <span className="text-sm text-ink-lo">Historians: {t.points} points</span>
-                  <span className="font-mono text-xs text-ink-min">C-SPAN survey</span>
+                  <span className="text-small text-ink-lo">Historians: {t.points} points</span>
+                  <span className="font-mono text-small text-ink-min">C-SPAN survey</span>
                 </Link>
               ))}
               {president.eoCount != null && (
                 <div className="flex min-h-24 flex-col gap-1.5 border border-white/[0.18] bg-surface px-5 py-4">
-                  <span className="text-base font-semibold text-ink-hi">Executive orders</span>
-                  <span className="text-sm text-ink-lo">
+                  <span className="text-body font-semibold text-ink-hi">Executive orders</span>
+                  <span className="text-small text-ink-lo">
                     {president.eoCount.toLocaleString("en-US")} signed
                   </span>
-                  <span className="font-mono text-xs text-ink-min">Federal Register</span>
+                  <span className="font-mono text-small text-ink-min">Federal Register</span>
                 </div>
               )}
             </div>

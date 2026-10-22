@@ -16,7 +16,7 @@ export default function CommitteeEntries({ entries }: { entries: CommitteeEntry[
           key={e.id}
           className="grid grid-cols-1 gap-x-6 gap-y-1 border-b border-white/[0.09] py-3 sm:grid-cols-[9rem_minmax(0,1fr)]"
         >
-          <p className="font-mono text-xs leading-relaxed text-ink-min">
+          <p className="font-mono text-small leading-relaxed text-ink-min">
             <Link
               href={dayHref(e.date)}
               className="text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
@@ -30,11 +30,11 @@ export default function CommitteeEntries({ entries }: { entries: CommitteeEntry[
           </p>
           <div className="min-w-0">
             {(e.committee || e.report) && (
-              <p className="text-[15px] font-semibold text-ink">{e.committee ?? e.report}</p>
+              <p className="text-body font-semibold text-ink">{e.committee ?? e.report}</p>
             )}
-            <p className="text-sm leading-relaxed text-ink-lo">{e.text}</p>
+            <p className="text-small leading-relaxed text-ink-lo">{e.text}</p>
             {e.bills.length > 0 && (
-              <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 font-mono text-xs">
+              <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 font-mono text-small">
                 {e.bills.map((b) => (
                   <Link
                     key={b.billId}

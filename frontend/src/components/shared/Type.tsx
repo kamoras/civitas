@@ -21,18 +21,13 @@ export function PageTitle({ as: Tag = "h1", className, ...rest }: Props<"h1" | "
 }
 
 /** A part of the page: its h2. */
-export function SectionHeading({ as: Tag = "h2", className, ...rest }: Props<"h2" | "h3">) {
+export function SectionHeading({ as: Tag = "h2", className, ...rest }: Props<"h2" | "h3" | "h4">) {
   return <Tag className={join(TYPE.section, className)} {...rest} />;
 }
 
 /** A box's or a list item's title: its h3. */
 export function BoxTitle({ as: Tag = "h3", className, ...rest }: Props<"h2" | "h3" | "h4" | "p">) {
   return <Tag className={join(TYPE.boxTitle, className)} {...rest} />;
-}
-
-/** One line under the title saying what the page is for. */
-export function Dek({ className, ...rest }: Omit<Props<never>, "as">) {
-  return <p className={join(TYPE.dek, className)} {...rest} />;
 }
 
 /** Where a figure or a section's data came from, and as of when. */

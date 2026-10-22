@@ -85,11 +85,11 @@ export default function VotePanel({
 
   if (!votes.length) {
     if (unreadable)
-      return <p className="text-[15px] text-ink-lo">The votes could not be loaded just now.</p>;
+      return <p className="text-body text-ink-lo">The votes could not be loaded just now.</p>;
     if (coverage && !coverage.held) {
       const linked = named.filter((rc) => rc.sourceUrl);
       return (
-        <div className="flex flex-col gap-3 text-[15px] text-ink-lo">
+        <div className="flex flex-col gap-3 text-body text-ink-lo">
           <p>{coverage.sentence}</p>
           {linked.length > 0 && (
             <ul className="flex flex-col">
@@ -105,7 +105,9 @@ export default function VotePanel({
                     {CHAMBER_NAME[rc.chamber as keyof typeof CHAMBER_NAME] ?? rc.chamber} roll call{" "}
                     {rc.number}
                   </a>
-                  <span className="ml-2 font-mono text-xs text-ink-min">{shortDate(rc.date)}</span>
+                  <span className="ml-2 font-mono text-small text-ink-min">
+                    {shortDate(rc.date)}
+                  </span>
                 </li>
               ))}
             </ul>
@@ -117,7 +119,7 @@ export default function VotePanel({
     // voice vote. Say how, from the actions, never "no votes".
     if (passage.length && passage.every((p) => p.method !== "rollCall"))
       return (
-        <div className="flex flex-col gap-2 text-[15px] text-ink">
+        <div className="flex flex-col gap-2 text-body text-ink">
           <p className="text-ink-lo">
             No roll call was taken on this bill, so no names are recorded:
           </p>
@@ -134,7 +136,7 @@ export default function VotePanel({
         </div>
       );
     return (
-      <p className="text-[15px] text-ink-lo">No recorded votes on this bill in either chamber.</p>
+      <p className="text-body text-ink-lo">No recorded votes on this bill in either chamber.</p>
     );
   }
 
@@ -145,16 +147,16 @@ export default function VotePanel({
     <div className="flex flex-col gap-4 border border-white/15 bg-surface p-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="font-mono text-xs text-ink-lo">
+          <p className="font-mono text-small text-ink-lo">
             {CHAMBER_NAME[vote.chamber]} vote {vote.number} · {shortDate(vote.date)}
           </p>
-          <p className="mt-1 text-lg font-semibold text-ink-hi">
+          <p className="mt-1 text-dek font-semibold text-ink-hi">
             {vote.question}: {voteResult(vote)}, <TallyText vote={vote} />
           </p>
         </div>
         <Link
           href={rollCallHref({ ...vote, congress })}
-          className="font-mono text-xs text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
+          className="font-mono text-small text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
         >
           Open the roll call &rarr;
         </Link>
@@ -165,12 +167,12 @@ export default function VotePanel({
         ))}
       </div>
       {failed && (
-        <p className="text-sm text-signal-amber">
+        <p className="text-small text-signal-amber">
           Each member&apos;s vote could not be loaded. Try again shortly.
         </p>
       )}
       {!detail && !failed && (
-        <p className="text-sm text-ink-lo">Loading each member&apos;s vote…</p>
+        <p className="text-small text-ink-lo">Loading each member&apos;s vote…</p>
       )}
       {detail && (
         <div className="border-t border-white/[0.09] pt-4">
@@ -193,7 +195,7 @@ export default function VotePanel({
             on ? "bg-white/[0.04]" : "hover:bg-white/[0.02]"
           }`}
         >
-          <span className="flex flex-col gap-1 pl-2 font-mono text-xs text-ink-lo">
+          <span className="flex flex-col gap-1 pl-2 font-mono text-small text-ink-lo">
             <span>
               {CHAMBER_NAME[v.chamber]} <span className="sr-only">roll call </span>
               {v.number}
@@ -201,14 +203,14 @@ export default function VotePanel({
             <span className="text-ink-min">{shortDate(v.date)}</span>
           </span>
           <span className="flex min-w-0 flex-col gap-1">
-            <span className="text-[15px] leading-snug text-ink">{v.question}</span>
+            <span className="text-body leading-snug text-ink">{v.question}</span>
             <AmendmentPurpose vote={v} chamber={v.chamber} compact />
           </span>
           {/* wrap-anywhere, as in ReportParts' VoteRow: a result of long
                words is wider than this column on a phone at
               200% text, and breaks only where it would overflow. */}
           <span className="col-start-2 flex min-w-0 flex-col items-start gap-1 pr-2 wrap-anywhere sm:col-start-auto sm:items-end">
-            <span className={`font-mono text-xs ${TONE[resultTone(v.rejected)]}`}>
+            <span className={`font-mono text-small ${TONE[resultTone(v.rejected)]}`}>
               {voteResult(v)}
             </span>
             <VoteCount vote={v} />
@@ -230,7 +232,7 @@ export default function VotePanel({
         // A native disclosure, open when a link to one of these votes
         // ("#vote-senate-2-243") selected it.
         <details open={linkedIndex >= VOTES_SHOWN || undefined} className="group">
-          <summary className="inline-flex min-h-11 w-fit cursor-pointer list-none items-center font-mono text-xs text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos [&::-webkit-details-marker]:hidden">
+          <summary className="inline-flex min-h-11 w-fit cursor-pointer list-none items-center font-mono text-small text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos [&::-webkit-details-marker]:hidden">
             <span className="group-open:hidden">All {votes.length} votes</span>
             <span className="hidden group-open:inline">Show the latest {VOTES_SHOWN} only</span>
           </summary>

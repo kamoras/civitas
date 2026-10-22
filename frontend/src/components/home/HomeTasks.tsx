@@ -4,14 +4,15 @@ import type { ThisWeek } from "@/types/thisWeek";
 import { shortDate } from "@/lib/congress";
 import ClosingLine from "@/components/elections/ClosingLine";
 import StateJump from "./StateJump";
+import { TYPE } from "@/lib/typeStyles";
 
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 
 const BOX = "flex min-w-0 flex-col border border-white/30 bg-surface p-4 sm:p-5";
-const LABEL = "text-[13px] font-semibold text-ink-lo";
-const TITLE = "mt-1 font-display text-[22px] font-semibold leading-tight text-ink-hi";
+const LABEL = "text-small font-semibold text-ink-lo";
+const TITLE = `${TYPE.boxTitle} mt-1`;
 const BUTTON =
-  "inline-flex min-h-11 w-fit items-center border border-ink-hi px-3 text-sm font-semibold text-ink-hi hover:bg-white/5";
+  "inline-flex min-h-11 w-fit items-center border border-ink-hi px-3 text-small font-semibold text-ink-hi hover:bg-white/5";
 
 /** Congress in one heading: in session today, back on a day, or neither. */
 function congressLine(c: ThisWeek["congress"]): string {
@@ -61,7 +62,7 @@ export default async function HomeTasks() {
           <h2 id="task-ballot" className={TITLE}>
             {election ? ballotLine(election) : "Your state's ballot"}
           </h2>
-          {election && <p className="text-sm text-ink-lo">{shortDate(election.date)}</p>}
+          {election && <p className="text-small text-ink-lo">{shortDate(election.date)}</p>}
           <StateJump label="State" to="ballot" />
         </section>
         <section aria-labelledby="task-congress" className={BOX}>
@@ -69,7 +70,7 @@ export default async function HomeTasks() {
           <h2 id="task-congress" className={TITLE}>
             {data?.congress ? congressLine(data.congress) : "This week in Congress"}
           </h2>
-          {data?.congress && <p className="text-sm text-ink-lo">{data.congress.sentence}</p>}
+          {data?.congress && <p className="text-small text-ink-lo">{data.congress.sentence}</p>}
           <div className="mt-auto pt-3">
             <Link href="/congress" className={BUTTON}>
               The week&apos;s record

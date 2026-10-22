@@ -179,7 +179,7 @@ export default function AccessibilityPage() {
                   more="the plain sentences"
                 >
                   <P>
-                    Every score has a <span className="font-mono text-sm text-ink-hi">[?]</span>{" "}
+                    Every score has a <span className="font-mono text-small text-ink-hi">[?]</span>{" "}
                     button whose explanation is in the page text itself, so a screen reader reads it
                     with the button. Each of a member&apos;s three scores opens with a plain
                     sentence giving that member&apos;s own figures. Each <A href="/about">About</A>{" "}

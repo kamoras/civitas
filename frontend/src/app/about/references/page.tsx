@@ -27,9 +27,9 @@ export default function ReferencesChapter() {
           <li
             key={id}
             id={id}
-            className="border-l-3 border-white/[0.09] pl-4 text-sm leading-relaxed text-ink-lo target:border-signal-cyan target:text-ink"
+            className="border-l-3 border-white/[0.09] pl-4 text-small leading-relaxed text-ink-lo target:border-signal-cyan target:text-ink"
           >
-            <span className="block font-mono text-xs text-signal-amber">{ref.short}</span>
+            <span className="block font-mono text-small text-signal-amber">{ref.short}</span>
             <span className="mt-1 block">{ref.entry}</span>
           </li>
         ))}

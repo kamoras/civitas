@@ -32,14 +32,14 @@ export default function RedrawnSeatNote({ state, district }: { state: string; di
   const seat = data?.seat;
   if (!seat || !data?.fromCongressSitting) return null;
   return (
-    <p className="mt-4 border-l border-signal-cyan/60 pl-3 font-sans text-[13px] leading-relaxed text-ink-lo">
-      <span className="font-mono text-[11px] text-signal-cyan">
+    <p className="mt-4 border-l border-signal-cyan/60 pl-3 font-sans text-small leading-relaxed text-ink-lo">
+      <span className="font-mono text-small text-signal-cyan">
         District redrawn for {data.cycle}
       </span>{" "}
       {oldDistrictSentence(seat)}{" "}
       <Link
         href={redistrictingHref(state, `old-${district}`)}
-        className="font-mono text-xs text-signal-cyan underline decoration-signal-cyan/40 underline-offset-4 hover:text-phos"
+        className="font-mono text-small text-signal-cyan underline decoration-signal-cyan/40 underline-offset-4 hover:text-phos"
       >
         [ What changed → ]
       </Link>

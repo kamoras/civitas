@@ -22,6 +22,7 @@ import { PeriodNav } from "./CongressNav";
 import SectionTabs from "@/components/layout/SectionTabs";
 import { Empty, Figure, FigureGroup, Section, TallyText, VoteRow } from "./ReportParts";
 import ScrollRegion from "@/components/shared/ScrollRegion";
+import { TYPE } from "@/lib/typeStyles";
 
 function chamberCell(day: PeriodDay, chamber: "senate" | "house") {
   const c = day[chamber];
@@ -55,17 +56,17 @@ function DayStrip({ days }: { days: PeriodDay[] }) {
             <li key={d.date}>
               <Link
                 href={dayHref(d.date)}
-                className={`flex h-full min-h-32 flex-col gap-2 border p-3 text-sm transition-colors hover:border-white/40 ${
+                className={`flex h-full min-h-32 flex-col gap-2 border p-3 text-small transition-colors hover:border-white/40 ${
                   met ? "border-white/20 bg-surface" : "border-white/[0.09]"
                 }`}
               >
-                <span className="font-mono text-xs text-ink-lo">{shortDate(d.date)}</span>
+                <span className="font-mono text-small text-ink-lo">{shortDate(d.date)}</span>
                 <span className="flex flex-col">
-                  <span className="text-xs text-ink-min">Senate</span>
+                  <span className="text-small text-ink-min">Senate</span>
                   {chamberCell(d, "senate")}
                 </span>
                 <span className="flex flex-col">
-                  <span className="text-xs text-ink-min">House</span>
+                  <span className="text-small text-ink-min">House</span>
                   {chamberCell(d, "house")}
                 </span>
               </Link>
@@ -94,7 +95,7 @@ function BillList({
       {items.map((e, i) => (
         <li
           key={`${e.billId}-${i}`}
-          className="flex flex-wrap gap-x-3 border-b border-white/[0.09] py-2 text-[15px]"
+          className="flex flex-wrap gap-x-3 border-b border-white/[0.09] py-2 text-body"
         >
           {e.billId ? (
             <Link
@@ -110,7 +111,7 @@ function BillList({
               phone at 200% text), not pushed past the screen. */}
           <span className="min-w-[min(10rem,100%)] flex-1 text-ink">
             {e.name}
-            <span className="ml-2 font-mono text-xs text-ink-min">{shortDate(e.date)}</span>
+            <span className="ml-2 font-mono text-small text-ink-min">{shortDate(e.date)}</span>
           </span>
         </li>
       ))}
@@ -170,14 +171,14 @@ export default function PeriodReportView({
             {lead ? (
               <>
                 {lead.body}
-                <h2 className="mt-4 font-mono text-xs text-ink-min">{title}</h2>
+                <h2 className={`${TYPE.kicker} mt-4`}>{title}</h2>
                 <p className="mt-1">{report.sentence}</p>
               </>
             ) : (
               <p>{report.sentence}</p>
             )}
             {pending > 0 && (
-              <p className="mt-1 font-sans text-sm text-ink-min">
+              <p className="mt-1 font-sans text-small text-ink-min">
                 {pending} session {pending === 1 ? "day is" : "days are"} still on the live floor
                 log; its passed and confirmed measures are added when the Daily Digest is published.
               </p>
@@ -237,11 +238,11 @@ export default function PeriodReportView({
                   >
                     <Link
                       href={weekHref(w.week)}
-                      className="font-mono text-sm text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
+                      className="font-mono text-small text-ink-lo underline decoration-white/30 underline-offset-4 hover:text-phos"
                     >
                       {shortDate(w.start).slice(5)} – {shortDate(w.end).slice(5)}
                     </Link>
-                    <span className="text-[15px] text-ink">{w.sentence}</span>
+                    <span className="text-body text-ink">{w.sentence}</span>
                   </li>
                 ))}
               </ul>
@@ -307,7 +308,7 @@ export default function PeriodReportView({
                     {report.closestVotes.map((v) => (
                       <li
                         key={`${v.chamber}-${v.number}`}
-                        className="border-b border-white/[0.09] py-2 text-[15px] text-ink"
+                        className="border-b border-white/[0.09] py-2 text-body text-ink"
                       >
                         <Link
                           href={rollCallHref(v)}

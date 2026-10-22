@@ -1,4 +1,4 @@
-import { EYEBROW } from "@/lib/typeStyles";
+import { EYEBROW, TYPE } from "@/lib/typeStyles";
 import Link from "next/link";
 import { OPEN_COMMENTS_HREF } from "@/lib/routes";
 import { connection } from "next/server";
@@ -87,7 +87,7 @@ function electionLine(e: ThisWeek["election"]): { figure: string; caption: strin
 function StatePicker({ states, compact }: { states: string[]; compact: boolean }) {
   return (
     <ul
-      className={`grid gap-1 font-mono text-xs ${compact ? "grid-cols-[repeat(auto-fill,minmax(2.75rem,1fr))]" : "grid-cols-[repeat(auto-fill,minmax(2.5rem,1fr))]"}`}
+      className={`grid gap-1 font-mono text-small ${compact ? "grid-cols-[repeat(auto-fill,minmax(2.75rem,1fr))]" : "grid-cols-[repeat(auto-fill,minmax(2.5rem,1fr))]"}`}
     >
       {[...states].sort(byStateName).map((st) => (
         <li key={st}>
@@ -111,7 +111,7 @@ const DEADLINES_SHOWN = 5;
 function DeadlineRow({ d }: { d: StateNextDeadline }) {
   const left = countdownText(d);
   return (
-    <li className="text-sm leading-snug">
+    <li className="text-small leading-snug">
       <Link
         href={`${stateBallotHref(d.state)}#voter-deadlines`}
         className="text-ink-hi underline decoration-white/30 underline-offset-4 hover:text-phos"
@@ -119,11 +119,11 @@ function DeadlineRow({ d }: { d: StateNextDeadline }) {
         {STATE_NAMES[d.state] ?? d.state}
       </Link>
       <span className="text-ink-lo">: {d.sentence}</span>
-      {left && <span className="ml-1 font-mono text-xs text-phos">{left}</span>}
+      {left && <span className="ml-1 font-mono text-small text-phos">{left}</span>}
       {d.register && (
         <>
           {" "}
-          <RegisterLink link={d.register} showNote={false} className="ml-1 text-xs" />
+          <RegisterLink link={d.register} showNote={false} className="ml-1 text-small" />
         </>
       )}
     </li>
@@ -145,7 +145,7 @@ function StateDeadlines({ rows }: { rows: StateNextDeadline[] }) {
       </ul>
       {rest.length > 0 && (
         <details className="group">
-          <summary className="inline-flex min-h-6 cursor-pointer list-none items-center font-mono text-xs text-ink-hi underline decoration-white/30 underline-offset-4 hover:text-phos [&::-webkit-details-marker]:hidden">
+          <summary className="inline-flex min-h-6 cursor-pointer list-none items-center font-mono text-small text-ink-hi underline decoration-white/30 underline-offset-4 hover:text-phos [&::-webkit-details-marker]:hidden">
             Every state&apos;s next deadline
             <span aria-hidden="true" className="ml-1 inline-block group-open:rotate-180">
               &#9662;
@@ -183,24 +183,23 @@ function FullStrip({ data }: { data: ThisWeek }) {
   const line = electionLine(election);
   return (
     <section aria-labelledby="this-week-heading" className="mx-auto mt-8 max-w-7xl px-4 sm:px-6">
-      <h2
-        id="this-week-heading"
-        className="border-b border-white/15 pb-2 font-mono text-xs text-ink-min"
-      >
+      <h2 id="this-week-heading" className={`${TYPE.kicker} border-b border-white/15 pb-2`}>
         This week
       </h2>
       <div className="grid grid-cols-1 gap-8 pt-4 md:grid-cols-3 md:gap-9">
         <div className="flex flex-col gap-3">
-          <p className="font-display text-ink-hi">
-            <span className="text-4xl font-semibold leading-none tabular-nums">{line.figure}</span>{" "}
-            <span className="font-mono text-xs text-ink-lo">{line.caption}</span>
+          <p className={TYPE.boxTitle}>
+            <span className="text-title font-semibold leading-none tabular-nums">
+              {line.figure}
+            </span>{" "}
+            <span className="font-mono text-small text-ink-lo">{line.caption}</span>
           </p>
           {/* Behind a disclosure, as in the compact strip: 51 boxes were
               the heaviest thing on the homepage and a third of its tab
               stops, and the masthead's state picker already leads to a
               ballot. */}
           <details className="group">
-            <summary className="cursor-pointer list-none font-sans text-base text-ink-hi underline decoration-white/30 underline-offset-4 hover:text-phos [&::-webkit-details-marker]:hidden">
+            <summary className="cursor-pointer list-none font-sans text-body text-ink-hi underline decoration-white/30 underline-offset-4 hover:text-phos [&::-webkit-details-marker]:hidden">
               {line.pick}
               <span aria-hidden="true" className="ml-1 inline-block group-open:rotate-180">
                 &#9662;
@@ -226,8 +225,8 @@ function FullStrip({ data }: { data: ThisWeek }) {
 
         <div className="flex flex-col gap-3">
           <h3 className={LABEL}>Congress</h3>
-          <p className="font-sans text-base leading-relaxed text-ink">{congress.sentence}</p>
-          <ul className="flex flex-col gap-1 font-mono text-xs text-ink-lo">
+          <p className="font-sans text-body leading-relaxed text-ink">{congress.sentence}</p>
+          <ul className="flex flex-col gap-1 font-mono text-small text-ink-lo">
             {(["senate", "house"] as const).map((c) => {
               const ch = congress.chambers[c];
               const n = ch.recordVotesThisWeek;
@@ -244,13 +243,13 @@ function FullStrip({ data }: { data: ThisWeek }) {
               {congress.recentVotes.map((v) => (
                 <li
                   key={`${v.chamber}-${v.congress}-${v.session}-${v.number}`}
-                  className="text-sm leading-snug"
+                  className="text-small leading-snug"
                 >
                   <Link href={rollCallHref(v)} className="text-ink-hi hover:underline">
                     {v.billLabel ? `${v.billLabel}: ` : ""}
                     {v.title || v.question}
                   </Link>
-                  <span className="block font-mono text-xs text-ink-min">
+                  <span className="block font-mono text-small text-ink-min">
                     {shortDate(v.date)} · {v.chamber === "senate" ? "Senate" : "House"} ·{" "}
                     {voteResult(v)}
                   </span>
@@ -260,7 +259,7 @@ function FullStrip({ data }: { data: ThisWeek }) {
           )}
           <Link
             href={weekHref(congress.weekStart)}
-            className={`inline-flex min-h-6 w-fit items-center font-mono text-xs ${LINK}`}
+            className={`inline-flex min-h-6 w-fit items-center font-mono text-small ${LINK}`}
           >
             What Congress did this week &rarr;
           </Link>
@@ -269,7 +268,7 @@ function FullStrip({ data }: { data: ThisWeek }) {
         <div className="flex flex-col gap-3">
           <h3 className={LABEL}>Comment deadlines</h3>
           {commentDeadlines.length === 0 ? (
-            <p className="font-sans text-base text-ink-lo">
+            <p className="font-sans text-body text-ink-lo">
               No federal rule is open for comment right now.
             </p>
           ) : (
@@ -277,14 +276,14 @@ function FullStrip({ data }: { data: ThisWeek }) {
               {commentDeadlines.map((d) => {
                 const why = deadlineWhy(d);
                 return (
-                  <li key={d.id} className="text-sm leading-snug">
+                  <li key={d.id} className="text-small leading-snug">
                     <Link
                       href={exploreHref(d)}
                       className="line-clamp-2 text-ink-hi hover:underline"
                     >
                       {d.title}
                     </Link>
-                    <span className="block font-mono text-xs text-ink-min">
+                    <span className="block font-mono text-small text-ink-min">
                       {d.docType} · closes {shortDate(d.commentsCloseOn)} · {daysLeft(d.daysLeft)}
                       {why && <> · {why}</>}
                     </span>
@@ -295,7 +294,7 @@ function FullStrip({ data }: { data: ThisWeek }) {
           )}
           <Link
             href={OPEN_COMMENTS_HREF}
-            className={`inline-flex min-h-6 w-fit items-center font-mono text-xs ${LINK}`}
+            className={`inline-flex min-h-6 w-fit items-center font-mono text-small ${LINK}`}
           >
             Every open comment period &rarr;
           </Link>
@@ -321,7 +320,7 @@ function CompactStrip({ data, pageDate }: { data: ThisWeek; pageDate?: string })
   return (
     <aside
       aria-label={label}
-      className="mb-6 border border-white/15 bg-surface px-4 py-3 font-mono text-xs text-ink-lo"
+      className="mb-6 border border-white/15 bg-surface px-4 py-3 font-mono text-small text-ink-lo"
     >
       <div className="flex flex-wrap items-baseline gap-x-5 gap-y-2">
         <span className="text-ink-min">{label}</span>

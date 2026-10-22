@@ -9,6 +9,7 @@ import BoxGrid from "@/components/shared/BoxGrid";
 import RecordBox from "@/components/shared/RecordBox";
 import { formatUtcDate } from "@/lib/formatting";
 import { SCORE_VERSIONS, type ScoreVersion } from "@/lib/scoreVersions";
+import { TYPE } from "@/lib/typeStyles";
 
 export const metadata = pageMetadata({
   title: "Changelog",
@@ -48,13 +49,10 @@ async function NewOnTheSite() {
   if (!features.length) return null;
   return (
     <section aria-labelledby="new-h">
-      <h2
-        id="new-h"
-        className="font-display text-2xl font-semibold leading-tight tracking-[-0.01em] text-ink-hi"
-      >
+      <h2 id="new-h" className={TYPE.section}>
         New on the site
       </h2>
-      <p className="mt-3 text-base leading-relaxed text-ink">
+      <p className="mt-3 text-body leading-relaxed text-ink">
         New pages and features, newest first, dated by release. Each is also posted once to the{" "}
         <A href={TOPIC_FEEDS.new.url}>What&apos;s new feed</A> and to Bluesky.
       </p>
@@ -65,17 +63,17 @@ async function NewOnTheSite() {
             id={`new-${f.id}`}
             className="grid grid-cols-1 gap-1 py-3 sm:grid-cols-[9rem_1fr] sm:gap-4"
           >
-            <time dateTime={f.date} className="font-mono text-xs text-signal-amber sm:pt-1">
+            <time dateTime={f.date} className="font-mono text-small text-signal-amber sm:pt-1">
               {released(f.date)}
             </time>
             <div>
               <Link
                 href={f.url}
-                className="font-display text-base font-semibold text-signal-cyan underline underline-offset-2 hover:text-phos"
+                className={`${TYPE.boxTitle} text-signal-cyan! underline underline-offset-2 hover:text-phos!`}
               >
                 {f.title}
               </Link>
-              <p className="mt-1 text-sm leading-relaxed text-ink-lo">{f.summary}</p>
+              <p className="mt-1 text-small leading-relaxed text-ink-lo">{f.summary}</p>
             </div>
           </li>
         ))}
@@ -122,7 +120,7 @@ function Entry({ v }: { v: ScoreVersion }) {
         label: v.tldr ? "what changed, and the evidence" : "what changed",
         children: (
           <div className="space-y-3">
-            {v.tldr && <p className="text-base leading-relaxed text-ink">{v.tldr}</p>}
+            {v.tldr && <p className="text-body leading-relaxed text-ink">{v.tldr}</p>}
             <List>
               {v.changes.map((c, i) => (
                 <Item key={i}>{c}</Item>
@@ -174,10 +172,7 @@ export default function ChangelogPage() {
             </Summary>
 
             <section aria-labelledby="current-h">
-              <h2
-                id="current-h"
-                className="font-display text-2xl font-semibold leading-tight tracking-[-0.01em] text-ink-hi"
-              >
+              <h2 id="current-h" className={TYPE.section}>
                 Current versions
               </h2>
               <dl className="mt-4 divide-y divide-white/[0.07] border-y border-white/[0.07]">
@@ -188,8 +183,8 @@ export default function ChangelogPage() {
                         key={f}
                         className="grid grid-cols-1 gap-1 py-3 sm:grid-cols-[13rem_1fr] sm:gap-4"
                       >
-                        <dt className="font-mono text-xs text-signal-amber sm:pt-0.5">{f}</dt>
-                        <dd className="text-sm leading-relaxed text-ink-lo">
+                        <dt className="font-mono text-small text-signal-amber sm:pt-0.5">{f}</dt>
+                        <dd className="text-small leading-relaxed text-ink-lo">
                           <a
                             href={`#${anchor(v)}`}
                             className="text-signal-cyan underline underline-offset-2 hover:text-phos"
@@ -205,13 +200,10 @@ export default function ChangelogPage() {
             </section>
 
             <section aria-labelledby="history-h">
-              <h2
-                id="history-h"
-                className="font-display text-2xl font-semibold leading-tight tracking-[-0.01em] text-ink-hi"
-              >
+              <h2 id="history-h" className={TYPE.section}>
                 Every version, newest first
               </h2>
-              <p className="mt-3 text-base leading-relaxed text-ink">
+              <p className="mt-3 text-body leading-relaxed text-ink">
                 Dates are when a version was released. Versions up to v5.8 (July 12, 2026) predate
                 the public code history, so their dates can&apos;t be checked against it.
               </p>

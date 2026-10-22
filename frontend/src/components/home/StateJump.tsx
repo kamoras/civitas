@@ -43,14 +43,14 @@ export default function StateJump({
           {name}&apos;s {to === "ballot" ? "ballot" : "members"} &rarr;
         </Link>
       )}
-      <label htmlFor={id} className="block text-sm text-ink-lo">
+      <label htmlFor={id} className="block text-small text-ink-lo">
         {state ? `Another state` : label}
       </label>
       <select
         id={id}
         defaultValue=""
         onChange={(e) => e.target.value && router.push(hrefFor(e.target.value))}
-        className="mt-1 min-h-11 w-full border border-ink-hi bg-surface px-2 text-base text-ink-hi"
+        className="mt-1 min-h-11 w-full border border-ink-hi bg-surface px-2 text-body text-ink-hi"
       >
         <option value="">Choose a state</option>
         {STATES.map(([code, name]) => (

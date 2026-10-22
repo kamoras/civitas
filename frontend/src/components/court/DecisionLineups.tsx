@@ -1,5 +1,6 @@
 import type { Court } from "@/types/court";
 import { splitLabel, termsPhrase } from "@/lib/court";
+import { TYPE } from "@/lib/typeStyles";
 
 // Lopsided splits light, close ones dark, in the order the API gives
 // them; a split past the end takes the darkest. Each shade is a theme
@@ -29,11 +30,11 @@ export default function DecisionLineups({ court }: { court: Court }) {
   if (terms.length === 0) return null;
   return (
     <div className="flex flex-col gap-4">
-      <h3 className="text-lg font-semibold text-ink-hi">How the Court split, by term</h3>
+      <h3 className={TYPE.boxTitle}>How the Court split, by term</h3>
       <div aria-hidden="true" className="flex flex-col gap-2">
         {terms.map((t) => (
           <div key={t.term} className="flex items-center gap-3">
-            <span className="w-12 shrink-0 font-mono text-sm text-ink-lo">{t.term}</span>
+            <span className="w-12 shrink-0 font-mono text-small text-ink-lo">{t.term}</span>
             <div className="flex h-7 flex-1 gap-0.5">
               {splits.map((s, i) => {
                 const count = t.counts[s] ?? 0;
@@ -42,7 +43,7 @@ export default function DecisionLineups({ court }: { court: Court }) {
                 return (
                   <span
                     key={s}
-                    className="@container flex items-center justify-center overflow-hidden font-mono text-xs"
+                    className="@container flex items-center justify-center overflow-hidden font-mono text-small"
                     style={{ ...shade(i), width: `${share * 100}%` }}
                   >
                     {/* Shown only where the segment is wide enough for it, a
@@ -60,7 +61,7 @@ export default function DecisionLineups({ court }: { court: Court }) {
             </div>
           </div>
         ))}
-        <div className="flex flex-wrap gap-x-4 gap-y-1 pl-[3.75rem] font-mono text-xs text-ink-lo">
+        <div className="flex flex-wrap gap-x-4 gap-y-1 pl-[3.75rem] font-mono text-small text-ink-lo">
           {splits.map((s, i) => (
             <span key={s} className="inline-flex items-center gap-1.5">
               <span className="h-3 w-3" style={{ background: shade(i).background }} />
@@ -71,14 +72,14 @@ export default function DecisionLineups({ court }: { court: Court }) {
       </div>
 
       <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Splits by term">
-        <table className="w-full border-collapse text-sm">
-          <caption className="mb-1 text-left text-sm text-ink-lo">
+        <table className="w-full border-collapse text-small">
+          <caption className="mb-1 text-left text-small text-ink-lo">
             Orally argued cases decided in {termsPhrase(terms.map((t) => t.term))}, by the
             Court&apos;s vote (majority&ndash;dissent). A count of 8 or fewer justices is a case a
             justice sat out.
           </caption>
           <thead>
-            <tr className="border-b border-white/15 font-mono text-xs text-ink-min">
+            <tr className="border-b border-white/15 font-mono text-small text-ink-min">
               <th scope="col" className="py-1.5 pr-3 text-left font-normal">
                 Term
               </th>

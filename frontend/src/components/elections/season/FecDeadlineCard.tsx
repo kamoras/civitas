@@ -1,6 +1,7 @@
 import type { FecDeadlineEvent } from "@/types/nextCycle";
 import { longDate } from "@/lib/specials";
 import { safeHref } from "@/lib/formatting";
+import { TYPE } from "@/lib/typeStyles";
 
 /** The FEC's campaign finance deadline as a recurring event: shown from two
  * weeks before it until a few days after (backend next_cycle.deadline_event
@@ -19,10 +20,10 @@ export default function FecDeadlineCard({ event }: { event: FecDeadlineEvent | n
       aria-labelledby="fec-deadline"
       className="mt-6 border font-sans border-signal-cyan/30 bg-surface px-4 py-3"
     >
-      <h2 id="fec-deadline" className="font-mono text-xs text-ink-min">
+      <h2 id="fec-deadline" className={TYPE.kicker}>
         FEC filing deadline
       </h2>
-      <p className="mt-1 text-sm text-ink-lo">
+      <p className="mt-1 text-small text-ink-lo">
         The FEC&apos;s {what} reports{event.reportYear ? ` (${event.reportYear})` : ""} {when}.
         Every federal candidate and committee files them; the fundraising figures on each race
         update as they are read.{" "}

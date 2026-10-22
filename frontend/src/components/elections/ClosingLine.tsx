@@ -26,7 +26,7 @@ export default function ClosingLine({
         : shortDate(soonest.closesOn);
   return (
     <p
-      className={`${className} border border-white/30 border-l-4 border-l-signal-orange bg-surface px-4 py-2 text-sm`}
+      className={`${className} border border-white/30 border-l-4 border-l-signal-orange bg-surface px-4 py-2 text-small`}
     >
       <Link
         href={CALENDAR_HREF}

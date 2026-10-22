@@ -22,9 +22,9 @@ function Tile({
 }) {
   const body = (
     <>
-      <span className="text-base font-semibold text-ink-hi">{title}</span>
-      <span className="text-sm text-ink-lo">{line}</span>
-      <span className="font-mono text-xs text-ink-min">{meta}</span>
+      <span className="text-body font-semibold text-ink-hi">{title}</span>
+      <span className="text-small text-ink-lo">{line}</span>
+      <span className="font-mono text-small text-ink-min">{meta}</span>
     </>
   );
   const box =
@@ -76,11 +76,7 @@ export default function AlsoOnRecord({
 
   return (
     <section className="flex flex-col gap-3" aria-labelledby="also-on-record">
-      <h2
-        id="also-on-record"
-        {...onThisPage("Also on record")}
-        className={TYPE.section}
-      >
+      <h2 id="also-on-record" {...onThisPage("Also on record")} className={TYPE.section}>
         {ALSO}
       </h2>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

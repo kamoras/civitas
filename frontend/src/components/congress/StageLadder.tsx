@@ -15,7 +15,7 @@ import type { StageMilestones } from "@/types/bill";
 export default function StageLadder({ data }: { data: StageMilestones }) {
   return (
     <div className="flex flex-col gap-2">
-      <p className="font-mono text-xs text-ink-min">How far it has got</p>
+      <p className="font-mono text-small text-ink-min">How far it has got</p>
       <ol className="flex flex-col">
         {data.milestones.map((m, i) => {
           const reached = i <= data.reached;
@@ -24,7 +24,7 @@ export default function StageLadder({ data }: { data: StageMilestones }) {
             <li
               key={m.label}
               aria-current={here ? "step" : undefined}
-              className="grid grid-cols-[minmax(0,10.5rem)_minmax(0,1fr)_3.25rem] items-center gap-3 border-t border-white/[0.07] py-1.5 text-sm"
+              className="grid grid-cols-[minmax(0,10.5rem)_minmax(0,1fr)_3.25rem] items-center gap-3 border-t border-white/[0.07] py-1.5 text-small"
             >
               <span className={reached ? "text-ink-hi" : "text-ink-lo"}>
                 {/* The label opens the bills that got at least this far, the
@@ -39,7 +39,7 @@ export default function StageLadder({ data }: { data: StageMilestones }) {
                   {m.label}
                 </Link>
                 {here && (
-                  <span className="ml-2 whitespace-nowrap border border-signal-cyan/50 px-1 font-mono text-[11px] text-signal-cyan">
+                  <span className="ml-2 whitespace-nowrap border border-signal-cyan/50 px-1 font-mono text-small text-signal-cyan">
                     This bill
                   </span>
                 )}
@@ -50,19 +50,19 @@ export default function StageLadder({ data }: { data: StageMilestones }) {
                   style={{ width: `${Math.max(m.share * 100, 0.6)}%` }}
                 />
               </span>
-              <span className="text-right font-mono text-xs tabular-nums text-ink-lo">
+              <span className="text-right font-mono text-small tabular-nums text-ink-lo">
                 {m.shareText}
               </span>
             </li>
           );
         })}
       </ol>
-      <p className="text-xs leading-relaxed text-ink-min">
+      <p className="text-small leading-relaxed text-ink-min">
         Share of the {data.total.toLocaleString("en-US")} bills sitting members have sponsored this
         Congress that got at least that far. Pick a step to list its bills.
       </p>
       {data.stage && data.stageOthers != null && (
-        <p className="text-sm">
+        <p className="text-small">
           {/* The ladder's lists are cumulative ("Introduced" is every
               bill); this one is the bills sitting where this one sits. */}
           <Link

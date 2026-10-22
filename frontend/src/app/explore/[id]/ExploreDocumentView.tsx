@@ -29,6 +29,7 @@ import {
   type ExploreDocumentSummary,
   type PublicComment,
 } from "@/lib/api";
+import { TYPE } from "@/lib/typeStyles";
 
 const formatDate = (dateStr: string): string =>
   formatUtcDate(
@@ -124,7 +125,7 @@ function HelpMeCommentPanel({ doc, remaining }: { doc: ExploreDocumentDetail; re
       <button
         onClick={handleOpen}
         aria-expanded={open}
-        className="text-xs font-mono px-4 py-2 border border-phos/40
+        className="text-small font-mono px-4 py-2 border border-phos/40
                    text-phos-mid hover:text-phos hover:bg-phos/10
                    transition-colors"
       >
@@ -135,13 +136,13 @@ function HelpMeCommentPanel({ doc, remaining }: { doc: ExploreDocumentDetail; re
         <div className="mt-4 p-4 border border-phos/20 bg-phos/5 space-y-4">
           {plainSummary && (
             <div>
-              <p className="text-xs font-mono text-ink-lo mb-1">What this document does</p>
-              <p className="font-sans text-base leading-relaxed text-ink">{plainSummary}</p>
+              <p className="text-small font-mono text-ink-lo mb-1">What this document does</p>
+              <p className="font-sans text-body leading-relaxed text-ink">{plainSummary}</p>
             </div>
           )}
 
           <div>
-            <label htmlFor="comment-draft" className="text-xs font-mono text-ink-lo block mb-1">
+            <label htmlFor="comment-draft" className="text-small font-mono text-ink-lo block mb-1">
               Your comment: edit before submitting
             </label>
             <textarea
@@ -151,17 +152,17 @@ function HelpMeCommentPanel({ doc, remaining }: { doc: ExploreDocumentDetail; re
               onChange={(e) => setDraft(e.target.value)}
               rows={9}
               className="w-full bg-surface-base border border-white/[0.07] px-3 py-2
-                         text-sm text-ink-hi leading-relaxed
+                         text-small text-ink-hi leading-relaxed
                          focus:outline-none focus:border-phos/50 transition-colors
                          resize-y min-h-[180px]"
             />
-            <p className="text-xs text-ink-min mt-1">
+            <p className="text-small text-ink-min mt-1">
               Replace the bracketed text with your own words.
             </p>
           </div>
 
           <div className="flex items-center justify-between gap-3 flex-wrap">
-            <p className="text-xs text-ink-lo">
+            <p className="text-small text-ink-lo">
               {remaining === 0
                 ? "Closes today"
                 : `${remaining} day${remaining !== 1 ? "s" : ""} left`}{" "}
@@ -172,14 +173,14 @@ function HelpMeCommentPanel({ doc, remaining }: { doc: ExploreDocumentDetail; re
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Open the comment form at regulations.gov (opens in new tab)"
-              className="text-xs font-mono px-5 py-2 bg-phos/20 text-phos border border-phos/50
+              className="text-small font-mono px-5 py-2 bg-phos/20 text-phos border border-phos/50
                          hover:bg-phos/30 hover:border-phos/70
                          transition-colors"
             >
               Open comment form ↗
             </a>
           </div>
-          <p className="text-xs text-ink-min leading-relaxed">
+          <p className="text-small text-ink-min leading-relaxed">
             Copy your comment above, then paste it into the form on regulations.gov. Your comment
             becomes part of the official public record.
           </p>
@@ -269,7 +270,7 @@ function CommentsSection({
         <TerminalTitlebar title="Public comments" />
         <div className="p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xs font-mono text-ink-lo">
+            <h3 className={TYPE.kicker}>
               Public comments
               {commentsLoaded && totalComments > 0 && (
                 <span className="ml-2 text-ink-min">({totalComments})</span>
@@ -282,7 +283,7 @@ function CommentsSection({
                     setShowForm(!showForm);
                     setSubmitResult(null);
                   }}
-                  className="text-xs font-mono px-3 py-1.5 bg-phos/20 text-phos border border-phos/40
+                  className="text-small font-mono px-3 py-1.5 bg-phos/20 text-phos border border-phos/40
                              hover:bg-phos/30 transition-colors"
                 >
                   {showForm ? "Cancel" : "Write comment"}
@@ -292,7 +293,7 @@ function CommentsSection({
                 <button
                   onClick={() => loadComments(1)}
                   disabled={commentsLoading}
-                  className="text-xs font-mono px-3 py-1.5 bg-signal-cyan/10 text-signal-cyan border border-white/15
+                  className="text-small font-mono px-3 py-1.5 bg-signal-cyan/10 text-signal-cyan border border-white/15
                              hover:bg-signal-cyan/10 hover:text-phos transition-colors
                              disabled:opacity-50"
                 >
@@ -306,7 +307,7 @@ function CommentsSection({
           {submitResult && (
             <div
               role="alert"
-              className={`mb-4 p-3  border text-sm ${
+              className={`mb-4 p-3 border text-small ${
                 submitResult.success
                   ? "bg-phos/10 border-phos/30 text-phos"
                   : "bg-signal-red/10 border-signal-red/40 text-signal-red"
@@ -319,7 +320,7 @@ function CommentsSection({
           {/* Comment Form */}
           {showForm && commentOpen && (
             <div className="mb-6 p-4 border border-phos/20 bg-phos/5">
-              <p className="text-xs text-ink-lo mb-3 leading-relaxed">
+              <p className="text-small text-ink-lo mb-3 leading-relaxed">
                 Your comment will be submitted to regulations.gov and become part of the official
                 public record. Agency officials review these comments when making final decisions.
               </p>
@@ -328,7 +329,7 @@ function CommentsSection({
                 <div>
                   <label
                     htmlFor="comment-name"
-                    className="text-xs font-mono text-ink-min block mb-1"
+                    className="text-small font-mono text-ink-min block mb-1"
                   >
                     Your name
                   </label>
@@ -340,14 +341,14 @@ function CommentsSection({
                     placeholder="Anonymous"
                     maxLength={100}
                     className="w-full bg-surface-base border border-white/[0.07] px-3 py-2
-                               text-sm text-ink-hi placeholder:text-ink-min
+                               text-small text-ink-hi placeholder:text-ink-min
                                focus:outline-none focus:border-phos/50 transition-colors"
                   />
                 </div>
                 <div>
                   <label
                     htmlFor="comment-org"
-                    className="text-xs font-mono text-ink-min block mb-1"
+                    className="text-small font-mono text-ink-min block mb-1"
                   >
                     Organization <span className="text-ink-min">(Optional)</span>
                   </label>
@@ -359,14 +360,17 @@ function CommentsSection({
                     placeholder=""
                     maxLength={200}
                     className="w-full bg-surface-base border border-white/[0.07] px-3 py-2
-                               text-sm text-ink-hi placeholder:text-ink-min
+                               text-small text-ink-hi placeholder:text-ink-min
                                focus:outline-none focus:border-phos/50 transition-colors"
                   />
                 </div>
               </div>
 
               <div className="mb-3">
-                <label htmlFor="comment-text" className="text-xs font-mono text-ink-min block mb-1">
+                <label
+                  htmlFor="comment-text"
+                  className="text-small font-mono text-ink-min block mb-1"
+                >
                   Your comment
                 </label>
                 <textarea
@@ -377,14 +381,14 @@ function CommentsSection({
                   maxLength={5000}
                   rows={6}
                   className="w-full bg-surface-base border border-white/[0.07] px-3 py-2
-                             text-sm text-ink-hi placeholder:text-ink-min
+                             text-small text-ink-hi placeholder:text-ink-min
                              focus:outline-none focus:border-phos/50 transition-colors
                              resize-y min-h-[120px]"
                 />
                 <div className="flex justify-between mt-1">
-                  <span className="text-xs text-ink-min">Minimum 10 characters</span>
+                  <span className="text-small text-ink-min">Minimum 10 characters</span>
                   <span
-                    className={`text-xs ${
+                    className={`text-small ${
                       commentText.length > 4800 ? "text-signal-red" : "text-ink-min"
                     }`}
                   >
@@ -394,7 +398,7 @@ function CommentsSection({
               </div>
 
               <div className="flex items-center justify-between">
-                <p className="text-xs text-ink-min">
+                <p className="text-small text-ink-min">
                   {remaining === 0
                     ? "Last day to comment"
                     : `${remaining} day${remaining !== 1 ? "s" : ""} remaining to comment`}
@@ -402,7 +406,7 @@ function CommentsSection({
                 <button
                   onClick={handleSubmit}
                   disabled={submitting || commentText.trim().length < 10}
-                  className="text-xs font-mono px-6 py-2 bg-phos/20 text-phos border border-phos/50
+                  className="text-small font-mono px-6 py-2 bg-phos/20 text-phos border border-phos/50
                              hover:bg-phos/30 hover:border-phos/70
                              transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
@@ -410,7 +414,7 @@ function CommentsSection({
                 </button>
               </div>
 
-              <p className="text-xs text-ink-min mt-3 leading-relaxed">
+              <p className="text-small text-ink-min mt-3 leading-relaxed">
                 By submitting, you acknowledge this comment will be publicly visible on
                 regulations.gov. Do not include personal information you do not wish to be public.
               </p>
@@ -420,7 +424,7 @@ function CommentsSection({
           {/* Comments List */}
           {commentsLoading && (
             <div className="text-center py-8">
-              <span className="text-signal-cyan text-sm font-mono pulse-subtle">
+              <span className="text-signal-cyan text-small font-mono pulse-subtle">
                 Loading public comments…
               </span>
             </div>
@@ -428,13 +432,13 @@ function CommentsSection({
 
           {commentsError && (
             <div className="text-center py-6">
-              <p className="text-ink-min text-base">{commentsError}</p>
+              <p className="text-ink-min text-body">{commentsError}</p>
               {commentsError === "API key not configured" && (
                 <a
                   href={commentHref(commentUrl)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-block mt-3 text-xs font-mono text-signal-cyan hover:text-phos transition-colors"
+                  className="inline-block mt-3 text-small font-mono text-signal-cyan hover:text-phos transition-colors"
                 >
                   View comments on Regulations.gov →
                 </a>
@@ -444,7 +448,7 @@ function CommentsSection({
 
           {commentsLoaded && !commentsLoading && !commentsError && comments.length === 0 && (
             <div className="text-center py-6">
-              <p className="text-ink-min text-base">
+              <p className="text-ink-min text-body">
                 {totalComments === 0
                   ? "No public comments have been submitted yet."
                   : "No comments on this page."}
@@ -452,7 +456,7 @@ function CommentsSection({
               {commentOpen && !showForm && (
                 <button
                   onClick={() => setShowForm(true)}
-                  className="mt-3 text-xs font-mono text-phos-mid hover:text-phos transition-colors"
+                  className="mt-3 text-small font-mono text-phos-mid hover:text-phos transition-colors"
                 >
                   Be the first to comment →
                 </button>
@@ -466,19 +470,21 @@ function CommentsSection({
                 <div key={c.id} className="border border-white/[0.07] p-4 bg-phos/[0.02]">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-ink font-semibold">
+                      <span className="text-small text-ink font-semibold">
                         {c.submitterName || "Anonymous"}
                       </span>
                       {c.organization && (
-                        <span className="text-xs text-ink-min">({c.organization})</span>
+                        <span className="text-small text-ink-min">({c.organization})</span>
                       )}
                     </div>
-                    <span className="text-xs text-ink-min">{formatCommentDate(c.postedDate)}</span>
+                    <span className="text-small text-ink-min">
+                      {formatCommentDate(c.postedDate)}
+                    </span>
                   </div>
                   {c.title && c.title !== c.body?.slice(0, 50) && (
-                    <p className="text-xs text-ink-lo font-semibold mb-1">{c.title}</p>
+                    <p className="text-small text-ink-lo font-semibold mb-1">{c.title}</p>
                   )}
-                  <p className="text-base text-ink-lo leading-relaxed whitespace-pre-wrap">
+                  <p className="text-body text-ink-lo leading-relaxed whitespace-pre-wrap">
                     {c.body || "(No comment text available)"}
                   </p>
                 </div>
@@ -490,17 +496,17 @@ function CommentsSection({
                   <button
                     onClick={() => loadComments(commentsPage - 1)}
                     disabled={commentsPage <= 1 || commentsLoading}
-                    className="text-xs font-mono text-ink-lo hover:text-phos disabled:text-ink-min disabled:cursor-not-allowed transition-colors"
+                    className="text-small font-mono text-ink-lo hover:text-phos disabled:text-ink-min disabled:cursor-not-allowed transition-colors"
                   >
                     ← Prev
                   </button>
-                  <span className="text-xs text-ink-min">
+                  <span className="text-small text-ink-min">
                     Page {commentsPage} of {totalPages}
                   </span>
                   <button
                     onClick={() => loadComments(commentsPage + 1)}
                     disabled={commentsPage >= totalPages || commentsLoading}
-                    className="text-xs font-mono text-ink-lo hover:text-phos disabled:text-ink-min disabled:cursor-not-allowed transition-colors"
+                    className="text-small font-mono text-ink-lo hover:text-phos disabled:text-ink-min disabled:cursor-not-allowed transition-colors"
                   >
                     Next →
                   </button>
@@ -516,7 +522,7 @@ function CommentsSection({
                 href={commentHref(commentUrl)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs font-mono text-ink-min hover:text-phos transition-colors"
+                className="text-small font-mono text-ink-min hover:text-phos transition-colors"
               >
                 View all comments on Regulations.gov →
               </a>
@@ -623,13 +629,13 @@ export default function ExploreDocumentView({
               arrived from anywhere else has none, and gets the documents search. */}
           <Link
             href={documentsHref({ q: query || undefined })}
-            className="inline-block text-xs font-mono text-ink-lo hover:text-phos transition-colors mb-2"
+            className="inline-block text-small font-mono text-ink-lo hover:text-phos transition-colors mb-2"
           >
             {query ? "← Back to results" : "← Search documents"}
           </Link>
           {/* What this site is, for a reader who arrived here from a search
               engine or a shared link: one line, in the homepage's words. */}
-          <p className="mb-6 font-sans text-xs leading-relaxed text-ink-lo">
+          <p className="mb-6 font-sans text-small leading-relaxed text-ink-lo">
             <Link href="/" className="underline underline-offset-2 hover:text-phos">
               Civitas
             </Link>{" "}
@@ -648,20 +654,20 @@ export default function ExploreDocumentView({
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
                   <div className="flex flex-wrap items-center gap-x-2 mb-1">
-                    <span className="text-xs font-mono px-2 py-0.5 bg-phos/20 text-phos border border-phos/30">
+                    <span className="text-small font-mono px-2 py-0.5 bg-phos/20 text-phos border border-phos/30">
                       Open for public comment
                     </span>
-                    <span className="text-ink-lo text-xs">
+                    <span className="text-ink-lo text-small">
                       {remaining === 0
                         ? "Closes today!"
                         : `${remaining} day${remaining !== 1 ? "s" : ""} remaining`}
                     </span>
                   </div>
-                  <p className="font-sans text-base leading-relaxed text-ink">
+                  <p className="font-sans text-body leading-relaxed text-ink">
                     The public can submit comments on this document. Your input is part of the
                     official record and may influence the final outcome.
                   </p>
-                  <p className="text-xs text-ink-min mt-1">
+                  <p className="text-small text-ink-min mt-1">
                     Comments close {formatDate(doc.commentsCloseOn)}
                   </p>
                 </div>
@@ -674,7 +680,7 @@ export default function ExploreDocumentView({
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label="Submit your comment at regulations.gov (opens in new tab)"
-                  className="text-sm font-mono px-6 py-3 bg-phos/20 text-phos border border-phos/50
+                  className="text-small font-mono px-6 py-3 bg-phos/20 text-phos border border-phos/50
                              hover:bg-phos/30 hover:border-phos/70
                              transition-colors shrink-0"
                 >
@@ -688,24 +694,22 @@ export default function ExploreDocumentView({
           {/* Document header */}
           <div className={`border p-6 mb-6 ${chamberBorder(doc.chamber)} bg-surface-base`}>
             <div className="flex items-center gap-2 flex-wrap mb-3">
-              <span className={`text-xs font-mono ${chamberColor(doc.chamber)}`}>
+              <span className={`text-small font-mono ${chamberColor(doc.chamber)}`}>
                 {chamberLabel(doc.chamber)}
               </span>
-              <span className="text-ink-min text-xs">|</span>
-              <span className="text-ink-lo text-xs">{doc.docType}</span>
+              <span className="text-ink-min text-small">|</span>
+              <span className="text-ink-lo text-small">{doc.docType}</span>
               {doc.date && (
                 <>
-                  <span className="text-ink-min text-xs">|</span>
-                  <span className="text-ink-lo text-xs">{formatDate(doc.date)}</span>
+                  <span className="text-ink-min text-small">|</span>
+                  <span className="text-ink-lo text-small">{formatDate(doc.date)}</span>
                 </>
               )}
             </div>
 
-            <h1 className="text-lg sm:text-xl text-ink-hi font-semibold leading-snug mb-4">
-              {doc.title}
-            </h1>
+            <h1 className={`${TYPE.title} mb-4`}>{doc.title}</h1>
 
-            <div className="flex items-center gap-4 flex-wrap text-xs">
+            <div className="flex items-center gap-4 flex-wrap text-small">
               {doc.agencyName && (
                 <span className="text-signal-orange">
                   <AgencyLink
@@ -721,7 +725,7 @@ export default function ExploreDocumentView({
               {scorecardLink && (
                 <Link
                   href={scorecardLink}
-                  className="font-mono text-xs text-signal-cyan hover:text-phos transition-colors"
+                  className="font-mono text-small text-signal-cyan hover:text-phos transition-colors"
                 >
                   [View record]
                 </Link>
@@ -731,14 +735,14 @@ export default function ExploreDocumentView({
                   href={safeHref(sourceUrl) || "#"}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="font-mono text-xs text-ink-min hover:text-phos transition-colors"
+                  className="font-mono text-small text-ink-min hover:text-phos transition-colors"
                 >
                   [{asLabel(sourceLabel)}]
                 </a>
               )}
               <a
                 href="#cite"
-                className="font-mono text-xs text-ink-min hover:text-phos transition-colors"
+                className="font-mono text-small text-ink-min hover:text-phos transition-colors"
               >
                 [Cite]
               </a>
@@ -747,7 +751,7 @@ export default function ExploreDocumentView({
             {/* The bill the Record heading names: the speech's own
                 stated subject, linked to the bill's page. */}
             {(doc.bills ?? []).length > 0 && (
-              <p className="mt-3 font-mono text-xs text-ink-lo">
+              <p className="mt-3 font-mono text-small text-ink-lo">
                 {(doc.bills ?? []).length > 1 ? "Bills: " : "Bill: "}
                 {(doc.bills ?? []).map((b, i) => (
                   <span key={b.billId}>
@@ -773,10 +777,10 @@ export default function ExploreDocumentView({
                   {/* pulse-subtle, not animate-pulse: at animate-pulse's
                       half opacity these words fell to 3.86:1 (WCAG 1.4.3),
                       and an analysis can take minutes. */}
-                  <span className="text-signal-cyan text-sm font-mono pulse-subtle">
+                  <span className="text-signal-cyan text-small font-mono pulse-subtle">
                     Analyzing document…
                   </span>
-                  <p className="text-ink-min text-xs mt-2">
+                  <p className="text-ink-min text-small mt-2">
                     {summaryQueued
                       ? "Other analyses are being written: this one is queued and starts as soon as the analyzer is free."
                       : "This may take a moment"}
@@ -788,8 +792,8 @@ export default function ExploreDocumentView({
                 <div className="space-y-4" aria-live="polite">
                   {displayedSummary.summary && (
                     <div>
-                      <h2 className="text-xs font-mono text-ink-lo mb-2">AI summary</h2>
-                      <p className="text-base text-ink-hi leading-relaxed">
+                      <h2 className={`${TYPE.kicker} mb-2`}>AI summary</h2>
+                      <p className="text-body text-ink-hi leading-relaxed">
                         {displayedSummary.summary}
                         {summaryStreaming && !summary && (
                           <span className="inline-block w-1.5 h-3.5 ml-0.5 bg-signal-cyan motion-safe:animate-pulse align-middle" />
@@ -800,10 +804,10 @@ export default function ExploreDocumentView({
 
                   {displayedSummary.keyPoints.length > 0 && (
                     <div>
-                      <h2 className="text-xs font-mono text-ink-lo mb-2">Key points</h2>
+                      <h2 className={`${TYPE.kicker} mb-2`}>Key points</h2>
                       <ul className="space-y-1.5">
                         {displayedSummary.keyPoints.map((point, i) => (
-                          <li key={i} className="flex gap-2 text-sm text-ink">
+                          <li key={i} className="flex gap-2 text-small text-ink">
                             <span className="text-ink-lo shrink-0">▸</span>
                             <span className="leading-relaxed">{point}</span>
                           </li>
@@ -814,21 +818,21 @@ export default function ExploreDocumentView({
 
                   {displayedSummary.impact && (
                     <div className="border-t border-white/[0.07] pt-3">
-                      <h2 className="text-xs font-mono text-ink-lo mb-2">Impact</h2>
-                      <p className="font-sans text-base leading-relaxed text-ink">
+                      <h2 className={`${TYPE.kicker} mb-2`}>Impact</h2>
+                      <p className="font-sans text-body leading-relaxed text-ink">
                         {displayedSummary.impact}
                       </p>
                     </div>
                   )}
 
                   {summary?.partial && (
-                    <p className="text-xs text-ink-lo">
+                    <p className="text-small text-ink-lo">
                       This analysis was cut short before it finished. Try again later for the whole
                       of it.
                     </p>
                   )}
                   {summary?.truncated && (
-                    <p className="text-xs text-ink-lo">
+                    <p className="text-small text-ink-lo">
                       This analysis reached its length limit; the section it was writing is left
                       out.
                     </p>
@@ -844,18 +848,18 @@ export default function ExploreDocumentView({
             <div className="p-5">
               {doc.summary && doc.summary !== doc.body?.slice(0, 300) && (
                 <div className="mb-4 pb-4 border-b border-white/[0.07]">
-                  <h2 className="text-xs font-mono text-ink-lo mb-2">Summary</h2>
-                  <p className="font-sans text-base leading-relaxed text-ink">{doc.summary}</p>
+                  <h2 className={`${TYPE.kicker} mb-2`}>Summary</h2>
+                  <p className="font-sans text-body leading-relaxed text-ink">{doc.summary}</p>
                 </div>
               )}
 
               {doc.body && (
                 <div>
-                  <h2 id="full-text-heading" className="mb-2 font-mono text-xs text-ink-lo">
+                  <h2 id="full-text-heading" className={`${TYPE.kicker} mb-2`}>
                     {BODY_HEADINGS[doc.bodyExtent ?? "full"]}
                   </h2>
                   {doc.bodyExtent && doc.bodyExtent !== "full" && (
-                    <p className="mb-2 text-xs text-ink-lo">
+                    <p className="mb-2 text-small text-ink-lo">
                       {doc.bodyExtent === "summary"
                         ? "The case as summarized, not the opinion itself."
                         : "The document is longer than this."}{" "}
@@ -880,7 +884,7 @@ export default function ExploreDocumentView({
                     tabIndex={0}
                     role="region"
                     aria-labelledby="full-text-heading"
-                    className="max-h-[600px] overflow-y-auto whitespace-pre-wrap pr-2 text-sm leading-relaxed text-ink focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-signal-cyan"
+                    className="max-h-[600px] overflow-y-auto whitespace-pre-wrap pr-2 text-small leading-relaxed text-ink focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-signal-cyan"
                   >
                     {doc.body}
                   </div>
@@ -888,7 +892,7 @@ export default function ExploreDocumentView({
               )}
 
               {!doc.body && !doc.summary && (
-                <p className="text-ink-min text-base">No document content available.</p>
+                <p className="text-ink-min text-body">No document content available.</p>
               )}
             </div>
           </div>
@@ -911,7 +915,7 @@ export default function ExploreDocumentView({
             aria-labelledby="cite-heading"
             className="mt-8 flex flex-col gap-2 border-t border-white/[0.07] pt-6"
           >
-            <h2 id="cite-heading" className="font-mono text-xs text-ink-min">
+            <h2 id="cite-heading" className={TYPE.kicker}>
               Cite this document
             </h2>
             {doc.frCitation && <CopyText text={doc.frCitation} label="Federal Register citation" />}
@@ -934,7 +938,7 @@ export default function ExploreDocumentView({
 
           {/* Source attribution */}
           <div className="mt-8 text-center">
-            <p className="text-ink-lo text-xs">
+            <p className="text-ink-lo text-small">
               Source: {sourceLabel}
               {sourceUrl && (
                 <>

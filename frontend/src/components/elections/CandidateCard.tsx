@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { BallotCandidate } from "@/types/election";
 import { DEM_AFFILIATE_PARTIES, candidateName, incumbencyLabel } from "@/lib/elections";
 import { cashOnHandDisplay, formatCurrency } from "@/lib/formatting";
+import { TYPE } from "@/lib/typeStyles";
 
 // FEC's party codes ("DEM"/"REP"/"IND"/...) don't match lib/partyStyles.ts's
 // D/R/I keys (those back President/Justice's own party codes), so this
@@ -95,7 +96,7 @@ export default function CandidateCard({
 
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h3 className="font-display text-lg font-semibold leading-tight text-ink-hi">
+          <h3 className={TYPE.boxTitle}>
             {candidate.fecFiled === false ? (
               candidateName(candidate)
             ) : (
@@ -106,33 +107,33 @@ export default function CandidateCard({
                 className="transition-colors hover:text-phos"
               >
                 {candidateName(candidate)}{" "}
-                <span aria-hidden="true" className="font-mono text-xs text-phos-mid">
+                <span aria-hidden="true" className="font-mono text-small text-phos-mid">
                   ↗
                 </span>
               </a>
             )}
           </h3>
-          <p className={`mt-0.5 font-mono text-xs ${pm.color}`}>{pm.label}</p>
+          <p className={`mt-0.5 font-mono text-small ${pm.color}`}>{pm.label}</p>
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
           {showUnconfirmed && !candidate.confirmed && (
             <span
-              className="border border-dashed border-white/20 px-2 py-0.5 font-mono text-xs text-ink-min"
+              className="border border-dashed border-white/20 px-2 py-0.5 font-mono text-small text-ink-min"
               title="This state's primary file doesn't list this candidate: an uncontested primary isn't held, so there is no result to read. Their FEC filing is the source."
             >
               Unconfirmed
             </span>
           )}
           {incumbency && (
-            <span className="whitespace-nowrap border border-white/15 px-2 py-0.5 font-mono text-xs text-ink-lo">
+            <span className="whitespace-nowrap border border-white/15 px-2 py-0.5 font-mono text-small text-ink-lo">
               {incumbency}
             </span>
           )}
           {candidate.incumbentRecord && (
             <Link
               href={`/politicians/${candidate.incumbentRecord.id}`}
-              className="font-mono text-xs text-ink-lo hover:underline"
+              className="font-mono text-small text-ink-lo hover:underline"
             >
               Where this member stands →
             </Link>
@@ -141,27 +142,29 @@ export default function CandidateCard({
       </div>
 
       {candidate.fecFiled === false ? (
-        <p className="mt-3 font-mono text-xs text-ink-min">
+        <p className="mt-3 font-mono text-small text-ink-min">
           On the state&apos;s ballot · No FEC filing
         </p>
       ) : syncedOn == null ? (
         // Never synced ≠ raised $0 — don't show figures that read as zeros.
-        <p className="mt-3 font-mono text-xs text-ink-min">Awaiting FEC sync</p>
+        <p className="mt-3 font-mono text-small text-ink-min">Awaiting FEC sync</p>
       ) : (
         <>
           <dl className="mt-3 grid grid-cols-2 gap-x-8 gap-y-1">
             <div>
-              <dt className="font-mono text-xs text-ink-min">Raised</dt>
-              <dd className="font-mono text-xl tabular-nums text-ink-hi">
+              <dt className="font-mono text-small text-ink-min">Raised</dt>
+              <dd className="font-mono text-section tabular-nums text-ink-hi">
                 {candidate.contributions != null ? formatCurrency(candidate.contributions) : "—"}
               </dd>
             </div>
             <div>
-              <dt className="font-mono text-xs text-ink-min">{cash?.label ?? "Cash on hand"}</dt>
-              <dd className="font-mono text-xl tabular-nums text-ink-hi">{cash?.amount ?? "—"}</dd>
+              <dt className="font-mono text-small text-ink-min">{cash?.label ?? "Cash on hand"}</dt>
+              <dd className="font-mono text-section tabular-nums text-ink-hi">
+                {cash?.amount ?? "—"}
+              </dd>
             </div>
           </dl>
-          <p className="mt-2 font-mono text-xs text-ink-min">
+          <p className="mt-2 font-mono text-small text-ink-min">
             {candidate.financialsThrough
               ? `FEC reports through ${candidate.financialsThrough} · Checked ${syncedOn}`
               : candidate.contributions == null && candidate.cashOnHand == null

@@ -102,18 +102,18 @@ export default function DeadlineRibbon({
           />
           {pct(today) < 80 && (
             <span
-              className={`absolute top-10 whitespace-nowrap font-mono text-[11px] text-ink-hi ${anchor(today)}`}
+              className={`absolute top-10 whitespace-nowrap font-mono text-small text-ink-hi ${anchor(today)}`}
               style={{ left: at(today) }}
             >
               Today
             </span>
           )}
-          <span className="absolute right-0 top-10 font-mono text-[11px] text-ink-hi">
+          <span className="absolute right-0 top-10 font-mono text-small text-ink-hi">
             {shortDate(electionDay)}
           </span>
           {registerBy && day(registerBy) >= now && (
             <span
-              className={`absolute top-0 whitespace-nowrap font-mono text-[11px] text-phos ${anchor(registerBy)}`}
+              className={`absolute top-0 whitespace-nowrap font-mono text-small text-phos ${anchor(registerBy)}`}
               style={{ left: at(registerBy) }}
             >
               Register by {shortDate(registerBy)}
@@ -123,7 +123,7 @@ export default function DeadlineRibbon({
       </ChartReadout>
       <p
         aria-hidden="true"
-        className="mt-1 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px] text-ink-lo"
+        className="mt-1 flex flex-wrap gap-x-4 gap-y-1 font-mono text-small text-ink-lo"
       >
         <span>
           <span className="mr-1 inline-block h-2.5 w-0.5 bg-phos align-middle" />

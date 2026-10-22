@@ -3,6 +3,7 @@ import Link from "next/link";
 import GlitchText from "@/components/effects/GlitchText";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
+import { TYPE } from "@/lib/typeStyles";
 
 export interface NextStep {
   href: string;
@@ -44,15 +45,11 @@ export default function RecordNotFound({
         tabIndex={-1}
         className="flex min-h-[70vh] flex-col items-center justify-center px-4 pt-[var(--header-clearance)] text-center"
       >
-        <GlitchText
-          text="404"
-          as="h1"
-          className="mb-4 font-display text-6xl font-semibold text-signal-magenta sm:text-8xl"
-        />
+        <GlitchText text="404" as="h1" className={`${TYPE.display} mb-4 text-signal-magenta!`} />
 
         <div className="panel mb-8 w-full max-w-md p-6">
-          <p className="mb-2 font-mono text-xs text-signal-cyan">{label}</p>
-          <p className="font-sans text-base leading-relaxed text-ink-lo">{message}</p>
+          <p className="mb-2 font-mono text-small text-signal-cyan">{label}</p>
+          <p className="font-sans text-body leading-relaxed text-ink-lo">{message}</p>
           {children}
           {steps.length > 0 && (
             <ul className="mt-5 flex flex-col gap-2 text-left">
@@ -60,7 +57,7 @@ export default function RecordNotFound({
                 <li key={s.href}>
                   <Link
                     href={s.href}
-                    className="flex min-h-11 items-center justify-between gap-3 border border-white/15 px-3 py-2 font-sans text-[15px] text-ink-hi transition-colors hover:border-phos/60 hover:text-phos"
+                    className="flex min-h-11 items-center justify-between gap-3 border border-white/15 px-3 py-2 font-sans text-body text-ink-hi transition-colors hover:border-phos/60 hover:text-phos"
                   >
                     {s.label}
                     <span aria-hidden="true" className="font-mono text-ink-min">
@@ -75,7 +72,7 @@ export default function RecordNotFound({
 
         <Link
           href="/"
-          className="border border-phos/40 px-6 py-2.5 font-mono text-sm text-phos-mid transition-colors hover:border-phos hover:text-phos"
+          className="border border-phos/40 px-6 py-2.5 font-mono text-small text-phos-mid transition-colors hover:border-phos hover:text-phos"
         >
           Back to the record
         </Link>

@@ -1,6 +1,6 @@
 import React from "react";
+import { TYPE } from "@/lib/typeStyles";
 import { PageTitle } from "@/components/shared/Type";
-import { labelCase } from "@/lib/controlStyles";
 
 /**
  * The standing page header: eyebrow, title, optional standing line, and the
@@ -46,7 +46,7 @@ export default function PageMasthead({
     <header className={`border-b-3 border-ink-min/60 pb-5 ${className}`.trim()}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className={`font-mono text-ink-min ${labelCase(eyebrow)}`}>{eyebrow}</p>
+          <p className={TYPE.kicker}>{eyebrow}</p>
           {/* Caps from 640px up; a phone's title is set as written, in
               sentence case, where caps at 30px wrapped "TODAY ON THE
               RECORD" to two lines (mobile spec P1). */}
@@ -56,7 +56,7 @@ export default function PageMasthead({
       </div>
       {(children || more) && (
         <div
-          className={`mt-3 max-w-2xl font-sans text-base leading-relaxed text-ink-lo ${children ? "" : "hidden sm:block"}`}
+          className={`mt-3 max-w-2xl font-sans text-body leading-relaxed text-ink-lo ${children ? "" : "hidden sm:block"}`}
         >
           {children}
           {more && (
@@ -69,10 +69,10 @@ export default function PageMasthead({
       )}
       {more && (
         <details className="mt-1 sm:hidden">
-          <summary className="inline-flex min-h-11 cursor-pointer items-center font-mono text-[0.8125rem] text-ink-lo hover:text-phos">
+          <summary className="inline-flex min-h-11 cursor-pointer items-center font-mono text-small text-ink-lo hover:text-phos">
             More about this page
           </summary>
-          <p className="max-w-2xl font-sans text-base leading-relaxed text-ink-lo">{more}</p>
+          <p className="max-w-2xl font-sans text-body leading-relaxed text-ink-lo">{more}</p>
         </details>
       )}
     </header>

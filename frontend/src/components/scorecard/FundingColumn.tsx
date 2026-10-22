@@ -53,14 +53,14 @@ function Lede({ facts, afterFinding }: { facts: FundingFacts; afterFinding: bool
   if (afterFinding) {
     if (facts.smallDonorShare == null) return null;
     return (
-      <p className="text-base leading-relaxed text-ink">
+      <p className="text-body leading-relaxed text-ink">
         {pac} of {formatCurrency(facts.contributions)} in contributions came from PACs.
       </p>
     );
   }
   if (facts.smallDonorShare == null) {
     return (
-      <p className="text-base leading-relaxed text-ink">
+      <p className="text-body leading-relaxed text-ink">
         {pac} of {formatCurrency(facts.contributions)} in contributions came from PACs. The campaign
         itemizes every gift, so its filings can&apos;t say how much came from donors giving $200 or
         less.
@@ -71,7 +71,7 @@ function Lede({ facts, afterFinding }: { facts: FundingFacts; afterFinding: bool
   const typical =
     expected == null ? null : (facts.shown?.smallDonorExpectedShare ?? percent(expected));
   return (
-    <p className="text-base leading-relaxed text-ink">
+    <p className="text-body leading-relaxed text-ink">
       {pac} of {formatCurrency(facts.contributions)} in contributions came from PACs. {small} came
       from donors giving $200 or less
       {typical != null &&
@@ -126,7 +126,7 @@ export default function FundingColumn({
       {facts ? (
         <Lede facts={facts} afterFinding={!!dimension?.finding} />
       ) : (
-        <p className="text-base text-ink-lo">No campaign finance filings on record yet.</p>
+        <p className="text-body text-ink-lo">No campaign finance filings on record yet.</p>
       )}
 
       {industries.length > 0 && (
@@ -146,7 +146,7 @@ export default function FundingColumn({
               />
             ))}
           </div>
-          <ul className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs text-ink-lo">
+          <ul className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-small text-ink-lo">
             {industries.slice(0, INDUSTRIES_NAMED).map((i) => (
               <li key={i.industry} className="flex items-center gap-1.5">
                 <span
@@ -165,7 +165,7 @@ export default function FundingColumn({
         <Block label={`Top ${donors.length} donors`}>
           <ul className="flex flex-col gap-1.5">
             {donors.map((d) => (
-              <li key={d.name} className="flex items-baseline justify-between gap-3 text-sm">
+              <li key={d.name} className="flex items-baseline justify-between gap-3 text-small">
                 <span className="min-w-0 text-ink [overflow-wrap:anywhere]">
                   {d.type === "PAC" || d.type === "SuperPAC" ? (
                     <a
@@ -180,7 +180,7 @@ export default function FundingColumn({
                     d.name
                   )}{" "}
                   {DONOR_KIND[d.type] && (
-                    <span className="font-mono text-xs text-ink-min">{DONOR_KIND[d.type]}</span>
+                    <span className="font-mono text-small text-ink-min">{DONOR_KIND[d.type]}</span>
                   )}
                 </span>
                 <span className="shrink-0 font-mono text-ink-hi">{formatCurrency(d.total)}</span>
@@ -195,7 +195,7 @@ export default function FundingColumn({
           type="button"
           onClick={onDonorVotes}
           {...{ [SHARE_EXCLUDE_ATTR]: "" }}
-          className="min-h-[44px] self-start text-left text-sm text-ink underline underline-offset-2 hover:text-phos"
+          className="min-h-[44px] self-start text-left text-small text-ink underline underline-offset-2 hover:text-phos"
         >
           See how this money lines up with votes ({donorVoteLinks} link
           {donorVoteLinks !== 1 ? "s" : ""}) &rarr;

@@ -5,6 +5,7 @@ import type { ElectionCalendar } from "@/types/specials";
 import { calendarEntries, longDate, type CalendarEntry as Entry } from "@/lib/specials";
 import RegisterLink from "@/components/elections/RegisterLink";
 import { useYourState } from "@/hooks/useYourState";
+import { TYPE } from "@/lib/typeStyles";
 
 type Row = Entry & { group?: Entry[] };
 
@@ -95,11 +96,11 @@ export default function CalendarList({ cal }: { cal: ElectionCalendar }) {
       key={e.key}
       className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-3 border-t border-white/[0.07] py-2 [overflow-wrap:anywhere] sm:grid-cols-[7rem_7rem_minmax(0,1fr)_auto]"
     >
-      <span className="font-mono text-xs tabular-nums text-ink-hi">
+      <span className="font-mono text-small tabular-nums text-ink-hi">
         {longDate(e.date).replace(/, \d{4}$/, "")}
       </span>
-      <span className="font-mono text-[11px] text-ink-min">{e.tag}</span>
-      <span className="col-span-2 text-sm text-ink-lo sm:col-span-1">
+      <span className="font-mono text-small text-ink-min">{e.tag}</span>
+      <span className="col-span-2 text-small text-ink-lo sm:col-span-1">
         {e.group ? (
           <details>
             <summary className="flex min-h-11 cursor-pointer items-start">{e.text}</summary>
@@ -139,7 +140,7 @@ export default function CalendarList({ cal }: { cal: ElectionCalendar }) {
           e.text
         )}
       </span>
-      <span className="col-span-2 font-mono text-[11px] text-ink-min sm:col-span-1 sm:text-right">
+      <span className="col-span-2 font-mono text-small text-ink-min sm:col-span-1 sm:text-right">
         {e.status}
       </span>
     </li>
@@ -147,12 +148,12 @@ export default function CalendarList({ cal }: { cal: ElectionCalendar }) {
 
   return (
     <div>
-      <label className="flex flex-wrap items-center gap-3 font-mono text-xs text-ink-min">
+      <label className="flex flex-wrap items-center gap-3 font-mono text-small text-ink-min">
         State
         <select
           value={state}
           onChange={(ev) => setState(ev.target.value)}
-          className="min-h-11 max-w-full border border-white/15 bg-surface-base px-3 font-mono text-sm tracking-normal text-ink-hi"
+          className="min-h-11 max-w-full border border-white/15 bg-surface-base px-3 font-mono text-small tracking-normal text-ink-hi"
         >
           <option value="">Every state</option>
           {states.map(([code, name]) => (
@@ -172,20 +173,20 @@ export default function CalendarList({ cal }: { cal: ElectionCalendar }) {
         {passed.length ? `, ${passed.length} passed in the last month` : ""}.
       </p>
       {ahead.length === 0 && (
-        <p className="mt-4 text-sm text-ink-lo">
+        <p className="mt-4 text-small text-ink-lo">
           Nothing ahead on the calendar{state ? " for this state" : ""} in the year to{" "}
           {longDate(cal.window.to)}.
         </p>
       )}
       {Array.from(months.entries()).map(([month, entries]) => (
         <section key={month} className="mt-6">
-          <h3 className="font-mono text-xs text-ink-min">{month}</h3>
+          <h3 className={TYPE.kicker}>{month}</h3>
           <ul className="mt-1">{entries.map(row)}</ul>
         </section>
       ))}
       {passed.length > 0 && (
         <details className="mt-6">
-          <summary className="flex min-h-11 cursor-pointer items-center font-mono text-xs text-ink-min">
+          <summary className="flex min-h-11 cursor-pointer items-center font-mono text-small text-ink-min">
             Passed in the last month ({passed.length})
           </summary>
           <ul className="mt-1">{passed.map(row)}</ul>

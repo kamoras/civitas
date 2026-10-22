@@ -6,6 +6,7 @@ import { axisAt, positionDomain, signedPosition, surname } from "@/lib/court";
 import { onThisPage } from "@/lib/onThisPage";
 import StripPoints from "@/components/shared/Strip";
 import { More } from "@/components/shared/RecordBox";
+import { TYPE } from "@/lib/typeStyles";
 
 const MQ_SOURCE = "Martin-Quinn scores (Martin and Quinn 2002), mqscores.wustl.edu";
 
@@ -33,22 +34,22 @@ export default function CourtLine({ court }: { court: Court }) {
       className="flex flex-col gap-4 border border-white/25 bg-surface px-4 py-5 sm:px-6"
     >
       <div>
-        <h2 id="line-heading" className="text-xl font-semibold text-ink-hi">
+        <h2 id="line-heading" className={TYPE.section}>
           Where the justices sit
         </h2>
-        <p className="mt-1 font-mono text-xs text-ink-min">
+        <p className="mt-1 font-mono text-small text-ink-min">
           Martin-Quinn estimate{court.mqTerm ? `, ${court.mqTerm} term` : ""} · not a score
         </p>
       </div>
 
       {placed.length === 0 ? (
-        <p className="text-base text-ink">
+        <p className="text-body text-ink">
           No Martin-Quinn position is stored yet. Martin and Quinn publish each term&apos;s
           estimates after it ends.
         </p>
       ) : (
         <>
-          <p className="max-w-prose text-base text-ink">
+          <p className="max-w-prose text-body text-ink">
             Left is more liberal, right more conservative; the median justice is marked.
           </p>
 
@@ -82,7 +83,10 @@ export default function CourtLine({ court }: { court: Court }) {
                 />
               ))}
             </StripPoints>
-            <div aria-hidden="true" className="flex justify-between font-mono text-xs text-ink-min">
+            <div
+              aria-hidden="true"
+              className="flex justify-between font-mono text-small text-ink-min"
+            >
               <span>&larr; liberal</span>
               <span>conservative &rarr;</span>
             </div>
@@ -94,14 +98,14 @@ export default function CourtLine({ court }: { court: Court }) {
             role="region"
             aria-label="Justices by position"
           >
-            <table className="w-full border-collapse text-sm">
+            <table className="w-full border-collapse text-small">
               <caption className="sr-only">
                 Sitting justices, left to right by Martin-Quinn position
                 {court.mqTerm ? ` for the ${court.mqTerm} term` : ""}, with the 95% credible
                 interval
               </caption>
               <thead>
-                <tr className="border-b border-white/15 text-left font-mono text-xs text-ink-min">
+                <tr className="border-b border-white/15 text-left font-mono text-small text-ink-min">
                   <th scope="col" className="py-2 pr-3 font-normal">
                     Justice
                   </th>
@@ -127,7 +131,7 @@ export default function CourtLine({ court }: { court: Court }) {
                           {surname(j)}
                         </Link>
                         {isMedian && (
-                          <span className="ml-2 border border-signal-amber/60 px-1 font-mono text-xs text-signal-amber">
+                          <span className="ml-2 border border-signal-amber/60 px-1 font-mono text-small text-signal-amber">
                             Median
                           </span>
                         )}
@@ -166,7 +170,7 @@ export default function CourtLine({ court }: { court: Court }) {
             </table>
           </div>
           {unplaced.length > 0 && (
-            <p className="text-sm text-ink-lo">
+            <p className="text-small text-ink-lo">
               No position for the {court.mqTerm} term yet:{" "}
               {unplaced.map((j, i) => (
                 <span key={j.id}>

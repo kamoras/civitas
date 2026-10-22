@@ -55,6 +55,58 @@ const NOT_TYPED_INTO = [
   "file",
 ];
 
+// One style per role (src/lib/typeStyles.ts): the roles' class strings, read
+// from the source, and which roles each element may take (the same table as
+// src/lib/typeScale.test.ts, which holds the code; this holds the page).
+const TYPE = Object.fromEntries(
+  [
+    ...readFileSync(new URL("../src/lib/typeStyles.ts", import.meta.url), "utf8")
+      .match(/export const TYPE = \{([\s\S]*?)\} as const/)[1]
+      .matchAll(/^\s+(\w+): "([^"]+)"/gm),
+  ].map((m) => [m[1], m[2]])
+);
+const ROLES_FOR = {
+  h1: ["title", "display"],
+  h2: ["section", "boxTitle", "kicker", "kickerToned"],
+  h3: ["boxTitle", "section", "kicker", "kickerToned", "label"],
+  th: ["label", "small"],
+};
+
+/** Each h1, h2, h3 and th whose computed face, size and weight is no role
+ *  its element may take, measured against probes of the roles on this page
+ *  (so each width's phone steps and a doubled text size are allowed for). */
+async function offScale(page) {
+  return page.evaluate(
+    ({ type, rolesFor }) => {
+      const main = document.querySelector("main") ?? document.body;
+      const look = (el) => {
+        const cs = getComputedStyle(el);
+        return `${cs.fontFamily.split(",")[0].trim()} ${cs.fontSize} ${cs.fontWeight}`;
+      };
+      const probe = {};
+      for (const [role, cls] of Object.entries(type)) {
+        const el = document.createElement("span");
+        el.className = cls;
+        el.textContent = "x";
+        main.appendChild(el);
+        probe[role] = look(el);
+        el.remove();
+      }
+      const out = [];
+      for (const el of main.querySelectorAll("h1, h2, h3, th")) {
+        if (!el.textContent.trim() || el.closest("svg, .sr-only") || !el.getClientRects().length)
+          continue;
+        const tag = el.tagName.toLowerCase();
+        const got = look(el);
+        if (!rolesFor[tag].some((r) => probe[r] === got))
+          out.push(`<${tag}> "${el.textContent.trim().slice(0, 40)}": ${got}`);
+      }
+      return out;
+    },
+    { type: TYPE, rolesFor: ROLES_FOR }
+  );
+}
+
 const configPath = process.argv[2];
 if (!configPath) {
   console.error("usage: node scripts/axe-routes.mjs <lighthouserc.json>");
@@ -108,6 +160,8 @@ try {
       const page = await browser.newPage({ viewport: { width, height: 900 }, colorScheme: SCHEME });
       await page.goto(base + path, { waitUntil: "networkidle", timeout: 60_000 });
       const violations = await axeViolations(page, `${path} @${width}px`);
+      const loose = await offScale(page);
+      for (const l of loose) failures.push(`${path} @${width}px  type scale: ${l}`);
       if (width === 320) {
         const over = await page.evaluate(
           () => document.documentElement.scrollWidth - document.documentElement.clientWidth
@@ -133,7 +187,9 @@ try {
         for (const s of small)
           failures.push(`${path} @320px  phone control under 16px or 44px: ${s}`);
       }
-      console.log(`${path} @${width}px: ${violations.length} violation(s)`);
+      console.log(
+        `${path} @${width}px: ${violations.length} violation(s), ${loose.length} off the type scale`
+      );
       await page.close();
     }
     for (const [phone, { fontSize, ...device }] of Object.entries(PHONES)) {
@@ -163,6 +219,9 @@ try {
         );
       // Doubled text: axe again, since contrast and target sizes move with it.
       const found = fontSize ? (await axeViolations(page, `${path} on ${phone}`)).length : 0;
+      if (fontSize)
+        for (const l of await offScale(page))
+          failures.push(`${path} on ${phone}  type scale: ${l}`);
       console.log(
         `${path} on ${phone}: ${wide.over > 0 ? `${wide.over}px too wide` : "fits"}` +
           (fontSize ? `, ${found} violation(s)` : "")

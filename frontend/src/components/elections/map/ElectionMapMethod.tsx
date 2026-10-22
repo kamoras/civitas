@@ -1,5 +1,6 @@
 import { chamberWord, coverageSentence, formatAsOf, leanWindowWords } from "@/lib/electionMap";
 import type { ElectionMapData } from "@/types/electionMap";
+import { TYPE } from "@/lib/typeStyles";
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
@@ -18,9 +19,9 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
     <section
       id="method"
       aria-labelledby="method-heading"
-      className="space-y-4 text-[15px] leading-relaxed text-ink-lo"
+      className="space-y-4 text-body leading-relaxed text-ink-lo"
     >
-      <h2 id="method-heading" className="font-display text-2xl font-semibold text-ink-hi">
+      <h2 id="method-heading" className={TYPE.section}>
         How this is measured
       </h2>
       <div data-testid="method-summary" className="space-y-3">
@@ -35,7 +36,7 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
           These ranges are not a call. They don&apos;t say who will take any seat, and the page
           gives no odds. Nothing here feeds any member&apos;s record on Civitas.
         </p>
-        <p className="text-sm">
+        <p className="text-small">
           Polls: {data.sources.polls.attribution}, {data.sources.polls.license}
           {tp ? `. Past polls: ${tp.attribution}` : ""}. Sources and licences are listed in the full
           method.
@@ -43,12 +44,12 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
       </div>
 
       <details className="border-t border-white/10 pt-2">
-        <summary className="inline-flex min-h-11 cursor-pointer items-center font-mono text-xs text-ink-lo hover:text-ink-hi">
+        <summary className="inline-flex min-h-11 cursor-pointer items-center font-mono text-small text-ink-lo hover:text-ink-hi">
           Full method · Model, inputs, checks, sources
           <span aria-hidden="true">&nbsp;▾</span>
         </summary>
         <div className="mt-3 space-y-4">
-          <h3 className="font-display text-lg font-semibold text-ink-hi">The three views</h3>
+          <h3 className={TYPE.boxTitle}>The three views</h3>
           <ul className="list-disc space-y-1 pl-5">
             <li>
               <strong className="text-ink">Usual vote</strong> is each{" "}
@@ -82,7 +83,7 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
             </li>
           </ul>
 
-          <h3 className="font-display text-lg font-semibold text-ink-hi">The method</h3>
+          <h3 className={TYPE.boxTitle}>The method</h3>
           <ol className="list-decimal space-y-2 pl-5">
             <li>
               <strong className="text-ink">Structural line.</strong> A straight-line fit through
@@ -131,13 +132,11 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
           )}
           <p>
             Every number in these formulas is fitted by a script from the sources below and written
-            to <code className="font-mono text-sm">{data.model.file}</code> ({data.model.fit}); none
-            is typed by hand.
+            to <code className="font-mono text-small">{data.model.file}</code> ({data.model.fit});
+            none is typed by hand.
           </p>
 
-          <h3 className="font-display text-lg font-semibold text-ink-hi">
-            Is it honest? Held-out checks
-          </h3>
+          <h3 className={TYPE.boxTitle}>Is it honest? Held-out checks</h3>
           <p>
             Each cycle from {c.cycles[0]} to {c.cycles[1]} was predicted by a fit that never saw it,
             using only the polls fielded by {data.horizon} days before election day.{" "}
@@ -172,11 +171,11 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
                 role="region"
                 aria-label="Held-out calibration table"
               >
-                <table className="w-full min-w-[30rem] border-collapse font-mono text-sm">
+                <table className="w-full min-w-[30rem] border-collapse font-mono text-small">
                   <caption className="sr-only">
                     Held-out calibration of the implied chances, either party alike, {c.races} races
                   </caption>
-                  <thead className="border-b border-white/20 text-left text-xs text-ink-min">
+                  <thead className="border-b border-white/20 text-left text-small text-ink-min">
                     <tr>
                       <th scope="col" className="px-2 py-1">
                         Lean of the range
@@ -221,9 +220,7 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
             {c.brier.fundamentals.toFixed(3)} for the structural line alone.
           </p>
 
-          <h3 className="font-display text-lg font-semibold text-ink-hi">
-            Why there is no seat total
-          </h3>
+          <h3 className={TYPE.boxTitle}>Why there is no seat total</h3>
           <p>
             Adding up races only works if their errors are independent, and they are not: when polls
             miss, they tend to miss the same way everywhere. In {c.seatTotalsOutside90} of the{" "}
@@ -232,13 +229,11 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
             checked the same way, the map shows each seat&apos;s own range and no tally by party.
           </p>
 
-          <h3 className="font-display text-lg font-semibold text-ink-hi">
-            Inputs, sources and licences
-          </h3>
+          <h3 className={TYPE.boxTitle}>Inputs, sources and licences</h3>
           <ul className="list-disc space-y-1 pl-5">
             <li>
               Usual vote: {data.sources.lean.source} (
-              <code className="font-mono text-sm">{data.sources.lean.file}</code>
+              <code className="font-mono text-small">{data.sources.lean.file}</code>
               ).
             </li>
             <li>Training: {data.sources.training}</li>

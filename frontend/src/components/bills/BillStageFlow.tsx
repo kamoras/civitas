@@ -65,7 +65,7 @@ export default function BillStageFlow({
                   COMMI…". `truncate` stays as a guard for a longer stage name
                   arriving from /config, not as the normal case. */}
               <span
-                className={`w-40 max-w-full shrink-0 truncate text-xs font-mono ${
+                className={`w-40 max-w-full shrink-0 truncate text-small font-mono ${
                   isActive ? style.text : "text-ink-lo"
                 }`}
               >
@@ -88,7 +88,7 @@ export default function BillStageFlow({
                   `hidden sm:inline`, so below `sm` this column reserved 80px
                   to render at most four digits. Giving the 32px back to the
                   bar matters at 390px, where the bar was down to 55px. */}
-              <span className="w-12 shrink-0 text-right font-mono text-xs tabular-nums text-ink sm:w-24">
+              <span className="w-12 shrink-0 text-right font-mono text-small tabular-nums text-ink sm:w-24">
                 {count.toLocaleString("en-US")}
                 {/* The share, read out on a phone too; shown from sm up. */}
                 <span className="sr-only text-ink-min sm:not-sr-only">
@@ -107,7 +107,7 @@ export default function BillStageFlow({
           type="button"
           onClick={() => onSelectStage(activeStage === "VETOED" ? null : "VETOED")}
           aria-pressed={activeStage === "VETOED"}
-          className={`border px-2 py-1 font-mono text-xs transition-colors ${
+          className={`border px-2 py-1 font-mono text-small transition-colors ${
             activeStage === "VETOED"
               ? "border-signal-red bg-signal-red/10 text-signal-red"
               : "border-signal-red/40 text-signal-red hover:border-signal-red"

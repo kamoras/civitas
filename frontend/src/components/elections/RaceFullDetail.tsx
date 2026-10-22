@@ -39,10 +39,10 @@ const SUPERSEDED_NOTE =
 function TailRow({ candidate }: { candidate: BallotCandidate }) {
   const cash = cashOnHandDisplay(candidate.cashOnHand);
   return (
-    <div className="flex items-center gap-2.5 border-b border-white/[0.05] py-1.5 text-sm last:border-b-0">
+    <div className="flex items-center gap-2.5 border-b border-white/[0.05] py-1.5 text-small last:border-b-0">
       <span className={`h-2 w-2 shrink-0 ${getPartyMeta(candidate).rule}`} aria-hidden="true" />
       <span className="flex-1 truncate text-ink-lo">{candidateName(candidate)}</span>
-      <span className="shrink-0 font-mono text-xs text-ink-min">{cash?.amount ?? "—"}</span>
+      <span className="shrink-0 font-mono text-small text-ink-min">{cash?.amount ?? "—"}</span>
     </div>
   );
 }
@@ -94,11 +94,11 @@ export default function RaceFullDetail({
   return (
     <div id={`race-${race.id}`}>
       {active.length === 0 ? (
-        <p className="text-xs text-ink-lo">No candidates on record for this race yet.</p>
+        <p className="text-small text-ink-lo">No candidates on record for this race yet.</p>
       ) : (
         <>
           <div className="mb-2 flex items-center gap-2">
-            <p className="font-mono text-xs text-ink-min">
+            <p className="font-mono text-small text-ink-min">
               {supersededByPrimary && race.candidateSource === "filers"
                 ? SUPERSEDED_NOTE
                 : SOURCE_NOTE[race.candidateSource]}
@@ -106,7 +106,7 @@ export default function RaceFullDetail({
                 " Candidates marked unconfirmed drew no primary opponent, so this state held no primary for them and its results file doesn't list them: they're shown from their FEC filing."}
             </p>
             {tiered && (
-              <span className="shrink-0 border border-white/15 px-1.5 py-0.5 font-mono text-[10px] text-ink-min">
+              <span className="shrink-0 border border-white/15 px-1.5 py-0.5 font-mono text-small text-ink-min">
                 FEC-filed field
               </span>
             )}
@@ -131,7 +131,7 @@ export default function RaceFullDetail({
                 type="button"
                 onClick={() => setTailOpen((v) => !v)}
                 aria-expanded={tailOpen}
-                className="mt-3 flex w-full items-center gap-2 border border-dashed border-white/15 px-3 py-2 font-mono text-xs text-ink-lo transition-colors hover:border-white/30 hover:text-ink-hi"
+                className="mt-3 flex w-full items-center gap-2 border border-dashed border-white/15 px-3 py-2 font-mono text-small text-ink-lo transition-colors hover:border-white/30 hover:text-ink-hi"
               >
                 <span
                   className={`inline-block transition-transform ${tailOpen ? "rotate-90" : ""}`}
@@ -154,10 +154,10 @@ export default function RaceFullDetail({
 
       {otherFilers.length > 0 && (
         <details className="mt-3 border border-white/[0.09] bg-surface p-4">
-          <summary className="cursor-pointer font-mono text-xs text-ink-lo hover:text-ink-hi">
+          <summary className="cursor-pointer font-mono text-small text-ink-lo hover:text-ink-hi">
             Other FEC filers ({otherFilers.length})
           </summary>
-          <p className="mt-2 font-mono text-xs leading-relaxed text-ink-min">
+          <p className="mt-2 font-mono text-small leading-relaxed text-ink-min">
             Paper filers and prior-cycle candidates on FEC record who have not raised funds this
             cycle.
           </p>
@@ -175,7 +175,7 @@ export default function RaceFullDetail({
       )}
 
       {active.length > 0 && (
-        <p className="mt-4 font-mono text-xs leading-relaxed text-ink-min">
+        <p className="mt-4 font-mono text-small leading-relaxed text-ink-min">
           Source: FEC filings, as filed. Each candidate&apos;s date is the last day those figures
           cover; totals lag by up to a quarter and change with amendments.
         </p>

@@ -22,7 +22,7 @@ export function PeriodNav({
     <Link
       href={hrefs[key]}
       aria-current={active === key ? "page" : undefined}
-      className={`flex min-h-11 items-center justify-center border px-4 font-mono text-sm transition-colors ${
+      className={`flex min-h-11 items-center justify-center border px-4 font-mono text-small transition-colors ${
         active === key ? BOXED_CONTROL.selected : BOXED_CONTROL.unselected
       }`}
     >
@@ -33,7 +33,7 @@ export function PeriodNav({
     s ? (
       <Link
         href={s.href}
-        className="flex min-h-11 items-center border border-white/15 px-3 font-mono text-sm text-ink-lo transition-colors hover:border-white/30 hover:text-ink-hi"
+        className="flex min-h-11 items-center border border-white/15 px-3 font-mono text-small text-ink-lo transition-colors hover:border-white/30 hover:text-ink-hi"
       >
         {arrow === "prev" ? `← ${s.label}` : `${s.label} →`}
       </Link>

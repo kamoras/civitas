@@ -50,7 +50,7 @@ const EXTERNAL_LINKS: readonly { href: string; label: string; aria: string }[] =
 
 // 24 px tall: WCAG 2.5.8's minimum target, in a list of links set close.
 const linkClass =
-  "inline-flex min-h-6 items-center font-mono text-xs text-ink-lo hover:text-ink-hi transition-colors";
+  "inline-flex min-h-6 items-center font-mono text-small text-ink-lo hover:text-ink-hi transition-colors";
 
 export default function Footer() {
   return (
@@ -91,7 +91,7 @@ export default function Footer() {
           <div>
             {/* The colophon: the name and its line, as the header and the
                 homepage's nameplate set them, then the terms. */}
-            <p className="font-mono text-xs leading-[1.9] text-ink-min [overflow-wrap:anywhere]">
+            <p className="font-mono text-small leading-[1.9] text-ink-min [overflow-wrap:anywhere]">
               <span className="text-ink-hi">Civitas Research</span>
               <br />
               {SITE_TAGLINE}
@@ -107,7 +107,7 @@ export default function Footer() {
           </div>
 
           <div>
-            <p className="font-sans text-base leading-relaxed text-ink-lo">
+            <p className="font-sans text-body leading-relaxed text-ink-lo">
               All data sourced from public records, principally: FEC campaign finance filings
               (fec.gov); bills and roll-call votes from Congress.gov, Senate.gov and the House
               Clerk; ideal points from Voteview; Lobbying Disclosure Act filings (lda.gov); the

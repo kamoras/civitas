@@ -43,7 +43,7 @@ export default function SeatChart({
   const shown = ORDER.filter((b) => parties.some((p) => p[b] > 0));
   return (
     <figure className="flex min-w-0 flex-col gap-3">
-      <figcaption className="font-mono text-xs text-ink-min">
+      <figcaption className="font-mono text-small text-ink-min">
         The {chamberName}, one dot per member
       </figcaption>
       <div aria-hidden="true" className="flex flex-col gap-2.5">
@@ -53,7 +53,7 @@ export default function SeatChart({
             .sort((a, b) => ORDER.indexOf(a.bucket as Bucket) - ORDER.indexOf(b.bucket as Bucket));
           return (
             <div key={p.party} className="flex flex-col gap-1">
-              <span className="text-sm text-ink">{PARTY_NAME[p.party] ?? p.party}</span>
+              <span className="text-small text-ink">{PARTY_NAME[p.party] ?? p.party}</span>
               <div data-seats={p.party} className="flex flex-wrap gap-[3px]">
                 {group.map((m, i) => (
                   <Mark key={i} bucket={m.bucket as Bucket} />
@@ -62,7 +62,7 @@ export default function SeatChart({
             </div>
           );
         })}
-        <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs text-ink-lo">
+        <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-small text-ink-lo">
           {shown.map((b) => (
             <span key={b} className="inline-flex items-center gap-1.5">
               <Mark bucket={b} />
@@ -74,7 +74,7 @@ export default function SeatChart({
       {/* At a large text size the table scrolls in its own box (reachable by
           keyboard) rather than widening the page. */}
       <div role="region" aria-label="How each party voted" tabIndex={0} className="overflow-x-auto">
-        <table className="w-full max-w-md text-left font-mono text-xs tabular-nums">
+        <table className="w-full max-w-md text-left font-mono text-small tabular-nums">
           <caption className="sr-only">How each party voted</caption>
           <thead>
             <tr className="text-ink-min">
@@ -91,7 +91,7 @@ export default function SeatChart({
           <tbody>
             {parties.map((p) => (
               <tr key={p.party} className="border-t border-white/[0.07] text-ink-lo">
-                <th scope="row" className="py-1 pr-3 font-sans text-sm font-normal text-ink">
+                <th scope="row" className="py-1 pr-3 font-sans text-small font-normal text-ink">
                   {PARTY_NAME[p.party] ?? p.party}
                 </th>
                 {shown.map((b) => (

@@ -26,7 +26,7 @@ function RecordPanel({ race }: { race: RaceWithCandidates }) {
   const withRecord = active.filter((c) => c.incumbentRecord || c.memberRecord);
   return (
     <div>
-      <p className="mb-3 text-[13px] text-ink-lo">
+      <p className="mb-3 text-small text-ink-lo">
         A member of Congress in this race is linked to their record and peers when the match to
         their record is certain: one running for re-election, or one who serves in the other chamber
         now. Anyone not linked here may still be under{" "}
@@ -42,33 +42,33 @@ function RecordPanel({ race }: { race: RaceWithCandidates }) {
             className="flex items-baseline justify-between gap-3 border-b border-white/[0.09] py-2.5"
           >
             <span className="flex min-w-0 flex-col">
-              <span className="text-[15px] font-semibold text-ink-hi">{candidateName(c)}</span>
-              <span className={`font-mono text-[11px] ${getPartyMeta(c).color}`}>
+              <span className="text-body font-semibold text-ink-hi">{candidateName(c)}</span>
+              <span className={`font-mono text-small ${getPartyMeta(c).color}`}>
                 {getPartyMeta(c).label}
               </span>
             </span>
             {c.incumbentRecord ? (
               <Link
                 href={`/politicians/${c.incumbentRecord.id}`}
-                className="shrink-0 font-mono text-xs text-ink-lo hover:text-phos"
+                className="shrink-0 font-mono text-small text-ink-lo hover:text-phos"
               >
                 record and peers →
               </Link>
             ) : c.memberRecord ? (
               <Link
                 href={`/politicians/${c.memberRecord.id}`}
-                className="shrink-0 text-right font-mono text-xs text-ink-lo hover:text-phos"
+                className="shrink-0 text-right font-mono text-small text-ink-lo hover:text-phos"
               >
                 {memberRecordLabel(c.memberRecord)} · record and peers →
               </Link>
             ) : (
-              <span className="shrink-0 font-mono text-xs text-ink-min">not linked</span>
+              <span className="shrink-0 font-mono text-small text-ink-min">not linked</span>
             )}
           </li>
         ))}
       </ul>
       {withRecord.length === 0 && (
-        <p className="mt-3 text-[13px] text-ink-lo">
+        <p className="mt-3 text-small text-ink-lo">
           No one in this race is linked to a member&apos;s record on Civitas.
         </p>
       )}
@@ -147,7 +147,7 @@ export default function RaceResearch({
               aria-controls={`${base}-${t.id}-panel`}
               tabIndex={selected ? 0 : -1}
               onClick={() => setTab(t.id)}
-              className={`min-h-[44px] flex-1 border px-4 text-sm ${
+              className={`min-h-[44px] flex-1 border px-4 text-small ${
                 selected
                   ? "border-phos bg-phos font-semibold text-surface-base"
                   : "border-white/25 text-ink-hi hover:border-white/50"
