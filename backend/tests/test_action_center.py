@@ -1865,6 +1865,7 @@ def _new_values_for(
         "actions": "[]", "source_urls": "[]", "source_names": "[]",
         "policy_areas": "[]", "related_bill_ids": "[]", "related_explore_ids": "[]", "related_explore_keys": "[]",
         "related_senators": "[]", "related_officials": "[]",
+        "member_link_stamp": "s", "member_link_texts": "[]",
         "primary_article_date": primary_article_date,
         "image_url": image_url,
         "image_alt": image_alt,
