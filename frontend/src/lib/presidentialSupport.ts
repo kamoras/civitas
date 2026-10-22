@@ -59,16 +59,24 @@ export function expectationSentence(s: SupportNumbers): string {
   } than expected.`;
 }
 
-export function chamberCounts(view: ChamberSupport): Record<"more" | "less" | "within", number> {
-  const out = { more: 0, less: 0, within: 0 };
-  for (const m of view.members) if (m.comparedWithExpected) out[m.comparedWithExpected] += 1;
+export function chamberCounts(
+  view: ChamberSupport
+): Record<"more" | "less" | "within" | "total", number> {
+  // The backend's count; counted here only from a backend older than it.
+  if (view.counts) return view.counts;
+  const out = { more: 0, less: 0, within: 0, total: 0 };
+  for (const m of view.members)
+    if (m.comparedWithExpected) {
+      out[m.comparedWithExpected] += 1;
+      out.total += 1;
+    }
   return out;
 }
 
 export function chamberSentence(view: ChamberSupport): string {
   const c = chamberCounts(view);
   const body = view.chamber === "senate" ? "senators" : "House members";
-  return `Of ${c.more + c.less + c.within} ${body}, ${c.more} voted with the president's stated position more often than members of the same party in similar seats, and ${c.less} less often. For the other ${c.within}, the gap is within what their votes can tell apart from chance.`;
+  return `Of ${c.total} ${body}, ${c.more} voted with the president's stated position more often than members of the same party in similar seats, and ${c.less} less often. For the other ${c.within}, the gap is within what their votes can tell apart from chance.`;
 }
 
 /** The member a reader names: by name, state code or name, or "TX-7". */

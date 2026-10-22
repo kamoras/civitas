@@ -1,4 +1,4 @@
-import { Children, isValidElement, type ReactElement, type ReactNode } from "react";
+import { Children, cloneElement, isValidElement, type ReactElement, type ReactNode } from "react";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import PageMasthead from "@/components/layout/PageMasthead";
@@ -10,6 +10,7 @@ import { onThisPage } from "@/lib/onThisPage";
 import BoxGrid from "@/components/shared/BoxGrid";
 import RecordBox, { type BoxLink } from "@/components/shared/RecordBox";
 import type { Figure } from "@/types/figure";
+import { INLINE_LINK } from "@/lib/controlStyles";
 
 /**
  * Shared frame and prose parts for the About section (see lib/aboutPages.ts
@@ -41,16 +42,21 @@ export function AboutPage({
   eyebrow,
   title,
   lede,
+  intro,
   children,
 }: {
   href: string;
   eyebrow: string;
   title: string;
+  /** The standing line under the title: one line. */
   lede: ReactNode;
+  /** The chapter's full introduction, kept behind "More" in its first box,
+   *  "The short version", so the first screen is the lede and the summary. */
+  intro?: ReactNode;
   children: ReactNode;
 }) {
   const { prev, next } = adjacentChapters(href);
-  const body = withContents(children);
+  const body = withContents(children, intro);
   return (
     <>
       <Navbar />
@@ -92,9 +98,12 @@ export function AboutPage({
 const CONTENTS_MIN_SECTIONS = 4;
 
 /** The chapter's children with an "On this page" list of its top-level
- *  Sections placed after its Summary (first, when it has none). */
-function withContents(children: ReactNode): ReactNode {
-  const kids = Children.toArray(children);
+ *  Sections placed after its Summary (first, when it has none), and the
+ *  chapter's full introduction in the Summary's "More". */
+function withContents(children: ReactNode, intro?: ReactNode): ReactNode {
+  const kids = Children.toArray(children).map((c) =>
+    intro && isValidElement<SummaryProps>(c) && c.type === Summary ? cloneElement(c, { intro }) : c
+  );
   const sections = kids
     .filter((c): c is ReactElement<{ id: string; title: string }> => {
       return isValidElement(c) && c.type === Section;
@@ -185,8 +194,14 @@ function ChapterNav({ current }: { current: string }) {
   );
 }
 
+interface SummaryProps {
+  children: ReactNode;
+  /** The chapter's full introduction (AboutPage `intro`), behind "More". */
+  intro?: ReactNode;
+}
+
 /** "The short version": what a reader should leave with. */
-export function Summary({ children }: { children: ReactNode }) {
+export function Summary({ children, intro }: SummaryProps) {
   return (
     <section
       aria-labelledby="short-version"
@@ -196,6 +211,27 @@ export function Summary({ children }: { children: ReactNode }) {
         The short version
       </h2>
       <ul className="mt-3 space-y-2.5 text-base leading-relaxed text-ink">{children}</ul>
+      {intro && (
+        <details className="group/intro mt-3 text-sm">
+          <summary
+            className={`${INLINE_LINK} inline-flex min-h-6 cursor-pointer list-none items-center gap-1.5 [&::-webkit-details-marker]:hidden`}
+          >
+            <span aria-hidden="true" className="font-id no-underline group-open/intro:hidden">
+              +
+            </span>
+            <span
+              aria-hidden="true"
+              className="hidden font-id no-underline group-open/intro:inline"
+            >
+              −
+            </span>
+            More: the chapter&apos;s introduction
+          </summary>
+          <div className="mt-2 border-t border-white/25 pt-3 text-base leading-relaxed text-ink">
+            {intro}
+          </div>
+        </details>
+      )}
     </section>
   );
 }

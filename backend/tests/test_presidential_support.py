@@ -281,6 +281,11 @@ def test_read_side_views(db_session):
     view = chamber_view(db_session, "house")
     assert len(view["members"]) == 48 and [r["rollCall"] for r in view["rollCalls"]] == [2, 1]
     assert view["rollCalls"][0]["presidentSide"] == "Nay"
+    # The page's lead figure: members above, below or within reach of their
+    # seat's expected rate, counted here so the page counts nothing.
+    sides = [m["comparedWithExpected"] for m in view["members"]]
+    assert view["counts"] == {**{k: sides.count(k) for k in ("more", "less", "within")},
+                              "total": sum(s is not None for s in sides)}
     assert view["rollCalls"][0]["statement"]["sentence"].startswith("The Administration opposes")
     member = member_view(db_session, "rep-d000005")
     assert [v["memberVote"] for v in member["rollCalls"]] == ["Not Voting", "Nay"]

@@ -34,7 +34,8 @@ export default function DataChapter() {
       href="/about/data"
       eyebrow="Methodology · data, AI & infrastructure"
       title="Data, AI & how it runs"
-      lede={
+      lede={<p>Where every number comes from.</p>}
+      intro={
         <p>
           Where every number comes from, what the AI models do and don&apos;t do, what we record
           about visits, and the machine it all runs on.

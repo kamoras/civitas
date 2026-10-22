@@ -967,6 +967,17 @@ export interface ExploreDocumentDetail {
    * older than the fields. */
   crCitation?: string;
   speakerName?: string;
+  /** The header box's line, a template over the record's own fields:
+   * "Proposed Rule from the Food and Drug Administration, October 9, 2026
+   * · 91 FR 48248" (api/explore.py document_headline). */
+  headline?: string;
+  /** The comment period from publication to deadline while it is open
+   * (comment_periods.comment_window), the header box's countdown; null
+   * once it has closed or for a document that takes no comments. */
+  commentWindow?: CommentWindow | null;
+  /** The executive orders the text cites that have a page here, by
+   * number, lowest first (api/explore.py cited_orders). */
+  executiveOrders?: { number: number; key: string }[];
 }
 
 export interface ExploreDocumentSummary {
