@@ -50,10 +50,16 @@ THE METHOD, in the order it runs:
    measure calibration.
 
 Every fitted number is written by the fit script to
-app/data/forecast_model.json; nothing here is a hand-typed estimate. The
-poll window is the training polls' own reach (poll_window), recorded with
-each fit as windowDays. The constants below are the method's design
-choices (grids searched, sample clipping), each one stated.
+app/data/forecast_model.json. The poll window is the training polls' own
+reach (poll_window), recorded with each fit as windowDays. Five numbers are
+not fitted yet: the poll-weighting priors below (N_REF, N_MIN, N_CAP,
+HOUSE_SHRINK) and the half-life grid. They are stated priors, each with its
+reason, and the map's method section names them as such. The fit that
+replaces them (scripts/fit_forecast_model.py --fit-priors, fit_priors
+there) is held off while a map built on them is live, and runs once the
+election they were stated for has been certified: data_refresh alerts
+until it has (data-stale-forecast-model). A fit made with it records its
+values under `priors`, which every function here reads in place of these.
 """
 
 from __future__ import annotations
@@ -66,18 +72,35 @@ from dataclasses import dataclass
 
 import numpy as np
 
+# STATED PRIORS, not fitted (module docstring). Each is a reason, not a
+# measurement; fit_priors (scripts/fit_forecast_model.py) measures them.
+#
 # Sample sizes enter as sqrt(n / N_REF), with n clipped to [N_MIN, N_CAP]
 # so one enormous online panel cannot drown out every other poll, and a
-# poll that states no sample counts as a typical one (N_REF).
+# poll that states no sample counts as a typical one (N_REF). 600 is about
+# a typical statewide poll; every Senate training poll states its sample
+# (median 732, so N_REF moves only a live poll that states none), N_MIN
+# binds none of them (the 1st percentile is 365), and N_CAP binds the
+# largest few percent: online panels of tens of thousands.
 N_REF = 600
 N_MIN = 100
 N_CAP = 3000
 # House effects shrink toward zero as if each pollster had this many
-# extra polls exactly matching the others (a simple, stated prior; with
-# fewer polls than this a pollster keeps less than half its raw effect).
+# extra polls exactly matching the others (with fewer polls than this a
+# pollster keeps less than half its raw effect): a round number between
+# keeping every raw effect (0) and trusting none.
 HOUSE_SHRINK = 10
-# Grids the fit searches (by maximum likelihood on the training cycles).
+# The half-lives the fit chooses among by maximum likelihood: about half a
+# week, one, two and four weeks, a doubling grid over the training polls'
+# three-week reach.
 HALF_LIFE_GRID = (4.0, 7.0, 14.0, 28.0)
+# The same, as the `priors` a fit can carry (fit(priors=...)): a fit with
+# none uses these.
+STATED_PRIORS = {"sampleRef": N_REF, "sampleMin": N_MIN, "sampleCap": N_CAP, "houseShrink": HOUSE_SHRINK,
+                 "halfLifeGrid": list(HALF_LIFE_GRID)}
+# When the priors were stated: the alert to fit them opens once a general
+# election after this date has been certified (data_refresh).
+PRIORS_STATED_ON = "2026-10-22"
 FLOOR_GRID = tuple(round(0.5 + 0.25 * i, 2) for i in range(47))  # 0.5 .. 12.0 points
 SPREAD_GRID = tuple(round(0.5 * i, 1) for i in range(41))  # 0 .. 20 points
 # The as-of horizons the method is fitted at, in days before election
@@ -137,11 +160,11 @@ def match_pollster(name: str, known: dict) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-def house_effects(races: list[list[Poll]]) -> dict:
+def house_effects(races: list[list[Poll]], shrink: float = HOUSE_SHRINK) -> dict:
     """{"pollsters": {key: effect}, "partisan": lean of sponsored polls}.
 
     A pollster's effect is the mean of (its poll - the mean of the other
-    pollsters' polls in the same race), shrunk by HOUSE_SHRINK. The
+    pollsters' polls in the same race), shrunk by `shrink`. The
     partisan figure is the same difference for polls a source marks as
     partisan, signed toward the sponsor (positive = they lean the
     sponsor's way), used only for a pollster with no history."""
@@ -164,7 +187,7 @@ def house_effects(races: list[list[Poll]]) -> dict:
                 counts[k] += 1
                 if p.partisan in ("R", "D"):
                     partisan.append(d if p.partisan == "R" else -d)
-    effects = {k: round(sums[k] / (counts[k] + HOUSE_SHRINK), 3) for k in sorted(sums)}
+    effects = {k: round(sums[k] / (counts[k] + shrink), 3) for k in sorted(sums)}
     return {"pollsters": effects, "partisan": round(float(np.mean(partisan)), 3) if partisan else 0.0}
 
 
@@ -217,13 +240,15 @@ def eligible(polls: list[Poll], horizon: int, window: int) -> list[Poll]:
             and latest.get(pollster_key(p.pollster)) == p.days_out]
 
 
-def poll_weight(p: Poll, horizon: int, half_life: float) -> float:
-    n = min(max(p.n or N_REF, N_MIN), N_CAP)
-    return 0.5 ** ((p.days_out - horizon) / half_life) * math.sqrt(n / N_REF)
+def poll_weight(p: Poll, horizon: int, half_life: float, priors: dict | None = None) -> float:
+    pr = priors or STATED_PRIORS
+    ref = pr["sampleRef"]
+    n = min(max(p.n or ref, pr["sampleMin"]), pr["sampleCap"])
+    return 0.5 ** ((p.days_out - horizon) / half_life) * math.sqrt(n / ref)
 
 
 def poll_average(polls: list[Poll], horizon: int, half_life: float, effects: dict,
-                 window: int) -> PollAverage | None:
+                 window: int, priors: dict | None = None) -> PollAverage | None:
     used = eligible(polls, horizon, window)
     if not used:
         return None
@@ -232,7 +257,7 @@ def poll_average(polls: list[Poll], horizon: int, half_life: float, effects: dic
     per = defaultdict(int)
     for p in used:
         per[pollster_key(p.pollster)] += 1
-    w = np.array([poll_weight(p, horizon, half_life) / per[pollster_key(p.pollster)] for p in used])
+    w = np.array([poll_weight(p, horizon, half_life, priors) / per[pollster_key(p.pollster)] for p in used])
     m = np.array([adjusted_margin(p, effects) for p in used])
     return PollAverage(float(w @ m / w.sum()), float(w.sum() ** 2 / (w ** 2).sum()), tuple(used))
 
@@ -247,8 +272,8 @@ def poll_sd(k_eff: float, floor: float, spread: float) -> float:
 
 
 def national(generic: dict, year: int, horizon: int, half_life: float, effects: dict,
-             window: int) -> float | None:
-    avg = poll_average(generic.get(str(year), []), horizon, half_life, effects, window)
+             window: int, priors: dict | None = None) -> float | None:
+    avg = poll_average(generic.get(str(year), []), horizon, half_life, effects, window, priors)
     return None if avg is None else avg.margin
 
 
@@ -287,7 +312,25 @@ def combine(prior: float, prior_sd: float, avg: float | None, avg_sd: float | No
     return (prior * wp + avg * wa) / (wp + wa), math.sqrt(1 / (wp + wa))
 
 
-def fit(rows: list[dict], generic: dict, horizon: int, national_coef: float | None = None) -> dict:
+def poll_error_fit(races: list[list[Poll]], rows: list[dict], horizon: int, effects: dict, window: int,
+                   priors: dict | None = None) -> tuple[float, float, float, float]:
+    """(half-life, floor, spread, log-likelihood): the half-life on the
+    priors' grid, and the poll-error spread, that make the training
+    averages' errors most likely."""
+    best = None
+    for hl in (priors or STATED_PRIORS)["halfLifeGrid"]:
+        avgs = [poll_average(p, horizon, hl, effects, window, priors) for p in races]
+        idx = [i for i, a in enumerate(avgs) if a is not None]
+        err = np.array([avgs[i].margin - rows[i]["margin"] for i in idx])
+        k = np.array([avgs[i].k_eff for i in idx])
+        floor, spread, ll = fit_poll_error(err, k)
+        if best is None or ll > best[3]:
+            best = (hl, floor, spread, ll)
+    return best
+
+
+def fit(rows: list[dict], generic: dict, horizon: int, national_coef: float | None = None,
+        priors: dict | None = None) -> dict:
     """Every parameter of the method at one horizon, from training rows.
 
     `national_coef` fixes the generic-ballot coefficient instead of fitting
@@ -295,22 +338,17 @@ def fit(rows: list[dict], generic: dict, horizon: int, national_coef: float | No
     race in a cycle shares one generic-ballot average), so a history of a
     few cycles cannot estimate it: the House's three would fit it on two
     values per held-out fold. The House takes the Senate fit's coefficient
-    (thirteen cycles), and fits everything else itself."""
+    (thirteen cycles), and fits everything else itself.
+
+    `priors` replaces the stated priors (STATED_PRIORS) with fitted ones
+    (fit_priors in scripts/fit_forecast_model.py); a fit made with them
+    records them, and predictions from it read them."""
     races = [[Poll.from_row(r) for r in row["polls"]] for row in rows]
     gen = {y: [Poll.from_row(r) for r in v] for y, v in generic.items()}
     window = poll_window(rows, generic)
-    effects = house_effects(races + list(gen.values()))
-    best = None
-    for hl in HALF_LIFE_GRID:
-        avgs = [poll_average(p, horizon, hl, effects, window) for p in races]
-        idx = [i for i, a in enumerate(avgs) if a is not None]
-        err = np.array([avgs[i].margin - rows[i]["margin"] for i in idx])
-        k = np.array([avgs[i].k_eff for i in idx])
-        floor, spread, ll = fit_poll_error(err, k)
-        if best is None or ll > best[3]:
-            best = (hl, floor, spread, ll)
-    half_life, floor, spread, _ = best
-    nat = {int(y): national(gen, int(y), horizon, half_life, effects, window) for y in gen}
+    effects = house_effects(races + list(gen.values()), (priors or STATED_PRIORS)["houseShrink"])
+    half_life, floor, spread, _ = poll_error_fit(races, rows, horizon, effects, window, priors)
+    nat = {int(y): national(gen, int(y), horizon, half_life, effects, window, priors) for y in gen}
     usable = [i for i, row in enumerate(rows) if nat.get(row["year"]) is not None]
     x = np.array([[rows[i]["lean"], rows[i]["inc"], nat[rows[i]["year"]]] for i in usable])
     y = np.array([rows[i]["margin"] for i in usable])
@@ -321,6 +359,8 @@ def fit(rows: list[dict], generic: dict, horizon: int, national_coef: float | No
         beta = b + [float(national_coef)]
     params = {"horizon": horizon, "windowDays": window, "halfLife": half_life, "pollFloor": floor, "pollSpread": spread,
               "beta": beta, "priorSd": prior_sd, "houseEffects": effects}
+    if priors is not None:
+        params["priors"] = priors
     means, sds, prior_m, avg_m, actual = [], [], [], [], []
     for i in usable:
         r = predict_raw(rows[i], races[i], nat[rows[i]["year"]], params)
@@ -340,7 +380,8 @@ def fit(rows: list[dict], generic: dict, horizon: int, national_coef: float | No
 def predict_raw(row: dict, polls: list[Poll], nat: float, params: dict) -> dict:
     b = params["beta"]
     prior = b[0] + b[1] * row["lean"] + b[2] * row["inc"] + b[3] * nat
-    avg = poll_average(polls, params["horizon"], params["halfLife"], params["houseEffects"], params["windowDays"])
+    avg = poll_average(polls, params["horizon"], params["halfLife"], params["houseEffects"], params["windowDays"],
+                       params.get("priors"))
     avg_sd = poll_sd(avg.k_eff, params["pollFloor"], params["pollSpread"]) if avg else None
     mean, sd = combine(prior, params["priorSd"], avg.margin if avg else None, avg_sd)
     return {"prior": prior, "pollAverage": avg.margin if avg else None, "pollSd": avg_sd,
@@ -416,16 +457,16 @@ def calibration_current(table: list[dict] | None) -> bool:
 
 
 def predict_cycle(train: list[dict], test: list[dict], generic: dict, year: int, horizon: int,
-                  national_coef: float | None = None) -> list[dict]:
+                  national_coef: float | None = None, priors: dict | None = None) -> list[dict]:
     """Every race of `test` (one cycle, `year`) predicted by a fit on `train`
     alone, which must not hold that cycle. The national average for the
     held-out year uses only that year's generic-ballot polls (and the
     house effects of the training years)."""
     assert all(r["year"] != year for r in train), "the fit must not see the cycle it predicts"
     gen_train = {y: v for y, v in generic.items() if int(y) != year}
-    params = fit(train, gen_train, horizon, national_coef)
+    params = fit(train, gen_train, horizon, national_coef, priors)
     gen_all = {y: [Poll.from_row(x) for x in v] for y, v in generic.items()}
-    nat = national(gen_all, year, horizon, params["halfLife"], params["houseEffects"], params["windowDays"])
+    nat = national(gen_all, year, horizon, params["halfLife"], params["houseEffects"], params["windowDays"], priors)
     if nat is None:
         return []
     out = []
@@ -439,7 +480,8 @@ def predict_cycle(train: list[dict], test: list[dict], generic: dict, year: int,
     return out
 
 
-def leave_one_cycle_out(rows: list[dict], generic: dict, horizon: int, national_coef_for=None) -> dict:
+def leave_one_cycle_out(rows: list[dict], generic: dict, horizon: int, national_coef_for=None,
+                        priors: dict | None = None) -> dict:
     """Every race predicted by a fit that never saw its cycle."""
     out = []
     for year in sorted({r["year"] for r in rows}):
@@ -448,11 +490,12 @@ def leave_one_cycle_out(rows: list[dict], generic: dict, horizon: int, national_
         # A borrowed national coefficient is itself refitted without the
         # held-out cycle, so nothing from that cycle reaches its prediction.
         out += predict_cycle(train, test, generic, year, horizon,
-                             national_coef_for(year) if national_coef_for else None)
+                             national_coef_for(year) if national_coef_for else None, priors)
     return summarize(out)
 
 
-def forward(rows: list[dict], generic: dict, horizon: int, national_coef_for=None) -> dict | None:
+def forward(rows: list[dict], generic: dict, horizon: int, national_coef_for=None,
+            priors: dict | None = None) -> dict | None:
     """The newest cycle predicted by a fit on the cycles before it only: what
     the method would have said had it been run that year, with nothing from
     that year or later (not even a later cycle's house effects, which leave
@@ -467,7 +510,7 @@ def forward(rows: list[dict], generic: dict, horizon: int, national_coef_for=Non
     test = [r for r in rows if r["year"] == year]
     earlier = {y: v for y, v in generic.items() if int(y) <= year}
     preds = predict_cycle(train, test, earlier, year, horizon,
-                          national_coef_for(year) if national_coef_for else None)
+                          national_coef_for(year) if national_coef_for else None, priors)
     if not preds:
         return None
     out = summarize(preds)

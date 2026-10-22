@@ -92,6 +92,8 @@ ALLOWED: dict[tuple[str, int], str] = {
 ALLOWED_IN_TEXT: dict[tuple[str, int], str] = {
     ("api/feed.py", 2026): "the feed's fixed epoch and RFC 4151 tag date",
     ("entity_feeds.py", 2026): "RFC 4151 tag date",
+    ("forecast/model.py", 2026): "PRIORS_STATED_ON, the dated record of when the map's priors were stated "
+                                 "(the alert compares certified generals by rule, not by year)",
     ("api/public.py", 1939): "BLS payroll series begins",
     ("api/redistricting.py", 2020): "the 2020 census's residents, the column the file reports",
     ("pipeline/analyze/president_scorer.py", 1824): "first national popular vote",
