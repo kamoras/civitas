@@ -636,6 +636,14 @@ def normalize_recent_votes(
     return votes
 
 
+# A roll call is party-labeled R or D when at least PARTY_SIDE_MIN of one
+# party's Yea/Nay voters voted Yea and at most PARTY_SIDE_MAX of the other's
+# did; anything else is bipartisan. Shown text quotes these (measures.py),
+# so a change here changes what the site says.
+PARTY_SIDE_MIN = 0.65
+PARTY_SIDE_MAX = 0.35
+
+
 def compute_party_vote_split(roll_call_data: dict) -> dict | None:
     """Compute the full party split from roll call member votes: the
     same R/D/bipartisan label compute_party_split() returns, plus the two
@@ -645,10 +653,13 @@ def compute_party_vote_split(roll_call_data: dict) -> dict | None:
     Republican bill, Democratic bill, or bipartisan vote — without relying on
     LLM classification.
 
-    The shares are of the members who voted Yea or Nay, as in CQ's party
-    unity votes: an absent or "present" member took no side, and counting
-    them as not-Yea let a party's absences decide the label (a 143-73 vote
-    read bipartisan beside the other party's 0-212).
+    The shares are of the members who voted Yea or Nay, as CQ's party
+    unity votes count them: an absent or "present" member took no side, and
+    counting them as not-Yea let a party's absences decide the label (a
+    143-73 vote read bipartisan beside the other party's 0-212). The
+    threshold is not CQ's: CQ's party unity vote needs only a majority of
+    each party on opposite sides; this label needs PARTY_SIDE_MIN of one
+    party voting Yea and at most PARTY_SIDE_MAX of the other.
 
     Returns:
         {"label": "R"|"D"|"bipartisan", "r_yea_pct": float, "d_yea_pct": float},
@@ -675,9 +686,9 @@ def compute_party_vote_split(roll_call_data: dict) -> dict | None:
     r_yea_pct = r_yea / r_total
     d_yea_pct = d_yea / d_total
 
-    if r_yea_pct >= 0.65 and d_yea_pct <= 0.35:
+    if r_yea_pct >= PARTY_SIDE_MIN and d_yea_pct <= PARTY_SIDE_MAX:
         label = "R"
-    elif d_yea_pct >= 0.65 and r_yea_pct <= 0.35:
+    elif d_yea_pct >= PARTY_SIDE_MIN and r_yea_pct <= PARTY_SIDE_MAX:
         label = "D"
     else:
         label = "bipartisan"

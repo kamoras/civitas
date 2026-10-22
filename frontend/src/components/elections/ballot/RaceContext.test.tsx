@@ -105,6 +105,24 @@ describe("RaceContext", () => {
     );
   });
 
+  it("never calls a state's lean Cook's: it is Civitas's own, from certified returns", () => {
+    const senate = race({
+      id: "2026-SENATE-NC",
+      office: "S",
+      district: null,
+      pviLevel: "state",
+      leanContext: { ...race().leanContext!, unit: "states", of: 50 },
+    });
+    const { unmount } = render(
+      <RaceContext race={{ ...senate, usualVote: { lean: 5, label: "R+5", source: "state" } }} />
+    );
+    expect(screen.queryByText(/Cook PVI/)).not.toBeInTheDocument();
+    unmount();
+    render(<RaceContext race={{ ...senate, usualVote: null }} />);
+    expect(screen.getByText("The seat · State lean R+5")).toBeInTheDocument();
+    expect(screen.queryByText(/Cook PVI/)).not.toBeInTheDocument();
+  });
+
   it("falls back to Cook's figure, labelled as Cook's, without a computed one", () => {
     render(<RaceContext race={race({ usualVote: null })} />);
     expect(screen.getByText("The seat · Cook PVI R+5")).toBeInTheDocument();

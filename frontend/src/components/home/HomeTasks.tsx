@@ -1,8 +1,12 @@
 import Link from "next/link";
 import { connection } from "next/server";
 import type { ThisWeek } from "@/types/thisWeek";
-import { shortDate } from "@/lib/congress";
+import { RECORD_SOURCE, shortDate } from "@/lib/congress";
+import { ELECTION_DAY_LAW } from "@/lib/elections";
+import { CALENDAR_HREF } from "@/lib/routes";
+import { INLINE_LINK } from "@/lib/controlStyles";
 import ClosingLine from "@/components/elections/ClosingLine";
+import { SourceLine } from "@/components/shared/Type";
 import StateJump from "./StateJump";
 import { TYPE } from "@/lib/typeStyles";
 
@@ -64,6 +68,17 @@ export default async function HomeTasks() {
           </h2>
           {election && <p className="text-small text-ink-lo">{shortDate(election.date)}</p>}
           <StateJump label="State" to="ballot" />
+          <SourceLine className="mt-3">
+            Election Day by law (
+            <a href={ELECTION_DAY_LAW.url} className={INLINE_LINK}>
+              {ELECTION_DAY_LAW.name}
+            </a>
+            ); registration deadlines from each state&apos;s election office, on the{" "}
+            <Link href={CALENDAR_HREF} className={INLINE_LINK}>
+              calendar
+            </Link>
+            .
+          </SourceLine>
         </section>
         <section aria-labelledby="task-congress" className={BOX}>
           <p className={LABEL}>Congress this week</p>
@@ -71,6 +86,9 @@ export default async function HomeTasks() {
             {data?.congress ? congressLine(data.congress) : "This week in Congress"}
           </h2>
           {data?.congress && <p className="text-small text-ink-lo">{data.congress.sentence}</p>}
+          <SourceLine className="mt-3">
+            Source: {RECORD_SOURCE}; the next sitting as the Record announces it.
+          </SourceLine>
           <div className="mt-auto pt-3">
             <Link href="/congress" className={BUTTON}>
               The week&apos;s record

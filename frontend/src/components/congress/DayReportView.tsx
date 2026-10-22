@@ -6,7 +6,17 @@ import PageMasthead from "@/components/layout/PageMasthead";
 import FollowFeed from "@/components/shared/FollowFeed";
 import { TOPIC_FEEDS } from "@/lib/site";
 import type { ChamberDay, CongressEvent, DayReport } from "@/types/congress";
-import { CHAMBER_NAME, dayHref, longDate, monthHref, shortDate, weekHref } from "@/lib/congress";
+import {
+  CHAMBER_NAME,
+  RECORD_SOURCE,
+  dayHref,
+  longDate,
+  monthHref,
+  shortDate,
+  weekHref,
+} from "@/lib/congress";
+import { SourceLine } from "@/components/shared/Type";
+import { INLINE_LINK } from "@/lib/controlStyles";
 import { PeriodNav } from "./CongressNav";
 import SectionTabs from "@/components/layout/SectionTabs";
 import { Empty, EventList, Figure, FigureGroup, MeasureRow, Section, VoteRow } from "./ReportParts";
@@ -295,11 +305,21 @@ export default function DayReportView({
               />
             </FigureGroup>
           </div>
+          <SourceLine className="mt-3">
+            Source: {RECORD_SOURCE}; each chamber&apos;s own floor log until the Digest is
+            published.{" "}
+            <a href="#day-source" className={INLINE_LINK}>
+              The day&apos;s record
+            </a>
+          </SourceLine>
           <div className="mt-10 grid grid-cols-1 gap-12 md:grid-cols-2">
             <ChamberColumn day={senate} />
             <ChamberColumn day={house} />
           </div>
-          <footer className="mt-12 border-t border-white/15 pt-5 text-small leading-relaxed text-ink-lo">
+          <footer
+            id="day-source"
+            className="mt-12 border-t border-white/15 pt-5 text-small leading-relaxed text-ink-lo"
+          >
             <p className="font-mono text-small text-ink-min">Source</p>
             <p className="mt-2 max-w-4xl">
               The Congressional Record&apos;s Daily Digest (Government Publishing Office) once

@@ -1283,8 +1283,9 @@ class PublicScoreDimensionsSchema(_PublicModel):
 class PublicSeatSchema(_PublicModel):
     state: str
     district: int | None = Field(description="House district, 0 at-large; null for senators")
-    cook_pvi: int = Field(description="The seat's Cook PVI the score used, positive leaning Republican (the "
-                                      "district's for a House seat, the state's for a senator; 0 when unknown)")
+    cook_pvi: int = Field(description="The seat's lean the score used, positive leaning Republican (a House "
+                                      "seat's Cook PVI; for a senator, the state's lean computed by Civitas "
+                                      "with Cook's formula from certified presidential returns; 0 when unknown)")
     district_lines_congress: int | None = Field(
         description="The Congress whose district lines the House score was computed on; null for senators, or "
                     "a score stored before this was recorded")
@@ -1445,7 +1446,9 @@ class PublicPresidentialSupportMemberSchema(_PublicModel):
     party: str = Field(description="The party the expectation is read for (an independent's caucus party)")
     state: str
     district: int | None = Field(description="House district, 0 at-large; null for senators")
-    seat_lean: int | None = Field(description="The seat's Cook PVI, positive leaning Republican")
+    seat_lean: int | None = Field(description="The seat's lean, positive leaning Republican: a House seat's "
+                                              "Cook PVI; for a senator, the state's lean computed by Civitas "
+                                              "with Cook's formula")
     with_president: int = Field(description="Counted votes cast on the president's side")
     votes: int = Field(description="Counted votes cast (Yea or Nay; present and not voting excluded)")
     rate: float = Field(description="withPresident / votes")

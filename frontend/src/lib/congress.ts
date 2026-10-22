@@ -152,6 +152,16 @@ export function resultTone(rejected: boolean | null): "yes" | "no" | "neutral" {
 
 export const CHAMBER_NAME = { senate: "Senate", house: "House" } as const;
 
+/** Where the Congress reports' days, sittings and record votes come from:
+ * printed under each box on /congress and the week and month reports, and
+ * carried by each box's share image. */
+export const RECORD_SOURCE =
+  "the Congressional Record's Daily Digest (Government Publishing Office); Senate.gov and House Clerk roll calls";
+
+/** Where the bill funnel's counts come from. */
+export const BILL_STATUS_SOURCE =
+  "Congress.gov bill status, for every bill sitting members sponsored";
+
 /** A roll call's count as the backend words it (roll_call_shape: a broken
  * tie, a quorum call, an election of the Speaker); yeas to nays from a
  * backend image older than that field. */

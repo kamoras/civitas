@@ -26,6 +26,7 @@ import TownContestCard from "@/components/elections/TownContestCard";
 import FollowFeed from "@/components/shared/FollowFeed";
 import BoxGrid from "@/components/shared/BoxGrid";
 import RecordBox from "@/components/shared/RecordBox";
+import { SourceLine } from "@/components/shared/Type";
 import NoteLine from "@/components/elections/NoteLine";
 import ShareSectionButton from "@/components/share/ShareSectionButton";
 import BallotRaceRows, { CandidateNames } from "@/components/elections/ballot/BallotRaceRows";
@@ -1962,7 +1963,7 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
     title: `${stateName} statewide ballot`,
     subtitle: `${ballot.cycleYear} general election · ${calendarDate(ballot.electionDate)}`,
     url: absoluteUrl(stateBallotHref(ballot.state)),
-    source: `${stateName}'s election office (candidates, measures and results, quoted); FEC filings; Cook PVI`,
+    source: `${stateName}'s election office (candidates, measures and results, quoted); FEC filings; state lean computed by Civitas from certified presidential returns`,
     // Read when the page loads.
     asOf: null,
   };
@@ -2185,6 +2186,11 @@ export default function StateBallotClient({ ballot }: { ballot: StateBallot }) {
                       </div>
                     ))}
                   </dl>
+                  <SourceLine className="mt-2">
+                    Sources: candidates from the list named above (the state&apos;s own, or FEC
+                    filings); each contest&apos;s money from FEC filings, behind its
+                    &ldquo;More&rdquo;; news stories from the newsrooms each one credits.
+                  </SourceLine>
                 </details>
               </section>
             )}

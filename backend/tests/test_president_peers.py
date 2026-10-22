@@ -1,5 +1,7 @@
 """Where a president stands among the other presidencies (app/president_peers.py)."""
 
+from datetime import datetime, timezone
+
 from app.models import President
 from app.president_peers import MIN_PEERS, president_peers
 
@@ -53,3 +55,21 @@ def test_a_missing_record_is_said_plainly_never_drawn(db_session):
     assert any("No approval polls" in m for m in out["missing"])
     assert any("Not rated by historians" in m for m in out["missing"])
     assert president_peers(db_session, "nobody") is None
+
+
+def test_a_sitting_presidents_peer_growth_says_it_is_the_first_year(db_session, freeze_utcnow):
+    """A term in its second calendar year has no later complete year, so the
+    pipeline credits the first year alone (peer_gdp.peer_relative_growth):
+    the method says so and the row draws no word."""
+    for i in range(2, 9):
+        db_session.add(_president(i, gdp_growth_relative=0.5 * i))
+    db_session.add(_president(9, term_start="2025-01-20", term_end=None, is_current=True,
+                              gdp_growth_relative=3.6))
+    db_session.commit()
+    freeze_utcnow(datetime(2026, 10, 22, tzinfo=timezone.utc))
+    row = next(m for m in president_peers(db_session, "p-9")["measures"] if m["key"] == "growthVsPeers")
+    assert row["measured"].startswith("First year only; no later year published yet.")
+    assert "leaving out the first year" not in row["measured"]
+    assert row["thin"] is True and row["word"] is None
+    finished = next(m for m in president_peers(db_session, "p-8")["measures"] if m["key"] == "growthVsPeers")
+    assert "leaving out the first year" in finished["measured"]

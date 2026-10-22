@@ -237,7 +237,10 @@ def summary_boxes(ballot: dict) -> list[dict]:
         boxes.append({
             "key": "lean", "kicker": "Usual vote",
             "title": f"{name} votes about evenly" if label == "EVEN" else f"{name} leans {label}",
-            "dek": "Against the national presidential vote, from Cook PVI. Not a forecast.",
+            # state_pvi.json: Civitas's own computation with Cook's formula,
+            # not Cook's published figure (the member page words it the same).
+            "dek": "Against the national presidential vote, computed by Civitas with Cook's formula "
+                   "from certified presidential returns. Not a forecast.",
             "figure": _stat(pvi, "statewide lean", text=label),
         })
 
