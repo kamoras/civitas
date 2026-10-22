@@ -79,17 +79,20 @@ export default async function PresidentSupportPage({
                 ))}
               </nav>
             }
-          >
-            <p>
-              Before many votes, the White House says where the president stands on the bill. This
-              page counts how often each member voted that way, and sets it beside what members of
-              the same party in seats that lean the same way do. Voting with or against the
-              president is neither good nor bad.
-            </p>
-          </PageMasthead>
-          <div className="mt-8">
+          />
+          <div className="mt-6">
             {view ? (
-              <ChamberView view={view} />
+              <ChamberView
+                view={view}
+                intro={
+                  <p>
+                    Before many votes, the White House says where the president stands on the bill.
+                    This page counts how often each member voted that way, and sets it beside what
+                    members of the same party in seats that lean the same way do. Voting with or
+                    against the president is neither good nor bad.
+                  </p>
+                }
+              />
             ) : (
               <p className="font-sans text-base text-ink-lo">
                 Not measured yet: the first nightly run after this page went live fills it in.

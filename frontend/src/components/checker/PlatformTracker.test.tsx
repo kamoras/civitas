@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { olderApi } from "@/lib/olderApi";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import PlatformTracker from "./PlatformTracker";
@@ -79,5 +80,17 @@ describe("PlatformTracker interpretation", () => {
     await userEvent.click(screen.getByRole("button", { name: /Positions vs\. Votes/ }));
     expect(screen.getByText("Voting record sits at the center overall.")).toBeInTheDocument();
     expect(screen.queryByText(/voting record leans/)).not.toBeInTheDocument();
+  });
+});
+
+describe("an older API, during a rolling update", () => {
+  it("draws the bar and the areas plain, placed from the lean", async () => {
+    const { container } = await open(olderApi(depth(0.43)));
+    expect(screen.queryByRole("img", { name: /^Votes / })).toBeNull();
+    expect(screen.queryByRole("group", { name: /^Voting record by policy area/ })).toBeNull();
+    const fill = container.querySelector<HTMLElement>(".bg-signal-red, .bg-dem-blue")!;
+    expect([fill.style.left, fill.style.width]).toEqual(["50%", "21.5%"]);
+    // Plain: drawn, with no readout, nothing printed from a missing field.
+    expect(container.textContent).not.toMatch(/undefined|NaN/);
   });
 });

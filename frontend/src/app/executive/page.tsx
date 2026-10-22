@@ -20,7 +20,10 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
 import SectionTabs from "@/components/layout/SectionTabs";
-import SectionCards from "@/components/sections/SectionCards";
+import SectionCards, { fetchSectionFigures } from "@/components/sections/SectionCards";
+import BoxGrid from "@/components/shared/BoxGrid";
+import RecordBox from "@/components/shared/RecordBox";
+import { formatCurrency } from "@/lib/formatting";
 import BudgetBars from "@/components/agencies/BudgetBars";
 import JsonLd, { breadcrumbList } from "@/components/seo/JsonLd";
 import type { OpenCommentItem } from "@/lib/api";
@@ -39,7 +42,6 @@ const AGENCIES_SHOWN = 5;
 const NOMINATIONS_SHOWN = 3;
 
 const LINK = "underline underline-offset-2 hover:text-phos";
-const MORE = "inline-flex min-h-11 items-center font-mono text-xs text-ink-lo hover:text-phos";
 
 /** One panel's data, or null when its source can't answer right now: the
  *  hub shows the other panels and says which one is missing, rather than
@@ -58,34 +60,30 @@ async function json<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-function Panel({
-  id,
-  title,
-  more,
-  children,
+/** A box's list behind its "More": each item a linked title over a line. */
+function MoreList({
+  items,
 }: {
-  id: string;
-  title: string;
-  more: { href: string; label: string };
-  children: React.ReactNode;
+  items: { key: string; href: string; title: string; line: string }[];
 }) {
   return (
-    <section aria-labelledby={`${id}-heading`} className="border border-white/15 bg-surface p-4">
-      <h2 id={`${id}-heading`} className="font-display text-xl font-semibold text-ink-hi">
-        {title}
-      </h2>
-      <div className="mt-3">{children}</div>
-      <Link href={more.href} className={`mt-2 ${MORE}`}>
-        {more.label} →
-      </Link>
-    </section>
+    <ul>
+      {items.map((it) => (
+        <li key={it.key} className="border-b border-white/[0.07] py-1.5 last:border-0">
+          <Link href={it.href} className={`text-sm ${LINK}`}>
+            {it.title}
+          </Link>
+          <span className="block font-mono text-xs text-ink-min">{it.line}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
-function Unavailable({ what }: { what: string }) {
-  return (
-    <p className="text-sm text-ink-lo">{what} can&apos;t be read right now. Try again shortly.</p>
-  );
+/** What a box says for a source that can't answer right now: the hub shows
+ *  the others rather than failing the page over one of five reads. */
+function unavailable(what: string): string {
+  return `${what} can't be read right now. Try again shortly.`;
 }
 
 /**
@@ -99,12 +97,15 @@ function Unavailable({ what }: { what: string }) {
 export default async function ExecutivePage() {
   // Per request (fetches still cached): a build has no backend to read.
   await connection();
-  const [presidents, comments, agencies, nominations] = await Promise.all([
+  const [presidents, comments, agencies, nominations, figures] = await Promise.all([
     attempt(fetchPresidents),
     attempt(() => json<OpenCommentItem[]>("/api/action/open-comments")),
     attempt(fetchAgencyIndex),
     attempt(() => json<NominationList>("/api/nominations?status=pending&per_page=3")),
+    fetchSectionFigures(),
   ]);
+  const openCount = figures?.agencies.comments.open ?? null;
+  const budget = figures?.agencies.budget ?? null;
   const president = presidents?.find((p) => p.isCurrent) ?? null;
   const profile = president
     ? await attempt(() =>
@@ -130,164 +131,190 @@ export default async function ExecutivePage() {
           <div className="mx-auto max-w-5xl">
             <SectionTabs section="executive" active={null} />
             <PageMasthead
-              className="mb-8"
+              className="mb-6"
               eyebrow="Executive · Article II"
               title="The executive branch"
+              more="This page shows what the president has signed, what the agencies spend, the rules open for your comment, and the nominations waiting on the Senate."
             >
-              <p>
-                The president and the federal agencies that carry out the law: what the president
-                has signed, what the agencies spend, the rules open for your comment, and the
-                nominations waiting on the Senate.
-              </p>
+              The president and the federal agencies that carry out the law.
             </PageMasthead>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <Panel
-                id="president"
-                title="The President"
-                more={{ href: PRESIDENTS_HREF, label: "Every president" }}
-              >
-                {!presidents ? (
-                  <Unavailable what="The presidents" />
-                ) : !president ? (
-                  <p className="text-sm text-ink-lo">No sitting president is on record yet.</p>
-                ) : (
-                  <>
-                    <p className="text-lg">
-                      <Link
-                        href={`/politicians/${encodeURIComponent(president.id)}`}
-                        className={LINK}
-                      >
-                        {president.name}
-                      </Link>
-                    </p>
-                    <p className="text-sm text-ink-lo">
-                      {ordinal(president.number)} president, in office since{" "}
-                      {calendarDate(president.termStart)}
-                    </p>
-                    <h3 className="mt-4 font-mono text-xs text-ink-min">
-                      Latest presidential documents
-                    </h3>
-                    {actions === null ? (
-                      <Unavailable what="The president's documents" />
-                    ) : actions.length === 0 ? (
-                      <p className="text-sm text-ink-lo">
-                        None in the Federal Register for this term yet.
-                      </p>
-                    ) : (
-                      <ul className="mt-1">
-                        {actions.map((d) => (
-                          <li
-                            key={d.id}
-                            className="border-b border-white/[0.07] py-1.5 last:border-0"
-                          >
-                            <Link href={exploreHref(d)} className={`text-sm ${LINK}`}>
-                              {d.title}
-                            </Link>
-                            <span className="block font-mono text-xs text-ink-min">
-                              {d.docType} · {calendarDate(d.date)}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    <Link href={EXECUTIVE_ORDERS_HREF} className={`mt-2 ${MORE}`}>
-                      Every executive order and proclamation →
+            {/* Each part of the branch as a box led by its figure (every
+                number the backend's: the president's documents on record,
+                the open comment periods and the budget total from GET
+                /api/sections, the pending nominations); the lists behind
+                each box's More, each list's full page as a chip. */}
+            <BoxGrid columns={2} className="mb-8">
+              <RecordBox
+                kicker="The President"
+                level={2}
+                headingAttrs={{ id: "president-heading" }}
+                title={
+                  president ? (
+                    <Link href={`/politicians/${encodeURIComponent(president.id)}`}>
+                      {president.name}
                     </Link>
-                  </>
-                )}
-              </Panel>
+                  ) : (
+                    "The President"
+                  )
+                }
+                dek={
+                  !presidents
+                    ? unavailable("The presidents")
+                    : president
+                      ? `${ordinal(president.number)} president, in office since ${calendarDate(president.termStart)}`
+                      : "No sitting president is on record yet."
+                }
+                figure={
+                  profile?.governmentRecord
+                    ? {
+                        type: "stat",
+                        value: profile.governmentRecord.totalDocs,
+                        caption: "presidential documents in the Federal Register",
+                      }
+                    : null
+                }
+                links={[
+                  { label: "Executive orders", href: EXECUTIVE_ORDERS_HREF },
+                  { label: "Every president", href: PRESIDENTS_HREF },
+                ]}
+                more={
+                  president
+                    ? {
+                        label: "the latest presidential documents",
+                        children:
+                          actions === null ? (
+                            unavailable("The president's documents")
+                          ) : actions.length === 0 ? (
+                            <p className="text-sm text-ink-lo">
+                              None in the Federal Register for this term yet.
+                            </p>
+                          ) : (
+                            <MoreList
+                              items={actions.map((d) => ({
+                                key: String(d.id),
+                                href: exploreHref(d),
+                                title: d.title,
+                                line: `${d.docType} · ${calendarDate(d.date)}`,
+                              }))}
+                            />
+                          ),
+                      }
+                    : null
+                }
+              />
 
-              <Panel
-                id="comments"
-                title="Open for your comment"
-                more={{ href: OPEN_COMMENTS_HREF, label: "Every open comment period" }}
-              >
-                {!comments ? (
-                  <Unavailable what="The comment periods" />
-                ) : comments.length === 0 ? (
-                  <p className="text-sm text-ink-lo">
-                    No Federal Register document takes public comments today.
-                  </p>
-                ) : (
-                  <ul>
-                    {comments.slice(0, COMMENTS_SHOWN).map((c) => (
-                      <li key={c.id} className="border-b border-white/[0.07] py-1.5 last:border-0">
-                        <Link href={exploreHref(c)} className={`text-sm ${LINK}`}>
-                          {c.title}
-                        </Link>
-                        <span className="block font-mono text-xs text-ink-min">
-                          {c.agencyName ? `${c.agencyName} · ` : ""}comments close{" "}
-                          {calendarDate(c.commentsCloseOn)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </Panel>
+              <RecordBox
+                kicker="Open for your comment"
+                tone="deadline"
+                level={2}
+                headingAttrs={{ id: "comments-heading" }}
+                title="Rules and notices taking comments"
+                dek={
+                  !comments
+                    ? unavailable("The comment periods")
+                    : comments.length === 0
+                      ? "No Federal Register document takes public comments today."
+                      : undefined
+                }
+                figure={
+                  openCount !== null
+                    ? { type: "stat", value: openCount, caption: "open for public comment today" }
+                    : null
+                }
+                links={[{ label: "Every open comment period", href: OPEN_COMMENTS_HREF }]}
+                more={
+                  comments?.length
+                    ? {
+                        label: "three to comment on",
+                        children: (
+                          <MoreList
+                            items={comments.slice(0, COMMENTS_SHOWN).map((c) => ({
+                              key: String(c.id),
+                              href: exploreHref(c),
+                              title: c.title,
+                              line: `${c.agencyName ? `${c.agencyName} · ` : ""}comments close ${calendarDate(c.commentsCloseOn)}`,
+                            }))}
+                          />
+                        ),
+                      }
+                    : null
+                }
+              />
 
-              <Panel
-                id="agencies"
-                title="The largest agencies"
-                more={{ href: AGENCY_BUDGETS_HREF, label: "Every agency's budget" }}
-              >
-                {!agencies ? (
-                  <Unavailable what="The agency budgets" />
-                ) : !budgetRows?.length ? (
-                  <p className="text-sm text-ink-lo">
-                    USAspending.gov&apos;s budgets haven&apos;t been read yet.
-                  </p>
-                ) : (
-                  <>
-                    <p className="text-sm text-ink-lo">
-                      Budgetary resources, fiscal year {agencies.budget!.fiscalYear}:
-                    </p>
-                    <BudgetBars rows={budgetRows} />
-                  </>
-                )}
-              </Panel>
+              <RecordBox
+                kicker="The largest agencies"
+                level={2}
+                headingAttrs={{ id: "agencies-heading" }}
+                title={
+                  agencies?.budget
+                    ? `Budgetary resources, fiscal year ${agencies.budget.fiscalYear}`
+                    : "Agency budgets"
+                }
+                dek={
+                  !agencies
+                    ? unavailable("The agency budgets")
+                    : !budgetRows?.length
+                      ? "USAspending.gov's budgets haven't been read yet."
+                      : undefined
+                }
+                figure={
+                  budget
+                    ? {
+                        type: "stat",
+                        value: budget.total,
+                        text: formatCurrency(budget.total),
+                        caption: `across ${budget.reportedCount} reporting agencies`,
+                      }
+                    : null
+                }
+                links={[{ label: "Every agency's budget", href: AGENCY_BUDGETS_HREF }]}
+                below={budgetRows?.length ? <BudgetBars rows={budgetRows} /> : undefined}
+              />
 
-              <Panel
-                id="nominations"
-                title="Waiting on the Senate"
-                more={{
-                  href: `${NOMINATIONS_HREF}?status=pending`,
-                  label: "Every pending nomination",
-                }}
-              >
-                {!nominations ? (
-                  <Unavailable what="The nominations" />
-                ) : nominations.counts.pending === 0 ? (
-                  <p className="text-sm text-ink-lo">
-                    No nomination is pending in the Senate this Congress.
-                  </p>
-                ) : (
-                  <>
-                    <p className="text-sm text-ink-lo">
-                      {nominations.counts.pending}{" "}
-                      {nominations.counts.pending === 1 ? "nomination is" : "nominations are"}{" "}
-                      pending in the Senate. The latest:
-                    </p>
-                    <ul className="mt-1">
-                      {nominations.items.slice(0, NOMINATIONS_SHOWN).map((n) => (
-                        <li
-                          key={n.citation}
-                          className="border-b border-white/[0.07] py-1.5 last:border-0"
-                        >
-                          <Link href={nominationHref(n)} className={`text-sm ${LINK}`}>
-                            {n.nominees.join(", ") || n.citation}
-                          </Link>
-                          <span className="block font-mono text-xs text-ink-min">
-                            {[n.positionTitle, n.organization].filter(Boolean).join(", ")}
-                            {" · "}received {calendarDate(n.receivedDate)}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                )}
-              </Panel>
-            </div>
+              <RecordBox
+                kicker="Waiting on the Senate"
+                level={2}
+                headingAttrs={{ id: "nominations-heading" }}
+                title="Pending nominations"
+                dek={
+                  !nominations
+                    ? unavailable("The nominations")
+                    : nominations.counts.pending === 0
+                      ? "No nomination is pending in the Senate this Congress."
+                      : undefined
+                }
+                figure={
+                  nominations && nominations.counts.pending > 0
+                    ? {
+                        type: "stat",
+                        value: nominations.counts.pending,
+                        caption: `${nominations.counts.pending === 1 ? "nomination" : "nominations"} pending in the Senate`,
+                      }
+                    : null
+                }
+                links={[
+                  { label: "Every pending nomination", href: `${NOMINATIONS_HREF}?status=pending` },
+                ]}
+                more={
+                  nominations?.items.length
+                    ? {
+                        label: "the latest received",
+                        children: (
+                          <MoreList
+                            items={nominations.items.slice(0, NOMINATIONS_SHOWN).map((n) => ({
+                              key: n.citation,
+                              href: nominationHref(n),
+                              title: n.nominees.join(", ") || n.citation,
+                              line: `${[n.positionTitle, n.organization].filter(Boolean).join(", ")} · received ${calendarDate(n.receivedDate)}`,
+                            }))}
+                          />
+                        ),
+                      }
+                    : null
+                }
+              />
+            </BoxGrid>
 
             <SectionCards section="executive" />
           </div>

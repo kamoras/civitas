@@ -91,6 +91,7 @@ describe("search results: one list", () => {
         label: "Food additive rule",
         context: "Proposed Rule",
         url: "/explore/fr-2026-1",
+        snippet: "a rule on \u0002food safety\u0003 for additives",
       },
       {
         kind: "agency",
@@ -127,7 +128,13 @@ describe("search results: one list", () => {
       "/congress/bills/HR.1",
       "/search?tab=documents&q=food+safety",
     ]);
-    expect(within(links[0]).getByText("Documents")).toBeInTheDocument();
+    // Each result is a box: its kind over its name, and a document's own
+    // words around the query behind "More", the match marked.
+    const first = links[0].closest("article")!;
+    expect(within(first).getByText("Documents")).toBeInTheDocument();
+    expect(within(first).getByText("More: the document's words")).toBeInTheDocument();
+    expect(within(first).getByText("food safety").tagName).toBe("MARK");
+    expect(within(links[2].closest("article")!).queryByText(/^More:/)).toBeNull();
     const chips = within(
       screen.getByRole("navigation", { name: "Filter the results" })
     ).getAllByRole("link");

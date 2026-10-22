@@ -11,6 +11,7 @@ only the caller's address from it.
 import asyncio
 import json
 import sqlite3
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -18,7 +19,14 @@ import httpx
 import pytest
 from fastapi import HTTPException
 
-from app.api.explore import body_extent, fr_reference, get_explore_document_summary
+from app.api.explore import (
+    body_extent,
+    cited_orders,
+    document_headline,
+    fr_reference,
+    get_explore_document,
+    get_explore_document_summary,
+)
 from app.models import ExploreDocument
 from app.pipeline.fetch.fr_rulemaking import MAX_BODY_LEN
 from app.services import explore_summary
@@ -737,3 +745,43 @@ def test_body_extent_says_how_much_of_the_document_the_body_holds(db_session, fi
 ])
 def test_fr_reference_is_the_documents_own(db_session, fields, reference):
     assert fr_reference(_make_doc(db_session, **fields)) == reference
+
+
+def test_cited_orders_are_the_held_ones_the_text_cites(db_session):
+    """Each executive order the body cites, linked to its page here; one the
+    corpus lacks has no page and is left out, as is the document's own."""
+    _make_doc(db_session, title="EO 12866: Regulatory Planning and Review", external_id="fr-1993-24000")
+    _make_doc(db_session, title="EO 14192: Unleashing Prosperity", external_id="fr-2025-02345")
+    rule = _make_doc(db_session, doc_type="Proposed Rule", title="Fees", external_id="fr-reg-2026-00001",
+                     body="Under Executive Order 14192 and E.O. 12866, and Executive Order 13563, ...")
+    assert cited_orders(db_session, rule) == [
+        {"number": 12866, "key": "fr-1993-24000"}, {"number": 14192, "key": "fr-2025-02345"}]
+    order = db_session.query(type(rule)).filter_by(external_id="fr-2025-02345").one()
+    order.body = "This order amends Executive Order 14192 and Executive Order 12866."
+    assert cited_orders(db_session, order) == [{"number": 12866, "key": "fr-1993-24000"}]
+
+
+@pytest.mark.parametrize("fields,speaker,citation,line", [
+    ({"doc_type": "Proposed Rule", "agency_name": "Food and Drug Administration", "date": "2026-10-09"}, "",
+     "91 FR 48248", "Proposed Rule from the Food and Drug Administration, October 9, 2026 · 91\u00a0FR\u00a048248"),
+    ({"doc_type": "House Floor Speech", "date": "2026-02-02"}, "Jane Doe", "172 Cong. Rec. H1933",
+     "House Floor Speech by Jane Doe, February 2, 2026 · 172\u00a0Cong.\u00a0Rec.\u00a0H1933"),
+    ({"doc_type": "Supreme Court Opinion", "date": "June 2026"}, "", "", "Supreme Court Opinion, June 2026"),
+])
+def test_document_headline_is_a_template_over_the_record(db_session, fields, speaker, citation, line):
+    assert document_headline(_make_doc(db_session, **fields), speaker, citation) == line
+
+
+def test_detail_serves_the_comment_window_only_while_open(db_session, freeze_utcnow):
+    freeze_utcnow(datetime(2026, 10, 21, 15, 0))
+    doc = _make_doc(db_session, doc_type="Proposed Rule", date="2026-10-01", comments_close_on="2026-10-31",
+                    comment_url="https://www.regulations.gov/commenton/X-2026-0001-0001")
+    body = json.loads(asyncio.run(get_explore_document(str(doc.id), db_session)).body)
+    window = body["commentWindow"]
+    assert {k: v for k, v in window.items() if k != "marks"} == {
+        "opened": "2026-10-01", "closes": "2026-10-31", "totalDays": 30, "daysLeft": 10, "elapsedPercent": 67}
+    assert window["marks"]  # the bar's readout, comment_periods.period_marks
+    assert body["headline"].startswith("Proposed Rule, October 1, 2026")
+    doc.comments_close_on = "2026-10-20"
+    db_session.commit()
+    assert json.loads(asyncio.run(get_explore_document(str(doc.id), db_session)).body)["commentWindow"] is None

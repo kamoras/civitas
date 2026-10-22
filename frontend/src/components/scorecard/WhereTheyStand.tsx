@@ -8,7 +8,12 @@ import { fetchPeerComparison } from "@/lib/api";
 import ChartReadout from "@/components/shared/ChartReadout";
 import type { PeerComparison, PeerGroupKey, PeerMeasure } from "@/types/peers";
 import { onThisPage } from "@/lib/onThisPage";
-import StripPoints, { BigFigure, StripAxis, type StripPoint } from "@/components/shared/Strip";
+import StripPoints, {
+  BigFigure,
+  StripAxis,
+  stripTop,
+  type StripPoint,
+} from "@/components/shared/Strip";
 
 /** A round mark. Drawn as SVG, not a rounded box: the site's boxes keep
  *  hard corners, and a dot is a data mark, not a box. */
@@ -48,7 +53,8 @@ const JITTER = [10, 4, 16, 7, 13, 1, 19, 10];
 const jitterY = (i: number, size: number) => 12 + JITTER[i % JITTER.length] / 2 + size / 2;
 
 function Strip({ m, memberId }: { m: PeerMeasure; memberId: string }) {
-  const at = (v: number) => Math.min(100, (v / m.axisMax) * 100);
+  const max = stripTop(m.axisMax, [...m.distribution, m.value, m.expected]);
+  const at = (v: number) => Math.min(100, (v / max) * 100);
   const muted = m.thin;
   const points: StripPoint[] = m.distribution.map((v, i) => {
     const id = m.distributionIds[i];

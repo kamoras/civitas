@@ -53,6 +53,7 @@ export default async function CongressPage() {
         hub={<SectionCards section="congress" current="reports" className="mt-6 mb-8" />}
         lead={{
           title: report.recess.headline,
+          figure: report.recess.figure,
           body: (
             <p>
               {report.recess.sentence}{" "}

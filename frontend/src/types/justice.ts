@@ -99,8 +99,8 @@ export interface JusticeInterval {
   ciLow: number;
   ciHigh: number;
   /** As printed: signed points ("+6.3", "\u22122.1 to +14.5"). */
-  estimateShown: string;
-  intervalShown: string;
+  estimateShown?: string;
+  intervalShown?: string;
 }
 
 export interface JusticeFigures {
@@ -118,7 +118,7 @@ export interface JusticeFigures {
     sentence: string;
     throughTerm: number | null;
     /** One readout per row, in order. */
-    marks: ReadoutMark[];
+    marks?: ReadoutMark[];
   } | null;
 }
 

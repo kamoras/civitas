@@ -92,7 +92,9 @@ export default function BallotRaceRows({
     <ul>
       {rows.map((c) => {
         const party = getPartyMeta(c);
-        const pct = leader > 0 ? Math.round(((c.contributions ?? 0) / leader) * 100) : 0;
+        // The API's share of the race's leader; from an older backend,
+        // drawn from the figures (drawing only).
+        const pct = c.raisedShare ?? (leader > 0 ? ((c.contributions ?? 0) / leader) * 100 : 0);
         return (
           <li key={c.id} className="border-b border-white/[0.09] px-4 py-2.5">
             <div className="flex items-baseline justify-between gap-3">
