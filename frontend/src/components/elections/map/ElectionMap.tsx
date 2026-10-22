@@ -6,6 +6,7 @@ import ShareSectionButton from "@/components/share/ShareSectionButton";
 import { ShareSubjectProvider } from "@/components/share/ShareSubjectContext";
 import ElectionMapMethod from "./ElectionMapMethod";
 import ClosestSeats from "./ClosestSeats";
+import HouseStateLabels from "./HouseStateLabels";
 import { SHARE_EXCLUDE_ATTR, SHARE_SECTION_ATTR, shareMetaAttrs } from "@/lib/shareImage";
 import { trapTab } from "@/lib/focusedDialog";
 import { MAP_LABEL_HALO } from "@/lib/results";
@@ -327,16 +328,6 @@ function HouseTileMap({
       <HatchDefs id={hatch} />
       {layout.blocks.map((b) => (
         <g key={b.state}>
-          {!mini && (
-            <text
-              x={b.x}
-              y={b.y - 2}
-              className="pointer-events-none fill-ink-min font-mono"
-              fontSize="6"
-            >
-              {b.state}
-            </text>
-          )}
           {/* An invisible hit area around the block: the state's mark, so a
               small state is still a 24px target once the map is phone-sized. */}
           {!mini && (
@@ -394,6 +385,7 @@ function HouseTileMap({
           )}
         </g>
       ))}
+      {!mini && <HouseStateLabels blocks={layout.blocks} viewBoxWidth={layout.width + 4} />}
     </svg>
   );
   if (mini) return svg;
