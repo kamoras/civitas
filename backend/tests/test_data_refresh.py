@@ -512,6 +512,44 @@ def test_a_failed_try_is_retried_the_next_day_once_what_it_runs_changes(alerts, 
         assert tried == [1, 1]
 
 
+def test_a_fix_in_a_module_the_script_imports_is_retried_the_next_day(alerts, tmp_path):
+    # The script names only itself; the fix lands two imports away, in a
+    # module reached by a relative import.
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "app" / "analyze").mkdir(parents=True)
+    script = tmp_path / "scripts" / "gen.py"
+    script.write_text("import json\nfrom app.analyze import reader\n")
+    (tmp_path / "app" / "__init__.py").write_text("")
+    (tmp_path / "app" / "analyze" / "__init__.py").write_text("")
+    (tmp_path / "app" / "analyze" / "reader.py").write_text("from . import helpers\nimport app.unrelated_missing\n")
+    helpers = tmp_path / "app" / "analyze" / "helpers.py"
+    helpers.write_text("x.cache_clear()\n")
+    (tmp_path / "app" / "untouched.py").write_text("")
+    tried = []
+    spec = dr.DataFile("t_dep.json", command=lambda ctx: [sys.executable, str(script), "{out}"],
+                       due=lambda ctx: False)
+    with patch.object(dr, "BACKEND", tmp_path), patch.object(dr, "utcnow", return_value=datetime(2026, 10, 20)), \
+         patch.object(dr, "refresh_one", side_effect=lambda spec, ctx: tried.append(1) or "kept: crashed"), \
+         patch.object(dr, "_record_try"):
+        failed_with = dr.recipe(spec.command(None))
+        (tmp_path / "app" / "untouched.py").write_text("changed, but nothing imports it")
+        assert dr.recipe(spec.command(None)) == failed_with
+        with patch.object(dr, "_last_try", return_value=(datetime(2026, 10, 19, 18), True, failed_with)):
+            dr.run_refreshes([spec])
+            assert tried == []
+            helpers.write_text("pass\n")
+            dr.run_refreshes([spec])
+            assert tried == [1]
+
+
+def test_recipe_follows_the_real_generators_imports():
+    spec = next(f for f in dr.DATA_FILES if f.name == "bill_title_token_df.json")
+    files = {f.relative_to(dr.BACKEND).as_posix()
+             for f in dr._backend_imports(dr.BACKEND / "scripts" / "calibrate_lda_bill_match.py")}
+    assert "app/pipeline/analyze/lobbying_records.py" in files
+    assert len(dr.recipe(spec.command(_ctx(spec.name)))) == 16
+
+
 def test_a_try_records_the_recipe_it_ran(db_session):
     with patch.object(dr, "SessionLocal", return_value=db_session), patch.object(db_session, "close"):
         dr._record_try("x.json", "kept: crashed", "abc")

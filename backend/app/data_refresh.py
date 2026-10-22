@@ -30,6 +30,7 @@ Readers call `read(name)`, which notices a rewrite from either process.
 
 from __future__ import annotations
 
+import ast
 import gzip
 import hashlib
 import json
@@ -157,21 +158,69 @@ def content_sha256(doc: dict) -> str:
 RETRY_FAILED_AFTER_DAYS = 7
 
 
+def _module_file(name: str) -> pathlib.Path | None:
+    """The file under BACKEND that module `name` is, or None."""
+    base = BACKEND.joinpath(*name.split("."))
+    for path in (base.with_suffix(".py"), base / "__init__.py"):
+        if path.is_file():
+            return path
+    return None
+
+
+def _backend_imports(path: pathlib.Path) -> set[pathlib.Path]:
+    """The files of this backend's own packages (app, scripts) that `path`
+    imports directly, absolute or relative. `from app.x import y` counts
+    app/x and, when y is a module, app/x/y."""
+    try:
+        tree = ast.parse(path.read_bytes())
+    except (OSError, SyntaxError, ValueError):
+        return set()
+    package = path.relative_to(BACKEND).with_suffix("").parts
+    package = package if path.name == "__init__.py" else package[:-1]
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            if node.level:
+                if node.level - 1 > len(package):
+                    continue
+                parent = ".".join(package[:len(package) - (node.level - 1)])
+                module = ".".join(part for part in (parent, node.module) if part)
+            else:
+                module = node.module or ""
+            names.add(module)
+            names.update(f"{module}.{alias.name}" for alias in node.names)
+    return {f for name in names
+            if name.split(".")[0] in ("app", "scripts") and (f := _module_file(name)) is not None}
+
+
 def recipe(argv: list[str]) -> str:
-    """What a refresh runs: its command line and the content of every file
-    of this backend it names (the generator script, an input it reads). A
+    """What a refresh runs: its command line, the content of every file of
+    this backend it names (the generator script, an input it reads), and
+    of every module of this backend those files import, transitively. A
     failed try whose recipe has changed since is tried again the next day,
     not a week on: the change is usually the fix. All three of 2026-10-18's
     failed refreshes had their fix deployed within a day and waited out the
     week (the token table and coverage floors in their scripts, name casing
-    in its command line). A fix only inside a module the script imports is
-    not seen here and waits for the week."""
+    in its command line). Only failed tries read it, so a change it sees
+    costs no refresh of a file whose last try succeeded."""
     digest = hashlib.sha256()
+    named: list[pathlib.Path] = []
     for arg in argv:
         digest.update(arg.encode() + b"\0")
         path = pathlib.Path(arg)
         if path.is_absolute() and path.is_relative_to(BACKEND) and path.is_file():
             digest.update(path.read_bytes())
+            named.append(path)
+    seen: set[pathlib.Path] = set(named)
+    pending = [p for p in named if p.suffix == ".py"]
+    while pending:
+        for module in _backend_imports(pending.pop()) - seen:
+            seen.add(module)
+            pending.append(module)
+    for module in sorted(seen - set(named)):
+        digest.update(str(module.relative_to(BACKEND)).encode() + b"\0" + module.read_bytes())
     return digest.hexdigest()[:16]
 
 
@@ -392,14 +441,18 @@ def run_refreshes(files: list[DataFile] | None = None, *, pipeline_busy: bool = 
             ctx = Context(spec.name, read(spec.name), utcnow().date(), *_last_try(spec.name))
             shipped = any(bundled_moved(n, read(n)) for n in (spec.name, *spec.outputs))
             template = spec.command(ctx) if spec.command else None
-            current = recipe(template) if template is not None else None
             # A failed try is retried the next day once what it runs has
             # changed (a try recorded before recipes were counts as changed).
-            fixed = ctx.last_failed and current is not None and current != ctx.last_recipe
+            # Hashed only when it can matter (it reads the generator's whole
+            # import tree, about 5 s for every file).
+            current = recipe(template) if template is not None and ctx.last_failed else None
+            fixed = current is not None and current != ctx.last_recipe
             if spec.command and (spec.due(ctx) or ((shipped or fixed) and not ctx.tried_within(1))):
                 if spec.heavy and pipeline_busy:
                     outcomes[spec.name] = "waiting for the pipeline"
                 else:
+                    if current is None and template is not None:
+                        current = recipe(template)
                     outcomes[spec.name] = refresh_one(spec, ctx)
                     _record_try(spec.name, outcomes[spec.name], current)
                     ctx.doc = read(spec.name)
