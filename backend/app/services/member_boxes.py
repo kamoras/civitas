@@ -212,7 +212,7 @@ def holdings_box(holdings) -> dict | None:
     return {"kicker": kicker,
             "headline": f"{holdings.total_shown} disclosed across {_plural(n, 'asset')}",
             "dek": " ".join(x for x in (filed, unvalued) if x) or None,
-            "figure": _stat(holdings.total_low, holdings.total_shown, f"across {_plural(n, 'asset')}")}
+            "figure": _stat(holdings.total_low, holdings.total_shown, f"disclosed across {_plural(n, 'asset')}")}
 
 
 def trades_box(total: int, late: int, branch: str) -> dict:

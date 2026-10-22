@@ -17,6 +17,7 @@ import pathlib
 import re
 import unicodedata
 
+from app.score_display import shown_share
 from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
@@ -133,6 +134,7 @@ def constituent_approval(
             # None: the survey can't tell members apart in this cell (see
             # fetch_ces_approval.priors), so no per-member figure is shown.
             "approve": approval_share(est.get("shrunk")),
+            "approve_shown": None if est.get("shrunk") is None else shown_share(approval_share(est["shrunk"])),
             # Share of the figure that is this member's own respondents; the
             # rest is the typical member's (the shrinkage).
             "own_weight": est.get("own_weight"),

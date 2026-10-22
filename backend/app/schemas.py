@@ -709,6 +709,8 @@ class ConstituentApprovalPartySchema(CamelModel):
     # How much of `approve` is the member's own respondents (0-1).
     own_weight: float | None = Field(None, description="How much of approve is the member's own respondents, 0-1")
     respondents: int = Field(description="The member's own constituents of this party who answered")
+    # The share as every surface prints it (score_display.shown_share).
+    approve_shown: str | None = None
 
 
 class ConstituentApprovalSchema(CamelModel):
