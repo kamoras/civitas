@@ -1975,6 +1975,9 @@ class ActionIssueSchema(CamelModel):
     date: str
     rank: int
     title: str
+    # The newsroom whose headline `title` is (api/action.headline_outlets);
+    # None when the title is Civitas's template around a record.
+    headline_outlet: str | None = None
     summary: str
     facts: list[str] = []
     # Source name per fact, aligned with `facts` by index. Facts are

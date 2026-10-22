@@ -76,6 +76,32 @@ function factsSection() {
     .closest<HTMLElement>("[data-share-section]")!;
 }
 
+describe("a newsroom's headline", () => {
+  it("is credited before the h1 and quoted, and each quote is set off from its outlet", async () => {
+    await renderIssue(
+      issue({
+        sourceType: null,
+        status: "confirmed",
+        headlineOutlet: "The Hill",
+        title: "A headline",
+        facts: ["Voting starts in November."],
+        factSources: ["The Hill"],
+      })
+    );
+    const h1 = screen.getByRole("heading", { level: 1 });
+    expect(h1).toHaveTextContent("“A headline”");
+    const credit = screen.getByText("Reported by The Hill");
+    expect(credit.compareDocumentPosition(h1) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(factsSection().textContent).toMatch(/in November\. · The Hill/);
+  });
+
+  it("is not claimed for a title that is Civitas's template around a record", async () => {
+    await renderIssue(issue({ headlineOutlet: null }));
+    expect(screen.getByRole("heading", { level: 1 }).textContent).not.toMatch(/“/);
+    expect(screen.queryByText(/^Reported by/)).toBeNull();
+  });
+});
+
 describe("an issue's facts section", () => {
   it("is anchored and shared as #from-the-count for a count", async () => {
     await renderIssue(issue());

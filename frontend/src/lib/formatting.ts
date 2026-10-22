@@ -78,6 +78,14 @@ export function formatUtcDate(
   }
 }
 
+/** "12:53 PM ET": the Eastern clock time of an ISO instant, for an
+ *  "Updated" line. en-US always, so server and browser agree. */
+export function formatEasternClock(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${d.toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" })} ET`;
+}
+
 /**
  * A story's date, honestly. `date` is bumped to today on every pipeline run
  * that re-matches an ActionIssue to fresh coverage, whether or not anything
