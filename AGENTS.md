@@ -2492,6 +2492,25 @@ the pending list).
   checks its signature, and adds it to `TLS_CONTEXT`, whose partial chains
   are off so the chain must still end at a certifi root. Never
   `verify=False`, and never a root taken from the network.
+- **Distrusted roots** (2026-10). A root whose keys are compromised is
+  removed from every trust store in the images we build, not only from
+  certifi (which drops it upstream; keep the pin current). First case:
+  emSign ECC Root CA - G3 (GHSA-6q48-6c7w-9gw2; emSign's other roots are
+  unaffected). The stores: the Debian/Alpine system store in all three
+  Dockerfiles (a `!` line in `/etc/ca-certificates.conf`, then
+  `update-ca-certificates`); Node in the frontend, whose built-in store
+  can't drop a root, so it runs with `NODE_OPTIONS=--use-openssl-ca` and
+  reads the cleaned system store; and Playwright's Chromium, whose store is
+  compiled in, by managed policy (`backend/chromium-distrusted-roots.json`,
+  `CADistrustedCertificates`), which only the full browser reads, so
+  `senate_ptr` launches `channel=CHROMIUM_CHANNEL`, never the headless
+  shell. To add a root: its CN in `check-trust-stores.sh`'s `DISTRUSTED`,
+  the same `sed` in each Dockerfile, and its DER (base64) in the Chromium
+  policy. `tests/test_distrusted_roots.py` checks the Dockerfiles against
+  that list; `check-trust-stores.sh` reads every store out of the built
+  images, and `check-and-deploy.sh` refuses to deploy when it fails.
+  llama-server is ggml-org's pulled image, outside this (it makes no
+  outbound TLS).
 - All pipeline modules use dependency injection for DB sessions
 - Never store secrets in source code — all credentials come from `.env` via `pydantic-settings`
 - Use parameterized queries via SQLAlchemy ORM; never concatenate user input into SQL
@@ -3194,6 +3213,10 @@ Patterns that exist because they failed once:
   and runs the stack-deploy command above. There's no separate
   frontend-only/backend-only deploy anymore; Swarm only rolls the services
   whose image tag actually changed.
+- After building, `check-and-deploy.sh` runs `./check-trust-stores.sh`
+  on the three new images and does not deploy if any trust store holds a
+  distrusted root (see "Distrusted roots" under Backend conventions; run
+  it by hand with the three image tags to see each store's emSign roots).
 - nginx's security headers (nosniff, X-Frame-Options, Referrer-Policy,
   Permissions-Policy) live in `nginx/security-headers.conf`. nginx drops the
   server-level `add_header`s from any location that sets one of its own, so
