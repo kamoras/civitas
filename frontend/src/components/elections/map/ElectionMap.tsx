@@ -273,9 +273,9 @@ function SenateTileMap({
   // (or both) in the API's words; Enter or a click opens it, a state with
   // two races its chooser.
   const marks = Object.entries(STATE_TILES)
-    .filter(([st]) => byState.has(st) && data.stateMarks[view][st])
+    .filter(([st]) => byState.has(st) && (data.stateMarks?.[view] ?? {})[st])
     .sort(([, [ac, ar]], [, [bc, br]]) => ar - br || ac - bc)
-    .map(([st]) => data.stateMarks[view][st]);
+    .map(([st]) => (data.stateMarks?.[view] ?? {})[st]);
   return (
     <ChartReadout
       label="Senate seats by state"
@@ -398,7 +398,7 @@ function HouseTileMap({
   if (mini) return svg;
   // Blocks in the layout's order: rows by rough geography, west to east.
   const marks = layout.blocks
-    .map((b) => data.stateMarks[view][b.state])
+    .map((b) => (data.stateMarks?.[view] ?? {})[b.state])
     .filter((m): m is NonNullable<typeof m> => m != null);
   return (
     <ChartReadout
@@ -467,7 +467,11 @@ function HouseStateList({
           <button
             type="button"
             onClick={() => onState(state)}
-            aria-label={readoutWords(data.stateMarks[view][state])}
+            aria-label={
+              (data.stateMarks?.[view] ?? {})[state]
+                ? readoutWords((data.stateMarks?.[view] ?? {})[state])
+                : seats[0].stateName
+            }
             className="flex min-h-11 w-full items-center gap-3 py-1.5 text-left"
           >
             <span className="w-28 shrink-0 text-sm text-ink-hi">{seats[0].stateName}</span>

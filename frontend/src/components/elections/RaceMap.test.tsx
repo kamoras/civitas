@@ -102,3 +102,20 @@ describe("RaceMap", () => {
     }
   });
 });
+
+describe("an older API, during a rolling update", () => {
+  it("draws the map plain when the states come with no readouts", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ATLAS }));
+    const { container } = render(
+      <RaceMap
+        label="Partisan lean by state"
+        marks={{}}
+        getFillColor={() => "#222"}
+        getHoverFillColor={() => "#333"}
+      />
+    );
+    await waitFor(() => expect(container.querySelectorAll("path").length).toBeGreaterThan(48));
+    expect(screen.queryByRole("group")).toBeNull();
+    expect(container.querySelectorAll("[tabindex='0'] path, path[tabindex='0']")).toHaveLength(0);
+  });
+});

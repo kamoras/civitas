@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { olderApi } from "@/lib/olderApi";
 import { render, screen } from "@testing-library/react";
 import axe from "axe-core";
 import userEvent from "@testing-library/user-event";
@@ -253,5 +254,16 @@ describe("MapAccountability", () => {
     senate.focus();
     await userEvent.keyboard("{Home}");
     expect(senate.querySelector("[aria-live]")!.textContent).toMatch(/: swing R\+\d+\.$/);
+  });
+});
+
+describe("an older API, during a rolling update", () => {
+  it("draws the check and the swing maps plain, saying only what it was sent", () => {
+    const { container } = render(
+      <MapAccountability data={olderApi(data())} pageUrl="https://civitas.example/elections/2026" />
+    );
+    expect(screen.queryByRole("group", { name: /swing map/ })).toBeNull();
+    // Plain: drawn, with no readout, nothing printed from a missing field.
+    expect(container.textContent).not.toMatch(/undefined|NaN/);
   });
 });
