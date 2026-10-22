@@ -60,10 +60,55 @@ describe("Ongoing tab", () => {
 
   it("offers an open monitor's own feed, to follow without an account", async () => {
     render(<MonitorsTab />);
-    fireEvent.click(await screen.findByRole("button", { name: /A concern/ }));
-    const link = screen.getByRole("link", { name: "Follow this monitor without an account" });
+    const box = (await screen.findByRole("heading", { name: "A concern" })).closest(
+      "article"
+    ) as HTMLElement;
+    fireEvent.click(within(box).getByText("More: every update and the related votes"));
+    const link = within(box).getByRole("link", { name: "Follow this monitor without an account" });
     expect(link.getAttribute("href")).toBe("/feed/monitors/a-concern.xml");
     expect(link.getAttribute("type")).toBe("application/atom+xml");
+  });
+
+  it("boxes each monitor: its updates and last date as a figure, its newest update quoted", async () => {
+    vi.mocked(api.fetchMonitors).mockResolvedValueOnce({
+      monitors: [
+        monitor({
+          latest: {
+            date: "2026-09-24",
+            text: "The Senate voted on the resolution.",
+            source: "Outlet B",
+            sourceUrl: "https://b.example/story",
+            headline: "Senate votes",
+          },
+        }),
+        monitor({
+          id: 3,
+          slug: "legacy",
+          title: "A legacy concern",
+          latest: {
+            date: "2026-09-20",
+            text: null,
+            source: "Outlet C",
+            sourceUrl: "https://c.example/3",
+            headline: "A headline",
+          },
+        }),
+      ],
+      recentlyClosed: [],
+      recentlyClosedDays: 60,
+    });
+    render(<MonitorsTab />);
+    expect(
+      await screen.findAllByRole("img", { name: "12 updates · last Sep 24." })
+    ).not.toHaveLength(0);
+    const quote = screen.getByText(/The Senate voted on the resolution\./).closest("figure")!;
+    expect(within(quote).getByRole("link", { name: /Outlet B/ })).toHaveAttribute(
+      "href",
+      "https://b.example/story"
+    );
+    // An update whose text isn't an outlet's own words is named, not quoted.
+    expect(screen.getByText(/Latest, Sep 20: A headline \(Outlet C\)/)).toBeInTheDocument();
+    expect(screen.queryByText(/“A model/)).not.toBeInTheDocument();
   });
 });
 

@@ -381,6 +381,74 @@ def election_calendar(db: Session, now: datetime | None = None) -> dict:
     }
 
 
+def _plural(n: int, one: str, many: str | None = None) -> str:
+    return f"{n} {one if n == 1 else (many or one + 's')}"
+
+
+def _day(iso: str) -> str:
+    d = date.fromisoformat(iso)
+    return f"{d:%b} {d.day}, {d.year}"
+
+
+def calendar_boxes(cal: dict, board: dict) -> dict:
+    """The calendar page's four boxes ("Boxes, not blocks"), each line a
+    template over the rows the calendar and the specials board already
+    serve: the next deadline (a state's voter deadline or an FEC report,
+    the soonest still open, and how many more fall that day), where
+    registration closes soon, the next special election (or the last one,
+    when none is scheduled) and the seats empty today."""
+    voter = [d for d in cal["voterDeadlines"] if d["status"] != CLOSED and d["daysLeft"] is not None]
+    fec = [f for f in cal["fecDeadlines"] if f["daysLeft"] is not None]
+    nxt = None
+    if voter and (not fec or voter[0]["date"] <= fec[0]["date"]):
+        d = voter[0]
+        more = sum(1 for v in voter if v["date"] == d["date"]) - 1 + sum(1 for f in fec if f["date"] == d["date"])
+        nxt = {"title": d["label"], "kicker": d["stateName"], "closes": d["date"], "daysLeft": d["daysLeft"],
+               "dek": d["sentence"] + (f"; {_plural(more, 'more deadline')} that day." if more else "."),
+               "href": None}
+    elif fec:
+        f = fec[0]
+        more = sum(1 for x in fec if x["date"] == f["date"]) - 1
+        nxt = {"title": f"{f['label'].title()} report", "kicker": "FEC", "closes": f["date"],
+               "daysLeft": f["daysLeft"],
+               "dek": f"Due to the FEC {_day(f['date'])}" + (f"; {_plural(more, 'more report')} that day." if more
+                                                             else "."),
+               "href": FEC_REPORTING_URL}
+
+    closing = cal["registrationClosing"]
+    registration = {
+        "count": len(closing),
+        "days": cal["closingSoonDays"],
+        "dek": (f"Soonest: {closing[0]['stateName']}, {_day(closing[0]['closesOn'])}." if closing
+                else f"No state's regular registration closes in the next {cal['closingSoonDays']} days."),
+    }
+
+    upcoming = board["upcoming"]
+    last = board["lastSpecial"] or (board["recent"][0] if board["recent"] else None)
+    if upcoming:
+        s = upcoming[0]
+        special = {"title": s["seat"], "closes": s["date"], "daysLeft": s["daysLeft"],
+                   "dek": f"{s['label'] or 'Special election'}, {_day(s['date'])}, as the FEC lists it"
+                          + (f"; {_plural(len(upcoming) - 1, 'more')} after it." if len(upcoming) > 1 else "."),
+                   "href": f"#special-{s['id']}"}
+    else:
+        special = {"title": "None scheduled", "closes": None, "daysLeft": None,
+                   "dek": "No special election is on the FEC's calendar"
+                          + (f"; the last was {last['seat']}'s {(last['label'] or 'special').lower()}, "
+                             f"{_day(last['date'])}." if last else "."),
+                   "href": None}
+
+    seats = board["vacancies"]
+    house = sum(1 for v in seats if v["office"] == "H")
+    vacancies = {
+        "count": len(seats),
+        "dek": (f"{_plural(house, 'seat')} in the House, {_plural(len(seats) - house, 'seat')} in the Senate, "
+                "as the House Clerk and the Senate list them.") if seats
+        else "Every seat is filled, as the House Clerk and the Senate list them.",
+    }
+    return {"nextDeadline": nxt, "registration": registration, "nextSpecial": special, "vacancies": vacancies}
+
+
 def publish_new_specials(db: Session, new_ids: list[str], today: date | None = None) -> int:
     """One feed entry (never Bluesky: what is posted there is a measured
     volume decision) for each special general or runoff newly on the FEC's
