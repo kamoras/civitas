@@ -1632,15 +1632,20 @@ class TestPhaseTable:
             calls.append("president")
             return 3
 
+        async def scans(_db, _client):
+            calls.append("scans")
+            return 4
+
         steps = list(reversed(holdings_pipeline.HOLDINGS_STEPS))
         with patch.object(holdings_pipeline, "HOLDINGS_STEPS", steps), \
              patch.object(holdings_pipeline, "ingest_house_holdings", house), \
              patch.object(holdings_pipeline, "ingest_senate_holdings", senate), \
-             patch.object(holdings_pipeline, "ingest_president_holdings", president):
+             patch.object(holdings_pipeline, "ingest_president_holdings", president), \
+             patch.object(holdings_pipeline, "ingest_scan_pages", scans):
             counts, errors = await holdings_pipeline.run_holdings_phases(MagicMock(), None, MagicMock())
         assert (calls, counts, errors) == (
-            ["president", "senate", "house"],
-            {"president_holdings": 3, "senate_holdings": 2, "house_holdings": 1}, [],
+            ["scans", "president", "senate", "house"],
+            {"scan_pages": 4, "president_holdings": 3, "senate_holdings": 2, "house_holdings": 1}, [],
         )
 
 
@@ -1665,6 +1670,7 @@ class TestNoteAndPhaseEdges:
              patch.object(holdings_pipeline, "ingest_house_holdings", house), \
              patch.object(holdings_pipeline, "ingest_senate_holdings", house), \
              patch.object(holdings_pipeline, "ingest_president_holdings", house), \
+             patch.object(holdings_pipeline, "ingest_scan_pages", house), \
              patch.object(holdings_pipeline, "send_ops_alert"):
             counts, errors = await holdings_pipeline.run_holdings_phases(MagicMock(), None, MagicMock())
         assert counts["house_holdings"] == 1 and len(errors) == 1 and "unregistered_holdings" in errors[0]

@@ -23,10 +23,18 @@ from datetime import datetime
 from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session
 
+from app import disclosure_scans
 from app.config_definitions import HOLDING_CATEGORIES
 from app.models import FinancialDisclosure, FinancialHolding, President, Representative, Senator
 from app.readout import compact_money, share_text
-from app.schemas import HoldingCategorySchema, HoldingSchema, HoldingsSchema, ReadoutMarkSchema, is_open_ended
+from app.schemas import (
+    DisclosureScanSchema,
+    HoldingCategorySchema,
+    HoldingSchema,
+    HoldingsSchema,
+    ReadoutMarkSchema,
+    is_open_ended,
+)
 from app.services.pagination import paginate_bounds
 
 # The `category` query parameter accepts exactly the category keys.
@@ -166,6 +174,34 @@ def _breakdown(db: Session, disclosure: FinancialDisclosure) -> _Breakdown:
     return result
 
 
+SCAN_PAGE_PREFIX = "/api/disclosure-scans/"
+
+
+def _scan(disclosure: FinancialDisclosure) -> DisclosureScanSchema | None:
+    """A scanned report's stored pages (app/disclosure_scans.py), read from
+    the manifest the pipeline writes — a small file, read per request, so a
+    re-fetch shows in every API worker at once. None for any other report."""
+    if disclosure.parsed or disclosure.unreadable_reason != "scanned":
+        return None
+    manifest = disclosure_scans.read_manifest(disclosure.filing_id) or {}
+    sizes = manifest.get("sizes") if isinstance(manifest.get("sizes"), list) else []
+    pages = manifest.get("pages") if isinstance(manifest.get("pages"), int) else 0
+    if len(sizes) != pages:
+        pages, sizes = 0, []  # a manifest that disagrees with itself shows no pages
+    owner = disclosure.senator or disclosure.representative
+    title = f"{owner.name}'s {disclosure.report_label}" if owner else disclosure.report_label
+    return DisclosureScanSchema(
+        filing_id=disclosure.filing_id,
+        pages=pages,
+        page_sizes=sizes,
+        page_url_prefix=f"{SCAN_PAGE_PREFIX}{disclosure.filing_id}/",
+        fetched_from=manifest.get("source_url") or "",
+        fetched_at=manifest.get("fetched_at"),
+        failed_at=manifest.get("failed_at"),
+        title=title,
+    )
+
+
 def _build(db: Session, disclosure: FinancialDisclosure, page: int, per_page: int, category: str | None) -> HoldingsSchema:
     in_report = FinancialHolding.disclosure_id == disclosure.id
     breakdown = _breakdown(db, disclosure)
@@ -208,6 +244,7 @@ def _build(db: Session, disclosure: FinancialDisclosure, page: int, per_page: in
         source_url=disclosure.source_url,
         parsed=disclosure.parsed,
         unreadable_reason=disclosure.unreadable_reason if not disclosure.parsed else None,
+        scan=_scan(disclosure),
         later_filing_label=disclosure.later_filing_label if disclosure.later_filing_url else None,
         later_filing_url=disclosure.later_filing_url,
         holdings_count=breakdown.holdings_count,

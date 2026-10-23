@@ -407,7 +407,13 @@ The correct pattern, established by `_district_pvi()` /
    records the bundled copy's hash (`_refreshed.bundled`) and a file whose
    bundled copy has changed since is refreshed the next day
    (`bundled_moved`; 2026-10-19's House fit through 2024 otherwise waited a
-   week behind the 2026-10-18 refit). A script the job runs takes an output path and reads no `/data` copy of
+   week behind the 2026-10-18 refit; a refreshed copy with no record,
+   installed before it existed, counts as changed and is refreshed once).
+   A failed try is retried within a week whatever the cadence, and the
+   next day once what it runs has changed (`recipe`: the command line, the
+   backend files it names, the generator script included, and every `app`
+   or `scripts` module those import, transitively), since that change is
+   usually the fix. A script the job runs takes an output path and reads no `/data` copy of
    its own output. Files a script can't regenerate unattended — a new
    survey whose question ids change, a model-selection refit that is a
    method decision, a source behind research-only dependencies, a source
@@ -1854,8 +1860,7 @@ the seated Congress's lines (`district_lines.table_for_lines`, shared by the
 computed lean and the county and place crosswalks, carries the last table
 forward only for a state whose map didn't change, and only once the cycle
 is listed), the voter calendar (150 days out), the poll closing times
-(45 days) and towns' sample ballots (60 days; a town ballot from an earlier
-cycle is never served as this one's). Standing law is stored as law
+(45 days). Standing law is stored as law
 (`election_rules.json`'s `standing`, a runoff counted from the general;
 `office_terms.json`'s year rules; `state_ballot_scope.json`'s
 `statewide_executive`), so the next cycle computes its own.
@@ -2163,7 +2168,22 @@ and told apart by its printed text: `schemas.EXACT_VALUE_RE`, passed to
 `is_open_ended`); the pie is drawn by bracket
 midpoints and says so, and no net-worth figure is produced. Reports that can't
 be read are stored `parsed=False` with a reason (`scanned` paper filing,
-`unrecognized` layout) and linked, not OCR'd. A Senate paper filing states
+`unrecognized` layout) and linked, not OCR'd. A `scanned` one is shown on the
+member's page as its own pages (2026-10): the stock run's fourth holdings
+step (`holdings_pipeline.ingest_scan_pages`, `fetch/scan_pages.py`) fetches
+the House PDF or the eFD paper filing's page images (`img.filingImage`, on
+efd-media-public.senate.gov only) and renders them in a child process
+(`fetch/scan_render.py`, which nothing in `app/` imports) as lossless 1-bit
+WebP at 200 dpi, the House scans' own resolution, into
+`/data/disclosure_scans/<filing_id>/` with a manifest (source, fetch date,
+page sizes, last failure; `app/disclosure_scans.py`). Served same-origin by
+`GET /api/disclosure-scans/<filing_id>/<n>.webp` (ids, never URLs), viewed
+in `components/checker/ScannedFiling.tsx` with alt text naming the page and
+report. A failed fetch keeps the stored pages and records `failed_at`; with
+none stored the page says so beside the link, never an empty viewer; no
+filing tried stored fails the step. A filing's stored pages are not fetched
+again, and scans no stored report names are pruned. 34 reports, about 1,100
+pages, measured at about 33 MiB (2026-10). A Senate paper filing states
 no year anywhere eFD shows it (its page is page images), so no year is
 claimed or inferred for it: it ranks below every dated report, and an undated
 filing (paper, or a title with no year) filed on or after the shown report's

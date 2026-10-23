@@ -2057,3 +2057,28 @@ describe("a state with no executive offices up this cycle", () => {
     expect(drawer.getByText(/as published by Ohio Secretary of State/)).toBeInTheDocument();
   });
 });
+
+describe("local contests", () => {
+  it("says a general Google Civic hasn't loaded is pending, never that nothing is on it", async () => {
+    const api = await import("@/lib/api");
+    vi.mocked(api.fetchTownsForState).mockResolvedValueOnce([
+      { name: "Cambridge", sourceName: "City of Cambridge" },
+    ]);
+    vi.mocked(api.fetchTownBallot).mockResolvedValueOnce({
+      status: "pending",
+      address: "795 Massachusetts Ave, Cambridge, MA 02139",
+      source: "Google Civic Information API",
+      sourceUrl: null,
+      electionName: "General Election",
+      electionDate: "2026-11-03",
+      contests: [],
+    });
+    render(<StateBallotClient ballot={ballot()} />);
+    await screen.findByRole("heading", { name: /Local contests/ });
+    const drawer = await openContest(/Local contests/);
+    fireEvent.change(drawer.getByRole("combobox"), { target: { value: "Cambridge" } });
+    const status = await drawer.findByText(/Google Civic has not loaded Cambridge's ballot/);
+    expect(status.textContent).toContain("does not mean nothing is on it");
+    expect(drawer.queryByText(/No local races on file/)).toBeNull();
+  });
+});

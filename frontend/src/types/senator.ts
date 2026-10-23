@@ -429,6 +429,23 @@ export interface HoldingCategory {
   mark?: ReadoutMark | null;
 }
 
+/** A scanned or paper disclosure's page images, served from this site. */
+export interface DisclosureScan {
+  filingId: string;
+  /** Pages stored; 0 when none could be loaded yet. */
+  pages: number;
+  /** Each page's [width, height] in pixels. */
+  pageSizes: [number, number][];
+  /** Page N is at pageUrlPrefix + `${N}.webp`. */
+  pageUrlPrefix: string;
+  fetchedFrom: string;
+  fetchedAt: string | null;
+  /** The last failed attempt; stored pages are kept. */
+  failedAt: string | null;
+  /** "Jane Doe's 2025 annual report", for each page's alt text. */
+  title: string;
+}
+
 export interface Holdings {
   /** False when no annual report has been ingested for this member yet. */
   available: boolean;
@@ -442,6 +459,8 @@ export interface Holdings {
   /** "scanned": a paper filing; "unrecognized": electronic, but in a layout
    * the parser can't read. Null when parsed. */
   unreadableReason: "scanned" | "unrecognized" | null;
+  /** A scanned report's pages, kept on this site; null for any other report. */
+  scan?: DisclosureScan | null;
   /** The date the holdings describe (a year end for an annual report, the
    * stated date for a new-filer report); null for a paper filing. */
   asOfDate: string | null;

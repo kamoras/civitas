@@ -785,7 +785,6 @@ _DATA_PATH_MODULES = (
     "app.pipeline.analyze.score_calculator",
     "app.pipeline.fetch.ballot_lookup",
     "app.pipeline.fetch.ballot_measure_pdf_sources",
-    "app.pipeline.fetch.ballot_pdf_sources",
     "app.pipeline.fetch.committee_leadership",
     "app.pipeline.fetch.district_pvi",
     "app.pipeline.fetch.senate_classes",

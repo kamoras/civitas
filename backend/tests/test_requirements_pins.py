@@ -46,7 +46,7 @@ DIRECT = {
     "alembic", "apscheduler", "atproto", "certifi", "cryptography", "cssselect", "defusedxml",
     "diff-cover", "fastapi", "httptools", "httpx", "huggingface-hub", "lxml", "mcp", "numpy",
     "opencv-python-headless",
-    "packaging", "pdfplumber", "pillow", "playwright", "pydantic",
+    "packaging", "pdfplumber", "pillow", "playwright", "pydantic", "pypdfium2",
     "pydantic-settings", "pytesseract", "pytest", "pytest-asyncio",
     "pytest-cov", "pytest-xdist", "pyyaml", "requests", "scikit-learn", "scipy",
     "sentence-transformers", "sqlalchemy", "sqlite-vec", "starlette",
