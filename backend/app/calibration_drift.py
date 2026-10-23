@@ -80,12 +80,14 @@ GATES = {
 # parameters, not the measurements a daily refit rewrites beside them.
 PARAMETERS = {
     "committee_routing": ("reference", "k", "alpha", "temperature", "threshold"),
+    "member_photo": ("margin", "depiction_ceiling"),
 }
 
 # Gates that refit themselves from data-supplied labels, by the data_refresh
 # file whose refit drift requests.
 REFITTING = {
     "committee_routing": "committee_routing_calibration.json",
+    "member_photo": "member_photo_calibration.json",
 }
 REFIT_GRACE_DAYS = 3
 

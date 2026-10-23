@@ -3238,6 +3238,10 @@ class MemberPhoto(Base):
     # side); null when bioguide has no portrait.
     bioguide_face_share: Mapped[float | None] = mapped_column(Float, nullable=True)
     depiction_face_share: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # The sha256 of each image measured, so the daily refit's check against
+    # the hand labels uses only labels whose images are still the ones judged.
+    bioguide_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    depiction_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     checked_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
 
 
