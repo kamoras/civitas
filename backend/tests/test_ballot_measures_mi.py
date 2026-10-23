@@ -105,3 +105,46 @@ async def test_no_document_linked_yet_is_not_yet_published(monkeypatch):
 
     monkeypatch.setattr(mi, "fetch_text_with_retry", get_doubled)
     assert await mi.fetch_measures(None, 2026) is None
+
+
+# The landing page as served 2026-10-22, cut to the Bureau's November
+# candidate listing link, with the ballot-questions link taken down.
+_TAKEN_DOWN = (
+    "<html><body><a href='https://mi-boe.entellitrak.com/etk-mi-boe-prod/page.request.do?"
+    "page=page.miboePublicReport&amp;electionType=GEN&amp;electionYear=2026'>2026 November General "
+    "Candidate Listing</a></body></html>"
+)
+
+
+async def test_a_document_taken_down_after_it_was_read_reads_as_removed(monkeypatch):
+    """The Bureau takes the document down when its last proposal is struck.
+    With the reader passing its self-check on the recorded document and the
+    page still the current election's, every recorded proposal is removed:
+    decided by rule, no operator."""
+    async def landing(*a, **kw):
+        return _TAKEN_DOWN
+
+    monkeypatch.setattr(mi, "fetch_text_with_retry", landing)
+    monkeypatch.setattr(mi, "pdf_lines", lambda raw: _pages())
+    mi._record(2026, "https://www.michigan.gov/sos/doc.pdf", b"%PDF-recorded")
+    pairs = await mi.fetch_measures(None, 2026)
+    assert [(p["number"], p["removed"], url) for p, url in pairs] == [
+        ("2026-1", True, "https://www.michigan.gov/sos/doc.pdf"),
+        ("2026-2", True, "https://www.michigan.gov/sos/doc.pdf"),
+    ]
+    # A reader that no longer reads its recording is a failure, not "none".
+    monkeypatch.setattr(mi, "pdf_lines", lambda raw: [])
+    assert await mi.fetch_measures(None, 2026) is None
+
+
+async def test_a_page_that_is_not_the_current_elections_decides_nothing(monkeypatch):
+    from app.pipeline.fetch.ballot_measure_text import NotYetPublished
+
+    async def landing(*a, **kw):
+        return "<html><body>maintenance</body></html>"
+
+    monkeypatch.setattr(mi, "fetch_text_with_retry", landing)
+    monkeypatch.setattr(mi, "pdf_lines", lambda raw: _pages())
+    mi._record(2026, "https://www.michigan.gov/sos/doc.pdf", b"%PDF-recorded")
+    with pytest.raises(NotYetPublished):
+        await mi.fetch_measures(None, 2026)

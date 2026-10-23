@@ -47,6 +47,19 @@ No document linked for `year` raises NotYetPublished (not yet covered):
 the Bureau posts it only once a proposal is certified, so its absence is
 "nothing to read yet", not a failure and never "none".
 
+A document that WAS read and is no longer linked (the Bureau takes it down
+when its last proposal is struck) is decided by rule, with no operator.
+Every successful read records the document (RECORDING, on the data volume).
+When the link is gone, the reader first proves itself on that recording
+(the same extraction and parser, run again: its self-check), and the
+landing page must still be the current one, linking the Bureau's own
+November candidate listing for `year`. Both holding, the landing page no
+longer linking the document is the Bureau's own word that nothing it read
+is still certified: every recorded proposal is returned as removed, as a
+source that reports a measure struck is (Florida's "Removed"). A failing
+self-check is a failure (None, alerted); with no recording for `year`
+(never read) it is still not yet published.
+
 Origin is read only from the title's own words — "initiated law" /
 "initiated amendment" / "initiative" means a citizen petition, a
 "legislat..." word means legislature-referred; the constitutional
@@ -54,8 +67,11 @@ convention question (which the constitution itself puts on the ballot
 every 16 years) says neither and is left None.
 """
 
+import base64
 import io
+import json
 import logging
+import os
 import re
 from urllib.parse import urljoin
 
@@ -63,6 +79,7 @@ import httpx
 import pdfplumber
 from lxml import html as lxml_html
 
+from app.atomic_write import runtime_data_path, write_text_atomic
 from app.pipeline.fetch.ballot_measure_text import NotYetPublished, join_lines
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_bytes_with_retry, fetch_text_with_retry
 from app.pipeline.rate_limiter import RateLimiter
@@ -79,6 +96,12 @@ HEADERS = {
 }
 
 _rate_limiter = RateLimiter(rps=1.0)
+
+RECORDING = "mi_ballot_questions_{year}.json"
+# The Bureau's November candidate listing on the landing page
+# (mi-boe.entellitrak.com ... electionType=GEN&electionYear=<year>, read
+# 2026-10-22): its link marks the page as the current election's.
+_GENERAL_LISTING_RE = r"electionType=GEN&(?:amp;)?electionYear={year}\b"
 
 _PROPOSAL_RE = re.compile(r"^Proposal\s+(\d{4}-\d+)$")
 _YES_BOX_RE = re.compile(r"^\[\s*\]\s*Yes$")
@@ -203,6 +226,47 @@ def parse_lines(pages: list[list[tuple[str, bool]]], year: int) -> list[dict] | 
     return results or None
 
 
+def _record(year: int, url: str, raw: bytes) -> None:
+    path = runtime_data_path(RECORDING.format(year=year))
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        write_text_atomic(path, json.dumps({"url": url, "pdf": base64.b64encode(raw).decode()}))
+    except OSError:
+        logger.exception("Could not record Michigan's %d ballot questions document", year)
+
+
+def _recorded(year: int) -> tuple[str, bytes] | None:
+    try:
+        with open(runtime_data_path(RECORDING.format(year=year))) as f:
+            data = json.load(f)
+        return data["url"], base64.b64decode(data["pdf"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def _taken_down(landing_html: str, year: int) -> list[tuple[dict, str]] | None:
+    """The recorded document's proposals, each marked removed, when the
+    page is the current election's and the reader still reads the
+    recording whole; None (a failure) when it doesn't. Raises
+    NotYetPublished when nothing was ever recorded for `year`."""
+    recorded = _recorded(year)
+    if recorded is None or not re.search(_GENERAL_LISTING_RE.format(year=year), landing_html):
+        raise NotYetPublished(
+            f"Michigan's '{year} November ballot questions' document", deadline_applies=False,
+        )
+    url, raw = recorded
+    try:
+        parsed = parse_lines(pdf_lines(raw), year)
+    except Exception:
+        logger.exception("MI self-check: the recorded %d document no longer parses", year)
+        parsed = None
+    if not parsed:
+        logger.warning("MI %d: document no longer linked, and the reader fails on its recording", year)
+        return None
+    logger.info("MI %d: document no longer linked; its %d proposal(s) read as removed", year, len(parsed))
+    return [({**p, "removed": True}, url) for p in parsed]
+
+
 async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dict, str]] | None:
     landing_html = await fetch_text_with_retry(
         client, _rate_limiter, LANDING_URL, "MI elections landing", headers=HEADERS,
@@ -212,12 +276,10 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
     pdf_url = find_pdf_url(landing_html, year)
     if pdf_url is None:
         if _link_count(landing_html, year) == 0:
-            # The Bureau posts this document only once something is
-            # certified to November's ballot; until then there is nothing
-            # to read and nothing broken. Not yet covered, never none.
-            raise NotYetPublished(
-                f"Michigan's '{year} November ballot questions' document", deadline_applies=False,
-            )
+            # Never read: the Bureau posts this document only once
+            # something is certified, so not yet covered. Read before and
+            # taken down: decided by rule (_taken_down).
+            return _taken_down(landing_html, year)
         logger.warning("MI: more than one '%d November ballot questions' PDF link on the landing page", year)
         return None
     raw = await fetch_bytes_with_retry(client, _rate_limiter, pdf_url, "MI ballot questions PDF", headers=HEADERS)
@@ -230,4 +292,5 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
         return None
     if parsed is None:
         return None
+    _record(year, pdf_url, raw)
     return [(m, pdf_url) for m in parsed]
