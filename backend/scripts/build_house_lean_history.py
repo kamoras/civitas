@@ -61,7 +61,6 @@ import argparse
 import collections
 import json
 import sys
-import zipfile
 from pathlib import Path
 
 import numpy as np
@@ -70,6 +69,7 @@ from scipy.spatial import cKDTree
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import build_district_lean as bdl  # noqa: E402
 import fetch_state_leg_crosswalk as sl  # noqa: E402
+from app import census_lines  # noqa: E402
 from app.forecast.model import two_party_lean  # noqa: E402
 from fit_forecast_model import presidential_totals  # noqa: E402
 
@@ -83,7 +83,6 @@ VEST16_VERSION_URL = (
 )
 VEST16_D, VEST16_R = "G16PREDCLI", "G16PRERTRU"
 CD116_URL = "https://www2.census.gov/geo/tiger/TIGER2019/CD/tl_2019_us_cd116.zip"
-CD118_URL = f"{bdl.cw._RDO}/2023/118-congressional-district-bef/cd118.zip"
 PRESIDENT_URL = "https://dataverse.harvard.edu/api/access/datafile/13887042"
 STATE_TOLERANCE = 0.005
 CYCLES = {"2018": ("116", ("2016",)), "2020": ("116", ("2016",)),
@@ -136,11 +135,9 @@ def assign_116(st: str, lonlat: np.ndarray, shapes, records) -> tuple[list[str |
     return out, len(missing)
 
 
-def bef(cache: Path, url: str, name: str, congress: str, st: str) -> dict[str, str]:
-    fips = sl._FIPS[st]
-    with zipfile.ZipFile(bdl.fetch(url, cache / name)) as zf:
-        member = f"{fips}_{st}_CD{congress}.txt"
-        return bdl._bef_member(zf, member if member in zf.namelist() else f"NationalCD{congress}.txt", fips)
+def bef(cache: Path, congress: int, st: str) -> dict[str, str]:
+    """Block -> district on `congress`'s lines (its BEF found by rule)."""
+    return dict(census_lines.bef_rows(bdl.bef_zip(congress, cache), sl._FIPS[st], st))
 
 
 def build_state(st: str, cache: Path, files16: dict, files20: dict, shapes116, records116,
@@ -154,8 +151,8 @@ def build_state(st: str, cache: Path, files16: dict, files20: dict, shapes116, r
         path.unlink()
     v20, _ = bdl.votes_2020(st, cache, files20, lonlat, pop)
     b116, unplaced = assign_116(st, lonlat, shapes116, records116)
-    b118 = bef(cache, CD118_URL, "cd118.zip", "118", st)
-    b119 = bef(cache, bdl.cw.CD119_URL, "cd119.zip", "119", st)
+    b118 = bef(cache, 118, st)
+    b119 = bef(cache, 119, st)
     lines = {"116": b116,
              "118": [bdl.seat(b118.get(g, "")) for g in geoids],
              "119": [bdl.seat(b119.get(g, "")) for g in geoids]}

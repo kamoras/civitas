@@ -416,12 +416,48 @@ def test_the_court_finding_gate_holds_an_older_release_or_an_impossible_interval
     assert dr._court_finding_gate({**old, "justices": 40}, old)
 
 
-def test_only_the_district_lean_is_left_on_a_staleness_check():
-    """Its next window needs the next presidential election's precinct
-    returns; its alert states that they are out, not a task."""
-    assert [f.name for f in dr.DATA_FILES if f.command is None] == ["district_lean.json"]
-    why = dr._district_lean_stale(_ctx(doc={"_window": "2020+2024"}, today=date(2028, 12, 20)))
-    assert "2028" in why and not any(w in why for w in ("rerun", "Rerun", "research", "commit", "point "))
+def test_every_generated_file_rebuilds_itself():
+    """The computed lean rebuilds its tables like the rest (app/census_lines.py);
+    only its next window, new inputs and corrections, is a staleness alert."""
+    assert [f.name for f in dr.DATA_FILES if f.command is None] == []
+
+
+def test_the_district_lean_window_is_reported_once_its_next_inputs_are_published(monkeypatch):
+    """Found by rule: VEST's "<year> Precinct-Level Election Results" for
+    the window's earlier election and MEDSL's "<year>-elections-official"
+    for its later one; nothing until both exist."""
+    doc = {"_window": "2020+2024"}
+    asked = []
+
+    class Resp:
+        def __init__(self, status=200, items=()):
+            self.status_code, self._items = status, list(items)
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"data": {"items": self._items}}
+
+    def get(url, params=None, **kw):
+        asked.append(params["q"] if params else url)
+        if "dataverse" in url:
+            return Resp(items=published["vest"])
+        return Resp(200 if published["medsl"] else 404)
+
+    monkeypatch.setattr(dr.httpx, "get", get)
+    monkeypatch.setattr(dr, "_record_try", lambda *a, **k: None)
+    published = {"vest": [{"name": "2021 Precinct-Level Election Results"}], "medsl": False}
+    assert dr._district_lean_stale(_ctx("district_lean.json", doc)) is None
+    assert asked == ['"2024 Precinct-Level Election Results"',
+                     "https://api.github.com/repos/MEDSL/2028-elections-official"]
+    published = {"vest": [{"name": "2024 Precinct-Level Election Results", "global_id": "doi:x"}], "medsl": False}
+    assert dr._district_lean_stale(_ctx("district_lean.json", doc)) is None
+    published["medsl"] = True
+    text = dr._district_lean_stale(_ctx("district_lean.json", doc))
+    assert "doi:x" in text and "2028-elections-official" in text
+    assert not any(w in text for w in ("rerun", "Rerun", "research", "commit", "point "))
+    assert dr._district_lean_stale(_ctx("district_lean.json", doc, last=datetime.now())) is dr.UNCHECKED
 
 
 def test_an_installed_refit_that_moves_scoring_inputs_records_a_scoring_revision(alerts):
@@ -439,7 +475,10 @@ def test_an_installed_refit_that_moves_scoring_inputs_records_a_scoring_revision
     assert f"{base}.1" in alerts.send.call_args.args[0] and alerts.send.call_args.kwargs.get("condition") is None
 
 
-def test_every_generated_file_on_record_exists_and_every_command_names_a_real_script():
+def test_every_generated_file_on_record_exists_and_every_command_names_a_real_script(monkeypatch):
+    # The election the site is on reads the stored counts after election
+    # day; this test is about the commands, not the phase.
+    monkeypatch.setattr(dr, "_election", lambda: SimpleNamespace(cycle=2026, phase="campaign"))
     for spec in dr.DATA_FILES:
         assert (dr.BUNDLED / spec.name).exists(), spec.name
         if spec.command and spec.name not in ("poll_close_times.json", "election_calendar.json"):

@@ -11,6 +11,7 @@ import json
 import pathlib
 import sys
 
+from app import census_lines
 from app.district_places import places_on_lines_of
 
 _BACKEND = pathlib.Path(__file__).resolve().parent.parent
@@ -29,7 +30,6 @@ def _load(name: str):
 
 places = _load("build_district_place_crosswalk")
 sl = _load("fetch_state_leg_crosswalk")
-cw = _load("build_county_district_crosswalk")
 
 _BUNDLED = json.loads((_DATA / "congressional_district_places.json").read_text())
 _COUNTIES = json.loads((_DATA / "county_district_crosswalk.json").read_text())["districts"]
@@ -60,8 +60,8 @@ def test_state_legislative_keys_are_unchanged_by_the_key_parameter():
 
 
 def test_bundled_file_has_both_maps_for_every_seat():
-    election = _BUNDLED["congresses"][places.ELECTION]
-    sitting = _BUNDLED["congresses"][places.SITTING]
+    election = _BUNDLED["congresses"]["120"]
+    sitting = _BUNDLED["congresses"]["119"]
     # The election map is the one the county file describes, seat for seat.
     assert set(election) == set(_COUNTIES)
     # Apportionment is the same for both Congresses, so the seats are too.
@@ -84,16 +84,17 @@ def test_bundled_names_are_what_a_reader_types():
 
 
 def test_only_redrawn_states_differ_between_the_two_maps():
-    election = _BUNDLED["congresses"][places.ELECTION]
-    sitting = _BUNDLED["congresses"][places.SITTING]
+    election = _BUNDLED["congresses"]["120"]
+    sitting = _BUNDLED["congresses"]["119"]
     differs = {k.split("-")[0] for k in election if election[k] != sitting[k]}
-    redrawn = {st for st, (plan, _) in cw.CYCLE_MAPS.items() if plan == cw.CD120}
+    cycles = census_lines.maps_cycles()
+    redrawn = {st for st, e in cycles["2026"].items() if e["map"] == "CD120"}
     assert differs and differs <= redrawn
 
 
 def test_some_places_are_split_between_districts():
     """A place listed under two districts is split; the filter says so."""
-    election = _BUNDLED["congresses"][places.ELECTION]
+    election = _BUNDLED["congresses"]["120"]
     seen: dict[tuple[str, str], int] = {}
     for key, listed in election.items():
         for name in listed:

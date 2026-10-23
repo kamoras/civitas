@@ -361,8 +361,10 @@ def election_readiness_gaps(election_day: date) -> dict[str, str]:
             if missing:
                 gaps["election-ready-district-lean"] = (
                     f"No computed district lean for the {congress}th Congress's lines in {', '.join(missing)} "
-                    f"(they redrew, or app/data/district_lean.json has no table to carry forward): those House "
-                    f"pages show no computed lean until the file has those maps."
+                    f"(they redrew, or app/data/district_lean.json has no table to carry forward). The data "
+                    f"refresh builds it once the maps are listed (app/data_refresh.py, district_lean.json, "
+                    f"heavy: after the night's pipeline); a failed build has its own alert saying why "
+                    f"(data-refresh-district-lean)."
                 )
     if today >= election_day - READINESS_LEAD["calendar"] and calendar_election_date() != election_day.isoformat():
         gaps["election-ready-calendar"] = (

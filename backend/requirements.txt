@@ -58,6 +58,7 @@ pycparser==3.0
 pyee==13.0.1
 PyJWT==2.15.1
 pypdfium2==5.13.0
+pyproj==3.8.0
 pytesseract==0.3.13
 pluggy==1.7.0
 pydantic==2.13.5

@@ -15,14 +15,11 @@ districts under the same numbers.
 from collections.abc import Mapping
 from typing import TypeVar
 
-from app.live_results.sync import _map_in, _maps
+from app.census_lines import elected_in
+from app.census_lines import map_in as _map_in
+from app.census_lines import maps_cycles as _maps
 
 T = TypeVar("T")
-
-
-def elected_in(congress: int) -> int:
-    """The election year that seats `congress` (the 1st was elected in 1788)."""
-    return 1786 + 2 * congress
 
 
 def table_for_lines(congress: int, tables: Mapping[int, Mapping[str, T]]) -> dict[str, T] | None:

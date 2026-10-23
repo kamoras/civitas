@@ -28,10 +28,13 @@ NAMED BY THE LINES THEY HOLD, so a file can never answer for other lines:
     the ballots don't number, as in Vermont, has none). Nebraska has no
     lower house.
 
-SOURCES. Public domain, U.S. Census Bureau: TIGER/Line (the full-resolution
-lines the block equivalency files are drawn from; 2025 for the 119th
-Congress, 2026 for the 120th and the 2026 state legislative districts and
-roads) and the 2025 cartographic boundary files for the towns. TIGER
+SOURCES. Public domain, U.S. Census Bureau, each found by rule
+(app.census_lines): TIGER/Line (the full-resolution lines the block
+equivalency files are drawn from: a Congress's in the vintage of the year
+it convenes, else the year it is elected; the state legislative districts
+in the vintage of the election the newest legislative block file is for;
+the newest roads) and the newest cartographic boundary files for the
+towns. TIGER
 districts are not clipped to the shore: a position on a beach or a pier is
 still in its district. Unassigned water ("ZZ") is left out.
 
@@ -42,8 +45,8 @@ neighbouring districts gapless), and quantized. Before anything is written,
 every populated 2020 block's internal point (the P.L. 94-171 header) is
 placed, with the same even-odd ray cast the browser uses, in the simplified
 shapes and in the same lines unsimplified, and compared with the district
-the Census block equivalency file assigns the block (cd119.zip with its
-corrected per-state files, NationalCD120.txt, the 2026 SLDU/SLDL files).
+the Census block equivalency file assigns the block (each map's zip with
+its states' own files, and the newest SLDU/SLDL files).
 Blocks are what the lines are made of, and many a block's point is a few
 metres from one, so this measures exactly what simplification could break;
 the residents within NEAR_LINE_M of a line are reported on their own. The
@@ -57,7 +60,13 @@ Needs Node (`npx mapshaper`), numpy and the research requirements
 (build_district_lean's reader); network on the first run (~5-20MB per state
 plus the P.L. headers), cached in --cache. From the repo root:
 
-    python backend/scripts/build_district_lookup.py [--cache DIR] [--interval 10] [ST ...]
+    python backend/scripts/build_district_lookup.py --congress 119 --congress 120 --cycle 2026 \\
+        [--cache DIR] [--out DIR] [--interval 10] [ST ...]
+
+`--congress` (repeatable): the Congresses whose House lines are needed (the
+sitting one and the one the coming election seats); a folder is built for
+each map they use (congress-<the map's Congress>). `--cycle`: the election
+the legislature folder is for.
 """
 
 from __future__ import annotations
@@ -79,27 +88,15 @@ import numpy as np
 from scipy.spatial import cKDTree
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import build_county_district_crosswalk as cw  # noqa: E402
 import build_district_lean as lean  # noqa: E402
 import build_district_place_crosswalk as places_cw  # noqa: E402
 import fetch_state_leg_crosswalk as sl  # noqa: E402
 
+from app import census_lines  # noqa: E402
+
 REPO = Path(__file__).resolve().parents[2]
 OUT_DIR = REPO / "frontend" / "public" / "data" / "lookup"
 PLACES = REPO / "backend" / "app" / "data" / "congressional_district_places.json"
-
-TIGER = "https://www2.census.gov/geo/tiger"
-CD_URL = {
-    119: f"{TIGER}/TIGER2025/CD/tl_2025_{{fips}}_cd119.zip",
-    120: f"{TIGER}/TIGER2026/CD/tl_2026_{{fips}}_cd120.zip",
-}
-SLD_URL = f"{TIGER}/TIGER2026/{{kind_upper}}/tl_2026_{{fips}}_{{kind}}.zip"
-ROADS_URL = f"{TIGER}/TIGER2026/PRISECROADS/tl_2026_{{fips}}_prisecroads.zip"
-TOWN_URLS = (
-    f"{TIGER}/GENZ2025/shp/cb_2025_us_place_500k.zip",
-    f"{TIGER}/GENZ2025/shp/cb_2025_us_cousub_500k.zip",
-)
-SLD_BEF = {kind: sl._BEF.format(chamber=kind) for kind in ("sldu", "sldl")}
 
 # The simplification distances in metres, chosen by measurement (the PR
 # that added this script reports the table). Douglas-Peucker, so no
@@ -133,7 +130,6 @@ MAX_NEAR_LINE_DROP = 0.005
 # steps across even Texas (~1,300 km) is ~1.3m. At 1e5 (~10m steps across a
 # wide state) Washington misplaced 413 near-line residents that 1e6 places.
 QUANTIZATION = 1_000_000
-CYCLE = cw.CYCLE
 # Near-line points written to the frontend's test fixture
 # (frontend/src/lib/districtAt.fixture.json), so the browser's decoder is
 # checked against this measurement on the hardest points: a small state, a
@@ -275,11 +271,51 @@ def accuracy(
 # ---------------------------------------------------------------------------
 
 
+class Sources:
+    """The files of one build, found by rule (app.census_lines) once."""
+
+    def __init__(self, cycle: int):
+        self.towns = (
+            census_lines.newest(f"{census_lines.TIGER}/GENZ{{y}}/shp/cb_{{y}}_us_place_500k.zip"),
+            census_lines.newest(f"{census_lines.TIGER}/GENZ{{y}}/shp/cb_{{y}}_us_cousub_500k.zip"),
+        )
+        self.sld_bef = {kind: census_lines.find_sld_bef(cycle, kind) for kind in ("sldu", "sldl")}
+        if not all(self.towns) or not all(self.sld_bef.values()):
+            raise SystemExit(f"missing a source: towns {self.towns}, legislative files {self.sld_bef}")
+        self.sld_cycle = self.sld_bef["sldu"][2]
+        roads = census_lines.newest(f"{census_lines.TIGER}/TIGER{{y}}/PRISECROADS/tl_{{y}}_01_prisecroads.zip")
+        self.roads_year = int(roads.split("/TIGER", 1)[1][:4])
+        self.cd_bef: dict[int, Path] = {}
+
+    def cd_url(self, congress: int, fips: str) -> str:
+        url = census_lines.tiger_cd_url(congress, fips)
+        if url is None:
+            raise SystemExit(f"no TIGER/Line districts for the {congress}th Congress ({fips})")
+        return url
+
+    def sld_url(self, kind: str, fips: str) -> str:
+        y = self.sld_cycle
+        return f"{census_lines.TIGER}/TIGER{y}/{kind.upper()}/tl_{y}_{fips}_{kind}.zip"
+
+    def roads_url(self, fips: str) -> str:
+        y = self.roads_year
+        return f"{census_lines.TIGER}/TIGER{y}/PRISECROADS/tl_{y}_{fips}_prisecroads.zip"
+
+    def bef(self, congress: int, cache: Path) -> Path:
+        if congress not in self.cd_bef:
+            found = census_lines.find_congress_bef(congress)
+            if found is None:
+                raise SystemExit(f"no block equivalency file for the {congress}th Congress")
+            self.cd_bef[congress] = sl.download(found[0], cache)
+        return self.cd_bef[congress]
+
+
 def split_towns(congress_key: str, state: str) -> set[str]:
     """Places the crosswalk lists under more than one of the state's House
     districts on this map: the towns a name alone can't settle."""
     seen: Counter = Counter()
-    for key, names in json.loads(PLACES.read_text())["congresses"][congress_key].items():
+    places = census_lines.read_json_preferring(census_lines.runtime_data_path(PLACES.name), PLACES, default={})
+    for key, names in places["congresses"][congress_key].items():
         if key.split("-")[0] == state:
             seen.update(set(names))
     return {n for n, c in seen.items() if c > 1}
@@ -288,10 +324,10 @@ def split_towns(congress_key: str, state: str) -> set[str]:
 _COUSUB_NAMES: dict[str, set[str]] = {}
 
 
-def town_names(cache: Path, fips: str) -> set[str]:
+def town_names(cache: Path, fips: str, src: Sources) -> set[str]:
     """The county subdivision names in a state, from the cartographic file."""
     if not _COUSUB_NAMES:
-        with zipfile.ZipFile(fetch_zip(TOWN_URLS[1], cache)) as zf:
+        with zipfile.ZipFile(fetch_zip(src.towns[1], cache)) as zf:
             dbf = zf.read(next(n for n in zf.namelist() if n.endswith(".dbf")))
         for row in lean.read_dbf(dbf, ("STATEFP", "NAMELSAD")):
             # read_dbf decodes Latin-1; the cartographic files are UTF-8.
@@ -309,6 +345,7 @@ def build(
     cache: Path,
     work: Path,
     interval: float,
+    src: Sources,
     house_congress: int | None = None,
     towns_key: str | None = None,
     legislature: bool = False,
@@ -323,7 +360,7 @@ def build(
     if house_congress:
         cd_field = f"CD{house_congress}FP"
         args += _layer_args(
-            fetch_zip(CD_URL[house_congress].format(fips=fips), cache),
+            fetch_zip(src.cd_url(house_congress, fips), cache),
             "house",
             f"d = +{cd_field}",
             f'{cd_field} !== "ZZ" && {cd_field} !== "98"',
@@ -334,9 +371,9 @@ def build(
             # A strong-MCD state's towns are county subdivisions, and some
             # are also places of the same name ("Providence city"): the town
             # file first, then the places it doesn't already name.
-            in_cousub = sorted(set(towns) & town_names(cache, fips))
+            in_cousub = sorted(set(towns) & town_names(cache, fips, src))
             rest = sorted(set(towns) - set(in_cousub))
-            sources = [(u, n) for u, n in ((TOWN_URLS[1], in_cousub), (TOWN_URLS[0], rest)) if n]
+            sources = [(u, n) for u, n in ((src.towns[1], in_cousub), (src.towns[0], rest)) if n]
             for i, (url, names) in enumerate(sources):
                 args += [
                     "-i", str(fetch_zip(url, cache)), f"name=towns{i}",
@@ -348,7 +385,7 @@ def build(
             else:
                 args += ["-rename-layers", "towns", "target=towns0"]
             args += [
-                "-i", str(fetch_zip(ROADS_URL.format(fips=fips), cache)), "name=roads",
+                "-i", str(fetch_zip(src.roads_url(fips), cache)), "name=roads",
                 "-clip", "towns", "target=roads",
                 "-filter", "!!FULLNAME", "-each", "n = FULLNAME", "-filter-fields", "n",
             ]
@@ -356,7 +393,7 @@ def build(
     if legislature:
         layers = []
         for kind in ("sldu", "sldl"):
-            url = SLD_URL.format(kind=kind, kind_upper=kind.upper(), fips=fips)
+            url = src.sld_url(kind, fips)
             try:
                 path = fetch_zip(url, cache)
             except urllib.error.HTTPError as exc:
@@ -404,19 +441,16 @@ def build(
     return topos
 
 
-def truth_house(state: str, congress_map: str, cache: Path, geoids: list[str]) -> list:
+def truth_house(state: str, congress: int, cache: Path, geoids: list[str], src: Sources) -> list:
     fips = sl._FIPS[state]
-    if congress_map == cw.CD120:
-        rows = places_cw.cd120_rows(sl.download(cw.CD120_URL, cache), fips)
-    else:
-        rows = places_cw.cd119_rows(sl.download(cw.CD119_URL, cache), state, fips)
-    assigned = {g: places_cw.cd_key(cd) for g, cd in rows}
+    assigned = {g: places_cw.cd_key(cd) for g, cd in census_lines.bef_rows(src.bef(congress, cache), fips, state)}
     return [None if assigned.get(g) is None else assigned[g] for g in geoids]
 
 
-def truth_sld(state: str, kind: str, cache: Path, geoids: list[str]) -> list:
+def truth_sld(state: str, kind: str, cache: Path, geoids: list[str], src: Sources) -> list:
     fips = sl._FIPS[state]
-    assigned = {g: sl.district_key(code) for g, code in sl.bef_rows(sl.download(SLD_BEF[kind], cache), state, fips)}
+    path = sl.download(src.sld_bef[kind][0], cache)
+    assigned = {g: sl.district_key(code) for g, code in sl.bef_rows(path, state, fips)}
     return [assigned.get(g) for g in geoids]
 
 
@@ -429,12 +463,21 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--quantization", type=int, default=QUANTIZATION)
     ap.add_argument("--max-drop", type=float, default=MAX_DROP)
     ap.add_argument("--max-near-line-drop", type=float, default=MAX_NEAR_LINE_DROP)
-    ap.add_argument("--sitting-congress", type=int, default=cw.SITTING_CONGRESS)
+    ap.add_argument("--congress", type=int, action="append", required=True,
+                    help="a Congress whose House lines are needed (repeatable)")
+    ap.add_argument("--cycle", type=int, required=True, help="the election the legislature folder is for")
+    ap.add_argument("--out", type=Path, default=OUT_DIR, help="the lookup folder to write")
     ap.add_argument("--dry-run", action="store_true", help="measure only; write nothing")
     args = ap.parse_args(argv)
     QUANTIZATION = args.quantization
     args.cache.mkdir(parents=True, exist_ok=True)
     states = args.states or sorted(s for s in sl._STATES if s != "DC")
+    src = Sources(args.cycle)
+    cycles = census_lines.maps_cycles()
+    unlisted = [c for c in args.congress if not census_lines.listed(cycles, c)]
+    if unlisted:
+        raise SystemExit(f"the elections that seat {unlisted} are not in redrawn_congressional_maps.json yet")
+    maps = {c: census_lines.state_maps(c, states, cycles) for c in sorted(set(args.congress))}
 
     written: dict[str, bytes] = {}
     report: dict[str, dict] = {}
@@ -445,29 +488,27 @@ def main(argv: list[str] | None = None) -> int:
         for st in states:
             print(f"{st}:")
             geoids, pop, points, _ = lean.state_blocks(st, args.cache)
-            # (folder, build arguments, {layer: the block files' answer})
+            # (folder, build arguments, {layer: the block files' answer}):
+            # one House folder per map the Congresses use (named by the
+            # map, so a state that kept its map stays in its earlier
+            # folder: district_lines.lookup_lines), its towns from a
+            # Congress on that map; and the legislature.
+            on_map = {}
+            for c, by_state in maps.items():
+                on_map.setdefault(by_state[st], c)
             jobs = [
-                (
-                    f"congress-{args.sitting_congress}",
-                    {"house_congress": args.sitting_congress},
-                    {"house": truth_house(st, cw.CD119, args.cache, geoids)},
-                ),
-                (
-                    f"election-{CYCLE}",
-                    {"legislature": True},
-                    {kind: truth_sld(st, kind, args.cache, geoids) for kind in ("sldu", "sldl")},
-                ),
+                (f"congress-{m}", {"house_congress": m, "towns_key": str(c)},
+                 {"house": truth_house(st, m, args.cache, geoids, src)})
+                for m, c in sorted(on_map.items())
             ]
-            if cw.map_for_state(st) == cw.CD120:
-                # A state voting on new lines: its election's House map. A
-                # state voting on its sitting lines reads those.
-                jobs.append(
-                    ("congress-120", {"house_congress": 120, "towns_key": places_cw.ELECTION},
-                     {"house": truth_house(st, cw.CD120, args.cache, geoids)})
-                )
+            jobs.append((
+                f"election-{src.sld_cycle}",
+                {"legislature": True},
+                {kind: truth_sld(st, kind, args.cache, geoids, src) for kind in ("sldu", "sldl")},
+            ))
             for folder, how, truths in jobs:
-                simplified = build(st, args.cache, work, args.interval, **how)
-                unsimplified = build(st, args.cache, work, 0, **how)
+                simplified = build(st, args.cache, work, args.interval, src, **how)
+                unsimplified = build(st, args.cache, work, 0, src, **how)
                 for layer, truth in truths.items():
                     kind = "house" if layer == "house" else "legislature"
                     if kind not in simplified or layer not in simplified[kind]["objects"] or not any(truth):
@@ -509,7 +550,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.dry_run:
         return 0
     for name, blob in written.items():
-        path = OUT_DIR / name
+        path = args.out / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(blob)
     if fixture:
@@ -527,7 +568,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             + "\n"
         )
-    accuracy_path = OUT_DIR / "_accuracy.json"
+    accuracy_path = args.out / "_accuracy.json"
     existing = json.loads(accuracy_path.read_text()) if accuracy_path.exists() else {}
     for folder, by_state in report.items():
         existing.setdefault(folder, {}).update(by_state)

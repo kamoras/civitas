@@ -1178,8 +1178,18 @@ the official state files (FEC for 2020, MEDSL's state file for 2024),
 every fetched county canvass matches, every district's 2024/2020 vote ratio
 is within 0.85-1.15 (or a recorded, evidenced exception at its own ratio),
 every district of both maps is present once, and the Texas and California
-official per-district tables agree; districts more than 1.5 points from
-Cook are listed as alerts. Against Cook: 119th lines r 0.9998, mean
+official per-district tables agree (found by rule: the Texas Legislative
+Council plan whose block file is the map's, compared block by block, and
+California's Supplement to the Statement of Vote by its URL pattern);
+districts more than 1.5 points from Cook are listed as alerts. Which lines
+get a table is a rule too (`app/census_lines.py`): the sitting Congress and
+the one the coming election seats, each state on the map
+`redrawn_congressional_maps.json` gives it, every file found in the Census
+Bureau's listings; the data refresh rebuilds the table when a Congress the
+site needs has a state no table covers, or a block file is re-released, as
+it does the county, place and state legislative crosswalks and the
+redistricting overlap (`app/data_refresh.py`). Each records the files it
+was read from (`_inputs`). Against Cook: 119th lines r 0.9998, mean
 absolute difference 0.27, 423 of 435 equal when rounded, all within one;
 120th lines r 0.9997, 0.28, 403 equal, 432 within one. Texas's Red-206 tables are the independent cross-check; California's is also its correction source, so agreement there only confirms the correction was applied. It moves no score:
 Constituent Alignment still reads Cook's figure.
@@ -1261,9 +1271,10 @@ crosswalk answers "which district do I vote in"; in a redrawn state it gives
 the new district, whose number names a different place from the one its
 sitting member won. `/congress/members` answers "who represents me" from a second
 file on the lines the sitting members were elected on,
-`county_district_crosswalk_sitting.json` (every state on the 119th-Congress
-block file, `build_county_district_crosswalk.py --sitting`), with the
-cities, towns and communities from the `"119"` map of
+`county_district_crosswalk_sitting.json` (the sitting Congress's lines,
+`build_county_district_crosswalk.py --congress N`, rebuilt by the data
+refresh when a Congress needs a map no table holds), with the cities, towns
+and communities from that Congress's map in
 `congressional_district_places.json`. Pick a state, type a city, town or
 county, and the House cards narrow to the districts covering it (a place
 typed in full says which districts it is in, and that it is split when it

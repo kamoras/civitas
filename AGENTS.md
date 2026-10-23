@@ -581,6 +581,34 @@ The correct pattern, established by `_district_pvi()` /
    gates are its contract; when a new error turns up, add a correction
    entry with its official source, not a code path.
 
+   **District tables are built by rule and rebuild themselves** (2026-10).
+   Every per-district table (the computed lean, the county and place
+   crosswalks, the state legislative crosswalk, the redistricting overlap,
+   and the browser's district shapes) is built from the Census Bureau's
+   block equivalency files, and `app/census_lines.py` is the one place
+   that says which: the Congresses needed come from the clock (the sitting
+   Congress and the one the coming election seats, once its maps are
+   listed), each state's map from `redrawn_congressional_maps.json` (the
+   copy in use, which `derive_redrawn_maps.py` extends from the BEFs), and
+   every file (BEFs, state legislative BEFs, TIGER/Line and cartographic
+   shapes, the Gazetteer) from the Census Bureau's own directory listings.
+   No builder names a Congress, a cycle or a URL a person found. A map is
+   named by the Congress whose BEF drew it, and a table is needed per map
+   in use: a state that kept its map is carried from an earlier Congress's
+   table (`district_lines.table_for_lines`), and the browser's lookup
+   folder is the map's (`district_lines.lookup_lines`). `app/data_refresh.py`
+   rebuilds a table only when a needed Congress has a state no table on
+   file covers (a redraw, a new census), a BEF it was read from is
+   re-released (each file records its `_inputs`), or, for the place lists,
+   a newer Gazetteer appears; readers read the copy in use
+   (`data_refresh.read`). Texas's and California's cross-check tables are
+   found by rule too: the Texas Legislative Council plan whose block file
+   is the map's, California's Supplement to the Statement of Vote by its
+   URL pattern. `pyproj` is in the image for the lean's VEST projections
+   (2026-10: 10 MB wheel, 37 MB installed, `certifi` its only dependency;
+   the 51 VEST 2020 files use ten coordinate systems, Lambert conformal
+   conic, transverse Mercator and Web Mercator among them).
+
    Better still, when the population a value describes is the one the
    pipeline is scoring, measure it in the run itself. Legislative
    Effectiveness's reference (per-stage bill totals, chamber median credit,
