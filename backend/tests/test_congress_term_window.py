@@ -54,70 +54,22 @@ def test_expected_current_congress_tracks_the_clock():
         assert expected_current_congress() == 120
 
 
-@pytest.mark.parametrize("configured, alerts", [
-    pytest.param(120, False, id="silent_when_config_matches"),
-    # An operator who bumped early (or a mid-term convening edge) must
-    # not trigger a spurious "stale" alert.
-    pytest.param(121, False, id="silent_when_config_is_ahead"),
-    pytest.param(119, True, id="alerts_when_config_is_behind"),
-])
-def test_congress_staleness_guard(configured, alerts):
-    # An environment pin (Settings(CURRENT_CONGRESS=...) is one): unpinned,
-    # the check advances the value to the clock first and returns before
-    # comparing, so a case built on the process's own settings could never
-    # alert, whatever the comparison said.
+def test_an_environment_value_without_archive_mode_follows_the_clock():
+    """A CURRENT_CONGRESS left in a production .env is not a pin: the
+    value follows the clock and keeps advancing, so it can't go stale."""
     from app.config import Settings
-    from app.ops_alerts import check_current_congress_staleness
 
-    pinned = Settings(CURRENT_CONGRESS=configured)
-    assert pinned.current_congress_pinned
-    with patch("app.config.settings", pinned), patch(
-        "app.pipeline.fetch.congress.expected_current_congress",
-        return_value=120,
-    ), patch("app.ops_alerts.send_ops_alert") as mock_alert, patch(
-        "app.ops_alerts.resolve_ops_alert",
-    ) as resolved:
-        check_current_congress_staleness()
-    assert mock_alert.called is alerts
-    assert resolved.called is not alerts
+    with patch("app.time_utils.utcnow", return_value=datetime(2027, 6, 1)):
+        s = Settings(CURRENT_CONGRESS=119)
+    assert s.CURRENT_CONGRESS == 120 and not s.current_congress_pinned
 
 
-def test_congress_staleness_guard_alerts_when_a_pin_is_behind_the_calendar():
-    # An environment pin still says 119 while the clock is in the 120th.
-    # (Unpinned, a value behind the clock advances instead — see the
-    # next test — so only a pin can alert.)
+def test_archive_mode_pins_the_environment_value():
     from app.config import Settings
-    from app.ops_alerts import check_current_congress_staleness
 
-    with patch("app.config.settings", Settings(CURRENT_CONGRESS=119)), patch(
-        "app.pipeline.fetch.congress.expected_current_congress",
-        return_value=120,
-    ), patch("app.ops_alerts.send_ops_alert") as mock_alert:
-        check_current_congress_staleness()
-    assert mock_alert.called
-    # The alert names the Congress in session and the pin.
-    text = mock_alert.call_args.args[1]
-    assert "120th" in text and "pinned in the environment" in text and "to 119," in text
-
-
-def test_congress_staleness_guard_unpinned_never_alerts_even_across_the_hand_over():
-    """Unpinned, the check advances the value first; it can read behind
-    only if noon passes between its two reads — not staleness, and no
-    "pinned" alert."""
-    from app.config import Settings
-    from app.ops_alerts import check_current_congress_staleness
-
-    s = Settings()
-    assert not s.current_congress_pinned
-    with patch("app.config.settings", s), patch(
-        "app.pipeline.fetch.congress.expected_current_congress",
-        return_value=s.CURRENT_CONGRESS + 1,
-    ), patch("app.ops_alerts.send_ops_alert") as mock_alert, patch(
-        "app.ops_alerts.resolve_ops_alert",
-    ) as resolved:
-        check_current_congress_staleness()
-    mock_alert.assert_not_called()
-    resolved.assert_called_once_with("stale-congress")
+    with patch("app.time_utils.utcnow", return_value=datetime(2027, 6, 1)):
+        s = Settings(CURRENT_CONGRESS=118, ARCHIVE_MODE=True)
+    assert s.CURRENT_CONGRESS == 118 and s.current_congress_pinned
 
 
 def test_expected_current_congress_waits_for_noon_et_on_jan_3():
@@ -129,59 +81,11 @@ def test_expected_current_congress_waits_for_noon_et_on_jan_3():
         assert expected_current_congress() == 120
 
 
-class TestCongressStalenessMessage:
-    """Only an environment pin can go stale (it needs editing); an unpinned
-    value advances at the start of each pipeline job."""
-
-    def _alert_text(self, settings_obj):
-        expected = settings_obj.CURRENT_CONGRESS + 1
-        with patch("app.config.settings", settings_obj), patch(
-            "app.pipeline.fetch.congress.expected_current_congress", return_value=expected,
-        ), patch("app.ops_alerts.send_ops_alert") as mock_alert:
-            from app.ops_alerts import check_current_congress_staleness
-
-            check_current_congress_staleness()
-        return mock_alert.call_args.args[1]
-
-    def test_unpinned_advances_instead_of_alerting(self):
-        """Unpinned, a process still running when a new Congress convenes
-        advances (app.config.advance_current_congress) — no restart, and
-        nothing to alert about."""
-        from app import config
-        from app.config import Settings
-
-        s = Settings()
-        s.CURRENT_CONGRESS -= 1  # computed before the next Congress convened
-        expected = s.CURRENT_CONGRESS + 1
-        with patch.object(config, "settings", s), patch("app.ops_alerts.settings", s), patch(
-            "app.time_utils.utcnow", return_value=datetime(2027, 1, 4, 3),
-        ), patch(
-            "app.pipeline.fetch.congress.expected_current_congress", return_value=expected,
-        ), patch("app.ops_alerts.send_ops_alert") as mock_alert:
-            from app.ops_alerts import check_current_congress_staleness
-
-            check_current_congress_staleness()
-        mock_alert.assert_not_called()
-
-    def test_environment_pin_says_edit_the_pin(self):
-        from app import config
-        from app.config import Settings
-
-        s = Settings(CURRENT_CONGRESS=119)
-        with patch.object(config, "settings", s):
-            text = self._alert_text(s)
-        assert "pinned in the environment" in text and "Remove the pin" in text
-        # The pin holds the windows and the district lines alike.
-        assert "district lines" in text and "scored windows" in text
-        assert "on the 119th Congress" in text and "120th Congress's members" in text
-
-
 def test_env_example_does_not_pin_current_congress():
-    """docker compose passes .env to the backend, and any CURRENT_CONGRESS
-    there is an operator pin (Settings.current_congress_pinned): it freezes
-    the scored windows AND the district lines (one value) past the
-    next Jan 3. The template must leave it unset — a commented-out example
-    only."""
+    """docker compose passes .env to the backend; with ARCHIVE_MODE, a
+    CURRENT_CONGRESS there pins the scored windows AND the district lines
+    (Settings.current_congress_pinned). The template must leave both unset:
+    commented-out examples only."""
     import pathlib
     import re
 
@@ -190,6 +94,7 @@ def test_env_example_does_not_pin_current_congress():
     # A live assignment, as a dotenv parser reads one (optional `export`);
     # comment lines don't count.
     assert not re.search(r"(?m)^\s*(?:export\s+)?CURRENT_CONGRESS\s*=", text)
+    assert not re.search(r"(?m)^\s*(?:export\s+)?ARCHIVE_MODE\s*=", text)
     assert re.search(r"(?m)^#\s*CURRENT_CONGRESS=", text), "keep the documented, commented-out example"
 
 

@@ -320,53 +320,6 @@ def _send_ntfy(subject: str, body: str) -> None:
         logger.exception("ntfy alert failed")
 
 
-def check_current_congress_staleness() -> None:
-    """Alert if CURRENT_CONGRESS has fallen behind the Congress in office.
-
-    Unpinned, it can't: the pipeline process advances it to the Congress in
-    office (noon ET on Jan 3 of an odd year, the 20th Amendment's
-    hand-over) at the start of every job (app.config.scoring_congress), and
-    this check advances it first too, so a process that was already running
-    when a new Congress convened scores the new one from its next job, with
-    no restart. What can go stale is an operator's pin: CURRENT_CONGRESS
-    set in the environment (an archived-DB re-run's reproducibility) and
-    left in place past the next Congress — or copied from an old
-    .env.example that set it. Only editing the environment fixes that. The
-    pin holds both chambers' scored windows and House members' district
-    lines (fetch/district_pvi reads the same value), and the alert says so.
-
-    The round-4 audit's original "silent time bomb" finding was that the
-    default was a hardcoded literal nobody would remember to bump.
-    """
-    from app.config import advance_current_congress
-    from app.ordinals import ordinal
-    from app.pipeline.fetch.congress import expected_current_congress
-
-    from app.config import settings as current
-
-    configured = advance_current_congress()
-    expected = expected_current_congress()
-    # Unpinned, advance_current_congress just brought it up to the clock;
-    # it can only read as behind across the instant of the hand-over
-    # between the two reads, and the next call advances it.
-    if expected <= configured or not current.current_congress_pinned:
-        resolve_ops_alert("stale-congress")
-        return
-    send_ops_alert(
-        "CURRENT_CONGRESS is stale",
-        f"CURRENT_CONGRESS is pinned in the environment (.env or the container's environment) "
-        f"to {configured}, but the {ordinal(expected)} Congress is now in session. Both chambers' "
-        f"scored windows (roll-call sessions, bills, Voteview ideal points) and House members' "
-        f"district lines stay on the {ordinal(configured)} Congress while the pin is in place "
-        f"(fetch/district_pvi reads the same setting), so the {ordinal(expected)} Congress's "
-        f"members are scored on a dead Congress's record and on districts they were not elected "
-        f"in. Remove the pin so it follows the clock — production should never set it; a pin is "
-        f"only for re-running an archived database — and restart the backend.",
-        dedupe_key=f"stale-congress-{expected}",
-        condition="stale-congress",
-    )
-
-
 # How far ahead of an election each piece of cycle-specific data has to be
 # in place. The maps must be settled by the year's filing deadlines; voter
 # deadlines start with UOCAVA ballots 45 days out and registration about a

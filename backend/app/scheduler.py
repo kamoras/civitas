@@ -331,7 +331,6 @@ def _nightly_pipeline() -> None:
     """
     from app.ops_alerts import (
         check_api_v1_sunset,
-        check_current_congress_staleness,
         check_election_readiness,
         check_feedback_token_expiration,
         check_sitting_president,
@@ -345,9 +344,6 @@ def _nightly_pipeline() -> None:
         # warning about the chain, never a reason to skip it: one that
         # raises is logged and the pipelines still run.
         pre_checks = (
-            # CURRENT_CONGRESS fallen behind the calendar, before we score
-            # another day against a possibly-dead one.
-            check_current_congress_staleness,
             # FEEDBACK_TOKEN's mandatory PAT expiration — a real GitHub API
             # call, so this one is self-gated to run at most weekly.
             check_feedback_token_expiration,

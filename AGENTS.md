@@ -496,12 +496,12 @@ The correct pattern, established by `_district_pvi()` /
    process-wide value — hand such work over with `asyncio.to_thread`) — so a process
    running across Jan 3 moves at its next job with no restart, and a job
    running across noon stays on one Congress. The read-only API process
-   runs no jobs; it advances the value on its liveness loop. An environment pin is the one thing that stops the switch: it
-   freezes the district lines as well as the windows, and
-   `check_current_congress_staleness` alerts once it falls behind. It exists only for re-running an archived
-   database; **the production `.env` must not set `CURRENT_CONGRESS`**
-   (`.env.example` leaves it commented out, and a test keeps it that
-   way). Every House run — the nightly
+   runs no jobs; it advances the value on its liveness loop. A pin is the one thing that stops the switch: it
+   freezes the district lines as well as the windows, and it exists only for re-running an archived
+   database, so it takes two settings, `ARCHIVE_MODE=true` and `CURRENT_CONGRESS`. Without
+   `ARCHIVE_MODE`, a `CURRENT_CONGRESS` in the environment is ignored (logged at start) and the
+   value follows the clock, so a line left in a production `.env` can never go stale
+   (`.env.example` leaves both commented out, and a test keeps it that way). Every House run — the nightly
    chain's and each triggered one (`/api/admin/pipeline/trigger`,
    `/trigger-house`, the token trigger) — goes through
    `run_house_on_sitting_lines`, which takes the `DISTRICT_LINES` lease,
@@ -2448,7 +2448,8 @@ See `.env.example` for all options. Key variables:
 | `LLAMA_SERVER_URL` | No | llama.cpp server URL |
 | `DATABASE_URL` | No | SQLite path (`docker-compose.yml` sets `sqlite:////data/civitas.db`, the volume; the code default is the relative `sqlite:///data/civitas.db`) |
 | `BLS_API_KEY` | No | Bureau of Labor Statistics v2 registration key: lifts the jobs API from 25 to 500 requests a day; works without it |
-| `CURRENT_CONGRESS` | **Never in production** | Leave unset — computed from the clock. Setting it pins the scored windows *and* House members' district lines to that Congress past the next Jan 3; only for re-running an archived database |
+| `CURRENT_CONGRESS` | No | Computed from the clock. Ignored unless `ARCHIVE_MODE=true`, which pins the scored windows *and* House members' district lines to it: only for re-running an archived database |
+| `ARCHIVE_MODE` | No | `true` only to re-run an archived database: makes `CURRENT_CONGRESS` a pin |
 
 **On the production Pi, `.env` is a hand-edited, Pi-local file** (see
 "CI/CD" below for why — no GitHub Actions job ever touches the Pi
@@ -2456,11 +2457,10 @@ anymore, so there's no automated sync). To change a value: SSH in, edit
 `.env` directly, then redeploy. `.env.example` stays the source of truth
 for which variables exist and what they do; local development
 (`docker compose up -d`) uses its own real `.env` file the same way it
-always has. **The production `.env` must not set `CURRENT_CONGRESS`**:
-an `.env` copied from a template that once set it (`CURRENT_CONGRESS=119`,
-before 2026-09) pins the scored windows and the district lines on the
-119th Congress for good — check for the line and delete it
-(`check_current_congress_staleness` alerts once it has gone stale).
+always has. `ARCHIVE_MODE` is for an archived re-run only: an `.env`
+copied from a template that once set `CURRENT_CONGRESS=119` (before
+2026-09) does nothing without it, since outside archive mode the setting
+follows the clock.
 
 ### Database
 
