@@ -2212,7 +2212,13 @@ date is named beside it ("also filed, on or after this report's filing date")
 rather than guessed to be newer. A House member's new-filer report (index type
 "H", read from this year's index too) is read for a member with nothing newer;
 it states no date its values describe, so it is labelled by filing date and any
-annual report outranks it. Filers are matched in `filer_matching.py`: the
+annual report outranks it. So is a candidate report (index type "C"), with
+its amendment (an "A" in a year with the filer's candidate report and no
+annual one), for a member seated in a special election who filed nothing
+else (four on 2026-10-22), and only when the filer's first name is the
+member's (`filer_matching.first_name_agrees`): a namesake running for the
+seat files the same report under the same district. Among undated House
+reports the latest filed wins (`_rank`). Filers are matched in `filer_matching.py`: the
 last-name field up to its first comma ("Doe, Jr."), and a House filer listed
 under a district no member of that surname holds — the Clerk keeps a member's
 pre-redistricting district — is matched across the state only when the first

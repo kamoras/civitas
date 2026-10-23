@@ -41,7 +41,8 @@ from sqlalchemy.orm import Session
 from app.models import FinancialDisclosure, FinancialHolding
 from app.ops_alerts import resolve_ops_alert, send_ops_alert
 from app.pipeline.fetch.fd_common import UNREADABLE_SCANNED, AnnualReport, until_deadline
-from app.pipeline.fetch.house_fd import NEW_FILER_TYPE, PARSER_VERSION as HOUSE_PARSER_VERSION
+from app.pipeline.fetch.house_fd import AMENDMENT_TYPE, CANDIDATE_TYPE, NEW_FILER_TYPE
+from app.pipeline.fetch.house_fd import PARSER_VERSION as HOUSE_PARSER_VERSION
 from app.pipeline.fetch.house_fd import fetch_and_parse_annual as fetch_house_annual, fetch_annual_filing_index
 from app.pipeline.fetch.house_fd import report_still_loads as house_report_still_loads
 from app.pipeline.fetch.president_fd import HOLDINGS_PARSER_VERSION as PRESIDENT_PARSER_VERSION
@@ -64,6 +65,7 @@ from app.pipeline.fetch.senate_ptr import senate_filing_id
 from app.pipeline.filer_matching import (
     FilerMatcher,
     current_representatives,
+    first_name_agrees,
     current_senators,
     match_representative,
     match_senator,
@@ -132,7 +134,15 @@ def _rank(
     that states none) ranks below every dated one, and among those an
     original goes before an amendment: an original's place in the
     once-a-year sequence is at least known, while an undated amendment can
-    amend any earlier report."""
+    amend any earlier report.
+
+    A House report with no date (a new-filer or candidate report, or its
+    amendment, which the House index places by year:
+    _annual_amendments_only) ranks below every dated one too, and among
+    those the latest filed wins: a candidate report's amendment supersedes
+    it, and a later campaign's report an earlier one's."""
+    if not as_of and seq_before_date:
+        return ("", 0, 0, filed_date or "", seq, filing_id)
     if as_of:
         precedence = 1 if amended else 0
     else:
@@ -313,24 +323,37 @@ def _replace_disclosure(
     return len(report.holdings or [])
 
 
+_UNDATED_KINDS = {NEW_FILER_TYPE: "new-filer report", CANDIDATE_TYPE: "candidate report"}
+
+
+def _house_kind(filing: dict) -> str:
+    """The report a House filing is, or amends: an amendment's own type says
+    only "A", so _house_candidates records which of the filer's reports of
+    that year it amends (`amends`); an annual report unless set."""
+    if filing.get("filing_type") == AMENDMENT_TYPE:
+        return filing.get("amends") or "O"
+    return filing.get("filing_type") or "O"
+
+
 def _house_report_label(filing: dict) -> str:
-    if filing.get("filing_type") == NEW_FILER_TYPE:
+    amended = " (amended)" if filing.get("filing_type") == AMENDMENT_TYPE else ""
+    if (kind := _UNDATED_KINDS.get(_house_kind(filing))) is not None:
         # It states no date its values describe (see _house_as_of), so it is
         # named by when it was filed.
         filed = filing.get("filing_date")
-        return f"new-filer report filed {filed}" if filed else "new-filer report"
+        return f"{kind}{amended} filed {filed}" if filed else f"{kind}{amended}"
     year = filing.get("year")
     base = f"{year} annual report" if year else "annual report"
-    return f"{base} (amended)" if filing.get("filing_type") == "A" else base
+    return f"{base}{amended}"
 
 
 def _house_as_of(filing: dict) -> str | None:
     """The date a House report's holdings describe: an annual report's (or
-    its amendment's) year end. A new-filer report states none — neither on
-    its cover nor in the index, whose year is only the year it was filed
-    under — so it has none and ranks below every annual report (_rank): it
-    is shown for a member who has filed nothing else."""
-    if filing.get("filing_type") == NEW_FILER_TYPE or not filing.get("year"):
+    its amendment's) year end. A new-filer or candidate report states none
+    in the index, whose year is only the year it was filed under, so it has
+    none and ranks below every annual report (_rank): it is shown for a
+    member who has filed nothing else."""
+    if _house_kind(filing) in _UNDATED_KINDS or not filing.get("year"):
         return None
     return f"{filing['year']}-12-31"
 
@@ -634,19 +657,40 @@ def _house_owner(filing: dict, report: AnnualReport) -> str:
     2025 index all 430 were (426 marked "Hon.", the other 4 sitting members
     too), and every one carries a district. An amendment is a member's only
     with the "Hon." every sitting member's filing carries (a candidate's
-    has none: 2025, 82 of 105 amendments)."""
+    has none: 2025, 82 of 105 amendments).
+
+    A candidate report, or its amendment, says "Congressional Candidate",
+    and is the member's only when the filer's first name is the member's
+    (`first_name_agrees`, set by _house_candidates): a namesake running for
+    the seat files the same report under the same district."""
     status = (report.filer_status or "").lower()
+    own_candidate_report = _house_kind(filing) == CANDIDATE_TYPE and filing.get("first_name_agrees")
     if status:
-        return _MEMBERS if status == "member" else _NOT_MEMBERS
-    if filing.get("filing_type") == "O" or _is_member_prefix(filing.get("prefix")):
+        if status == "member" or (status == "congressional candidate" and own_candidate_report):
+            return _MEMBERS
+        return _NOT_MEMBERS
+    if own_candidate_report:
+        return _MEMBERS
+    if filing.get("filing_type") == "O" or (
+        _is_member_prefix(filing.get("prefix")) and _house_kind(filing) != CANDIDATE_TYPE
+    ):
         return _MEMBERS
     return _NOT_MEMBERS
 
 
 async def _house_candidates(db: Session, client: httpx.AsyncClient) -> dict[str, list[dict]]:
     per_rep: dict[str, list[dict]] = {}
-    match = FilerMatcher(current_representatives(db), match_representative)
+    roster = current_representatives(db)
+    names = {member.id: member.name for member in roster}
+    match = FilerMatcher(roster, match_representative)
     indexed = 0
+
+    def keep(rep_id: str, filing: dict) -> None:
+        filing = {**filing, "first_name_agrees": first_name_agrees(filing.get("first"), names[rep_id])}
+        if filing.get("filing_type") == CANDIDATE_TYPE and not filing["first_name_agrees"]:
+            return  # a namesake's candidate report for the seat
+        per_rep.setdefault(rep_id, []).append(filing)
+
     for year in _report_years():
         filings = await fetch_annual_filing_index(client, db, year)
         if filings is None:
@@ -660,19 +704,24 @@ async def _house_candidates(db: Session, client: httpx.AsyncClient) -> dict[str,
         indexed += len(filings)
         for filing in filings:
             if (rep_id := match(filing["last"], filing["first"], filing["state_district"])) is not None:
-                per_rep.setdefault(rep_id, []).append(filing)
-    # This year's index too, for new-filer reports alone: a member seated
-    # this year files one months before any annual report (two of the four
-    # sitting members whose only report was one, 2026-10, filed it in the
-    # year it is indexed under). Best-effort — early in a year the index can
-    # be missing, and nothing else is read from it — so a failure here costs
-    # only those reports, until the next run.
-    current = await fetch_annual_filing_index(client, db, utcnow().year, filing_types={NEW_FILER_TYPE})
+                keep(rep_id, filing)
+    # This year's index too, for new-filer and candidate reports and their
+    # amendments: a member seated this year files one months before any
+    # annual report (two of the four sitting members whose only report was a
+    # new-filer one, 2026-10, filed it in the year it is indexed under; all
+    # four whose only reports were candidate reports, 2026-10-22, filed them
+    # this year). Never this year's annual reports, which describe last
+    # year and are read from last year's index. Best-effort — early in a
+    # year the index can be missing, and nothing else is read from it — so
+    # a failure here costs only those reports, until the next run.
+    current = await fetch_annual_filing_index(
+        client, db, utcnow().year, filing_types={NEW_FILER_TYPE, CANDIDATE_TYPE, AMENDMENT_TYPE},
+    )
     if current is None:
         logger.warning("House index for %d not loaded — this year's new-filer reports wait for the next run", utcnow().year)
     for filing in current or []:
         if (rep_id := match(filing["last"], filing["first"], filing["state_district"])) is not None:
-            per_rep.setdefault(rep_id, []).append(filing)
+            keep(rep_id, filing)
     if indexed == 0:
         # Two calendar years with no annual report from anyone in the House
         # is a failed or changed index, not a quiet year — fail the phase so
@@ -688,9 +737,28 @@ def _annual_amendments_only(filings: list[dict]) -> list[dict]:
     report it amends. An annual report's amendment is indexed in the same
     year as the annual report it amends: every member-status or unreadable
     amendment in the 2025 index (23 of 119; the rest are candidates') has
-    its filer's annual report beside it (checked 2026-09-27)."""
-    annual_years = {f["year"] for f in filings if f.get("filing_type") == "O"}
-    return [f for f in filings if f.get("filing_type") != "A" or f["year"] in annual_years]
+    its filer's annual report beside it (checked 2026-09-27).
+
+    The same holds for the filer's new-filer and candidate reports, so an
+    amendment in a year with no annual report but one of those is taken as
+    amending it (`amends`), and ranks and is labelled as that report: one
+    sitting member's only reports, 2026-10-22, were a candidate report and
+    its amendment, both indexed that year. An annual report, when the year
+    has one, is what an amendment is read as amending, as before. An
+    amendment in a year with none of the three is dropped."""
+    kinds_by_year: dict[int, set[str]] = {}
+    for f in filings:
+        kinds_by_year.setdefault(f["year"], set()).add(f.get("filing_type"))
+    kept = []
+    for f in filings:
+        if f.get("filing_type") != AMENDMENT_TYPE:
+            kept.append(f)
+            continue
+        kinds = kinds_by_year.get(f["year"], set())
+        amends = next((k for k in ("O", CANDIDATE_TYPE, NEW_FILER_TYPE) if k in kinds), None)
+        if amends is not None:
+            kept.append({**f, "amends": amends})
+    return kept
 
 
 async def ingest_house_holdings(db: Session, client: httpx.AsyncClient) -> int:
