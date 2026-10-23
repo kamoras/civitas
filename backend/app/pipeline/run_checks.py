@@ -64,7 +64,8 @@ def run_calibration_check(entity_type: str) -> None:
             f"Score drift ({entity_type}s) on an unchanged scoring method",
             f"{report['from_date']} → {report['to_date']}:\n"
             + "\n".join(f"- {evt['dimension']}: {evt['message']}" for evt in incidents)
-            + "\nNo method change explains it; check the run's fetch and reference alerts.",
+            + "\nNo method change explains it; the run's fetch and reference alerts, if any, name "
+            "what it read differently.",
             dedupe_key=f"{condition}-{report['to_date']}",
             condition=condition,
         )

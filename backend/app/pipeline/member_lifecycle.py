@@ -163,8 +163,8 @@ def reconcile_roster(
             f"Tonight's {chamber} roster had {len(roster)} members but "
             f"{len(serving)} are recorded as currently serving. This looks "
             "like a truncated or failed Congress.gov fetch, so no member was "
-            "retired. Departures will go undetected until it recovers; if "
-            "this repeats, check the cached roster.",
+            "retired. Departures go undetected until a full roster is read; "
+            "each run reads it again.",
             dedupe_key=f"roster-skipped-{chamber}-{today}",
             condition=f"roster-skipped-{chamber}",
         )
