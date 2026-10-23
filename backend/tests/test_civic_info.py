@@ -146,14 +146,13 @@ def test_state_towns_404s_on_unknown_state():
     assert exc.value.status_code == 404
 
 
-def test_state_towns_omits_civic_towns_without_key_but_keeps_pdf_towns(monkeypatch):
-    """No GOOGLE_CIVIC_API_KEY means Cambridge (Google-Civic-only) isn't
-    offered, but Somerville still is — it has its own verified ballot PDF
-    (ballot_pdf_sources.json) and needs no API key at all. The two
-    sources are independent; state_towns unions them."""
+def test_state_towns_offers_no_town_without_key(monkeypatch):
+    """No GOOGLE_CIVIC_API_KEY means no town is offered: since Somerville's
+    hand-pointed sample-ballot PDF was removed, Google Civic is the town
+    ballot's only source."""
     monkeypatch.setattr(civic_info.settings, "GOOGLE_CIVIC_API_KEY", "")
     data = _body(elections.state_towns("MA"))
-    assert {t["name"] for t in data["towns"]} == {"Somerville"}
+    assert data["towns"] == []
 
 
 def test_state_towns_lists_curated_entries_when_configured(monkeypatch):
@@ -182,6 +181,61 @@ async def test_town_ballot_not_yet_covered_for_uncurated_town(monkeypatch, db_se
     monkeypatch.setattr(civic_info.settings, "GOOGLE_CIVIC_API_KEY", "test-key")
     data = _body(await elections.town_ballot(None, "MA", "Nowhereville", db=db_session))
     assert data["status"] == "not_yet_covered"
+
+
+def _civic_answers(monkeypatch, election_date, contests):
+    monkeypatch.setattr(elections, "civic_is_configured", lambda: True)
+    monkeypatch.setattr(elections, "address_for_town", lambda state, town: "795 Massachusetts Ave, Cambridge, MA 02139")
+
+    async def answered(*_a, **_k):
+        return {"address": "795 Massachusetts Ave, Cambridge, MA 02139", "election_name": "General Election",
+                "election_date": election_date, "contests": contests}
+
+    monkeypatch.setattr(elections, "fetch_town_ballot", answered)
+
+
+def _house_race(db_session, cycle=2026):
+    from app.models import Race
+
+    db_session.add(Race(id=f"{cycle}-MA-07", state="MA", cycle_year=cycle, office="H", district=7))
+    db_session.commit()
+
+
+@pytest.mark.asyncio
+async def test_an_empty_general_with_federal_races_on_file_is_pending_not_empty(monkeypatch, db_session):
+    """Cambridge, 2026-10-22: Civic answered the November 3 general with no
+    contest. Every town votes for a House seat in a general, so that is a
+    ballot Civic hasn't loaded, never "nothing on your ballot"."""
+    _house_race(db_session)
+    _civic_answers(monkeypatch, "2026-11-03", [])
+    data = _body(await elections.town_ballot(None, "MA", "Cambridge", db=db_session))
+    assert data["status"] == "pending" and data["contests"] == []
+    assert data["electionDate"] == "2026-11-03"
+
+
+@pytest.mark.asyncio
+async def test_a_loaded_general_is_covered(monkeypatch, db_session):
+    _house_race(db_session)
+    _civic_answers(monkeypatch, "2026-11-03", [{"kind": "contest", "office": "U.S. House", "candidates": []}])
+    assert _body(await elections.town_ballot(None, "MA", "Cambridge", db=db_session))["status"] == "covered"
+
+
+@pytest.mark.asyncio
+async def test_an_empty_answer_for_another_election_is_still_empty(monkeypatch, db_session):
+    """A local special (not a federal general's date) can have nothing on
+    it at an address, and the state's races being on file says nothing
+    about it."""
+    _house_race(db_session)
+    _civic_answers(monkeypatch, "2026-12-08", [])
+    assert _body(await elections.town_ballot(None, "MA", "Cambridge", db=db_session))["status"] == "covered"
+
+
+@pytest.mark.asyncio
+async def test_an_empty_general_with_no_races_on_file_is_not_read_as_pending(monkeypatch, db_session):
+    """Without the state's races on file there is nothing to tell the two
+    absences apart by, so the answer is reported as Civic gave it."""
+    _civic_answers(monkeypatch, "2026-11-03", [])
+    assert _body(await elections.town_ballot(None, "MA", "Cambridge", db=db_session))["status"] == "covered"
 
 
 # ── upstream budget ──────────────────────────────────────────────────

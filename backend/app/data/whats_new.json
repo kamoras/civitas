@@ -9,6 +9,13 @@
       "url": "/"
     },
     {
+      "id": "scanned-disclosure-pages",
+      "date": "2026-10-22",
+      "title": "Paper disclosures shown page by page",
+      "summary": "A member's annual financial disclosure filed on paper now appears on the member's own page as the filed pages, one at a time with zoom, instead of only a link to the government site.",
+      "url": "/politicians"
+    },
+    {
       "id": "member-page-boxes",
       "date": "2026-10-22",
       "title": "Member pages at a glance",

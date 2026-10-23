@@ -948,6 +948,19 @@ function TownDetail({
           </p>
         ))}
 
+      {selected && !loading && ballot?.status === "pending" && (
+        // Google Civic answered for the general with no contest, while this
+        // state's federal races are on file: its ballot isn't loaded yet,
+        // which is not the same as nothing being on it.
+        <p role="status" className="text-small text-signal-amber">
+          Google Civic has not loaded {selected}&apos;s ballot
+          {ballot.electionDate ? ` for ${calendarDate(ballot.electionDate)}` : ""} yet. This does{" "}
+          <strong>not</strong> mean nothing is on it: every town votes for a U.S. House seat in a
+          general election, and the statewide contests and measures on this page are on every ballot
+          in the state.
+        </p>
+      )}
+
       {selected && !loading && ballot?.status === "ingest_failed" && (
         <p className="text-small text-signal-amber">
           Could not load {selected}&apos;s local races right now: try again shortly.
