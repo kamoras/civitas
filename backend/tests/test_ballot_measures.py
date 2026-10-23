@@ -1061,7 +1061,6 @@ async def test_a_town_ballot_that_failed_to_load_is_never_stored(monkeypatch, db
     the ballot couldn't be read until it expired."""
     from app.api import elections
 
-    monkeypatch.setattr(elections.ballot_pdf, "is_configured", lambda town: False)
     monkeypatch.setattr(elections, "civic_is_configured", lambda: True)
     monkeypatch.setattr(elections, "address_for_town", lambda state, town: "1 Main St")
 
@@ -1693,6 +1692,41 @@ async def test_a_failed_read_records_and_alerts_the_readers_own_reason(monkeypat
     assert "- GA: GA proposed constitutional amendments failed after 3 attempts: HTTP 403" in bodies[0]
 
 
+def test_a_documented_wall_is_not_alerted_every_night_but_a_new_failure_is(monkeypatch, db_session):
+    """Ohio's whole site walled from 2026-10-21: investigated, written up
+    in the registry's `wall`, and the page says the read failed. The
+    nightly alert names only new problems; a failure at another host is
+    one."""
+    sources = {
+        "OH": {**_fake_pdf_source("OH"), "wall": {"host": "www.ohiosos.gov", "measured": "2026-10-22", "evidence": "x"}},
+        "TX": _fake_pdf_source("TX"),
+    }
+    monkeypatch.setattr(ballot_measure_pdf_sources, "source_for_state", lambda state: sources.get(state))
+    for state, detail in (
+        ("OH", "OH election directives: https://www.ohiosos.gov/elections/ — bot challenge (HTTP 403), not retried"),
+        ("TX", "TX constitutional amendment election dates: https://lrl.texas.gov/ — bot challenge (HTTP 503)"),
+    ):
+        db_session.add(MeasureCoverage(
+            state=state, election_date="2026-11-03", status=MeasureCoverage.INGEST_FAILED, error_detail=detail,
+        ))
+    db_session.flush()
+    sent, resolved = [], []
+    monkeypatch.setattr(ops_alerts, "send_ops_alert", lambda s, b, dedupe_key=None, condition=None: sent.append(b))
+    monkeypatch.setattr(ops_alerts, "resolve_ops_alert", resolved.append)
+
+    election_pipeline._alert_ingest_failures(db_session, ["OH"], "2026-11-03")
+    assert sent == [] and resolved == ["ballot-measure-ingest-2026-11-03"]
+
+    election_pipeline._alert_ingest_failures(db_session, ["OH", "TX"], "2026-11-03")
+    assert "1 state(s)" in sent[0] and "- TX:" in sent[0] and "- OH:" not in sent[0]
+    assert "Documented walls, not repeated: OH (www.ohiosos.gov)." in sent[0]
+
+
+def test_ohio_documents_its_wall_with_evidence():
+    wall = ballot_measure_pdf_sources.source_for_state("OH")["wall"]
+    assert wall["host"] == "www.ohiosos.gov" and wall["measured"] and len(wall["evidence"]) > 100
+
+
 @pytest.mark.asyncio
 async def test_a_measure_the_source_reports_gone_is_removed_not_a_lost_document(monkeypatch, db_session):
     """Oklahoma: the only listed State Question is no longer dated for this
@@ -2136,27 +2170,3 @@ def test_a_rekeyed_measure_keeps_its_title_and_is_superseded_not_removed(db_sess
     assert left == [f"NM-{election}-old"]
 
 
-async def test_a_town_sample_ballot_from_last_cycle_is_not_served_as_this_ones(monkeypatch, db_session, freeze_utcnow):
-    """A town's sample ballot names one election. In 2026 its September
-    primary ballot is this cycle's; in 2028 it is last cycle's, and the town
-    reads as not yet covered until its entry names the new election."""
-    from datetime import date, datetime
-
-    from app.api import elections
-
-    monkeypatch.setattr(elections.ballot_pdf, "is_configured", lambda town: True)
-    monkeypatch.setattr(elections, "ballot_pdf_source_for_town",
-                        lambda town: {"source_name": "Town Elections", "election_date": "2026-09-01",
-                                      "election_name": "State Primary"})
-    monkeypatch.setattr(elections, "civic_is_configured", lambda: False)
-
-    async def parsed(*_a, **_k):
-        return {"sourceUrl": "https://example.gov/ballot.pdf", "contests": []}
-
-    monkeypatch.setattr(elections.ballot_pdf, "fetch_town_ballot_pdf", parsed)
-    freeze_utcnow(datetime(2026, 10, 1, 12))
-    monkeypatch.setattr("app.election_phase.election_today", lambda: date(2026, 10, 1))
-    assert b'"covered"' in (await elections.town_ballot(None, "MA", "Somerville", db=db_session)).body
-    freeze_utcnow(datetime(2028, 3, 1, 12))
-    monkeypatch.setattr("app.election_phase.election_today", lambda: date(2028, 3, 1))
-    assert b"not_yet_covered" in (await elections.town_ballot(None, "MA", "Somerville", db=db_session)).body

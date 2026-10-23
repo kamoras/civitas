@@ -148,7 +148,7 @@ export default async function ElectionsChapter() {
               the same table the lean comes from. A district that only has its state&apos;s figure
               is not placed among districts, and from election day the lean is not shown at all, so
               that it can&apos;t be read as a call on the count. A House district&apos;s figure is
-              computed from precinct returns and used in no score (
+              computed from precinct returns and used in no member comparison (
               <A href="/about/data#computed-lean">how it is computed</A>); where Civitas has none,
               the page shows Cook&apos;s, labelled as Cook&apos;s.
             </P>
@@ -209,29 +209,31 @@ export default async function ElectionsChapter() {
           </Box>
           <Box
             title="Not a prediction"
-            dek="It shows no chance of anyone winning and no seat total by party. Every number is fitted by a script and checked on cycles the fit never saw."
+            dek="It shows no chance of anyone winning and no seat total by party. Its numbers are fitted by a script, apart from five stated ones in how polls are weighted, and checked on cycles the fit never saw."
             figure={{ type: "stat", value: 1998, text: "1998", caption: "polls archived from" }}
             more="the method and its checks"
           >
             <P>
               It is not a prediction and calls no race: it shows no chance of anyone winning and no
-              seat total by party. Every number in the method is fitted by a script on official
-              results and Silver Bulletin&apos;s archive of final-weeks polls (from 1998, used free
-              of charge and attributed to Silver Bulletin as its terms ask), refitted automatically
-              when a new copy of that archive passes Civitas&apos;s checks, and checked on election
-              cycles the fit never saw, including the newest cycle predicted from the earlier ones
-              alone; the map&apos;s own method section opens with a short summary and keeps the full
-              method behind a disclosure: how often its ranges held the result, a calibration table
-              that treats both parties the same way (when a range leaned one way by this much, how
-              often that side carried the seat), and why there is no seat total. The archive&apos;s
-              polls reach only the final weeks before election day, so further out the map shows
-              each seat&apos;s structural range alone, labelled fundamentals only, with its polls
-              listed beside it. It has nothing to do with a member&apos;s record on their page,
-              which describes what the member did, not an election. Only Democrat-versus-Republican
-              races whose November ballot Civitas has confirmed get a range. The House fit covers
-              every cycle from 2018 whose House results the FEC has compiled, with each
-              district&apos;s lean rebuilt from precinct returns as it stood before each election,
-              on the lines it was held on.
+              seat total by party. Apart from five stated numbers in how polls are weighted (named,
+              with their reasons, in the map&apos;s method section, and fitted once this election is
+              certified), every number in the method is fitted by a script on official results and
+              Silver Bulletin&apos;s archive of final-weeks polls (from 1998, used free of charge
+              and attributed to Silver Bulletin as its terms ask), refitted automatically when a new
+              copy of that archive passes Civitas&apos;s checks, and checked on election cycles the
+              fit never saw, including the newest cycle predicted from the earlier ones alone; the
+              map&apos;s own method section opens with a short summary and keeps the full method
+              behind a disclosure: how often its ranges held the result, a calibration table that
+              treats both parties the same way (when a range leaned one way by this much, how often
+              that side carried the seat), and why there is no seat total. The archive&apos;s polls
+              reach only the final weeks before election day, so further out the map shows each
+              seat&apos;s structural range alone, labelled fundamentals only, with its polls listed
+              beside it. It has nothing to do with a member&apos;s record on their page, which
+              describes what the member did, not an election. Only Democrat-versus-Republican races
+              whose November ballot Civitas has confirmed get a range. The House fit covers every
+              cycle from 2018 whose House results the FEC has compiled, with each district&apos;s
+              lean rebuilt from precinct returns as it stood before each election, on the lines it
+              was held on.
             </P>
           </Box>
           <Box

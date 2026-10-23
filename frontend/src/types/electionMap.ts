@@ -156,6 +156,15 @@ export interface ChamberModel {
   pollSpread: number;
   scale: number;
   priorScale?: number;
+  /** The poll-weighting priors: stated (fitted false) until a fit measures them. */
+  priors?: {
+    sampleRef: number;
+    sampleMin: number;
+    sampleCap: number;
+    houseShrink: number;
+    halfLifeGrid: number[];
+    fitted?: boolean;
+  };
   file: string;
   fit: string;
   /** When the automatic refit last replaced the checked-in fit. */

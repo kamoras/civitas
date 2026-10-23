@@ -320,3 +320,42 @@ Biden 83 to 73. Pre-1947 presidents unchanged.
 2025 (the shutdown). A year counts once its December figure is out,
 averaged over its published months.
 
+## President v12: the peers by a stated rule
+
+Measured 2026-10-22. Until v12 the peers were thirteen countries this note
+had picked (Britain, France, Germany, the Netherlands, Belgium, Italy,
+Sweden, Denmark, Norway, Switzerland, Canada, Australia, Japan). They are now
+every member of the OECD before its 1994 enlargement, the US aside: the 20
+signatories of the 1960 Convention plus Japan (1964), Finland (1969),
+Australia (1971) and New Zealand (1973), a membership unchanged until Mexico
+joined in 1994. `scripts/fetch_peer_gdp.py` holds the membership dates (the
+OECD's record of ratifications and accessions) and writes the list and the
+rule into `peer_gdp_per_capita.json`; `fetch/peer_gdp.py` reads them. The
+rule adds Austria, Finland, Greece, Iceland, Ireland, Luxembourg (from 1950,
+where Maddison starts it), New Zealand, Portugal, Spain and Turkey, and
+drops none. The OECD's founders alone (19) were also measured and behave
+like the 23.
+
+The old list's stored figures reproduce exactly from the same code
+(Eisenhower's relative growth 0.9797, Biden's 3.2702). On October 2026 data:
+
+| | 13 picked | OECD before 1994 (23) |
+|---|---|---|
+| Convergence rate (points per log gap) | 8.9 | 9.1 |
+| Share of term growth shared with the peers, terms since 1961 | 64% | 55% |
+| Raw relative growth against start year, 13 completed terms | +0.73 | +0.67 |
+| Same, catch-up set aside | +0.41 | +0.28 |
+
+Relative growth, catch-up set aside, points a year: Eisenhower 0.98 → 1.94,
+Kennedy 2.45 → 3.59, Johnson 2.80 → 3.48, Nixon 0.79 → 1.10, Ford 2.25 →
+2.92, Carter 2.27 → 2.51, Reagan 2.70 → 2.88, G. H. W. Bush 1.92 → 2.23,
+Clinton 1.95 → 2.10, G. W. Bush 1.70 → 1.84, Obama 1.86 → 2.64, Trump (first
+term) 2.78 → 3.45, Biden 3.27 → 4.06, Trump (second, partial) 3.55 → 4.27.
+Effectiveness scores each against the other postwar terms, so what moves a
+score is the order (rank correlation 0.92). The growth part (a quarter of
+postwar Effectiveness, approximated here with all fourteen terms as the
+population) moves by up to 18 points: Kennedy +18, Eisenhower +12, Obama
++10, Ford +4; Reagan −16, Carter −12, Clinton −12, G. W. Bush −9, G. H. W.
+Bush −7; the rest within about a point. Effectiveness moves by a quarter of
+that.
+
