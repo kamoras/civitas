@@ -52,13 +52,12 @@ describe("SECTIONS", () => {
     expect(href("elections", "map")).toBe(ELECTION_MAP_HREF);
     expect(href("elections", "redistricting")).toBe(REDISTRICTING_HREF);
     expect(href("elections", "calendar")).toBe(CALENDAR_HREF);
-    expect(href("congress", "president")).toBe(presidentSupportHref("house"));
     expect(href("congress", "nominations")).toBe(NOMINATIONS_HREF);
   });
 });
 
 // Pages that are no section's: the footer's own pages, the admin, and
-// /congress/president (which sends to the House's page, a tab).
+// /congress/president (which sends to the House's page).
 const NOT_IN_A_SECTION = new Set([
   "/",
   "/accessibility",
@@ -157,12 +156,14 @@ describe("currentTab", () => {
 
   it("marks the tab whose views a page is, and the page itself", () => {
     expect(marked("executive", "/agencies")).toEqual([["agencies", "page"]]);
-    expect(marked("executive", "/agencies/budget")).toEqual([["agencies", "true"]]);
+    expect(marked("executive", "/executive/budgets")).toEqual([["agencies", "true"]]);
     expect(marked("executive", "/compare/presidents")).toEqual([["presidents", "true"]]);
     expect(marked("congress", "/congress/week")).toEqual([["reports", "true"]]);
     expect(marked("congress", "/congress/month/2026-09")).toEqual([["reports", "true"]]);
     expect(marked("congress", "/congress/day")).toEqual([["reports", "true"]]);
-    expect(marked("congress", "/congress/president/senate")).toEqual([["measures", "true"]]);
+    // Votes with the president's full page sits under By the numbers, whose
+    // fifth row links it: no menu names it, the Members tab holds it.
+    expect(marked("congress", presidentSupportHref("senate"))).toEqual([["measures", "true"]]);
     expect(marked("congress", "/compare")).toEqual([["measures", "true"]]);
     expect(marked("elections", "/elections/redistricting/TX")).toEqual([["map", "true"]]);
   });
@@ -201,10 +202,9 @@ describe("currentTab", () => {
       "Reports",
       "This Congress",
     ]);
-    expect(tabChain("congress", "president").map((p) => p.label)).toEqual([
+    expect(tabChain("congress", "measures").map((p) => p.label)).toEqual([
       "Members",
       "By the numbers",
-      "Votes with the president",
     ]);
     expect(tabChain("congress", "compare").map((p) => p.label)).toEqual(["Members", "Compare"]);
     expect(tabChain("congress", "bills").map((p) => p.label)).toEqual(["Bills"]);

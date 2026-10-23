@@ -162,14 +162,24 @@ class TestScoringCongress:
         with patch("app.time_utils.utcnow", return_value=datetime(2026, 6, 1)):
             assert advance_current_congress() == s.CURRENT_CONGRESS == 120
 
-    def test_an_environment_pin_wins(self, monkeypatch):
+    def test_an_environment_pin_wins_in_archive_mode(self, monkeypatch):
         monkeypatch.setenv("CURRENT_CONGRESS", "118")
+        monkeypatch.setenv("ARCHIVE_MODE", "true")
         s = config.Settings()
         monkeypatch.setattr(config, "settings", s)
         assert s.current_congress_pinned
         with patch("app.time_utils.utcnow", return_value=datetime(2027, 6, 1)):
             with scoring_congress() as held:
                 assert held == 118
+
+    def test_an_environment_value_outside_archive_mode_is_ignored(self, monkeypatch):
+        monkeypatch.setenv("CURRENT_CONGRESS", "118")
+        monkeypatch.setattr("app.time_utils.utcnow", lambda: datetime(2027, 6, 1))
+        s = config.Settings()
+        monkeypatch.setattr(config, "settings", s)
+        assert not s.current_congress_pinned and s.CURRENT_CONGRESS == 120
+        with scoring_congress() as held:
+            assert held == 120
 
     def test_assigning_the_setting_later_is_not_a_pin(self, monkeypatch):
         """Pydantic adds an assigned field to model_fields_set; anything

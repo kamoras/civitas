@@ -232,7 +232,7 @@ the residual.
 | 1 | FEC structured metadata / SEC SIC / learning store | Unambiguous entity types, a PAC's industry where its registration or its sponsor's SEC record states it (`fec.structured_industry`), previously classified entities |
 | 2 | Sentence-transformer cosine similarity | Whether a claim's actor span the capitalised-actor rule refuses is a party that can act (`post_composer.ACTOR_PROTOTYPES`, threshold refit daily on data-supplied non-actors), industry, donor type, bill policy, party alignment, stance direction, procedural detection, commemorative detection, skip entity detection, employer filtering, memo transfer detection, category normalization, whether two Action Center claims restate one fact (calibrated on labelled pairs, `claim_restatement_*.json`) |
 | 2b | SVD / PageRank on cosponsorship matrix | Ideology scoring (Tauberer 2012), legislative leadership (Brin & Page 1998) |
-| 3 | k-Nearest Neighbor in embedding space | Remaining unclassified donors and bills; Action Center relevance (against stored feed articles labelled by their publishers' own filing and by the officials and agencies they name, refit daily: `app/policy_relevance.py`); committee routing (against hand-labelled issues, blended with tier-2 jurisdiction prototypes) |
+| 3 | k-Nearest Neighbor in embedding space | Remaining unclassified donors and bills; Action Center relevance (against stored feed articles labelled by their publishers' own filing and by the officials and agencies they name, refit daily: `app/policy_relevance.py`); committee routing (against bills labelled by their Congress.gov committee referrals and texts no committee handles, refit daily, blended with tier-2 jurisdiction prototypes: `app/committee_routing.py`) |
 | 4 | LLM (LFM2.5-1.2B-Instruct) | Natural-language text only — Action Center claims, monitor titles and period summaries, race-post spans, Explore document summaries (full list in the bullet above) |
 
 When FEC metadata is ambiguous (e.g., entity_type "COM" could be a corporate
@@ -301,14 +301,20 @@ alias table. This prevents label fragmentation from diluting kNN vote weights.
 
 **No composite is displayed** (2026-10). The weighted Representation Score
 and its rank are not shown on any page; each is still computed for public
-API v1's deprecated `overall` and `rank` (removed in v2). What the site
+API v1's deprecated `overall` and `rank` (served through `schemas.API_V1_SUNSET`, then left out of
+responses by themselves, `public.strip_deprecated`). What the site
 shows is each measure against peers (`app/peer_comparison.py`): the member's
 figure, the seat-adjusted expected figure, the peers' distribution, and an
 evaluative word per measure ("well above / above / near / below / well below
 peers") from a fixed percentile rule whose cut points are conventions, served
 with every comparison as `rule`. The words are neutral about direction (above
 and below, never better and worse). Never add a page that ranks members by a
-blend of unlike measures, or a word not from that rule.
+blend of unlike measures, or a word not from that rule. The one row with
+words of its own is votes with the president on the measures page
+(`peer_comparison.president_row`, 2026-10): a senator has a few dozen such
+votes, too few for a percentile, so it says "more than / within / less than
+the seat's expected rate" from the member's 95% range, and every row there
+serves its rule (`rule`, `ruleText`) so the page states which one it follows.
 
 The representation sub-scores — Funding Independence, Constituent Alignment
 and Legislative Effectiveness (weighted, `SCORE_WEIGHTS`), plus the
@@ -496,12 +502,12 @@ The correct pattern, established by `_district_pvi()` /
    process-wide value — hand such work over with `asyncio.to_thread`) — so a process
    running across Jan 3 moves at its next job with no restart, and a job
    running across noon stays on one Congress. The read-only API process
-   runs no jobs; it advances the value on its liveness loop. An environment pin is the one thing that stops the switch: it
-   freezes the district lines as well as the windows, and
-   `check_current_congress_staleness` alerts once it falls behind. It exists only for re-running an archived
-   database; **the production `.env` must not set `CURRENT_CONGRESS`**
-   (`.env.example` leaves it commented out, and a test keeps it that
-   way). Every House run — the nightly
+   runs no jobs; it advances the value on its liveness loop. A pin is the one thing that stops the switch: it
+   freezes the district lines as well as the windows, and it exists only for re-running an archived
+   database, so it takes two settings, `ARCHIVE_MODE=true` and `CURRENT_CONGRESS`. Without
+   `ARCHIVE_MODE`, a `CURRENT_CONGRESS` in the environment is ignored (logged at start) and the
+   value follows the clock, so a line left in a production `.env` can never go stale
+   (`.env.example` leaves both commented out, and a test keeps it that way). Every House run — the nightly
    chain's and each triggered one (`/api/admin/pipeline/trigger`,
    `/trigger-house`, the token trigger) — goes through
    `run_house_on_sitting_lines`, which takes the `DISTRICT_LINES` lease,
@@ -634,8 +640,7 @@ which must trace back to a generating script and a data file, not a
 comment asserting "trust me, I ran a script once."
 
 A calibration fitted to **hand labels** (the Action Center's relevance,
-clustering, claim and actor gates, the trend-post gates, committee routing,
-the member-photo check) can't regenerate itself, and doesn't need to when
+clustering, claim and actor gates, the trend-post gates) can't regenerate itself, and doesn't need to when
 its labels change: each records the hash of its labels and a test fails
 until it is refit. What it can't see is the stream moving away from its
 labels. Each such gate reports what it decides (`calibration_drift.observe`,
@@ -654,10 +659,19 @@ paired difference lower; otherwise the fit in use stays and the refit is
 recorded with why (`precision_rule.compare`). Today that is the
 near-identical cut (issue pairs plus feed articles the text dates days
 apart, `action_center.fit_near_identical_cut`), the related-vote threshold
-(`roll_call_links.refit`, on `RollCallLinkLabel`) and the outlet reposts
-(`bluesky_engagement`, on `OutletPostLink`). A
-new calibrated gate is added to `calibration_drift.GATES` and observes its
-decisions.
+(`roll_call_links.refit`, on `RollCallLinkLabel`), the outlet reposts
+(`bluesky_engagement`, on `OutletPostLink`) and committee routing (bills'
+committee referrals and texts no committee handles,
+`scripts/calibrate_committee_routing.py`, run daily by `data_refresh` and
+installed through `data_refresh.precision_rule_accepts`); the member-photo
+check refits the same way with no label at all (mixtures over the stored
+face shares), its hand labels the held-out comparison. A new calibrated
+gate is added to `calibration_drift.GATES` and observes its decisions; one
+that refits itself through `data_refresh` is also listed in
+`calibration_drift.REFITTING` (drift then requests its refit, and alerts
+only if drift outlasts `REFIT_GRACE_DAYS` of refits) and `PARAMETERS` (its
+baseline follows the parameters, not the measurements a daily refit
+rewrites).
 
 ### 3b. Search ranking is measured, not asserted
 
@@ -1309,11 +1323,17 @@ stock-trades run (`pipeline/fetch/member_photos.py`, stored in
 `member_photos`): OpenCV's YuNet face detector measures each candidate's
 face height over its shorter side, and bioguide wins only when the
 depiction's face is below a head-and-shoulders share and bioguide's is
-clearly larger. Both numbers are fitted, not typed:
-`scripts/calibrate_member_photos.py` writes them to
-`app/data/member_photo_calibration.json` from a hand-labelled comparison of
-every current member's two photos (labels kept there with each image's
-hash; rerun when labelled photos change). OpenCV runs only in a child
+clearly larger. Both numbers are fitted, not typed, and refit daily from
+the stored shares alone (`scripts/calibrate_member_photos.py`, run by
+`data_refresh`): the ceiling is the lower 97.5% point of the dominant
+(headshot) component of a Gaussian mixture over every measured image's log
+face share, the margin the upper 99.9% point of the dominant component of
+each member's two-photo log ratio (one picture measured twice). The
+hand-labelled comparison of every member's two photos (labels in
+`member_photo_calibration.json` with each image's hash, matched against the
+hash the nightly run stores) is the held-out check under
+`precision_rule.accept`, never the fit, and each night every stored choice
+is decided again from its stored shares. OpenCV runs only in a child
 process started for the night's batch (`pipeline/fetch/face_detection.py`,
 which nothing in `app/` imports; `tests/test_member_photos.py` checks no app
 process loads `cv2`), so a native fault can't reach page serving or the
@@ -1610,8 +1630,8 @@ for the Senate and House runs, which rewrite the rows it updates.
 
 A gate's labels come from the data wherever the data supplies one (the
 relevance gate's publisher labels above). Hand labels are the exception, used
-only where it was checked that no data-supplied label exists (committee
-routing; the story-to-vote link, `app/roll_call_links.py`), and such a gate
+only where it was checked that no data-supplied label exists (the
+story-to-vote link, `app/roll_call_links.py`), and such a gate
 records each data-supplied label that turns up later for its next refit.
 
 Running beside the chain makes it a second writer on SQLite's one write
@@ -1655,19 +1675,26 @@ Each issue's actions are fixed templates around stored data:
   fingerprint like `live_results/`). Tier 2 and tier 3 together: each
   committee's subjects as House Rule X / Senate Rule XXV list them
   (`committee_jurisdictions.json`, `scripts/fetch_committee_jurisdictions.py`;
-  hubness-corrected, CSLS) blended with the votes of the nearest
-  hand-labelled issues (`committee_routing_examples.json`, an empty label
-  meaning no committee). It names a committee only when both signals pick
-  the same one and the combined share clears the threshold
-  (`committee_routing_calibration.json`, `scripts/calibrate_committee_routing.py`).
-  The threshold is chosen on the training issues by the Action Center's
-  precision rule (exact lower 95% bound ≥ 0.80, else the highest bound);
-  the held-out curve is written for reading, never chosen from. The rule is
-  not met yet (0.82 held out, bound 0.67), so the row is worded as a likely
-  match — keep that wording until a recalibration reports
-  `precision_rule_met_on_training: true` and the held-out bound agrees. The
-  test fails until the script is rerun after either data file changes. The rules' subjects alone were
-  measured at 0.38 held-out precision — do not drop the labelled votes to
+  hubness-corrected, CSLS) blended with the votes of the nearest labelled
+  texts the data supplies (`committee_routing.labelled_texts`): each stored
+  bill labelled with the committees its Congress.gov actions record it was
+  referred to (no request added: the pipeline already stores the actions),
+  and, as no committee's, feed articles filed under another desk naming no
+  official (the relevance gate's label 0) and race coverage. It names a
+  committee only when both signals pick the same one and the combined share
+  clears the threshold. `scripts/calibrate_committee_routing.py` refits it
+  daily (`data_refresh`), held out on blocks of consecutive days per kind,
+  the threshold the precision rule's lowest passing one, and installs it
+  only under `precision_rule.accept`; its reference and embeddings sit on
+  the data volume beside it. The row is worded as a likely match only while
+  the fit in use misses the bar held out (`precision_rule_met`, stored on
+  each action as `likely`). Measured 2026-10-23: held out 0.817 (bound
+  0.803) against the hand-labelled fit's 0.632 on the same decisions, and on
+  the 136 newest hand-labelled issues 36 of 38 right against 36 of 44. The
+  460 hand-labelled issues (`committee_routing_examples.json`) are the
+  bundled fallback until the first refit and every refit's held-out check,
+  never fitted to. The rules' subjects alone were measured at 0.38 held-out
+  precision — do not drop the labelled votes to
   "simplify". The chair and ranking member are read from the stored rosters
   when the issue is served (`api/action._committee_leaders`).
 - **"On the ballot"** for the states and races the issue's own words name
@@ -1921,8 +1948,16 @@ pronouns, no em dashes, no emoji, no year or Congress number
 **Ahead of each election** a nightly pre-check (`ops_alerts.check_election_readiness`)
 compares each cycle-specific data file with the election the calendar says
 is next and alerts, once its lead time begins, for what is missing: the
-cycle's entry in `redrawn_congressional_maps.json` (from January 1; an empty
-entry when no state redrew), a computed district lean for every state on
+cycle's entry in `redrawn_congressional_maps.json` (from January 1; derived
+weekly by `scripts/derive_redrawn_maps.py`, a `data_refresh` file, from the
+Census Bureau's block equivalency file for the Congress the election seats:
+a state is listed on the new map exactly when its blocks' districts differ
+from the map it voted on last, and must have a file of its own in the zip;
+an empty entry when none differ. It reproduces both researched cycles, 2024's
+five states and 2026's nine. The file arrives in the election's summer (the
+119th's 2024-07-29, the 120th's by 2026-08-31, re-released 2026-10-07 after
+a court order), so until then the cycle is unconfirmed and the alert says
+what was looked for), a computed district lean for every state on
 the seated Congress's lines (`district_lines.table_for_lines`, shared by the
 computed lean and the county and place crosswalks, carries the last table
 forward only for a state whose map didn't change, and only once the cycle
@@ -2467,7 +2502,8 @@ See `.env.example` for all options. Key variables:
 | `LLAMA_SERVER_URL` | No | llama.cpp server URL |
 | `DATABASE_URL` | No | SQLite path (`docker-compose.yml` sets `sqlite:////data/civitas.db`, the volume; the code default is the relative `sqlite:///data/civitas.db`) |
 | `BLS_API_KEY` | No | Bureau of Labor Statistics v2 registration key: lifts the jobs API from 25 to 500 requests a day; works without it |
-| `CURRENT_CONGRESS` | **Never in production** | Leave unset — computed from the clock. Setting it pins the scored windows *and* House members' district lines to that Congress past the next Jan 3; only for re-running an archived database |
+| `CURRENT_CONGRESS` | No | Computed from the clock. Ignored unless `ARCHIVE_MODE=true`, which pins the scored windows *and* House members' district lines to it: only for re-running an archived database |
+| `ARCHIVE_MODE` | No | `true` only to re-run an archived database: makes `CURRENT_CONGRESS` a pin |
 
 **On the production Pi, `.env` is a hand-edited, Pi-local file** (see
 "CI/CD" below for why — no GitHub Actions job ever touches the Pi
@@ -2475,11 +2511,10 @@ anymore, so there's no automated sync). To change a value: SSH in, edit
 `.env` directly, then redeploy. `.env.example` stays the source of truth
 for which variables exist and what they do; local development
 (`docker compose up -d`) uses its own real `.env` file the same way it
-always has. **The production `.env` must not set `CURRENT_CONGRESS`**:
-an `.env` copied from a template that once set it (`CURRENT_CONGRESS=119`,
-before 2026-09) pins the scored windows and the district lines on the
-119th Congress for good — check for the line and delete it
-(`check_current_congress_staleness` alerts once it has gone stale).
+always has. `ARCHIVE_MODE` is for an archived re-run only: an `.env`
+copied from a template that once set `CURRENT_CONGRESS=119` (before
+2026-09) does nothing without it, since outside archive mode the setting
+follows the clock.
 
 ### Database
 
@@ -2530,7 +2565,7 @@ the pending list).
 | Lobbying match + key vote selection (deterministic, no LLM) | `backend/app/pipeline/analyze/cross_reference.py` |
 | Action Center analysis (news → issues → monitors → timeline) | `backend/app/pipeline/analyze/action_center.py` |
 | Claim composer (verbatim spans, actor check: capitalised rule + prototype margin, threshold refit daily) | `backend/app/pipeline/analyze/post_composer.py`, `backend/app/data/claim_actor_threshold.json`, `backend/scripts/calibrate_claim_actor.py` |
-| Committee routing for issues (rules' jurisdictions + labelled issues) | `backend/app/committee_routing.py`, `backend/app/data/committee_*.json`, `backend/scripts/fetch_committee_jurisdictions.py`, `backend/scripts/calibrate_committee_routing.py` |
+| Committee routing for issues (rules' jurisdictions + bills labelled by their committee referrals, refit daily) | `backend/app/committee_routing.py`, `backend/app/data/committee_*.json`, `backend/scripts/fetch_committee_jurisdictions.py`, `backend/scripts/calibrate_committee_routing.py` |
 | Issue principal actor + weekly actor concentration (admin) | `backend/app/pipeline/analyze/story_actor.py`, `GET /api/admin/actor-concentration`, `frontend/src/components/admin/ActionCenterDashboard.tsx` |
 | A president among the other presidencies (strips, words; no score) | `backend/app/president_peers.py`, `frontend/src/components/scorecard/PresidentStanding.tsx` |
 | A president's term charted against the others (approval, jobs, growth) | `backend/app/president_charts.py`, `frontend/src/components/scorecard/PresidentCharts.tsx` |
@@ -2606,7 +2641,7 @@ the pending list).
 | Every dot-per-person strip: nearest-dot hover label (name, seat or years, figure, place on the row), one Tab stop with arrow keys, the tick label at its tick, the big figure's unit line | `frontend/src/components/shared/Strip.tsx` (`StripPoints`, `StripAxis`, `BigFigure`); the place from `backend/app/ordinals.rank_shown` |
 | Where a member stands among peers (per-measure figure, expected, percentile, word by a fixed rule, template sentence) | `backend/app/peer_comparison.py`, `GET /api/{senators,representatives}/{id}/peers`, public breakdown `peerComparison` |
 | Find your members (Congress › Members: Senate and House by state, town or county; `/politicians` redirects here) | `frontend/src/app/congress/members/MembersDirectory.tsx`, `GET /api/politicians`, `GET /api/politicians/house-districts` |
-| The chamber measure by measure (`/congress/members/measures`; replaced the leaderboard page, and `/leaderboard` redirects), compare's pair strips; the leaderboard API stays for the deprecated composite | `frontend/src/app/congress/members/measures/`, `frontend/src/components/compare/PairStrips.tsx`, `GET /api/congress/measures` (`peer_comparison.chamber_measures`); `backend/app/api/leaderboard.py`, `backend/app/score_display.py` (`score_spread`, `thin_dimensions`) |
+| The chamber measure by measure (`/congress/members/measures`: five rows, the fifth votes with the president on its own interval rule, linking its full page `/congress/president/<chamber>`, which is no menu's view; replaced the leaderboard page, and `/leaderboard` redirects), compare's pair strips; the leaderboard API stays for the deprecated composite | `frontend/src/app/congress/members/measures/`, `frontend/src/components/compare/PairStrips.tsx`, `GET /api/congress/measures` (`peer_comparison.chamber_measures`); `backend/app/api/leaderboard.py`, `backend/app/score_display.py` (`score_spread`, `thin_dimensions`) |
 | Site navigation: sections, main menu, footer (site pages only), section tabs and hub cards | `frontend/src/lib/routes.ts` (`SECTIONS`), `frontend/src/components/layout/Navbar.tsx`, `Footer.tsx`, `SectionTabs.tsx`, `frontend/src/components/sections/SectionCards.tsx`, `frontend/src/lib/sectionPreviews.ts`, `backend/app/api/sections.py` |
 
 | Homepage (masthead, "Entered into the record" front page: lead, tier and Congress/Agencies/news columns by a fixed rule, task boxes and registration closing) | `frontend/src/components/home/Masthead.tsx`, `FrontPage.tsx` and `YourMembersLink.tsx` (from `GET /api/front-page`, `backend/app/api/notable.py`), `HomeTasks.tsx`, `StateJump.tsx`; the source ledger is on `/about/data#sources` (`frontend/src/components/about/SourceLedger.tsx`, `backend/app/api/sources.py`) |
@@ -2672,7 +2707,11 @@ the pending list).
   FastAPI would otherwise never check the body against the documented shape. A CSV download (`…/x.csv`) declares
   `response_class=CsvResponse` and `_CSV_RESPONSES`, and is written and
   documented from one column list (`_csv`, `_csv_doc`): the contract test
-  checks its header against that list, and it is not an MCP tool.
+  checks its header against that list, and it is not an MCP tool. A field or column
+  being retired is marked deprecated (`json_schema_extra={"deprecated": True}`
+  with `default=None`; a column's description starting with
+  `_DEPRECATED_COLUMN`) and stops being served the day after
+  `schemas.API_V1_SUNSET` by itself, never by a person removing it on the day.
 - **A bill's id has one spelling in every response** (`HR.997`, `SJRES.138`;
   `app/bill_ids.py`). Stored records keep their source's spelling (a Senate
   roll call names "H.R. 997"), so the API's `JSONResponse`

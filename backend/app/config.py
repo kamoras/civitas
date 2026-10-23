@@ -1,4 +1,5 @@
 import datetime
+import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -10,15 +11,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from app.site_url import DEFAULT_SITE_URL, domain_of
 from app.time_utils import congress_in_session
 
+logger = logging.getLogger(__name__)
+
 
 def _default_current_congress(now: datetime.datetime | None = None) -> int:
     """The Congress in office when the process starts, computed rather than
     hardcoded so this never needs a manual bump after Jan 3 of an odd year
-    (previously a hardcoded literal that could only be caught by a separate
-    staleness alert an unattended operator might never see — see
-    ops_alerts.check_current_congress_staleness, kept for the case an
-    operator pins this via env for archived-DB reproducibility and that pin
-    itself goes stale).
+    (previously a hardcoded literal, then an environment value whose pin
+    could go stale; a pin is now honoured only with ARCHIVE_MODE, see
+    Settings.model_post_init).
 
     Noon ET on Jan 3 of an odd year (the 20th Amendment's hand-over,
     app.time_utils.congress_in_session), the same rule the district lines
@@ -44,8 +45,8 @@ _RUN_CONGRESS: ContextVar[int | None] = ContextVar("scoring_congress", default=N
 
 def advance_current_congress() -> int:
     """Bring settings.CURRENT_CONGRESS up to the Congress in office (noon ET
-    on Jan 3 of an odd year), unless an operator pinned it in the
-    environment. Never moves it back. Returns the value in effect in this
+    on Jan 3 of an odd year), unless it is pinned for an archive re-run
+    (ARCHIVE_MODE with CURRENT_CONGRESS). Never moves it back. Returns the value in effect in this
     context. Called at the start of every background job (via
     scoring_congress, which app.background.start_writer and writing()
     take) and by the API process periodically; a job's own hold is
@@ -172,6 +173,13 @@ class Settings(BaseSettings):
     SENATE_PTR_RPS: float = 0.5
     PRESIDENT_PTR_RPS: float = 0.5
     CURRENT_CONGRESS: int = Field(default_factory=_default_current_congress)
+    # Re-running the pipeline against an archived database from an earlier
+    # Congress: with this set, a CURRENT_CONGRESS in the environment pins the
+    # scored windows and the district lines to it. Without it, a
+    # CURRENT_CONGRESS in the environment is ignored and the value follows
+    # the clock, so a pin left in a production .env (one copied from an old
+    # .env.example that set 119) can never freeze the site on a dead Congress.
+    ARCHIVE_MODE: bool = False
     # Bluesky integration (leave BSKY_HANDLE empty to disable)
     BSKY_HANDLE: str = ""
     BSKY_APP_PASSWORD: str = ""
@@ -203,14 +211,24 @@ class Settings(BaseSettings):
     # docstring for why this gap needed its own watchdog at all.
     PIPELINE_STALE_ALERT_DAYS: float = 2.0
 
-    # Whether CURRENT_CONGRESS came from the environment (an operator's pin)
-    # rather than the clock default — recorded once, at construction, since
-    # model_fields_set also grows when code later assigns the field.
+    # Whether CURRENT_CONGRESS is pinned for an archive re-run (set in the
+    # environment with ARCHIVE_MODE) rather than following the clock —
+    # recorded once, at construction, since model_fields_set also grows when
+    # code later assigns the field.
     _current_congress_pinned: bool = PrivateAttr(default=False)
 
     def model_post_init(self, context) -> None:
         super().model_post_init(context)
-        self._current_congress_pinned = "CURRENT_CONGRESS" in self.model_fields_set
+        given = "CURRENT_CONGRESS" in self.model_fields_set
+        self._current_congress_pinned = given and self.ARCHIVE_MODE
+        if given and not self.ARCHIVE_MODE:
+            # Outside archive mode an environment value is not a pin: the
+            # clock decides (written to __dict__ so it stays unpinned).
+            ignored = self.__dict__["CURRENT_CONGRESS"]
+            self.__dict__["CURRENT_CONGRESS"] = _default_current_congress()
+            logger.warning(
+                "CURRENT_CONGRESS=%s in the environment is ignored without ARCHIVE_MODE; following the "
+                "clock (Congress %s)", ignored, self.__dict__["CURRENT_CONGRESS"])
 
     @property
     def current_congress_pinned(self) -> bool:

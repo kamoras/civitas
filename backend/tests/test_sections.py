@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from app.api import sections
 from app.database import get_db
 from app.main import app
-from app.models import CongressDay, PresidentialSupport, Representative, RollCall
+from app.models import CongressDay, RollCall
 
 
 def _get(db_session):
@@ -33,7 +33,7 @@ def test_nothing_read_is_null_or_a_reason_never_a_made_up_zero(db_session, freez
     assert set(body) == {"congress", "agencies", "elections"}
     assert body["congress"]["week"] is None
     assert body["congress"]["committees"] == {"count": 0, "metThisWeek": None}
-    assert body["congress"]["president"] == {"house": None, "senate": None}
+    assert "president" not in body["congress"]
     assert body["agencies"]["budget"] is None
     # The map page's own reason: not built (no file) here.
     assert body["elections"]["map"]["available"] is False and body["elections"]["map"]["reason"]
@@ -53,21 +53,6 @@ def test_counts_the_latest_week_and_month_congress_met(db_session, freeze_utcnow
     c = sections.congress(db_session)
     assert c["week"] == {"start": "2026-10-12", "recordVotes": 3}
     assert c["month"] == {"month": "2026-10", "recordVotes": 4}
-
-
-def test_votes_with_the_president_counts_serving_members_only(db_session):
-    db_session.add_all([
-        Representative(id="a", bioguide_id="A000001", name="A", state="OH", district=1, party="R", is_current=True),
-        Representative(id="b", bioguide_id="B000001", name="B", state="OH", district=2, party="D", is_current=True),
-        Representative(id="gone", bioguide_id="G000001", name="G", state="OH", district=3, party="D",
-                       is_current=False),
-        PresidentialSupport(chamber="house", member_id="a", congress=119, party="R", with_president=9, votes=10),
-        PresidentialSupport(chamber="house", member_id="b", congress=119, party="D", with_president=1, votes=10),
-        PresidentialSupport(chamber="house", member_id="gone", congress=119, party="D", with_president=0, votes=10),
-    ])
-    db_session.commit()
-    assert sections._president(db_session, "house") == {"rate": 0.5, "rollCalls": 0}
-    assert sections._president(db_session, "senate") is None
 
 
 def test_agencies(db_session):

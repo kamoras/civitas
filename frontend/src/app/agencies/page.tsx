@@ -90,7 +90,7 @@ function AgencyRow({
 
 /**
  * Every agency the Federal Register lists, findable by name (the budgets
- * are their own page, /agencies/budget, the "Budgets" card below). A plain GET
+ * are their own page, /executive/budgets, the "Budgets" card below). A plain GET
  * form over the server's render, so a search is a URL and works without
  * JavaScript.
  */

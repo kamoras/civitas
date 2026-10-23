@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import threading
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
@@ -89,13 +90,32 @@ def _start_job(target, *, name: str, alert: bool = False) -> None:
         if alert:
             from app.ops_alerts import send_ops_alert
 
+            _nightly_missed.set()
             send_ops_alert(
-                "Nightly pipeline skipped: data reset in progress",
-                f"{held}. Nothing ran tonight; trigger the pipeline once the reset has finished, or the "
-                "database stays empty until tomorrow night's run.",
+                "Nightly pipeline held off: data reset in progress",
+                f"{held}. The nightly chain did not start at its time; it starts as soon as the reset "
+                "finishes (run_missed_nightly).",
                 dedupe_key=f"nightly-skipped-reset-{utcnow():%Y-%m-%d}",
                 condition="nightly-skipped-reset",
             )
+
+
+# The nightly chain a data reset held off (_start_job), started when the
+# reset ends (api/admin.py's admin_reset_data). Admin routes and the
+# scheduler are both the pipeline process, so a flag in memory is whole.
+_nightly_missed = threading.Event()
+
+
+def run_missed_nightly() -> bool:
+    """Start the nightly chain a data reset held off; True when it did."""
+    if not _nightly_missed.is_set():
+        return False
+    _nightly_missed.clear()
+    from app.ops_alerts import resolve_ops_alert
+
+    resolve_ops_alert("nightly-skipped-reset")
+    _nightly_pipeline()
+    return True
 
 
 def warm_bills() -> None:
@@ -204,7 +224,7 @@ def reporter(run_name: str):
                 # House run held off by a stuck District PVI refresh).
                 f"The {link.label} pipeline did not start because "
                 f"{skip_reason_text(reason, who=(outcome.result or {}).get('holder'))}. "
-                f"{link.label} data will be a day stale unless triggered again. {rest}",
+                f"{link.label} data stays as the last run left it until the next nightly run. {rest}",
                 dedupe_key=f"skipped-{tag}",
                 condition=skipped,
             )
@@ -226,8 +246,8 @@ def reporter(run_name: str):
                 why = f"it ended {outcome.status} ({detail or 'see its run row'})"
             send_ops_alert(
                 f"{run_name} {link.label} run {'crashed' if outcome.status == CRASHED else 'failed'}",
-                f"{why}. The traceback is on the run row (admin, Pipelines). {link.label} data will be "
-                "a day stale unless triggered again. The rest of its chain still runs.",
+                f"{why}. The traceback is on the run row (admin, Pipelines). {link.label} data stays as "
+                "the last run left it until the next nightly run. The rest of its chain still runs.",
                 dedupe_key=f"crashed-{tag}",
                 condition=crashed,
             )
@@ -330,8 +350,6 @@ def _nightly_pipeline() -> None:
     uvicorn loop stays responsive during long-running pipeline phases.
     """
     from app.ops_alerts import (
-        check_api_v1_sunset,
-        check_current_congress_staleness,
         check_election_readiness,
         check_feedback_token_expiration,
         check_sitting_president,
@@ -345,9 +363,6 @@ def _nightly_pipeline() -> None:
         # warning about the chain, never a reason to skip it: one that
         # raises is logged and the pipelines still run.
         pre_checks = (
-            # CURRENT_CONGRESS fallen behind the calendar, before we score
-            # another day against a possibly-dead one.
-            check_current_congress_staleness,
             # FEEDBACK_TOKEN's mandatory PAT expiration — a real GitHub API
             # call, so this one is self-gated to run at most weekly.
             check_feedback_token_expiration,
@@ -366,9 +381,6 @@ def _nightly_pipeline() -> None:
             # (they refit by themselves, data_refresh; this says which
             # input a refit still waits on).
             check_election_map_training_staleness,
-            # Public API v1's deprecated fields past their dated sunset,
-            # and the unmeasured 0-100 transforms kept only to feed them.
-            check_api_v1_sunset,
         )
         for check in pre_checks:
             try:

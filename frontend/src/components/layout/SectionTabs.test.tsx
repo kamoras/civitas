@@ -4,7 +4,7 @@ import SectionTabs from "./SectionTabs";
 
 describe("SectionTabs", () => {
   it("is plain links, the current page marked, each target 44 px tall", () => {
-    render(<SectionTabs section="congress" active="president" />);
+    render(<SectionTabs section="congress" active="compare" />);
     const nav = screen.getByRole("navigation", { name: "Congress sections" });
     // Pages, not an in-page tab widget.
     expect(within(nav).queryByRole("tab")).not.toBeInTheDocument();
@@ -30,15 +30,12 @@ describe("SectionTabs", () => {
         .getAllByRole("link")
         .map((l) => [l.textContent, l.getAttribute("aria-current")])
     ).toEqual([
-      ["By the numbers", "true"],
+      ["By the numbers", null],
       ["Directory", null],
-      ["Compare", null],
+      ["Compare", "page"],
     ]);
-    const members = within(views).getByRole("group", { name: "By the numbers pages" });
-    const pages = within(members).getAllByRole("link");
-    expect(pages.map((l) => l.textContent)).toEqual(["By the numbers", "Votes with the president"]);
-    expect(pages[1]).toHaveAttribute("aria-current", "page");
-    expect(pages[1]).toHaveAttribute("href", "/congress/president/house");
+    // Votes with the president is By the numbers' fifth row, not a view.
+    expect(within(views).queryByRole("group", { name: "By the numbers pages" })).toBeNull();
     for (const l of [...within(views).getAllByRole("link")])
       expect(l.className).toContain("min-h-11");
   });

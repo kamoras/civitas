@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { pageMetadata } from "@/lib/site";
+import { MEASURES_HREF } from "@/lib/routes";
 import {
   AboutPage,
   Summary,
@@ -680,7 +681,10 @@ export default function ScoresChapter() {
           <Box
             title="The president's side, from the White House"
             dek="How often a member voted on the president's side, beside similar seats. The side comes only from a signed statement."
-            links={[{ label: "Chamber pages", href: "/congress/president/house" }]}
+            links={[
+              { label: "By the numbers", href: MEASURES_HREF },
+              { label: "Chamber pages", href: "/congress/president/house" },
+            ]}
             more="which votes count"
           >
             <P>
@@ -693,6 +697,15 @@ export default function ScoresChapter() {
               chamber&apos;s final vote on a measure counts, or a vote on an amendment a statement
               names: no statement addresses a procedural vote. A statement that takes no position on
               passage counts no vote.
+            </P>
+            <P>
+              It is the fifth row of <Link href={MEASURES_HREF}>By the numbers</Link>, every member
+              of a chamber at once, with its own word rule rather than the peer percentile words the
+              other four rows follow: a senator had about 27 such votes (measured October 2026), too
+              few to place among peers. So the row says &ldquo;more than&rdquo;,
+              &ldquo;within&rdquo; or &ldquo;less than the seat&apos;s expected rate&rdquo; from the
+              range below, and a member with fewer than 20 counted votes draws no word there or on
+              the profile.
             </P>
           </Box>
           <Box
