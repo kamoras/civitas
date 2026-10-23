@@ -1765,24 +1765,21 @@ fits the four scoring weights and the two jump thresholds on half the
 entities and reports on the other half
 (`app/data/site_search_calibration.json`). A wrong jump is worse than a
 list, so the thresholds allow no wrong jump in any probe type on the fit
-half. On the live index (the refit of 2026-10-21 in the calibration file), held out from the fit:
+half; a jump is wrong when it lands anywhere but the probe's own page (an ambiguous query's other pages have probes of their own, so it still never jumps on one). The pipeline refits it itself (§3a's acceptance rule, AGENTS.md §3b). On a copy of the production index (the refit of 2026-10-23 in the calibration file), held out from the fit:
 
 | Probe type | Probes | Right page first | Straight there | Wrong jump |
 |---|---|---|---|---|
-| Name | 403 | 100% | 96.7% | 0 |
-| Surname | 309 | 100% | 97.6% | 0 |
-| Acronym | 214 | 100% | 93.6% | 0 |
-| Identifier | 416 | 100% | 100% | 0 |
-| Typo | 406 | 99.5% | 74.2% | 0 |
-| Page | 91 | 100% | 89.8% | 1 |
-| Section words | 410 | 100% | 99.8% | 0 |
-| Document title | 395 | 95.7% | 93.5% | 0 |
+| Name | 403 | 100% | 98.5% | 0 |
+| Surname | 309 | 100% | 81.2% | 1 |
+| Acronym | 214 | 100% | 94.9% | 0 |
+| Identifier | 417 | 100% | 100% | 0 |
+| Typo | 408 | 99.5% | 96.6% | 0 |
+| Page | 96 | 100% | 97.9% | 0 |
+| Section words | 410 | 100% | 100% | 0 |
+| Document title | 397 | 95.5% | 71.3% | 0 |
 | Prefix (in the first 8) | 413 | 100% | | |
 
-All 2,644: 93.3% straight to the right page with one Enter, one wrong jump
-(a site-page probe); p50 8 ms, p95 40 ms per query in that run (the whole
-read path, Explore's title search included). "Straight there" counts the unambiguous
-probes; an ambiguous one (two pages of one name) that lists is right.
+All 2,654: 92.3% straight to the right page with one Enter, one wrong jump (a surname); p50 9 ms, p95 42 ms per query in that run (the whole read path, Explore's title search included). "Straight there" counts every probe, an ambiguous one included (it lists, never jumps: two members of one surname, a document title other documents share). Against the calibration it replaced, on the same held-out probes (per probe, the reciprocal rank of its page plus 1 for a right jump), the refit gained 0.059 (standard error 0.005), most on typos (+0.25) and site pages (+0.10), with no type worse: it jumps at a margin of 0.02 where the old one needed 0.3. It became possible when the harness stopped counting a jump to the probe's own page as wrong: until then Record speeches titled "Illinois" or "ICE" made those names ambiguous and the full refit of 2026-10-22 turned jumping off (#1248).
 
 **Privacy.** Nothing a reader types is kept. Answers are cached only in the
 reader's browser (`Cache-Control: private`), never in nginx's cache on disk;

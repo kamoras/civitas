@@ -435,3 +435,94 @@ def test_the_candidate_pool_is_the_fitted_one(index):
     _, wide_hits = site_search.gather("john", index, None, fitted)
     _, narrow_hits = site_search.gather("john", index, None, narrow)
     assert len(narrow_hits) < len(wide_hits)
+
+
+# ── The calibration harness (scripts/calibrate_site_search.py) ───
+
+def _harness():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("calibrate_site_search", BACKEND / "scripts" / "calibrate_site_search.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_a_jump_to_the_probes_own_page_is_right_when_a_bare_titled_document_shares_its_name(tmp_path):
+    """#1248: Record speeches titled "Illinois" and "ICE" made the state's and
+    the agency's names ambiguous, every jump to their own pages counted as
+    wrong, no threshold met the zero-wrong-jumps rule and the refit turned
+    direct navigation off. A jump is wrong only when it lands elsewhere."""
+    h = _harness()
+    path = str(tmp_path / "site_search.db")
+    # Found by key only, as every Explore document is: never listed for the
+    # word, but its title is in the index's names.
+    write_index(_fixture_entities() + [Entity("document", "Texas", "/explore/9", "Congressional Record", 0.5,
+                                              words=False)], path, "fp")
+    probes = [p for p in h.probes(path, None) if p["type"] == "name" and p["q"] == "Texas"]
+    assert probes and probes[0]["ambiguous"]  # the speech shares the name
+    p = site_search.params()
+    gathered = [(probe, *site_search.gather(probe["q"], path, None, p)) for probe in probes]
+    floor, margin = h.fit_direct(gathered, p)
+    # Counted as wrong, the jump left no pair passing, and the fit fell back
+    # to its no-jump corner (1.0, 0.4).
+    assert (floor, margin) != (1.0, 0.4)
+    a = answer("Texas", path, None, replace(p, direct_floor=floor, direct_margin=margin))
+    assert a.direct is not None and a.direct.url == "/elections/states/TX"
+    assert h.wrong_jumps(probes, path, None, replace(p, direct_floor=floor, direct_margin=margin)) == []
+
+
+def test_a_query_two_probes_share_still_never_jumps(index):
+    """Two members called John Smith: each has a probe by the surname, so a
+    jump on "smith" is right for one and wrong for the other, and no
+    threshold that jumps on it passes."""
+    h = _harness()
+    probes = [p for p in h.probes(index, None) if p["q"] == "smith"]
+    assert {p["url"] for p in probes} == {"/politicians/john-smith", "/politicians/john-smith-ny"}
+    p = site_search.params()
+    gathered = [(probe, *site_search.gather(probe["q"], index, None, p)) for probe in probes]
+    floor, margin = h.fit_direct(gathered, p)
+    assert answer("smith", index, None, replace(p, direct_floor=floor, direct_margin=margin)).direct is None
+
+
+def test_the_harness_compares_the_refit_with_the_copy_in_use(index):
+    """The comparison the refresh's acceptance rule reads: per probe, the
+    reciprocal rank plus 1 for a right jump; a refit that turns jumping off
+    loses on every type that jumped."""
+    h = _harness()
+    probes = [p for p in h.probes(index, None) if p["k"] == 1]
+    current = site_search.params()
+    never = replace(current, direct_floor=2.0)
+    c = h.compare(probes, index, None, never, current)
+    assert c["delta"] < -c["se"]
+    assert any(v["delta"] < 0 for v in c["subgroups"].values())
+    same = h.compare(probes, index, None, current, current)
+    assert same["delta"] == 0 and same["se"] == 0
+
+
+def test_site_search_reads_the_refreshed_calibration():
+    from app import data_refresh
+    from app.atomic_write import runtime_data_path
+    bundled = site_search.params()
+    path = Path(runtime_data_path("site_search_calibration.json"))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"params": {"direct_floor": 0.99}}))
+    try:
+        assert site_search.params().direct_floor == 0.99
+    finally:
+        path.unlink()
+        data_refresh._read_cache.pop("site_search_calibration.json", None)
+    assert site_search.params() == bundled
+
+
+def test_a_members_whole_name_goes_to_the_member_not_a_section(tmp_path):
+    """"bill" is Legislative Effectiveness's section word, and "Bill
+    Huizenga" jumped to that section of his page (2026-10-23): a query
+    that is a page's whole name means the page."""
+    path = str(tmp_path / "site_search.db")
+    write_index(_fixture_entities() + [Entity("member", "Bill Huizenga", "/politicians/bill-huizenga",
+                                              "Representative · R-MI-4", 1.0)], path, "fp")
+    a = answer("Bill Huizenga", path)
+    assert a.direct is not None and a.direct.url == "/politicians/bill-huizenga"
+    # Section words beside a name still land on the section.
+    donors = answer("Bill Huizenga donors", path)
+    assert donors.direct is not None and donors.direct.url.startswith("/politicians/bill-huizenga#")
