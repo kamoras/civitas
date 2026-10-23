@@ -3,9 +3,6 @@ import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
-import BoxGrid from "@/components/shared/BoxGrid";
-import RecordBox from "@/components/shared/RecordBox";
-import type { StatFigure } from "@/types/figure";
 import FollowFeed from "@/components/shared/FollowFeed";
 import { TOPIC_FEEDS } from "@/lib/site";
 import type { MonthReport, PeriodDay, PeriodReport } from "@/types/congress";
@@ -126,19 +123,12 @@ function BillList({
 export default function PeriodReportView({
   report,
   kind,
-  lead,
   strip,
-  hub,
 }: {
   report: PeriodReport | MonthReport;
   kind: "week" | "month";
-  /** /congress during a recess: the masthead says Congress is out and
-   *  introduces this week as the last one with business. */
-  lead?: { title: string; body: ReactNode; figure?: StatFigure | null };
   /** The "this week" strip, rendered by the server page. */
   strip?: ReactNode;
-  /** The section hub's cards (/congress only), rendered by the server page. */
-  hub?: ReactNode;
 }) {
   const { senate, house } = report.totals;
   const title =
@@ -146,10 +136,6 @@ export default function PeriodReportView({
       ? `Week of ${longDate(report.start).replace(/^\w+, /, "")}`
       : monthLabel(report.start.slice(0, 7));
   const pending = senate.daysPending + house.daysPending;
-  // In a recess the week is the last one with business, under the page's
-  // own lead: its lists fold behind their headings (each says its count),
-  // and the full week is a tab away.
-  const folded = Boolean(lead);
   // A neighbour only when it has a record to show (the API says null past
   // either end of the record).
   const step = (period: string | null) =>
@@ -165,14 +151,9 @@ export default function PeriodReportView({
       <Navbar />
       <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
         <div className="mx-auto max-w-6xl">
-          {/* /congress in a recess is still the Today tab, showing a week. */}
-          <SectionTabs section="congress" active={lead ? "reports" : kind} />
-          <PageMasthead
-            className="mb-6"
-            eyebrow="What happened on the floor"
-            title={lead?.title ?? title}
-          >
-            {lead ? null : <p>{report.sentence}</p>}
+          <SectionTabs section="congress" active={kind} />
+          <PageMasthead className="mb-6" eyebrow="What happened on the floor" title={title}>
+            <p>{report.sentence}</p>
             {pending > 0 && (
               <p className="mt-1 font-sans text-small text-ink-min">
                 {pending} session {pending === 1 ? "day is" : "days are"} still on the live floor
@@ -181,27 +162,10 @@ export default function PeriodReportView({
             )}
             <FollowFeed className="mt-2" subject="Congress" feed={TOPIC_FEEDS.congress} />
           </PageMasthead>
-          {/* In a recess, one box led by the days since the last business:
-              the last week of business as its title and its sentence as
-              its line, when each chamber next sits behind its More. */}
-          {lead && (
-            <BoxGrid columns={1} className="mb-6">
-              <RecordBox
-                level={2}
-                kicker="Last week of business"
-                title={title}
-                href={weekHref(report.start)}
-                dek={report.sentence}
-                figure={lead.figure ?? null}
-                more={{ label: "when Congress sits next", children: lead.body }}
-              >
-                <SourceLine>Source: {RECORD_SOURCE}.</SourceLine>
-              </RecordBox>
-            </BoxGrid>
-          )}
           <PeriodNav
             active={kind}
             hrefs={{
+              congress: "/congress",
               day: dayHref(report.start),
               week: weekHref(report.start),
               month: monthHref(report.start),
@@ -210,7 +174,6 @@ export default function PeriodReportView({
             next={next}
           />
           {strip}
-          {hub}
           <div className="mt-8 grid grid-cols-1 gap-8 md:grid-cols-2">
             <FigureGroup name="Senate">
               <Figure
@@ -268,7 +231,7 @@ export default function PeriodReportView({
 
           <div className="mt-10 grid grid-cols-1 gap-12 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
             <div className="flex min-w-0 flex-col gap-6">
-              <Section level={2} title="Record votes" count={report.votes.length} folded={folded}>
+              <Section level={2} title="Record votes" count={report.votes.length}>
                 {report.votes.length ? (
                   <ul className="flex flex-col">
                     {report.votes.map((v) => (
@@ -286,12 +249,7 @@ export default function PeriodReportView({
             </div>
             <div className="flex min-w-0 flex-col gap-6">
               {report.becameLaw.length > 0 && (
-                <Section
-                  level={2}
-                  title="Became law"
-                  count={report.becameLaw.length}
-                  folded={folded}
-                >
+                <Section level={2} title="Became law" count={report.becameLaw.length}>
                   <BillList items={report.becameLaw} />
                 </Section>
               )}
@@ -299,7 +257,6 @@ export default function PeriodReportView({
                 level={2}
                 title="Passed both chambers"
                 count={report.passedBothChambers.length}
-                folded={folded}
               >
                 {report.passedBothChambers.length ? (
                   <BillList items={report.passedBothChambers} />
@@ -307,12 +264,7 @@ export default function PeriodReportView({
                   <Empty>None.</Empty>
                 )}
               </Section>
-              <Section
-                level={2}
-                title="Passed one chamber"
-                count={report.passedOneChamber.length}
-                folded={folded}
-              >
+              <Section level={2} title="Passed one chamber" count={report.passedOneChamber.length}>
                 {report.passedOneChamber.length ? (
                   <BillList items={report.passedOneChamber} />
                 ) : (
@@ -320,7 +272,7 @@ export default function PeriodReportView({
                 )}
               </Section>
               {report.closestVotes.length > 0 && (
-                <Section level={2} title="Closest votes" folded={folded}>
+                <Section level={2} title="Closest votes">
                   <ul className="flex flex-col">
                     {report.closestVotes.map((v) => (
                       <li

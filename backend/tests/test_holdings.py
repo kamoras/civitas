@@ -1632,15 +1632,20 @@ class TestPhaseTable:
             calls.append("president")
             return 3
 
+        async def scans(_db, _client):
+            calls.append("scans")
+            return 4
+
         steps = list(reversed(holdings_pipeline.HOLDINGS_STEPS))
         with patch.object(holdings_pipeline, "HOLDINGS_STEPS", steps), \
              patch.object(holdings_pipeline, "ingest_house_holdings", house), \
              patch.object(holdings_pipeline, "ingest_senate_holdings", senate), \
-             patch.object(holdings_pipeline, "ingest_president_holdings", president):
+             patch.object(holdings_pipeline, "ingest_president_holdings", president), \
+             patch.object(holdings_pipeline, "ingest_scan_pages", scans):
             counts, errors = await holdings_pipeline.run_holdings_phases(MagicMock(), None, MagicMock())
         assert (calls, counts, errors) == (
-            ["president", "senate", "house"],
-            {"president_holdings": 3, "senate_holdings": 2, "house_holdings": 1}, [],
+            ["scans", "president", "senate", "house"],
+            {"scan_pages": 4, "president_holdings": 3, "senate_holdings": 2, "house_holdings": 1}, [],
         )
 
 
@@ -1665,6 +1670,7 @@ class TestNoteAndPhaseEdges:
              patch.object(holdings_pipeline, "ingest_house_holdings", house), \
              patch.object(holdings_pipeline, "ingest_senate_holdings", house), \
              patch.object(holdings_pipeline, "ingest_president_holdings", house), \
+             patch.object(holdings_pipeline, "ingest_scan_pages", house), \
              patch.object(holdings_pipeline, "send_ops_alert"):
             counts, errors = await holdings_pipeline.run_holdings_phases(MagicMock(), None, MagicMock())
         assert counts["house_holdings"] == 1 and len(errors) == 1 and "unregistered_holdings" in errors[0]
@@ -1747,14 +1753,13 @@ class TestDuplicateRows:
     def test_a_row_repeated_across_pages_is_counted_once(self):
         from app.pipeline.fetch import senate_ptr
 
-        by_id: dict = {}
-        unparsed: set = set()
+        found = senate_ptr._Found()
         page = [{"url": "a"}, {"url": "b"}, {"url": None, "n": 1}]
         with patch.object(senate_ptr, "_parse_search_row",
                           side_effect=lambda r: {"report_url": f"https://e/view/annual/{r['url']}/"} if r["url"] else None):
-            senate_ptr._collect_rows(by_id, unparsed, page)
-            senate_ptr._collect_rows(by_id, unparsed, [{"url": "b"}, {"url": "c"}, {"url": None, "n": 1}])
-        assert (sorted(by_id), len(unparsed)) == (["a", "b", "c"], 1)
+            senate_ptr._collect_rows(found, page)
+            senate_ptr._collect_rows(found, [{"url": "b"}, {"url": "c"}, {"url": None, "n": 1}])
+        assert (sorted(found.by_id), len(found.unparsed), found.repeated) == (["a", "b", "c"], 1, {"b"})
 
     async def test_a_house_document_listed_twice_is_fetched_once(self, db_session, rep):
         filing = _house_filing("10078188")

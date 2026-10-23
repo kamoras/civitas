@@ -18,22 +18,23 @@ describe("SectionTabs", () => {
       "Committees",
       "Nominations",
     ]);
-    // The page is a view of Reports: the tab holds it, the view is it.
-    expect(links[0]).toHaveAttribute("aria-current", "true");
+    // The page is a view of Members: the tab holds it, the view is it.
+    expect(links[1]).toHaveAttribute("aria-current", "true");
     expect(links.filter((l) => l.hasAttribute("aria-current"))).toHaveLength(1);
     for (const l of links) expect(l.className).toContain("min-h-11");
 
     const views = nav.querySelector<HTMLElement>("[data-section-views]")!;
-    const reports = within(views).getByRole("group", { name: "Reports pages" });
+    const tabViews = within(views).getByRole("group", { name: "Members pages" });
     expect(
-      within(reports)
+      within(tabViews)
         .getAllByRole("link")
         .map((l) => [l.textContent, l.getAttribute("aria-current")])
     ).toEqual([
-      ["Floor", null],
-      ["Members", "true"],
+      ["By the numbers", "true"],
+      ["Directory", null],
+      ["Compare", null],
     ]);
-    const members = within(views).getByRole("group", { name: "Members pages" });
+    const members = within(views).getByRole("group", { name: "By the numbers pages" });
     const pages = within(members).getAllByRole("link");
     expect(pages.map((l) => l.textContent)).toEqual(["By the numbers", "Votes with the president"]);
     expect(pages[1]).toHaveAttribute("aria-current", "page");
@@ -42,11 +43,11 @@ describe("SectionTabs", () => {
       expect(l.className).toContain("min-h-11");
   });
 
-  it("leaves the floor's Day, Week and Month to the page's own toggle", () => {
+  it("leaves Reports' This Congress, Day, Week and Month to the page's own toggle", () => {
     render(<SectionTabs section="congress" active="week" />);
-    const views = document.querySelector<HTMLElement>("[data-section-views]")!;
-    expect(within(views).getAllByRole("group")).toHaveLength(1);
-    expect(within(views).getByRole("link", { name: "Floor" })).toHaveAttribute(
+    expect(document.querySelector("[data-section-views]")).toBeNull();
+    const row = document.querySelector<HTMLElement>("[data-section-row]")!;
+    expect(within(row).getByRole("link", { name: "Reports" })).toHaveAttribute(
       "aria-current",
       "true"
     );

@@ -213,13 +213,10 @@ function ChamberColumn({ day }: { day: ChamberDay }) {
 export default function DayReportView({
   report,
   strip,
-  hub,
 }: {
   report: DayReport;
   /** The "this week" strip, rendered by the server page. */
   strip?: ReactNode;
-  /** The section hub's cards (/congress only), rendered by the server page. */
-  hub?: ReactNode;
 }) {
   const { senate, house } = report.chambers;
   const sources = (["senate", "house"] as const)
@@ -230,7 +227,7 @@ export default function DayReportView({
       <Navbar />
       <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
         <div className="mx-auto max-w-6xl">
-          <SectionTabs section="congress" active="reports" />
+          <SectionTabs section="congress" active="day" />
           <PageMasthead
             className="mb-6"
             eyebrow="What happened on the floor"
@@ -242,6 +239,7 @@ export default function DayReportView({
           <PeriodNav
             active="day"
             hrefs={{
+              congress: "/congress",
               day: dayHref(report.date),
               week: weekHref(report.date),
               month: monthHref(report.date),
@@ -258,7 +256,6 @@ export default function DayReportView({
             }
           />
           {strip}
-          {hub}
           <div className="mt-8 grid grid-cols-1 gap-8 md:grid-cols-2">
             <FigureGroup name="Senate">
               <Figure

@@ -277,7 +277,7 @@ export function articleJsonLd(issue: ActionIssue) {
  * (`mode`): the live count from the first state's last polls closing
  * until the results window closes (backend election_phase); on election
  * day before then, no count yet and — as all day — no partisan lean; the
- * rest of the time a ballot-research index with its lean map. The results
+ * rest of the time a ballot-research index with each state's lean. The results
  * wording is kept under metaDescription's 160 characters, so the part that
  * says Civitas calls no race is never the part cut off.
  */
