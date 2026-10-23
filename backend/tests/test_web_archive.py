@@ -10,6 +10,7 @@ import hashlib
 import json
 from datetime import date
 from pathlib import Path
+from urllib.parse import urlparse
 
 import httpx
 import pytest
@@ -51,7 +52,7 @@ def test_captured_on_reads_only_a_wayback_address():
 def _archive(rows_by_url: dict, bodies: dict, seen: list):
     def answer(request: httpx.Request) -> httpx.Response:
         seen.append(str(request.url))
-        assert "archive.org" in request.url.host  # never the walled host
+        assert request.url.host == "web.archive.org"  # never the walled host
         assert "Civitas/1.0" in request.headers["user-agent"]
         if request.url.path == "/cdx/search/cdx":
             return httpx.Response(200, json=rows_by_url.get(request.url.params["url"], []))
@@ -96,7 +97,7 @@ async def test_no_capture_and_off_host_addresses_are_no_copy(ballot_pages):
     seen = []
     async with _archive({}, {}, seen) as client:
         assert await oh.fetch_archived(client, 2026, [BALLOT, "https://county.example.gov/ballot.pdf"]) is None
-    assert not any("county.example.gov" in u for u in seen)
+    assert all(urlparse(u).hostname == "web.archive.org" for u in seen)
 
 
 @pytest.mark.asyncio
