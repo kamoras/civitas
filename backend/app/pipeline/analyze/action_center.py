@@ -69,7 +69,7 @@ from app.models import (
 )
 from app.pipeline.analyze import action_metrics
 from app.committee_routing import route_committees
-from app import calibration_drift, roll_call_links
+from app import calibration_drift, precision_rule, roll_call_links
 from app.person_names import (
     APOSTROPHES as _APOSTROPHES,
     RecordName as _RecordName,
@@ -451,22 +451,93 @@ def _json_set_list(raw) -> list:
     return value if isinstance(value, list) else []
 
 
-def fit_near_identical_cut(issues: Sequence) -> dict | None:
+def stated_day_negatives(articles: Sequence[tuple[str, str, datetime]]) -> list[tuple[int, int]]:
+    """Pairs of (title, description, published) articles published within
+    REMATCH_WINDOW_DAYS of each other that share a distinctive entity and
+    whose own text dates them days apart (days_disagree): two occasions, the
+    clustering fit's label (fit_cluster_cut) at the issue rematch's reach."""
+    when = [p for _, _, p in articles]
+    days = [stated_days(f"{t} {d}", p.date()) for t, d, p in articles]
+    signatures = [_issue_signature(t, [d]) for t, d, _ in articles]
+    df: Counter = Counter()
+    for s in signatures:
+        df.update(s)
+    window = timedelta(days=REMATCH_WINDOW_DAYS)
+    order = sorted(range(len(articles)), key=lambda n: when[n])
+    pairs = []
+    for a, i in enumerate(order):
+        for j in order[a + 1:]:
+            if when[j] - when[i] > window:
+                break
+            if days_disagree(days[i], days[j]) and _shares_distinctive_entity(
+                    signatures[i], signatures[j], df, len(articles)):
+                pairs.append((i, j))
+    return pairs
+
+
+# Blocks of consecutive days the near-identical refit is held out on.
+NEAR_IDENTICAL_FOLDS = 4
+
+
+def fit_near_identical_cut(issues: Sequence, articles: Sequence[tuple[str, str, datetime]] = (),
+                           in_use: float | None = None) -> dict | None:
     """The near-identical title cut (comment above near_identical_cut): the
     lowest cosine no data-labelled different-story pair reaches, plus
-    CUT_MARGIN, with the share of same-story pairs it would join. None with
-    fewer than MIN_HARD_NEGATIVES different-story pairs."""
+    CUT_MARGIN, with the share of same-story pairs it would join. The
+    different-story pairs are the issues' own (near_identical_pairs) and
+    the feed articles' stated-day pairs (stated_day_negatives): an issue's
+    title is an outlet's headline, scored the same way. None with fewer than
+    MIN_HARD_NEGATIVES different-story pairs.
+
+    With `in_use`, the same fit is held out on NEAR_IDENTICAL_FOLDS blocks of
+    consecutive days (fitted on the other blocks' different-story pairs) and
+    compared with the cut in use on the same pairs (precision_rule.compare);
+    `kept` says why the cut in use stays (precision_rule.accept), or is
+    None when the refit is adopted."""
     pairs = near_identical_pairs(issues)
-    negatives = [(i, j) for i, j, same in pairs if not same]
-    positives = [(i, j) for i, j, same in pairs if same]
-    if len(negatives) < MIN_HARD_NEGATIVES:
+    article_pairs = stated_day_negatives(articles)
+    if sum(not same for _, _, same in pairs) + len(article_pairs) < MIN_HARD_NEGATIVES:
         return None
     vectors = _embed_texts_sim([r.title or "" for r in issues])
-    fitted = _zero_merge_cut([float(vectors[i] @ vectors[j]) for i, j in negatives])
-    threshold = round(min(fitted + CUT_MARGIN, 0.99), 2)
-    joined = sum(float(vectors[i] @ vectors[j]) >= threshold for i, j in positives)
-    return {"threshold": threshold, "fitted": fitted, "margin": CUT_MARGIN, "negatives": len(negatives),
-            "positives": len(positives), "positives_joined": joined}
+    issue_days = [date.fromisoformat(str(r.date)[:10]) for r in issues]
+    scores, same_story, days = [], [], []
+    for i, j, same in pairs:
+        scores.append(float(vectors[i] @ vectors[j]))
+        same_story.append(same)
+        days.append(max(issue_days[i], issue_days[j]).toordinal())
+    if article_pairs:
+        titles = _embed_texts_sim([t for t, _, _ in articles])
+        for i, j in article_pairs:
+            scores.append(float(titles[i] @ titles[j]))
+            same_story.append(False)
+            days.append(max(articles[i][2], articles[j][2]).date().toordinal())
+    scores, same_story, days = np.array(scores), np.array(same_story, bool), np.array(days)
+
+    def cut(negatives: np.ndarray) -> float:
+        return round(min(_zero_merge_cut(negatives.tolist()) + CUT_MARGIN, 0.99), 2)
+
+    threshold = cut(scores[~same_story])
+    out = {"threshold": threshold, "fitted": _zero_merge_cut(scores[~same_story].tolist()), "margin": CUT_MARGIN,
+           "negatives": int((~same_story).sum()), "article_negatives": len(article_pairs),
+           "positives": int(same_story.sum()), "positives_joined": int((scores[same_story] >= threshold).sum())}
+    if in_use is None:
+        return out
+    # A block is scored only when the other blocks hold enough different-
+    # story pairs to fit on, and both cuts are compared on the same blocks.
+    fold = precision_rule.fold_of(days, NEAR_IDENTICAL_FOLDS)
+    passed = np.zeros(len(scores), bool)
+    scored = np.zeros(len(scores), bool)
+    for f in range(NEAR_IDENTICAL_FOLDS):
+        test = fold == f
+        train_negatives = scores[~test & ~same_story]
+        if not test.any() or len(train_negatives) < MIN_HARD_NEGATIVES:
+            continue
+        scored |= test
+        passed[test] = scores[test] >= cut(train_negatives)
+    out["in_use"] = in_use
+    out["held_out"] = precision_rule.compare(same_story[scored], passed[scored], scores[scored] >= in_use)
+    out["kept"] = precision_rule.accept(out["held_out"])
+    return out
 
 
 def refit_cuts(db: Session) -> None:
@@ -489,14 +560,30 @@ def refit_cuts(db: Session) -> None:
         except ValueError:
             facts = []
         issues.append((row.id, row.date, [row.summary or "", *facts]))
-    near_rows = db.query(ActionIssue).filter(ActionIssue.source_type.is_(None), ActionIssue.date >= issue_since).all()
+    # The near-identical fit reads every stored issue and kept article: its
+    # same-story pairs are rare in any few weeks (9 in the three weeks to
+    # 2026-10-22), and it is held out on blocks of days.
+    near_rows = db.query(ActionIssue).filter(ActionIssue.source_type.is_(None)).all()
+    near_articles = [(r.title, r.description, r.published or r.seen_at)
+                     for r in db.query(FeedArticle).filter(FeedArticle.kept.is_(True))]
     fits = {"cluster": fit_cluster_cut(articles), "restatement": fit_restatement_cut(issues),
-            "near_identical": fit_near_identical_cut(near_rows)}
+            "near_identical": fit_near_identical_cut(near_rows, near_articles, in_use=near_identical_cut())}
     for key, fitted in fits.items():
         if fitted is None:
             logger.info("Cut refit (%s): too few pairs the data labels; the stored cut stands", key)
             continue
         fitted["date"] = today
+        if fitted.get("kept"):
+            # Measured and not adopted: the cut in use stays, and the refit,
+            # with why, is kept beside it for the record.
+            logger.info("Cut refit (%s) not adopted: %s", key, fitted["kept"])
+            try:
+                with db.begin_nested():
+                    api_cache_set(db, _CUTS_TIER, f"{key}-refit", fitted, normal_ttl_hours=_CUTS_TTL_HOURS,
+                                  commit=False)
+            except Exception:
+                logger.warning("Cut refit (%s) record not stored", key, exc_info=True)
+            continue
         try:
             with db.begin_nested():
                 api_cache_set(db, _CUTS_TIER, key, fitted, normal_ttl_hours=_CUTS_TTL_HOURS, commit=False)
@@ -574,16 +661,19 @@ ACTION_CENTER_PROMPT_VERSION = "action-v21"
 _RETIREMENT_GRACE_HOURS = 24
 
 # Where title cosine alone decides "same story". Refit once a UTC day
-# (refit_cuts, fit_near_identical_cut) from pairs of stored issues the data
-# itself labels: two issues in different national monitors on different
-# days are two stories, and the cut is the lowest no such pair reaches, plus
-# CUT_MARGIN, as the article and claim cuts are fitted. Pairs the data
-# can't decide are left out, never guessed. Until MIN_HARD_NEGATIVES such
-# pairs exist (on the 2026-10-18 snapshot, 1: two monitors had opened) the
-# cut in use is the bundled one, app/data/action_thresholds.json, written by
-# scripts/calibrate_near_identical.py with the same fit: today it carries
-# the 0.92 hand-measured on 120 pairs in 2026-07, whose labels were not
-# kept, and records how many data-labelled pairs it would need.
+# (refit_cuts, fit_near_identical_cut) from pairs the data itself labels:
+# two issues sharing a source article, monitor or bill are one story, two in
+# different national monitors on different days are two, and so are two
+# feed articles about one actor whose own text dates them days apart (an
+# issue's title is an outlet's headline). The cut is the lowest no
+# different-story pair reaches, plus CUT_MARGIN, as the article and claim
+# cuts are fitted, and a refit replaces the cut in use only under
+# precision_rule.accept, held out on blocks of days. Pairs the data can't
+# decide are left out, never guessed. The bundled cut,
+# app/data/action_thresholds.json, is written by
+# scripts/calibrate_near_identical.py with the same fit: 0.89 on 2026-10-23
+# (968 article pairs; the issues alone had 1 different-story pair, and the
+# 0.92 before it was hand-measured on 120 pairs whose labels were not kept).
 _NEAR_IDENTICAL_PATH = _DATA_DIR / "action_thresholds.json"
 
 
