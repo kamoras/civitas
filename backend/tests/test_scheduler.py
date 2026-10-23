@@ -795,3 +795,19 @@ def test_the_congress_sync_sends_held_posts_even_when_its_own_posting_fails():
          patch("app.scheduler.deliver_pending", return_value=1) as deliver:
         scheduler._congress_activity_sync()
     deliver.assert_called_once()
+
+
+def test_a_nightly_chain_a_reset_held_off_starts_when_the_reset_ends():
+    """No one has to trigger it: the reset's end starts the missed chain,
+    once."""
+    from app import scheduler
+    from app.background import WritesHeld
+
+    with patch.object(scheduler, "start_writer", side_effect=WritesHeld("a data reset holds writes")), \
+         patch("app.ops_alerts.send_ops_alert") as alert:
+        scheduler._start_job(lambda: None, name="nightly-pipeline", alert=True)
+    assert "starts as soon as the reset finishes" in alert.call_args.args[1]
+    with patch.object(scheduler, "_nightly_pipeline") as nightly, patch("app.ops_alerts.resolve_ops_alert"):
+        assert scheduler.run_missed_nightly() is True
+        assert scheduler.run_missed_nightly() is False
+    nightly.assert_called_once()

@@ -360,20 +360,21 @@ def election_readiness_gaps(election_day: date) -> dict[str, str]:
             if missing:
                 gaps["election-ready-district-lean"] = (
                     f"No computed district lean for the {congress}th Congress's lines in {', '.join(missing)} "
-                    f"(they redrew, or app/data/district_lean.json has no table to carry forward). Rebuild it "
-                    f"with backend/scripts/build_district_lean.py for those maps."
+                    f"(they redrew, or app/data/district_lean.json has no table to carry forward): those House "
+                    f"pages show no computed lean until the file has those maps."
                 )
     if today >= election_day - READINESS_LEAD["calendar"] and calendar_election_date() != election_day.isoformat():
         gaps["election-ready-calendar"] = (
             f"app/data/election_calendar.json is for {calendar_election_date() or 'no election'}, not "
-            f"{election_day}: every state page and the homepage strip show no voter deadlines until it is "
-            f"rebuilt for {election_day} (backend/scripts/build_election_calendar.py)."
+            f"{election_day}: every state page and the homepage strip show no voter deadlines until "
+            f"app/data_refresh.py installs the calendar for {election_day} (a refresh it refuses raises its "
+            f"own alert, naming why)."
         )
     if today >= election_day - READINESS_LEAD["poll_close"] and poll_close.file_year() != year:
         gaps["election-ready-poll-close"] = (
             f"app/data/poll_close_times.json is for {poll_close.file_year() or 'no stated year'}, not {year}: "
-            f"election night would hold each state's count to the last cycle's closing times "
-            f"(backend/scripts/fetch_poll_close_times.py {year})."
+            f"election night would hold each state's count to the last cycle's closing times until "
+            f"app/data_refresh.py installs {year}'s (a refresh it refuses raises its own alert, naming why)."
         )
     return gaps
 
@@ -694,8 +695,8 @@ def check_pipeline_service_alive() -> None:
                 "Pipeline heartbeat unreadable",
                 f"The API process has not been able to read the pipeline service's heartbeat since "
                 f"{_heartbeat_unreadable_since:%Y-%m-%d %H:%M} UTC, so it can't tell whether that "
-                "service is running. Check the heartbeat file (scheduler_heartbeat.json on the data "
-                "volume both services mount) and the backend's logs.",
+                "service is running: the heartbeat file (scheduler_heartbeat.json, on the data volume "
+                "both services mount) could not be read. Each liveness tick reads it again.",
                 # Per day, not per spell: when a spell began is each
                 # process's own observation (each API worker, each task
                 # after a rollout), so a key built from it would page once
@@ -731,7 +732,8 @@ def check_pipeline_service_alive() -> None:
         "Pipeline service is not running",
         f"The pipeline service's scheduler has not reported {since}. The site is still being "
         "served, but no scheduled job — the nightly chain, the hourly refreshes — will run until "
-        "it is back. Check `docker service ps civitas_pipeline` and its logs.",
+        "it is back. Swarm restarts a stopped task by itself (restart_policy: any); a chain cut "
+        "short resumes from its link when the service starts (resume_interrupted_chain).",
         # Once per outage — keyed by the last beat before it, which each
         # outage has its own of — not per day: a service that recovers and
         # stops again the same day alerts again.
