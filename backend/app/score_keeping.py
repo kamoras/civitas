@@ -10,7 +10,7 @@ import json
 from typing import Any
 
 from app.models import ScoreSnapshot
-from app.pipeline.analyze.score_calculator import ALGORITHM_VERSION, compute_overall_score
+from app.pipeline.analyze.score_calculator import compute_overall_score, scoring_version
 from app.time_utils import utcnow
 
 # The source a fetcher's "could not read" exception names, by class name so
@@ -83,8 +83,8 @@ def keep_rescored(db: Any, entity_type: str, row: Any, key: str, part: dict) -> 
     explain_scores `part`): put the part's breakdown in the kept breakdown,
     so the arithmetic served is still the stored score's, and write today's
     snapshot of the score, so the score shown can be cited to a run. The
-    snapshot carries the running ALGORITHM_VERSION, the code that rescored
-    it. The caller commits."""
+    snapshot carries the running scoring version, the code (and accepted
+    refits) that rescored it. The caller commits."""
     dimensions, _ = load_breakdown(row)
     if dimensions is not None:
         dimensions[key] = {k: v for k, v in part.items() if k != "vote_part_status"}
@@ -105,5 +105,5 @@ def keep_rescored(db: Any, entity_type: str, row: Any, key: str, part: dict) -> 
         score_3=row.score_constituent_alignment,
         score_4=row.score_funding_diversity,
         score_5=row.score_legislative_effectiveness,
-        algorithm_version=ALGORITHM_VERSION,
+        algorithm_version=scoring_version(),
     ))

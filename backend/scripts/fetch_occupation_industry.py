@@ -42,9 +42,11 @@ Run in the backend image:
 The ACS year and the O*NET version are the newest each publisher has out
 (newest_pums_year, newest_onet: read from the Census Bureau's PUMS
 directory and O*NET's database page, never typed); --year and --onet pin
-them. Rerun when a new ACS release or O*NET database comes out (the data
-refresh job's staleness check, app/data_refresh.py, alerts when one has),
-and commit the file: a new release moves donors' industries, so scores.
+them. app/data_refresh.py runs it yearly and within a week of either
+publisher releasing a newer one (--download --work <scratch on /data>
+--output): the records stream to disk, never memory, and are deleted after.
+A new release moves donors' industries, so scores: a data refresh within
+the method, announced by an ops notice.
 """
 
 import argparse
@@ -290,6 +292,7 @@ def main():
     ap.add_argument("--download", action="store_true")
     ap.add_argument("--year", type=int, help="ACS PUMS year (default: the newest posted)")
     ap.add_argument("--onet", help="O*NET version as MAJOR.MINOR (default: the newest published)")
+    ap.add_argument("--output", type=pathlib.Path, default=OUT)
     args = ap.parse_args()
     year = args.year or newest_pums_year(date.today())
     if args.onet:
@@ -335,9 +338,9 @@ def main():
         "occupations": dict(sorted(occ.items())),
         "titles": dict(sorted(mapping.items())),
     }
-    with gzip.open(OUT, "wt", encoding="utf-8") as f:
+    with gzip.open(args.output, "wt", encoding="utf-8") as f:
         json.dump(data, f, separators=(",", ":"))
-    print(f"wrote {OUT}")
+    print(f"wrote {args.output}")
 
 
 if __name__ == "__main__":

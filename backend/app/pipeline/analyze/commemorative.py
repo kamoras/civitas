@@ -28,6 +28,8 @@ import pathlib
 
 import numpy as np
 
+from app import data_refresh
+
 logger = logging.getLogger(__name__)
 
 COMMEMORATIVE_PROTOTYPES: tuple[str, ...] = (
@@ -40,7 +42,6 @@ SUBSTANTIVE_PROTOTYPES: tuple[str, ...] = (
 )
 
 _CALIBRATION_PATH = pathlib.Path(__file__).resolve().parent.parent.parent / "data" / "commemorative_calibration.json"
-_calibration_cache: dict | None = None
 # Prototype embeddings per encoder (keyed by id): vectors from one model
 # are meaningless against another's. The entry holds the encoder itself so
 # its id can't be recycled for a different object while the entry exists
@@ -55,10 +56,9 @@ def prototype_hash() -> str:
 
 
 def calibration() -> dict:
-    global _calibration_cache
-    if _calibration_cache is None:
-        _calibration_cache = json.loads(_CALIBRATION_PATH.read_text())
-    return _calibration_cache
+    """The calibration in use: data_refresh's accepted refit (on CEL's
+    newest Congress), else the bundled file."""
+    return data_refresh.read(_CALIBRATION_PATH.name) or json.loads(_CALIBRATION_PATH.read_text())
 
 
 def commemorative_margins(titles: list[str], model) -> np.ndarray:

@@ -27,11 +27,11 @@ from app.pipeline.analyze.cross_reference import detect_lobbying_matches
 from app.pipeline.analyze.party_line_record import party_line_records
 from app.pipeline.analyze.policy_alignment import clear_alignment_cache
 from app.pipeline.analyze.score_calculator import (
-    ALGORITHM_VERSION,
     calculate_confidence,
     calculate_scores,
     explain_scores,
     compute_overall_score,
+    scoring_version,
 )
 from app.member_ids import assign_member_ids
 from app.pipeline.member_lifecycle import (
@@ -1254,7 +1254,7 @@ def _record_rep_snapshots(db: Session, failed: "set[str] | frozenset[str]" = fro
             # Same-day re-run after a code deploy: keep the version label
             # in sync with the scores it describes (the Senate recorder
             # delete-and-recreates, which refreshes it implicitly).
-            existing.algorithm_version = ALGORITHM_VERSION
+            existing.algorithm_version = scoring_version()
         else:
             db.add(ScoreSnapshot(
                 entity_type="representative",
@@ -1266,7 +1266,7 @@ def _record_rep_snapshots(db: Session, failed: "set[str] | frozenset[str]" = fro
                 score_3=r.score_constituent_alignment,
                 score_4=r.score_funding_diversity,
                 score_5=r.score_legislative_effectiveness,
-                algorithm_version=ALGORITHM_VERSION,
+                algorithm_version=scoring_version(),
             ))
             count += 1
     db.commit()

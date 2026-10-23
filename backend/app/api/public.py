@@ -62,10 +62,10 @@ from app.member_ids import resolve_member_id
 from app.models import Agency, ExploreDocument, Justice, Nomination, President, Representative, RollCall, RollCallPosition, ScoreSnapshot, Senator
 from app.pipeline.analyze.population_reference import CONSTITUENT_REFERENCE, FUNDING_REFERENCE, LES_REFERENCE
 from app.pipeline.analyze.score_calculator import (
-    ALGORITHM_VERSION,
     _member_ideal_points,
     _seat_pvi,
     compute_overall_score,
+    scoring_version,
     stored_bills_status,
 )
 from app.pipeline.fetch.district_pvi import lines_congress, lines_of
@@ -492,7 +492,7 @@ def _breakdown(db: Session, model, entity_type: str, member_id: str, request: Re
             "party": member.party,
             "siteUrl": _member_url(member_id),
             **_method(snapshot),
-            "recomputedWith": ALGORITHM_VERSION,
+            "recomputedWith": scoring_version(),
             "overall": compute_overall_score(member),
             "weights": SCORE_WEIGHTS,
             "dimensions": dimensions,
