@@ -56,9 +56,11 @@ script refuses to write if simplifying loses more than `--max-drop` of a
 layer's residents, or `--max-near-line-drop` of its near-line ones, and
 writes every figure to lookup/_accuracy.json beside the files.
 
-Needs Node (`npx mapshaper`), numpy and the research requirements
-(build_district_lean's reader); network on the first run (~5-20MB per state
-plus the P.L. headers), cached in --cache. From the repo root:
+Needs the pinned mapshaper (scripts/mapshaper/: in the backend image, else
+npx at that version) and build_district_lean's reader; network on the first
+run (~5-20MB per state plus the P.L. headers), cached in --cache. The data
+refresh runs it through scripts/build_district_shapes.py when a map the
+site needs has no shapes. From the repo root:
 
     python backend/scripts/build_district_lookup.py --congress 119 --congress 120 --cycle 2026 \\
         [--cache DIR] [--out DIR] [--interval 10] [ST ...]
@@ -91,8 +93,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import build_district_lean as lean  # noqa: E402
 import build_district_place_crosswalk as places_cw  # noqa: E402
 import fetch_state_leg_crosswalk as sl  # noqa: E402
+from build_district_topology import MAPSHAPER  # noqa: E402
 
 from app import census_lines  # noqa: E402
+from app.ordinals import ordinal  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
 OUT_DIR = REPO / "frontend" / "public" / "data" / "lookup"
@@ -159,7 +163,7 @@ def fetch_zip(url: str, cache: Path, attempts: int = 3) -> Path:
 
 def _mapshaper(args: list[str]) -> str:
     result = subprocess.run(
-        ["npx", "-y", "mapshaper", *args], capture_output=True, text=True, env=_NODE_ENV
+        [*MAPSHAPER, *args], capture_output=True, text=True, env=_NODE_ENV
     )
     if result.returncode:
         raise RuntimeError(f"mapshaper failed:\n{result.stdout}{result.stderr}")
@@ -290,7 +294,7 @@ class Sources:
     def cd_url(self, congress: int, fips: str) -> str:
         url = census_lines.tiger_cd_url(congress, fips)
         if url is None:
-            raise SystemExit(f"no TIGER/Line districts for the {congress}th Congress ({fips})")
+            raise SystemExit(f"no TIGER/Line districts for the {ordinal(congress)} Congress ({fips})")
         return url
 
     def sld_url(self, kind: str, fips: str) -> str:
@@ -305,7 +309,7 @@ class Sources:
         if congress not in self.cd_bef:
             found = census_lines.find_congress_bef(congress)
             if found is None:
-                raise SystemExit(f"no block equivalency file for the {congress}th Congress")
+                raise SystemExit(f"no block equivalency file for the {ordinal(congress)} Congress")
             self.cd_bef[congress] = sl.download(found[0], cache)
         return self.cd_bef[congress]
 
@@ -553,7 +557,9 @@ def main(argv: list[str] | None = None) -> int:
         path = args.out / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(blob)
-    if fixture:
+    # The browser decoder's test fixture is the repository's: written by a
+    # build into the repository's own folder, never by the data refresh's.
+    if fixture and args.out == OUT_DIR:
         FIXTURE.write_text(
             json.dumps(
                 {

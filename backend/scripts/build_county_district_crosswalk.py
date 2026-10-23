@@ -66,6 +66,7 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "backend"))
 from app.contact import BOT_USER_AGENT  # noqa: E402
 from app import census_lines  # noqa: E402
+from app.ordinals import ordinal  # noqa: E402
 
 COUNTY_NAMES_URL = (
     "https://www2.census.gov/geo/docs/reference/codes2020/national_county2020.txt"
@@ -94,17 +95,17 @@ def check_maps(
     state's map in the election before."""
     listed_now = set(listed_now)
     anywhere = {st for d in digests.values() for st in d}  # not the territories
-    problems = [f"{st}: no blocks in the {m}th Congress's file" for st, m in sorted(maps.items())
+    problems = [f"{st}: no blocks in the {ordinal(m)} Congress's file" for st, m in sorted(maps.items())
                 if st in anywhere and st not in digests.get(m, {})]
     own = digests.get(congress)
     if own is not None:
         for st, m in sorted(maps.items()):
             if m != congress and st in own and own[st] != digests.get(m, {}).get(st) and st not in listed_now:
-                problems.append(f"{st}: its blocks differ between the {m}th and {congress}th Congress files "
-                                f"but the maps file doesn't list it for the election that seats the {congress}th")
+                problems.append(f"{st}: its blocks differ between the {ordinal(m)} and {ordinal(congress)} Congress files "
+                                f"but the maps file doesn't list it for the election that seats the {ordinal(congress)}")
             if m == congress and st in listed_now and own.get(st) == digests.get(previous.get(st), {}).get(st):
-                problems.append(f"{st}: listed as on the {congress}th Congress's map but its lines are identical "
-                                f"to the {previous.get(st)}th's")
+                problems.append(f"{st}: listed as on the {ordinal(congress)} Congress's map but its lines are identical "
+                                f"to the {ordinal(previous.get(st))}'s")
     return problems
 
 
@@ -142,15 +143,15 @@ def source_note(congress: int, maps: Mapping[str, int], urls: Mapping[int, str],
     counts: dict[int, int] = defaultdict(int)
     for m in maps.values():
         counts[m] += 1
-    files = "; ".join(f"{m}th Congress: {urls[m]}" for m in sorted(urls))
-    redrawn = "; ".join(f"{st} on the {m}th Congress's map ({reasons[st]})" for st, m in sorted(maps.items())
+    files = "; ".join(f"{ordinal(m)} Congress: {urls[m]}" for m in sorted(urls))
+    redrawn = "; ".join(f"{st} on the {ordinal(m)} Congress's map ({reasons[st]})" for st, m in sorted(maps.items())
                         if st in reasons)
     return (
         "U.S. Census Bureau Redistricting Data Office congressional district Block "
         "Equivalency Files (2020 Census blocks -> district), each state's own corrected file "
         "replacing its national rows, joined to each block's own county FIPS (embedded in its "
         f"GEOID) and the Bureau's national_county2020.txt county-name table. Files: {files}. "
-        f"The lines of the {congress}th Congress (elected {census_lines.elected_in(congress)}): "
+        f"The lines of the {ordinal(congress)} Congress (elected {census_lines.elected_in(congress)}): "
         f"each state on the map it votes on in that election (redrawn_congressional_maps.json)"
         + (f": {redrawn}" if redrawn else "") + "; every other state on its earlier map. "
         "A county tagged '(part)' has 2020 Census blocks in more than one district "
@@ -207,7 +208,7 @@ def build(congress: int, cache: Path, cycles: dict | None = None) -> tuple[dict,
     names, fips_to_state = load_county_names(download(COUNTY_NAMES_URL, cache))
     cycles = census_lines.maps_cycles() if cycles is None else cycles
     if not census_lines.listed(cycles, congress):
-        return {}, [f"the election that seats the {congress}th Congress ({census_lines.elected_in(congress)}) "
+        return {}, [f"the election that seats the {ordinal(congress)} Congress ({census_lines.elected_in(congress)}) "
                     "is not in redrawn_congressional_maps.json yet"]
     year = census_lines.elected_in(congress)
     states = sorted(set(fips_to_state.values()))
@@ -221,7 +222,7 @@ def build(congress: int, cache: Path, cycles: dict | None = None) -> tuple[dict,
         found = census_lines.find_congress_bef(m)
         if found is None:
             if m in maps.values():
-                return {}, [f"no Census block equivalency file for the {m}th Congress"]
+                return {}, [f"no Census block equivalency file for the {ordinal(m)} Congress"]
             continue
         print(f"reading {found[0]}")
         mine = {st for st, x in maps.items() if x == m}
@@ -263,7 +264,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     for (doc, _), out in zip(built, args.out):
         out.write_text(json.dumps(doc, indent=2))
-        print(f"wrote {len(doc['districts'])} districts ({doc['congress']}th Congress) to {out}")
+        print(f"wrote {len(doc['districts'])} districts ({ordinal(doc['congress'])} Congress) to {out}")
     return 0
 
 

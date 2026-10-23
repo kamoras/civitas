@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
-import { districtsAt, featureAt, type Topology } from "./districtAt";
+import { describe, expect, it, vi } from "vitest";
+import { districtsAt, featureAt, loadDistrictLookup, type Topology } from "./districtAt";
 import fixture from "./districtAt.fixture.json";
 
 // Two districts side by side, sharing the edge x = 1, the second with a
@@ -101,4 +101,32 @@ describe("the shipped district files near their lines", () => {
       expect(right / points.length).toBeGreaterThanOrEqual(0.95);
     });
   }
+});
+
+describe("loadDistrictLookup", () => {
+  it("fetches from where the API says the folder is served, and nowhere else", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(TOPO)));
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      await loadDistrictLookup(
+        "congress-121",
+        "TX",
+        "house",
+        "/api/district-shapes/20280801T030000Z/lookup"
+      );
+      expect(fetchMock).toHaveBeenLastCalledWith(
+        "/api/district-shapes/20280801T030000Z/lookup/congress-121/TX.json"
+      );
+      await loadDistrictLookup("congress-119", "NY", "towns");
+      expect(fetchMock).toHaveBeenLastCalledWith("/data/lookup/congress-119/NY.towns.json");
+      // No build holds the map yet, or a base the API never names.
+      expect(await loadDistrictLookup("congress-121", "TX", "house", null)).toBeNull();
+      expect(
+        await loadDistrictLookup("congress-121", "TX", "house", "https://elsewhere/x")
+      ).toBeNull();
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });

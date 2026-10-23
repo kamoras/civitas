@@ -220,6 +220,7 @@ function CountyFinder({
       <DistrictLocator
         state={stateCode}
         lines={lines.lookupLines ?? ""}
+        base={lines.lookupBase ?? null}
         linesLabel="the lines today's members were elected on"
         districts={lines.districts}
         query={query}

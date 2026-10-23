@@ -42,13 +42,14 @@ const files = new Map<string, Promise<Topology | null>>();
 function lookup(
   lines: string,
   state: string,
-  kind: LookupKind = "house"
+  kind: LookupKind = "house",
+  base: string | null = "/data/lookup"
 ): Promise<Topology | null> {
-  const key = `${lines}/${state}/${kind}`;
+  const key = `${base}/${lines}/${state}/${kind}`;
   if (!files.has(key)) {
     files.set(
       key,
-      loadDistrictLookup(lines, state, kind).catch(() => {
+      loadDistrictLookup(lines, state, kind, base).catch(() => {
         files.delete(key);
         return null;
       })
@@ -95,9 +96,13 @@ export default function DistrictLocator({
   officialLookup,
   legislature = false,
   houseGov = true,
+  base = "/data/lookup",
 }: {
   state: string;
   lines: string;
+  /** Where the API says `lines` is served (lookupBase); null when no
+   * build holds that map yet. */
+  base?: string | null;
   linesLabel: string;
   districts: HouseDistrict[];
   /** What the reader typed in the town filter. */
@@ -147,7 +152,7 @@ export default function DistrictLocator({
               </>
             );
           } else {
-            const topo = await lookup(lines, st, legislature ? "legislature" : "house");
+            const topo = await lookup(lines, st, legislature ? "legislature" : "house", base);
             const found = topo ? districtsAt(topo, lon, lat) : null;
             if (!found || (legislature ? !found.sldu && !found.sldl : found.house == null)) {
               message = topo
@@ -225,6 +230,7 @@ export default function DistrictLocator({
         .filter((p) => p.fullName === mapFor)
         .map((p) => (
           <TownMap
+            base={base}
             key={p.fullName}
             state={state}
             lines={lines}
@@ -326,7 +332,9 @@ function TownMap({
   splitDistricts,
   districts,
   onPick,
+  base,
 }: {
+  base: string | null;
   state: string;
   lines: string;
   town: string;
@@ -343,13 +351,13 @@ function TownMap({
   useEffect(() => {
     let live = true;
     // The district shapes and the town's outline and roads, from two files.
-    Promise.all([lookup(lines, state), lookup(lines, state, "towns")]).then(
+    Promise.all([lookup(lines, state, "house", base), lookup(lines, state, "towns", base)]).then(
       ([house, towns]) => live && setTopo(house && towns ? { house, towns } : null)
     );
     return () => {
       live = false;
     };
-  }, [lines, state]);
+  }, [lines, state, base]);
 
   const view = useMemo(() => {
     if (!topo) return null;

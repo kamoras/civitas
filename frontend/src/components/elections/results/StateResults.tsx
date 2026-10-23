@@ -402,6 +402,7 @@ export default function StateResults({
           <div className="min-w-0 space-y-5">
             <DistrictMap
               state={ballot.state}
+              url={ballot.districtMapUrl}
               races={ballot.houseRaces}
               picked={null}
               results={byDistrict}

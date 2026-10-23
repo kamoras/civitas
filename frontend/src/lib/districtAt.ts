@@ -134,17 +134,22 @@ export const LOOKUP_LINES = /^(congress-\d{1,3}|election-\d{4})$/;
  * house districts a cycle's election is on. */
 export type LookupKind = "house" | "towns" | "legislature";
 
+/** Where the API says a folder is served: the shapes bundled with the
+ * site, or a data refresh's build of a map they don't cover. */
+export const LOOKUP_BASE = /^\/(data\/lookup|api\/district-shapes\/\d{8}T\d{6}Z\/lookup)$/;
+
 /** A state's file for one map, from this site; null when there is none
- * (a Congress or a cycle nobody has built yet). No query, no body. */
+ * (a Congress or a cycle nobody has built yet: the API names no base).
+ * No query, no body. */
 export async function loadDistrictLookup(
   lines: string,
   state: string,
-  kind: LookupKind = "house"
+  kind: LookupKind = "house",
+  base: string | null = "/data/lookup"
 ): Promise<Topology | null> {
-  if (!LOOKUP_LINES.test(lines) || !/^[A-Z]{2}$/.test(state)) return null;
-  const res = await fetch(
-    `/data/lookup/${lines}/${state}${kind === "house" ? "" : `.${kind}`}.json`
-  );
+  if (!base || !LOOKUP_BASE.test(base) || !LOOKUP_LINES.test(lines) || !/^[A-Z]{2}$/.test(state))
+    return null;
+  const res = await fetch(`${base}/${lines}/${state}${kind === "house" ? "" : `.${kind}`}.json`);
   if (!res.ok) return null;
   return (await res.json()) as Topology;
 }

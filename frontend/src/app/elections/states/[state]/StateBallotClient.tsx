@@ -254,7 +254,8 @@ function StateLegislatureDetail({
       </p>
       <DistrictLocator
         state={ballot.state}
-        lines={`election-${ballot.cycleYear}`}
+        lines={ballot.legislatureLookupLines ?? ""}
+        base={ballot.legislatureLookupBase ?? null}
         linesLabel={`the ${ballot.cycleYear} election's lines`}
         districts={[]}
         query=""
@@ -1278,6 +1279,7 @@ function HouseDetail({
       )}
       <DistrictMap
         state={ballot.state}
+        url={ballot.districtMapUrl}
         newLines={newLines}
         cycleYear={ballot.cycleYear}
         races={houseRaces}
@@ -1341,6 +1343,7 @@ function HouseDetail({
         <DistrictLocator
           state={ballot.state}
           lines={ballot.houseLookupLines ?? ""}
+          base={ballot.houseLookupBase ?? null}
           houseGov={!newLines}
           linesLabel={`the ${ballot.cycleYear} election's lines`}
           districts={houseRaces.map((r) => ({ district: r.district ?? 0, places: r.places }))}

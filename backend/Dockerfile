@@ -12,6 +12,17 @@
 # (found 2026-09-29, when every justice went unscored). curl and urllib pass
 # on both, so the block is keyed to that one handshake, not to automated
 # clients.
+# The pinned mapshaper the district shape builders run (scripts/mapshaper/,
+# npm's lockfile with each package's integrity hash): installed in a stage
+# of its own so the image gets its JavaScript and no npm. --ignore-scripts:
+# nothing compiles, and the parts that would (better-sqlite3, for GeoPackage
+# files) are never used. Run below by the Node that Playwright already ships
+# in this image, the same major version.
+FROM node:24.21.0-trixie-slim AS mapshaper
+WORKDIR /opt/mapshaper
+COPY scripts/mapshaper/package.json scripts/mapshaper/package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+
 FROM python:3.13.15-slim-trixie
 
 # No usage reports to Hugging Face. huggingface_hub, transformers and hf_xet
@@ -72,6 +83,13 @@ RUN sed -i 's|^mozilla/emSign_ECC_Root_CA_-_G3\.crt$|!&|' /etc/ca-certificates.c
 # why senate_ptr launches channel="chromium".
 COPY chromium-distrusted-roots.json /etc/opt/chrome_for_testing/policies/managed/distrusted-roots.json
 COPY chromium-distrusted-roots.json /etc/chromium/policies/managed/distrusted-roots.json
+
+# mapshaper for the district shapes the data refresh rebuilds
+# (scripts/build_district_shapes.py), on Playwright's bundled Node.
+COPY --from=mapshaper /opt/mapshaper /opt/mapshaper
+RUN node_bin="$(python -c 'import os, playwright; print(os.path.join(os.path.dirname(playwright.__file__), "driver", "node"))')" && \
+    test -x "$node_bin" && ln -s "$node_bin" /usr/local/bin/node && node --version
+ENV MAPSHAPER="/opt/mapshaper/node_modules/.bin/mapshaper"
 
 COPY . .
 

@@ -58,7 +58,8 @@ def test_unredrawn_state_is_the_same_on_both(monkeypatch):
 def test_no_file_for_the_congress_says_so_rather_than_guessing(monkeypatch):
     monkeypatch.setattr(settings, "CURRENT_CONGRESS", 121)
     body = _body(politicians.house_districts_by_county(state="TX"))
-    assert body == {"state": "TX", "congress": 121, "available": False, "districts": [], "lookupLines": None}
+    assert body == {"state": "TX", "congress": 121, "available": False, "districts": [], "lookupLines": None,
+                    "lookupBase": None}
 
 
 LOOKUP = pathlib.Path(__file__).resolve().parents[2] / "frontend" / "public" / "data" / "lookup"

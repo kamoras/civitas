@@ -10,6 +10,7 @@ from app.api.compare import router as compare_router
 from app.api.congress import router as congress_router
 from app.api.court import router as court_router
 from app.api.disclosure_scans import router as disclosure_scans_router
+from app.api.district_shapes import router as district_shapes_router
 from app.api.election_archive import router as election_archive_router
 from app.api.election_map import router as election_map_router
 from app.api.elections import router as elections_router
@@ -58,6 +59,7 @@ api_router.include_router(election_map_router, tags=["elections"])
 api_router.include_router(election_archive_router, tags=["elections"])
 api_router.include_router(elections_router, tags=["elections"])
 api_router.include_router(redistricting_router, tags=["elections"])
+api_router.include_router(district_shapes_router, tags=["elections"])
 api_router.include_router(special_elections_router, tags=["elections"])
 api_router.include_router(bills_router, tags=["bills"])
 api_router.include_router(congress_router, tags=["congress"])

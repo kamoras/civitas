@@ -1,0 +1,8 @@
+{
+  "name": "civitas-mapshaper",
+  "private": true,
+  "description": "The mapshaper the district shape builders run (build_district_lookup.py, build_district_topology.py), pinned: installed into the backend image by the Dockerfile's mapshaper stage from this lockfile, and run by npx at this version elsewhere. The checked-in shapes were built with it (byte-identical rebuild, 2026-10-23).",
+  "dependencies": {
+    "mapshaper": "0.7.97"
+  }
+}

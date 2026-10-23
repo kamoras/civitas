@@ -48,8 +48,11 @@ crosswalk lists, and no district may be lost to simplification. A dense
 urban district is the thing simplification is most likely to collapse,
 and `keep-shapes` alone is a request, not a guarantee.
 
-Needs Node (for `npx mapshaper`) and network access; the block files are
-large (Texas alone is ~750MB), so pass --cache to keep them between runs.
+Needs the pinned mapshaper (scripts/mapshaper/: in the backend image, else
+npx at that version) and network access; the block files are large (Texas
+alone is ~750MB, about 3 GB of memory to dissolve), so pass --cache to keep
+them between runs. The data refresh runs it through
+scripts/build_district_shapes.py when a map the ballot needs has no outlines.
 Run from the repo root:
 
     python backend/scripts/build_district_topology.py --congress N [--cache DIR] [--out DIR]
@@ -69,14 +72,15 @@ import zipfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import fetch_state_leg_crosswalk as sl  # noqa: E402
 from build_county_district_crosswalk import download  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "backend"))
 from app import census_lines  # noqa: E402
+from app.ordinals import ordinal  # noqa: E402
 
 OUT_DIR = REPO / "frontend" / "public" / "data" / "cd"
-STATE_CODES_TS = REPO / "frontend" / "src" / "lib" / "stateCodes.ts"
 CROSSWALK_NAME = "county_district_crosswalk.json"
 
 # Enough to keep every district recognisable at state-page size while
@@ -93,9 +97,17 @@ _NODE_ENV = {**os.environ, "NODE_OPTIONS": "--max-old-space-size=12000"}
 
 
 def _fips_to_state() -> dict[str, str]:
-    # The frontend's own table, so the file names cannot drift from the
-    # codes the map component looks them up by.
-    return dict(re.findall(r'"(\d{2})":\s*"([A-Z]{2})"', STATE_CODES_TS.read_text()))
+    """The states' FIPS codes -> postal codes (DC included: it has no
+    district, so it is left out by the delegate filter)."""
+    return {fips: st for st, fips in sl._FIPS.items()}
+
+
+# The pinned mapshaper (scripts/mapshaper/package.json): installed in the
+# backend image (the Dockerfile's mapshaper stage sets MAPSHAPER), npx at
+# the same version elsewhere.
+MAPSHAPER_VERSION = json.loads((Path(__file__).resolve().parent / "mapshaper" / "package.json").read_text())[
+    "dependencies"]["mapshaper"]
+MAPSHAPER = os.environ.get("MAPSHAPER", "").split() or ["npx", "-y", f"mapshaper@{MAPSHAPER_VERSION}"]
 
 
 def _expected_districts(congress: int) -> dict[str, set[int]]:
@@ -147,7 +159,7 @@ def validate_and_normalize(
 
 def _mapshaper(args: list[str]) -> str:
     result = subprocess.run(
-        ["npx", "-y", "mapshaper", *args],
+        [*MAPSHAPER, *args],
         check=True,
         capture_output=True,
         text=True,
@@ -296,7 +308,7 @@ def main(argv: list[str] | None = None) -> int:
     expected = _expected_districts(args.congress)
     cycles = census_lines.maps_cycles()
     if not census_lines.listed(cycles, args.congress):
-        raise SystemExit(f"the election that seats the {args.congress}th Congress is not listed yet")
+        raise SystemExit(f"the election that seats the {ordinal(args.congress)} Congress is not listed yet")
     by_state = census_lines.state_maps(args.congress, fips.values(), cycles)
     maps = {f: by_state[st] for f, st in fips.items()}
     # The simplification is measured on the newest national cartographic
@@ -316,7 +328,7 @@ def main(argv: list[str] | None = None) -> int:
 
         on = {m: {f for f, x in maps.items() if x == m} for m in set(maps.values())}
         sources, interval = _build_cartographic(base[1], base[0], on.get(base[0], set()), cache, work)
-        print(f"{base[0]}th Congress file simplified at {interval}")
+        print(f"{ordinal(base[0])} Congress file simplified at {interval}")
         from_blocks = 0
         for m, members in sorted(on.items()):
             if m == base[0]:
@@ -327,7 +339,7 @@ def main(argv: list[str] | None = None) -> int:
                 continue
             found = census_lines.find_congress_bef(m)
             if found is None:
-                raise SystemExit(f"no block equivalency file for the {m}th Congress")
+                raise SystemExit(f"no block equivalency file for the {ordinal(m)} Congress")
             csvs = _write_assignments(download(found[0], cache), work, members)
             for f in sorted(members):
                 url = census_lines.blocks_url(m, f)
