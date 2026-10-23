@@ -68,7 +68,9 @@ from app.pipeline.filer_matching import (
     match_representative,
     match_senator,
 )
-from app.holdings_schedule import FETCH_BUDGET, HOLDINGS_STEPS, PREP_BUDGET, PROBE_BUDGET
+from app import disclosure_scans
+from app.holdings_schedule import FETCH_BUDGET, HOLDINGS_STEPS, PREP_BUDGET, PROBE_BUDGET, SCAN_RENDER_GRACE
+from app.pipeline.fetch import scan_pages
 from app.services.president_service import current_president
 from app.time_utils import utcnow
 
@@ -882,9 +884,10 @@ async def _senate_candidates(db: Session, client: httpx.AsyncClient) -> dict[str
     # report until their first annual one.
     filings = await search_annual_filings(f"{min(_report_years())}-01-01")
     if not any(is_senator_filing(f) and is_annual_title(f.get("title") or "") for f in filings):
-        # Every senator files one every year; none across two years means
-        # the search broke (search_filings returns [] on any failure).
-        raise RuntimeError("Senate eFD annual-report search returned no senators' reports")
+        # Every senator files one every year; none across two years, from a
+        # search that answered (a failed one raises SearchUnavailable), means
+        # the form or its results changed under the reader.
+        raise RuntimeError("Senate eFD annual-report search answered with no senators' reports")
     per_senator: dict[str, list[dict]] = {}
     match = FilerMatcher(current_senators(db), match_senator)
     for filing in filings:
@@ -970,6 +973,68 @@ async def ingest_senate_holdings(db: Session, client: httpx.AsyncClient) -> int:
     return inserted
 
 
+def _scanned_reports(db: Session) -> list[FinancialDisclosure]:
+    """Every member's stored report that is a scan: its pages are what the
+    member's page shows in place of a breakdown."""
+    return (
+        db.query(FinancialDisclosure)
+        .filter(
+            FinancialDisclosure.parsed == False,  # noqa: E712
+            FinancialDisclosure.unreadable_reason == UNREADABLE_SCANNED,
+            (FinancialDisclosure.senator_id.isnot(None)) | (FinancialDisclosure.representative_id.isnot(None)),
+        )
+        .order_by(FinancialDisclosure.id)
+        .all()
+    )
+
+
+def _pages_kept(filing_id: str, source_url: str) -> bool:
+    """The filing's pages are stored, from the same source. A filed report
+    never changes, so they are not fetched again."""
+    manifest = disclosure_scans.read_manifest(filing_id)
+    return bool(manifest and manifest.get("pages") and manifest.get("source_url") == source_url)
+
+
+async def ingest_scan_pages(db: Session, client: httpx.AsyncClient) -> int:
+    """Keep the page images of every stored scanned report
+    (fetch/scan_pages.py). Returns pages stored this run.
+
+    A failure keeps the stored pages and is recorded on the filing; if no
+    filing tried could be stored, the step fails (and alerts), every night
+    it lasts: an outage must not read as a report with no pages."""
+    reports = [(r.filing_id, r.source_url, r.senator_id is not None) for r in _scanned_reports(db)]
+    db.rollback()  # no transaction held across the downloads below
+    todo = [r for r in reports if not _pages_kept(r[0], r[1])]
+    deadline = time.monotonic() + FETCH_BUDGET.total_seconds()
+    stored = failed = pages = 0
+    for filing_id, source_url, senate in todo:
+        if time.monotonic() > deadline:
+            logger.info("Scan pages: time budget spent — %d filings wait for the next run", len(todo) - stored - failed)
+            break
+        try:
+            if senate:
+                kind, blobs = await _retry_after_lapse(
+                    client, lambda url=source_url: scan_pages.fetch_senate_scan(client, url),
+                )
+            else:
+                kind, blobs = await scan_pages.fetch_house_scan(client, source_url)
+            timeout = max(deadline - time.monotonic(), 0) + SCAN_RENDER_GRACE.total_seconds()
+            manifest = await scan_pages.store_scan(filing_id, source_url, kind, blobs, timeout)
+        except (scan_pages.ScanUnavailable, SessionLapsed, _TermsRefused, OSError) as e:
+            reason = str(e) or type(e).__name__
+            logger.warning("Scan pages: %s not stored: %s", source_url, reason)
+            scan_pages.record_failure(filing_id, source_url, reason)
+            failed += 1
+            continue
+        stored += 1
+        pages += manifest["pages"]
+    removed = scan_pages.prune({filing_id for filing_id, _, _ in reports})
+    logger.info("Scan pages: %d filings stored (%d pages), %d failed, %d removed", stored, pages, failed, removed)
+    if failed and not stored:
+        raise RuntimeError(f"scan pages: {failed} filings tried, none could be fetched and rendered")
+    return pages
+
+
 async def run_holdings_phases(
     db: Session, client: httpx.AsyncClient, progress,
 ) -> tuple[dict[str, int], list[str]]:
@@ -987,7 +1052,9 @@ async def run_holdings_phases(
         "house_holdings": ("House holdings", ingest_house_holdings),
         "senate_holdings": ("Senate holdings", ingest_senate_holdings),
         "president_holdings": ("Presidential holdings", ingest_president_holdings),
+        "scan_pages": ("Scanned disclosure pages", ingest_scan_pages),
     }
+    units = {"scan_pages": "pages"}
     counts = {step: 0 for step, _, _ in HOLDINGS_STEPS}
     errors: list[str] = []
     for step, _, _ in HOLDINGS_STEPS:
@@ -997,7 +1064,7 @@ async def run_holdings_phases(
             if ingest is None:
                 raise RuntimeError(f"no ingest registered for holdings step {step!r}")
             counts[step] = await ingest(db, client)
-            progress.complete(step, detail=f"{counts[step]} holdings")
+            progress.complete(step, detail=f"{counts[step]} {units.get(step, 'holdings')}")
             resolve_ops_alert(f"holdings-failed-{step}")
         except Exception:
             logger.exception("%s ingestion failed", label)

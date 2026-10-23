@@ -407,7 +407,13 @@ The correct pattern, established by `_district_pvi()` /
    records the bundled copy's hash (`_refreshed.bundled`) and a file whose
    bundled copy has changed since is refreshed the next day
    (`bundled_moved`; 2026-10-19's House fit through 2024 otherwise waited a
-   week behind the 2026-10-18 refit). A script the job runs takes an output path and reads no `/data` copy of
+   week behind the 2026-10-18 refit; a refreshed copy with no record,
+   installed before it existed, counts as changed and is refreshed once).
+   A failed try is retried within a week whatever the cadence, and the
+   next day once what it runs has changed (`recipe`: the command line, the
+   backend files it names, the generator script included, and every `app`
+   or `scripts` module those import, transitively), since that change is
+   usually the fix. A script the job runs takes an output path and reads no `/data` copy of
    its own output. Files a script can't regenerate unattended — a new
    survey whose question ids change, a model-selection refit that is a
    method decision, a source behind research-only dependencies, a source
@@ -2183,7 +2189,22 @@ and told apart by its printed text: `schemas.EXACT_VALUE_RE`, passed to
 `is_open_ended`); the pie is drawn by bracket
 midpoints and says so, and no net-worth figure is produced. Reports that can't
 be read are stored `parsed=False` with a reason (`scanned` paper filing,
-`unrecognized` layout) and linked, not OCR'd. A Senate paper filing states
+`unrecognized` layout) and linked, not OCR'd. A `scanned` one is shown on the
+member's page as its own pages (2026-10): the stock run's fourth holdings
+step (`holdings_pipeline.ingest_scan_pages`, `fetch/scan_pages.py`) fetches
+the House PDF or the eFD paper filing's page images (`img.filingImage`, on
+efd-media-public.senate.gov only) and renders them in a child process
+(`fetch/scan_render.py`, which nothing in `app/` imports) as lossless 1-bit
+WebP at 200 dpi, the House scans' own resolution, into
+`/data/disclosure_scans/<filing_id>/` with a manifest (source, fetch date,
+page sizes, last failure; `app/disclosure_scans.py`). Served same-origin by
+`GET /api/disclosure-scans/<filing_id>/<n>.webp` (ids, never URLs), viewed
+in `components/checker/ScannedFiling.tsx` with alt text naming the page and
+report. A failed fetch keeps the stored pages and records `failed_at`; with
+none stored the page says so beside the link, never an empty viewer; no
+filing tried stored fails the step. A filing's stored pages are not fetched
+again, and scans no stored report names are pruned. 34 reports, about 1,100
+pages, measured at about 33 MiB (2026-10). A Senate paper filing states
 no year anywhere eFD shows it (its page is page images), so no year is
 claimed or inferred for it: it ranks below every dated report, and an undated
 filing (paper, or a title with no year) filed on or after the shown report's
@@ -2869,10 +2890,11 @@ the pending list).
   read yet says so, never a bare zero. **A menu names five pages or fewer**
   (2026-10, from 28 entries to 18; `routes.test.ts` holds it): a page that
   belongs with another goes in that tab's `views`, a second row of the tab
-  bar on its pages (Reports: Floor and Members; Members: Directory and
-  Compare two; Every president: Compare; Agencies: Budgets; Seat map: New
-  House maps), and a view's own `views` are a toggle on the page (Day, Week,
-  Month). Each view keeps its own path, so folding a page into a tab needs
+  bar on its pages (Members: By the numbers, Directory and Compare; Every
+  president: Compare; Agencies: Budgets; Seat map: New
+  House maps), and a view's own `views` are a toggle on the page; a tab
+  whose views follow the date being read draws them itself (`ownToggle`:
+  Reports' This Congress, Day, Week and Month, PeriodNav). Each view keeps its own path, so folding a page into a tab needs
   no redirect and no query-string state; a tab with views is its first
   view (same key and href), and the hub's cards list every view one by one.
 - **The main navigation's current section is the longest match** in

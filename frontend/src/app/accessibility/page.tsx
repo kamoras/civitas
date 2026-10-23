@@ -417,6 +417,17 @@ export default function AccessibilityPage() {
                   }
                 />
                 <Box
+                  title="Scanned disclosure pages"
+                  dek={
+                    <>
+                      A member&apos;s financial disclosure filed on paper is shown as page images,
+                      and a screen reader can&apos;t read the text in them. Each page says which
+                      page of whose report it is, and the official filing is linked beside it; we
+                      have no text version of these reports yet.
+                    </>
+                  }
+                />
+                <Box
                   title="The admin dashboard"
                   dek={
                     <>
