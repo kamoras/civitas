@@ -491,7 +491,15 @@ def main(argv: list[str] | None = None) -> int:
         work = Path(tmp)
         for st in states:
             print(f"{st}:")
-            geoids, pop, points, _ = lean.state_blocks(st, args.cache)
+            # Each map is measured on the blocks of the census it is drawn
+            # on (census_lines.census_year).
+            blocks: dict[int, tuple] = {}
+
+            def on(census: int) -> tuple:
+                if census not in blocks:
+                    blocks[census] = lean.state_blocks(st, args.cache, census)[:3]
+                return blocks[census]
+
             # (folder, build arguments, {layer: the block files' answer}):
             # one House folder per map the Congresses use (named by the
             # map, so a state that kept its map stays in its earlier
@@ -501,16 +509,20 @@ def main(argv: list[str] | None = None) -> int:
             for c, by_state in maps.items():
                 on_map.setdefault(by_state[st], c)
             jobs = [
-                (f"congress-{m}", {"house_congress": m, "towns_key": str(c)},
-                 {"house": truth_house(st, m, args.cache, geoids, src)})
+                (f"congress-{m}", {"house_congress": m, "towns_key": str(c)}, census_lines.census_year(m),
+                 lambda m=m: {"house": truth_house(st, m, args.cache, on(census_lines.census_year(m))[0], src)})
                 for m, c in sorted(on_map.items())
             ]
+            sld_census = census_lines.census_year(census_lines.seated_by(src.sld_cycle))
             jobs.append((
                 f"election-{src.sld_cycle}",
                 {"legislature": True},
-                {kind: truth_sld(st, kind, args.cache, geoids, src) for kind in ("sldu", "sldl")},
+                sld_census,
+                lambda: {kind: truth_sld(st, kind, args.cache, on(sld_census)[0], src) for kind in ("sldu", "sldl")},
             ))
-            for folder, how, truths in jobs:
+            for folder, how, census, truths_of in jobs:
+                geoids, pop, points = on(census)
+                truths = truths_of()
                 simplified = build(st, args.cache, work, args.interval, src, **how)
                 unsimplified = build(st, args.cache, work, 0, src, **how)
                 for layer, truth in truths.items():

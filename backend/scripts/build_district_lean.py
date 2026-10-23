@@ -386,15 +386,14 @@ def seat(code: str) -> str | None:
     return None if code in _NOT_A_SEAT else str(int(code))
 
 
-def state_blocks(st: str, cache: Path) -> tuple[list[str], np.ndarray, np.ndarray, dict[str, str]]:
-    """(GEOIDs, population, (lon, lat) internal points) of the populated
-    2020 blocks, and county base name -> county FIPS — the P.L. 94-171
+def state_blocks(st: str, cache: Path, census: int = 2020) -> tuple[list[str], np.ndarray, np.ndarray, dict[str, str]]:
+    """(GEOIDs, population, (lon, lat) internal points) of a census's
+    populated blocks, and county base name -> county FIPS — the P.L. 94-171
     header, through the crosswalk script's own reader."""
-    fips, folder = sl._STATES[st]
-    pl = fetch(sl._PL.format(folder=folder, st=st.lower()), cache / f"{st.lower()}2020.pl.zip")
+    fips = sl._FIPS[st]
     points: dict[str, tuple[float, float]] = {}
-    with zipfile.ZipFile(pl) as zf, zf.open(f"{st.lower()}geo2020.pl") as raw:
-        blocks, _names = sl.read_geo(io.TextIOWrapper(raw, encoding="latin-1"), False, points)
+    with sl.open_geo(st, census, cache) as raw:
+        blocks, _names = sl.read_geo(raw, False, points)
     geoids = list(points)
     counties = {base: fips + code for (kind, code), (_name, base) in _names.items() if kind == "county"}
     return geoids, np.array([blocks[g][0] for g in geoids], float), np.array([points[g] for g in geoids]), counties
@@ -999,10 +998,21 @@ def build_state(st: str, cache: Path, files: dict, fixes: list[dict], official: 
     later election's votes are counted on the map it was held on (`voted`)
     and carried to any other map by swing transfer."""
     t0 = time.time()
-    geoids, pop, lonlat, county_fips = state_blocks(st, cache)
     voted = census_lines.map_congress(census_lines.map_in(cycles, LATER, st))
     maps = {c: census_lines.state_maps(c, [st], cycles)[st] for c in targets}
     used = sorted(set(maps.values()) | {voted})
+    other = [m for m in used if census_lines.census_year(m) != census_lines.census_year(voted)]
+    if other:
+        # A map on a new census's blocks (the first election after a
+        # census) is the next window's: by its election the next
+        # presidential election's precinct returns exist, and those, on the
+        # new blocks, are a new window's inputs and corrections, not a
+        # rebuild of this one (_district_lean_stale says when they are out).
+        raise SystemExit(
+            f"{st}: the {ordinal(other[0])} Congress's map is drawn on the {census_lines.census_year(other[0])} "
+            f"census's blocks; this window's votes ({'+'.join(WINDOW)}) are allocated on the "
+            f"{census_lines.census_year(voted)} census's. Its lean needs the next window's precinct returns.")
+    geoids, pop, lonlat, county_fips = state_blocks(st, cache)
     befs = state_befs(st, cache, set(used))
     labels = {m: [seat(befs[m].get(g, "")) for g in geoids] for m in used}
     missing_bef = sum(1 for g in geoids if any(g not in befs[m] for m in used))
@@ -1451,7 +1461,8 @@ def drop_state_inputs(st: str, cache: Path) -> None:
     """One state's P.L., VEST and MEDSL files are read once per build:
     removed after, so a full build holds one state's at a time (about
     1.5 GB in all otherwise)."""
-    for name in (f"{st.lower()}2020.pl.zip", f"{st.lower()}_2020.zip", f"{st.lower()}24.zip"):
+    sl._drop_state_download(st, cache)
+    for name in (f"{st.lower()}_2020.zip", f"{st.lower()}24.zip"):
         (cache / name).unlink(missing_ok=True)
 
 

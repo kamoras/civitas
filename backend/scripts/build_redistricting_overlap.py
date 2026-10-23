@@ -43,15 +43,14 @@ from __future__ import annotations
 import argparse
 import collections
 import datetime as dt
-import io
 import json
 import sys
-import zipfile
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import build_district_lean as lean  # noqa: E402
 import build_district_place_crosswalk as places  # noqa: E402
 import fetch_state_leg_crosswalk as sl  # noqa: E402
 
@@ -103,24 +102,37 @@ def overlap(
     return rows, unmatched
 
 
-def block_population(state: str, cache: Path) -> dict[str, int]:
-    """Block GEOID -> 2020 residents, populated blocks only."""
-    _fips, folder = sl._STATES[state]
-    pl = sl.download(sl._PL.format(folder=folder, st=state.lower()), cache)
-    with zipfile.ZipFile(pl) as zf, zf.open(f"{state.lower()}geo2020.pl") as raw:
-        blocks, _names = sl.read_geo(io.TextIOWrapper(raw, encoding="latin-1"), strong_mcd=False)
+def block_population(state: str, cache: Path, census: int = 2020) -> dict[str, int]:
+    """Block GEOID -> a census's residents, populated blocks only."""
+    with sl.open_geo(state, census, cache) as raw:
+        blocks, _names = sl.read_geo(raw, strong_mcd=False)
     return {g: pop for g, (pop, _units) in blocks.items()}
 
 
-def build_state(state: str, cache: Path, old_zip: Path, new_zip: Path) -> list[list]:
+def old_districts_by_point(state: str, old: int, census: int, cache: Path) -> list[tuple[str, str]]:
+    """(GEOID, district) for a census's populated blocks on an older map
+    drawn on another census's blocks (the first election after a census):
+    each block's internal point placed in the older map's TIGER/Line
+    district shapes (longitude/latitude), since the two censuses' blocks
+    don't nest."""
     fips = sl._FIPS[state]
-    population = block_population(state, cache)
-    cells, unmatched = overlap(
-        population,
-        census_lines.bef_rows(old_zip, fips, state),
-        census_lines.bef_rows(new_zip, fips, state),
-        state,
-    )
+    url = census_lines.tiger_cd_url(old, fips)
+    if url is None:
+        raise SystemExit(f"{state}: no TIGER/Line shapes of the {ordinal(old)} Congress's districts")
+    field = f"CD{old}FP"
+    shapes, records, _prj = lean.read_shapefile(sl.download(url, cache), (field,))
+    geoids, _pop, points, _ = lean.state_blocks(state, cache, census)
+    owner = lean.locate(points, shapes)
+    return [(g, records[i][field]) for g, i in zip(geoids, owner) if i >= 0]
+
+
+def build_state(state: str, cache: Path, old: int, new: int, zips: dict[int, Path]) -> list[list]:
+    fips = sl._FIPS[state]
+    census = census_lines.census_year(new)
+    population = block_population(state, cache, census)
+    old_rows = (census_lines.bef_rows(zips[old], fips, state) if census_lines.census_year(old) == census
+                else old_districts_by_point(state, old, census, cache))
+    cells, unmatched = overlap(population, old_rows, census_lines.bef_rows(zips[new], fips, state), state)
     if unmatched:
         raise SystemExit(f"{state}: {unmatched} residents in blocks without a district on both maps")
     print(f"   {state}: {sum(c[2] for c in cells):,} residents in {len(cells)} old/new overlaps")
@@ -162,7 +174,7 @@ def main(argv: list[str] | None = None) -> int:
         urls[m], zips[m], inputs[str(m)] = found[0], sl.download(found[0], args.cache), list(found)
     built = {}
     for st, (old, new) in states.items():
-        built[st] = build_state(st, args.cache, zips[old], zips[new])
+        built[st] = build_state(st, args.cache, old, new, zips)
         if not args.keep_downloads:
             sl._drop_state_download(st, args.cache)
     doc = {

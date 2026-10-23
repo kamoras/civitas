@@ -22,9 +22,18 @@ Where the files are, by rule: mapping-files/<year the Congress convenes>/
 <N>-congressional-district-bef(s)/cd<N>.zip (the 113th to the 120th all sit
 there); when not under that year, every year directory is searched.
 
-Gates (any failure prints why and writes nothing):
-  * both files hold the same blocks (a new census's blocks are a decennial
-    redistricting, not a mid-decade redraw this rule can compare);
+The first election after a census (its Congress on a new census's blocks,
+census_lines.census_year: 2032's, the 123rd, on the 2030 census's) is a
+decennial redistricting: every state is reapportioned and redrawn, so every
+state is listed on the new map (kind "census"), gated on the Census
+Bureau's apportionment (app/data/apportionment.json, refreshed from its
+Table 1 by scripts/fetch_apportionment.py): each state's seats in the new
+block file must be exactly its apportioned seats, and with no apportionment
+on file yet the cycle stays pending.
+
+Gates for a mid-decade cycle (any failure prints why and writes nothing):
+  * both files hold the same blocks (blocks that differ within a census
+    are not a redraw this rule can compare);
   * every state whose blocks changed has its own file in the zip (the
     Census Bureau files one per state with a new plan);
   * the bundled cycles are written unchanged.
@@ -106,6 +115,54 @@ def state_digests(zip_path: Path) -> tuple[dict[str, int], dict[str, int], set[s
 map_in = census_lines.map_in
 
 
+def state_seats(zip_path: Path) -> dict[str, int]:
+    """State FIPS -> its House seats in a BEF (the distinct district codes
+    of its blocks: delegate seats and unassigned water aren't seats)."""
+    seats: dict[str, set[str]] = collections.defaultdict(set)
+    for geoid, cd in census_lines.bef_all_rows(zip_path):
+        if cd not in ("98", "ZZ"):
+            seats[geoid[:2]].add(cd)
+    return {st: len(cds) for st, cds in seats.items()}
+
+
+def derive_census(cycle: int, fips: dict[str, str], cache: Path, url: str, modified: str,
+                  own_dates: dict[str, str], states_in: set[str]) -> tuple[dict | None, str]:
+    """The first election after a census: every state is reapportioned and
+    redrawn on the new census's blocks, so every state is on the new map.
+    Gated on the apportionment: each state's seats in the block file are
+    exactly its seats in the Census Bureau's Table 1 for that census
+    (app/data/apportionment.json)."""
+    congress = seated_by(cycle)
+    census = census_lines.census_year(congress)
+    apportioned = census_lines.apportionment(census)
+    if not apportioned:
+        return None, f"the {census} census's apportionment is not on file yet (scripts/fetch_apportionment.py)"
+    seats = {fips[f]: n for f, n in state_seats(_fetch(url, cache)).items() if f in fips}
+    wrong = sorted(st for st in apportioned if seats.get(st) != apportioned[st])
+    if wrong:
+        return None, (f"the {ordinal(congress)} Congress's file disagrees with the {census} apportionment in "
+                      + ", ".join(f"{st} ({seats.get(st, 0)} seats, apportioned {apportioned[st]})" for st in wrong))
+    entry = {}
+    for code_fips in sorted(states_in, key=lambda f: fips.get(f, f)):
+        st = fips.get(code_fips)
+        if st not in apportioned:
+            continue
+        entry[st] = {
+            "map": f"CD{congress}",
+            "reason": (f"Reapportioned after the {census} census ({apportioned[st]} "
+                       f"seat{'s' if apportioned[st] != 1 else ''}) and drawn on its blocks: the Census Bureau's "
+                       f"{ordinal(congress)} Congress block equivalency file"),
+            "kind": "census",
+            "settled": own_dates.get(code_fips) or modified[:10],
+            "source": {
+                "title": f"{ordinal(congress)} Congress block equivalency file (cd{congress}.zip, published {modified[:10]})",
+                "issuedBy": "U.S. Census Bureau, Redistricting Data Office",
+                "url": url,
+            },
+        }
+    return entry, f"{url} (published {modified}; a new census: every state)"
+
+
 def derive(cycle: int, cycles: dict, fips: dict[str, str], cache: Path) -> tuple[dict | None, str]:
     """The cycle's entry (state -> map entry; {} when no state redrew), or
     None with why not."""
@@ -115,6 +172,8 @@ def derive(cycle: int, cycles: dict, fips: dict[str, str], cache: Path) -> tuple
         return None, f"no Census block equivalency file for the {ordinal(congress)} Congress under {RDO}/ yet"
     url, modified = found
     new, new_counts, own, own_dates = state_digests(_fetch(url, cache))
+    if census_lines.census_year(congress) != census_lines.census_year(congress - 1):
+        return derive_census(cycle, fips, cache, url, modified, own_dates, set(new))
     states = sorted({st for c in cycles.values() for st in c} | set(fips.values()))
     in_force = {st: map_in(cycles, cycle - 2, st) for st in states}
     base_digests: dict[str, tuple[dict, dict]] = {}

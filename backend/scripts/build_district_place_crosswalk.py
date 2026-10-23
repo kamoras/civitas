@@ -80,11 +80,15 @@ def build_state(state: str, cache: Path, maps: dict[int, dict[str, int]], befs: 
     """{Congress: {"ST-N": places}} for one state on each Congress in
     `maps` (Congress -> state -> the Congress whose BEF holds its lines)."""
     fips = sl._FIPS[state]
-    blocks, names = sl.state_units(state, cache, gazetteer)
-    blocks = places_only(blocks)
     by_map: dict[int, dict] = {}
-    for m in sorted({maps[c][state] for c in maps}):
-        by_map[m] = sl.crosswalk(blocks, names, census_lines.bef_rows(befs[m], fips, state), key=cd_key)
+    needed = sorted({maps[c][state] for c in maps})
+    # Each map on the blocks of the census it is drawn on (a new census's
+    # maps on its own blocks, census_lines.census_year).
+    for census in sorted({census_lines.census_year(m) for m in needed}):
+        blocks, names = sl.state_units(state, cache, gazetteer, census)
+        blocks = places_only(blocks)
+        for m in (m for m in needed if census_lines.census_year(m) == census):
+            by_map[m] = sl.crosswalk(blocks, names, census_lines.bef_rows(befs[m], fips, state), key=cd_key)
     print(f"   {state}: " + ", ".join(f"{ordinal(m)} map {len(seats)} districts" for m, seats in by_map.items()))
     return {str(c): {f"{state}-{n}": listed for n, listed in by_map[maps[c][state]].items()} for c in maps}
 

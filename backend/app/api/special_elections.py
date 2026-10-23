@@ -98,7 +98,7 @@ def presidential(db: Session = Depends(get_db)):
     current = season(db)
     cycle = current.cycle
     body = {"cycle": cycle, "presidential": electoral_votes.is_presidential(cycle),
-            "nextPresidential": cycle + (-cycle) % 4, "electoralVotes": electoral_votes.summary()}
+            "nextPresidential": cycle + (-cycle) % 4, "electoralVotes": electoral_votes.summary(cycle + (-cycle) % 4)}
     if body["presidential"]:
         race = db.get(Race, f"{cycle}-PRES")
         cands = sorted(race.candidates if race else [], key=lambda c: -(c.contributions or 0))

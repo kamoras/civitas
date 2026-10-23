@@ -1667,7 +1667,7 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
         "statePvi": state_pvi.get(state),
         # In a presidential cycle, the state's electoral votes (from the
         # House apportionment, electoral_votes); null otherwise.
-        "electoralVotes": electoral_votes().get(state) if is_presidential(cycle) else None,
+        "electoralVotes": electoral_votes(cycle).get(state) if is_presidential(cycle) else None,
         # The state votes this cycle on congressional lines other than the
         # ones its members were elected on — the members going into this
         # election, or the ones sitting now (redrawn_states;
