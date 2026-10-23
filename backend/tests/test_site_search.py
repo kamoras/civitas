@@ -512,3 +512,17 @@ def test_site_search_reads_the_refreshed_calibration():
         path.unlink()
         data_refresh._read_cache.pop("site_search_calibration.json", None)
     assert site_search.params() == bundled
+
+
+def test_a_members_whole_name_goes_to_the_member_not_a_section(tmp_path):
+    """"bill" is Legislative Effectiveness's section word, and "Bill
+    Huizenga" jumped to that section of his page (2026-10-23): a query
+    that is a page's whole name means the page."""
+    path = str(tmp_path / "site_search.db")
+    write_index(_fixture_entities() + [Entity("member", "Bill Huizenga", "/politicians/bill-huizenga",
+                                              "Representative · R-MI-4", 1.0)], path, "fp")
+    a = answer("Bill Huizenga", path)
+    assert a.direct is not None and a.direct.url == "/politicians/bill-huizenga"
+    # Section words beside a name still land on the section.
+    donors = answer("Bill Huizenga donors", path)
+    assert donors.direct is not None and donors.direct.url.startswith("/politicians/bill-huizenga#")

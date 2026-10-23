@@ -457,12 +457,16 @@ def answer(raw: str, path: str | None = None, db=None, p: Params | None = None) 
     ("H.R. 1 votes", "<member> donors")."""
     p = p or params()
     q = normalize((raw or "")[:QUERY_MAX])
-    for kind, anchor, heading, rest in _section_intent(q):
-        sub = rank(" ".join(rest), path, db, p)
-        if is_direct(sub, p) and sub[0].kind in _SECTION_KINDS[kind]:
-            top = replace(sub[0], url=f"{sub[0].url.split('#')[0]}#{anchor}", section=heading)
-            return Answer([top] + sub[1:], top)
     ranked = rank(raw or "", path, db, p)
+    # A query that is a page's whole name or identifier means that page,
+    # not a section: "Bill Huizenga" read "bill" as Legislative
+    # Effectiveness's section words and jumped to it (2026-10-23).
+    if not (ranked and ranked[0].match >= EXACT):
+        for kind, anchor, heading, rest in _section_intent(q):
+            sub = rank(" ".join(rest), path, db, p)
+            if is_direct(sub, p) and sub[0].kind in _SECTION_KINDS[kind]:
+                top = replace(sub[0], url=f"{sub[0].url.split('#')[0]}#{anchor}", section=heading)
+                return Answer([top] + sub[1:], top)
     return Answer(ranked, ranked[0] if is_direct(ranked, p) else None)
 
 
