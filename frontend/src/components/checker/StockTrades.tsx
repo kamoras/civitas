@@ -141,9 +141,9 @@ const SOURCE_LABEL = {
 
 const ABOUT_DATA = {
   congress:
-    "Disclosed under the STOCK Act (2012), which requires members of Congress to report stock transactions within 45 days. Informational only, not part of the overall score, since disclosure completeness varies widely per member.",
+    "Disclosed under the STOCK Act (2012), which requires members of Congress to report stock transactions within 45 days. Shown for context, not compared with other members, since disclosure completeness varies widely per member.",
   president:
-    "Every securities and virtual-currency purchase, sale, or exchange over $1,000 the president disclosed. For a year the annual report (OGE Form 278e) covers, its list of the year's transactions is the record; after it, the periodic reports (OGE Form 278-T) the STOCK Act requires within 45 days, which the White House files as scans. Amounts are the value ranges the forms report: they carry no cost basis or share count, so no profit or gain figure is shown or derived. Informational only, not part of the overall score.",
+    "Every securities and virtual-currency purchase, sale, or exchange over $1,000 the president disclosed. For a year the annual report (OGE Form 278e) covers, its list of the year's transactions is the record; after it, the periodic reports (OGE Form 278-T) the STOCK Act requires within 45 days, which the White House files as scans. Amounts are the value ranges the forms report: they carry no cost basis or share count, so no profit or gain figure is shown or derived. Shown for context, not compared with other members.",
 } as const;
 
 export default function StockTrades({ politicianId, filer = "senate" }: StockTradesProps) {

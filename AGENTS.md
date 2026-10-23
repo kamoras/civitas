@@ -939,7 +939,11 @@ Corollaries that follow from the same rule, all enforced in code:
   plain 4xx that way), so nothing is crawled past it
   (`state_source_crawler.WALLED`). Walls already investigated go in
   `state_candidate_sources.json`'s `_robots_walls` with their evidence, so
-  the crawl's ops alert names only a new wall or an unreachable file.
+  the crawl's ops alert names only a new wall or an unreachable file. A
+  measure source walled the same way is written up as the state's `wall`
+  in `ballot_measure_pdf_sources.json` (host, date measured, evidence):
+  the state stays `ingest_failed` and its page says the read failed, but
+  the nightly ingest alert names only new problems (Ohio, 2026-10-21).
 - The source is the state's own document, but not always the state's own
   server. Where a state's whole site sits behind a bot wall (Georgia's
   Cloudflare, Nevada's Imperva), the reader raises `SourceBlocked` and the
@@ -2030,6 +2034,15 @@ it keeps, each enforced by a test (`tests/test_forecast_model.py`,
   was measured and rejected (it moved every forward figure the wrong way). The poll window
   is the training polls' own reach (`model.poll_window`), never typed;
   beyond it every range is the structural line's, labelled fundamentals only.
+  Five poll-weighting numbers are still stated priors (`model.STATED_PRIORS`:
+  the sample-size clip and reference, the house-effect shrink, the half-life
+  grid), named with their reasons on the map's method section. Their fit
+  (`fit_forecast_model.py --fit-priors`) stays off while a map built on them
+  is live; from the January 3 after a general held since
+  `model.PRIORS_STATED_ON`, `data_refresh._forecast_priors_stale` alerts until
+  a fit records fitted ones. Adopt that refit on its held-out checks, not its
+  in-sample likelihood: measured 2026-10-22, it fit better in sample and no
+  better held out.
 - **Training polls: Silver Bulletin, gated, attributed.**
   `app/forecast/training_polls.py` (fetched by
   `scripts/fetch_silver_bulletin_polls.py` with `BOT_USER_AGENT` and no other
