@@ -188,7 +188,7 @@ def test_heavy_files_wait_for_the_pipeline_and_stale_ones_alert(alerts):
     stale = dr.DataFile("t_stale.json", stale=lambda ctx: "a newer one is out")
     fresh = dr.DataFile("t_fresh.json")
     with patch.object(dr, "_last_try", return_value=(None, False)), \
-         patch.object(dr, "_record_try", side_effect=lambda n, o: tried.append(n)):
+         patch.object(dr, "_record_try", side_effect=lambda n, o, r=None: tried.append(n)):
         out = dr.run_refreshes([heavy, stale, fresh], pipeline_busy=True)
         assert out == {"t_heavy.json": "waiting for the pipeline", "t_stale.json": "current", "t_fresh.json": "current"}
         assert tried == []
@@ -300,10 +300,30 @@ def test_calibrations_tied_to_a_congress_are_flagged_when_the_next_one_is_comple
     assert "119th" in dr._commemorative_stale(_ctx(doc={"les_spearman_118th": 0.9}))
 
 
+def test_the_vote_grades_gate():
+    good = {"chambers": {"senate": {"partial": 33, "full": 53}, "house": {"partial": 15, "full": 30}}}
+    assert dr._grades_gate(good, good) == []
+    assert dr._grades_gate({"chambers": {"senate": {"partial": 60, "full": 53}}}, {})
+    doubled = {"chambers": {"senate": {"partial": 70, "full": 120}, "house": {"partial": 15, "full": 30}}}
+    assert any("moved" in f for f in dr._grades_gate(doubled, good))
+
+
 def test_the_district_lean_window_goes_stale_after_the_next_presidential_election():
     doc = {"_window": "2020+2024"}
     assert dr._district_lean_stale(_ctx(doc=doc, today=date(2028, 12, 14))) is None
     assert "2028" in dr._district_lean_stale(_ctx(doc=doc, today=date(2028, 12, 15)))
+
+
+def test_the_maps_stated_priors_alert_once_their_election_is_certified():
+    stated = {"fits": {"0": {"halfLife": 7.0}, "7": {"halfLife": 7.0}}}
+    fitted = {"fits": {h: {"priors": {"fitted": True}} for h in ("0", "7")}}
+    ctx = lambda doc, day: _ctx("forecast_model.json", doc, today=day)  # noqa: E731
+    # Not while the map built on them is live, nor in the results window.
+    assert dr._forecast_priors_stale(ctx(stated, date(2026, 10, 30))) is None
+    assert dr._forecast_priors_stale(ctx(stated, date(2027, 1, 2))) is None
+    # From the January 3 the election they were stated for is certified.
+    assert "--fit-priors" in dr._forecast_priors_stale(ctx(stated, date(2027, 1, 3)))
+    assert dr._forecast_priors_stale(ctx(fitted, date(2027, 1, 3))) is None
 
 
 def test_a_newer_maddison_release_is_found_by_search(monkeypatch):
@@ -318,7 +338,7 @@ def test_a_newer_maddison_release_is_found_by_search(monkeypatch):
             return {"data": {"items": [{"name": n} for n in self.names]}}
 
     doc = {"_source": "Maddison Project Database 2023 (Bolt & van Zanden 2024)"}
-    monkeypatch.setattr(dr, "_record_try", lambda n, o: None)
+    monkeypatch.setattr(dr, "_record_try", lambda n, o, r=None: None)
     monkeypatch.setattr(dr.httpx, "get", lambda *a, **k: Resp(["Maddison Project Database 2023"]))
     assert dr._peer_gdp_stale(_ctx("peer_gdp_per_capita.json", doc)) is None
     monkeypatch.setattr(dr.httpx, "get", lambda *a, **k: Resp(["Maddison Project Database 2026", "x"]))
@@ -356,7 +376,7 @@ def test_a_newer_acs_or_onet_is_found(monkeypatch):
     """The bundled file names ACS and O*NET releases in its _source; a
     newer one posted is an alert, nothing new is not, and a source that
     can't be read says nothing."""
-    monkeypatch.setattr(dr, "_record_try", lambda n, o: None)
+    monkeypatch.setattr(dr, "_record_try", lambda n, o, r=None: None)
     with gzip.open(dr.BUNDLED / dr.OCCUPATION_FILE, "rt") as f:
         source = json.load(f)["_source"]
     year = int(re.search(r"ACS (\d{4})", source)[1])
@@ -375,7 +395,7 @@ def test_a_newer_acs_or_onet_is_found(monkeypatch):
 
 
 def test_a_newer_supreme_court_database_release_is_found(monkeypatch):
-    monkeypatch.setattr(dr, "_record_try", lambda n, o: None)
+    monkeypatch.setattr(dr, "_record_try", lambda n, o, r=None: None)
     doc = {"scdbRelease": "2026_01"}
     monkeypatch.setattr(dr, "_get_text", lambda url: '<a href="data/2026-release-01/">2026 Release 01</a>')
     assert dr._court_finding_stale(_ctx("court_finding.json", doc)) is None
@@ -474,5 +494,83 @@ def test_a_shipped_regeneration_is_refreshed_the_next_day(alerts, tmp_path):
         # against what shipped, so it is not refreshed again every day.
         assert dr.run_refreshes([spec]) == {"t_ship.json": "unchanged"}
         assert not dr.bundled_moved("t_ship.json", dr.read("t_ship.json"))
-    # A copy installed before the record existed is not told apart.
-    assert not dr.bundled_moved("t_ship.json", {"v": 2, "_refreshed": {"at": "2026-10-18T18:48:52"}})
+        # A refreshed copy installed before the record existed (every copy
+        # in production on 2026-10-22, the House fit's among them) is
+        # refreshed once, which records it; the bundled copy itself never is.
+        assert dr.bundled_moved("t_ship.json", {"v": 2, "_refreshed": {"at": "2026-10-18T18:48:52"}})
+        assert not dr.bundled_moved("t_ship.json", {"v": 3})
+
+
+def test_a_failed_try_is_retried_the_next_day_once_what_it_runs_changes(alerts, tmp_path):
+    # 2026-10-18: three refreshes failed; each fix shipped within a day (two in
+    # the generator script, one in the command line) and waited out the week.
+    script = tmp_path / "gen.py"
+    script.write_text("broken")
+    tried = []
+    spec = dr.DataFile("t_fix.json", command=lambda ctx: [sys.executable, str(script), "{out}"],
+                       due=lambda ctx: False)
+    with patch.object(dr, "BACKEND", tmp_path), patch.object(dr, "utcnow", return_value=datetime(2026, 10, 20)), \
+         patch.object(dr, "refresh_one", side_effect=lambda spec, ctx: tried.append(1) or "kept: crashed"), \
+         patch.object(dr, "_record_try"):
+        failed_with = dr.recipe(spec.command(None))
+        yesterday = datetime(2026, 10, 19, 18, 0)
+        with patch.object(dr, "_last_try", return_value=(yesterday, True, failed_with)):
+            dr.run_refreshes([spec])
+            assert tried == []  # nothing changed: the week's retry stands
+            script.write_text("fixed")
+            dr.run_refreshes([spec])
+            assert tried == [1]
+        # A failure recorded before recipes were counts as changed.
+        with patch.object(dr, "_last_try", return_value=(yesterday, True, None)):
+            dr.run_refreshes([spec])
+            assert tried == [1, 1]
+        # Never twice in a day, and never for a try that succeeded.
+        with patch.object(dr, "_last_try", return_value=(datetime(2026, 10, 20, 9), True, None)):
+            dr.run_refreshes([spec])
+        with patch.object(dr, "_last_try", return_value=(yesterday, False, None)):
+            dr.run_refreshes([spec])
+        assert tried == [1, 1]
+
+
+def test_a_fix_in_a_module_the_script_imports_is_retried_the_next_day(alerts, tmp_path):
+    # The script names only itself; the fix lands two imports away, in a
+    # module reached by a relative import.
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "app" / "analyze").mkdir(parents=True)
+    script = tmp_path / "scripts" / "gen.py"
+    script.write_text("import json\nfrom app.analyze import reader\n")
+    (tmp_path / "app" / "__init__.py").write_text("")
+    (tmp_path / "app" / "analyze" / "__init__.py").write_text("")
+    (tmp_path / "app" / "analyze" / "reader.py").write_text("from . import helpers\nimport app.unrelated_missing\n")
+    helpers = tmp_path / "app" / "analyze" / "helpers.py"
+    helpers.write_text("x.cache_clear()\n")
+    (tmp_path / "app" / "untouched.py").write_text("")
+    tried = []
+    spec = dr.DataFile("t_dep.json", command=lambda ctx: [sys.executable, str(script), "{out}"],
+                       due=lambda ctx: False)
+    with patch.object(dr, "BACKEND", tmp_path), patch.object(dr, "utcnow", return_value=datetime(2026, 10, 20)), \
+         patch.object(dr, "refresh_one", side_effect=lambda spec, ctx: tried.append(1) or "kept: crashed"), \
+         patch.object(dr, "_record_try"):
+        failed_with = dr.recipe(spec.command(None))
+        (tmp_path / "app" / "untouched.py").write_text("changed, but nothing imports it")
+        assert dr.recipe(spec.command(None)) == failed_with
+        with patch.object(dr, "_last_try", return_value=(datetime(2026, 10, 19, 18), True, failed_with)):
+            dr.run_refreshes([spec])
+            assert tried == []
+            helpers.write_text("pass\n")
+            dr.run_refreshes([spec])
+            assert tried == [1]
+
+
+def test_recipe_follows_the_real_generators_imports():
+    spec = next(f for f in dr.DATA_FILES if f.name == "bill_title_token_df.json")
+    files = {f.relative_to(dr.BACKEND).as_posix()
+             for f in dr._backend_imports(dr.BACKEND / "scripts" / "calibrate_lda_bill_match.py")}
+    assert "app/pipeline/analyze/lobbying_records.py" in files
+    assert len(dr.recipe(spec.command(_ctx(spec.name)))) == 16
+
+
+def test_a_try_records_the_recipe_it_ran(db_session):
+    with patch.object(dr, "SessionLocal", return_value=db_session), patch.object(db_session, "close"):
+        dr._record_try("x.json", "kept: crashed", "abc")
+        assert dr._last_try("x.json")[1:] == (True, "abc")

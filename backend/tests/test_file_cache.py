@@ -188,7 +188,7 @@ class TestReadJson:
 
 
 @pytest.mark.parametrize("module", [
-    "ballot_lookup", "town_directory", "ballot_pdf_sources", "ballot_measure_pdf_sources", "state_candidate_sources",
+    "ballot_lookup", "town_directory", "ballot_measure_pdf_sources", "state_candidate_sources",
 ])
 def test_an_operator_override_unreadable_for_a_moment_is_not_kept(module, tmp_path, monkeypatch):
     # Kept, the bundled fallback (or nothing) would stand for the life of

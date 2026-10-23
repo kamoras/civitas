@@ -30,6 +30,7 @@ Readers call `read(name)`, which notices a rewrite from either process.
 
 from __future__ import annotations
 
+import ast
 import gzip
 import hashlib
 import json
@@ -98,6 +99,7 @@ class Context:
     today: date
     last_tried: datetime | None
     last_failed: bool = False  # the last try kept the copy in use
+    last_recipe: str | None = None  # recipe() of the last try's command
 
     def tried_within(self, days: int) -> bool:
         if self.last_failed:
@@ -156,21 +158,89 @@ def content_sha256(doc: dict) -> str:
 RETRY_FAILED_AFTER_DAYS = 7
 
 
-def _last_try(name: str) -> tuple[datetime | None, bool]:
-    """When `name` was last tried, and whether that try kept the copy in use."""
+def _module_file(name: str) -> pathlib.Path | None:
+    """The file under BACKEND that module `name` is, or None."""
+    base = BACKEND.joinpath(*name.split("."))
+    for path in (base.with_suffix(".py"), base / "__init__.py"):
+        if path.is_file():
+            return path
+    return None
+
+
+def _backend_imports(path: pathlib.Path) -> set[pathlib.Path]:
+    """The files of this backend's own packages (app, scripts) that `path`
+    imports directly, absolute or relative. `from app.x import y` counts
+    app/x and, when y is a module, app/x/y."""
+    try:
+        tree = ast.parse(path.read_bytes())
+    except (OSError, SyntaxError, ValueError):
+        return set()
+    package = path.relative_to(BACKEND).with_suffix("").parts
+    package = package if path.name == "__init__.py" else package[:-1]
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            if node.level:
+                if node.level - 1 > len(package):
+                    continue
+                parent = ".".join(package[:len(package) - (node.level - 1)])
+                module = ".".join(part for part in (parent, node.module) if part)
+            else:
+                module = node.module or ""
+            names.add(module)
+            names.update(f"{module}.{alias.name}" for alias in node.names)
+    return {f for name in names
+            if name.split(".")[0] in ("app", "scripts") and (f := _module_file(name)) is not None}
+
+
+def recipe(argv: list[str]) -> str:
+    """What a refresh runs: its command line, the content of every file of
+    this backend it names (the generator script, an input it reads), and
+    of every module of this backend those files import, transitively. A
+    failed try whose recipe has changed since is tried again the next day,
+    not a week on: the change is usually the fix. All three of 2026-10-18's
+    failed refreshes had their fix deployed within a day and waited out the
+    week (the token table and coverage floors in their scripts, name casing
+    in its command line). Only failed tries read it, so a change it sees
+    costs no refresh of a file whose last try succeeded."""
+    digest = hashlib.sha256()
+    named: list[pathlib.Path] = []
+    for arg in argv:
+        digest.update(arg.encode() + b"\0")
+        path = pathlib.Path(arg)
+        if path.is_absolute() and path.is_relative_to(BACKEND) and path.is_file():
+            digest.update(path.read_bytes())
+            named.append(path)
+    seen: set[pathlib.Path] = set(named)
+    pending = [p for p in named if p.suffix == ".py"]
+    while pending:
+        for module in _backend_imports(pending.pop()) - seen:
+            seen.add(module)
+            pending.append(module)
+    for module in sorted(seen - set(named)):
+        digest.update(str(module.relative_to(BACKEND)).encode() + b"\0" + module.read_bytes())
+    return digest.hexdigest()[:16]
+
+
+def _last_try(name: str) -> tuple[datetime | None, bool, str | None]:
+    """When `name` was last tried, whether that try kept the copy in use,
+    and its recipe (None for a try recorded before recipes were)."""
     db = SessionLocal()
     try:
         state = api_cache_get(db, _STATE_TIER, name, max_age_hours=24 * 365 * 5) or {}
     finally:
         db.close()
     tried = datetime.fromisoformat(state["triedAt"]) if state.get("triedAt") else None
-    return tried, str(state.get("outcome") or "").startswith("kept")
+    return tried, str(state.get("outcome") or "").startswith("kept"), state.get("recipe")
 
 
-def _record_try(name: str, outcome: str) -> None:
+def _record_try(name: str, outcome: str, recipe: str | None = None) -> None:
     db = SessionLocal()
     try:
-        api_cache_set(db, _STATE_TIER, name, {"triedAt": utcnow().isoformat(), "outcome": outcome},
+        api_cache_set(db, _STATE_TIER, name,
+                      {"triedAt": utcnow().isoformat(), "outcome": outcome, "recipe": recipe},
                       normal_ttl_hours=24 * 365 * 5)
     finally:
         db.close()
@@ -235,10 +305,15 @@ def bundled_moved(name: str, doc: dict) -> bool:
     method now reads), and read() keeps serving the refreshed copy until
     the next refresh. #1113 shipped the House fit through 2024 on
     2026-10-19, and the map kept the 2026-10-18 refit through 2022 for a
-    week. Copies installed before the record existed have none and are not
-    told apart."""
-    recorded = (doc.get("_refreshed") or {}).get("bundled")
-    return recorded is not None and recorded != bundled_sha256(name)
+    week. A refreshed copy installed before the record existed (before
+    2026-10-21) counts as moved: which bundled copy it was measured against
+    is unknown, so it is refreshed once, which records it. Read as unmoved,
+    every copy in production was, and the House fit waited on its weekly
+    refit with the alert open."""
+    provenance = doc.get("_refreshed")
+    if not provenance:
+        return False  # the bundled copy itself
+    return provenance.get("bundled") != bundled_sha256(name)
 
 
 def install(spec: DataFile | str, new: dict, argv: list[str]) -> bool:
@@ -365,12 +440,21 @@ def run_refreshes(files: list[DataFile] | None = None, *, pipeline_busy: bool = 
         try:
             ctx = Context(spec.name, read(spec.name), utcnow().date(), *_last_try(spec.name))
             shipped = any(bundled_moved(n, read(n)) for n in (spec.name, *spec.outputs))
-            if spec.command and (spec.due(ctx) or (shipped and not ctx.tried_within(1))):
+            template = spec.command(ctx) if spec.command else None
+            # A failed try is retried the next day once what it runs has
+            # changed (a try recorded before recipes were counts as changed).
+            # Hashed only when it can matter (it reads the generator's whole
+            # import tree, about 5 s for every file).
+            current = recipe(template) if template is not None and ctx.last_failed else None
+            fixed = current is not None and current != ctx.last_recipe
+            if spec.command and (spec.due(ctx) or ((shipped or fixed) and not ctx.tried_within(1))):
                 if spec.heavy and pipeline_busy:
                     outcomes[spec.name] = "waiting for the pipeline"
                 else:
+                    if current is None and template is not None:
+                        current = recipe(template)
                     outcomes[spec.name] = refresh_one(spec, ctx)
-                    _record_try(spec.name, outcomes[spec.name])
+                    _record_try(spec.name, outcomes[spec.name], current)
                     ctx.doc = read(spec.name)
             why = spec.stale(ctx)
             if why is UNCHECKED:
@@ -550,6 +634,25 @@ def _coverage_gate(new: dict, old: dict) -> list[str]:
             prior = ((old.get(chamber) or {}).get("floors") or {}).get(ref)
             if prior is not None and abs(float(value) - float(prior)) > 0.3:
                 failures.append(f"{chamber} {ref} floor moved {prior} -> {value}")
+    return failures
+
+
+def _grades_gate(new: dict, old: dict) -> list[str]:
+    """Constituent Alignment's data-grade vote counts: both chambers, Partial
+    below Full, and no count more than doubled or halved since the copy in
+    use (a jump that size is a broken read, not a month's new votes)."""
+    failures = []
+    for chamber in ("house", "senate"):
+        entry = (new.get("chambers") or {}).get(chamber) or {}
+        partial, full = entry.get("partial"), entry.get("full")
+        if not (isinstance(partial, int) and isinstance(full, int) and 0 < partial <= full):
+            failures.append(f"{chamber}: partial {partial}, full {full}")
+            continue
+        prior = (old.get("chambers") or {}).get(chamber) or {}
+        for key, value in (("partial", partial), ("full", full)):
+            was = prior.get(key)
+            if was and not was / 2 <= value <= was * 2:
+                failures.append(f"{chamber} {key} moved {was} -> {value}")
     return failures
 
 
@@ -859,6 +962,25 @@ def _forecast_gate(new: dict, old: dict) -> list[str]:
     return failures
 
 
+def _forecast_priors_stale(ctx: Context) -> str | None:
+    """The map's stated priors (model.STATED_PRIORS: the sample-size clip and
+    reference, the house-effect shrink, the half-life grid) are to be fitted
+    once the election they were stated for is certified, and not while a
+    map built on them is live. From the January 3 after a general held
+    since model.PRIORS_STATED_ON, a fit that doesn't record fitted priors
+    for every horizon is stale."""
+    fits = (ctx.doc.get("fits") or {}).values()
+    if fits and all((f.get("priors") or {}).get("fitted") for f in fits):
+        return None
+    if last_certified_general(ctx.today) == last_certified_general(date.fromisoformat(model.PRIORS_STATED_ON)):
+        return None
+    return ("the election map's poll weighting still rests on stated priors (app/forecast/model.py: N_REF, "
+            "N_MIN, N_CAP, HOUSE_SHRINK, HALF_LIFE_GRID), and the election they were stated for has been "
+            "certified. Run scripts/fit_forecast_model.py --fit-priors, review the refit's held-out checks, "
+            "make the flag the default in _forecast_command, and update the map's method section, which "
+            "names them as stated.")
+
+
 # Familywise error rate of the forward check's alert.
 FORWARD_ALPHA = 0.05
 
@@ -941,10 +1063,14 @@ DATA_FILES: list[DataFile] = [
                                   "--days", str(NAME_CASING_ISSUES), "--output", "{out}", "--cache", "{tmp}"],
              due=lambda ctx: not ctx.tried_within(365) and ctx.today >= date(ctx.today.year, 2, 1),
              gate=_casing_gate, heavy=True, timeout_s=4 * 3600),
+    DataFile("confidence_grades.json",
+             command=lambda ctx: [PY, _script("calibrate_confidence_grades.py"), "--out", "{out}"],
+             due=_every(30), gate=_grades_gate, timeout_s=1800),
     DataFile(training_polls.FILE_NAME, command=_training_polls_command, due=_training_polls_due,
              gate=training_polls.gate, timeout_s=900),
     DataFile("forecast_model.json", command=_forecast_command, due=_forecast_due, gate=_forecast_gate,
-             outputs=FORECAST_OUTPUTS, check=_forward_finding, heavy=True, timeout_s=3600),
+             outputs=FORECAST_OUTPUTS, check=_forward_finding, stale=_forecast_priors_stale, heavy=True,
+             timeout_s=3600),
     DataFile("eavs.json", command=lambda ctx: [PY, _script("fetch_eavs.py"), "{out}"], due=_every(30),
              gate=_eavs_gate, timeout_s=900),
     DataFile("agency_crosswalk.json", command=lambda ctx: [PY, _script("calibrate_agency_crosswalk.py"), "{out}"],

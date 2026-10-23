@@ -45,7 +45,6 @@ from app.models import (
     StockTradesPipelineRun,
     SupplementaryPipelineRun,
 )
-from app.pipeline.fetch import ballot_pdf_sources
 from app.time_utils import utcnow
 from app.voter_calendar import calendar_election_date
 
@@ -372,13 +371,11 @@ def check_current_congress_staleness() -> None:
 # in place. The maps must be settled by the year's filing deadlines; voter
 # deadlines start with UOCAVA ballots 45 days out and registration about a
 # month out, and a calendar must be on the page well before either; poll
-# closing times only matter on the night, a town's sample ballot once it is
-# printed (about two months out).
+# closing times only matter on the night.
 READINESS_LEAD = {
     "maps": None,  # from January 1 of the election year
     "calendar": timedelta(days=150),
     "poll_close": timedelta(days=45),
-    "town_ballots": timedelta(days=60),
 }
 
 
@@ -427,22 +424,12 @@ def election_readiness_gaps(election_day: date) -> dict[str, str]:
             f"election night would hold each state's count to the last cycle's closing times "
             f"(backend/scripts/fetch_poll_close_times.py {year})."
         )
-    if today >= election_day - READINESS_LEAD["town_ballots"]:
-        stale = sorted(
-            town for town, entry in ballot_pdf_sources.all_towns().items()
-            if (entry.get("election_date") or "") < (election_day - timedelta(days=366)).isoformat()
-        )
-        if stale:
-            gaps["election-ready-town-ballots"] = (
-                f"The sample ballots on file for {', '.join(stale)} are from an earlier cycle; those towns show "
-                f"as not covered until app/data/ballot_pdf_sources.json names the {year} ballot."
-            )
     return gaps
 
 
 READINESS_CONDITIONS = (
     "election-ready-maps", "election-ready-district-lean", "election-ready-calendar",
-    "election-ready-poll-close", "election-ready-town-ballots",
+    "election-ready-poll-close",
 )
 
 

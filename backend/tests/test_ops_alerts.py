@@ -542,12 +542,11 @@ class TestElectionReadiness:
         gaps = self._gaps(date(2028, 1, 5), maps={"2026": {}, "2028": {"OH": {"map": "CD121"}}})
         assert set(gaps) == {"election-ready-district-lean"} and "OH" in gaps["election-ready-district-lean"]
 
-    def test_the_calendar_poll_closes_and_town_ballots_follow_in_turn(self):
+    def test_the_calendar_then_poll_closes_follow_in_turn(self):
         maps = {"2026": {}, "2028": {}}
         assert set(self._gaps(date(2028, 6, 20), maps)) == {"election-ready-calendar"}
-        assert set(self._gaps(date(2028, 9, 15), maps)) == {"election-ready-calendar", "election-ready-town-ballots"}
-        assert set(self._gaps(date(2028, 10, 1), maps)) == {
-            "election-ready-calendar", "election-ready-town-ballots", "election-ready-poll-close"}
+        assert set(self._gaps(date(2028, 9, 15), maps)) == {"election-ready-calendar"}
+        assert set(self._gaps(date(2028, 10, 1), maps)) == {"election-ready-calendar", "election-ready-poll-close"}
 
     def test_alerts_open_and_resolve_per_condition(self):
         held = ActiveElection(election_day=self.ELECTION, phase="campaign", results_until=None, last_result_change=None)

@@ -62,7 +62,9 @@ cf-mitigated: challenge) to the pipeline's client too. That is a wall
 2026-10-20 stay on the page, and nothing tries to get past it. There is
 no county copy to fall back on: the county boards post their own precinct
 ballots, not the Secretary's sample ballot this reader verifies page by
-page, so Ohio has no `republished_by` entry.
+page, so Ohio has no `republished_by` entry. The wall is written up as the
+registry entry's `wall` (measured again 2026-10-22, now a Cloudflare block
+page), so the nightly ingest alert stops repeating it.
 """
 
 import io
