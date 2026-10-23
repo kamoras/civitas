@@ -2252,7 +2252,11 @@ it keeps, each enforced by a test (`tests/test_forecast_model.py`,
   2018, 2020, 2022 and 2024 on the lines each was held on, with
   `build_district_lean.py`'s own block method (VEST 2016/2020 on Census 2020
   blocks; 116th lines from TIGER polygons, 118th and 119th from the BEFs), into
-  `app/data/forecast_house_lean.json`; results and incumbency come from the
+  `app/data/forecast_house_lean.json`. An election after its last takes, by
+  rule, the computed lean's table for the lines it seats when that table's
+  window is the two presidential elections before it (2026's and 2028's:
+  2020 and 2024; `fit_forecast_model.house_leans`), so no cycle waits on a
+  person extending the history script; results and incumbency come from the
   FEC's Federal Elections workbooks, and for a year the FEC has not compiled,
   from the Clerk of the House's Statistics of the Presidential and
   Congressional Election (found by year on the Clerk's Election Information
