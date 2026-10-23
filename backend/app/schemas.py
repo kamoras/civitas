@@ -1888,6 +1888,10 @@ class CommitteeContactSchema(CamelModel):
     url: str | None = None
     chair: CommitteeLeaderSchema | None = None
     ranking_member: CommitteeLeaderSchema | None = None
+    # Worded as a likely match while the routing fit falls short of the
+    # precision rule (committee_routing.precision_rule_met); actions stored
+    # before the flag existed were all from such a fit.
+    likely: bool = True
 
 
 class ActionItemSchema(CamelModel):

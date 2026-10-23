@@ -683,15 +683,20 @@ Every hour at :15
        │         - the committee with jurisdiction, per chamber or none
        │           (app/committee_routing.py): House Rule X / Senate Rule
        │           XXV subjects (hubness-corrected similarity) blended with
-       │           the votes of the nearest of 460 hand-labelled issues,
-       │           named only when both signals pick the same committee;
-       │           held out, 82% precise (bootstrap 0.67-0.94), naming one
-       │           for 22% of issues; the rules alone, 38%. The bar of an
-       │           exact lower 95% bound >= 0.80 is met at no threshold, so
-       │           the row says "likely". The chair and ranking member are
-       │           read when the issue is served
-       │           (app/data/committee_routing_*.json; the calibration file
-       │           holds the whole held-out curve)
+       │           the votes of the nearest labelled texts the data supplies
+       │           (each stored bill's Congress.gov committee referrals;
+       │           feed articles filed under another desk naming no
+       │           official, and race coverage, as no committee's), named
+       │           only when both signals pick the same committee. Refit
+       │           daily by data_refresh, installed under
+       │           precision_rule.accept (2026-10-23: 15,933 bills and 2,707
+       │           none texts; held out 0.817, bound 0.803, against the
+       │           hand-labelled fit's 0.632 on the same decisions; on the
+       │           136 newest hand-labelled issues 36 of 38 right against
+       │           36 of 44). The row says "likely" only while the fit in
+       │           use misses the bar (precision_rule_met). The chair and
+       │           ranking member are read when the issue is served
+       │           (scripts/calibrate_committee_routing.py)
        │         - "Comment by <date>": a proposed or final rule still open
        │           whose title clears the same 0.49; served only while open
        │         Replayed on the last 30 days of issues (2026-10-11), the

@@ -134,3 +134,88 @@ def test_a_stopgap_funding_story_names_no_unrelated_committee():
         "The Senate voted to pass a continuing resolution to keep the government funded.",
     )
     assert {c["code"] for c in routed} <= {"HSAP", "SSAP", "HSBU", "SSBU"}
+
+
+def test_labels_come_from_bills_referrals_and_texts_no_committee_handles(db_session):
+    """A bill is labelled with the committees its actions record it was
+    referred to (a chamber it was never referred in says nothing); a feed
+    article filed under another desk naming no official, and election
+    coverage, are labelled no committee's; an article the publisher filed
+    under politics is not labelled at all."""
+    import json
+    from datetime import datetime
+
+    from app.models import ApiCache, FeedArticle, RaceCoverageItem, RepSponsoredBill
+
+    referral = {"type": "IntroReferral", "actionDate": "2027-02-01", "text": "Referred to the Committee on Ways",
+                "committees": [{"systemCode": "hswm00", "name": "Ways and Means Committee"}]}
+    floor = {"type": "Floor", "actionDate": "2027-03-01", "text": "Passed", "committees": [
+        {"systemCode": "hsag00"}]}
+    db_session.add_all([
+        ApiCache(tier="congress", cache_key="bill-actions-120-hr-7", data_json=json.dumps([referral, floor])),
+        ApiCache(tier="congress", cache_key="bill-record-summaries-120-hr-7",
+                 data_json=json.dumps({"value": [{"text": "<p>This bill changes the tax code.</p>",
+                                                  "updateDate": "2027-02-03"}]})),
+        ApiCache(tier="congress", cache_key="bill-actions-120-hr-8", data_json=json.dumps([floor])),
+        RepSponsoredBill(representative_id="r", bill_id="HR.7", title="Tax Act", congress=120),
+        FeedArticle(url="u1", source_name="BBC", scope="world", text="t", title="Storm hits coast",
+                    description="Rain", label=0, embedding=b"", model="m", published=datetime(2027, 2, 2)),
+        FeedArticle(url="u2", source_name="NPR", scope="politics", text="t", title="Senate votes",
+                    description="", label=1, embedding=b"", model="m", published=datetime(2027, 2, 2)),
+        RaceCoverageItem(race_id="r1", source_type="rss", source_name="Outlet", title="Poll shows tight race",
+                         url="u3", summary="A new poll", published_at=datetime(2027, 2, 4)),
+    ])
+    db_session.flush()
+    texts = {t.text: t for t in cr.labelled_texts(db_session)}
+    assert set(texts) == {"Tax Act. This bill changes the tax code.", "Storm hits coast. Rain",
+                          "Poll shows tight race. A new poll"}
+    bill = texts["Tax Act. This bill changes the tax code."]
+    assert bill.labels == {"house": ("HSWM",), "senate": None} and bill.kind == "bill"
+    assert texts["Storm hits coast. Rain"].labels == {"house": (), "senate": ()}
+    assert texts["Poll shows tight race. A new poll"].kind == "none"
+
+
+def test_a_text_votes_only_in_a_chamber_it_has_a_label_for():
+    texts = [cr.Labelled("a", {"house": ("HA",), "senate": None}, 1, "bill"),
+             cr.Labelled("b", {"house": (), "senate": ()}, 1, "none")]
+    v = cr.votes(texts, {"house": ["HA", "HB"], "senate": ["SA"]})
+    assert v["house"].tolist() == [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]
+    assert v["senate"].tolist() == [[0.0, 0.0], [0.0, 1.0]]
+
+
+def test_the_nearest_texts_are_those_voting_in_the_chamber():
+    ref = _toy_reference()
+    ref.votes["senate"] = np.array([[0, 0.0], [0, 0.0], [0, 1.0]])  # only the third votes in the Senate
+    nb = cr.neighbours(np.array([[1.0, 0, 0, 0]]), ref, 1)
+    assert nb.index["house"][0, 0] == 0 and nb.index["senate"][0, 0] == 2
+
+
+def test_a_refit_whose_reference_is_missing_falls_back_to_the_bundled_fit(monkeypatch):
+    """A refit's parameters belong to its reference: without the reference
+    file the bundled fit and its reference decide, worded as likely."""
+    refit = {"reference": "data", "k": 15, "alpha": 0.0, "temperature": 5.0, "threshold": 0.5,
+             "precision_rule_met": True}
+    monkeypatch.setattr(cr, "calibration", lambda: refit)
+    monkeypatch.setattr(cr.data_refresh, "read", lambda name: {} if name == cr.REFERENCE_NAME
+                        else cr._load(cr.JURISDICTIONS_PATH))
+    monkeypatch.setattr(cr, "_reference", None)
+    used = []
+
+    def fake_reference(embed_fn=None, texts=None, vectors=None):
+        used.append(texts)
+        return _toy_reference()
+
+    monkeypatch.setattr(cr, "Reference", fake_reference)
+    monkeypatch.setattr(cr, "embed", lambda texts: np.array([[1.0, 0, 0, 0]]))
+    monkeypatch.setattr(cr, "jurisdictions", lambda: {c: {"name": c, "url": f"https://x/{c}"} for c in ("HA", "HB", "SA")})
+    bundled = cr._load(cr.CALIBRATION_PATH)
+    routed = cr.route_committees("t", "s")
+    assert used == [None]  # the hand-labelled reference
+    assert all(r["likely"] is (not bundled.get("precision_rule_met", False)) for r in routed)
+
+
+def test_a_fit_meeting_the_precision_rule_is_not_worded_likely():
+    assert cr.precision_rule_met({"precision_rule_met": True})
+    assert not cr.precision_rule_met({})
+    # The bundled hand-labelled fit never met it.
+    assert not cr.precision_rule_met(cr._load(cr.CALIBRATION_PATH))

@@ -107,3 +107,44 @@ def test_the_gates_report_what_they_decide(monkeypatch):
     monkeypatch.setattr(trend_relevance, "_reference", lambda gate: None)
     trend_relevance.gate_votes("tragedy", np.zeros((2, 3)))
     assert seen[0][0] == "trend_tragedy" and seen[0][1] == [0.2, 0.9]
+
+
+def test_a_self_refitting_gate_gets_a_refit_and_is_alerted_only_if_drift_outlasts_it(store, freeze_utcnow):
+    """Drift on a gate that refits itself from data-supplied labels makes its
+    refit due; only drift still there REFIT_GRACE_DAYS later is alerted."""
+    gate = "committee_routing"
+    assert gate in cd.REFITTING
+    freeze_utcnow(datetime(2028, 3, 1, 12))
+    moved = lambda g: "moved" if g == gate else None  # noqa: E731
+    with patch.object(cd, "drift", side_effect=moved), patch.object(cd.data_refresh, "request_refit") as request, \
+         patch.object(cd, "send_ops_alert") as send, patch.object(cd, "resolve_ops_alert"):
+        cd.check_all()
+        request.assert_called_once()
+        assert request.call_args.args[0] == cd.REFITTING[gate]
+        assert not [c for c in send.call_args_list if c.kwargs["condition"] == "calibration-drift-committee-routing"]
+        freeze_utcnow(datetime(2028, 3, 1, 12) + timedelta(days=cd.REFIT_GRACE_DAYS))
+        cd.check_all()
+        sent = [c for c in send.call_args_list if c.kwargs["condition"] == "calibration-drift-committee-routing"]
+        assert sent and "remains" in sent[0].args[1]
+    # Cleared, the episode ends: the next drift starts a fresh grace period.
+    with patch.object(cd, "drift", return_value=None), patch.object(cd, "send_ops_alert"), \
+         patch.object(cd, "resolve_ops_alert"):
+        cd.check_all()
+    with patch.object(cd, "drift", side_effect=moved), patch.object(cd.data_refresh, "request_refit"), \
+         patch.object(cd, "send_ops_alert") as send, patch.object(cd, "resolve_ops_alert"):
+        cd.check_all()
+        assert not [c for c in send.call_args_list if c.kwargs["condition"] == "calibration-drift-committee-routing"]
+
+
+def test_a_daily_refit_keeps_the_baseline_while_its_parameters_hold(tmp_path, monkeypatch):
+    """A self-refitting gate's file is rewritten daily with new measurements;
+    its baseline follows only the parameters that decide."""
+    path = tmp_path / "committee_routing_calibration.json"
+    monkeypatch.setattr(cd, "runtime_data_path", lambda name: str(path))
+    keys = cd.PARAMETERS["committee_routing"]
+    path.write_text('{"reference": "data", "k": 15, "alpha": 0.0, "temperature": 5.0, "threshold": 0.5, "x": 1}')
+    first = cd._calibration_sha("committee_routing_calibration.json", keys)
+    path.write_text('{"reference": "data", "k": 15, "alpha": 0.0, "temperature": 5.0, "threshold": 0.5, "x": 2}')
+    assert cd._calibration_sha("committee_routing_calibration.json", keys) == first
+    path.write_text('{"reference": "data", "k": 15, "alpha": 0.0, "temperature": 5.0, "threshold": 0.55, "x": 2}')
+    assert cd._calibration_sha("committee_routing_calibration.json", keys) != first

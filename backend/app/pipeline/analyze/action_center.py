@@ -1464,7 +1464,8 @@ def _build_actions_from_data(
             "text": f"Contact the {committee['name']}",
             "type": "contact_committee",
             "url": committee["url"],
-            "committee": {k: committee[k] for k in ("code", "name", "chamber")},
+            "committee": {**{k: committee[k] for k in ("code", "name", "chamber")},
+                          "likely": committee.get("likely", True)},
         })
 
     # Bill tracking — only when we have a real Congress.gov URL. The text

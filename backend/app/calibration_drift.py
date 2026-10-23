@@ -16,8 +16,17 @@ calibration in use was first seen (a refit starts a new baseline); the check
 compares the last four weeks with it, and alerts when the pass rate has
 moved by at least MIN_SHIFT and the move is far outside sampling noise
 (a two-proportion z of at least MIN_Z, both windows holding at least MIN_N
-decisions). The alert reports the measured shift; nothing here changes a
-threshold, and a refit needs labels drawn from the stream it now sees.
+decisions). For a hand-labelled gate the alert reports the measured shift;
+nothing here changes a threshold, and a refit needs labels drawn from the
+stream it now sees.
+
+A gate that refits itself from labels the data supplies (REFITTING) gets a
+refit instead of a note: drift makes its refit due at the next data refresh
+(data_refresh.request_refit), and only drift still there REFIT_GRACE_DAYS
+after the first request is alerted, since then the refit itself did not
+bring the gate back. Such a gate refits daily, so its calibration file
+changes daily; its baseline follows only the parameters that decide
+(PARAMETERS), not the day's measurements.
 
 Counters are kept in memory as gates decide and written per day per gate
 to api_cache (tier calibration-drift) after each hourly Action Center
@@ -36,6 +45,7 @@ import threading
 from collections.abc import Iterable
 from datetime import date, timedelta
 
+from app import data_refresh
 from app.atomic_write import runtime_data_path
 from app.database import SessionLocal
 from app.file_cache import read_json_preferring
@@ -65,6 +75,19 @@ GATES = {
     "engagement": ("engagement_calibration.json", "outlet posts reposted as matching an issue"),
 }
 
+
+# A self-refitting gate's file: what defines its calibration in use is its
+# parameters, not the measurements a daily refit rewrites beside them.
+PARAMETERS = {
+    "committee_routing": ("reference", "k", "alpha", "temperature", "threshold"),
+}
+
+# Gates that refit themselves from data-supplied labels, by the data_refresh
+# file whose refit drift requests.
+REFITTING = {
+    "committee_routing": "committee_routing_calibration.json",
+}
+REFIT_GRACE_DAYS = 3
 
 _pending: dict[tuple[str, str], list[int]] = {}
 _pending_lock = threading.Lock()
@@ -117,11 +140,13 @@ def _days(db, gate: str, start: date, end: date) -> tuple[int, int]:
     return n, passed
 
 
-def _calibration_sha(filename: str) -> str:
-    """The content of the calibration in use: a refit copy on the data
-    volume when there is one, else the bundled file."""
+def _calibration_sha(filename: str, keys: tuple[str, ...] | None = None) -> str:
+    """The content of the calibration in use (only `keys` when given): a
+    refit copy on the data volume when there is one, else the bundled file."""
     bundled = pathlib.Path(__file__).resolve().parent / "data" / filename
     doc = read_json_preferring(runtime_data_path(filename), bundled, default={})
+    if keys is not None:
+        doc = {k: doc.get(k) for k in keys}
     return hashlib.sha256(json.dumps(doc, sort_keys=True).encode()).hexdigest()
 
 
@@ -141,7 +166,7 @@ def drift(gate: str, today: date | None = None) -> str | None:
     today = today or utcnow().date()
     db = SessionLocal()
     try:
-        since = _since(db, gate, _calibration_sha(filename), today)
+        since = _since(db, gate, _calibration_sha(filename, PARAMETERS.get(gate)), today)
         if today < since + 2 * WINDOW:
             return None  # a baseline and a separate recent window aren't there yet
         n0, p0 = _days(db, gate, since, since + WINDOW)
@@ -161,6 +186,30 @@ def drift(gate: str, today: date | None = None) -> str | None:
             f"behind app/data/{filename} were drawn.")
 
 
+def _refit_for_drift(gate: str, why: str | None) -> str | None:
+    """A self-refitting gate's drift: request its refit, and return what to
+    alert (None until the drift has outlasted REFIT_GRACE_DAYS of refits)."""
+    today = utcnow().date()
+    db = SessionLocal()
+    try:
+        key = f"{gate}|refit-requested"
+        if not why:
+            api_cache_set(db, _TIER, key, {"date": None}, normal_ttl_hours=_KEEP_HOURS)
+            return None
+        first = (api_cache_get(db, _TIER, key, max_age_hours=_KEEP_HOURS) or {}).get("date")
+        if not first:
+            first = today.isoformat()
+            api_cache_set(db, _TIER, key, {"date": first}, normal_ttl_hours=_KEEP_HOURS)
+    finally:
+        db.close()
+    data_refresh.request_refit(REFITTING[gate], f"calibration drift: {why}")
+    if today < date.fromisoformat(first) + timedelta(days=REFIT_GRACE_DAYS):
+        logger.info("Calibration drift on %s: refit requested (%s)", gate, why)
+        return None
+    return (f"{why} Refits from data-supplied labels have been requested every day since {first} and the "
+            f"drift remains: see the refit's record in app/data/{REFITTING[gate]} (_refreshed.kept).")
+
+
 def check_all() -> dict[str, str | None]:
     """Each gate's drift, alerted per gate (calibration-drift-<gate>) and
     resolved when it clears."""
@@ -174,6 +223,11 @@ def check_all() -> dict[str, str | None]:
             continue
         out[gate] = why
         condition = f"calibration-drift-{gate.replace('_', '-')}"
+        if gate in REFITTING:
+            try:
+                why = _refit_for_drift(gate, why)
+            except Exception:
+                logger.exception("Calibration drift refit request for %s failed", gate)
         if why:
             send_ops_alert(f"{GATES[gate][0]} looks stale", why,
                            dedupe_key=f"{condition}-{utcnow():%Y-%W}", condition=condition)
