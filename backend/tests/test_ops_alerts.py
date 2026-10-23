@@ -166,38 +166,6 @@ class TestCheckFeedbackTokenExpiration:
         mock_alert.assert_not_called()
 
 
-class TestCheckStatePviStaleness:
-    """state_pvi.json's sources are deliberately pinned to immutable
-    historical snapshots (see the check's own docstring) — a scheduled
-    refetch can't advance its 2-cycle window, so this alert is the only
-    signal an operator gets that a manual refresh is due."""
-
-    def _check(self, window: str, today: date):
-        from app.ops_alerts import check_state_pvi_staleness
-
-        with patch("app.pipeline.analyze.score_calculator._read_pvi_json",
-                   return_value={"_window": window}), \
-             patch("app.ops_alerts.utcnow", return_value=datetime.combine(today, datetime.min.time())), \
-             patch("app.ops_alerts.send_ops_alert") as mock_alert:
-            check_state_pvi_staleness()
-        return mock_alert
-
-    @pytest.mark.parametrize("window, today, alerts", [
-        pytest.param("2020+2024", date(2027, 1, 1), False, id="silent_well_before_next_cycle_is_due"),
-        pytest.param("2020+2024", date(2028, 12, 14), False, id="silent_right_before_the_due_date"),
-        pytest.param("2020+2024", date(2028, 12, 15), True, id="alerts_on_the_due_date"),
-        pytest.param("2020+2024", date(2029, 1, 1), True, id="alerts_once_next_cycle_data_should_be_available"),
-        pytest.param("", date(2030, 1, 1), False, id="silent_when_window_metadata_missing"),
-    ])
-    def test_alerts_once_the_next_cycle_is_due(self, window, today, alerts):
-        mock_alert = self._check(window, today=today)
-        if alerts:
-            mock_alert.assert_called_once()
-            assert "2028" in mock_alert.call_args.args[1]
-        else:
-            mock_alert.assert_not_called()
-
-
 def _check_stale(db_session):
     with patch("app.ops_alerts.SessionLocal", return_value=db_session), \
          patch("app.ops_alerts.send_ops_alert") as mock_alert:

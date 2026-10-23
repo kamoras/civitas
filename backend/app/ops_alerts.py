@@ -581,55 +581,6 @@ def check_api_v1_sunset() -> None:
     )
 
 
-def check_state_pvi_staleness() -> None:
-    """Alert once a newer presidential election's data should be available
-    for state_pvi.json's two-cycle window than what's currently baked in.
-
-    Unlike CURRENT_CONGRESS or the committee-leadership data
-    (app/pipeline/fetch/committee_leadership.py), this is NOT something a
-    scheduled refetch can advance automatically (district PVI is pinned
-    too, per Congress, in app/data/district_pvi_sources.json — see
-    fetch/district_pvi.py):
-    scripts/fetch_state_pvi.py deliberately pins its data sources to
-    specific immutable GitHub-mirrored commits — "so a regeneration years
-    from now fetches the exact same file" — so re-running it forever
-    reproduces the identical 2020+2024 numbers. Advancing the window is a
-    genuine one-time engineering task each presidential cycle (finding the
-    new cycle's data source, verifying it passes the fidelity gates), the
-    same class of unavoidable manual step as adding a new president to the
-    historical term tables. This turns "nobody notices a new cycle is due"
-    into a loud, deduped, dashboard-visible alert instead of silence —
-    logged + DB-recorded regardless of whether ALERT_NTFY_URL is set.
-    """
-    import re
-
-    from app.pipeline.analyze.score_calculator import _read_pvi_json
-
-    window = _read_pvi_json("state_pvi.json").get("_window", "")
-    years = [int(y) for y in re.findall(r"\d{4}", window)]
-    if not years:
-        return
-    next_cycle = max(years) + 4
-    # Presidential county-level canvass data is reliably compiled within a
-    # few weeks of the election; mid-December of the election year is a
-    # comfortable buffer before alerting.
-    if utcnow().date() < date(next_cycle, 12, 15):
-        resolve_ops_alert("stale-state-pvi")  # regenerated for the new cycle
-    else:
-        send_ops_alert(
-            "state_pvi.json window is stale",
-            f"state_pvi.json is still windowed to {window}, but the "
-            f"{next_cycle} presidential election has passed and its data "
-            f"should be available now. Update scripts/fetch_state_pvi.py's "
-            f"CYCLES/source URLs to the new cycle, verify the fidelity "
-            f"gates pass, and regenerate the file. (district_pvi.json "
-            f"is separate: its sources are pinned per Congress in "
-            f"app/data/district_pvi_sources.json.)",
-            dedupe_key=f"stale-state-pvi-{next_cycle}",
-            condition="stale-state-pvi",
-        )
-
-
 def stock_trades_overrun_budget() -> timedelta:
     """How long a stock-trades run may take before it counts as hung: 2h
     for the trade phases (normal runs finish in under 90 minutes), plus the

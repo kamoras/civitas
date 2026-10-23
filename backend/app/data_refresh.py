@@ -664,6 +664,26 @@ def _population_gate(new: dict, old: dict) -> list[str]:
     return failures
 
 
+def _state_pvi_gate(new: dict, old: dict) -> list[str]:
+    """51 jurisdictions with the counts they were computed from, DC strongly
+    Democratic (the cheapest sign-flip check), and no state moved more than
+    a new window moves one (the script's CONTINUITY_TOLERANCE, 5) from the
+    copy in use."""
+    states, before = new.get("states") or {}, old.get("states") or {}
+    failures = []
+    if set(states) != set(STATE_NAMES):
+        failures.append(f"{len(states)} jurisdictions, expected {len(STATE_NAMES)}")
+    if len(new.get("inputs") or {}) != 2:
+        failures.append("not two cycles of inputs")
+    if int(states.get("DC", 0)) > -30:
+        failures.append(f"DC at {states.get('DC')}, expected strongly Democratic")
+    moved = [f"{st} {before[st]:+d} to {v:+d}" for st, v in sorted(states.items())
+             if st in before and abs(int(v) - int(before[st])) > 5]
+    if moved:
+        failures.append(f"moved more than 5 points: {', '.join(moved)}")
+    return failures
+
+
 def _token_df_gate(new: dict, old: dict) -> list[str]:
     docs, before = int(new.get("documents") or 0), int(old.get("documents") or 0)
     failures = [] if new.get("df") else ["no word table"]
@@ -1091,6 +1111,11 @@ DATA_FILES: list[DataFile] = [
     DataFile("committee_routing_calibration.json",
              command=lambda ctx: [PY, _script("calibrate_committee_routing.py"), "--output", "{out}"],
              due=_routing_due, gate=_routing_gate, heavy=True, timeout_s=3600),
+    # The two newest presidential elections an official compilation covers
+    # (MEDSL's newest Dataverse file, the FEC's compilations), found by rule:
+    # a new election's returns move the window with no edit.
+    DataFile("state_pvi.json", command=lambda ctx: [PY, _script("fetch_state_pvi.py"), "{out}"],
+             due=_every(30), gate=_state_pvi_gate, moves_scores=True, timeout_s=900),
     DataFile("state_population.json", command=lambda ctx: [PY, _script("fetch_state_population.py"), "{out}"],
              due=_every(90), gate=_population_gate, moves_scores=True, timeout_s=300),
     DataFile("bill_title_token_df.json",

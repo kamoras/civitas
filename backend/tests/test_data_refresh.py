@@ -668,3 +668,13 @@ def test_a_try_records_the_recipe_it_ran(db_session):
     with patch.object(dr, "SessionLocal", return_value=db_session), patch.object(db_session, "close"):
         dr._record_try("x.json", "kept: crashed", "abc")
         assert dr._last_try("x.json")[1:] == (True, "abc")
+
+
+def test_state_pvi_gate_refuses_a_flipped_or_short_candidate():
+    old = json.loads((dr.BUNDLED / "state_pvi.json").read_text())
+    assert dr._state_pvi_gate(old, old) == []
+    flipped = {**old, "states": {st: -v for st, v in old["states"].items()}}
+    assert any("DC" in f for f in dr._state_pvi_gate(flipped, old))
+    assert any("moved more than 5" in f for f in dr._state_pvi_gate(flipped, old))
+    short = {**old, "states": {st: v for st, v in old["states"].items() if st != "WY"}}
+    assert dr._state_pvi_gate(short, old)
