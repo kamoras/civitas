@@ -817,7 +817,7 @@ def test_the_staleness_alert_names_each_missing_input(freeze_utcnow, monkeypatch
     assert ("House (fit stops at 2022): no refit has read 2028 House results: neither the FEC's Federal Elections "
             "2028 compilation (US House Results by State) nor the Clerk of the House's 2028 Statistics of the "
             "Presidential and Congressional Election was there to read") in body
-    assert "app/data/forecast_house_lean.json has no 2028 district lean" in body
+    assert "no 2028 district lean: the refit takes it from app/data/district_lean.json" in body
     assert "sign-in" not in body
     assert "Silver Bulletin" not in body  # both chambers' polls reach 2028
     assert "fit_forecast_model.py and refit" not in body

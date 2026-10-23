@@ -98,8 +98,11 @@ from pdfplumber.utils.text import chars_to_textmap
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from app import census_lines  # noqa: E402
 from app.acceptance import held_out_beats_in_use  # noqa: E402
 from app.atomic_write import runtime_data_path  # noqa: E402
+from app.file_cache import read_json_preferring  # noqa: E402
+from app.ordinals import ordinal  # noqa: E402
 from app.contact import BOT_USER_AGENT  # noqa: E402
 from app.forecast import model  # noqa: E402
 from app.forecast import training_polls as tp  # noqa: E402
@@ -643,10 +646,41 @@ def clerk_house(lines: list[tuple[float, str, bool]], ranked_choice=frozenset())
     return out, set(blocks), left_out
 
 
+def last_two_presidential(year: int) -> tuple[int, int]:
+    """The two presidential elections before a November election (2026's
+    and 2028's are 2020 and 2024)."""
+    later = year - 1 - (year - 1) % 4
+    return later - 4, later
+
+
+def house_leans() -> dict:
+    """forecast_house_lean.json's pre-election leans, extended by rule: an
+    election it doesn't reach whose two presidential elections before it
+    are the computed lean's window takes app/data/district_lean.json's
+    table for the Congress that election seats (the copy in use, which the
+    data refresh builds for each new map). That table is the same block
+    method on the same window, so 2026's and 2028's House cycles need no
+    one to extend build_house_lean_history.py (whose own cycles end where
+    its 2016 input does)."""
+    leans = json.loads(HOUSE_LEAN.read_text())
+    computed = read_json_preferring(runtime_data_path("district_lean.json"), DATA / "district_lean.json", default={})
+    window = str(computed.get("_window") or "")
+    for congress, table in sorted((computed.get("congresses") or {}).items()):
+        year = census_lines.elected_in(int(congress))
+        if str(year) in leans["leans"] or window != "+".join(map(str, last_two_presidential(year))):
+            continue
+        districts = (table or {}).get("districts") or {}
+        leans["leans"][str(year)] = districts
+        leans["lines"][congress] = {k: None for k in [*districts, *((computed.get("unavailable") or {}).get(congress) or {})]}
+        leans["_method"][str(year)] = (f"{ordinal(int(congress))} Congress lines; 25% {window[:4]} + 75% {window[-4:]} "
+                                       "(Cook's formula): app/data/district_lean.json")
+    return leans
+
+
 def house_training(cache: Path, house_polls: dict, generic: dict, poll_doc: dict,
                    training_out: Path) -> tuple[list[dict], dict, str]:
     """Write the House training file: (rows, generic polls, source)."""
-    leans = json.loads(HOUSE_LEAN.read_text())
+    leans = house_leans()
     years = sorted(int(y) for y in leans["leans"])
     workbooks = fec_house_workbooks(years, cache)
     results = {year: fec_house(raw, _house_sheet(raw)) for year, raw in workbooks.items()}
@@ -689,7 +723,8 @@ def house_training(cache: Path, house_polls: dict, generic: dict, poll_doc: dict
                  f"Statistics of the Presidential and Congressional Election (official results, public domain), "
                  f"with incumbency from the FEC's list of general-election candidates" if clerk_years else "")
               + ". Lean: app/data/forecast_house_lean.json "
-              "(Civitas, from VEST 2016 and 2020 precinct results, CC BY 4.0, and Census blocks and districts), "
+              "(Civitas, from VEST 2016 and 2020 precinct results, CC BY 4.0, and Census blocks and districts; "
+              "an election after its last, from app/data/district_lean.json on the same method), "
               f"each district's lean before the election on the lines it was held on. {poll_source(poll_doc)}")
     training_out.write_text(json.dumps({
         "_source": source, "_regenerate": REGENERATE,
@@ -708,7 +743,7 @@ def house_training(cache: Path, house_polls: dict, generic: dict, poll_doc: dict
 
 def _lines(leans: dict, year: int) -> dict:
     """The seats of the lines `year`'s House election was fought on."""
-    return leans["lines"][leans["_method"][str(year)].split("th", 1)[0]]
+    return leans["lines"][re.match(r"\d+", leans["_method"][str(year)])[0]]
 
 
 def _same_name(surname: str, name: str) -> bool:
