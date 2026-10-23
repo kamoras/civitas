@@ -15,9 +15,12 @@ after the member pipelines) both images are fetched and a face detector
 face's height as a share of the image's shorter side, which is the square an
 avatar shows. Bioguide's portrait is chosen only when the depiction's face is
 below a head-and-shoulders share and bioguide's is clearly larger; otherwise
-the depiction stays. Both numbers come from
-app/data/member_photo_calibration.json (scripts/calibrate_member_photos.py),
-fitted to a hand-labelled comparison of every current member's two photos.
+the depiction stays. Both numbers come from member_photo_calibration.json,
+refit daily from the stored face shares themselves
+(scripts/calibrate_member_photos.py, run by data_refresh; the hand-labelled
+comparison of every member's two photos is its held-out check, not its fit),
+and every stored choice is decided again from its stored shares each night,
+so a refit takes effect without refetching a photo.
 
 The choice is stored per member (models.MemberPhoto) for the photo-sources
 endpoint to read. Nothing here runs on a page request, and OpenCV is never
@@ -30,20 +33,20 @@ member's stored choice as it was, since an outage is not a missing photo.
 """
 
 import asyncio
+import hashlib
 import json
 import logging
 import sys
 import tempfile
 import time
 from datetime import timedelta
-from functools import cache
 from pathlib import Path
 
 import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import calibration_drift
+from app import calibration_drift, data_refresh
 from app.error_utils import output_summary
 from app.models import ApiCache, MemberPhoto, Representative, Senator
 from app.photos import bioguide_portrait_url, credited_depiction, photo_source_allowed
@@ -71,9 +74,10 @@ MAX_IMAGE_BYTES = 5 * 1024 * 1024
 MEASURE_TIMEOUT_S = 300
 
 
-@cache
 def calibration() -> dict:
-    return json.loads(CALIBRATION_PATH.read_text())
+    # The daily refit's copy when one is installed (data_refresh), else the
+    # bundled one.
+    return data_refresh.read(CALIBRATION_PATH.name)
 
 
 class _MeasureFailed(Exception):
@@ -103,17 +107,36 @@ async def measure(paths: list[str]) -> dict[str, float | None]:
     return json.loads(out)
 
 
-def prefers_bioguide(bioguide_share: float | None, depiction_share: float | None) -> bool:
+def prefers_bioguide(bioguide_share: float | None, depiction_share: float | None, observe: bool = True) -> bool:
     """True when bioguide's portrait is the better avatar: the depiction's
     face is below a head-and-shoulders share (`depiction_ceiling`) and
     bioguide's is larger by `margin`. Otherwise the depiction stays,
-    including when either measurement is missing."""
+    including when either measurement is missing. `observe` counts the
+    decision for the drift check (a fresh measurement, not a re-decision)."""
     if bioguide_share is None or depiction_share is None:
         return False
     cal = calibration()
     prefers = depiction_share < cal["depiction_ceiling"] and bioguide_share >= cal["margin"] * depiction_share
-    calibration_drift.observe("member_photo", [float(prefers)], 0.5)
+    if observe:
+        calibration_drift.observe("member_photo", [float(prefers)], 0.5)
     return prefers
+
+
+def redecide_stored(db: Session) -> int:
+    """Decide every stored choice again from its stored shares, with the
+    calibration in use: a refit takes effect the night it is installed,
+    with no photo fetched. Returns how many choices changed."""
+    changed = 0
+    for row in db.scalars(select(MemberPhoto).where(MemberPhoto.depiction_url.is_not(None),
+                                                    MemberPhoto.bioguide_face_share.is_not(None))):
+        portrait = bioguide_portrait_url(row.bioguide_id)
+        source = portrait if prefers_bioguide(row.bioguide_face_share, row.depiction_face_share,
+                                              observe=False) else row.depiction_url
+        if source != row.source_url:
+            row.source_url = source
+            changed += 1
+    db.commit()
+    return changed
 
 
 class _FetchFailed(Exception):
@@ -159,7 +182,11 @@ def _members_to_check(db: Session) -> list[tuple[str, str | None]]:
         except ValueError:
             depiction = None
         row = stored.get(bioguide_id)
-        if row is None or row.depiction_url != depiction or row.checked_at < due_before:
+        # A measurement stored before images were hashed is measured again
+        # once, so the refit's check knows which image each label judged.
+        unhashed = row is not None and ((row.bioguide_face_share is not None and row.bioguide_sha256 is None)
+                                        or (row.depiction_face_share is not None and row.depiction_sha256 is None))
+        if row is None or row.depiction_url != depiction or row.checked_at < due_before or unhashed:
             out.append((bioguide_id, depiction))
     return out
 
@@ -195,6 +222,7 @@ async def refresh_member_photos(db: Session, client: httpx.AsyncClient, budget: 
                 paths.append(path)
             fetched.append((bioguide_id, depiction, *paths))
         shares = await measure([p for f in fetched for p in f[2:] if p])
+        digests = {p: hashlib.sha256(Path(p).read_bytes()).hexdigest() for f in fetched for p in f[2:] if p}
     for bioguide_id, depiction, depiction_path, portrait_path in fetched:
         portrait = bioguide_portrait_url(bioguide_id)
         depiction_share = shares.get(depiction_path) if depiction_path else None
@@ -211,9 +239,14 @@ async def refresh_member_photos(db: Session, client: httpx.AsyncClient, budget: 
             source = portrait if prefers_bioguide(portrait_share, depiction_share) else depiction
         db.merge(MemberPhoto(
             bioguide_id=bioguide_id, source_url=source, depiction_url=depiction,
-            bioguide_face_share=portrait_share, depiction_face_share=depiction_share, checked_at=utcnow(),
+            bioguide_face_share=portrait_share, depiction_face_share=depiction_share,
+            bioguide_sha256=digests.get(portrait_path), depiction_sha256=digests.get(depiction_path),
+            checked_at=utcnow(),
         ))
     db.commit()
+    redecided = redecide_stored(db)
+    if redecided:
+        logger.info("Member photos: %d stored choices changed under the calibration in use", redecided)
     if failed:
         logger.warning("Member photos: %d members not measured this run (fetch failed)", failed)
     return len(fetched)

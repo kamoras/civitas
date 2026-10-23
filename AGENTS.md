@@ -640,8 +640,7 @@ which must trace back to a generating script and a data file, not a
 comment asserting "trust me, I ran a script once."
 
 A calibration fitted to **hand labels** (the Action Center's relevance,
-clustering, claim and actor gates, the trend-post gates, the member-photo
-check) can't regenerate itself, and doesn't need to when
+clustering, claim and actor gates, the trend-post gates) can't regenerate itself, and doesn't need to when
 its labels change: each records the hash of its labels and a test fails
 until it is refit. What it can't see is the stream moving away from its
 labels. Each such gate reports what it decides (`calibration_drift.observe`,
@@ -664,7 +663,9 @@ apart, `action_center.fit_near_identical_cut`), the related-vote threshold
 (`bluesky_engagement`, on `OutletPostLink`) and committee routing (bills'
 committee referrals and texts no committee handles,
 `scripts/calibrate_committee_routing.py`, run daily by `data_refresh` and
-installed through `data_refresh.precision_rule_accepts`). A new calibrated
+installed through `data_refresh.precision_rule_accepts`); the member-photo
+check refits the same way with no label at all (mixtures over the stored
+face shares), its hand labels the held-out comparison. A new calibrated
 gate is added to `calibration_drift.GATES` and observes its decisions; one
 that refits itself through `data_refresh` is also listed in
 `calibration_drift.REFITTING` (drift then requests its refit, and alerts
@@ -1303,11 +1304,17 @@ stock-trades run (`pipeline/fetch/member_photos.py`, stored in
 `member_photos`): OpenCV's YuNet face detector measures each candidate's
 face height over its shorter side, and bioguide wins only when the
 depiction's face is below a head-and-shoulders share and bioguide's is
-clearly larger. Both numbers are fitted, not typed:
-`scripts/calibrate_member_photos.py` writes them to
-`app/data/member_photo_calibration.json` from a hand-labelled comparison of
-every current member's two photos (labels kept there with each image's
-hash; rerun when labelled photos change). OpenCV runs only in a child
+clearly larger. Both numbers are fitted, not typed, and refit daily from
+the stored shares alone (`scripts/calibrate_member_photos.py`, run by
+`data_refresh`): the ceiling is the lower 97.5% point of the dominant
+(headshot) component of a Gaussian mixture over every measured image's log
+face share, the margin the upper 99.9% point of the dominant component of
+each member's two-photo log ratio (one picture measured twice). The
+hand-labelled comparison of every member's two photos (labels in
+`member_photo_calibration.json` with each image's hash, matched against the
+hash the nightly run stores) is the held-out check under
+`precision_rule.accept`, never the fit, and each night every stored choice
+is decided again from its stored shares. OpenCV runs only in a child
 process started for the night's batch (`pipeline/fetch/face_detection.py`,
 which nothing in `app/` imports; `tests/test_member_photos.py` checks no app
 process loads `cv2`), so a native fault can't reach page serving or the

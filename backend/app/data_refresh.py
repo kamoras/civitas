@@ -703,6 +703,20 @@ def _routing_gate(new: dict, old: dict) -> list[str]:
     return failures
 
 
+# The member-photo check: refit daily from the stored face shares
+# (scripts/calibrate_member_photos.py), installed under the acceptance rule
+# on the hand labels it is checked against.
+def _member_photo_gate(new: dict, old: dict) -> list[str]:
+    failures = []
+    if not 0 < float(new.get("depiction_ceiling") or 0) < 1:
+        failures.append(f"depiction_ceiling {new.get('depiction_ceiling')}")
+    if not float(new.get("margin") or 0) >= 1:
+        failures.append(f"margin {new.get('margin')}")
+    if not new.get("labels"):
+        failures.append("the hand labels it is checked against are missing")
+    return failures
+
+
 def _population_gate(new: dict, old: dict) -> list[str]:
     states, before = new.get("states") or {}, old.get("states") or {}
     failures = []
@@ -1216,6 +1230,10 @@ DATA_FILES: list[DataFile] = [
              command=lambda ctx: [PY, _script("calibrate_committee_routing.py"), "--in-use", "{in_use}",
                                   "--output", "{out}"],
              due=_every(1), gate=_routing_gate, accept=precision_rule_accepts, heavy=True, timeout_s=3600),
+    DataFile("member_photo_calibration.json",
+             command=lambda ctx: [PY, _script("calibrate_member_photos.py"), "--in-use", "{in_use}",
+                                  "--output", "{out}"],
+             due=_every(1), gate=_member_photo_gate, accept=precision_rule_accepts, timeout_s=600),
     # The two newest presidential elections an official compilation covers
     # (MEDSL's newest Dataverse file, the FEC's compilations), found by rule:
     # a new election's returns move the window with no edit.
