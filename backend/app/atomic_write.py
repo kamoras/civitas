@@ -56,8 +56,8 @@ def runtime_data_path(name: str) -> str:
     return os.path.join(base, name)
 
 
-def write_text_atomic(path: str | os.PathLike, text: str, *, durable: bool = True) -> None:
-    """Write `text` to `path` (UTF-8), replacing it in one step, keeping
+def write_text_atomic(path: str | os.PathLike, text: str | bytes, *, durable: bool = True) -> None:
+    """Write `text` to `path` (UTF-8; bytes as they are), replacing it in one step, keeping
     the file's mode (a new one gets the umask's, as open() would give).
     Raises OSError as a plain write would; nothing is left behind on
     failure.
@@ -71,7 +71,7 @@ def write_text_atomic(path: str | os.PathLike, text: str, *, durable: bool = Tru
     tmp = os.path.join(directory, f".{name}.{uuid.uuid4().hex}.tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)  # umask applies, as for open(path, "w")
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        with (os.fdopen(fd, "wb") if isinstance(text, bytes) else os.fdopen(fd, "w", encoding="utf-8")) as fh:
             fh.write(text)
             fh.flush()
             try:
