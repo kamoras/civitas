@@ -219,6 +219,9 @@ def test_votes_with_the_president_is_the_fifth_row_with_its_own_rule(monkeypatch
     assert all(m["rule"]["kind"] == "percentile" and m["ruleText"] for m in out["measures"][:4])
     row = out["measures"][-1]
     assert row["rule"] == {"kind": "interval", "interval": 95, "minRecord": 20}
+    # Each party's median, never a chamber median in the gap between them.
+    assert row["median"] is None and row["medianShown"] is None
+    assert row["partyMedians"] == [{"party": "D", "value": 5 / 27, "n": 26, "shown": "Democrats' median 19%"}]
     assert "the median senator has 27 counted votes against 100 party-line votes" in row["ruleText"]
     points = {p["id"]: p for p in row["points"]}
     assert points["d23"]["shown"] == "74%, 20 of 27 votes"

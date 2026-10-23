@@ -494,7 +494,16 @@ def president_row(chamber: str, support: dict, rows: list[dict]) -> dict:
     seats = {r["id"]: r for r in rows}
     members = [m for m in support["members"] if m["rate"] is not None]
     values = sorted(m["rate"] for m in members)
-    median = statistics.median(values) if values else None
+    # One tick per party, not a chamber median: the parties sit far apart
+    # here, and a chamber median falls in the gap between them, a rate
+    # almost no member has.
+    party_medians = []
+    for party, plural in _PARTY_PLURAL.items():
+        rates = [m["rate"] for m in members if m["party"] == party]
+        if rates:
+            mid = statistics.median(rates)
+            party_medians.append({"party": party, "value": mid, "n": len(rates),
+                                  "shown": f"{plural}' median {axis_figure('share', mid)}"})
 
     def entry(m: dict) -> dict:
         word = support_word(m)
@@ -531,10 +540,10 @@ def president_row(chamber: str, support: dict, rows: list[dict]) -> dict:
                 "Administration Policy asked. Members of the president's party, and from seats that lean "
                 "the president's way, tend to vote that way more. Neither more nor less is better."),
         "direction": "higher means more votes on the president's stated side", "unit": "share",
-        "median": median, "n": len(entries),
+        "median": None, "partyMedians": party_medians, "n": len(entries),
         "source": {"name": SUPPORT_METHOD["source"], "url": SUPPORT_METHOD["sourceUrl"]},
-        "medianShown": None if median is None else axis_figure("share", median),
-        **_axis("share", values + ([median] if median is not None else [])),
+        "medianShown": None,
+        **_axis("share", values),
         "points": sorted(entries, key=lambda e: e["value"]),
         # Only members whose whole range is clear of the seat's rate.
         "mostAbove": more[:3],

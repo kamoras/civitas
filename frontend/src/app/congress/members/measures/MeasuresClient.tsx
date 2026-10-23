@@ -205,8 +205,24 @@ function ChamberStrip({ m, house }: { m: ChamberMeasure; house: boolean }) {
                 style={{ left: `${at(m.median)}%` }}
               />
             )}
+            {/* Votes with the president: each party's median in its colour,
+                labelled under the strip. */}
+            {m.partyMedians?.map((t) => (
+              <span
+                key={t.party}
+                className="absolute top-1 h-12 -translate-x-1/2 border-l-2 border-dashed"
+                style={{
+                  left: `${at(t.value)}%`,
+                  borderColor: PARTY_FILL[t.party] ?? "var(--ind-purple)",
+                }}
+              />
+            ))}
           </StripPoints>
-          <StripAxis start={m.axisStartShown} end={m.axisEndShown} />
+          <StripAxis
+            start={m.axisStartShown}
+            end={m.axisEndShown}
+            ticks={m.partyMedians?.map((t) => ({ at: at(t.value), text: t.shown }))}
+          />
         </>
       )}
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">

@@ -147,6 +147,12 @@ describe("votes with the president", () => {
       label: "Votes with the president",
       ruleText: "Its own word rule, not the percentile one.",
       rule: { kind: "interval" as const, interval: 95, minRecord: 20 },
+      median: null,
+      medianShown: null,
+      partyMedians: [
+        { party: "D", value: 0.2, n: 1, shown: "Democrats' median 20%" },
+        { party: "R", value: 0.1, n: 1, shown: "Republicans' median 10%" },
+      ],
       points: [
         { ...point("b", "Bea Ray", "R", 0.1), shown: "10%, 2 of 20 votes", context: "Range a" },
         { ...point("a", "Al Fox", "D", 0.2), shown: "20%, 4 of 20 votes", context: "Range b" },
@@ -164,6 +170,10 @@ describe("votes with the president", () => {
       screen.getByRole("link", { name: "Every vote and the president's position" })
     ).toHaveAttribute("href", "/congress/president/house");
     expect(screen.getAllByText("20 / 27")).toHaveLength(3);
+    // Each party's median, labelled; no chamber median between them.
+    expect(screen.getByText("Democrats' median 20%")).toBeInTheDocument();
+    expect(screen.getByText("Republicans' median 10%")).toBeInTheDocument();
+    expect(screen.queryByText(/^Median /)).toBeNull();
     screen.getByRole("group", { name: /Votes with the president, every representative/ }).focus();
     await userEvent.keyboard("{End}");
     expect(

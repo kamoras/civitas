@@ -123,6 +123,9 @@ export interface ChamberMeasure {
   /** The three members furthest above, and below, the figure expected for them. */
   mostAbove: ChamberPoint[];
   mostBelow: ChamberPoint[];
+  /** Votes with the president: each party's median, drawn in place of a
+   *  chamber median (null there), which would fall between the parties. */
+  partyMedians?: { party: string; value: number; n: number; shown: string }[];
   /** Absent from a backend older than the page. */
   rule?: MeasureRule;
   ruleText?: string;
