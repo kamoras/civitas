@@ -180,7 +180,8 @@ const PREVIEWS: Record<string, Record<string, (f: SectionFigures) => Preview | n
  */
 const BLURBS: Record<string, Record<string, string>> = {
   congress: {
-    reports: "What happened on the floor, day by day, with each chamber's votes",
+    reports: "The Congress so far: the days each chamber met and how far its bills got",
+    day: "What each chamber did on the last day Congress met",
     week: "What each chamber did in the last week Congress met",
     month: "What each chamber did in the last month Congress met",
     members: "Every senator and representative, found by state, town or name",
@@ -222,6 +223,7 @@ const RECORD = "Source: the Congressional Record's Daily Digest; Senate and Hous
 
 const CARD_SOURCES: Record<string, Record<string, CardSource>> = {
   congress: {
+    day: { text: RECORD },
     week: { text: RECORD },
     month: { text: RECORD },
     bills: { text: "Source: Congress.gov bill status" },

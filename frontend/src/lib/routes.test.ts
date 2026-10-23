@@ -161,15 +161,16 @@ describe("currentTab", () => {
     expect(marked("executive", "/compare/presidents")).toEqual([["presidents", "true"]]);
     expect(marked("congress", "/congress/week")).toEqual([["reports", "true"]]);
     expect(marked("congress", "/congress/month/2026-09")).toEqual([["reports", "true"]]);
-    expect(marked("congress", "/congress/president/senate")).toEqual([["reports", "true"]]);
-    expect(marked("congress", "/compare")).toEqual([["members", "true"]]);
+    expect(marked("congress", "/congress/day")).toEqual([["reports", "true"]]);
+    expect(marked("congress", "/congress/president/senate")).toEqual([["measures", "true"]]);
+    expect(marked("congress", "/compare")).toEqual([["measures", "true"]]);
     expect(marked("elections", "/elections/redistricting/TX")).toEqual([["map", "true"]]);
   });
 
   it("marks the closest tab a page sits under, and never the hub for a page under it", () => {
-    // The measures sit under the directory's path, but are a Reports view.
-    expect(marked("congress", "/congress/members/measures")).toEqual([["reports", "true"]]);
-    expect(marked("congress", "/congress/members")).toEqual([["members", "page"]]);
+    // The measures are the Members tab's own page; the directory a view of it.
+    expect(marked("congress", "/congress/members/measures")).toEqual([["measures", "page"]]);
+    expect(marked("congress", "/congress/members")).toEqual([["measures", "true"]]);
     expect(marked("congress", "/congress/bills/HR.1")).toEqual([["bills", "true"]]);
     expect(marked("executive", "/agencies/environmental-protection-agency")).toEqual([
       ["agencies", "true"],
@@ -195,13 +196,17 @@ describe("currentTab", () => {
   });
 
   it("finds the chain down to any page", () => {
-    expect(tabChain("congress", "week").map((p) => p.label)).toEqual(["Reports", "Floor", "Week"]);
+    expect(tabChain("congress", "week").map((p) => p.label)).toEqual(["Reports", "Week"]);
     expect(tabChain("congress", "reports").map((p) => p.label)).toEqual([
       "Reports",
-      "Floor",
-      "Day",
+      "This Congress",
     ]);
-    expect(tabChain("congress", "compare").map((p) => p.label)).toEqual(["Members", "Compare two"]);
+    expect(tabChain("congress", "president").map((p) => p.label)).toEqual([
+      "Members",
+      "By the numbers",
+      "Votes with the president",
+    ]);
+    expect(tabChain("congress", "compare").map((p) => p.label)).toEqual(["Members", "Compare"]);
     expect(tabChain("congress", "bills").map((p) => p.label)).toEqual(["Bills"]);
     expect(tabChain("executive", null)).toEqual([]);
   });
