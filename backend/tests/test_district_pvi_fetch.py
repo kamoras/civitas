@@ -2467,3 +2467,18 @@ class TestTriggeredRunsCheckTheSittingLines:
         await captured["run"]()
         # The same chain as the admin trigger (app.pipeline_chain).
         assert order == ["senate", "supplementary", "pvi", "house", "stock trades", "election"]
+
+
+def test_each_pin_is_gated_on_its_own_census_s_apportionment(monkeypatch):
+    """A pin from before a census keeps its own apportionment (it is never
+    retired), and the first Congress after one is gated on the new census's
+    before it sits: the Clerk's list is the sitting House's only."""
+    module = dp
+    clerk = {"TX": 38, "VT": 1}
+    monkeypatch.setattr(module, "apportionment", lambda census: {"TX": 40, "VT": 1} if census == 2030 else {})
+    assert module.seats_for(120, 122, clerk) == clerk  # same census as the sitting House
+    assert module.seats_for(123, 122, clerk) == {"TX": 40, "VT": 1}  # 2032's, before it sits
+    monkeypatch.setattr(module, "apportionment", lambda census: {"TX": 38, "VT": 1} if census == 2020 else {})
+    assert module.seats_for(119, 123, {"TX": 40, "VT": 1}) == {"TX": 38, "VT": 1}  # an old pin, after
+    assert module.seats_for(124, 123, clerk) == clerk
+    assert module.seats_for(133, 123, clerk) == {}  # 2040's census: not on file yet

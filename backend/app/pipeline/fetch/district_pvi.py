@@ -85,6 +85,7 @@ from contextvars import ContextVar
 from datetime import date, timedelta
 
 from app.atomic_write import runtime_data_path, write_text_atomic
+from app.census_lines import apportionment, census_year
 from app.contact import BOT_USER_AGENT
 from app.file_cache import new_reload_lock, reload_if_moved
 from app.ordinals import ordinal
@@ -579,12 +580,24 @@ def _ordered_congresses(sources: dict) -> list[str]:
     return sorted(sources["congresses"], key=int)
 
 
+def seats_for(congress: int, sitting: int, clerk: dict[str, int]) -> dict[str, int]:
+    """The apportionment `congress`'s table is gated on: the House Clerk's
+    seat list (house_seats, the sitting House's) for a Congress on the
+    sitting Congress's census, else that census's apportionment from the
+    Census Bureau's own table (census_lines.apportionment). So a pin from
+    before a census keeps its own apportionment and never has to be
+    retired, and the first Congress after one (the 123rd, elected in 2032
+    on the 2030 census) is gated on the new apportionment before it sits.
+    {} when that census's table isn't on file yet."""
+    census = census_year(congress)
+    return clerk if census == census_year(sitting) else apportionment(census)
+
+
 async def house_seats() -> dict[str, int]:
     """{state: voting seats} from the House Clerk's member list
-    (house_clerk.fetch_house_apportionment), or {} when it can't be read.
-    Every pinned table is gated against it, so a reapportionment reaches
-    the gates with no edit here; the pins from before one describe the
-    old apportionment and are retired from the sources file with it."""
+    (house_clerk.fetch_house_apportionment), or {} when it can't be read:
+    the sitting House's apportionment (seats_for gives each pinned
+    Congress its own census's)."""
     async with make_async_client(follow_redirects=True) as client:
         apportionment = await fetch_house_apportionment(client)
     return {st: a["seats"] for st, a in apportionment.items()}
@@ -617,7 +630,12 @@ async def build_payload(
         rev = await _fetch_revision(revid=src["revid"])
         base = tables.get(src["redrawn_from"]) if src.get("redrawn_from") else None
         base_src = sources["congresses"].get(src["redrawn_from"]) if src.get("redrawn_from") else None
-        table, fails = check_table(src, rev, page, base, base_src, seats=seats)
+        c_seats = seats_for(int(c), sitting_congress, seats)
+        if not c_seats:
+            failures.append(f"{ordinal(int(c))} Congress: the {census_year(int(c))} census's apportionment is not "
+                            "on file (app/data/apportionment.json)")
+            continue
+        table, fails = check_table(src, rev, page, base, base_src, seats=c_seats)
         if fails:
             failures += [f"{ordinal(int(c))} Congress: {f}" for f in fails]
             continue
@@ -1243,6 +1261,9 @@ def candidate_entry(revision: dict, target: int, pins: dict, tables: dict[str, d
                               f"{elected_in(election_congress)} election: new lines, not the "
                               f"{ordinal(target)} Congress's"]
     base = tables.get(base_key) if entry.get("redrawn_from") else None
+    seats = seats_for(target, sitting, seats)
+    if not seats:
+        return None, [f"the {census_year(target)} census's apportionment is not on file (app/data/apportionment.json)"]
     table, failures = check_table(entry, revision, page, base, base_src, seats=seats)
     if failures and all(f.startswith("table median") for f in failures):
         stated = parse_stated_summary(content).get("median_pvi")

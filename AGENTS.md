@@ -462,7 +462,11 @@ The correct pattern, established by `_district_pvi()` /
    describes. `app/pipeline/fetch/district_pvi.py` fetches exactly those
    revisions (Supplementary, weekly; before a House run when the file is
    missing, predates pinning, or is not at the current pins), gates them — every seat of the House
-   Clerk's apportionment exactly once, the revision's own prose
+   Clerk's apportionment exactly once (for a Congress on another census
+   than the sitting House's, that census's apportionment from the Census
+   Bureau's table, `app/data/apportionment.json` via
+   `district_pvi.seats_for`: a pin from before a census is never retired,
+   and the first Congress after one is gated before it sits), the revision's own prose
    counts must match its table and its stated median must be the table's
    exactly (a pin may declare a `median_tolerance` only with a written
    `_why_median_tolerance`); a redrawn Congress must be identical to its
