@@ -22,6 +22,7 @@ def _member(mid, caucus="D", party=None, small=0.2, pac=0.1, breaks=0, votes=100
 
 def _rows(monkeypatch, rows):
     monkeypatch.setattr(pc, "chamber_rows", lambda db, chamber: rows)
+    monkeypatch.setattr(pc, "support_chamber_view", lambda db, chamber: None)
 
 
 def test_percentile_is_mid_rank():
@@ -193,3 +194,44 @@ def test_a_measure_over_time_reads_night_by_night_in_one_congress():
     assert pc.over_time(pc.BY_KEY["pacMoney"], funding) is None
     assert pc.over_time(pc.BY_KEY["smallGifts"], funding) is None
     assert pc.over_time(m, []) is None
+
+
+def _support(mid, party, with_president, votes, expected, compared, low, high):
+    return {"id": mid, "name": mid, "party": party, "state": "OR", "district": None, "seatLean": 3,
+            "withPresident": with_president, "votes": votes, "rate": with_president / votes,
+            "rateLow": low, "rateHigh": high, "expected": expected, "difference": with_president / votes - expected,
+            "differenceLow": low - expected, "differenceHigh": high - expected, "comparedWithExpected": compared}
+
+
+def test_votes_with_the_president_is_the_fifth_row_with_its_own_rule(monkeypatch):
+    """Its own words (the interval against the seat's expected rate, never
+    a percentile word), the rule served beside every row, a thin record
+    with no word, and every readout written here."""
+    _rows(monkeypatch, [_member(f"d{i}") for i in range(25)] + [_member("thin")])
+    support = [_support(f"d{i}", "D", 5, 27, 0.2, "within", 0.08, 0.37) for i in range(23)]
+    support += [_support("d23", "D", 20, 27, 0.2, "more", 0.55, 0.87),
+                _support("d24", "D", 0, 27, 0.4, "less", 0.0, 0.12),
+                _support("thin", "D", 0, 4, 0.9, "less", 0.0, 0.49)]
+    monkeypatch.setattr(pc, "support_chamber_view", lambda db, chamber: {"members": support})
+    out = pc.chamber_measures(None, "senate")
+    assert [m["key"] for m in out["measures"]] == ["breaks", "pacMoney", "smallGifts", "billsMoved",
+                                                    "presidentSupport"]
+    assert all(m["rule"]["kind"] == "percentile" and m["ruleText"] for m in out["measures"][:4])
+    row = out["measures"][-1]
+    assert row["rule"] == {"kind": "interval", "interval": 95, "minRecord": 20}
+    assert "the median senator has 27 counted votes against 100 party-line votes" in row["ruleText"]
+    points = {p["id"]: p for p in row["points"]}
+    assert points["d23"]["shown"] == "74%, 20 of 27 votes"
+    assert points["d23"]["context"] == ("Range 55% to 87% · seat's expected rate 20% · "
+                                        "more than the seat's expected rate")
+    assert points["thin"]["word"] is None and points["thin"]["thin"]
+    assert points["thin"]["context"].endswith("too few counted votes to compare (under 20)")
+    assert [p["id"] for p in row["mostAbove"]] == ["d23"] and [p["id"] for p in row["mostBelow"]] == ["d24"]
+    assert not any("peers" in (p["word"] or "") for p in row["points"])
+    assert "—" not in row["why"] + row["ruleText"]
+    member = {m["id"]: m for m in out["members"]}
+    assert (member["d23"]["withPresident"], member["d23"]["presidentVotes"]) == (20, 27)
+    # Before the first run: the four rows only, and no figure in the table.
+    monkeypatch.setattr(pc, "support_chamber_view", lambda db, chamber: None)
+    out = pc.chamber_measures(None, "senate")
+    assert len(out["measures"]) == 4 and out["members"][0]["presidentVotes"] is None

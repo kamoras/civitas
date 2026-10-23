@@ -12,7 +12,6 @@ const FIGURES: SectionFigures = {
     recess: null,
     committees: { count: 40, metThisWeek: 7 },
     bills: { inMotion: 512 },
-    president: { house: { rate: 0.5612, rollCalls: 21 }, senate: null },
   },
   agencies: {
     budget: null,
@@ -28,11 +27,6 @@ const FIGURES: SectionFigures = {
 
 describe("sectionPreview", () => {
   it("words the backend's figures", () => {
-    expect(sectionPreview(FIGURES, "congress", "president")).toEqual({
-      figure: "56%",
-      caption:
-        "of House members' votes went the president's way, on 21 roll calls with a stated position",
-    });
     expect(sectionPreview(FIGURES, "elections", "redistricting")?.caption).toBe(
       "states vote on new House lines in 2026"
     );
@@ -126,7 +120,7 @@ describe("sectionPreview", () => {
   it("names only real section pages", () => {
     // A preview keyed to a tab SECTIONS doesn't have would never show.
     for (const [section, tabs] of Object.entries({
-      congress: ["week", "month", "bills", "committees", "president"],
+      congress: ["week", "month", "bills", "committees"],
       executive: ["budget", "comments"],
       elections: ["map", "redistricting", "archive"],
     })) {
