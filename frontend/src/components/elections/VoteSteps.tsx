@@ -242,7 +242,7 @@ export default function VoteSteps({ steps, stateName }: { steps: VoteStep[]; sta
           <Step key={s.task} step={s} n={i + 1} />
         ))}
       </ol>
-      <p className="mt-3 text-small text-ink-lo">
+      <p className="mt-3 text-body text-ink-lo">
         This page is research, not your official ballot. Your sample ballot also lists county, city
         and local questions this page leaves out.
       </p>

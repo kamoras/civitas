@@ -651,7 +651,7 @@ function ComparePageInner() {
             <div
               key={u.side}
               role="status"
-              className="mb-4 border-l-2 border-signal-amber pl-3 text-small"
+              className="mb-4 border-l-2 border-signal-amber pl-3 text-body"
             >
               <p className="text-ink">
                 The link&rsquo;s {u.side} member, <span className={TYPE.id}>{u.id}</span>, matched

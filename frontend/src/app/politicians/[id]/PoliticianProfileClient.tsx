@@ -304,7 +304,7 @@ export default function PoliticianProfileClient({
                         </div>
                         <p className="mb-1 font-sans text-body text-ink-hi">{issue.title}</p>
                         {issue.summary && (
-                          <p className="line-clamp-2 font-sans text-small text-ink-lo">
+                          <p className="line-clamp-2 font-sans text-body text-ink-lo">
                             {issue.summary}
                           </p>
                         )}

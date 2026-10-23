@@ -30,7 +30,7 @@ export default function PresidentialContest({ data }: { data: Contest | null }) 
           The House apportionment the electoral votes come from couldn&apos;t be read just now.
         </p>
       )}
-      <p className="mt-2 text-small text-ink-lo">
+      <p className="mt-2 text-body text-ink-lo">
         Each state casts one electoral vote per senator and representative, so its House seats plus
         two; the District of Columbia casts three. A majority of all electors elects. Civitas reads
         no presidential count and calls no race: each state&apos;s election office publishes its
@@ -62,7 +62,7 @@ export default function PresidentialContest({ data }: { data: Contest | null }) 
       <h3 className={`${TYPE.kicker} mt-4`}>Registered with the FEC</h3>
       {candidates.length ? (
         <>
-          <p className="mt-1 text-small text-ink-lo">
+          <p className="mt-1 text-body text-ink-lo">
             {data.registered} {data.registered === 1 ? "candidate has" : "candidates have"} raised
             or spent past the FEC&apos;s threshold; the {candidates.length} who have raised the most
             are listed. None is on a ballot until a state certifies it.

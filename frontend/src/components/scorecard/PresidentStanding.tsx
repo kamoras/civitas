@@ -122,7 +122,7 @@ function Row({ m, me, showTable }: { m: PresidentPeerMeasure; me: Self; showTabl
         )}
       </div>
       <div className="min-w-0">
-        <p className="mb-1 text-small text-ink">{m.why}</p>
+        <p className="mb-1 text-body text-ink">{m.why}</p>
         <Strip m={m} me={me} />
       </div>
       <p
@@ -281,7 +281,7 @@ export default function PresidentStanding({
             </span>
             <span>┆ the median, or what presidents starting from the same level saw</span>
           </p>
-          <p className="mt-2 max-w-prose text-small text-ink-lo">
+          <p className="mt-2 max-w-prose text-body text-ink-lo">
             Each figure is compared with every other presidency that has it, within the era its
             series covers. The word is a fixed rule: outside the middle half ({lo}th to {hi}th
             percentile) reads &ldquo;above&rdquo; or &ldquo;below&rdquo;, and only with at least{" "}

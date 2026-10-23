@@ -82,7 +82,7 @@ from app.pipeline.fetch import (
     coverage_captions,
     senate_classes,
 )
-from app.pipeline.fetch.ballot_measure_text import NotYetPublished
+from app.pipeline.fetch.ballot_measure_text import RELINK_WINDOW_DAYS, DocumentNotLinked, NotYetPublished
 from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_tracked_run, skip_reason_text
 from app.time_utils import utcnow
 
@@ -969,21 +969,45 @@ def _has_read_this_election(db: Session, prior, state: str, election_day: str, s
     return prior is not None and prior.source_name == source_name and prior.last_success_at is not None
 
 
-def _late_cycle_notice(state: str, election_day: str, source_name: str, awaited) -> None:
-    """A low-severity notice, once per state and election, that a document
-    which exists only in a year with a measure still isn't published at
-    the default expected-by date. Not a coverage change — "not yet
-    covered" is still the honest status, and may be the real answer — but
-    a reader that broke before it ever read anything this cycle would
-    otherwise sit there silently until election day."""
+async def _late_cycle_check(
+    client: httpx.AsyncClient, state: str, election_day: str, source: dict, awaited,
+) -> None:
+    """A document that exists only in a year with a measure, still not
+    published at the default expected-by date. Not a coverage change: "not
+    yet covered" is the honest status, and may be the state's answer. A
+    reader that broke before it read anything this cycle would look the
+    same, so the reader's self-check (ballot_measures_pdf.SELF_CHECKS: the
+    reader run on an earlier year's document from an official archive)
+    tells the two apart. A passing self-check sends nothing; a failing one,
+    or a reader with no self-check, sends one notice per state and
+    election, worded as what the nightly run does next."""
+    check = ballot_measures_pdf.SELF_CHECKS.get(source.get("strategy"))
+    condition = f"ballot-measure-late-{state}-{election_day}"
+    if check is not None:
+        try:
+            failed = await check(client, int(election_day[:4]))
+        except Exception as exc:
+            logger.exception("Self-check of %s's ballot-measure reader failed", state)
+            failed = f"its self-check raised {type(exc).__name__}"
+        if failed is None:
+            logger.info("%s: %s not published yet; the reader passed its self-check", state, awaited)
+            ops_alerts.resolve_ops_alert(condition)
+            return
+        body = (f"{source['source_name']}: {awaited}, still not published {DEFAULT_EXPECTED_BY_DAYS_BEFORE} "
+                f"days before {election_day}, and the reader failed its self-check on an earlier year's "
+                f"document: {failed}. The state reads as not yet covered; the nightly run reads the state's "
+                "pages again and runs the self-check again.")
+    else:
+        body = (f"{source['source_name']}: {awaited}, still not published {DEFAULT_EXPECTED_BY_DAYS_BEFORE} "
+                f"days before {election_day}. The document exists only in a year with a measure, so this can "
+                "be the state's answer; the state reads as not yet covered, and the nightly run reads the "
+                "state's pages again and publishes the document the night it appears.")
     try:
         ops_alerts.send_ops_alert(
             f"[notice] {state} ballot measures still not published",
-            f"{source_name}: {awaited} — still not published {DEFAULT_EXPECTED_BY_DAYS_BEFORE} days "
-            f"before {election_day}. That can be the real answer (the document exists only in a year "
-            f"with a measure); worth a manual look at the source in case the reader has broken.",
-            dedupe_key=f"ballot-measure-late-{state}-{election_day}",
-            condition=f"ballot-measure-late-{state}-{election_day}",
+            body,
+            dedupe_key=f"ballot-measure-late-{state}-{election_day}-{'checked' if check else 'unchecked'}",
+            condition=condition,
         )
     except Exception:
         logger.exception("Could not send late-cycle ballot-measure notice for %s", state)
@@ -1041,7 +1065,7 @@ async def _fetch_with_reasons(
     with _reader_reasons() as reasons:
         try:
             return await ballot_measures_pdf.fetch_state_measures_pdf(client, db, state, year, election_day), reasons
-        except NotYetPublished:
+        except (NotYetPublished, DocumentNotLinked):
             raise
         except Exception as exc:
             logger.exception("PDF measure fetch raised for %s", state)
@@ -1050,6 +1074,7 @@ async def _fetch_with_reasons(
 
 async def _sync_pdf_measures(
     db: Session, client: httpx.AsyncClient, election_day: str, failing: list[str] | None = None,
+    states: list[str] | None = None,
 ) -> tuple[int, int, int]:
     """Every state with a registered direct source
     (ballot_measure_pdf_sources.json; see ballot_measures_pdf.py) — the
@@ -1075,12 +1100,30 @@ async def _sync_pdf_measures(
     synced = failed = marked_removed = 0
     if failing is None:
         failing = []
-    for state in sorted(ballot_measure_pdf_sources.configured_states()):
+    for state in states if states is not None else sorted(ballot_measure_pdf_sources.configured_states()):
         source = ballot_measure_pdf_sources.source_for_state(state)
         source_name = source["source_name"]
         fresh = ballot_measures_pdf.cached_answer(db, state, year) is None
         try:
             listed, reasons = await _fetch_with_reasons(client, db, state, year, election_day)
+        except DocumentNotLinked as unlinked:
+            # The state's word is unchanged: the measures on file stay as
+            # they are, credited to the recorded document and dated by that
+            # read, and the coverage status is left alone. Alerted only once
+            # the document has stayed unlinked past the window.
+            row = _coverage_row(db, state, election_day)
+            days = (utcnow().date() - date.fromisoformat(unlinked.since)).days
+            note = (f"{unlinked}: no longer linked since {unlinked.since} and not found elsewhere on the state's "
+                    "site; its reader passes its self-check on the recorded document, so the measures read "
+                    "from it stay current. The nightly run looks for the document again.")
+            if row is not None:
+                row.error_detail = note
+                row.checked_at = utcnow()
+            db.commit()
+            if days >= RELINK_WINDOW_DAYS:
+                failed += 1
+                failing.append(state)
+            continue
         except NotYetPublished as awaited:
             prior = _coverage_row(db, state, election_day)
             # Measures the source itself reports as no longer on this
@@ -1119,7 +1162,7 @@ async def _sync_pdf_measures(
                 # published the document yet. No alert, no claim.
                 logger.info("Ballot measures for %s not published yet: %s", state, awaited)
                 if not awaited.deadline_applies and _past_expected_by({}, election_day):
-                    _late_cycle_notice(state, election_day, source_name, awaited)
+                    await _late_cycle_check(client, state, election_day, source, awaited)
                 # Until this source answers, the measures on the page (if
                 # any) are still the previous source's — a registry entry
                 # renamed or re-pointed — so the coverage row keeps naming
@@ -1295,8 +1338,9 @@ def _alert_ingest_failures(db: Session, failing: list[str], election_day: str) -
         ops_alerts.send_ops_alert(
             "Ballot measure ingest failed",
             f"{len(states)} state(s) failed to ingest statewide ballot measures "
-            f"for {election_day}: {', '.join(states)}. Those states render as 'not yet covered' "
-            f"rather than 'no measures' until this clears.\n{why}",
+            f"for {election_day}: {', '.join(states)}, each on two reads in tonight's election run. "
+            "Measures already read stay on each page, and the next nightly run reads every state again; "
+            f"until one reads cleanly the state says its check failed rather than 'no measures'.\n{why}",
             dedupe_key=f"ballot-measure-ingest-{election_day}-{utcnow().date().isoformat()}-{digest}",
             condition=f"ballot-measure-ingest-{election_day}",
         )
@@ -1448,6 +1492,20 @@ async def _sync_ballot_measures(db: Session, client: httpx.AsyncClient, cycle: i
 
     failing: list[str] = []
     synced, failed, marked_removed = await _sync_pdf_measures(db, client, election_day, failing)
+    if failing:
+        # Each failed state is read once more at the end of the pass, the
+        # other states' reads later: a source that answered one request
+        # with a passing error (Texas's Legislative Reference Library, one
+        # 503 on 2026-10-21, inside fetch_with_retry's three attempts over
+        # six seconds) is read cleanly then, and only a state that fails
+        # both reads is alerted. A documented wall fails the same way twice
+        # and is never retried past (fetch_with_retry does not retry a bot
+        # challenge).
+        first = sorted(set(failing))
+        failing = []
+        again, failed, removed_again = await _sync_pdf_measures(db, client, election_day, failing, states=first)
+        synced += again
+        marked_removed += removed_again
 
     unread = sorted((federal_states() | {"DC"}) - ballot_measure_pdf_sources.configured_states())
     for state in unread:

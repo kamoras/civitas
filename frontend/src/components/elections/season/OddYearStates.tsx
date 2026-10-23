@@ -18,7 +18,7 @@ export default function OddYearStates({ data }: { data: Odd | null }) {
       </h2>
       {data.states.length ? (
         <>
-          <p className="mt-3 text-small text-ink-lo">
+          <p className="mt-3 text-body text-ink-lo">
             {data.states.length} {data.states.length === 1 ? "state holds" : "states hold"} regular
             state elections in {data.year}, by their own constitutions and laws. Civitas
             doesn&apos;t list these contests&apos; candidates or read their counts: its state
@@ -52,7 +52,7 @@ export default function OddYearStates({ data }: { data: Odd | null }) {
           </ul>
         </>
       ) : (
-        <p className="mt-3 text-small text-ink-lo">
+        <p className="mt-3 text-body text-ink-lo">
           No state holds a regular November state election in {data.year} by the record Civitas
           keeps; every state votes in the federal cycle&apos;s even years.
         </p>

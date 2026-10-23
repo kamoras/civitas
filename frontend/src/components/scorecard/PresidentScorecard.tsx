@@ -176,14 +176,14 @@ export default function PresidentScorecard({
                     #{legacy.rank}{" "}
                     <span className={`${TYPE.figure} text-ink-lo`}>of {legacy.rated}</span>
                   </p>
-                  <p className="text-small leading-relaxed text-ink-lo">
+                  <p className="text-body leading-relaxed text-ink-lo">
                     Their ranking, not Civitas&apos;s: the {survey}, by total points (
                     {legacy.points} points).
                   </p>
                 </>
               ) : (
                 legacy && (
-                  <p className="text-small leading-relaxed text-ink-lo">
+                  <p className="text-body leading-relaxed text-ink-lo">
                     Not rated. C-SPAN&apos;s Presidential Historians Survey rates only completed
                     terms, and the newest edition published does not rate this presidency.
                   </p>

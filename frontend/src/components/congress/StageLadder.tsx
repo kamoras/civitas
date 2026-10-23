@@ -57,7 +57,7 @@ export default function StageLadder({ data }: { data: StageMilestones }) {
           );
         })}
       </ol>
-      <p className="text-small leading-relaxed text-ink-min">
+      <p className="text-body leading-relaxed text-ink-min">
         Share of the {data.total.toLocaleString("en-US")} bills sitting members have sponsored this
         Congress that got at least that far. Pick a step to list its bills.
       </p>

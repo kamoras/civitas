@@ -78,7 +78,7 @@ function Withdrawn({ retraction }: { retraction: Retraction }) {
           <p className="font-mono text-small text-ink-min">Withdrawn {retraction.date}</p>
           <h1 className={TYPE.title}>This issue was withdrawn</h1>
           <p className="leading-relaxed text-ink">{retraction.reason}</p>
-          <p className="text-small text-ink-lo">
+          <p className="text-body text-ink-lo">
             Every withdrawal is listed, with its reason, in the public retraction log in the Civitas
             source code.{" "}
             <Link

@@ -141,7 +141,7 @@ export default async function RedistrictingIndexPage() {
 
           <RedistrictingWatch watch={index?.watch} />
 
-          <p className="mt-8 max-w-2xl text-small leading-relaxed text-ink-min">
+          <p className="mt-8 max-w-2xl text-body leading-relaxed text-ink-min">
             Lean is Cook PVI: how a district voted for president relative to the nation, on the same
             presidential elections before and after, so a change in lean is a change in the lines.
             It is not a forecast. Each state page explains the method and lists every source.

@@ -135,7 +135,7 @@ function PartisanDepthPanel({
 
       {/* Party alignment interpretation */}
       {senatorParty !== "I" && (
-        <div className="text-small text-ink mb-3">
+        <div className="text-body text-ink mb-3">
           {matchesParty ? (
             depth.depth === "deep" ? (
               <span>

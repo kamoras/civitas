@@ -162,7 +162,7 @@ export default function JusticeProfile({
               <h2 id="agreement-heading" {...onThisPage("Agreement")} className={TYPE.section}>
                 Agreement with each justice
               </h2>
-              <p className="text-small text-ink">
+              <p className="text-body text-ink">
                 Who votes alike: the share of cases both decided where they took the same side.
               </p>
               <figure aria-labelledby="agreement-caption" className="flex flex-col gap-2">
@@ -186,7 +186,7 @@ export default function JusticeProfile({
                     </li>
                   ))}
                 </ul>
-                <figcaption id="agreement-caption" className="text-small text-ink">
+                <figcaption id="agreement-caption" className="text-body text-ink">
                   Most often on the same side as {agreement[0].name} (
                   {Math.round(agreement[0].share)}%), least often as{" "}
                   {agreement[agreement.length - 1].name} (

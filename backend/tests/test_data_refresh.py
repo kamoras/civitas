@@ -468,14 +468,92 @@ def test_name_casing_refresh_reads_as_many_issues_as_the_bundled_table():
     assert argv[argv.index("--year") + 1] == "2026"
 
 
-def test_a_search_calibration_alerts_on_a_kind_its_fit_never_saw(monkeypatch):
-    check = dr._search_kinds_stale("calibrate_site_search.py")
+def test_a_search_calibration_is_refit_within_a_week_of_a_kind_its_fit_never_saw(monkeypatch):
     monkeypatch.setattr(dr.site_search, "index_kinds", lambda: {"member", "bill", "nomination"})
-    assert "nomination" in check(_ctx("site_search_calibration.json", {"kinds": ["member", "bill"]}))
-    assert check(_ctx("site_search_calibration.json", {"kinds": ["member", "bill", "nomination"]})) is None
-    assert "records no kinds" in check(_ctx("site_search_calibration.json", {"params": {}}))
-    monkeypatch.setattr(dr.site_search, "index_kinds", lambda: None)
-    assert check(_ctx("site_search_calibration.json", {"kinds": []})) is None
+    eight_days = datetime(2028, 2, 22)
+    monkeypatch.setattr(dr, "utcnow", lambda: datetime(2028, 3, 1))
+    assert dr._search_due(_ctx("s.json", {"kinds": ["member", "bill"]}, last=eight_days))
+    assert not dr._search_due(_ctx("s.json", {"kinds": ["member", "bill", "nomination"]}, last=eight_days))
+    assert dr._search_due(_ctx("s.json", {"kinds": ["member", "bill", "nomination"]}, last=datetime(2028, 1, 20)))
+    for spec in (f for f in dr.DATA_FILES if f.name in ("site_search_calibration.json",
+                                                         "search_fusion_calibration.json")):
+        argv = spec.command(_ctx(spec.name))
+        assert "{in_use}" in argv and "{out}" in argv and spec.accept is dr.held_out_beats_in_use
+        assert spec.stale(_ctx(spec.name)) is None  # no alert asks anyone to rerun it
+
+
+# ── the acceptance rule ──────────────────────────────────────────────
+
+def _comparison(delta, se, **more):
+    return {"params": {"x": 2}, "_comparison": {"metric": "m", "delta": delta, "se": se, **more}}
+
+
+@pytest.mark.parametrize("candidate,why", [
+    (_comparison(0.01, 0.02), "within noise"),
+    (_comparison(0.05, 0.01, subgroups={"name": {"delta": -0.3, "se": 0.1}, "typo": {"delta": 0.2, "se": 0.1}}),
+     "loses more than one standard error on name"),
+    (_comparison(0.05, 0.01, refused=["the refit jumps wrong on 2 fit-half probes"]), "jumps wrong"),
+    ({"params": {"x": 2}}, "no held-out comparison"),
+])
+def test_a_refit_that_does_not_clear_the_rule_keeps_the_copy_in_use_on_record_without_an_alert(alerts, candidate,
+                                                                                               why):
+    _write_runtime("t_acc.json", {"params": {"x": 1}})
+    spec = dr.DataFile("t_acc.json", command=lambda ctx: _writer(candidate), accept=dr.held_out_beats_in_use)
+    outcome = dr.refresh_one(spec, _ctx("t_acc.json", dr.read("t_acc.json")))
+    assert outcome.startswith("in use:") and why in outcome
+    doc = dr.read("t_acc.json")
+    assert doc["params"] == {"x": 1}
+    assert why in doc["_refreshed"]["kept"]["why"]
+    alerts.send.assert_not_called()
+    alerts.resolve.assert_called_with("data-refresh-t-acc")
+    # Not a failure (those start "kept"): it waits its cadence, not the week's retry.
+    assert not outcome.startswith("kept")
+
+
+def test_a_refit_that_wins_by_more_than_a_standard_error_is_installed(alerts):
+    _write_runtime("t_win.json", {"params": {"x": 1}})
+    candidate = _comparison(0.05, 0.01, subgroups={"name": {"delta": -0.005, "se": 0.01}})
+    spec = dr.DataFile("t_win.json", command=lambda ctx: _writer(candidate), accept=dr.held_out_beats_in_use)
+    assert dr.refresh_one(spec, _ctx("t_win.json", dr.read("t_win.json"))) == "refreshed"
+    assert dr.read("t_win.json")["params"] == {"x": 2}
+
+
+def test_a_refit_that_reproduces_the_parameters_in_use_installs_its_new_measurements(alerts):
+    _write_runtime("t_same.json", {"params": {"x": 1}, "kinds": ["a"]})
+    candidate = {"params": {"x": 1}, "kinds": ["a", "b"], "_comparison": {"unchanged": True}}
+    spec = dr.DataFile("t_same.json", command=lambda ctx: _writer(candidate), accept=dr.held_out_beats_in_use)
+    assert dr.refresh_one(spec, _ctx("t_same.json", dr.read("t_same.json"))) == "refreshed"
+    assert dr.read("t_same.json")["kinds"] == ["a", "b"]
+
+
+def test_the_script_is_handed_the_copy_in_use(alerts):
+    """{in_use} is a file holding the copy in use, refreshed or bundled."""
+    _write_runtime("t_inuse.json", {"params": {"x": 7}})
+    script = ("import json,sys; old=json.load(open(sys.argv[1])); "
+              "json.dump({'params': old['params'], 'seen': old['params']['x']}, open(sys.argv[2],'w'))")
+    spec = dr.DataFile("t_inuse.json", command=lambda ctx: [sys.executable, "-c", script, "{in_use}", "{out}"])
+    assert dr.refresh_one(spec, _ctx("t_inuse.json", dr.read("t_inuse.json"))) == "refreshed"
+    assert dr.read("t_inuse.json")["seen"] == 7
+
+
+def test_a_shipped_fit_supersedes_an_accepted_refit(alerts, tmp_path):
+    """A commit that ships a new fit replaces a refit installed before it,
+    and the next refit is measured against what shipped."""
+    (tmp_path / "t_sup.json").write_text(json.dumps({"params": {"x": 1}}))
+    seen = []
+
+    def command(ctx):
+        seen.append(ctx.doc.get("params"))
+        return _writer(_comparison(0.0, 0.01))
+
+    spec = dr.DataFile("t_sup.json", command=command, accept=dr.held_out_beats_in_use)
+    with patch.object(dr, "BUNDLED", tmp_path), patch.object(dr, "_record_try"), \
+         patch.object(dr, "_last_try", return_value=(None, False, None)):
+        dr.install(spec, {"params": {"x": 2}}, ["refit"])
+        (tmp_path / "t_sup.json").write_text(json.dumps({"params": {"x": 3}}))  # a commit ships x=3
+        assert dr.run_refreshes([spec])["t_sup.json"].startswith("in use:")
+    assert seen[-1] == {"x": 3}
+    assert dr.read("t_sup.json")["params"] == {"x": 3}
 
 
 def test_a_shipped_regeneration_is_refreshed_the_next_day(alerts, tmp_path):
@@ -530,6 +608,26 @@ def test_a_failed_try_is_retried_the_next_day_once_what_it_runs_changes(alerts, 
         with patch.object(dr, "_last_try", return_value=(yesterday, False, None)):
             dr.run_refreshes([spec])
         assert tried == [1, 1]
+
+
+def test_a_refit_under_the_acceptance_rule_is_measured_the_day_after_its_code_changes(alerts, tmp_path):
+    """A ranking change ships; the search calibration is refit against it the
+    next day, not at the month's end."""
+    script = tmp_path / "fit.py"
+    script.write_text("ranker v1")
+    tried = []
+    spec = dr.DataFile("t_rank.json", command=lambda ctx: [sys.executable, str(script), "{out}"],
+                       due=lambda ctx: False, accept=dr.held_out_beats_in_use)
+    with patch.object(dr, "BACKEND", tmp_path), patch.object(dr, "utcnow", return_value=datetime(2026, 10, 20)), \
+         patch.object(dr, "refresh_one", side_effect=lambda spec, ctx: tried.append(1) or "in use: within noise"), \
+         patch.object(dr, "_record_try"):
+        fitted_with = dr.recipe(spec.command(None))
+        with patch.object(dr, "_last_try", return_value=(datetime(2026, 10, 19), False, fitted_with)):
+            dr.run_refreshes([spec])
+            assert tried == []
+            script.write_text("ranker v2")
+            dr.run_refreshes([spec])
+            assert tried == [1]
 
 
 def test_a_fix_in_a_module_the_script_imports_is_retried_the_next_day(alerts, tmp_path):

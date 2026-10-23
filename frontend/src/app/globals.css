@@ -15,13 +15,13 @@
   --text-title--line-height: 1.1;
   --text-section: 1.5rem;
   --text-section--line-height: 1.25;
-  --text-box: 1.125rem;
+  --text-box: 1.25rem;
   --text-box--line-height: 1.35;
-  --text-dek: 1.125rem;
+  --text-dek: 1.25rem;
   --text-dek--line-height: 1.5;
-  --text-body: 1rem;
+  --text-body: 1.125rem;
   --text-body--line-height: 1.6;
-  --text-small: 0.875rem;
+  --text-small: 1rem;
   --text-small--line-height: 1.45;
   --text-figure: 1.875rem;
   --text-figure--line-height: 1;
@@ -33,8 +33,10 @@
     --text-display: 1.875rem;
     --text-title: 1.75rem;
     --text-section: 1.375rem;
-    --text-box: 1.0625rem;
-    --text-dek: 1.0625rem;
+    --text-box: 1.125rem;
+    --text-dek: 1.125rem;
+    --text-body: 1.0625rem;
+    --text-small: 0.9375rem;
     --text-figure: 1.625rem;
     --text-figure-lg: 2.5rem;
   }
@@ -636,8 +638,8 @@ input:focus-visible {
 
 /* ===== A PHONE'S TYPE SCALE (mobile spec P1) =====
    On a phone nothing a reader must read is under 13px: the scale's
-   smallest step is 14px everywhere (`--text-small`, "One style per role"
-   above), and Tailwind's own sizes are switched off there, so a 9-12px
+   smallest step is 15px on a phone and 16px wider (`--text-small`, "One
+   style per role" above), and Tailwind's own sizes are switched off there, so a 9-12px
    one-off can't come back. The tracked capitals left (the logotype)
    tighten to 0.08em, where wider would take the width of 17px text. */
 @media (max-width: 639.98px) {

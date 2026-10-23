@@ -29,7 +29,7 @@ export default function NewCongress({ data }: { data: Compared | null }) {
             <Chamber name="Senate" c={data.senate} />
             <Chamber name="House" c={data.house} />
           </div>
-          <p className="mt-3 text-small text-ink-lo">
+          <p className="mt-3 text-body text-ink-lo">
             New means no earlier term in that chamber. Age is at January 3, {data.firstYear}, from
             birth year: Congress.gov gives the year only, so each member&apos;s age is this or one
             less. Gender, race and other traits aren&apos;t in the official record, so none is
@@ -52,7 +52,7 @@ function Chamber({ name, c }: { name: string; c: ChamberCompared }) {
     <div className="border-t border-white/[0.07] py-2">
       <h3 className={TYPE.kicker}>{name}</h3>
       {c.read === 0 ? (
-        <p className="mt-1 text-small text-ink-lo">
+        <p className="mt-1 text-body text-ink-lo">
           No member&apos;s Congress.gov record lists this Congress yet ({c.members} sitting); the
           comparison appears as the records are updated.
         </p>
@@ -61,7 +61,7 @@ function Chamber({ name, c }: { name: string; c: ChamberCompared }) {
           <p className={`${TYPE.section} mt-1 tabular-nums`}>
             {c.new} new{c.newShare != null ? ` · ${pct(c.newShare)}` : ""}
           </p>
-          <p className="mt-1 text-small text-ink-lo">
+          <p className="mt-1 text-body text-ink-lo">
             {c.fromOtherChamber > 0 && `${c.fromOtherChamber} from the other chamber; `}
             {c.returning > 0 && `${c.returning} back after sitting out the last Congress; `}
             {c.medianAge != null

@@ -422,7 +422,7 @@ export function Fact({ label, children }: { label: string; children: ReactNode }
   return (
     <div className="grid grid-cols-1 gap-1 py-3 sm:grid-cols-[13rem_1fr] sm:gap-4">
       <dt className="font-mono text-small text-signal-amber sm:pt-0.5">{label}</dt>
-      <dd className="text-small leading-relaxed text-ink-lo">{children}</dd>
+      <dd className="text-body leading-relaxed text-ink-lo">{children}</dd>
     </div>
   );
 }

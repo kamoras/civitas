@@ -24,7 +24,7 @@ export default function NoteLine({
   return (
     <details
       data-testid={testId}
-      className={`group/note mb-2 border-l-2 pl-3 text-small ${
+      className={`group/note mb-2 border-l-2 pl-3 text-body ${
         alert ? "border-signal-red" : "border-ink-lo"
       }`}
     >
@@ -35,7 +35,7 @@ export default function NoteLine({
           <span className="hidden group-open/note:inline">Less</span>
         </span>
       </summary>
-      <div className="mt-1 pb-1 text-small leading-relaxed text-ink-lo">{children}</div>
+      <div className="mt-1 pb-1 text-body leading-relaxed text-ink-lo">{children}</div>
     </details>
   );
 }
