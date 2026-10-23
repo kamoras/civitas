@@ -219,7 +219,7 @@ function CountyFinder({
       )}
       <DistrictLocator
         state={stateCode}
-        lines={`congress-${lines.congress}`}
+        lines={lines.lookupLines ?? ""}
         linesLabel="the lines today's members were elected on"
         districts={lines.districts}
         query={query}
@@ -349,7 +349,7 @@ function MembersDirectoryContent() {
         : [],
     [linesReady, houseLines, county]
   );
-  const linesName = houseLines ? `congress-${houseLines.congress}` : "";
+  const linesName = houseLines?.lookupLines ?? "";
   const picked =
     linesReady &&
     yourDistrict.district?.state === state &&

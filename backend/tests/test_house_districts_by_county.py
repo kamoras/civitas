@@ -3,13 +3,16 @@ county, on the lines of the Congress in office (the sitting members'),
 never the coming election's map in a redrawn state."""
 
 import json
+import pathlib
 
 import pytest
 from fastapi import HTTPException
 
 from app.api import politicians
 from app.config import settings
+from app.district_lines import lookup_lines
 from app.district_places import places_on_lines_of
+from app.state_names import STATE_NAMES
 
 
 def _body(resp) -> dict:
@@ -55,7 +58,32 @@ def test_unredrawn_state_is_the_same_on_both(monkeypatch):
 def test_no_file_for_the_congress_says_so_rather_than_guessing(monkeypatch):
     monkeypatch.setattr(settings, "CURRENT_CONGRESS", 121)
     body = _body(politicians.house_districts_by_county(state="TX"))
-    assert body == {"state": "TX", "congress": 121, "available": False, "districts": []}
+    assert body == {"state": "TX", "congress": 121, "available": False, "districts": [], "lookupLines": None}
+
+
+LOOKUP = pathlib.Path(__file__).resolve().parents[2] / "frontend" / "public" / "data" / "lookup"
+
+
+@pytest.mark.parametrize("congress", [119, 120])
+def test_lookup_lines_name_a_folder_holding_the_state(monkeypatch, congress):
+    # The 120th sits on Jan 3, 2027: asking for congress-120/<ST> by its
+    # number found no file for the 41 states that kept their map. The
+    # folder is the map's, so every state is found with nothing rebuilt.
+    monkeypatch.setattr(settings, "CURRENT_CONGRESS", congress)
+    for st in STATE_NAMES:
+        if st == "DC" or not _body(politicians.house_districts_by_county(state=st))["available"]:
+            continue
+        folder = _body(politicians.house_districts_by_county(state=st))["lookupLines"]
+        assert (LOOKUP / folder / f"{st}.json").exists(), (st, folder)
+
+
+def test_lookup_lines_follow_each_state_s_map(monkeypatch):
+    monkeypatch.setattr(settings, "CURRENT_CONGRESS", 120)
+    assert lookup_lines("TX", 120) == "congress-120"  # redrew for 2026
+    assert lookup_lines("NY", 120) == "congress-119"  # kept its map
+    assert lookup_lines("MO", 120) == "congress-119"  # its 2025 map stayed
+    assert lookup_lines("TX", 119) == "congress-119"
+    assert lookup_lines("TX", 121) is None  # 2028's maps not listed yet
 
 
 def test_unknown_state_is_404():

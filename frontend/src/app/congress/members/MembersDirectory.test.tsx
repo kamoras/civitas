@@ -44,6 +44,7 @@ function open(search: string) {
   api.fetchHouseDistrictsByCounty.mockImplementation(async (state: string) => ({
     state,
     congress: 119,
+    lookupLines: "congress-119",
     available: true,
     districts:
       state === "WY"

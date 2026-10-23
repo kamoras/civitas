@@ -1098,9 +1098,10 @@ as the keyboard and screen-reader path. Both are worked out in the browser
 (`frontend/src/lib/districtAt.ts`) against the site's own district shapes
 in `frontend/public/data/lookup/`, named by the lines they hold:
 `congress-<N>/<ST>.json`, the House districts that Congress's members are
-elected in (`congress-119` for who represents the reader now, from the
-Congress the API says is in office; the ballot reads the lines its election
-is on, `congress-120` in the nine states that redrew), with
+elected in, one folder per map (the API names the folder for each state
+and Congress, `lookupLines`: a state that kept its map stays in its earlier
+Congress's folder; `congress-120` holds the nine states that redrew for
+2026), with
 `<ST>.towns.json` beside it for the town map, and
 `election-2026/<ST>.legislature.json`, the state senate and house districts.
 A state's file is fetched only on a click, whole and with no query. The
