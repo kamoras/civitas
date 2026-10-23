@@ -7,23 +7,26 @@ downloaded once into --cache:
 - Epstein & Posner (2016), "Supreme Court Justices' Loyalty to the
   President", J. Legal Studies 45: every vote in a case of concern to the
   president, 1937-2014, hand-coded by the Solicitor General's position.
-- The Supreme Court Database, 2026 Release 01 (justice-centered, by
-  citation): every vote 1946-2025, whose lead parties extend the president
-  cases past 2014.
+- The Supreme Court Database's newest release (justice-centered, by
+  citation; 2026 Release 01 when this was written): every vote from 1946,
+  whose lead parties extend the president cases past 2014. Found by rule:
+  the newest release its data page lists, and on that release's page the
+  download whose file is named SCDB_<year>_<release>_justiceCentered_Citation.
 - Martin-Quinn scores (2024 release): each justice's position per term.
 
 Run: python scripts/research_justice_loyalty.py --cache .research-cache/justice-loyalty
 (pandas, statsmodels, scipy). With --write-finding it writes
 app/data/court_finding.json, the Court-level finding /court and the methods
-page state (section 8: the appointer effect less its placebo, with its
+page state; with --finding-only as well it computes that alone (what
+app/data_refresh.py runs monthly for a new Database release) (section 8: the appointer effect less its placebo, with its
 bootstrap interval), never a number typed into a page. With --write-bundle it also writes
 app/data/justice_president_votes_1937_2014.csv.gz, the hand-coded votes the
 pipeline reads for the terms before the Database's lead parties take over
 (pipeline/analyze/justice_loyalty.py): the one source here it can't fetch,
 since Epstein & Posner publish it as a Stata file.
 
-Research-only dependencies (scripts/requirements-research.txt):
-    pip install -r requirements.txt -r scripts/requirements-research.txt
+pandas, statsmodels and scipy are in requirements.txt (the refresh runs it
+in the image).
 """
 
 import gzip
@@ -48,17 +51,20 @@ from scipy.stats import spearmanr
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from app.contact import BOT_USER_AGENT  # noqa: E402
-from app.pipeline.analyze.justice_loyalty import Estimate, measurable  # noqa: E402
+from app.database import SessionLocal  # noqa: E402
+from app.models import President  # noqa: E402
+from app.pipeline.analyze.justice_loyalty import Estimate, measurable, president_on as president_in  # noqa: E402
+from app.pipeline.fetch.justice_records import fjc_appointments  # noqa: E402
+from app.pipeline.justice_pipeline import _appointers  # noqa: E402
 
-# The Supreme Court Database release read: its file name carries it, and
-# court_finding.json records it so the data refresh job can tell when a
-# newer one is out (app/data_refresh.py, _court_finding_stale).
-SCDB_FILE = "SCDB_2026_01_justiceCentered_Citation.zip"
-SCDB_RELEASE = re.match(r"SCDB_(\d{4})_(\d{2})_", SCDB_FILE).group(1, 2)
+# The Supreme Court Database: the newest release, found by rule
+# (scdb_newest); court_finding.json records which one it read.
+SCDB_DATA = "https://scdb.la.psu.edu/data/"
+SCDB_FILE = "scdb_justice_citation.zip"  # the cached download's name
+SCDB_NAME = re.compile(r"SCDB_(\d{4})_(\d{2})_justiceCentered_Citation[._]", re.I)
 FINDING = pathlib.Path(__file__).resolve().parents[1] / "app/data/court_finding.json"
 SOURCES = {
     "JusticePresident.zip": "https://epstein.wustl.edu/s/JusticePresident.zip",
-    SCDB_FILE: "https://scdb.la.psu.edu/?jet_download=c99e5d5b7131dda1f6d1c06a5e7c4dda58c38c88",
     "mq_justices.csv": "https://mqscores.wustl.edu/media/2024/justices.csv",
     "judges.csv": "https://www.fjc.gov/sites/default/files/history/judges.csv",
 }
@@ -119,15 +125,40 @@ def shrink(estimates: dict[str, Estimate]) -> tuple[dict[str, Shrunk], float, fl
     return out, mu, tau
 
 
-def fetch(cache: pathlib.Path) -> dict[str, pathlib.Path]:
+def _open(url: str, method: str = "GET"):
+    return urllib.request.urlopen(urllib.request.Request(url, method=method, headers={"User-Agent": BOT_USER_AGENT}),
+                                  timeout=120)
+
+
+def scdb_newest() -> tuple[tuple[str, str], str]:
+    """((year, release), download URL) of the Database's newest release:
+    the newest release page its data page links, and on it the download
+    whose file (its Content-Disposition) is the justice-centered data
+    organized by citation."""
+    with _open(SCDB_DATA) as r:
+        page = r.read().decode("utf-8", "replace")
+    releases = sorted({(y, n) for y, n in re.findall(r"/data/(\d{4})-release-(\d{2})/", page)})
+    if not releases:
+        raise SystemExit(f"{SCDB_DATA} links no release")
+    year, rel = releases[-1]
+    with _open(f"{SCDB_DATA}{year}-release-{rel}/") as r:
+        page = r.read().decode("utf-8", "replace")
+    for url in dict.fromkeys(re.findall(r'href="(https://scdb\.la\.psu\.edu/\?jet_download=\w+)"', page)):
+        with _open(url, "HEAD") as r:
+            found = SCDB_NAME.search(r.headers.get("Content-Disposition") or "")
+        if found and "csv" in (r.headers.get("Content-Disposition") or "").lower():
+            return (found[1], found[2]), url
+    raise SystemExit(f"the {year} Release {rel} page links no justice-centered citation CSV")
+
+
+def fetch(cache: pathlib.Path, sources: dict[str, str]) -> dict[str, pathlib.Path]:
     cache.mkdir(parents=True, exist_ok=True)
     paths = {}
-    for name, url in SOURCES.items():
+    for name, url in sources.items():
         path = cache / name
         if not path.exists():
             print(f"fetching {url}")
-            req = urllib.request.Request(url, headers={"User-Agent": BOT_USER_AGENT})
-            with urllib.request.urlopen(req) as resp:
+            with _open(url) as resp:
                 path.write_bytes(resp.read())
         paths[name] = path
     return paths
@@ -190,16 +221,40 @@ def scdb_votes(sc: pd.DataFrame, gov) -> pd.DataFrame:
     return sc
 
 
-def panel(ep: pd.DataFrame, sc: pd.DataFrame) -> pd.DataFrame:
+def from_records(judges: pathlib.Path, terms: list[tuple[str, str, str | None]], names) -> tuple:
+    """(president on a date, a justice's appointer on a date) from the
+    records the pipeline reads (the presidents table's terms and the FJC's
+    appointments, joined as justice_pipeline does), in place of PRESIDENTS
+    and APPOINTER: the refresh's panel follows a new president or justice
+    with no edit here."""
+    with open(judges, encoding="utf-8-sig") as f:
+        spans = _appointers(set(names), fjc_appointments(csv.DictReader(f)), terms)
+
+    def appointer(name: str, date: str) -> str | None:
+        return next((p for p, a, b in spans.get(name) or [] if a <= date and (b is None or date < b)), None)
+
+    return (lambda date: president_in(date, terms)), appointer
+
+
+def panel(ep: pd.DataFrame, sc: pd.DataFrame, records: tuple | None = None) -> pd.DataFrame:
     m = ep.dropna(subset=["JVoteForPres"]).merge(sc[["voteId", "vote_for_pres", "pet_gov"]], on="voteId")
     print(f"  on the {len(m)} votes both hold: same vote-for-president {np.mean(m.JVoteForPres == m.vote_for_pres):.2%}, "
           f"same side {np.mean(m.PresPet == m.pet_gov.astype(int)):.2%}")
-    new = sc[(sc.term >= 2015) & sc.justiceName.isin(APPOINTER)].copy()
-    new["pres"] = pd.to_datetime(new.dateDecision).dt.strftime("%Y-%m-%d").map(president_on)
-    new["in_office"] = (new.pres == new.justiceName.map(APPOINTER)).astype(int)
+    if records is None:
+        new = sc[(sc.term >= 2015) & sc.justiceName.isin(APPOINTER)].copy()
+        new["pres"] = pd.to_datetime(new.dateDecision).dt.strftime("%Y-%m-%d").map(president_on)
+        new["appt"] = new.justiceName.map(APPOINTER)
+    else:
+        on, appointer = records
+        new = sc[sc.term >= 2015].copy()
+        dates = pd.to_datetime(new.dateDecision).dt.strftime("%Y-%m-%d")
+        new["pres"] = dates.map(on)
+        new["appt"] = [appointer(j, d) for j, d in zip(new.justiceName, dates)]
+        new = new[new.pres.notna() & new.appt.notna()]
+    new["in_office"] = (new.pres == new.appt).astype(int)
     # same_party: the sitting president is of the appointer's party (the
     # appointer's own terms included).
-    new["same_party"] = (new.pres.map(PARTY) == new.justiceName.map(APPOINTER).map(PARTY)).astype(int)
+    new["same_party"] = (new.pres.map(PARTY) == new.appt.map(PARTY)).astype(int)
     new = new.assign(pet=new.pet_gov.astype(int)).rename(columns={"vote_for_pres": "y"})
     old = ep.dropna(subset=["JVoteForPres"]).assign(term=lambda d: d.caseId.str[:4].astype(int))
     # Epstein & Posner's same_partyExcludeInOffice is not a same-party
@@ -548,6 +603,28 @@ def _career_fit(P: pd.DataFrame, shape: str, flag: str = "in_office") -> tuple:
     return pooled, R
 
 
+def _net(p: pd.DataFrame, d0: pd.DataFrame) -> float:
+    return (smf.ols("y ~ in_office + pet + C(justiceName)", p).fit().params["in_office"]
+            - smf.ols("y ~ fake + pet + C(justiceName)", d0).fit().params["fake"])
+
+
+def court_finding(P: pd.DataFrame) -> dict:
+    """The Court-level effect that survives the placebo: A's pooled effect
+    less its k=0 placebo, with a bootstrap over justices."""
+    D0 = next(D for _, D in _placebo_windows(P))
+    rng, names, draws = np.random.default_rng(0), P.justiceName.unique(), []
+    by_p, by_d = dict(tuple(P.groupby("justiceName"))), dict(tuple(D0.groupby("justiceName")))
+    for _ in range(200):
+        pick = rng.choice(names, len(names))
+        p = pd.concat([by_p[j].assign(justiceName=f"{j}#{i}") for i, j in enumerate(pick)])
+        d0 = pd.concat([by_d[j].assign(justiceName=f"{j}#{i}") for i, j in enumerate(pick) if j in by_d])
+        draws.append(_net(p, d0))
+    lo, hi = np.percentile(draws, [2.5, 97.5])
+    return {"estimate": round(float(_net(P, D0)), 4), "low": round(float(lo), 4), "high": round(float(hi), 4),
+            "draws": len(draws), "firstTerm": int(P.term.min()), "lastTerm": int(P.term.max()),
+            "justices": int(P.justiceName.nunique())}
+
+
 def career(P: pd.DataFrame, sv: pd.DataFrame, sc: pd.DataFrame, judges: pathlib.Path) -> dict:
     """Candidate F: the appointer indicator with a pooled career-tenure
     curve. Identified because the appointer's window varies in length (and
@@ -615,27 +692,10 @@ def career(P: pd.DataFrame, sv: pd.DataFrame, sc: pd.DataFrame, judges: pathlib.
     _per_justice_placebo("F", F, fakes)
     _per_justice_placebo("A", A, {k: _per_justice(D, "y ~ fake + pet", "fake", lambda g: g.fake == 1,
                                                   lambda g: g.fake == 0) for k, D in _placebo_windows(P)})
-    # the Court-level effect that survives the placebo: A's pooled effect
-    # less its k=0 placebo, with a bootstrap over justices
-    D0 = next(D for _, D in _placebo_windows(P))
-
-    def net(p: pd.DataFrame, d0: pd.DataFrame) -> float:
-        return (smf.ols("y ~ in_office + pet + C(justiceName)", p).fit().params["in_office"]
-                - smf.ols("y ~ fake + pet + C(justiceName)", d0).fit().params["fake"])
-
-    rng, names, draws = np.random.default_rng(0), P.justiceName.unique(), []
-    by_p, by_d = dict(tuple(P.groupby("justiceName"))), dict(tuple(D0.groupby("justiceName")))
-    for _ in range(200):
-        pick = rng.choice(names, len(names))
-        p = pd.concat([by_p[j].assign(justiceName=f"{j}#{i}") for i, j in enumerate(pick)])
-        d0 = pd.concat([by_d[j].assign(justiceName=f"{j}#{i}") for i, j in enumerate(pick) if j in by_d])
-        draws.append(net(p, d0))
-    lo, hi = np.percentile(draws, [2.5, 97.5])
-    finding = {"estimate": round(float(net(P, D0)), 4), "low": round(float(lo), 4), "high": round(float(hi), 4),
-               "draws": len(draws), "firstTerm": int(P.term.min()), "lastTerm": int(P.term.max()),
-               "justices": int(P.justiceName.nunique())}
-    print(f"  Court-level: A's pooled effect less its k=0 placebo {net(P, D0) * 100:+.1f} points, 95% bootstrap CI over "
-          f"justices [{lo * 100:+.1f}, {hi * 100:+.1f}] (200 draws); F's +{real * 100:.1f} against its placebo sd "
+    finding = court_finding(P)
+    lo, hi = finding["low"], finding["high"]
+    print(f"  Court-level: A's pooled effect less its k=0 placebo {finding['estimate'] * 100:+.1f} points, 95% bootstrap "
+          f"CI over justices [{lo * 100:+.1f}, {hi * 100:+.1f}] (200 draws); F's +{real * 100:.1f} against its placebo sd "
           f"{v.std(ddof=1) * 100:.1f}: [{(real - 1.96 * v.std(ddof=1)) * 100:+.1f}, {(real + 1.96 * v.std(ddof=1)) * 100:+.1f}]")
     # gate 2: an appointer's return years into his appointees' careers
     sv = sv.assign(date=pd.to_datetime(sv.dateDecision))
@@ -712,11 +772,28 @@ def main():
     ap.add_argument("--write-bundle", action="store_true")
     ap.add_argument("--write-finding", nargs="?", const=FINDING, type=pathlib.Path, metavar="PATH",
                     help="write the Court-level finding (default app/data/court_finding.json)")
+    ap.add_argument("--finding-only", action="store_true", help="compute the finding alone (with --write-finding)")
     args = ap.parse_args()
-    paths = fetch(args.cache)
+    release, scdb_url = scdb_newest()
+    sources = {"JusticePresident.zip": SOURCES["JusticePresident.zip"], "judges.csv": SOURCES["judges.csv"],
+               SCDB_FILE: scdb_url}
+    paths = fetch(args.cache, sources if args.finding_only else {**SOURCES, **sources})
     ep = read_zip(paths["JusticePresident.zip"], ".dta", lambda b: pd.read_stata(b, convert_categoricals=False))
     sc = read_zip(paths[SCDB_FILE], ".csv",
                   lambda b: pd.read_csv(b, encoding="latin-1", low_memory=False))
+    if args.finding_only:
+        gov = government_codes(ep, sc.drop_duplicates("caseId")[["caseId", "term", "petitioner", "respondent"]])
+        db = SessionLocal()
+        try:
+            terms = [(p.name, p.term_start, p.term_end) for p in db.query(President).order_by(President.term_start)]
+        finally:
+            db.close()
+        if not terms:
+            raise SystemExit("the presidents table is empty")
+        votes = scdb_votes(sc, gov)
+        records = from_records(paths["judges.csv"], terms, votes.justiceName.unique())
+        write_finding(args.write_finding or FINDING, court_finding(panel(ep, votes, records)), release)
+        return
     mq = pd.read_csv(paths["mq_justices.csv"])
     reproduce(ep)
     gov = government_codes(ep, sc.drop_duplicates("caseId")[["caseId", "term", "petitioner", "respondent"]])
@@ -729,12 +806,12 @@ def main():
     era(P)
     finding = career(P, sv, sc, paths["judges.csv"])
     if args.write_finding:
-        write_finding(args.write_finding, finding)
+        write_finding(args.write_finding, finding, release)
     if args.write_bundle:
         write_bundle(ep)
 
 
-def write_finding(path: pathlib.Path, finding: dict) -> None:
+def write_finding(path: pathlib.Path, finding: dict, release: tuple[str, str]) -> None:
     """The Court-level finding as /court and /about/presidents-and-justices
     state it: shares (0.025 is 2.5 points), with the interval's own words
     decided here (does it exclude no effect), not on the page."""
@@ -742,10 +819,10 @@ def write_finding(path: pathlib.Path, finding: dict) -> None:
         "_source": (
             "backend/scripts/research_justice_loyalty.py --write-finding, section 8: the appointer effect "
             "pooled over every justice (Epstein & Posner's hand-coded votes through 2014, the Supreme Court "
-            f"Database {SCDB_RELEASE[0]} Release {SCDB_RELEASE[1]} after), less the placebo window at the same "
+            f"Database {release[0]} Release {release[1]} after), less the placebo window at the same "
             "point in a career, with a 95% bootstrap interval over justices (docs/research/justice-scores.md)."
         ),
-        "scdbRelease": f"{SCDB_RELEASE[0]}_{SCDB_RELEASE[1]}",
+        "scdbRelease": f"{release[0]}_{release[1]}",
         **finding,
         "excludesZero": finding["low"] > 0 or finding["high"] < 0,
     }

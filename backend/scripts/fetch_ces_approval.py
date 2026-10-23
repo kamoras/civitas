@@ -36,40 +36,79 @@ the name the survey showed them (CurrentHouseName / CurrentSen1Name /
 CurrentSen2Name); app/services/constituent_survey.py joins that to a member
 record.
 
-Data: CES 2024 Common Content (Harvard Dataverse doi:10.7910/DVN/X11EP6,
-CC0), pre-election wave, fielded October-November 2024. Rerun when a new
-Common Content is released and point CES_DATAFILE at it.
+Data, by rule (each survey, odd years' smaller ones included): the newest
+dataset on Harvard Dataverse named "... Common Content, <year>" (CC0), its
+data file (the largest .csv or .tab), and its questionnaire (the document
+naming the most question ids, CC24_312f and the like). The question ids
+change every survey, so each new one is mapped to the survey in use by its
+wording: for every question id, the grid's question plus the row the id
+labels, as the questionnaire prints them; scored by the mean of difflib's
+SequenceMatcher ratio and the all-MiniLM-L6-v2 cosine, and taken only when
+each of the three approval items' best match is one-to-one and mutual
+(the new item's best match among every question of the old survey is the
+old item). The new survey's answers must then look like approval answers
+(codes 1-5 on nearly every answered row, approval among opinions within
+the bounds below, and as many members rated as the survey in use, give or
+take a quarter). Anything short of that keeps the survey in use. The
+district column is the one for the Congress in office when the survey was
+fielded (cdid118 in 2024), from its own start times.
 
-Run from the repo (network required unless --csv is given):
-    cd backend && python3 scripts/fetch_ces_approval.py [--csv path/to/CCES24.csv]
+The 2024 Common Content (doi:10.7910/DVN/X11EP6, pre-election wave,
+October-November 2024) was the first survey read; app/data_refresh.py
+checks monthly for a newer one.
+
+    cd backend && python3 scripts/fetch_ces_approval.py --in-use IN_USE --output OUT --cache DIR
+    cd backend && python3 scripts/fetch_ces_approval.py --csv path/to/CCES24.csv   (the 2024 ids, offline)
 """
 
 import argparse
 import csv
+import io
 import json
 import pathlib
+import re
+import shutil
 import sys
 import tempfile
+import urllib.parse
 import urllib.request
+import zipfile
 from collections import defaultdict
+from datetime import datetime, timedelta
+from difflib import SequenceMatcher
 
+import numpy as np
+import pdfplumber
+
+csv.field_size_limit(sys.maxsize)
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from fetch_state_leg_crosswalk import _FIPS  # noqa: E402  (one state table)
 
+from app.pipeline.vector_store import get_similarity_model  # noqa: E402
+
+DATAVERSE = "https://dataverse.harvard.edu"
 CES_DOI = "doi:10.7910/DVN/X11EP6"
 CES_DATAFILE = 12050325  # CCES24_Common_OUTPUT_vv_topost_final.csv
-CES_URL = f"https://dataverse.harvard.edu/api/access/datafile/{CES_DATAFILE}"
-SURVEY = "CES 2024 Common Content (pre-election wave, Oct-Nov 2024)"
 OUT = pathlib.Path(__file__).resolve().parent.parent / "app" / "data" / "ces_member_approval.json"
 
 STATE_OF_FIPS = {int(fips): state for state, fips in _FIPS.items()}
 
-# (approval item, name shown, party shown, chamber) per rated member.
+# (approval item, name shown, party shown, chamber) per rated member: the
+# 2024 survey's ids, which later surveys are mapped to by wording.
 ITEMS = (
     ("CC24_312f", "CurrentHouseName", "CurrentHouseParty", "house"),
     ("CC24_312g", "CurrentSen1Name", "CurrentSen1Party", "senate"),
     ("CC24_312h", "CurrentSen2Name", "CurrentSen2Party", "senate"),
 )
+SLOTS = ("house", "senate1", "senate2")  # ITEMS in order
+# Bounds on a mapped survey's answers. Approval of one's own members has run
+# about 40-60% among opinions in every Common Content; outside 15-85% the
+# column read is not approval. Nearly every answered row of an approval item
+# is a code 1-5 (the rest skipped or not asked).
+APPROVAL_BOUNDS = (0.15, 0.85)
+CODED_SHARE = 0.95
+MEMBERS_KEPT = 0.75
 # The questionnaire's codes (CES 2024 guide): 1-2 approve, 3-4 disapprove,
 # 5 not sure; pid3 1 Democrat, 2 Republican, anything else independent/other.
 APPROVE, DISAPPROVE, NOT_SURE = {"1", "2"}, {"3", "4"}, {"5"}
@@ -77,15 +116,172 @@ RESPONDENT_PARTY = {"1": "D", "2": "R"}
 MEMBER_PARTY = {"Democratic": "D", "Republican": "R"}
 
 
-def _download() -> pathlib.Path:
-    path = pathlib.Path(tempfile.gettempdir()) / "ces_common_content.csv"
-    if not path.exists():
-        print(f"downloading {CES_URL} ...")
-        urllib.request.urlretrieve(CES_URL, path)
-    return path
+def _get(url: str) -> bytes:
+    with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "Civitas/1.0"}), timeout=300) as r:
+        return r.read()
 
 
-def tally(rows) -> dict:
+def _api(path: str, **params) -> dict:
+    return json.loads(_get(f"{DATAVERSE}/api/{path}?{urllib.parse.urlencode(params)}"))["data"]
+
+
+def survey_year(name: str) -> int | None:
+    """The year of a dataset named as a single Common Content ("CES Common
+    Content, 2025", "2017 CCES Common Content"), else None (cumulative
+    files, panels, anything else)."""
+    if "common content" not in name.lower() or re.search(r"cumulative|panel", name, re.I):
+        return None
+    years = re.findall(r"\b(?:19|20)\d{2}\b", name)
+    return int(years[0]) if len(years) == 1 else None
+
+
+def newest_survey(items: list[dict]) -> tuple[int, str, str]:
+    """(year, DOI, name) of the newest Common Content."""
+    found = [(y, i["global_id"], i["name"]) for i in items if (y := survey_year(i.get("name", "")))]
+    if not found:
+        raise SystemExit("Dataverse lists no Common Content")
+    return max(found)
+
+
+def survey_files(doi: str) -> tuple[dict, list[dict]]:
+    """(the data file, the documents) of a survey's latest published version."""
+    files = [f["dataFile"] for f in _api("datasets/:persistentId/versions/:latest-published/files",
+                                         persistentId=doi)]
+    data = [f for f in files if f.get("filename", "").lower().endswith((".csv", ".tab"))]
+    if not data:
+        raise SystemExit(f"{doi} has no .csv or .tab data file")
+    docs = [f for f in files if f.get("filename", "").lower().endswith((".pdf", ".docx"))]
+    return max(data, key=lambda f: f.get("filesize") or 0), docs
+
+
+def document_lines(name: str, body: bytes) -> list[str]:
+    """A questionnaire's text, one line per paragraph (docx) or line (pdf)."""
+    if name.lower().endswith(".docx"):
+        xml = zipfile.ZipFile(io.BytesIO(body)).read("word/document.xml").decode("utf-8", "replace")
+        lines = [re.sub(r"<[^>]+>", "", p) for p in re.findall(r"<w:p[ >].*?</w:p>", xml, flags=re.S)]
+    else:
+        with pdfplumber.open(io.BytesIO(body)) as pdf:
+            lines = [line for page in pdf.pages for line in (page.extract_text() or "").splitlines()]
+    return [line.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&").strip() for line in lines if line.strip()]
+
+
+_QID = re.compile(r"\b(CC\d{2}_\w+?)(?=-|\s|$)")
+
+
+def wordings(lines: list[str]) -> dict[str, str]:
+    """{question id: its wording}: the question the id's grid or page asks
+    (the last line before it ending in "?"), the rest of the id's own line
+    and the line after it (a grid row's label), with the survey's year
+    taken out of ids it mentions."""
+    out, stem = {}, ""
+    for i, line in enumerate(lines):
+        if line.endswith("?"):
+            stem = line
+        m = _QID.match(line)
+        if m and m[1] not in out:
+            rest = line[m.end():] + " " + (lines[i + 1] if i + 1 < len(lines) else "")
+            out[m[1]] = re.sub(r"\s+", " ", re.sub(r"CC\d{2}_", "CC_", f"{stem} {rest}")).strip().lower()
+    return out
+
+
+def questionnaire(docs: list[dict]) -> dict[str, str]:
+    """Every question id the survey's documents name, with its wording: from
+    the document naming the most ids where several name it (a codebook can
+    list a grid's id without its rows; the questionnaire names each row)."""
+    found = [wordings(document_lines(d["filename"], _get(f"{DATAVERSE}/api/access/datafile/{d['id']}")))
+             for d in docs]
+    merged: dict[str, str] = {}
+    for words in sorted(found, key=len, reverse=True):
+        merged.update({q: w for q, w in words.items() if q not in merged})
+    if not merged:
+        raise SystemExit("no document of the survey names its question ids")
+    return merged
+
+
+def map_items(old: dict[str, str], new: dict[str, str], old_ids: list[str], encode) -> dict[str, str] | str:
+    """{old id: new id} for `old_ids` by wording, or why they can't be
+    mapped. Score: the mean of SequenceMatcher's ratio and the embedding
+    cosine (`encode` returns unit vectors). Each old item's best new item
+    must be one-to-one and mutual."""
+    o_ids, n_ids = list(old), list(new)
+    o_vec, n_vec = encode([old[i] for i in o_ids]), encode([new[i] for i in n_ids])
+    cos = np.asarray(o_vec) @ np.asarray(n_vec).T
+
+    def score(oi: int, ni: int) -> float:
+        return (float(cos[oi, ni]) + SequenceMatcher(None, old[o_ids[oi]], new[n_ids[ni]]).ratio()) / 2
+
+    def best_new(oi: int) -> int:
+        top = np.argsort(-cos[oi])[:20]  # the ratio only for the nearest by cosine
+        return max(top, key=lambda ni: score(oi, ni))
+
+    def best_old(ni: int) -> int:
+        top = np.argsort(-cos[:, ni])[:20]
+        return max(top, key=lambda oi: score(oi, ni))
+
+    mapping = {}
+    for oid in old_ids:
+        if oid not in old:
+            return f"{oid} is not in the questionnaire of the survey in use"
+        oi = o_ids.index(oid)
+        ni = best_new(oi)
+        if best_old(ni) != oi:
+            return f"{oid}'s best match {n_ids[ni]} is closer to {o_ids[best_old(ni)]}"
+        mapping[oid] = n_ids[ni]
+    if len(set(mapping.values())) != len(mapping):
+        return f"not one-to-one: {mapping}"
+    return mapping
+
+
+def plausible(rows, items) -> str | None:
+    """Why the mapped columns don't read as approval answers, or None."""
+    counts = {item: [0, 0, 0, 0] for item, *_ in items}  # answered, coded, opinion, approve
+    for r in rows:
+        for item, c in counts.items():
+            a = r.get(item, "")
+            if a in ("", "__NA__"):
+                continue
+            c[0] += 1
+            c[1] += a in APPROVE | DISAPPROVE | NOT_SURE
+            c[2] += a in APPROVE | DISAPPROVE
+            c[3] += a in APPROVE
+    for item, (answered, coded, opinion, approve) in counts.items():
+        if not answered:
+            return f"{item} has no answers"
+        if coded < CODED_SHARE * answered:
+            return f"{item}: only {coded} of {answered} answers are codes 1-5"
+        share = approve / max(opinion, 1)
+        if not APPROVAL_BOUNDS[0] <= share <= APPROVAL_BOUNDS[1]:
+            return f"{item}: {share:.0%} approve among opinions"
+    return None
+
+
+def fielded(rows) -> tuple[datetime | None, datetime | None]:
+    """The first and last start time (ISO text, or Stata's milliseconds
+    since 1960, as an ingested .tab carries them)."""
+    first = last = None
+    for r in rows:
+        t = (r.get("starttime") or "").strip()
+        try:
+            when = (datetime(1960, 1, 1) + timedelta(milliseconds=float(t)) if re.fullmatch(r"[\d.eE+]+", t)
+                    else datetime.fromisoformat(t[:19]))
+        except (ValueError, OverflowError):
+            continue
+        first, last = min(first or when, when), max(last or when, when)
+    return first, last
+
+
+def district_column(header: list[str], start: datetime | None) -> str:
+    """cdid<N> for the Congress in office when the survey was fielded (the
+    newest the file carries at or before it)."""
+    congress = (start.year - 1789) // 2 + 1 if start else None
+    have = sorted(int(m[1]) for c in header if (m := re.fullmatch(r"cdid(\d+)", c)))
+    usable = [n for n in have if congress is None or n <= congress]
+    if not usable:
+        raise SystemExit(f"no district column (have {have})")
+    return f"cdid{usable[-1]}"
+
+
+def tally(rows, items=ITEMS, district_col: str = "cdid118") -> dict:
     """{(state, chamber, district, name, member_party): {respondent_party:
     [sum w approve, sum w opinion, sum w^2 opinion, n opinion, n not sure]}}"""
     cells: dict = defaultdict(lambda: defaultdict(lambda: [0.0, 0.0, 0.0, 0, 0]))
@@ -98,12 +294,12 @@ def tally(rows) -> dict:
         if not state or w <= 0:
             continue
         rparty = RESPONDENT_PARTY.get(row.get("pid3", ""), "I")
-        for item, name_col, party_col, chamber in ITEMS:
+        for item, name_col, party_col, chamber in items:
             name = (row.get(name_col) or "").strip()
             answer = row.get(item, "")
             if not name or answer not in APPROVE | DISAPPROVE | NOT_SURE:
                 continue
-            district = row.get("cdid118", "") if chamber == "house" else ""
+            district = row.get(district_col, "") if chamber == "house" else ""
             key = (state, chamber, district, name, MEMBER_PARTY.get(row.get(party_col, ""), "I"))
             acc = cells[key][rparty]
             if answer in NOT_SURE:
@@ -199,28 +395,94 @@ def build(cells: dict) -> dict:
     return {"priors": prior, "members": members}
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("--csv", type=pathlib.Path, help="a local copy of the Common Content CSV")
-    args = parser.parse_args()
-    path = args.csv or _download()
-    with open(path, newline="", encoding="utf-8", errors="replace") as f:
-        result = build(tally(csv.DictReader(f)))
+def write(out_path: pathlib.Path, path: pathlib.Path, items, district_col: str, year: int, doi: str,
+          datafile: dict, wording: dict[str, str]) -> dict:
+    first, last = fielded(_rows(path))
+    result = build(tally(_rows(path), items, district_col))
+    ids = "/".join(i[0] for i in items)
+    months = f"{first:%Y-%m}/{last:%Y-%m}" if first else str(year)
     out = {
         "_source": (
-            f"{SURVEY}, Harvard Dataverse {CES_DOI} (CC0), datafile {CES_DATAFILE}. Approval of the "
-            "respondent's own House member and senators (CC24_312f/g/h) by the respondent's party "
-            "(pid3), weighted by commonweight, among respondents giving an opinion; shrunk per "
-            "(chamber, member party, respondent party) by beta-binomial empirical Bayes (see the "
+            f"CES {year} Common Content, Harvard Dataverse {doi} (CC0), datafile {datafile['id']} "
+            f"({datafile.get('filename')}). Approval of the respondent's own House member and senators ({ids}) "
+            "by the respondent's party (pid3), weighted by commonweight, among respondents giving an opinion; "
+            "shrunk per (chamber, member party, respondent party) by beta-binomial empirical Bayes (see the "
             "script). Generated by backend/scripts/fetch_ces_approval.py."
         ),
-        "survey": SURVEY,
-        "fielded": "2024-10/2024-11",
-        "fielded_year": 2024,
+        "survey": f"CES {year} Common Content (fielded {months})",
+        "fielded": months,
+        "fielded_year": year,
+        "doi": doi,
+        "items": {slot: {"id": item[0], "wording": wording.get(item[0], "")} for slot, item in zip(SLOTS, items)},
         **result,
     }
-    OUT.write_text(json.dumps(out, indent=1, sort_keys=True) + "\n")
-    print(f"wrote {OUT}: {len(result['members'])} members; priors {result['priors']}")
+    out_path.write_text(json.dumps(out, indent=1, sort_keys=True) + "\n")
+    print(f"wrote {out_path}: {len(result['members'])} members; priors {result['priors']}")
+    return out
+
+
+def _rows(path: pathlib.Path):
+    """The data file's rows, streamed (.tab or .csv, told by its first line)."""
+    with open(path, newline="", encoding="utf-8", errors="replace") as f:
+        first = f.readline()
+        f.seek(0)
+        yield from csv.DictReader(f, delimiter="\t" if "\t" in first else ",")
+
+
+def _header(path: pathlib.Path) -> list[str]:
+    with open(path, encoding="utf-8", errors="replace") as f:
+        first = f.readline().rstrip("\r\n")
+    return [c.strip('"') for c in first.split("\t" if "\t" in first else ",")]
+
+
+def refresh(in_use: pathlib.Path, out: pathlib.Path, cache: pathlib.Path) -> int:
+    """The newest survey, mapped to the one in use by wording (module docstring)."""
+    current = json.loads(in_use.read_text())
+    year, doi, name = newest_survey(_api("search", q='"Common Content"', type="dataset", per_page=100)["items"])
+    if doi == current.get("doi", CES_DOI):
+        current.pop("_refreshed", None)
+        out.write_text(json.dumps(current, indent=1, sort_keys=True) + "\n")
+        print(f"{name} is the survey in use")
+        return 0
+    old_items = current.get("items") or {}
+    old_ids = [(old_items.get(slot) or {}).get("id") or item[0] for slot, item in zip(SLOTS, ITEMS)]
+    old_wording = questionnaire(survey_files(current.get("doi", CES_DOI))[1])
+    datafile, docs = survey_files(doi)
+    new_wording = questionnaire(docs)
+    model = get_similarity_model()
+    mapping = map_items(old_wording, new_wording, old_ids, lambda texts: model.encode(
+        texts, normalize_embeddings=True, show_progress_bar=False))
+    if isinstance(mapping, str):
+        raise SystemExit(f"{name}: its approval items can't be mapped to the survey in use: {mapping}")
+    items = tuple((mapping[oid], *item[1:]) for oid, item in zip(old_ids, ITEMS))
+    path = cache / datafile["filename"]
+    with urllib.request.urlopen(urllib.request.Request(f"{DATAVERSE}/api/access/datafile/{datafile['id']}",
+                                                       headers={"User-Agent": "Civitas/1.0"}), timeout=600) as r, \
+            open(path, "wb") as f:
+        shutil.copyfileobj(r, f, 1 << 20)  # streamed: the 2024 file is 184 MB
+    if why := plausible(_rows(path), items):
+        raise SystemExit(f"{name}: the mapped items don't read as approval answers: {why}")
+    first, _ = fielded(_rows(path))
+    written = write(out, path, items, district_column(_header(path), first), year, doi, datafile, new_wording)
+    path.unlink()
+    before = len(current.get("members") or [])
+    if before and len(written["members"]) < MEMBERS_KEPT * before:
+        raise SystemExit(f"{name}: {len(written['members'])} members rated where the survey in use rates {before}")
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser.add_argument("--csv", type=pathlib.Path, help="a local copy of the 2024 Common Content CSV")
+    parser.add_argument("--in-use", type=pathlib.Path, help="the survey file in use (the refresh's)")
+    parser.add_argument("--output", type=pathlib.Path, default=OUT)
+    parser.add_argument("--cache", type=pathlib.Path, default=pathlib.Path(tempfile.gettempdir()))
+    args = parser.parse_args()
+    if args.in_use:
+        return refresh(args.in_use, args.output, args.cache)
+    if not args.csv:
+        parser.error("--csv (the 2024 file) or --in-use")
+    write(args.output, args.csv, ITEMS, "cdid118", 2024, CES_DOI, {"id": CES_DATAFILE, "filename": args.csv.name}, {})
     return 0
 
 

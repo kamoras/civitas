@@ -8,33 +8,22 @@
 #
 # Resolved against requirements.txt as constraints, so the two files always
 # install together; pinned exactly, like requirements.txt. Direct needs:
-# pandas (+ openpyxl, which its read_excel loads for .xlsx), statsmodels,
 # rdata and pyreadr (the R-format replication datasets), onnxruntime
 # (evaluate_embedding_models.py's ONNX comparison), time-machine
 # (frozen_clock_plugin.py, the test suite run on another date), fonttools
-# and brotli (fetch_site_fonts.py's Open Graph TrueType files), websockets
-# (fetch_bluesky_activity.py's Jetstream sampling; its pin is requirements.txt's,
-# where uvicorn already brings it), pyproj (build_district_lean.py puts Census
-# block points into each VEST shapefile's own projection; its one dependency,
-# certifi, is requirements.txt's). The rest is what those pull in beyond
+# and brotli (fetch_site_fonts.py's Open Graph TrueType files), pyproj
+# (build_district_lean.py puts Census block points into each VEST
+# shapefile's own projection; its one dependency, certifi, is
+# requirements.txt's). pandas, statsmodels and openpyxl are requirements.txt's:
+# the data refresh runs scripts that read with them in the image. The rest is what those pull in beyond
 # requirements.txt.
 brotli==1.2.0
-et-xmlfile==2.0.0
 flatbuffers==25.12.19
 fonttools==4.63.0
-formulaic==1.2.2
-interface-meta==2.0.1
 onnxruntime==1.31.0
-openpyxl==3.1.5
-pandas==3.0.6
-patsy==1.0.3
 protobuf==7.36.2
 pyproj==3.8.0
 pyreadr==0.5.7
-python-dateutil==2.9.0.post0
 rdata==1.1.0
-six==1.17.0
-statsmodels==0.15.0
 time-machine==3.5.1
-wrapt==2.5.1
 xarray==2026.9.0
