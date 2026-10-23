@@ -231,11 +231,12 @@ async def run_supplementary_pipeline() -> dict:
         logger.info("--- Supplementary: DISTRICT PVI ---")
         progress.begin("district_pvi")
         # Same weekly-or-missing cadence as the phases above. Re-fetches the
-        # per-Congress PINNED revisions named in app/data/
-        # district_pvi_sources.json (idempotent — a pin can't drift) and
-        # alerts if the live article has moved away from the newest pin.
-        # A new Congress's lines or an advanced pin is a data-file edit;
-        # the sitting-Congress switch, and fetching a pin that changed,
+        # per-Congress PINNED revisions (app/data/district_pvi_sources.json
+        # and the pins adopted by rule; idempotent — a pin can't drift) and
+        # adopts a newer revision of the article that meets the rule
+        # (district_pvi.adopt_new_pins: stood 14 days, every gate, the
+        # redrawn states the maps list, the computed lean). The
+        # sitting-Congress switch, and fetching a pin that changed,
         # happen before each House run scores
         # (fetch/district_pvi.run_house_on_sitting_lines). Writes nothing
         # while a House run holds the lines (the DISTRICT_LINES lease).
