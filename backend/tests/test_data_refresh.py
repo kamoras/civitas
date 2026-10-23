@@ -518,6 +518,14 @@ def test_a_refit_that_wins_by_more_than_a_standard_error_is_installed(alerts):
     assert dr.read("t_win.json")["params"] == {"x": 2}
 
 
+def test_a_refit_that_reproduces_the_parameters_in_use_installs_its_new_measurements(alerts):
+    _write_runtime("t_same.json", {"params": {"x": 1}, "kinds": ["a"]})
+    candidate = {"params": {"x": 1}, "kinds": ["a", "b"], "_comparison": {"unchanged": True}}
+    spec = dr.DataFile("t_same.json", command=lambda ctx: _writer(candidate), accept=dr.held_out_beats_in_use)
+    assert dr.refresh_one(spec, _ctx("t_same.json", dr.read("t_same.json"))) == "refreshed"
+    assert dr.read("t_same.json")["kinds"] == ["a", "b"]
+
+
 def test_the_script_is_handed_the_copy_in_use(alerts):
     """{in_use} is a file holding the copy in use, refreshed or bundled."""
     _write_runtime("t_inuse.json", {"params": {"x": 7}})

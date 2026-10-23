@@ -278,7 +278,9 @@ def main() -> None:
         "held_out": report(held, chosen),
         "kinds": sorted(index_kinds(args.index) or ()),
     }
-    if args.in_use:
+    if args.in_use and chosen == _fusion_of(args.in_use):
+        out["_comparison"] = {"unchanged": True}  # the same fusion: only the measurements are new
+    elif args.in_use:
         current = _fusion_of(args.in_use)
         diffs: dict[str, list[float]] = collections.defaultdict(list)
         for p in held:

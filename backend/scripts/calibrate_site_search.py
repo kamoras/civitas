@@ -454,7 +454,9 @@ def main() -> None:
         "held_out": report,
         "kinds": sorted(index_kinds(args.index) or ()),
     }
-    if args.in_use:
+    if args.in_use and asdict(params) == asdict(current):
+        out["_comparison"] = {"unchanged": True}  # the same parameters: only the measurements are new
+    elif args.in_use:
         comparison = compare(held, args.index, db, params, current)
         wrong = wrong_jumps(fit, args.index, db, params)
         comparison["fit_half_wrong_jumps"] = len(wrong)

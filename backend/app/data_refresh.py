@@ -363,11 +363,16 @@ def install(spec: DataFile | str, new: dict, argv: list[str]) -> bool:
 #                   "subgroups": {name: {"delta": ..., "se": ...}},
 #                   "refused": ["a reason the script's own rule refuses it"]}
 #
+# or {"unchanged": true} when the refit's parameters are the copy in use's
+# (newer measurements by the same parameters), which installs.
+#
 # The copy in use reaches the script as "{in_use}" in its argv.
 def held_out_beats_in_use(new: dict, old: dict) -> str | None:
     """None when the candidate's comparison clears the rule above, else why
     the copy in use is kept."""
     c = new.get("_comparison")
+    if isinstance(c, dict) and c.get("unchanged"):
+        return None  # the refit reproduces the method's parameters: only its measurements are new
     if not isinstance(c, dict) or not {"delta", "se"} <= set(c):
         return "the refit reports no held-out comparison with the copy in use"
     if c.get("refused"):
