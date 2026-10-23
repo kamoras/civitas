@@ -546,7 +546,8 @@ def _alert_missing_house_lines(data: dict, cycle: int) -> None:
         send_ops_alert("Election map: no district lean for the House lines",
                        f"The {cycle} House election is fought on the {ordinal(congress)} Congress's lines, and "
                        f"app/data/district_lean.json has no table for them, so every House seat shows no "
-                       f"usual vote until the file has them (its data-refresh check names what it waits on).",
+                       f"usual vote. The data refresh builds the table once that election's maps are listed "
+                       f"(district_lean.json; its own alert says why if a build failed).",
                        dedupe_key=f"{HOUSE_LINES_CONDITION}-{congress}", condition=HOUSE_LINES_CONDITION)
     else:
         resolve_ops_alert(HOUSE_LINES_CONDITION)
@@ -568,8 +569,10 @@ def _coverage_line(chamber: str, doc: dict, due: int) -> list[str]:
                        "Presidential and Congressional Election was there to read (a refit that read one and failed "
                        "its gates raises its own forecast_model.json refresh alert)")
     if chamber == "house" and due not in cov.get("lean", []):
-        missing.append(f"app/data/forecast_house_lean.json has no {due} district lean "
-                       "(backend/scripts/build_house_lean_history.py)")
+        missing.append(f"no {due} district lean: the refit takes it from app/data/district_lean.json's table for "
+                       f"the lines that election seated once that table's window is the two presidential "
+                       f"elections before it (a new window's precinct returns are a method change: see "
+                       f"district_lean.json's staleness alert)")
     return missing or ["every input reaches it, but the last refit did not add it (see the forecast_model.json "
                        "refresh alert)"]
 

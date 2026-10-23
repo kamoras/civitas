@@ -50,6 +50,10 @@ def _leases_on_the_test_database(file_sessionmaker, monkeypatch):
     raced (IllegalStateChangeError in lease.release)."""
     monkeypatch.setattr("app.database.SessionLocal", file_sessionmaker)
     monkeypatch.setattr(dp, "house_seats", AsyncMock(return_value=SEATS))
+    # The adoption check reads the article's history; offline it reads as
+    # unreadable (nothing adopted) unless a test gives it one.
+    monkeypatch.setattr(dp, "_fetch_history", AsyncMock(return_value=None))
+    monkeypatch.setattr(dp, "_election_congress", lambda: None)
 
 
 def _pairs():
@@ -444,29 +448,30 @@ class TestRefresh:
 
     async def test_sitting_congress_without_a_source_still_writes_the_configured_tables(self, monkeypatch, tmp_path):
         """A missing entry can't fail the weekly refresh wholesale: the
-        configured tables are still (re)validated and the live-drift check
+        configured tables are still (re)validated and the adoption check
         still runs; members stay on the newest pinned lines."""
         out, _, new = _two_congress_setup(monkeypatch, tmp_path, sitting=121)
-        with patch.object(dp, "_check_live_drift", new_callable=AsyncMock) as drift:
+        with patch.object(dp, "adopt_new_pins", AsyncMock(return_value=None)) as adopt:
             assert await dp.refresh_district_pvi() is True
-        drift.assert_awaited_once()
+        adopt.assert_awaited_once()
+        assert adopt.await_args.kwargs["sitting"] == 121
         written = json.loads(out.read_text())
         assert written["congress"] == 120 and written["districts"] == new
         assert set(written["congresses"]) == {"119", "120"}
 
     async def test_a_sitting_congress_older_than_every_pin_writes_nothing(self, monkeypatch, tmp_path):
-        """No table describes the 118th's lines, so nothing is written —
-        but the pinned tables are still fetched and gated and the live-drift
-        check still runs, so a pin that needs advancing isn't hidden for as
-        long as an environment pin stands."""
+        """No table describes the 118th's lines, so nothing is written and
+        nothing is adopted (an archived database's re-run never moves the
+        pins) — but the pinned tables are still fetched and gated."""
         from app import config
 
         monkeypatch.setattr(config, "settings", config.Settings(CURRENT_CONGRESS=118, ARCHIVE_MODE=True))
         out, _, _ = _two_congress_setup(monkeypatch, tmp_path, sitting=118)
-        with patch.object(dp, "_check_live_drift", new_callable=AsyncMock) as drift:
+        with patch.object(dp, "adopt_new_pins", AsyncMock(return_value=None)) as adopt, \
+                patch.object(dp, "build_payload", wraps=dp.build_payload) as build:
             assert await dp.refresh_district_pvi() is False
-        drift.assert_awaited_once()
-        assert set(drift.await_args.args[1]["congresses"]) == {"119", "120"}
+        adopt.assert_not_awaited()
+        build.assert_awaited_once()
         assert not out.exists()
 
     async def test_any_gate_failure_keeps_previous_data(self, monkeypatch, tmp_path):
@@ -508,36 +513,235 @@ class TestRefresh:
         monkeypatch.setattr(dp, "_fetch_revision", boom)
         assert await dp.refresh_district_pvi() is False
 
-    async def test_live_article_drift_alerts_and_is_never_ingested(self, monkeypatch, tmp_path):
-        base = _synthetic_result()
-        edited = dict(_redraw(base, ["TN", "UT"]), **{"TX-35": 4})
-        live = _revision(edited, "2026 Cook PVI", 303)
-        out, _, new = _two_congress_setup(monkeypatch, tmp_path, live=live)
-        with patch("app.ops_alerts.send_ops_alert") as alert:
-            assert await dp.refresh_district_pvi() is True
-        assert "TX-35" in alert.call_args.args[1]
-        assert json.loads(out.read_text())["congresses"]["120"]["districts"] == new
-
-    async def test_drift_alert_is_keyed_on_the_difference_not_the_revision(self, monkeypatch, tmp_path):
-        """An unrelated edit elsewhere in the article makes a new live
-        revid with the same table difference: same key, so one alert. A
-        different difference is a new key."""
-        base = _synthetic_result()
-        edited = dict(_redraw(base, ["TN", "UT"]), **{"TX-35": 4})
-        keys = []
-        for revid, table in ((303, edited), (304, edited), (305, dict(edited, **{"TX-9": 1}))):
-            _two_congress_setup(monkeypatch, tmp_path, live=_revision(table, "2026 Cook PVI", revid))
-            with patch("app.ops_alerts.send_ops_alert") as alert:
-                assert await dp.refresh_district_pvi() is True
-            keys.append(alert.call_args.kwargs["dedupe_key"])
-        assert keys[0] == keys[1]
-        assert keys[2] != keys[0]
-
     async def test_live_article_at_the_pin_is_quiet(self, monkeypatch, tmp_path):
         _two_congress_setup(monkeypatch, tmp_path)
         with patch("app.ops_alerts.send_ops_alert") as alert:
             assert await dp.refresh_district_pvi() is True
         alert.assert_not_called()
+
+
+def _adoptable(table, title, revid, ts, *, window=(2020, 2024), date="2026-07-29", **kw) -> dict:
+    """A revision as the real article writes a new release: the section's
+    first sentence links the two elections and cites the release on
+    cookpolitical.com (parse_window, parse_release)."""
+    rev = _revision(table, title, revid, ts, **kw)
+    a, b = window
+    lead = (f"The PVIs for congressional districts are calculated based on the [[{a} United States presidential "
+            f"election|{a}]] and [[{b} United States presidential election|{b}]] presidential elections."
+            f"<ref name=\":0\">{{{{Cite web |date={date} |title={title} |url=https://www.cookpolitical.com/"
+            f"cook-pvi/x |website=Cook Political Report}}}}</ref> ")
+    rev["content"] = rev["content"].replace("==By congressional district==\n", "==By congressional district==\n" + lead)
+    return rev
+
+
+class TestAdoption:
+    """adopt_new_pins: a revision is pinned only once its table has stood
+    STAND_DAYS unchanged, cites a Cook release, passes every gate against the
+    states redrawn_congressional_maps.json says redrew, and agrees with the
+    computed lean; everything else is recorded and refused."""
+
+    NOW = datetime(2026, 8, 1)
+
+    def _setup(self, monkeypatch, tmp_path, revisions: list[dict], *, redrawn=("TN", "UT"), lean=None):
+        base = _synthetic_result()
+        pin = _source(101, "(119th Congress)", ts="2026-03-28T00:00:00Z")
+        sources = {"page": PAGE, "congresses": {"119": pin}}
+        everything = {101: _revision(base, "(119th Congress)", 101, pin["revision_timestamp"])}
+        everything.update({r["revid"]: r for r in revisions})
+        history = [{"revid": r["revid"], "timestamp": r["timestamp"], "sha1": f"sha{r['revid']}"}
+                   for r in sorted(everything.values(), key=lambda r: r["timestamp"])]
+
+        async def fake_fetch(*, revid=None, page=None):
+            return everything.get(revid) if revid is not None else everything[history[-1]["revid"]]
+
+        async def fake_revisions(page, revids):
+            return {r: everything[r] for r in revids}
+
+        monkeypatch.setattr(dp, "_fetch_revision", fake_fetch)
+        monkeypatch.setattr(dp, "_fetch_history", AsyncMock(return_value=history))
+        monkeypatch.setattr(dp, "_fetch_revisions", fake_revisions)
+        monkeypatch.setattr(dp, "redrawn_between", lambda c, b: set(redrawn) if redrawn is not None else None)
+        monkeypatch.setattr(dp, "_lean_tables", lambda window=None: lean or {})
+        payload = {"congresses": {"119": {"districts": base}}}
+        return sources, payload, base
+
+    async def _adopt(self, sources, payload, now=None):
+        with patch("app.ops_alerts.send_ops_alert") as alert, patch("app.ops_alerts.resolve_ops_alert"):
+            out = await dp.adopt_new_pins(sources, payload, SEATS, sitting=119, election_congress=120,
+                                          now=now or self.NOW)
+        return out, alert
+
+    async def test_a_redraw_that_has_stood_is_pinned_for_the_coming_congress(self, monkeypatch, tmp_path):
+        new = _redraw(_synthetic_result(), ["TN", "UT"])
+        rev = _adoptable(new, "Introducing the 2026 Cook PVI", 300, "2026-07-10T00:00:00Z")
+        sources, payload, _ = self._setup(monkeypatch, tmp_path, [rev])
+        out, _ = await self._adopt(sources, payload)
+        assert out["congresses"]["120"]["districts"] == new
+        assert out["congresses"]["119"]["districts"] == payload["congresses"]["119"]["districts"]
+        entry = json.loads(dp.adopted_path().read_text())["congresses"]["120"]
+        assert entry["revid"] == 300 and entry["redrawn_from"] == "119"
+        assert entry["redrawn_states"] == ["TN", "UT"] and entry["label"] == "Introducing the 2026 Cook PVI"
+        assert entry["window"] == "2020+2024" and entry["adopted"]["on"] == "2026-08-01"
+        log = json.loads(dp.adopted_path().read_text())["log"]
+        assert log[-1]["decision"] == "adopted" and log[-1]["revid"] == 300
+
+    async def test_a_table_younger_than_the_standing_time_waits(self, monkeypatch, tmp_path):
+        new = _redraw(_synthetic_result(), ["TN", "UT"])
+        rev = _adoptable(new, "Introducing the 2026 Cook PVI", 300, "2026-07-25T00:00:00Z")
+        sources, payload, _ = self._setup(monkeypatch, tmp_path, [rev])
+        out, _ = await self._adopt(sources, payload)
+        assert out is None
+        log = json.loads(dp.adopted_path().read_text())["log"][-1]
+        assert log["decision"] == "not adopted" and "has not stood" in log["reasons"][0]
+        # Two weeks on, unchanged, it is pinned.
+        out, _ = await self._adopt(sources, payload, now=datetime(2026, 8, 9))
+        assert out is not None
+
+    async def test_a_change_inside_the_standing_time_resets_it(self, monkeypatch, tmp_path):
+        base = _synthetic_result()
+        new = _redraw(base, ["TN", "UT"])
+        first = _adoptable(new, "Introducing the 2026 Cook PVI", 300, "2026-07-01T00:00:00Z")
+        vandal = _adoptable(dict(new, **{"TN-1": 30}), "Introducing the 2026 Cook PVI", 301, "2026-07-25T00:00:00Z")
+        sources, payload, _ = self._setup(monkeypatch, tmp_path, [first, vandal])
+        out, _ = await self._adopt(sources, payload)
+        assert out is None
+
+    async def test_states_the_maps_do_not_list_as_redrawn_must_not_change(self, monkeypatch, tmp_path):
+        new = _redraw(_synthetic_result(), ["TN", "UT", "MO"])
+        rev = _adoptable(new, "Introducing the 2026 Cook PVI", 300, "2026-07-10T00:00:00Z")
+        sources, payload, _ = self._setup(monkeypatch, tmp_path, [rev])
+        out, _ = await self._adopt(sources, payload)
+        assert out is None
+        reasons = json.loads(dp.adopted_path().read_text())["log"][-1]["reasons"]
+        assert any("did not redraw" in r and "MO-" in r for r in reasons)
+
+    async def test_nothing_is_pinned_for_an_election_the_maps_have_not_listed(self, monkeypatch, tmp_path):
+        new = _redraw(_synthetic_result(), ["TN", "UT"])
+        rev = _adoptable(new, "Introducing the 2026 Cook PVI", 300, "2026-07-10T00:00:00Z")
+        sources, payload, _ = self._setup(monkeypatch, tmp_path, [rev], redrawn=None)
+        out, _ = await self._adopt(sources, payload)
+        assert out is None
+        reasons = json.loads(dp.adopted_path().read_text())["log"][-1]["reasons"]
+        assert any("lists no 2026 election yet" in r for r in reasons)
+
+    async def test_a_revision_citing_no_cook_release_is_refused(self, monkeypatch, tmp_path):
+        new = _redraw(_synthetic_result(), ["TN", "UT"])
+        rev = _revision(new, "2026 Cook PVI", 300, "2026-07-10T00:00:00Z")
+        sources, payload, _ = self._setup(monkeypatch, tmp_path, [rev])
+        out, _ = await self._adopt(sources, payload)
+        assert out is None
+        assert "cites no Cook release" in json.loads(dp.adopted_path().read_text())["log"][-1]["reasons"][0]
+
+    async def test_a_table_far_from_the_computed_lean_is_refused(self, monkeypatch, tmp_path):
+        base = _synthetic_result()
+        new = _redraw(base, ["TN", "UT"])
+        rev = _adoptable(new, "Introducing the 2026 Cook PVI", 300, "2026-07-10T00:00:00Z")
+        # Civitas's lean agrees with the pinned 119th table to 0.4 points,
+        # so the tolerance is 1.4; on the 120th's lines it puts TN's last
+        # district 5 points from the article's value.
+        lean119 = {k: v + 0.4 for k, v in base.items()}
+        lean120 = {k: v + 0.4 for k, v in new.items()}
+        n = SEATS["TN"]
+        lean120[f"TN-{n}"] = new[f"TN-{n}"] + 5
+        sources, payload, _ = self._setup(monkeypatch, tmp_path, [rev], lean={119: lean119, 120: lean120})
+        out, _ = await self._adopt(sources, payload)
+        assert out is None
+        reasons = json.loads(dp.adopted_path().read_text())["log"][-1]["reasons"]
+        assert any(f"TN-{n}" in r and "computed lean" in r for r in reasons)
+        lean120[f"TN-{n}"] = new[f"TN-{n}"] + 1
+        out, _ = await self._adopt(sources, payload)
+        assert out is not None
+        assert json.loads(dp.adopted_path().read_text())["congresses"]["120"]["adopted"]["leanCheck"] == {
+            "tolerance": 1.4, "districtsCompared": 435}
+
+    async def test_a_median_moved_by_a_state_held_on_its_old_lines_is_explained(self, monkeypatch, tmp_path):
+        """Missouri, 2026-09: a court sent a state back to its old map after
+        the release, the editors restored its old values and left the
+        median sentence as written. An earlier revision of the same release
+        had the stated median exactly; with the held state at that
+        revision's values the median is exactly it again, so the tolerance
+        is derived, not typed."""
+        base = _synthetic_result()
+        release = _redraw(base, ["TN", "UT"])
+        tn = next(k for k in sorted(release) if k.startswith("TN-") and release[k] == -10)
+        release[tn] = -5
+        mo = [k for k in sorted(release) if k.startswith("MO-") and release[k] == 10]
+        for k in mo:
+            release[k] = -5
+        release_vals = release
+        stated = sorted(release.values())[217]
+        held = {**release, **{k: base[k] for k in mo}}
+        assert sorted(held.values())[217] != stated
+        mk = tn
+        title = "Introducing the 2026 Cook PVI"
+        r1 = _adoptable(release_vals, title, 300, "2026-07-01T00:00:00Z")
+        r2 = _adoptable(held, title, 301, "2026-07-10T00:00:00Z", median=(mk, stated),
+                        counts=(sum(v > 0 for v in held.values()), sum(v < 0 for v in held.values()),
+                                sum(v == 0 for v in held.values())))
+        sources, payload, _ = self._setup(monkeypatch, tmp_path, [r1, r2], redrawn=("TN", "UT"))
+        out, _ = await self._adopt(sources, payload)
+        assert out is not None, json.loads(dp.adopted_path().read_text())["log"][-1]
+        entry = json.loads(dp.adopted_path().read_text())["congresses"]["120"]
+        assert entry["revid"] == 301 and entry["median_tolerance"] == abs(sorted(held.values())[217] - stated)
+        assert "MO" in entry["_why_median_tolerance"] and "revision 300" in entry["_why_median_tolerance"]
+
+    async def test_an_article_at_the_pin_adopts_nothing_and_records_nothing(self, monkeypatch, tmp_path):
+        sources, payload, _ = self._setup(monkeypatch, tmp_path, [])
+        out, alert = await self._adopt(sources, payload)
+        assert out is None and not dp.adopted_path().exists()
+        alert.assert_not_called()
+
+    async def test_an_unadopted_difference_is_reported_after_twice_the_standing_time(self, monkeypatch, tmp_path):
+        """What differs and why it isn't adopted; nothing for anyone to do."""
+        new = _redraw(_synthetic_result(), ["TN", "UT", "MO"])
+        rev = _adoptable(new, "Introducing the 2026 Cook PVI", 300, "2026-07-01T00:00:00Z")
+        sources, payload, _ = self._setup(monkeypatch, tmp_path, [rev])
+        out, alert = await self._adopt(sources, payload, now=datetime(2026, 7, 20))
+        assert out is None
+        alert.assert_not_called()
+        out, alert = await self._adopt(sources, payload, now=datetime(2026, 8, 1))
+        text = alert.call_args.args[1]
+        assert "did not redraw" in text and "checked again each week" in text
+        assert alert.call_args.kwargs["condition"] == dp.UNADOPTED_CONDITION
+
+    def test_a_lean_on_another_window_is_not_compared(self, monkeypatch):
+        """A new Cook release on the next window is not held to a computed
+        lean that still averages the old elections."""
+        monkeypatch.setattr("app.district_lean._file", lambda: {"_window": "2020+2024",
+                                                                 "congresses": {"121": {"districts": {"TX-1": 0.0}}}})
+        assert dp.lean_disagreements({"TX-1": 9}, 121, 1.0, "2024+2028") == ([], 0)
+        assert dp.lean_disagreements({"TX-1": 9}, 121, 1.0, "2020+2024")[1] == 1
+
+    def test_the_later_revision_wins_the_merge(self):
+        bundled = {"page": PAGE, "congresses": {"120": _source(202, "a", ts="2026-09-10T00:00:00Z")}}
+        later = {"congresses": {"120": _source(303, "b", ts="2026-10-01T00:00:00Z")}}
+        earlier = {"congresses": {"120": _source(150, "c", ts="2026-08-01T00:00:00Z"),
+                                  "121": _source(404, "d", ts="2027-04-01T00:00:00Z")}}
+        assert dp.merge_adopted(bundled, later)["congresses"]["120"]["revid"] == 303
+        merged = dp.merge_adopted(bundled, earlier)["congresses"]
+        assert merged["120"]["revid"] == 202 and merged["121"]["revid"] == 404
+
+    def test_load_sources_reads_the_adopted_pins(self):
+        dp.adopted_path().parent.mkdir(parents=True, exist_ok=True)
+        dp.adopted_path().write_text(json.dumps({"congresses": {"121": _source(404, "d", ts="2027-04-01T00:00:00Z")}}))
+        assert dp.load_sources()["congresses"]["121"]["revid"] == 404
+        assert "120" in dp.load_sources()["congresses"]
+
+    def test_release_and_window_are_read_from_the_district_section(self):
+        rev = _adoptable(_synthetic_result(), "Introducing the 2026 Cook PVI: X", 1, "2026-07-10T00:00:00Z")
+        assert dp.parse_release(rev["content"])["title"] == "Introducing the 2026 Cook PVI: X"
+        assert dp.parse_release(rev["content"])["year"] == 2026
+        assert dp.parse_window(rev["content"]) == "2020+2024"
+        assert dp.parse_release(_revision(_synthetic_result(), "L", 1)["content"]) is None
+
+    def test_a_named_reference_resolves_to_its_definition(self):
+        text = ("Intro.<ref name=\"2025 Report\">{{cite web|url=https://www.cookpolitical.com/cook-pvi/2025|"
+                "title=2025 Cook PVI: District Map and List (119th Congress)|date=April 3, 2025}}</ref>\n"
+                "==By congressional district==\nThe PVIs are based on the [[2020 United States presidential "
+                "election|2020]] and [[2024 United States presidential election|2024]] elections."
+                "<ref name=\"2025 Report\"/> More.\n{| table\n|}\n")
+        assert dp.parse_release(text)["title"] == "2025 Cook PVI: District Map and List (119th Congress)"
+        assert dp.parse_release(text)["year"] == 2025
 
 
 class TestEnsureSittingLines:
@@ -739,15 +943,13 @@ class TestEnsureSittingLines:
         out, _, _ = _two_congress_setup(monkeypatch, tmp_path, sitting=118)
         monkeypatch.setattr(config, "settings", config.Settings(CURRENT_CONGRESS=118, ARCHIVE_MODE=True))
         bundled = json.loads(dp.BUNDLED_PATH.read_text())
-        with patch.object(dp, "_check_live_drift", new_callable=AsyncMock), patch(
-            "app.ops_alerts.send_ops_alert",
-        ) as alert:
+        with patch("app.ops_alerts.send_ops_alert") as alert:
             assert await _in_thread(dp._ensure_sitting_lines) == "no source configured"
         assert not out.exists()
         text = alert.call_args.args[1]
         assert f"the {bundled['congress']}th Congress's lines (the bundled copy's top-level table" in text
         assert "which are NOT the 118th's" in text and "scoring is on no pinned table" not in text
-        assert "every weekly District PVI refresh" in text and "live-drift check still runs" in text
+        assert "every weekly District PVI refresh" in text and "adopts nothing" in text
         assert dp.lines_congress() == bundled["congress"]
 
 
