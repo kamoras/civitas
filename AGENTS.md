@@ -1902,8 +1902,16 @@ pronouns, no em dashes, no emoji, no year or Congress number
 **Ahead of each election** a nightly pre-check (`ops_alerts.check_election_readiness`)
 compares each cycle-specific data file with the election the calendar says
 is next and alerts, once its lead time begins, for what is missing: the
-cycle's entry in `redrawn_congressional_maps.json` (from January 1; an empty
-entry when no state redrew), a computed district lean for every state on
+cycle's entry in `redrawn_congressional_maps.json` (from January 1; derived
+weekly by `scripts/derive_redrawn_maps.py`, a `data_refresh` file, from the
+Census Bureau's block equivalency file for the Congress the election seats:
+a state is listed on the new map exactly when its blocks' districts differ
+from the map it voted on last, and must have a file of its own in the zip;
+an empty entry when none differ. It reproduces both researched cycles, 2024's
+five states and 2026's nine. The file arrives in the election's summer (the
+119th's 2024-07-29, the 120th's by 2026-08-31, re-released 2026-10-07 after
+a court order), so until then the cycle is unconfirmed and the alert says
+what was looked for), a computed district lean for every state on
 the seated Congress's lines (`district_lines.table_for_lines`, shared by the
 computed lean and the county and place crosswalks, carries the last table
 forward only for a state whose map didn't change, and only once the cycle

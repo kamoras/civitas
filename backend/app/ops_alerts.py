@@ -388,7 +388,7 @@ def election_readiness_gaps(election_day: date) -> dict[str, str]:
     # live_results.sync), district_pvi and poll_close (through the data
     # refresh it reads) import this module.
     from app.district_lean import lines_table
-    from app.live_results.sync import _maps
+    from app.live_results.sync import _maps, maps_pending
     from app.pipeline.fetch import poll_close
     from app.pipeline.fetch.district_pvi import congress_for_election
 
@@ -397,11 +397,12 @@ def election_readiness_gaps(election_day: date) -> dict[str, str]:
     gaps: dict[str, str] = {}
     if today >= date(year, 1, 1):
         if str(year) not in _maps():
+            why = maps_pending().get(str(year)) or "the weekly derivation has not run for it yet"
             gaps["election-ready-maps"] = (
-                f"app/data/redrawn_congressional_maps.json has no entry for {year}. Each cycle's maps are "
-                f"confirmed there (an empty entry when no state redrew; a state whose new map is in force, "
-                f"or a court-held one, with its source). Until then the {year} House pages carry no "
-                f"computed lean, and a state that redrew would be read on its old lines."
+                f"The {year} election's maps are not confirmed yet: {why}. They are derived from the Census "
+                f"Bureau's block equivalency file for the Congress it seats, weekly (scripts/"
+                f"derive_redrawn_maps.py). Until then the {year} House pages carry no computed lean, and a "
+                f"state that redrew is read on its old lines."
             )
         else:
             congress = congress_for_election(year)

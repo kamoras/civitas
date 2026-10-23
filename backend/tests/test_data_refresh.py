@@ -323,10 +323,14 @@ def test_the_vote_grades_gate():
     assert any("moved" in f for f in dr._grades_gate(doubled, good))
 
 
-def test_the_district_lean_window_goes_stale_after_the_next_presidential_election():
-    doc = {"_window": "2020+2024"}
-    assert dr._district_lean_stale(_ctx(doc=doc, today=date(2028, 12, 14))) is None
-    assert "2028" in dr._district_lean_stale(_ctx(doc=doc, today=date(2028, 12, 15)))
+def test_the_maps_gate_keeps_the_researched_cycles_and_derived_ones():
+    bundled = dr._bundled_doc(dr.MAPS_FILE)
+    good = {**bundled, "cycles": {**bundled["cycles"], "2028": {"OH": {"map": "CD121"}}}, "_derived": {"2028": "x"}}
+    assert dr._maps_gate(good, bundled) == []
+    changed = {**good, "cycles": {**good["cycles"], "2026": {}}}
+    assert any("researched" in f for f in dr._maps_gate(changed, bundled))
+    assert any("ZZ" in f for f in dr._maps_gate({**good, "cycles": {**good["cycles"], "2028": {"ZZ": {"map": "CD121"}}}}, {}))
+    assert any("not now" in f for f in dr._maps_gate({**bundled, "_derived": {}}, good))
 
 
 def test_the_maps_priors_are_fitted_once_their_election_is_certified(monkeypatch):
