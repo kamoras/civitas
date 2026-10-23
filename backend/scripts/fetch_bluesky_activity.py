@@ -24,8 +24,11 @@ Two measurements, both from Bluesky's public, unauthenticated services:
     python3 backend/scripts/fetch_bluesky_activity.py sample ~/.cache/bsky/jetstream.jsonl
     python3 backend/scripts/fetch_bluesky_activity.py account ~/.cache/bsky/account.json
     python3 backend/scripts/fetch_bluesky_activity.py write ~/.cache/bsky/jetstream.jsonl ~/.cache/bsky/account.json
+    python3 backend/scripts/fetch_bluesky_activity.py refresh OUT SCRATCH_DIR
 
-Rerun all three when the audience might have moved (a season, a year).
+`refresh` runs all three in one go (the hours Jetstream still holds, about
+36, cover every Eastern hour) and writes OUT: app/data_refresh.py runs it
+every quarter, since the audience moves with the seasons.
 """
 
 import asyncio
@@ -167,7 +170,7 @@ def _runs(hours: set[int]) -> list[dict]:
     return [{"start": s, "end": e % 24 if e > 24 else e} for s, e in runs]
 
 
-def write(samples_path: pathlib.Path, account_path: pathlib.Path) -> None:
+def write(samples_path: pathlib.Path, account_path: pathlib.Path, output: pathlib.Path = OUTPUT) -> None:
     rows = [json.loads(line) for line in samples_path.read_text().splitlines() if line.strip()]
     # Each Eastern hour's mean over every sample of it, as a share of the
     # mean hour. Each sample is placed by its own instant, so a sample from
@@ -201,7 +204,7 @@ def write(samples_path: pathlib.Path, account_path: pathlib.Path) -> None:
 
     first = min(r["hour"] for r in rows)
     last = max(r["hour"] for r in rows)
-    OUTPUT.write_text(json.dumps({
+    output.write_text(json.dumps({
         "_source": (
             f"backend/scripts/fetch_bluesky_activity.py, generated {datetime.now(timezone.utc).date().isoformat()}. "
             f"Jetstream ({JETSTREAM}) replayed for {len(rows)} hours from "
@@ -223,7 +226,7 @@ def write(samples_path: pathlib.Path, account_path: pathlib.Path) -> None:
             "postsSentOutsideWindows": per_post(outside),
         },
     }, indent=2) + "\n")
-    print(f"windows {_runs(window_hours)} from {len(rows)} hourly samples; wrote {OUTPUT}")
+    print(f"windows {_runs(window_hours)} from {len(rows)} hourly samples; wrote {output}")
 
 
 if __name__ == "__main__":
@@ -234,5 +237,10 @@ if __name__ == "__main__":
         account(pathlib.Path(paths[0]))
     elif command == "write":
         write(pathlib.Path(paths[0]), pathlib.Path(paths[1]))
+    elif command == "refresh":
+        out, scratch = pathlib.Path(paths[0]), pathlib.Path(paths[1])
+        asyncio.run(sample(scratch / "jetstream.jsonl"))
+        account(scratch / "account.json")
+        write(scratch / "jetstream.jsonl", scratch / "account.json", out)
     else:
         sys.exit(__doc__)

@@ -2085,12 +2085,16 @@ it keeps, each enforced by a test (`tests/test_forecast_model.py`,
   Five poll-weighting numbers are still stated priors (`model.STATED_PRIORS`:
   the sample-size clip and reference, the house-effect shrink, the half-life
   grid), named with their reasons on the map's method section. Their fit
-  (`fit_forecast_model.py --fit-priors`) stays off while a map built on them
+  (`fit_forecast_model.py --fit-priors`) is off while a map built on them
   is live; from the January 3 after a general held since
-  `model.PRIORS_STATED_ON`, `data_refresh._forecast_priors_stale` alerts until
-  a fit records fitted ones. Adopt that refit on its held-out checks, not its
-  in-sample likelihood: measured 2026-10-22, it fit better in sample and no
-  better held out.
+  `model.PRIORS_STATED_ON` every refit runs it, and keeps it only under §3a's
+  acceptance rule on the forward check (each race's log predictive density,
+  fitted against stated priors, both chambers together, neither losing more
+  than a standard error), never on its in-sample likelihood; the comparison
+  is written as `priorsComparison` and the method section follows whichever
+  priors the fit used. Measured 2026-10-23 on the training files in use: the
+  fitted priors fit better in sample but lose on the forward check (Δ −0.005
+  per race, SE 0.004; Senate −0.030, SE 0.014), so the stated ones would stay.
 - **Training polls: Silver Bulletin, gated, attributed.**
   `app/forecast/training_polls.py` (fetched by
   `scripts/fetch_silver_bulletin_polls.py` with `BOT_USER_AGENT` and no other
@@ -2485,7 +2489,7 @@ the pending list).
 | A president among the other presidencies (strips, words; no score) | `backend/app/president_peers.py`, `frontend/src/components/scorecard/PresidentStanding.tsx` |
 | A president's term charted against the others (approval, jobs, growth) | `backend/app/president_charts.py`, `frontend/src/components/scorecard/PresidentCharts.tsx` |
 | Justice record and appointer estimate (not scored, justice v3) | `backend/app/pipeline/justice_pipeline.py`, `backend/app/pipeline/analyze/justice_loyalty.py` |
-| The Court page (`/court`: Martin-Quinn line, agreement grid, splits by term, decision lineups) and each justice's case list | `backend/app/services/court_service.py`, `backend/app/api/court.py`, `frontend/src/app/court/page.tsx`, `frontend/src/components/court/`, `frontend/src/components/scorecard/JusticeCases.tsx`; the Court-level appointer finding is generated, `app/data/court_finding.json` from `scripts/research_justice_loyalty.py --write-finding` (`GET /api/court/finding`) |
+| The Court page (`/court`: Martin-Quinn line, agreement grid, splits by term, decision lineups) and each justice's case list | `backend/app/services/court_service.py`, `backend/app/api/court.py`, `frontend/src/app/court/page.tsx`, `frontend/src/components/court/`, `frontend/src/components/scorecard/JusticeCases.tsx`; the Court-level appointer finding is generated, `app/data/court_finding.json` from `scripts/research_justice_loyalty.py --write-finding`, recomputed monthly on the Database's newest release by its numpy port `scripts/fetch_court_finding.py` (`GET /api/court/finding`) |
 | A justice's page (no score: each figure beside every sitting justice's, the appointing president linked, the appointer estimate as every justice's interval) and a president's "Justices appointed" | `backend/app/services/justice_figures.py`, `frontend/src/components/justice/`, `GET /api/justices/appointed-by/{president_id}` (every appointment since 1789: `JusticeAppointment`, stored from the FJC directory by `justice_pipeline.store_court_seats`) |
 | Election cycle pipeline (candidates, financials, ballot measures, coverage) | `backend/app/pipeline/election_pipeline.py` |
 | What shapes a race (seat lean among all seats, FEC contribution categories, state CSV; descriptive, no forecast) | `backend/app/race_context.py`, `frontend/src/components/elections/ballot/RaceContext.tsx`, `RaceMoneyBars.tsx` |
@@ -2550,7 +2554,7 @@ the pending list).
 | SEO: per-route metadata, canonicals, JSON-LD, sitemap | `frontend/src/lib/site.ts`, `frontend/src/lib/seo.ts`, `frontend/src/app/sitemap.ts`, `backend/app/api/sitemap.py` |
 | Frontend types | `frontend/src/types/` |
 | Metric explanations (tooltips on all scorecard metrics) | `frontend/src/components/checker/MetricTooltip.tsx` |
-| Record boxes ("Boxes, not blocks": ruled grid, box, figures shared with the homepage) and the bill and state ballot pages built from them | `frontend/src/components/shared/BoxGrid.tsx`, `RecordBox.tsx`, `RecordFigure.tsx`, `frontend/src/types/figure.ts`, `frontend/src/components/congress/BillPageView.tsx`, `frontend/src/app/elections/states/[state]/StateBallotClient.tsx`; the bill page's lines from `backend/app/services/bill_boxes.py` (`boxes` on `GET /api/bills/{id}/record`); a member profile's from `backend/app/services/member_boxes.py` (`boxes` on `GET /api/politicians/{id}`) and `committee_record.search`'s `headline`; the ballot page's from `backend/app/services/ballot_boxes.py` (`boxes` on `GET /api/elections/states/{state}`); the Action Center's Today tab (`frontend/src/app/action/page.tsx` `IssueBox`, `OpenComments`; buttons from `issueCommands` in `IssueEnrichment.tsx`); `/environmental` from `backend/app/environmental.py`, `backend/app/environmental_sampler.py` (daily, `/data/environmental_runtime.json`) and `app/data/environmental.json` (`GET /api/environmental`; eGRID staleness in `data_refresh`) |
+| Record boxes ("Boxes, not blocks": ruled grid, box, figures shared with the homepage) and the bill and state ballot pages built from them | `frontend/src/components/shared/BoxGrid.tsx`, `RecordBox.tsx`, `RecordFigure.tsx`, `frontend/src/types/figure.ts`, `frontend/src/components/congress/BillPageView.tsx`, `frontend/src/app/elections/states/[state]/StateBallotClient.tsx`; the bill page's lines from `backend/app/services/bill_boxes.py` (`boxes` on `GET /api/bills/{id}/record`); a member profile's from `backend/app/services/member_boxes.py` (`boxes` on `GET /api/politicians/{id}`) and `committee_record.search`'s `headline`; the ballot page's from `backend/app/services/ballot_boxes.py` (`boxes` on `GET /api/elections/states/{state}`); the Action Center's Today tab (`frontend/src/app/action/page.tsx` `IssueBox`, `OpenComments`; buttons from `issueCommands` in `IssueEnrichment.tsx`); `/environmental` from `backend/app/environmental.py`, `backend/app/environmental_sampler.py` (daily, `/data/environmental_runtime.json`) and `app/data/environmental.json` (`GET /api/environmental`; eGRID refreshed monthly by `data_refresh`) |
 | Detail pages' two layers: where a member stands among peers, methods ledger, bill stage ladder and sources, "cite this", held and thin-data marks | `frontend/src/components/scorecard/WhereTheyStand.tsx`, `MethodsLedger.tsx`, `HeldScore.tsx`, `frontend/src/components/congress/StageLadder.tsx`, `BillSources.tsx`, `frontend/src/components/shared/CiteThis.tsx` (a government document or record cites its issuer: `frontend/src/lib/citedSources.ts`); data from `api/politicians.py` (`_chamber_field`, `_scored_on`) and `bill_service.stage_milestones` |
 | Action Center issue parts (shared with `/issue/[id]`: meta, tags, "What you can do", coverage, sources) | `frontend/src/components/action/IssueEnrichment.tsx` |
 | Every dot-per-person strip: nearest-dot hover label (name, seat or years, figure, place on the row), one Tab stop with arrow keys, the tick label at its tick, the big figure's unit line | `frontend/src/components/shared/Strip.tsx` (`StripPoints`, `StripAxis`, `BigFigure`); the place from `backend/app/ordinals.rank_shown` |
@@ -3094,8 +3098,8 @@ box with the backend's `commentWindow` as its countdown) and
 read from the llama.cpp server and the embedding models' files by
 `app/environmental_sampler.py`, the pipelines' hours from their run
 records; only what the site can't read sits in `app/data/environmental.json`,
-each figure with its source and date, and `data_refresh` alerts on a newer
-eGRID edition. The Pi's power can't be sampled: no container can reach
+each figure with its source and date; its grid factor is reread monthly
+from the EPA's newest eGRID summary tables by `data_refresh`. The Pi's power can't be sampled: no container can reach
 `/dev/vcio`, so it stays a dated reading and the whole-machine figure a
 labelled assumption) follow; a new record page, or a rebuilt one,
 should use the pair rather than a new card. What the pair already takes, so

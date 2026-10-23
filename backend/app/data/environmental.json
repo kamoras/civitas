@@ -1,5 +1,5 @@
 {
-  "_source": "What running Civitas costs that the site can't read for itself, for /environmental (app/environmental.py). The machine, the models' sizes and the pipelines' hours are read by the site (app/environmental.py, app/environmental_sampler.py), never typed here. What stays here is a dated measurement, a published figure or a labelled assumption, each with its source and date; everything worked out from them is computed in app/environmental.py. data_refresh alerts when EPA publishes an eGRID edition newer than `grid.edition`.",
+  "_source": "What running Civitas costs that the site can't read for itself, for /environmental (app/environmental.py). The machine, the models' sizes and the pipelines' hours are read by the site (app/environmental.py, app/environmental_sampler.py), never typed here. What stays here is a dated measurement, a published figure or a labelled assumption, each with its source and date; everything worked out from them is computed in app/environmental.py. `grid` is reread monthly from the EPA's newest eGRID summary tables by app/data_refresh.py (scripts/fetch_egrid.py).",
   "_contract": "Each figure set has `source` (a short credit, shown under its box) and `date` (ISO, when measured or published). Add a figure here only if the site can't read it, with both.",
   "reviewed": "2026-10-21",
   "boardPower": {

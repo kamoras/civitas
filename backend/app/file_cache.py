@@ -13,6 +13,7 @@ ballot lookup links, discovered candidate sources and election dates
 what a failed read leaves behind, are decided once.
 """
 
+import gzip
 import json
 import logging
 import os
@@ -90,11 +91,12 @@ def read_json(path: str | os.PathLike):
     OSError when it exists but can't be read right now — unreadable is not
     absent, and callers of reload_if_moved must not keep it as such."""
     try:
-        with open(path, encoding="utf-8") as fh:
+        with (gzip.open(path, "rt", encoding="utf-8") if os.fspath(path).endswith(".gz")
+              else open(path, encoding="utf-8")) as fh:
             return json.load(fh)
     except FileNotFoundError:
         return None
-    except ValueError:
+    except (ValueError, EOFError):  # EOFError: a truncated .gz
         logger.exception("%s is not valid JSON", path)
         return None
 

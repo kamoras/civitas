@@ -285,10 +285,11 @@ def test_the_coverage_gate_holds_a_big_move():
 
 # ── staleness of what a person regenerates ───────────────────────────
 
-def test_a_newer_survey_is_flagged_once_it_should_be_out():
-    assert dr._ces_stale(_ctx(doc={"fielded_year": 2024}, today=date(2027, 3, 1))) is None
-    assert "2026" in dr._ces_stale(_ctx(doc={"fielded_year": 2024}, today=date(2027, 4, 2)))
-    assert dr._ces_stale(_ctx(doc={"fielded_year": 2026}, today=date(2028, 6, 1))) is None
+def test_the_ces_gate_holds_an_older_or_thinner_survey():
+    old = {"fielded_year": 2024, "members": [{}] * 500, "priors": {"x": 1}}
+    assert dr._ces_gate({"fielded_year": 2025, "members": [{}] * 480, "priors": {"x": 1}}, old) == []
+    assert dr._ces_gate({"fielded_year": 2022, "members": [{}] * 500, "priors": {"x": 1}}, old)
+    assert dr._ces_gate({"fielded_year": 2026, "members": [{}] * 100, "priors": {"x": 1}}, old)
 
 
 def test_calibrations_tied_to_a_congress_are_flagged_when_the_next_one_is_complete(monkeypatch):
@@ -314,36 +315,27 @@ def test_the_district_lean_window_goes_stale_after_the_next_presidential_electio
     assert "2028" in dr._district_lean_stale(_ctx(doc=doc, today=date(2028, 12, 15)))
 
 
-def test_the_maps_stated_priors_alert_once_their_election_is_certified():
-    stated = {"fits": {"0": {"halfLife": 7.0}, "7": {"halfLife": 7.0}}}
-    fitted = {"fits": {h: {"priors": {"fitted": True}} for h in ("0", "7")}}
-    ctx = lambda doc, day: _ctx("forecast_model.json", doc, today=day)  # noqa: E731
-    # Not while the map built on them is live, nor in the results window.
-    assert dr._forecast_priors_stale(ctx(stated, date(2026, 10, 30))) is None
-    assert dr._forecast_priors_stale(ctx(stated, date(2027, 1, 2))) is None
-    # From the January 3 the election they were stated for is certified.
-    assert "--fit-priors" in dr._forecast_priors_stale(ctx(stated, date(2027, 1, 3)))
-    assert dr._forecast_priors_stale(ctx(fitted, date(2027, 1, 3))) is None
+def test_the_maps_priors_are_fitted_once_their_election_is_certified(monkeypatch):
+    """From the January 3 after the election the priors were stated for, the
+    refit also fits them (kept only under the acceptance rule, inside the
+    script), and the first day it can, it runs: no alert asks anyone to."""
+    monkeypatch.setattr(dr, "utcnow", lambda: datetime(2027, 1, 3, 16))
+    spec = next(f for f in dr.DATA_FILES if f.name == "forecast_model.json")
+    assert spec.stale(_ctx(spec.name)) is None
+    for day, fitted in ((date(2026, 10, 30), False), (date(2027, 1, 2), False), (date(2027, 1, 3), True)):
+        assert ("--fit-priors" in spec.command(_ctx(spec.name, today=day))) is fitted
+    yesterday, in_use = datetime(2027, 1, 2, 16), dict(dr.read("forecast_model.json"))
+    assert dr._forecast_due(_ctx(spec.name, in_use, today=date(2027, 1, 3), last=yesterday))
+    measured = {**in_use, "priorsComparison": {}}
+    assert not dr._forecast_due(_ctx(spec.name, measured, today=date(2027, 1, 3), last=yesterday))
 
 
-def test_a_newer_maddison_release_is_found_by_search(monkeypatch):
-    class Resp:
-        def __init__(self, names):
-            self.names = names
-
-        def raise_for_status(self):
-            pass
-
-        def json(self):
-            return {"data": {"items": [{"name": n} for n in self.names]}}
-
-    doc = {"_source": "Maddison Project Database 2023 (Bolt & van Zanden 2024)"}
-    monkeypatch.setattr(dr, "_record_try", lambda n, o, r=None: None)
-    monkeypatch.setattr(dr.httpx, "get", lambda *a, **k: Resp(["Maddison Project Database 2023"]))
-    assert dr._peer_gdp_stale(_ctx("peer_gdp_per_capita.json", doc)) is None
-    monkeypatch.setattr(dr.httpx, "get", lambda *a, **k: Resp(["Maddison Project Database 2026", "x"]))
-    assert "2026 is published" in dr._peer_gdp_stale(_ctx("peer_gdp_per_capita.json", doc))
-    assert dr._peer_gdp_stale(_ctx("peer_gdp_per_capita.json", doc, last=datetime.now())) is dr.UNCHECKED
+def test_the_peer_gdp_gate_holds_a_changed_rule_or_a_shorter_series():
+    old = {"peers": ["AUS"], "release": 2023, "countries": {"AUS": {"2022": 1.0}, "USA": {"2022": 2.0}}}
+    assert dr._peer_gdp_gate({**old, "release": 2026, "countries": {"AUS": {"2025": 1}, "USA": {"2025": 2}}}, old) == []
+    assert dr._peer_gdp_gate({**old, "peers": ["AUS", "NZL"]}, old)
+    assert dr._peer_gdp_gate({**old, "countries": {"USA": {"2022": 2.0}}}, old)
+    assert dr._peer_gdp_gate({**old, "countries": {"AUS": {"2021": 1}, "USA": {"2021": 2}}}, old)
 
 
 def test_a_check_that_did_not_look_today_leaves_its_alert_as_it_is(alerts):
@@ -394,15 +386,19 @@ def test_a_newer_acs_or_onet_is_found(monkeypatch):
     assert dr._occupation_industry_stale(ctx) is None
 
 
-def test_a_newer_supreme_court_database_release_is_found(monkeypatch):
-    monkeypatch.setattr(dr, "_record_try", lambda n, o, r=None: None)
-    doc = {"scdbRelease": "2026_01"}
-    monkeypatch.setattr(dr, "_get_text", lambda url: '<a href="data/2026-release-01/">2026 Release 01</a>')
-    assert dr._court_finding_stale(_ctx("court_finding.json", doc)) is None
-    monkeypatch.setattr(dr, "_get_text", lambda url: '<a href="data/2027-release-01/">2027 Release 01</a>')
-    assert "2027 Release 01" in dr._court_finding_stale(_ctx("court_finding.json", doc))
-    monkeypatch.setattr(dr, "_get_text", lambda url: None)
-    assert dr._court_finding_stale(_ctx("court_finding.json", doc)) is None
+def test_the_court_finding_gate_holds_an_older_release_or_an_impossible_interval():
+    old = {"scdbRelease": "2026_01", "estimate": 0.02, "low": -0.01, "high": 0.05, "draws": 200,
+           "firstTerm": 1937, "lastTerm": 2025, "justices": 43}
+    assert dr._court_finding_gate({**old, "scdbRelease": "2027_01", "lastTerm": 2026, "justices": 44}, old) == []
+    assert dr._court_finding_gate({**old, "scdbRelease": "2025_02"}, old)
+    assert dr._court_finding_gate({**old, "estimate": 0.2}, old)
+    assert dr._court_finding_gate({**old, "justices": 40}, old)
+
+
+def test_the_files_still_on_a_staleness_check():
+    assert sorted(f.name for f in dr.DATA_FILES if f.command is None) == [
+        "commemorative_calibration.json", "district_lean.json", "occupation_industry.json.gz",
+        "position_confidence.json"]
 
 
 def test_every_generated_file_on_record_exists_and_every_command_names_a_real_script():
