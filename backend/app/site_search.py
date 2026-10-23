@@ -577,8 +577,13 @@ def results(raw: str, db=None, path: str | None = None, documents=None, limit: i
     for it in items:
         counts[it["kind"]] = counts.get(it["kind"], 0) + 1
     # A close call: a match good enough to jump to, but with one to three
-    # others too near it. More than that is a list, not a close call.
-    near_top = [h for h in a.ranked if a.ranked[0].score - h.score < p.direct_margin] if a.ranked else []
+    # others too near it (within the jump margin, or naming the query as
+    # exactly: two members of one name). More than that is a list, not a
+    # close call. The exact clause keeps the close call from depending on
+    # the fitted margin alone, which a refit can make narrow (0.02 on
+    # 2026-10-23).
+    near_top = [h for h in a.ranked if a.ranked[0].score - h.score < p.direct_margin
+                or (h.match >= EXACT and a.ranked[0].match >= EXACT)] if a.ranked else []
     close = ([h.public() for h in near_top]
              if a.direct is None and a.ranked and a.ranked[0].match >= p.direct_floor and 2 <= len(near_top) <= 4
              else [])
