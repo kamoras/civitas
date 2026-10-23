@@ -643,7 +643,27 @@ The correct pattern, established by `_district_pvi()` /
    place the reader). mapshaper is pinned (`scripts/mapshaper/`, npm's
    lockfile; a stage of the backend Dockerfile installs it and Playwright's
    bundled Node runs it; 174 MB): the checked-in shapes rebuild
-   byte-identical with it. `pyproj` is in the image for the lean's VEST projections
+   byte-identical with it.
+
+   **A census flows through the same way** (2026-10). Each Congress is on
+   the census its election is held under (`census_lines.census_year`:
+   2020's through the 122nd, 2030's from the 123rd, elected in 2032), and
+   every builder reads that census's blocks, P.L. 94-171 files, county
+   names and TIGER blocks by rule. The Census Bureau's apportionment
+   (Table 1 of each census, `scripts/fetch_apportionment.py` →
+   `app/data/apportionment.json`, a `data_refresh` file checked monthly
+   from a census year until it is out) gates the first election after a
+   census: `derive_redrawn_maps.py` lists every state on the new map (kind
+   `census`) only when each state's seats in the new block file are its
+   apportioned seats, and it sets a presidential cycle's electoral votes
+   (`electoral_votes(cycle)`: 2032's are the 2030 census's, not the sitting
+   House's). The overlap of an old map with a new census's map places the
+   new blocks' internal points in the old map's TIGER/Line shapes, since
+   the two censuses' blocks don't nest. The computed lean refuses a map on
+   a new census's blocks rather than carry its window onto them: by that
+   election the next presidential returns exist, and a new window's inputs
+   and corrections are a method change (its staleness alert says when they
+   are published). `pyproj` is in the image for the lean's VEST projections
    (2026-10: 10 MB wheel, 37 MB installed, `certifi` its only dependency;
    the 51 VEST 2020 files use ten coordinate systems, Lambert conformal
    conic, transverse Mercator and Web Mercator among them).

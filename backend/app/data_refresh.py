@@ -1149,6 +1149,25 @@ def _lean_gate(new: dict, old: dict) -> list[str]:
     return failures
 
 
+APPORTIONMENT_FILE = "apportionment.json"
+
+
+def _apportionment_due(ctx: Context) -> bool:
+    """Monthly from a census year (the Census Bureau publishes its
+    apportionment by December 31 of it, 13 U.S.C. 141(b)) until that
+    census is on file; otherwise never."""
+    census = 10 * (ctx.today.year // 10)
+    return str(census) not in (ctx.doc.get("censuses") or {}) and not ctx.tried_within(30)
+
+
+def _apportionment_gate(new: dict, old: dict) -> list[str]:
+    seats = new.get("censuses") or {}
+    failures = [f"{c}: {sum(v.values())} seats in {len(v)} states" for c, v in seats.items()
+                if sum(v.values()) != HOUSE_SEATS or len(v) != HOUSE_STATES]
+    lost = sorted(set(old.get("censuses") or {}) - set(seats))
+    return failures + ([f"censuses lost: {lost}"] if lost else [])
+
+
 SHAPES_FILE = "district_shapes.json"
 
 
@@ -1691,6 +1710,8 @@ DATA_FILES: list[DataFile] = [
              timeout_s=6 * 3600),
     DataFile(STATE_LEG_FILE, command=_state_leg_command, due=_state_leg_due, gate=_state_leg_gate, heavy=True,
              timeout_s=6 * 3600),
+    DataFile(APPORTIONMENT_FILE, command=lambda ctx: [PY, _script("fetch_apportionment.py"), "{out}"],
+             due=_apportionment_due, gate=_apportionment_gate, timeout_s=300),
     DataFile(SHAPES_FILE, command=_shapes_command, due=_shapes_due, gate=_shapes_gate, heavy=True,
              timeout_s=10 * 3600),
     DataFile(OVERLAP_FILE, command=_overlap_command, due=_overlap_due, gate=_overlap_gate, heavy=True,

@@ -68,9 +68,6 @@ from app.contact import BOT_USER_AGENT  # noqa: E402
 from app import census_lines  # noqa: E402
 from app.ordinals import ordinal  # noqa: E402
 
-COUNTY_NAMES_URL = (
-    "https://www2.census.gov/geo/docs/reference/codes2020/national_county2020.txt"
-)
 
 # Congressional district codes that are not House seats on a state ballot.
 _NOT_A_SEAT = {"98", "ZZ"}
@@ -150,7 +147,7 @@ def source_note(congress: int, maps: Mapping[str, int], urls: Mapping[int, str],
         "U.S. Census Bureau Redistricting Data Office congressional district Block "
         "Equivalency Files (2020 Census blocks -> district), each state's own corrected file "
         "replacing its national rows, joined to each block's own county FIPS (embedded in its "
-        f"GEOID) and the Bureau's national_county2020.txt county-name table. Files: {files}. "
+        f"GEOID) and the Bureau's national county-name table of the census the lines are drawn on. Files: {files}. "
         f"The lines of the {ordinal(congress)} Congress (elected {census_lines.elected_in(congress)}): "
         f"each state on the map it votes on in that election (redrawn_congressional_maps.json)"
         + (f": {redrawn}" if redrawn else "") + "; every other state on its earlier map. "
@@ -205,7 +202,9 @@ def read_map(path: Path, fips_to_state: Mapping[str, str], mine: set[str],
 
 
 def build(congress: int, cache: Path, cycles: dict | None = None) -> tuple[dict, list[str]]:
-    names, fips_to_state = load_county_names(download(COUNTY_NAMES_URL, cache))
+    # County names of the census the Congress's lines are drawn on.
+    names, fips_to_state = load_county_names(
+        download(census_lines.county_names_url(census_lines.census_year(congress)), cache))
     cycles = census_lines.maps_cycles() if cycles is None else cycles
     if not census_lines.listed(cycles, congress):
         return {}, [f"the election that seats the {ordinal(congress)} Congress ({census_lines.elected_in(congress)}) "

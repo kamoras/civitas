@@ -96,10 +96,6 @@ from app.contact import BOT_USER_AGENT  # noqa: E402
 OUTPUT = REPO / "backend" / "app" / "data" / "state_leg_district_crosswalk.json"
 
 _CHAMBER_FILES = {"upper": "sldu", "lower": "sldl"}
-_PL = (
-    "https://www2.census.gov/programs-surveys/decennial/2020/data/"
-    "01-Redistricting_File--PL_94-171/{folder}/{st}2020.pl.zip"
-)
 
 # Today's names for the 2020 codes (UTF-8, unlike the P.L. file, which
 # writes "Utqiagvik" for Utqiaġvik): the Census Gazetteer national files of
@@ -433,16 +429,24 @@ def bef_rows(zip_path: Path, state: str, fips: str) -> Iterator[tuple[str, str]]
     return census_lines.bef_rows(zip_path, fips, state)
 
 
-def state_units(state: str, cache: Path, gazetteer: dict[str, str]) -> tuple[dict, dict]:
-    """(blocks, names) for one state, as read_geo returns them, with
-    today's names and the places and towns created since 2020 moved in.
-    Also read by scripts/build_district_place_crosswalk.py."""
+def open_geo(state: str, census: int, cache: Path):
+    """A state's P.L. 94-171 geographic header of a census, as text."""
+    pl = download(census_lines.pl_url(state, census), cache)
+    zf = zipfile.ZipFile(pl)
+    return io.TextIOWrapper(zf.open(f"{state.lower()}geo{census}.pl"), encoding="latin-1")
+
+
+def state_units(state: str, cache: Path, gazetteer: dict[str, str], census: int = 2020) -> tuple[dict, dict]:
+    """(blocks, names) for one state on a census's blocks (the census the
+    lines being read are drawn on: census_lines.census_year), as read_geo
+    returns them, with today's names and the places and towns created
+    since the census moved in. Also read by
+    scripts/build_district_place_crosswalk.py."""
     fips, folder = _STATES[state]
-    pl = download(_PL.format(folder=folder, st=state.lower()), cache)
     strong_mcd = state in _STRONG_MCD_STATES
     points: dict[str, tuple[float, float]] = {}
-    with zipfile.ZipFile(pl) as zf, zf.open(f"{state.lower()}geo2020.pl") as raw:
-        blocks, names = read_geo(io.TextIOWrapper(raw, encoding="latin-1"), strong_mcd, points)
+    with open_geo(state, census, cache) as raw:
+        blocks, names = read_geo(raw, strong_mcd, points)
     created: dict[tuple, str] = {}
     for kind, url in gazetteer.items():
         if kind == "cousub" and not strong_mcd:
@@ -467,7 +471,10 @@ def state_units(state: str, cache: Path, gazetteer: dict[str, str]) -> tuple[dic
 
 def build_state(state: str, cache: Path, befs: dict, gazetteer: dict[str, str]) -> dict[str, list[str]]:
     fips = _STATES[state][0]
-    blocks, names = state_units(state, cache, gazetteer)
+    # The blocks of the census the legislative files are drawn on (a
+    # cycle's lines are on the census in force for its election).
+    census = census_lines.census_year(census_lines.seated_by(befs["upper"][2]))
+    blocks, names = state_units(state, cache, gazetteer, census)
     out: dict[str, list[str]] = {}
     for chamber, (url, _, _) in befs.items():
         seats = crosswalk(blocks, names, bef_rows(download(url, cache), state, fips))
@@ -529,10 +536,10 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _drop_state_download(state: str, cache: Path) -> None:
-    """A state's P.L. file (4-100MB) is read once per build: removed after,
-    so a full build on the Pi holds one state's at a time."""
-    fips, folder = _STATES[state]
-    (cache / _PL.format(folder=folder, st=state.lower()).rsplit("/", 1)[1]).unlink(missing_ok=True)
+    """A state's P.L. files (4-100MB) are read once per build: removed
+    after, so a full build on the Pi holds one state's at a time."""
+    for pl in cache.glob(f"{state.lower()}[0-9][0-9][0-9][0-9].pl.zip"):
+        pl.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

@@ -36,6 +36,7 @@ from pathlib import Path
 from app.atomic_write import runtime_data_path
 from app.contact import BOT_USER_AGENT
 from app.file_cache import new_reload_lock, read_json_preferring, reload_if_moved
+from app.state_names import STATE_NAMES
 
 RDO = "https://www2.census.gov/programs-surveys/decennial/rdo/mapping-files"
 MAPS_NAME = "redrawn_congressional_maps.json"
@@ -335,6 +336,32 @@ def block_digest(geoid: str, code: str) -> int:
     assignments (summed mod 2**64): two files agree on a state exactly
     when its sums and block counts agree."""
     return int.from_bytes(hashlib.blake2b(f"{geoid},{code}".encode(), digest_size=8).digest(), "big")
+
+
+APPORTIONMENT_NAME = "apportionment.json"
+
+
+def apportionment(census: int) -> dict[str, int]:
+    """{state: House seats} of a decennial census's apportionment
+    (scripts/fetch_apportionment.py, the copy in use), {} before the Census
+    Bureau has published it."""
+    doc = read_json_preferring(runtime_data_path(APPORTIONMENT_NAME),
+                               Path(__file__).resolve().parent / "data" / APPORTIONMENT_NAME,
+                               default={}, accept=lambda d: isinstance(d, dict))
+    return dict((doc.get("censuses") or {}).get(str(census)) or {})
+
+
+def pl_url(state: str, census: int) -> str:
+    """A state's P.L. 94-171 redistricting file of a census (block
+    population and internal points), under the folder named for the state."""
+    folder = STATE_NAMES[state].replace(" ", "_")
+    return (f"https://www2.census.gov/programs-surveys/decennial/{census}/data/01-Redistricting_File--PL_94-171/"
+            f"{folder}/{state.lower()}{census}.pl.zip")
+
+
+def county_names_url(census: int) -> str:
+    """The Census Bureau's national county-name table of a census's codes."""
+    return f"https://www2.census.gov/geo/docs/reference/codes{census}/national_county{census}.txt"
 
 
 def bundled_json(name: str) -> dict:
