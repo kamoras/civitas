@@ -153,7 +153,12 @@ export default function DistrictMap({
   showLean = true,
   stale = false,
   pickCounts = false,
+  url,
 }: {
+  /** The outlines' URL (StateBallot.districtMapUrl): the bundled file or a
+   * data refresh's build of the map; null when no build holds this
+   * state's map yet (no map; the filters still work). */
+  url?: string | null;
   /** With `results`, a district with a count but no race on the ballot is
    * pickable too, as the count's `raceId` — for a caller whose onPick lands
    * on the count (StateResults' rows), not on a ballot race. Off, such a
@@ -207,7 +212,12 @@ export default function DistrictMap({
   useEffect(() => {
     if (!multiDistrict) return;
     let cancelled = false;
-    fetch(`/data/cd/${state}.json`)
+    const src = url === undefined ? `/data/cd/${state}.json` : url;
+    if (!src) {
+      setFailed(true);
+      return;
+    }
+    fetch(src)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((t: Topo) => {
         if (!cancelled) setTopo(t);
@@ -220,7 +230,7 @@ export default function DistrictMap({
     return () => {
       cancelled = true;
     };
-  }, [state, multiDistrict]);
+  }, [state, multiDistrict, url]);
 
   const byDistrict = useMemo(() => {
     const m = new Map<number, RaceWithCandidates>();

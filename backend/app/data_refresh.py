@@ -70,6 +70,7 @@ from app.election_phase import active_election
 from app.error_utils import output_summary
 from app.file_cache import Uncached, files_stamp, read_json, read_json_preferring
 from app.forecast import model, training_polls
+from app.ordinals import ordinal
 from app.ops_alerts import resolve_ops_alert, send_ops_alert
 from app.pipeline.analyze import commemorative, score_version
 from app.pipeline.cache import api_cache_get, api_cache_set
@@ -83,8 +84,10 @@ BUNDLED = BACKEND / "app" / "data"
 _STATE_TIER = "data-refresh"
 MAPS_FILE = "redrawn_congressional_maps.json"
 # The House's size, fixed by statute (2 U.S.C. 2a, the Permanent
-# Apportionment Act of 1929): every district table has this many seats.
+# Apportionment Act of 1929): every district table has this many seats,
+# shared among the states (every one has at least one).
 HOUSE_SEATS = 435
+HOUSE_STATES = 50
 
 _read_cache: dict[str, tuple[object, dict]] = {}
 
@@ -1023,7 +1026,7 @@ def _seats_gate(table: dict, label: str) -> list[str]:
 
 def _county_gate(new: dict, old: dict) -> list[str]:
     return _seats_gate(new.get("districts") or {}, "the election's counties") + (
-        [] if new.get("congress") == line_targets()[1] else [f"built for the {new.get('congress')}th Congress"])
+        [] if new.get("congress") == line_targets()[1] else [f"built for Congress {new.get('congress')!r}, not the {ordinal(line_targets()[1])}"])
 
 
 def _places_command(ctx: Context) -> list[str]:
@@ -1058,7 +1061,7 @@ def _new_gazetteer(ctx: Context) -> bool:
 
 def _places_gate(new: dict, old: dict) -> list[str]:
     tables = _places_tables(new)
-    failures = [f for c, t in tables.items() for f in _seats_gate(t, f"the {c}th Congress's places")]
+    failures = [f for c, t in tables.items() for f in _seats_gate(t, f"the {ordinal(c)} Congress's places")]
     if set(tables) != set(line_targets()):
         failures.append(f"built for {sorted(tables)}, not {sorted(set(line_targets()))}")
     # Names drift a little with a new Gazetteer; a place list that loses
@@ -1068,7 +1071,7 @@ def _places_gate(new: dict, old: dict) -> list[str]:
         kept = sum(len(set(t.get(k) or []) & set(v)) for k, v in before.items())
         total = sum(len(v) for v in before.values())
         if total and kept < 0.8 * total:
-            failures.append(f"the {c}th Congress's places keep {kept} of {total} names")
+            failures.append(f"the {ordinal(c)} Congress's places keep {kept} of {total} names")
     return failures
 
 
@@ -1132,17 +1135,75 @@ def _lean_gate(new: dict, old: dict) -> list[str]:
     moves almost nowhere (the same inputs give the same figures; a BEF
     re-release moves only the districts it redrew)."""
     tables, before = _lean_tables(new), _lean_tables(old)
-    failures = [f"the {c}th Congress's table is gone" for c in before if c not in tables]
+    failures = [f"the {ordinal(c)} Congress's table is gone" for c in before if c not in tables]
     for c, t in tables.items():
         off = len(((new.get("unavailable") or {}).get(str(c))) or {})
         if len(t) + off != HOUSE_SEATS:
-            failures.append(f"the {c}th Congress's table has {len(t)} districts and {off} unavailable")
+            failures.append(f"the {ordinal(c)} Congress's table has {len(t)} districts and {off} unavailable")
         if any(not isinstance(v, (int, float)) or abs(v) > 60 for v in t.values()):
-            failures.append(f"the {c}th Congress's table has a lean out of range")
+            failures.append(f"the {ordinal(c)} Congress's table has a lean out of range")
         same = before.get(c) or {}
         moved = [k for k, v in same.items() if k in t and abs(t[k] - v) > 0.5]
         if same and len(moved) > 0.05 * len(same):
-            failures.append(f"the {c}th Congress's table moved {len(moved)} of {len(same)} districts by over half a point")
+            failures.append(f"the {ordinal(c)} Congress's table moved {len(moved)} of {len(same)} districts by over half a point")
+    return failures
+
+
+SHAPES_FILE = "district_shapes.json"
+
+
+def _shapes_missing(ctx: Context) -> list[str]:
+    """What the browser would ask for that no set of shapes holds (the
+    refresh's build or the bundled files, app/district_shapes.py): a lookup
+    folder for a state's map on the Congresses the site needs, and the
+    ballot map's outlines on the coming election's lines."""
+    sitting, election = line_targets()
+    cycles = census_lines.maps_cycles()
+    docs = [d for d in (ctx.doc, _bundled_doc(SHAPES_FILE)) if d]
+    states = sorted({st for d in docs for st in ((d.get("cd") or {}).get("maps") or {})})
+    missing = []
+    for c in dict.fromkeys((sitting, election)):
+        for st, m in census_lines.state_maps(c, states, cycles).items():
+            if not any(st in ((d.get("lookup") or {}).get(f"congress-{m}") or []) for d in docs):
+                missing.append(f"congress-{m}/{st}")
+    for st, m in census_lines.state_maps(election, states, cycles).items():
+        if not any(((d.get("cd") or {}).get("maps") or {}).get(st) == m for d in docs):
+            missing.append(f"cd/{st} on the {ordinal(m)} Congress's map")
+    return missing
+
+
+def _shapes_command(ctx: Context) -> list[str]:
+    sitting, election = line_targets()
+    argv = [PY, _script("build_district_shapes.py"), "--out", "{out}", "--cache", "{tmp}",
+            "--cycle", str(_election().cycle)]
+    for c in dict.fromkeys((sitting, election)):
+        argv += ["--congress", str(c)]
+    return argv
+
+
+def _shapes_due(ctx: Context) -> bool:
+    if _shapes_missing(ctx):
+        return True
+    # Weekly: a newer state legislative block file than any shapes built.
+    if ctx.tried_within(7):
+        return False
+    built = [int(f.removeprefix("election-")) for d in (ctx.doc, _bundled_doc(SHAPES_FILE))
+             for f in (d.get("lookup") or {}) if f.startswith("election-")]
+    try:
+        found = census_lines.find_sld_bef(_election().cycle, "sldu")
+    except Exception:
+        logger.info("district shapes: the Census listing is unreadable", exc_info=True)
+        return False
+    return bool(found and built and found[2] > max(built))
+
+
+def _shapes_gate(new: dict, old: dict) -> list[str]:
+    failures = [] if new.get("dir") else ["no build directory named"]
+    left = _shapes_missing(Context(SHAPES_FILE, new, utcnow().date(), None))
+    if left:
+        failures.append(f"still missing: {', '.join(left[:10])}")
+    if len((new.get("cd") or {}).get("maps") or {}) < HOUSE_STATES:
+        failures.append("outlines for fewer than every state")
     return failures
 
 
@@ -1630,6 +1691,8 @@ DATA_FILES: list[DataFile] = [
              timeout_s=6 * 3600),
     DataFile(STATE_LEG_FILE, command=_state_leg_command, due=_state_leg_due, gate=_state_leg_gate, heavy=True,
              timeout_s=6 * 3600),
+    DataFile(SHAPES_FILE, command=_shapes_command, due=_shapes_due, gate=_shapes_gate, heavy=True,
+             timeout_s=10 * 3600),
     DataFile(OVERLAP_FILE, command=_overlap_command, due=_overlap_due, gate=_overlap_gate, heavy=True,
              timeout_s=3600),
     DataFile(MAPS_FILE, command=_maps_command, due=_maps_due, gate=_maps_gate, heavy=True, timeout_s=1800),

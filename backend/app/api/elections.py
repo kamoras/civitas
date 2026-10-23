@@ -19,7 +19,7 @@ from app.api.response_helpers import CACHE_TTL_DETAIL_S, CACHE_TTL_LIST_S, CACHE
 from app.database import get_db
 from app.name_casing import candidate_display_name
 from app import district_lean
-from app import data_refresh
+from app import data_refresh, district_shapes
 from app.district_lean import lean_for as computed_lean_for
 from app.district_lines import lookup_lines
 from app.district_places import counties_on_lines_of, places_on_lines_of
@@ -1680,6 +1680,14 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
         # election seats; district_lines.lookup_lines), null before the
         # cycle's maps are listed.
         "houseLookupLines": lookup_lines(state, congress_for_election(cycle)),
+        # ...the build that holds that folder, the state legislative shapes
+        # for this ballot and the district map's outlines (district_shapes:
+        # the data refresh's build, else the bundled files; null when
+        # neither holds them yet).
+        "houseLookupBase": district_shapes.lookup_base(lookup_lines(state, congress_for_election(cycle)), state),
+        "legislatureLookupLines": district_shapes.legislature_lookup(state, cycle)[0],
+        "legislatureLookupBase": district_shapes.legislature_lookup(state, cycle)[1],
+        "districtMapUrl": district_shapes.district_map_url(state, congress_for_election(cycle)),
         "generalRunoffs": _election_rules(state, cycle, "generalRunoffs"),
         # Contests whose primary was not primaryDate (Alabama's House
         # districts 1, 2, 6 and 7; Louisiana's House, whose primary IS

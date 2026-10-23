@@ -629,7 +629,21 @@ The correct pattern, established by `_district_pvi()` /
    (`data_refresh.read`). Texas's and California's cross-check tables are
    found by rule too: the Texas Legislative Council plan whose block file
    is the map's, California's Supplement to the Statement of Vote by its
-   URL pattern. `pyproj` is in the image for the lean's VEST projections
+   URL pattern. The browser's district shapes rebuild the same way
+   (`scripts/build_district_shapes.py`, a `data_refresh` file,
+   `district_shapes.json`): the bundled files under `frontend/public/data/`
+   cover the maps in use when they were built, and when a needed map has
+   none the refresh builds every lookup folder and the ballot map's
+   outlines into a new directory on the data volume, served by
+   `GET /api/district-shapes/<build>/…` (immutable, nginx-cached). The API
+   names the place that holds each state's map (`lookupBase`,
+   `houseLookupBase`, `legislatureLookupLines`/`Base`, `districtMapUrl`:
+   `app/district_shapes.py`), so the page never computes a folder or a URL,
+   and a map nothing holds yet is named nowhere (the page says it can't
+   place the reader). mapshaper is pinned (`scripts/mapshaper/`, npm's
+   lockfile; a stage of the backend Dockerfile installs it and Playwright's
+   bundled Node runs it; 174 MB): the checked-in shapes rebuild
+   byte-identical with it. `pyproj` is in the image for the lean's VEST projections
    (2026-10: 10 MB wheel, 37 MB installed, `certifi` its only dependency;
    the 51 VEST 2020 files use ten coordinate systems, Lambert conformal
    conic, transverse Mercator and Web Mercator among them).
@@ -2650,7 +2664,8 @@ the pending list).
 | Statewide ballot-measure ingestion (verbatim, no LLM) | `backend/app/pipeline/fetch/ballot_measures_pdf.py` (pipeline stage + `STRATEGIES`), one reader per state in `fetch/ballot_measures_<st>.py`, registry `backend/app/data/ballot_measure_pdf_sources.json` |
 | What changed on the new House maps (old/new district overlap, lean before/after, enacting act) | `backend/app/redistricting.py`, `backend/app/api/redistricting.py`, `backend/scripts/build_redistricting_overlap.py` → `app/data/redistricting_overlap.json`, `frontend/src/components/redistricting/`, `frontend/src/app/elections/redistricting/` |
 | Special elections, vacancies and the election calendar (FEC election and reporting dates, House Clerk and Senate vacancies, a special's live count and swing, the season /elections leads with) | `backend/app/pipeline/fetch/special_elections.py`, `backend/app/live_results/specials.py`, `backend/app/special_elections.py`, `backend/app/api/special_elections.py` |
-| On-device district from location, split-town map (district shapes per map, accuracy gate) | `frontend/src/components/districts/DistrictLocator.tsx`, `frontend/src/lib/districtAt.ts`, `frontend/src/hooks/useYourDistrict.ts`, `backend/scripts/build_district_lookup.py` → `frontend/public/data/lookup/` |
+| On-device district from location, split-town map (district shapes per map, accuracy gate) | `frontend/src/components/districts/DistrictLocator.tsx`, `frontend/src/lib/districtAt.ts`, `frontend/src/hooks/useYourDistrict.ts`, `backend/scripts/build_district_lookup.py` → `frontend/public/data/lookup/`; which build serves each map: `backend/app/district_shapes.py`, `backend/app/api/district_shapes.py`, `backend/scripts/build_district_shapes.py` (the data refresh's build, on the data volume) |
+| Which lines and files every district table is built from (Congresses by the clock, maps by `redrawn_congressional_maps.json`, Census files by their listings) | `backend/app/census_lines.py`, `backend/app/data_refresh.py` (the district tables' refreshes) |
 | Official-ballot link table + liveness gating (verified / blocked-unconfirmed / dead) | `backend/app/pipeline/fetch/ballot_lookup.py` |
 | Public API v1 + its MCP server (spec generated from the routes, rendered at `/developers`) | `backend/app/api/public.py`, `backend/app/api/public_mcp.py`, `app/schemas.py` ("Public API v1"), `tests/test_public_api_contract.py`, `frontend/src/app/developers/page.tsx`, `frontend/src/lib/openapi.ts` |
 | Votes with the president's stated positions (OMB SAPs, matching, per-member rate, expected rate by seat; informational, not scored) | `backend/app/pipeline/fetch/omb_statements.py`, `analyze/sap_position.py`, `analyze/presidential_support.py`, `services/presidential_support_service.py`, `frontend/src/components/presidentialSupport/`, `frontend/src/app/congress/president/` |

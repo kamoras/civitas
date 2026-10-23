@@ -211,4 +211,7 @@ export interface HouseDistrictsByCounty {
    *  state that kept its map keeps an earlier Congress's folder), null
    *  when none can be named yet. */
   lookupLines?: string | null;
+  /** Where that folder is served (the bundled shapes or a data refresh's
+   *  build); null when no build holds it yet. */
+  lookupBase?: string | null;
 }

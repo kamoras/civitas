@@ -438,6 +438,7 @@ export default function ContactYourMembers({
               <DistrictLocator
                 state={state}
                 lines={linesName}
+                base={lines?.lookupBase ?? null}
                 linesLabel="the lines today's members were elected on"
                 districts={lines!.districts}
                 query={place}

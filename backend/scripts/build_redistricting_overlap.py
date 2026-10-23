@@ -56,6 +56,7 @@ import build_district_place_crosswalk as places  # noqa: E402
 import fetch_state_leg_crosswalk as sl  # noqa: E402
 
 from app import census_lines  # noqa: E402
+from app.ordinals import ordinal  # noqa: E402
 
 OUT_PATH = REPO / "backend" / "app" / "data" / "redistricting_overlap.json"
 
@@ -127,7 +128,7 @@ def build_state(state: str, cache: Path, old_zip: Path, new_zip: Path) -> list[l
 
 
 def source_note(cycle: int, states: dict[str, tuple[int, int]], urls: dict[int, str], built: dt.date) -> str:
-    moves = ", ".join(f"{st} {a}th to {b}th" for st, (a, b) in states.items()) or "none"
+    moves = ", ".join(f"{st} {ordinal(a)} to {ordinal(b)}" for st, (a, b) in states.items()) or "none"
     return (
         "U.S. Census Bureau: the Redistricting Data Office's congressional district Block "
         "Equivalency Files (" + "; ".join(urls[m] for m in sorted(urls)) + ", each state's own corrected "
@@ -157,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
     for m in sorted({m for pair in states.values() for m in pair}):
         found = census_lines.find_congress_bef(m)
         if found is None:
-            raise SystemExit(f"no Census block equivalency file for the {m}th Congress")
+            raise SystemExit(f"no Census block equivalency file for the {ordinal(m)} Congress")
         urls[m], zips[m], inputs[str(m)] = found[0], sl.download(found[0], args.cache), list(found)
     built = {}
     for st, (old, new) in states.items():

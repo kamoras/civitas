@@ -662,6 +662,16 @@ export interface StateBallot {
   /** The lookup folder with this ballot's House lines, null before the
    *  cycle's maps are listed (district_lines.lookup_lines). */
   houseLookupLines?: string | null;
+  /** Where that folder is served; null when no build holds it yet. */
+  houseLookupBase?: string | null;
+  /** The state legislative shapes for this ballot: the folder
+   *  ("election-2026", the newest built for this cycle or before) and
+   *  where it is served; null when none holds the state. */
+  legislatureLookupLines?: string | null;
+  legislatureLookupBase?: string | null;
+  /** The district map's outlines for this ballot's House lines; null when
+   *  no build holds this state's map yet. */
+  districtMapUrl?: string | null;
   /** Where November does not settle a contest by plurality (Georgia's
    * majority rule; Louisiana's House open primary, where its law makes one), with the
    * runoff's date. Optional for an older backend. */

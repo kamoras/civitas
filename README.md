@@ -1190,8 +1190,11 @@ the one the coming election seats, each state on the map
 `redrawn_congressional_maps.json` gives it, every file found in the Census
 Bureau's listings; the data refresh rebuilds the table when a Congress the
 site needs has a state no table covers, or a block file is re-released, as
-it does the county, place and state legislative crosswalks and the
-redistricting overlap (`app/data_refresh.py`). Each records the files it
+it does the county, place and state legislative crosswalks, the
+redistricting overlap and the browser's district shapes
+(`app/data_refresh.py`; the shapes are served from the data volume at
+`/api/district-shapes/` when the bundled ones don't hold a map, and the API
+names which serves each state's map). Each records the files it
 was read from (`_inputs`). Against Cook: 119th lines r 0.9998, mean
 absolute difference 0.27, 423 of 435 equal when rounded, all within one;
 120th lines r 0.9997, 0.28, 403 equal, 432 within one. Texas's Red-206 tables are the independent cross-check; California's is also its correction source, so agreement there only confirms the correction was applied. It moves no score:

@@ -150,6 +150,7 @@ import fetch_state_leg_crosswalk as sl  # noqa: E402
 import fetch_state_pvi as sp  # noqa: E402
 from app import census_lines  # noqa: E402
 from app.contact import BOT_USER_AGENT, CONTACT_EMAIL, UNSET_MESSAGE  # noqa: E402  (sl put backend/ on sys.path)
+from app.ordinals import ordinal  # noqa: E402
 from app.pipeline.fetch.state_candidates_tabular import _xlsx_rows  # noqa: E402
 from app.pipeline.fetch.state_candidates_tabular import xlsx_sheet_as_first as _as_first_sheet  # noqa: E402
 
@@ -407,7 +408,7 @@ def bef_zip(congress: int, cache: Path) -> Path:
     if str(congress) not in BEFS_READ:
         found = census_lines.find_congress_bef(congress)
         if found is None:
-            raise SystemExit(f"no Census block equivalency file for the {congress}th Congress")
+            raise SystemExit(f"no Census block equivalency file for the {ordinal(congress)} Congress")
         BEFS_READ[str(congress)] = list(found)
     return fetch(BEFS_READ[str(congress)][0], cache / f"cd{congress}.zip")
 
@@ -1025,7 +1026,7 @@ def build_state(st: str, cache: Path, files: dict, fixes: list[dict], official: 
                 touched = {d for c, d in zip(county, labels[m]) if c == f["county"] and d is not None}
                 if len(touched) != 1:
                     raise SystemExit(f"{st} {f['county']}: a county total is exact only for a county in one "
-                                     f"district; it is in {sorted(touched)} on the {m}th Congress's map")
+                                     f"district; it is in {sorted(touched)} on the {ordinal(m)} Congress's map")
     seats = {d for d in labels[voted] if d is not None}
     d24_voted, cell24, fine24, stats24 = allocate_2024(units, seats, dict(county_20))
     if any(f["action"] == "district_cells" for f in fixes):
@@ -1171,7 +1172,7 @@ def cross_checks(results: dict, cache: Path) -> tuple[dict, list[str]]:
         for m in sorted(set(r["maps"].values()) | {r["voted"]}):
             match = tx_plan_reports(dict(census_lines.bef_rows(bef_zip(m, cache), fips, "TX")), cache)
             if match is None:
-                failures.append(f"cross-check TX: no Texas Legislative Council plan has the {m}th Congress map's blocks")
+                failures.append(f"cross-check TX: no Texas Legislative Council plan has the {ordinal(m)} Congress map's blocks")
                 continue
             for year, url in sorted(match[1].items()):
                 tables.append(("TX", m, year, red206(fetch(url, cache / "official" / url.rsplit("/", 1)[1])),
@@ -1196,7 +1197,7 @@ def cross_checks(results: dict, cache: Path) -> tuple[dict, list[str]]:
             "maxAbsDiffPts": round(abs(diffs[worst]), 3), "worst": f"{st}-{worst}",
         }
         if abs(diffs[worst]) > CROSS_TOLERANCE[kind]:
-            failures.append(f"cross-check {st}-{worst} ({m}th Congress's map, {year}): two-party D share off the "
+            failures.append(f"cross-check {st}-{worst} ({ordinal(m)} Congress's map, {year}): two-party D share off the "
                             f"official table by {diffs[worst]:+.2f} pts (> {CROSS_TOLERANCE[kind]})")
     return report, failures
 
@@ -1232,7 +1233,7 @@ def gates(results: dict, inputs: dict, official: Official, fixes: list[dict],
             stray = stats.get("votesInCellsWithNoBlock", 0)
             if stray > STRAY_SHARE * sum(r["total24"]):
                 failures.append(f"{st}: {stray:,} 2024 votes are in county x district cells no populated block is "
-                                f"in, so the transfer to the {m}th Congress's map cannot place them")
+                                f"in, so the transfer to the {ordinal(m)} Congress's map cannot place them")
         for m in sorted(set(r["maps"].values())):
             cong = min(c for c, x in r["maps"].items() if x == m)
             # Every seat once: Cook's table where Cook has published one for
@@ -1242,16 +1243,16 @@ def gates(results: dict, inputs: dict, official: Official, fixes: list[dict],
                     else r["seats"][m])
             have = set(r["d24"][m]) & set(r["d20"][m])
             if have != want:
-                failures.append(f"{st} {cong}th lines: districts {sorted(have)} vs {sorted(want)}")
+                failures.append(f"{st} {ordinal(cong)} lines: districts {sorted(have)} vs {sorted(want)}")
             for d in sorted(have):
                 ratio = sum(r["d24"][m][d]) / sum(r["d20"][m][d])
                 pinned = excused.get((m, f"{st}-{d}"))
                 if pinned is not None:
                     if abs(ratio - pinned) > EXCEPTION_SLACK:
-                        failures.append(f"{st}-{d} ({cong}th lines): ratio {ratio:.3f} moved from its recorded "
+                        failures.append(f"{st}-{d} ({ordinal(cong)} lines): ratio {ratio:.3f} moved from its recorded "
                                         f"exception {pinned:.3f}")
                 elif not TURNOUT_RATIO[0] <= ratio <= TURNOUT_RATIO[1]:
-                    failures.append(f"{st}-{d} ({cong}th lines): 2024/2020 two-party vote ratio {ratio:.3f}")
+                    failures.append(f"{st}-{d} ({ordinal(cong)} lines): 2024/2020 two-party vote ratio {ratio:.3f}")
     # Official county canvasses, wherever one was fetched.
     checks = {}
     if "IN" in results:
@@ -1294,7 +1295,7 @@ def compare_with_cook(leans: dict) -> tuple[dict, list[str]]:
         }
         for k, a, b in zip(keys, ours, theirs):
             if abs(a - b) > COOK_ALERT:
-                alerts.append(f"{k} ({cong}th lines): computed {a:+.2f}, Cook {b:+.0f}")
+                alerts.append(f"{k} ({ordinal(cong)} lines): computed {a:+.2f}, Cook {b:+.0f}")
     return summary, alerts
 
 

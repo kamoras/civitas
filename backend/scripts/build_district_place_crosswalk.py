@@ -57,6 +57,7 @@ import build_county_district_crosswalk as cw  # noqa: E402
 import fetch_state_leg_crosswalk as sl  # noqa: E402
 
 from app import census_lines  # noqa: E402
+from app.ordinals import ordinal  # noqa: E402
 
 OUT_PATH = REPO / "backend" / "app" / "data" / "congressional_district_places.json"
 
@@ -84,7 +85,7 @@ def build_state(state: str, cache: Path, maps: dict[int, dict[str, int]], befs: 
     by_map: dict[int, dict] = {}
     for m in sorted({maps[c][state] for c in maps}):
         by_map[m] = sl.crosswalk(blocks, names, census_lines.bef_rows(befs[m], fips, state), key=cd_key)
-    print(f"   {state}: " + ", ".join(f"{m}th map {len(seats)} districts" for m, seats in by_map.items()))
+    print(f"   {state}: " + ", ".join(f"{ordinal(m)} map {len(seats)} districts" for m, seats in by_map.items()))
     return {str(c): {f"{state}-{n}": listed for n, listed in by_map[maps[c][state]].items()} for c in maps}
 
 
@@ -92,10 +93,10 @@ def source_note(maps: dict[int, dict[str, int]], urls: dict[int, str], gazetteer
                 built: dt.date) -> str:
     per = []
     for c, by_state in sorted(maps.items()):
-        moved = [f"{st} {m}th" for st, m in sorted(by_state.items()) if m != min(by_state.values())]
-        per.append(f"'{c}': the {c}th Congress's lines (elected {census_lines.elected_in(c)})"
+        moved = [f"{st} {ordinal(m)}" for st, m in sorted(by_state.items()) if m != min(by_state.values())]
+        per.append(f"'{c}': the {ordinal(c)} Congress's lines (elected {census_lines.elected_in(c)})"
                    + (f", each state on its map that election: {', '.join(moved)}, every other state on the "
-                      f"{min(by_state.values())}th's" if moved else f", every state on the {min(by_state.values())}th "
+                      f"{ordinal(min(by_state.values()))}'s" if moved else f", every state on the {ordinal(min(by_state.values()))} "
                       "Congress's map"))
     return (
         "U.S. Census Bureau: the Redistricting Data Office's congressional district Block "
@@ -132,7 +133,7 @@ def main(argv: list[str] | None = None) -> int:
     for m in sorted({m for by_state in maps.values() for m in by_state.values()}):
         found = census_lines.find_congress_bef(m)
         if found is None:
-            raise SystemExit(f"no Census block equivalency file for the {m}th Congress")
+            raise SystemExit(f"no Census block equivalency file for the {ordinal(m)} Congress")
         urls[m] = found[0]
         inputs[str(m)] = list(found)
         befs[m] = sl.download(found[0], args.cache)
