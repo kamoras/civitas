@@ -2763,6 +2763,17 @@ the pending list).
   `scripts/axe-routes.mjs` the page (each h1, h2, h3 and th as computed).
   Three ink levels: `ink` is `ink-hi`, then `ink-lo`, then `ink-min`, at
   least APCA Lc 8 apart (`inkContrast.test.ts`).
+  **Sizes (2026-10-22), desktop / phone:** body 18 / 17px, small 16 / 15,
+  dek and box title 20 / 18, section 24 / 22, title 36 / 28 (the rest in
+  `typeStyles.ts`). **A sentence a reader reads as prose is body**: a box's
+  line, RecordBox `dek`/`quote`, a finding, a list row's description, a
+  note (`NoteLine`), a "More" or "How to read this" disclosure's text,
+  About prose. Small is for what sits beside prose: source lines,
+  captions, units, dates, chips, labels. Measured on production at 1280px
+  before the change, small (then 14px) was most of the main column's text:
+  95% of a member page, 84% of a state ballot, 69% of the homepage, 68% of
+  the Action Center; readability rises with size to about 18pt and 14
+  measured worse (Rello, Pielot & Marcos, CHI 2016).
 - **Type** (2026-10, `src/app/fonts.ts`): Source Serif 4 600 for titles
   (`font-display`, through TYPE), Fira Sans 400/600 for everything else (`font-sans`; the
   long-standing `font-mono` class maps to Fira Sans too, so a label keeps its
@@ -2781,7 +2792,7 @@ the pending list).
   `president_scorer.py`, and `backend/tests/test_shown_text_style.py` fails on
   an em dash in any string there that isn't a docstring or a log message.
 - **On a phone nothing a reader must read is under 13px** (`globals.css`, "A
-  phone's type scale", 2026-10): the scale's smallest step is 14px, and the
+  phone's type scale", 2026-10): the scale's smallest step is 15px, and the
   sizes under it no longer exist.
 - **Letter case: sentence case, not capitals** (2026-10). A reader said the
   site's capitals felt intimidating, and the evidence agrees for anything

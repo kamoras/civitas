@@ -337,7 +337,7 @@ export function More({
         </span>
         {bare ? label : `More: ${label}`}
       </summary>
-      <div className={`mt-2 border-t pt-3 text-ink ${RULE}`}>{children}</div>
+      <div className={`mt-2 border-t pt-3 text-body text-ink ${RULE}`}>{children}</div>
     </details>
   );
 }

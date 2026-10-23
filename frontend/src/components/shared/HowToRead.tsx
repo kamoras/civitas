@@ -23,7 +23,7 @@ export default function HowToRead({
       >
         How to read this
       </summary>
-      <div className="mt-1 max-w-prose space-y-1 text-ink">{children}</div>
+      <div className="mt-1 max-w-prose space-y-1 text-body text-ink">{children}</div>
     </details>
   );
 }

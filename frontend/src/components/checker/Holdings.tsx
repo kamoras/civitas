@@ -303,7 +303,7 @@ function HoldingsMore({
   const selectedLabel = data.categories.find((c) => c.category === category)?.label;
   if (!data.parsed) {
     return (
-      <p className="text-small text-ink-lo">
+      <p className="text-body text-ink-lo">
         {data.unreadableReason === "scanned"
           ? `The ${reportLabel} is a scanned paper filing, so its assets can't be read reliably enough to chart.`
           : `The ${reportLabel} isn't in a layout that can be read automatically, so its assets aren't charted here.`}
@@ -330,7 +330,7 @@ function HoldingsMore({
         <MetricTooltip text={ABOUT_TEXT[filer]}>About this data</MetricTooltip>
       </p>
       {data.laterFilingUrl && (
-        <p className="text-small text-ink-lo">
+        <p className="text-body text-ink-lo">
           Also filed, on or after this report&apos;s filing date: the{" "}
           {data.laterFilingLabel ?? "later filing"}. It states no date its holdings describe that
           can be read here, so it can&apos;t be placed against this one, and this section stays with
@@ -665,7 +665,7 @@ export default function Holdings({
   const notes = (
     <>
       {data.laterFilingUrl && (
-        <p className="text-small text-ink-lo mt-2">
+        <p className="text-body text-ink-lo mt-2">
           Also filed, on or after this report&apos;s filing date: the{" "}
           {data.laterFilingLabel ?? "later filing"}. It states no date its holdings describe that
           can be read here, so it can&apos;t be placed against this one, and this section stays with

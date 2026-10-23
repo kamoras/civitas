@@ -16,7 +16,7 @@ export default function LobbyingMatches({ matches }: LobbyingMatchesProps) {
       {/* About a sixth-grade reading level (Flesch-Kincaid 5.7, from 8.8),
           keeping every caveat: the name match, the missing direction, and
           no claim of cause. */}
-      <div className="text-small text-ink-lo mb-3">
+      <div className="text-body text-ink-lo mb-3">
         Industries that gave this member a large share of their money, beside the member&apos;s
         votes on bills in that industry&apos;s area. Lobbying reports are looked up under the
         largest donor&apos;s name, or the name of the company behind it when the donor is a PAC.

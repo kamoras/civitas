@@ -521,7 +521,7 @@ export default async function DevelopersPage() {
                         <h3 id={tagId(tag)} className={TYPE.kicker}>
                           {tag}
                         </h3>
-                        {description && <p className="text-small text-ink-mid">{description}</p>}
+                        {description && <p className="text-body text-ink-mid">{description}</p>}
                       </div>
                       {endpoints.map((e) => (
                         <EndpointBlock key={`${e.method} ${e.path}`} endpoint={e} spec={spec} />

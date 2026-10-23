@@ -73,7 +73,7 @@ async function NewOnTheSite() {
               >
                 {f.title}
               </Link>
-              <p className="mt-1 text-small leading-relaxed text-ink-lo">{f.summary}</p>
+              <p className="mt-1 text-body leading-relaxed text-ink-lo">{f.summary}</p>
             </div>
           </li>
         ))}

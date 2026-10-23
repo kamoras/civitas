@@ -26,7 +26,7 @@ export default function RelatedVotes({
   return (
     <section className={className}>
       <Heading className={SECTION_HEADING}>Related votes in Congress</Heading>
-      <p className="mt-2 text-small text-ink-lo">
+      <p className="mt-2 text-body text-ink-lo">
         Roll calls taken around this story on what it covers, matched by the words of their record.
         Pick your state below to see how your members voted.
       </p>

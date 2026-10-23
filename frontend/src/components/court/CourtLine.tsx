@@ -170,7 +170,7 @@ export default function CourtLine({ court }: { court: Court }) {
             </table>
           </div>
           {unplaced.length > 0 && (
-            <p className="text-small text-ink-lo">
+            <p className="text-body text-ink-lo">
               No position for the {court.mqTerm} term yet:{" "}
               {unplaced.map((j, i) => (
                 <span key={j.id}>

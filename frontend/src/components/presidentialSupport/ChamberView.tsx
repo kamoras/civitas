@@ -168,7 +168,7 @@ export default function ChamberView({
               </Link>
             </div>
           ) : (
-            <p className="border-t border-white/[0.09] pt-3 font-sans text-small text-ink-lo">
+            <p className="border-t border-white/[0.09] pt-3 font-sans text-body text-ink-lo">
               Pick a square on the chart, or find a member, to read their record.
             </p>
           )}

@@ -293,7 +293,7 @@ export default function RaceContext({
           </span>
         </span>
       </div>
-      <p className="mt-2 text-small text-ink-lo">
+      <p className="mt-2 text-body text-ink-lo">
         {resultsMode
           ? "Civitas calls no race. A count on this page is the state's own, linked to its source."
           : "Descriptive only: Civitas publishes no odds for this race and calls no race."}
@@ -318,7 +318,7 @@ export default function RaceContext({
           <Row label={`The seat · ${usual.label}`}>
             {leanSentence(usualPoints(usual.label), lean.unit)} {leanCountsSentence(lean)}
             <LeanAxis context={lean} seatLabel={usual.label} />
-            <p className="mt-2 text-small">
+            <p className="mt-2 text-body">
               {usual.source === "computed"
                 ? `Computed by Civitas from open precinct returns, on this election's district lines: the figure the ${race.cycleYear} map shows, used in no member comparison.`
                 : `Computed by Civitas from each state's official presidential returns: the figure the ${race.cycleYear} map shows.`}{" "}
