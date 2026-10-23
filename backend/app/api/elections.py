@@ -64,6 +64,7 @@ from app.election_phase import ActiveElection, active_election, election_today
 from app.live_results.summary import state_summaries
 from app.live_results.sync import elected_congress_sits, redrawn_states
 from app.pipeline.fetch.ballot_lookup import lookup_for_state, vote_steps
+from app.pipeline.fetch.web_archive import captured_on
 from app.pipeline.fetch.ballot_measure_pdf_sources import unread_reason
 from app.pipeline.fetch.district_pvi import congress_for_election, district_pvi_for_congress
 from app.redistricting import new_district_notes
@@ -2168,6 +2169,9 @@ def _measure_json(measure) -> dict:
         "sourceName": measure.source_name,
         "sourceUrl": measure.source_url,
         "republishedBy": measure.republished_by,
+        # The capture date when the state's document was read from the
+        # Internet Archive's copy (its source is the capture's address).
+        "archivedOn": archived.isoformat() if (archived := captured_on(measure.source_url)) else None,
         "asOf": _iso_utc(measure.as_of),
     }
 

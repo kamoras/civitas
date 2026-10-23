@@ -780,3 +780,70 @@ async def test_a_moved_document_is_found_at_the_next_listed_address(monkeypatch,
     with pytest.raises(NotYetPublished):
         await pdf.fetch_state_measures_pdf(client, db_session, "ZZ", 2028, "2028-11-07")
 
+
+
+# ── a blocked state site: the Internet Archive's capture of its document ──
+
+_CAPTURE = "https://web.archive.org/web/20261021090000/https://state.example.gov/ballot.pdf"
+
+
+def _archived_state(monkeypatch, archive_reader, seen_known=None):
+    async def county_reader(client, year, page_url):
+        return None
+
+    _blocked_state(monkeypatch, county_reader, republished_by=[_COUNTY])
+    monkeypatch.setitem(pdf.ARCHIVED_STRATEGIES, "fake_multi", archive_reader)
+
+
+def _stored(db_session, **fields):
+    from app.models import BallotMeasure
+
+    row = {"id": "ZZ-2026-11-03-6", "state": "ZZ", "election_date": "2026-11-03", "number": "6", "title": "T",
+           "official_summary": "S", "status": "certified", "source_name": "Example State Elections Office",
+           "source_url": "https://state.example.gov/ballot.pdf"}
+    row.update(fields)
+    db_session.add(BallotMeasure(**row))
+    db_session.commit()
+
+
+@pytest.mark.asyncio
+async def test_a_blocked_state_is_read_from_the_archives_capture_and_says_so(monkeypatch, db_session):
+    known = []
+
+    async def archive_reader(client, year, known_urls):
+        known.extend(known_urls)
+        return [(dict(_PARSED), _CAPTURE)]
+
+    _archived_state(monkeypatch, archive_reader)
+    _stored(db_session)
+    (measure,) = await pdf.fetch_state_measures_pdf(None, db_session, "ZZ", 2026, "2026-11-03")
+    assert known == ["https://state.example.gov/ballot.pdf"]  # the state's own address, from the last read
+    assert measure["republished_by"] == "the Internet Archive"
+    assert measure["source_url"] == _CAPTURE
+
+
+@pytest.mark.asyncio
+async def test_an_archived_copy_that_differs_from_the_stored_text_is_refused(monkeypatch, db_session, caplog):
+    async def archive_reader(client, year, known_urls):
+        return [({**_PARSED, "official_summary": "S, reworded"}, _CAPTURE)]
+
+    _archived_state(monkeypatch, archive_reader)
+    _stored(db_session)
+    with caplog.at_level("ERROR"):
+        assert await pdf.fetch_state_measures_pdf(None, db_session, "ZZ", 2026, "2026-11-03") is None
+    assert "differ from the text stored" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_the_archive_is_never_read_in_place_of_a_readable_state_page(monkeypatch, db_session):
+    async def readable(client, year):
+        return [(dict(_PARSED), "https://state.example.gov/ballot.pdf")]
+
+    async def archive_reader(client, year, known_urls):
+        raise AssertionError("must not read the archive while the state's page answers")
+
+    monkeypatch.setattr(pdf, "source_for_state", lambda state: _fake_source("fake_multi"))
+    monkeypatch.setitem(pdf.MULTI_DOCUMENT_STRATEGIES, "fake_multi", readable)
+    monkeypatch.setitem(pdf.ARCHIVED_STRATEGIES, "fake_multi", archive_reader)
+    (measure,) = await pdf.fetch_state_measures_pdf(None, db_session, "ZZ", 2026, "2026-11-03")
+    assert measure["republished_by"] is None

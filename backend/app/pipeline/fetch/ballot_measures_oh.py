@@ -65,6 +65,16 @@ ballots, not the Secretary's sample ballot this reader verifies page by
 page, so Ohio has no `republished_by` entry. The wall is written up as the
 registry entry's `wall` (measured again 2026-10-22, now a Cloudflare block
 page), so the nightly ingest alert stops repeating it.
+
+A wall raises SourceBlocked (get_text_unless_walled /
+get_bytes_unless_walled), and only then does ballot_measures_pdf read the
+Internet Archive's newest capture of the Secretary's own sample ballot
+(fetch_archived, web_archive.py): the same parse and checks, the bytes
+matched to the capture's digest, the text matched to what is stored from
+the state's own read. On 2026-10-23 the Archive held none (no capture of
+the 2026 sample ballot; its crawler got the same 403 on the directives
+page in July and October), so Ohio stays ingest_failed until a capture
+appears or the Secretary lets Civitas's crawler through.
 """
 
 import io
@@ -77,11 +87,20 @@ import pdfplumber
 from lxml import html as lxml_html
 
 from app.pipeline.fetch.ballot_measure_text import NotYetPublished, join_lines
-from app.pipeline.fetch.ballot_measures_state_common import election_day, get_bytes, get_text, long_date
+from app.pipeline.fetch import web_archive
+from app.pipeline.fetch.ballot_measures_state_common import (
+    election_day,
+    get_bytes_unless_walled,
+    get_text_unless_walled,
+    long_date,
+)
 
 logger = logging.getLogger(__name__)
 
 DIRECTIVES_URL = "https://www.ohiosos.gov/elections/elections-officials/rules/"
+# Where the Secretary files directive documents: an archived copy is read
+# only of an address on the state's own host.
+_STATE_ASSETS = "https://www.ohiosos.gov/assets/"
 TITLE_AUTHORITY = "Ohio Ballot Board"
 
 _LINE_TOL = 3.0
@@ -418,8 +437,16 @@ def pdf_words(raw: bytes) -> list[dict]:
         ]
 
 
+def _read_ballot(raw: bytes, year: int, label: str) -> list[dict] | None:
+    try:
+        return parse_sample_ballot(pdf_words(raw), year)
+    except Exception:
+        logger.exception("OH official sample ballot (%s) was not parseable", label)
+        return None
+
+
 async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dict, str]] | None:
-    page_html = await get_text(client, DIRECTIVES_URL, "OH election directives")
+    page_html = await get_text_unless_walled(client, DIRECTIVES_URL, "OH election directives")
     if page_html is None:
         return None
     try:
@@ -432,14 +459,46 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
         return None
     if url is None:
         raise NotYetPublished(f"the Ohio Secretary of State's official sample ballot for {long_date(election_day(year))}")
-    raw = await get_bytes(client, url, "OH official sample ballot")
+    raw = await get_bytes_unless_walled(client, url, "OH official sample ballot")
     if raw is None:
         return None
-    try:
-        parsed = parse_sample_ballot(pdf_words(raw), year)
-    except Exception:
-        logger.exception("OH official sample ballot was not parseable")
-        return None
+    parsed = _read_ballot(raw, year, url)
     if parsed is None:
         return None
     return [(m, url) for m in parsed]
+
+
+async def fetch_archived(
+    client: httpx.AsyncClient, year: int, known_urls: list[str],
+) -> list[tuple[dict, str]] | None:
+    """The Secretary's sample ballot as the Internet Archive captured it,
+    for when www.ohiosos.gov is walled (ballot_measures_pdf calls this only
+    on SourceBlocked). Candidates: the sample ballot linked from the newest
+    capture of the directives page, then the addresses this election's
+    measures were last read from on the state's own host (`known_urls`).
+    Each candidate's newest capture is read byte for byte
+    (web_archive.read_capture) and parsed with every check the state's own
+    copy gets; the first that verifies is returned, its source the
+    capture's public address. None when no capture verifies: a missing
+    capture says nothing about Ohio's ballot."""
+    candidates: list[str] = []
+    page = await web_archive.newest_capture(client, DIRECTIVES_URL)
+    page_raw = await web_archive.read_capture(client, page, verify=False) if page else None
+    if page_raw is not None:
+        try:
+            url, page_ok = find_sample_ballot_url(page_raw.decode("utf-8", "replace"), year)
+        except Exception:
+            url, page_ok = None, False
+        if page_ok and url:
+            candidates.append(url)
+    candidates += [u for u in known_urls if u.startswith(_STATE_ASSETS) and u not in candidates]
+    for url in candidates:
+        capture = await web_archive.newest_capture(client, url)
+        raw = await web_archive.read_capture(client, capture) if capture else None
+        if raw is None:
+            continue
+        parsed = _read_ballot(raw, year, capture.page_url)
+        if parsed:
+            return [(m, capture.page_url) for m in parsed]
+    logger.warning("OH %d: no Internet Archive capture of the sample ballot verified (tried %s)", year, candidates)
+    return None

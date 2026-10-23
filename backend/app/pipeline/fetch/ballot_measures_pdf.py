@@ -41,6 +41,8 @@ import pdfplumber
 
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.ballot_measure_pdf_sources import source_for_state
+from app.models import BallotMeasure
+from app.pipeline.fetch import web_archive
 from app.pipeline.fetch.ballot_measure_text import DocumentNotLinked, NotYetPublished, SourceBlocked
 from app.pipeline.fetch.ballot_measures_al import fetch_measures as al_fetch_measures
 from app.pipeline.fetch.ballot_measures_ar import fetch_measures as ar_fetch_measures
@@ -89,6 +91,7 @@ from app.pipeline.fetch.ballot_measures_ms import fetch_measures as ms_fetch_mea
 from app.pipeline.fetch.ballot_measures_nh import fetch_measures as nh_fetch_measures
 from app.pipeline.fetch.ballot_measures_nv import fetch_measures as nv_fetch_measures
 from app.pipeline.fetch.ballot_measures_nv import fetch_republished as nv_fetch_republished
+from app.pipeline.fetch.ballot_measures_oh import fetch_archived as oh_fetch_archived
 from app.pipeline.fetch.ballot_measures_oh import fetch_measures as oh_fetch_measures
 from app.pipeline.fetch.ballot_measures_state_common import same_site
 from app.pipeline.fetch.ballot_measures_ut import fetch_measures as ut_fetch_measures
@@ -312,6 +315,20 @@ REPUBLISHED_STRATEGIES = {
     "az_publicity_pamphlet": az_fetch_republished,
 }
 
+# Readers that can read the state's own document from the Internet
+# Archive's capture of the state's own URL (web_archive.py), tried only
+# when the state's host is walled (SourceBlocked) and no office in
+# `republished_by` has a copy that verifies. Each takes (client, year, the
+# state-host addresses this election's measures were last read from) and
+# returns verified (parsed, capture url) pairs or None. An archived answer
+# must also agree with the measures already stored from the state's own
+# host (_agrees_with_stored).
+ARCHIVED_STRATEGIES = {
+    "oh_official_sample_ballot": oh_fetch_archived,
+}
+# The fields a capture must reproduce exactly: the ballot's words.
+_QUOTED_FIELDS = ("number", "official_title", "official_summary", "yes_means", "no_means")
+
 # These are documents a state republishes wholesale on the rare occasion
 # they change, so there is little to catch by polling more often: the
 # platform's general 72h API-cache default. That applies to a non-empty list only:
@@ -429,6 +446,48 @@ async def _from_republished_copy(
     return None
 
 
+def _stored_measures(db, state: str, election_date: str) -> list:
+    return (
+        db.query(BallotMeasure)
+        .filter(
+            BallotMeasure.state == state, BallotMeasure.election_date == election_date,
+            BallotMeasure.status != "removed",
+        )
+        .all()
+    )
+
+
+def _agrees_with_stored(state: str, pairs: list[tuple[dict, str]], stored: list) -> bool:
+    """Whether an archived answer quotes exactly the measures already
+    stored for this election. Nothing stored: nothing to disagree with (the
+    reader's own checks stand alone). A capture that differs is refused:
+    it may be older than the read on file, and a change of wording has to
+    come from a copy that can be dated after it."""
+    if not stored:
+        return True
+    want = sorted(tuple(getattr(m, f) or None for f in _QUOTED_FIELDS) for m in stored)
+    got = sorted(tuple(p.get(f) or None for f in _QUOTED_FIELDS) for p, _ in pairs)
+    if want != got:
+        logger.error("%s: the archived copy's measures differ from the text stored from the state's own host — refusing", state)
+        return False
+    return True
+
+
+async def _from_archive(
+    client: httpx.AsyncClient, db, state: str, strategy_key: str, year: int, election_date: str,
+) -> list[tuple[dict, str]] | None:
+    reader = ARCHIVED_STRATEGIES.get(strategy_key)
+    if reader is None:
+        return None
+    stored = _stored_measures(db, state, election_date)
+    known = [m.source_url for m in stored if m.source_url and not web_archive.captured_on(m.source_url)]
+    pairs = await reader(client, year, known)
+    if not pairs or not _agrees_with_stored(state, pairs, stored):
+        return None
+    logger.info("%s: read the state's document as archived by %s", state, web_archive.PUBLISHER)
+    return [({**parsed, "republished_by": web_archive.PUBLISHER}, url) for parsed, url in pairs]
+
+
 def _duplicate_ids(measures: list[dict]) -> list[str]:
     seen: set[str] = set()
     dupes: list[str] = []
@@ -526,6 +585,8 @@ async def fetch_state_measures_pdf(
             raise
         except SourceBlocked as blocked:
             pairs = await _from_republished_copy(client, state, source, strategy_key, year, blocked)
+            if pairs is None:
+                pairs = await _from_archive(client, db, state, strategy_key, year, election_date)
         except Exception:
             logger.exception("Multi-document ballot measure fetch failed for %s %d", state, year)
             return None
