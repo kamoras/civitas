@@ -35,6 +35,26 @@ class SourceBlocked(Exception):
     on. The message says what couldn't be read, for the log."""
 
 
+class DocumentNotLinked(Exception):
+    """Raised by a reader whose document, read before for this election, is
+    no longer linked where it was and was not found again elsewhere on the
+    state's site, while the reader still reads its recorded copy whole (its
+    self-check). Nothing has changed on the state's word: the measures on
+    file stay current, credited to the recorded document and dated by that
+    read, and the pipeline alerts only once the document has been unlinked
+    for RELINK_WINDOW_DAYS. `since`: the ISO date it was first missed."""
+
+    def __init__(self, awaited: str, *, since: str):
+        super().__init__(awaited)
+        self.since = since
+
+
+# Nights a document may stay unlinked (and not found again) before it is
+# alerted: a republish or a site reorganisation is usually back within a
+# day, and three nightly reads give the re-find three tries.
+RELINK_WINDOW_DAYS = 3
+
+
 class NotYetPublished(Exception):
     """Raised by a state's measure reader when the document it reads for
     this election has not been published YET — Maine's Citizen's Guide

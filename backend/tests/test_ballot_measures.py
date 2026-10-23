@@ -2221,3 +2221,32 @@ def test_a_rekeyed_measure_keeps_its_title_and_is_superseded_not_removed(db_sess
     assert left == [f"NM-{election}-old"]
 
 
+
+
+@pytest.mark.asyncio
+async def test_a_document_not_linked_keeps_the_last_read_and_alerts_only_past_the_window(
+        monkeypatch, db_session, freeze_utcnow):
+    """Nothing has changed on the state's word: the measures stay current
+    and the coverage stays covered; only a document unlinked past the
+    window is alerted, worded as what the nightly run does."""
+    from datetime import datetime
+
+    import app.ops_alerts as ops_alerts
+    from app.pipeline.fetch.ballot_measure_text import DocumentNotLinked
+
+    freeze_utcnow(datetime(2026, 10, 22, 6))
+    _direct_source(monkeypatch, [["1", "2"]])
+    await election_pipeline._sync_pdf_measures(db_session, None, "2026-11-03")
+    sent = []
+    monkeypatch.setattr(ops_alerts, "send_ops_alert", lambda subject, body, **kw: sent.append(body))
+    _direct_source(monkeypatch, [DocumentNotLinked("doc", since="2026-10-21")] * 2)
+    result = await election_pipeline._sync_ballot_measures(db_session, None, 2026)
+    assert result["failed_states"] == 0 and sent == []
+    assert _coverage(db_session).status == MeasureCoverage.COVERED
+    assert {m.status for m in db_session.query(BallotMeasure).all()} == {"certified"}
+
+    _direct_source(monkeypatch, [DocumentNotLinked("doc", since="2026-10-18")] * 2)
+    result = await election_pipeline._sync_ballot_measures(db_session, None, 2026)
+    assert result["failed_states"] == 1
+    assert len(sent) == 1 and "looks for the document again" in sent[0]
+    assert {m.status for m in db_session.query(BallotMeasure).all()} == {"certified"}

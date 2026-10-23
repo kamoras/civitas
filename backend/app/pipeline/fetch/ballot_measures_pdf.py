@@ -41,7 +41,7 @@ import pdfplumber
 
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.ballot_measure_pdf_sources import source_for_state
-from app.pipeline.fetch.ballot_measure_text import NotYetPublished, SourceBlocked
+from app.pipeline.fetch.ballot_measure_text import DocumentNotLinked, NotYetPublished, SourceBlocked
 from app.pipeline.fetch.ballot_measures_al import fetch_measures as al_fetch_measures
 from app.pipeline.fetch.ballot_measures_ar import fetch_measures as ar_fetch_measures
 from app.pipeline.fetch.ballot_measures_az import fetch_measures as az_fetch_measures
@@ -522,7 +522,7 @@ async def fetch_state_measures_pdf(
     if multi_strategy is not None:
         try:
             pairs = await multi_strategy(client, year)
-        except NotYetPublished:
+        except (NotYetPublished, DocumentNotLinked):
             raise
         except SourceBlocked as blocked:
             pairs = await _from_republished_copy(client, state, source, strategy_key, year, blocked)
