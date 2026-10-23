@@ -228,26 +228,31 @@ export const SECTIONS = {
     // section to the Navbar (recordTrail).
     match: ["/congress", "/compare", "/politicians"],
     tabs: [
+      // The floor's record, four ways: the Congress so far, and a day, a
+      // week or a month of it. PeriodNav draws them (ownToggle), so Day,
+      // Week and Month open the period of the date being read.
       {
         key: "reports",
         label: "Reports",
         href: "/congress",
+        ownToggle: true,
+        views: [
+          { key: "reports", label: "This Congress", href: "/congress" },
+          { key: "day", label: "Day", title: "Latest day", href: "/congress/day" },
+          { key: "week", label: "Week", title: "Latest week", href: "/congress/week" },
+          { key: "month", label: "Month", title: "Latest month", href: "/congress/month" },
+        ],
+      },
+      // The members: the chamber measure by measure, the directory where a
+      // reader finds their own, and two side by side.
+      {
+        key: "measures",
+        label: "Members",
+        href: MEASURES_HREF,
         views: [
           {
-            key: "reports",
-            label: "Floor",
-            href: "/congress",
-            ownToggle: true,
-            views: [
-              { key: "reports", label: "Day", href: "/congress" },
-              { key: "week", label: "Week", title: "Latest week", href: "/congress/week" },
-              { key: "month", label: "Month", title: "Latest month", href: "/congress/month" },
-            ],
-          },
-          {
             key: "measures",
-            label: "Members",
-            title: "By the numbers",
+            label: "By the numbers",
             href: MEASURES_HREF,
             views: [
               { key: "measures", label: "By the numbers", href: MEASURES_HREF },
@@ -262,17 +267,8 @@ export const SECTIONS = {
               },
             ],
           },
-        ],
-      },
-      // The directory first of the people pages: it is where a reader finds
-      // their own, and the pair compares two of them.
-      {
-        key: "members",
-        label: "Members",
-        href: MEMBERS_HREF,
-        views: [
           { key: "members", label: "Directory", title: "Members", href: MEMBERS_HREF },
-          { key: "compare", label: "Compare two", href: "/compare" },
+          { key: "compare", label: "Compare", title: "Compare two members", href: "/compare" },
         ],
       },
       { key: "bills", label: "Bills", href: "/congress/bills" },

@@ -2,13 +2,16 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { TOPIC_FEEDS, pageMetadata } from "@/lib/site";
 import { fetchGlance, fetchLatestDay, fetchWeek } from "@/lib/congressServer";
-import { dayHref, longDate } from "@/lib/congress";
+import { RECORD_SOURCE, dayHref, longDate, monthHref, weekHref } from "@/lib/congress";
+import { ordinal } from "@/components/scorecard/format";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PageMasthead from "@/components/layout/PageMasthead";
 import FollowFeed from "@/components/shared/FollowFeed";
-import DayReportView from "@/components/congress/DayReportView";
-import PeriodReportView from "@/components/congress/PeriodReportView";
+import BoxGrid from "@/components/shared/BoxGrid";
+import RecordBox from "@/components/shared/RecordBox";
+import { SourceLine } from "@/components/shared/Type";
+import { PeriodNav } from "@/components/congress/CongressNav";
 import ThisWeekStrip from "@/components/shared/ThisWeekStrip";
 import SectionTabs from "@/components/layout/SectionTabs";
 import SectionCards from "@/components/sections/SectionCards";
@@ -16,9 +19,9 @@ import CongressGlance from "@/components/congress/CongressGlance";
 import YourMembersRecord from "@/components/congress/YourMembersRecord";
 
 export const metadata = pageMetadata({
-  title: "What Happened in Congress Today",
+  title: "This Congress: Days in Session, Bills and Votes",
   description:
-    "Each day's record of the Senate and the House: bills passed, record votes with every member's vote, nominations confirmed and committee meetings, from the Congressional Record.",
+    "The sitting Congress so far: the days each chamber met, how far its bills got, and every day's, week's and month's record of the Senate and the House, from the Congressional Record.",
   path: "/congress",
   feed: TOPIC_FEEDS.congress,
 });
@@ -30,74 +33,89 @@ export default async function CongressPage() {
   // a revalidation. The fetch itself is still cached for five minutes.
   await connection();
   const [report, glance] = await Promise.all([fetchLatestDay(), fetchGlance()]);
-  // A day neither chamber did business (a pro forma sitting) read "met for
-  // 2 minutes" above eight zeros: lead with the recess and open the last
-  // week that had business instead. The backend decides (report.recess).
+  // In a recess the latest day is a pro forma sitting: the week and month
+  // views open on the last week that had business (the backend decides,
+  // report.recess), and a box says when each chamber sits next.
   const week = report?.recess ? await fetchWeek(report.recess.week) : null;
-  // The Congress so far in two pictures (the days each chamber sat, how far
-  // its bills got), then the reader's own members when a state is picked in
-  // the header, ahead of the day's or the week's record.
-  const lead = (pageDate: string) => (
-    <>
-      {glance && <CongressGlance glance={glance} />}
-      <YourMembersRecord />
-      <ThisWeekStrip variant="compact" pageDate={pageDate} />
-    </>
-  );
-  if (report?.recess && week) {
-    return (
-      <PeriodReportView
-        report={week}
-        kind="week"
-        strip={lead(report.date)}
-        hub={<SectionCards section="congress" current="reports" className="mt-6 mb-8" />}
-        lead={{
-          title: report.recess.headline,
-          figure: report.recess.figure,
-          body: (
-            <p>
-              {report.recess.sentence}{" "}
-              <Link
-                href={dayHref(report.date)}
-                className="underline decoration-white/30 underline-offset-4 hover:text-phos"
-              >
-                The latest sitting, {longDate(report.date)}
-              </Link>
-              .
-            </p>
-          ),
-        }}
-      />
-    );
-  }
-  if (report)
-    return (
-      <DayReportView
-        report={report}
-        strip={lead(report.date)}
-        hub={<SectionCards section="congress" current="reports" className="mt-6 mb-8" />}
-      />
-    );
+  const anchor = report ? (week?.start ?? report.date) : null;
   return (
     <div className="min-h-screen bg-surface-base font-sans text-ink-hi">
       <Navbar />
       <main id="main-content" tabIndex={-1} className="px-4 pb-16 pt-[var(--header-clearance)]">
         <div className="mx-auto max-w-6xl">
           <SectionTabs section="congress" active="reports" />
-          <PageMasthead eyebrow="What happened on the floor" title="Congress">
-            <p>
-              No day of Congress has been recorded yet. The{" "}
-              <Link
-                href="/congress/bills"
-                className="underline decoration-white/30 underline-offset-4 hover:text-phos"
-              >
-                bills tab
-              </Link>{" "}
-              shows every bill moving through this Congress.
-            </p>
+          <PageMasthead
+            className="mb-6"
+            eyebrow="What happened on the floor"
+            title={
+              glance ? `The ${ordinal(glance.calendar.congress)} Congress so far` : "This Congress"
+            }
+          >
+            {report ? (
+              <p>
+                The days each chamber met and how far this Congress&apos;s bills got. Day, Week and
+                Month open the record of the latest sitting.
+              </p>
+            ) : (
+              <p>
+                No day of Congress has been recorded yet. The{" "}
+                <Link
+                  href="/congress/bills"
+                  className="underline decoration-white/30 underline-offset-4 hover:text-phos"
+                >
+                  bills tab
+                </Link>{" "}
+                shows every bill moving through this Congress.
+              </p>
+            )}
             <FollowFeed className="mt-2" subject="Congress" feed={TOPIC_FEEDS.congress} />
           </PageMasthead>
-          <SectionCards section="congress" current="reports" />
+          {report && anchor && (
+            <PeriodNav
+              active="congress"
+              hrefs={{
+                congress: "/congress",
+                day: dayHref(report.date),
+                week: weekHref(anchor),
+                month: monthHref(anchor),
+              }}
+            />
+          )}
+          {report?.recess && week && (
+            <BoxGrid columns={1} className="mt-6">
+              <RecordBox
+                level={2}
+                kicker="Last week of business"
+                title={report.recess.headline}
+                href={weekHref(week.start)}
+                dek={week.sentence}
+                figure={report.recess.figure ?? null}
+                more={{
+                  label: "when Congress sits next",
+                  children: (
+                    <p>
+                      {report.recess.sentence}{" "}
+                      <Link
+                        href={dayHref(report.date)}
+                        className="underline decoration-white/30 underline-offset-4 hover:text-phos"
+                      >
+                        The latest sitting, {longDate(report.date)}
+                      </Link>
+                      .
+                    </p>
+                  ),
+                }}
+              >
+                <SourceLine>Source: {RECORD_SOURCE}.</SourceLine>
+              </RecordBox>
+            </BoxGrid>
+          )}
+          <div className="mt-8">
+            {glance && <CongressGlance glance={glance} />}
+            <YourMembersRecord />
+            {report && <ThisWeekStrip variant="compact" pageDate={report.date} />}
+          </div>
+          <SectionCards section="congress" current="reports" className="mt-8" />
         </div>
       </main>
       <Footer />
