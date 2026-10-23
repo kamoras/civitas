@@ -136,7 +136,7 @@ def test_the_sampler_reads_the_llm_server_and_keeps_the_last_reading(monkeypatch
 
 
 def test_a_newer_egrid_edition_is_found(monkeypatch):
-    monkeypatch.setattr(dr, "_record_try", lambda n, o: None)
+    monkeypatch.setattr(dr, "_record_try", lambda n, o, r=None: None)
     ctx = dr.Context("environmental.json", {"grid": {"edition": "eGRID2023"}}, date(2026, 10, 21), None)
     monkeypatch.setattr(dr, "_get_text", lambda url: "<h2>eGRID 2023</h2> eGRID2022")
     assert dr._egrid_stale(ctx) is None

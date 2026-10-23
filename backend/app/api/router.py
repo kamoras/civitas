@@ -9,6 +9,7 @@ from app.api.cards import router as cards_router
 from app.api.compare import router as compare_router
 from app.api.congress import router as congress_router
 from app.api.court import router as court_router
+from app.api.disclosure_scans import router as disclosure_scans_router
 from app.api.election_archive import router as election_archive_router
 from app.api.election_map import router as election_map_router
 from app.api.elections import router as elections_router
@@ -42,6 +43,7 @@ api_router = APIRouter(prefix="/api", default_response_class=JSONResponse)
 api_router.include_router(health_router, tags=["health"])
 api_router.include_router(politicians_router, tags=["politicians"])
 api_router.include_router(photos_router, tags=["photos"])
+api_router.include_router(disclosure_scans_router, tags=["photos"])
 api_router.include_router(senators_router, tags=["senators"])
 api_router.include_router(representatives_router, tags=["representatives"])
 api_router.include_router(presidents_router, tags=["presidents"])

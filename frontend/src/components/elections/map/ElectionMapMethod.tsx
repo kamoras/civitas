@@ -11,6 +11,7 @@ const pct = (x: number) => `${Math.round(x * 100)}%`;
 export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
   const c = data.calibration;
   const [b0, bLean, bInc, bNat] = data.model.beta;
+  const priors = data.model.priors;
   const house = data.chamber === "house";
   const tp = data.sources.trainingPolls;
   // A map frozen before the table became party blind (an archived
@@ -133,9 +134,32 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
             </p>
           )}
           <p>
-            Every number in these formulas is fitted by a script from the sources below and written
-            to <code className="font-mono text-small">{data.model.file}</code> ({data.model.fit});
-            none is typed by hand.
+            {priors?.fitted ? "Every number" : "Apart from five stated numbers, every number"} in
+            these formulas is fitted by a script from the sources below and written to{" "}
+            <code className="font-mono text-small">{data.model.file}</code> ({data.model.fit}).
+            {priors?.fitted ? null : priors ? (
+              <>
+                {" "}
+                The five are in how polls are weighted, each stated for a reason: a poll&apos;s
+                sample counts between {num(priors.sampleMin)} and {num(priors.sampleCap)} people, so
+                one huge online panel can&apos;t drown out the rest, and a poll that states none
+                counts as {num(priors.sampleRef)}, about a typical statewide poll; a pollster&apos;s
+                house effect is shrunk as if it had {priors.houseShrink} more polls matching the
+                others, so a pollster seen only a few times keeps less than half its raw lean; and
+                the half-life is chosen among {orList(priors.halfLifeGrid)} days, doubling each step
+                across the {data.pollWindowDays} days the past polls reach. They will be fitted on
+                those past polls once this election is certified, not while the map built on them is
+                live.
+              </>
+            ) : (
+              <>
+                {" "}
+                The five are in how polls are weighted (the limits on a poll&apos;s sample size, the
+                size a poll stating none counts as, how far house effects are shrunk and the
+                half-lives the fit chooses among): stated, not fitted, until this election is
+                certified.
+              </>
+            )}
           </p>
 
           <h3 className={TYPE.boxTitle}>Is it honest? Held-out checks</h3>
@@ -302,4 +326,15 @@ export default function ElectionMapMethod({ data }: { data: ElectionMapData }) {
       </details>
     </section>
   );
+}
+
+function num(n: number): string {
+  return n.toLocaleString("en-US");
+}
+
+function orList(values: number[]): string {
+  const words = values.map((v) => String(v));
+  return words.length > 1
+    ? `${words.slice(0, -1).join(", ")} or ${words[words.length - 1]}`
+    : words.join("");
 }

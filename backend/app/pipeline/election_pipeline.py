@@ -1267,7 +1267,6 @@ def _alert_ingest_failures(db: Session, failing: list[str], election_day: str) -
         ops_alerts.resolve_ops_alert(f"ballot-measure-ingest-{election_day}")
         return
     states = sorted(set(failing))
-    digest = hashlib.sha1("|".join(states).encode()).hexdigest()[:12]
     # Each state's own reason, as its coverage row recorded it — what the
     # reader said, so the alert answers "why" as well as "which".
     reasons = dict(
@@ -1275,7 +1274,20 @@ def _alert_ingest_failures(db: Session, failing: list[str], election_day: str) -
         .filter(MeasureCoverage.election_date == election_day, MeasureCoverage.state.in_(states))
         .all()
     )
+    # A wall already investigated and written up in the registry (`wall`)
+    # is not repeated every night: its page says the read failed, and the
+    # alert names only new problems.
+    walled = {s: host for s in states if (host := ballot_measure_pdf_sources.documented_wall(s, reasons.get(s)))}
+    if walled:
+        logger.info("Ballot measure ingest: documented walls not alerted: %s", walled)
+    states = [s for s in states if s not in walled]
+    if not states:
+        ops_alerts.resolve_ops_alert(f"ballot-measure-ingest-{election_day}")
+        return
+    digest = hashlib.sha1("|".join(states).encode()).hexdigest()[:12]
     why = "\n".join(f"- {state}: {reasons.get(state) or 'no reason recorded'}" for state in states)
+    if walled:
+        why += "\nDocumented walls, not repeated: " + ", ".join(f"{s} ({h})" for s, h in walled.items()) + "."
     # Fail loud: a silently-broken adapter and a quiet week look identical
     # from the outside, and this is the one dataset where that ambiguity
     # costs a vote.
