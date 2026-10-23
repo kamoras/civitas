@@ -901,8 +901,9 @@ answers these before it merges:
   title, a results URL, an FEC cycle) are built from the cycle by rule.
 - **Who holds office?** Read from the official source every run: members
   from Congress.gov's current roster (`member_lifecycle` for departures),
-  the president from the roster with the Federal Register cross-check
-  (`check_sitting_president`), justices from Oyez's sitting list
+  the president from the roster, completed from the Federal Register's
+  signer and Wikidata's record of the office when it lags an inauguration
+  (`presidential_roster.reconcile_with_register`), justices from Oyez's sitting list
   (`retire_departed_justices`, `court_roster_changed`), leadership and
   committees from congress-legislators. Never a typed name, majority party
   or count ("the nine justices").

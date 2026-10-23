@@ -34,6 +34,8 @@ from datetime import datetime
 from lxml import html as lxml_html
 from sqlalchemy.orm import Session
 
+from app.contact import BOT_USER_AGENT
+from app.ordinals import ordinal
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.pipeline.fetch.historical_executive_orders import NAME_TO_ID, derived_president_id
 from app.pipeline.fetch.http_utils import fetch_with_retry_requests
@@ -65,6 +67,7 @@ _RATE_LIMITER = RateLimiter(rps=1.0)
 _CACHE_TIER = "presidential-roster"
 _CACHE_KEY = "all-presidents"
 _CACHE_MAX_AGE_HOURS = 20
+_NO_EXPIRY_HOURS = 24 * 365 * 100
 
 
 @dataclass
@@ -78,6 +81,9 @@ class RosterEntry:
     # term_end is the successor's first day, standing in for a date the
     # roster page didn't give (see _parse_roster)
     end_from_successor: bool = False
+    # Set only on a president added from the Federal Register and Wikidata
+    # (reconcile_with_register), whom UCSB's EO table can't give a party yet.
+    party: str | None = None
 
 
 def _normalize_name(text: str) -> str:
@@ -197,41 +203,21 @@ def _parse_roster(html: str) -> list[RosterEntry]:
 
 
 async def fetch_presidential_roster(db: Session) -> list[RosterEntry]:
-    """Fetch + parse the full presidential roster in one request.
+    """Fetch + parse the full presidential roster in one request, then
+    reconcile its sitting president with the Federal Register
+    (reconcile_with_register).
 
-    Returns an empty list (never None) on failure — callers should treat
-    "couldn't fetch this run" as "leave existing rows alone," not as
-    "the presidency has no history."""
+    UCSB unreadable, the last roster read (any age) is reconciled instead;
+    with none ever read, returns an empty list (never None) — callers treat
+    "couldn't fetch this run" as "leave existing rows alone," not as "the
+    presidency has no history."""
     cached = api_cache_get(db, _CACHE_TIER, _CACHE_KEY, max_age_hours=_CACHE_MAX_AGE_HOURS)
     if cached is not None:
-        return [RosterEntry(**e) for e in cached["entries"]]
-
-    resp = await fetch_with_retry_requests(
-        _RATE_LIMITER, "GET", ROSTER_URL, log_label="UCSB presidential roster",
-    )
-    if resp is None or resp.status_code != 200:
-        logger.warning("Failed to fetch UCSB presidential roster (%s)", ROSTER_URL)
-        return []
-
-    try:
-        entries = _parse_roster(resp.text)
-    except Exception:
-        logger.exception("Failed to parse UCSB presidential roster")
-        return []
-
-    if len(entries) < 40:  # sanity floor — real page has 47 as of 2026-07
-        logger.warning(
-            "UCSB presidential roster parsed to only %d entries — page structure may have changed",
-            len(entries),
-        )
-        # 2026-07 (#218 review S1): used to return the partial list anyway
-        # (`entries or []`). `number` is pure list position, so even one
-        # silently-dropped row (e.g. 47->46) mis-numbers every president
-        # after it — and _sync_roster would still write that wrong
-        # numbering to the DB. Below the sanity floor, a partial parse is
-        # worse than none: return nothing and let the prior DB rows stand.
-        return []
-
+        return await reconcile_with_register(db, [RosterEntry(**e) for e in cached["entries"]])
+    entries = await _read_roster()
+    if entries is None:
+        last = api_cache_get(db, _CACHE_TIER, _CACHE_KEY, max_age_hours=_NO_EXPIRY_HOURS)
+        return await reconcile_with_register(db, [RosterEntry(**e) for e in last["entries"]]) if last else []
     for e in entries:
         if e.end_from_successor and e.page:
             end = await _end_from_own_page(e.page)
@@ -246,6 +232,36 @@ async def fetch_presidential_roster(db: Session) -> list[RosterEntry]:
             for e in entries
         ],
     })
+    return await reconcile_with_register(db, entries)
+
+
+async def _read_roster() -> list[RosterEntry] | None:
+    """UCSB's roster parsed, or None when it can't be read or parses short."""
+    resp = await fetch_with_retry_requests(
+        _RATE_LIMITER, "GET", ROSTER_URL, log_label="UCSB presidential roster",
+    )
+    if resp is None or resp.status_code != 200:
+        logger.warning("Failed to fetch UCSB presidential roster (%s)", ROSTER_URL)
+        return None
+
+    try:
+        entries = _parse_roster(resp.text)
+    except Exception:
+        logger.exception("Failed to parse UCSB presidential roster")
+        return None
+
+    if len(entries) < 40:  # sanity floor — real page has 47 as of 2026-07
+        logger.warning(
+            "UCSB presidential roster parsed to only %d entries — page structure may have changed",
+            len(entries),
+        )
+        # 2026-07 (#218 review S1): used to return the partial list anyway
+        # (`entries or []`). `number` is pure list position, so even one
+        # silently-dropped row (e.g. 47->46) mis-numbers every president
+        # after it — and _sync_roster would still write that wrong
+        # numbering to the DB. Below the sanity floor, a partial parse is
+        # worse than none: return nothing and let the prior DB rows stand.
+        return None
     return entries
 
 
@@ -265,3 +281,162 @@ async def _end_from_own_page(path: str) -> str | None:
     if resp is None or resp.status_code != 200:
         return None
     return parse_dates_in_office(resp.text)
+
+
+# ── The Federal Register as the second official source ────────────────
+#
+# Each presidential document (proclamation, executive order, memorandum) in
+# the Federal Register names the president who signed it: the official
+# record of who holds the office, published within days of a signing. When
+# its newest signer, signing after the roster's sitting president took
+# office, is someone else, UCSB's roster has fallen behind (an
+# inauguration or a succession it hasn't added yet), and the roster is
+# completed from the Register and Wikidata's record of the office (its
+# series ordinal, start date and the holder's current party) until UCSB
+# lists the new president itself.
+
+PRESIDENTIAL_DOCUMENTS_URL = "https://www.federalregister.gov/api/v1/documents.json"
+_SPARQL_URL = "https://query.wikidata.org/sparql"
+# Every holder of the office (Q11696) with the office's own series ordinal,
+# the holding's start and the holder's party with no end date.
+_HOLDERS_QUERY = """
+SELECT ?ordinal ?start ?personLabel ?partyLabel WHERE {
+  ?person p:P39 ?held . ?held ps:P39 wd:Q11696 ; pq:P1545 ?ordinal .
+  OPTIONAL { ?held pq:P580 ?start . }
+  OPTIONAL { ?person p:P102 ?ps . ?ps ps:P102 ?party . FILTER NOT EXISTS { ?ps pq:P582 ?end } }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+} ORDER BY DESC(xsd:integer(?ordinal)) LIMIT 4
+"""
+_REGISTER_CHECK_KEY = "register-check"
+_OTHER_LIMITER = RateLimiter(rps=1.0, name="roster_cross_check")
+
+
+def person_key(name: str) -> tuple[str, str] | None:
+    """(first, last) of a name with initials, suffixes and punctuation
+    dropped, so the Federal Register's "First Last" and the roster's "First
+    M. Last, Jr." compare equal; None for an empty name."""
+    words = [w for w in "".join(c if c.isalpha() or c == " " else "" for c in name.lower()).split()
+             if len(w) > 1 and w not in {"jr", "sr", "ii", "iii", "iv"}]
+    return (words[0], words[-1]) if words else None
+
+
+def party_code(label: str) -> str | None:
+    """The roster's party code for a party's name, by the convention UCSB's
+    tables use: each hyphenated word's initial ("Republican Party" R,
+    "Democratic-Republican Party" D-R)."""
+    words = [w.strip() for w in re.sub(r"\s+Party$", "", label.strip()).split("-") if w.strip()]
+    return "-".join(w[0].upper() for w in words) if words else None
+
+
+async def newest_presidential_signer() -> dict | None:
+    """{"name", "identifier", "signed"} of the newest presidential document
+    in the Federal Register, or None when it can't be read."""
+    resp = await fetch_with_retry_requests(
+        _OTHER_LIMITER, "GET", PRESIDENTIAL_DOCUMENTS_URL, log_label="Federal Register presidential documents",
+        params={"conditions[type][]": "PRESDOCU", "order": "newest", "per_page": 20,
+                "fields[]": ["president", "signing_date"]},
+    )
+    try:
+        rows = [r for r in resp.json().get("results") or []
+                if (r.get("president") or {}).get("name") and r.get("signing_date")] if resp is not None else []
+    except ValueError:
+        rows = []
+    if not rows:
+        logger.warning("Federal Register presidential documents could not be read")
+        return None
+    newest = max(rows, key=lambda r: r["signing_date"])
+    return {"name": newest["president"]["name"], "identifier": newest["president"].get("identifier"),
+            "signed": newest["signing_date"]}
+
+
+async def _first_signing(identifier: str, since: str) -> str | None:
+    """The earliest signing date on or after `since` of a president's
+    documents in the Federal Register."""
+    resp = await fetch_with_retry_requests(
+        _OTHER_LIMITER, "GET", PRESIDENTIAL_DOCUMENTS_URL, log_label="Federal Register first signing",
+        params={"conditions[type][]": "PRESDOCU", "conditions[president][]": identifier,
+                "conditions[signing_date][gte]": since, "order": "oldest", "per_page": 1,
+                "fields[]": ["signing_date"]},
+    )
+    try:
+        rows = resp.json().get("results") or [] if resp is not None else []
+    except ValueError:
+        return None
+    return rows[0].get("signing_date") if rows else None
+
+
+async def _office_holders() -> list[dict] | None:
+    """Wikidata's newest holders of the office: {"ordinal", "start", "name",
+    "party"}, newest first, or None when it can't be read."""
+    resp = await fetch_with_retry_requests(
+        _OTHER_LIMITER, "GET", _SPARQL_URL, log_label="Wikidata office holders",
+        params={"query": _HOLDERS_QUERY}, headers={"Accept": "application/sparql-results+json",
+                                                   "User-Agent": BOT_USER_AGENT},
+    )
+    try:
+        rows = resp.json()["results"]["bindings"] if resp is not None and resp.status_code == 200 else None
+    except (ValueError, KeyError):
+        rows = None
+    if rows is None:
+        return None
+    value = lambda b, k: (b.get(k) or {}).get("value")  # noqa: E731
+    return [{"ordinal": int(value(b, "ordinal")), "start": (value(b, "start") or "")[:10] or None,
+             "name": value(b, "personLabel") or "", "party": party_code(value(b, "partyLabel") or "")}
+            for b in rows if (value(b, "ordinal") or "").isdigit()]
+
+
+async def reconcile_with_register(db: Session, entries: list[RosterEntry]) -> list[RosterEntry]:
+    """The roster with its sitting president checked against the Federal
+    Register's newest presidential document, and completed when UCSB is
+    behind it: the outgoing entry ends on the new term's first day, and the
+    new president is added with Wikidata's ordinal, start date (else the
+    first document they signed) and party.
+
+    The outcome is stored (api_cache, `register_check`) for the nightly
+    check, which raises an alert only when this could not resolve a
+    disagreement. A Register that can't be read changes nothing."""
+    sitting = entries[-1] if entries and entries[-1].term_end is None else None
+    signer = await newest_presidential_signer() if entries else None
+    if signer is None:
+        return entries
+    outcome = {"signer": signer["name"], "signed": signer["signed"], "problem": None}
+    key = person_key(signer["name"])
+    if sitting is not None and (person_key(sitting.name) == key or signer["signed"] < sitting.term_start):
+        api_cache_set(db, _CACHE_TIER, _REGISTER_CHECK_KEY, outcome)
+        return entries  # the same person, or the Register behind the roster
+
+    holders = await _office_holders()
+    holder = next((h for h in holders or [] if person_key(h["name"]) == key), None)
+    since = sitting.term_start if sitting else ""
+    first = await _first_signing(signer["identifier"], since) if signer.get("identifier") else None
+    start = holder["start"] if holder and holder["start"] and holder["start"] >= since else first
+    if holders is None:
+        outcome["problem"] = "Wikidata's record of the office could not be read"
+    elif holder is None:
+        outcome["problem"] = f"Wikidata does not yet record {signer['name']} as holding the office"
+    elif not holder["party"]:
+        outcome["problem"] = f"Wikidata records no current party for {signer['name']}"
+    elif not start:
+        outcome["problem"] = f"no start date for {signer['name']}'s term in Wikidata or the Register"
+    api_cache_set(db, _CACHE_TIER, _REGISTER_CHECK_KEY, outcome)
+    if outcome["problem"]:
+        logger.warning("Roster behind the Federal Register (%s): %s", signer["name"], outcome["problem"])
+        return entries
+
+    number = max(holder["ordinal"], (entries[-1].number + 1) if entries else 1)
+    if sitting is not None:
+        sitting.term_end = start
+    name = signer["name"]
+    # A derived id, as _parse_roster gives a president the id table doesn't
+    # list, so UCSB's own entry for them later keeps it.
+    entries = [*entries, RosterEntry(id=derived_president_id(name, number), name=name, term_start=start,
+                                     term_end=None, number=number, party=holder["party"])]
+    logger.warning("UCSB's roster lacks %s, who signs the Federal Register's presidential documents; added "
+                   "as the %s president from %s (Wikidata, the Register)", name, ordinal(number), start)
+    return entries
+
+
+def register_check(db: Session) -> dict | None:
+    """The last reconcile_with_register outcome: {"signer", "signed",
+    "problem"} (problem None when the roster agreed or was completed)."""
+    return api_cache_get(db, _CACHE_TIER, _REGISTER_CHECK_KEY, max_age_hours=_NO_EXPIRY_HOURS)
