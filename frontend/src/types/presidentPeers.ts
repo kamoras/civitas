@@ -34,6 +34,14 @@ export interface PresidentPeerMeasure {
   word: string | null;
   sentence: string;
   thin: boolean;
+  /** Average approval only: the presidency's lowest and highest single poll
+   *  and that the strip ranks averages, one line. */
+  aside?: string;
+  /** Average approval only: the hover detail for this presidency's mark and
+   *  each other presidency's (years and single-poll extremes), same order as
+   *  `distribution`; the years alone stand in where these are absent. */
+  detail?: string | null;
+  distributionDetails?: (string | null)[];
 }
 
 export interface PresidentPeers {
