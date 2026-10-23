@@ -370,3 +370,90 @@ class TestStateOffices:
         for contest in tv._contests(NE_SW_HTML, state_offices=True):
             assert len(contest) == 4
             assert contest[2] is None
+
+
+class TestEidScan:
+    """Montana's host sends its no-eid page off the host; the general is
+    found by reading the ids above the newest it serves. The page is the
+    host's real 2024 general (eid=450002785), as bundled for the readers'
+    self-check."""
+
+    BASE = "https://electionresults.mt.gov"
+
+    def _page(self):
+        from app.live_results import readiness
+
+        recording = readiness.load_recording("MT")
+        return next(iter(recording["responses"].values()))["body"]
+
+    def _client(self, served):
+        import httpx
+
+        requests = []
+
+        def handler(request):
+            url = str(request.url)
+            requests.append(url)
+            if "eid=" not in url:
+                return httpx.Response(302, headers={"location": "https://sosmt.gov/elections/results/"})
+            eid = int(url.rsplit("eid=", 1)[1])
+            if eid in served:
+                return httpx.Response(200, text=served[eid])
+            return httpx.Response(302, headers={"location": f"{self.BASE}/ErrorPages/Error.aspx"})
+
+        return httpx.AsyncClient(transport=httpx.MockTransport(handler)), requests
+
+    def _source(self, seed):
+        return {"base_url": self.BASE, "queries": [{"type": "FED", "map": "CTY"}], "eid_scan": {"from": seed}}
+
+    async def test_the_general_is_found_above_the_frontier_and_remembered(self, monkeypatch):
+        from datetime import date
+
+        from app.pipeline.fetch import state_candidates_totalvote as tv
+
+        monkeypatch.setattr(tv, "_general_eids", {})
+        monkeypatch.setattr(tv, "_scan_misses", {})
+        monkeypatch.setattr(tv, "election_today", lambda: date(2024, 10, 25))
+        primary = self._page().replace('value="General"', 'value="Primary"').replace("11/5/2024", "6/4/2024")
+        client, requests = self._client({450002770: primary, 450002785: self._page()})
+        async with client:
+            count = await tv.fetch_general_results(client, date(2024, 11, 5), "MT", self._source(450002760))
+        assert count is not None and count.page_url.endswith("eid=450002785")
+        assert sorted((c.office, c.district) for c in count.contests) == [("H", 1), ("H", 2), ("S", None)]
+        # The newest id the host served is the next scan's start.
+        assert tv._frontier(self.BASE, 0) == 450002785
+        requests.clear()
+        async with self._client({450002785: self._page()})[0] as again:
+            assert await tv.fetch_general_results(again, date(2024, 11, 5), "MT", self._source(450002760))
+
+    async def test_nothing_within_the_bound_is_not_published_and_held_off(self, monkeypatch):
+        from datetime import date
+
+        from app.pipeline.fetch import state_candidates_totalvote as tv
+
+        monkeypatch.setattr(tv, "_general_eids", {})
+        monkeypatch.setattr(tv, "_scan_misses", {})
+        monkeypatch.setattr(tv, "election_today", lambda: date(2024, 10, 25))
+        client, requests = self._client({})
+        async with client:
+            assert await tv.fetch_general_results(client, date(2024, 11, 5), "MT", self._source(450002000)) is None
+            assert len(requests) == 1 + tv.EID_SCAN_BOUND
+            requests.clear()
+            assert await tv.fetch_general_results(client, date(2024, 11, 5), "MT", self._source(450002000)) is None
+            assert len(requests) == 1  # the no-eid page only: the miss is remembered
+
+    async def test_from_election_day_each_pass_reads_one_chunk_and_moves_on(self, monkeypatch):
+        from datetime import date
+
+        from app.pipeline.fetch import state_candidates_totalvote as tv
+
+        monkeypatch.setattr(tv, "_general_eids", {})
+        monkeypatch.setattr(tv, "_scan_cursor", {})
+        monkeypatch.setattr(tv, "election_today", lambda: date(2024, 11, 5))
+        seed = 450002785 - tv.EID_SCAN_CHUNK - 5
+        client, requests = self._client({450002785: self._page()})
+        async with client:
+            assert await tv.fetch_general_results(client, date(2024, 11, 5), "MT", self._source(seed)) is None
+            assert len(requests) == 1 + tv.EID_SCAN_CHUNK
+            count = await tv.fetch_general_results(client, date(2024, 11, 5), "MT", self._source(seed))
+        assert count is not None and count.page_url.endswith("eid=450002785")

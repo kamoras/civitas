@@ -1927,10 +1927,14 @@ wrong number on election night is worse than none:
   the exception, and a TotalVote state whose page stops serving the staged
   general names its year page in `general_eid_discovery` (New Mexico's
   general, eid=2917, 2026-10-21). Montana's host sends its default page to
-  the Secretary of State's site, which is behind a bot wall since
-  2026-10-15; its election ids are not sequential (450002570, 450002785,
-  450002928), so none is found by rule, and the sync reads the default page
-  from poll close.
+  the Secretary of State's site, behind a bot wall since 2026-10-15, and no
+  unwalled page links its ids, so its entry names `eid_scan`: the host's
+  ids above the newest it is known to serve are read upward, one request a
+  second, to `EID_SCAN_BOUND` (twice the widest gap between its
+  consecutive elections: 450002570, 450002785, 450002928), each page taken
+  only on its own type and date; the whole bound once a day before
+  election day, a minute of it per sync pass from election day; every id
+  found becomes the next start (`/data/totalvote_eid_frontier.json`).
 - A race the state's feed stops listing under its label mid-count (a
   renamed contest) is placed by its candidates (`sync.place_by_candidates`:
   the one contest the reader could not place, `StateCount.unplaced`, whose
