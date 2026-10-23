@@ -68,11 +68,11 @@ from scipy import stats as scipy_stats
 from app.pipeline.analyze.party_line_record import load_record
 from app.pipeline.transform.normalize_votes import stored_vote
 from app.pipeline.analyze.score_calculator import (
-    ALGORITHM_VERSION,
     CONSTITUENT_FULL_CONFIDENCE_VOTES,
     SATURATION_QUANTILE,
     beyond_saturation,
     party_break_rate,
+    scoring_version,
     seat_break_residual,
     seat_relative_vote_score,
 )
@@ -639,7 +639,7 @@ def check_score_distribution(db, model=None) -> list[dict]:
         db.query(ScoreSnapshot.date, *snapshot_cols)
         .filter(
             ScoreSnapshot.entity_type == entity_type,
-            ScoreSnapshot.algorithm_version == ALGORITHM_VERSION,
+            ScoreSnapshot.algorithm_version == scoring_version(),
             # This Congress convened January 3 of its first year.
             ScoreSnapshot.date >= f"{congress_first_year(congress_now)}-01-03",
             ScoreSnapshot.date < today,
@@ -647,8 +647,7 @@ def check_score_distribution(db, model=None) -> list[dict]:
         .all()
     )
     # Same Congress by calendar date, the boundary the trend chart and the
-    # leaderboard arrows use. A CURRENT_CONGRESS setting left behind the
-    # calendar is ops_alerts.check_current_congress_staleness's to flag.
+    # leaderboard arrows use.
     by_date: dict[str, list[tuple]] = defaultdict(list)
     for row in history_rows:
         by_date[row[0]].append(row[1:])

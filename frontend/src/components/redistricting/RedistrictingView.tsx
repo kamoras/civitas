@@ -432,7 +432,7 @@ function MethodAndData({ data }: { data: StateRedistricting }) {
       <h2 id="method" className={TYPE.kicker}>
         Method &amp; data
       </h2>
-      <div className="mt-3 max-w-3xl space-y-3 text-small leading-relaxed text-ink-lo">
+      <div className="mt-3 max-w-3xl space-y-3 text-body leading-relaxed text-ink-lo">
         <p>
           How residents are counted, what a predecessor is and what &ldquo;seats by lean&rdquo;
           counts are behind each figure&apos;s &ldquo;More&rdquo; at the top of the page.
@@ -670,7 +670,7 @@ export default function RedistrictingStateView({ data }: { data: StateRedistrict
           aria-label={`Filter ${view} districts by city, town, county or district number`}
           className="mt-3 w-full min-w-0 border border-white/15 bg-surface-base px-3 py-2 font-mono text-small text-ink-hi placeholder:text-ink-min"
         />
-        <p className="mt-1.5 text-small text-ink-min">
+        <p className="mt-1.5 text-body text-ink-min">
           {view === "new"
             ? `Districts on the ${data.cycle} ballot, and where their residents lived before.`
             : `Districts the members now serving were elected in, and where their residents went.`}{" "}
@@ -699,7 +699,7 @@ export default function RedistrictingStateView({ data }: { data: StateRedistrict
               ))}
         </ol>
         {shown.length === 0 && (
-          <p className="border border-white/[0.09] p-4 text-small text-ink-min">
+          <p className="border border-white/[0.09] p-4 text-body text-ink-min">
             No district matches &ldquo;{filter}&rdquo;. Try the name of your city, town or county,
             or a district number.
           </p>

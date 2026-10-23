@@ -29,6 +29,12 @@ measured once, at the end.
 title. A direct jump counts as rank 1 when it lands on an accepted page, and
 as a miss otherwise.
 
+With --in-use (the pipeline's refresh, app/data_refresh.py), the fusion in
+use is measured on the same held-out probes and the paired comparison
+written as `_comparison` (macro MRR at 10 over probe types, and each
+type's): the refresh installs the refit only when it wins by more than one
+standard error and no type loses more than one.
+
 Run in the pipeline container, against the live indexes:
 
     python scripts/calibrate_search_fusion.py [--samples 150] [--per-type 150]
@@ -193,6 +199,16 @@ def _paired_gain(probes: list[dict], a: Fusion, b: Fusion) -> tuple[float, float
     return gain, se
 
 
+def _fusion_of(path: str) -> Fusion:
+    """The fusion of a calibration file (the copy in use), or plain RRF when
+    it holds none."""
+    try:
+        fitted = json.loads(pathlib.Path(path).read_text()).get("params") or {}
+    except (OSError, ValueError, AttributeError):
+        fitted = {}
+    return Fusion(**{k: float(v) for k, v in fitted.items() if k in Fusion.__dataclass_fields__})
+
+
 def report(probes: list[dict], f: Fusion) -> dict:
     before, after = per_type(probes, None), per_type(probes, f)
     out = {}
@@ -218,8 +234,9 @@ def main() -> None:
     ap.add_argument("--per-type", type=int, default=150, help="site-search probes kept per type")
     ap.add_argument("--seed", type=int, default=20260730)
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--in-use", default=None, help="the calibration in use, to measure the refit against")
+    ap.add_argument("--output", default=None, help="where to write (default: the bundled file)")
     args = ap.parse_args()
-
 
     db = SessionLocal()
     try:
@@ -231,8 +248,15 @@ def main() -> None:
 
     plain = fit(fit_half, [Fusion(k=k, document_weight=w) for k, w in itertools.product(*GRID.values())])
     if plain is None:
-        print("No fusion keeps every site-search type within a standard error of before.")
-        raise SystemExit(1)
+        refused = "No fusion keeps every site-search type within a standard error of before."
+        print(refused)
+        if not args.in_use:
+            raise SystemExit(1)
+        # The refresh keeps the copy in use and records why.
+        out = {"params": asdict(_fusion_of(args.in_use)), "_comparison": {"delta": 0.0, "se": 0.0, "refused": [refused]}}
+        if not args.dry_run:
+            pathlib.Path(args.output or FUSION_PATH).write_text(json.dumps(out, indent=2) + "\n")
+        return
     gated = fit(fit_half, [Fusion(k=k, document_weight=w, strong_match=s, weak_weight=g)
                            for k, w, s, g in itertools.product(*GRID.values(), *GATE.values())])
     chosen, gate_note = plain, "no gated fusion met the constraint"
@@ -254,9 +278,17 @@ def main() -> None:
         "held_out": report(held, chosen),
         "kinds": sorted(index_kinds(args.index) or ()),
     }
+    if args.in_use and chosen == _fusion_of(args.in_use):
+        out["_comparison"] = {"unchanged": True}  # the same fusion: only the measurements are new
+    elif args.in_use:
+        current = _fusion_of(args.in_use)
+        diffs: dict[str, list[float]] = collections.defaultdict(list)
+        for p in held:
+            diffs[p["type"]].append(reciprocal_ranks(p, chosen) - reciprocal_ranks(p, current))
+        out["_comparison"] = site_probes.paired_comparison(dict(diffs), f"held-out MRR at {CUTOFF}, macro over probe types")
     print(json.dumps(out, indent=2))
     if not args.dry_run:
-        FUSION_PATH.write_text(json.dumps(out, indent=2) + "\n")
+        pathlib.Path(args.output or FUSION_PATH).write_text(json.dumps(out, indent=2) + "\n")
 
 
 if __name__ == "__main__":

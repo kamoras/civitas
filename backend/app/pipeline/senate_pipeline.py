@@ -438,8 +438,8 @@ def _record_score_snapshots(db: Session, failed: "set[str] | frozenset[str]" = f
     `failed`: ids of members this run did not score. They keep the scores
     of the last run they passed, which an older algorithm may have
     produced, so they get no snapshot today rather than one stamped with
-    this run's ALGORITHM_VERSION (and keep any earlier one from today)."""
-    from app.pipeline.analyze.score_calculator import ALGORITHM_VERSION, compute_overall_score
+    this run's scoring version (and keep any earlier one from today)."""
+    from app.pipeline.analyze.score_calculator import compute_overall_score, scoring_version
 
     today = utcnow().strftime("%Y-%m-%d")
     db.query(ScoreSnapshot).filter(
@@ -449,6 +449,7 @@ def _record_score_snapshots(db: Session, failed: "set[str] | frozenset[str]" = f
     ).delete(synchronize_session=False)
 
     senators = [s for s in db.query(Senator).all() if s.id not in failed]
+    version = scoring_version()
     for s in senators:
         db.add(ScoreSnapshot(
             entity_type="senator",
@@ -460,7 +461,7 @@ def _record_score_snapshots(db: Session, failed: "set[str] | frozenset[str]" = f
             score_3=s.score_constituent_alignment,
             score_4=s.score_funding_diversity,
             score_5=s.score_legislative_effectiveness,
-            algorithm_version=ALGORITHM_VERSION,
+            algorithm_version=version,
         ))
     db.commit()
     logger.info("Recorded score snapshots for %d senators on %s", len(senators), today)

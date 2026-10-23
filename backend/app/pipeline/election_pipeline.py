@@ -82,7 +82,7 @@ from app.pipeline.fetch import (
     coverage_captions,
     senate_classes,
 )
-from app.pipeline.fetch.ballot_measure_text import NotYetPublished
+from app.pipeline.fetch.ballot_measure_text import RELINK_WINDOW_DAYS, DocumentNotLinked, NotYetPublished
 from app.pipeline.run_tracker import PipelineRunTracker, STALE_PIPELINE_TIMEOUT, acquire_tracked_run, skip_reason_text
 from app.time_utils import utcnow
 
@@ -1065,7 +1065,7 @@ async def _fetch_with_reasons(
     with _reader_reasons() as reasons:
         try:
             return await ballot_measures_pdf.fetch_state_measures_pdf(client, db, state, year, election_day), reasons
-        except NotYetPublished:
+        except (NotYetPublished, DocumentNotLinked):
             raise
         except Exception as exc:
             logger.exception("PDF measure fetch raised for %s", state)
@@ -1106,6 +1106,24 @@ async def _sync_pdf_measures(
         fresh = ballot_measures_pdf.cached_answer(db, state, year) is None
         try:
             listed, reasons = await _fetch_with_reasons(client, db, state, year, election_day)
+        except DocumentNotLinked as unlinked:
+            # The state's word is unchanged: the measures on file stay as
+            # they are, credited to the recorded document and dated by that
+            # read, and the coverage status is left alone. Alerted only once
+            # the document has stayed unlinked past the window.
+            row = _coverage_row(db, state, election_day)
+            days = (utcnow().date() - date.fromisoformat(unlinked.since)).days
+            note = (f"{unlinked}: no longer linked since {unlinked.since} and not found elsewhere on the state's "
+                    "site; its reader passes its self-check on the recorded document, so the measures read "
+                    "from it stay current. The nightly run looks for the document again.")
+            if row is not None:
+                row.error_detail = note
+                row.checked_at = utcnow()
+            db.commit()
+            if days >= RELINK_WINDOW_DAYS:
+                failed += 1
+                failing.append(state)
+            continue
         except NotYetPublished as awaited:
             prior = _coverage_row(db, state, election_day)
             # Measures the source itself reports as no longer on this

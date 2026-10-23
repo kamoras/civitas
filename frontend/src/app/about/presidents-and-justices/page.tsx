@@ -180,7 +180,9 @@ export default function PresidentsAndJusticesChapter() {
               that begins near the top of a recession usually sees unemployment fall a long way, and
               inherited inflation usually lingers. So each sits beside what presidents who started
               at the same level went on to see. A presidency shorter than a full term (the sitting
-              one, or one cut short) is compared with predecessors over the same number of days.
+              one, or one cut short) is set beside every other presidency over the same number of
+              days from its first poll, its average approval and its change alike, and presidencies
+              polled for fewer days are left out: approval tends to fall as a term goes on.
             </P>
           </Box>
           <Box

@@ -138,7 +138,7 @@ function BillsPageContent() {
                 Introduced and Referred — but without this line it reads
                 as a bug next to a "Referred to Committee" count in the
                 tens of thousands sitting directly below it. */}
-            <p className="mt-1 font-sans text-small text-ink-min">
+            <p className="mt-1 font-sans text-body text-ink-min">
               Excludes bills only introduced or automatically referred to committee: nearly every
               bill clears that step within days; this counts what&apos;s moved further.
             </p>
@@ -625,7 +625,7 @@ function HotBillsList({
     <>
       {/* Which list this is: most days no live issue names a bill, and the
           backend then serves what moved this week (bill_service). */}
-      <p className="mb-2 max-w-3xl text-small leading-relaxed text-ink-lo">
+      <p className="mb-2 max-w-3xl text-body leading-relaxed text-ink-lo">
         {moved
           ? `No Action Center issue names a bill right now, so this lists bills that moved this week: a recorded action since ${since}, past referral to committee, latest first.`
           : "Bills named in today's Action Center issues, most-named first."}

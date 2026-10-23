@@ -231,7 +231,7 @@ export default async function NominationPage({ params }: PageProps) {
                 <h2 id="senators" className={TYPE.section}>
                   How each senator voted
                 </h2>
-                <p className="text-small text-ink-lo">
+                <p className="text-body text-ink-lo">
                   On{" "}
                   <Link
                     href={rollCallHref({ chamber: "senate", congress: n.congress, ...n.finalVote })}

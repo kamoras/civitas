@@ -32,7 +32,7 @@ export default function NextField({ field }: { field: Field | null }) {
               ? `${n(field.registered)} ${field.registered === 1 ? "candidate has" : "candidates have"} registered for federal races`
               : "No candidate has registered for a Senate or House race yet"}
           </p>
-          <p className="mt-2 text-small text-ink-lo">
+          <p className="mt-2 text-body text-ink-lo">
             Registering with the FEC is not a place on the ballot: each state certifies its own
             ballot months from now. Open seats are the FEC&apos;s own coding.
           </p>
@@ -71,7 +71,7 @@ export default function NextField({ field }: { field: Field | null }) {
               </ul>
             </>
           )}
-          <p className="mt-3 text-small text-ink-lo">
+          <p className="mt-3 text-body text-ink-lo">
             {n(field.house.noFiling)} sitting House{" "}
             {field.house.noFiling === 1 ? "member has" : "members have"} no {field.cycle} filing on
             record yet

@@ -90,7 +90,7 @@ function AgencyRow({
 
 /**
  * Every agency the Federal Register lists, findable by name (the budgets
- * are their own page, /agencies/budget, the "Budgets" card below). A plain GET
+ * are their own page, /executive/budgets, the "Budgets" card below). A plain GET
  * form over the server's render, so a search is a URL and works without
  * JavaScript.
  */
@@ -180,7 +180,7 @@ export default async function AgenciesPage({
                 )}
               </p>
               {linking && index.agencies.length > 0 && (
-                <p className="mt-3 max-w-2xl text-small text-ink-lo">
+                <p className="mt-3 max-w-2xl text-body text-ink-lo">
                   Documents stored before agencies were read are still being linked to the agency
                   that issued them: {linking.linked.toLocaleString("en-US")} of{" "}
                   {linking.total.toLocaleString("en-US")} so far. Until then a document count here
@@ -188,7 +188,7 @@ export default async function AgenciesPage({
                 </p>
               )}
               {index.agencies.length === 0 && (
-                <p className="mt-3 text-small text-ink-lo">
+                <p className="mt-3 text-body text-ink-lo">
                   The Federal Register&apos;s agency list hasn&apos;t been read yet. Civitas reads
                   it when the pipeline starts and tries again every hour until it has it; this is a
                   gap on Civitas, not a government without agencies.

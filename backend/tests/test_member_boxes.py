@@ -138,3 +138,12 @@ def test_no_template_names_a_member_with_a_pronoun(senator, db_session):
     text = json.dumps(json.loads(get_politician("ron-doe", db_session).body)["boxes"]).lower()
     for pronoun in (" he ", " she ", " his ", " her ", " they ", " their "):
         assert pronoun not in text
+
+
+def test_a_thin_record_draws_no_verdict(db_session):
+    """Under the measures page's minimum record, no comparison, as there."""
+    db_session.add(PresidentialSupport(chamber="senate", member_id="new-doe", congress=119, party="D",
+                                       with_president=0, votes=4, expected=0.9, computed_at=datetime(2026, 10, 21)))
+    db_session.commit()
+    box = mb.president_box(db_session, "new-doe")
+    assert box["verdict"] is None and box["dek"] == "0% of the counted votes."

@@ -270,3 +270,81 @@ def test_nothing_in_the_app_imports_the_detector_module():
             for alias in node.names
         }
         assert not {m for m in imported if m == "cv2" or m.endswith("face_detection")}, path
+
+
+# ── the daily refit (scripts/calibrate_member_photos.py) ─────────────
+
+def _refit_module():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("calibrate_member_photos",
+                                                  BACKEND / "scripts" / "calibrate_member_photos.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _row(b, bio, dep, bio_sha=None, dep_sha=None):
+    return MemberPhoto(bioguide_id=b, source_url=DEPICTION, depiction_url=DEPICTION, bioguide_face_share=bio,
+                       depiction_face_share=dep, bioguide_sha256=bio_sha, depiction_sha256=dep_sha, checked_at=NOW)
+
+
+def test_the_refit_reads_the_ceiling_and_margin_from_the_shares_alone():
+    """Headshots dominate the shares and most pairs are one picture measured
+    twice: the ceiling sits under the headshots, the margin past the
+    re-measurement noise, with no label."""
+    refit = _refit_module()
+    rng = np.random.default_rng(0)
+    rows = []
+    for i in range(400):
+        same = rng.random() < 0.8
+        dep = float(np.exp(rng.normal(np.log(0.42), 0.08)))
+        bio = dep * float(np.exp(rng.normal(0, 0.01))) if same else float(np.exp(rng.normal(np.log(0.42), 0.3)))
+        rows.append(_row(f"M{i:06d}", bio, dep, f"b{i}", f"d{i}"))
+    fitted = refit.fit(rows)
+    assert 0.30 < fitted["depiction_ceiling"] < 0.38
+    assert 1.01 < fitted["margin"] < 1.06
+
+
+def test_a_store_too_small_to_fit_is_refused():
+    refit = _refit_module()
+    with pytest.raises(SystemExit):
+        refit.fit([_row("M1", 0.4, 0.4)])
+
+
+def test_the_check_uses_only_labels_whose_images_are_the_ones_judged():
+    refit = _refit_module()
+    rows = [_row("A", 0.7, 0.25, "ba", "da"), _row("B", 0.4, 0.3, "bb-new", "db"), _row("C", 0.4, 0.4)]
+    labels = {"A": {"label": "bioguide", "sha256": {"bioguide": "ba", "depiction": "da"}},
+              "B": {"label": "depiction", "sha256": {"bioguide": "bb", "depiction": "db"}},
+              "C": {"label": "depiction", "sha256": {"bioguide": "bc", "depiction": "dc"}}}
+    current, stale = refit.current_labels(rows, labels)
+    assert current == {"A": "bioguide"} and stale == ["B", "C"]
+
+
+async def test_each_measured_image_is_hashed(db_session, measured, freeze_utcnow):
+    freeze_utcnow(NOW)
+    _member(db_session)
+    async with _client({DEPICTION: _jpeg(b"0.45"), PORTRAIT: _jpeg(b"0.40")}) as client:
+        await refresh_member_photos(db_session, client, timedelta(minutes=1))
+    row = db_session.get(MemberPhoto, "X000001")
+    assert row.depiction_sha256 == hashlib.sha256(b"\xff\xd80.45").hexdigest()
+    assert row.bioguide_sha256 == hashlib.sha256(b"\xff\xd80.40").hexdigest()
+
+
+async def test_a_measurement_stored_before_hashing_is_measured_again(db_session, measured, freeze_utcnow):
+    freeze_utcnow(NOW)
+    _member(db_session)
+    db_session.add(_row("X000001", 0.40, 0.45))
+    db_session.commit()
+    async with _client({DEPICTION: _jpeg(b"0.45"), PORTRAIT: _jpeg(b"0.40")}) as client:
+        assert await refresh_member_photos(db_session, client, timedelta(minutes=1)) == 1
+
+
+def test_a_refit_takes_effect_on_stored_choices_without_a_fetch(db_session, monkeypatch):
+    db_session.add(_row("X000001", 0.75, 0.30, "b", "d"))
+    db_session.commit()
+    monkeypatch.setattr(member_photos, "calibration", lambda: {"margin": 1.2, "depiction_ceiling": 0.25})
+    assert member_photos.redecide_stored(db_session) == 0
+    monkeypatch.setattr(member_photos, "calibration", lambda: {"margin": 1.2, "depiction_ceiling": 0.35})
+    assert member_photos.redecide_stored(db_session) == 1
+    assert db_session.get(MemberPhoto, "X000001").source_url == PORTRAIT

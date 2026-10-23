@@ -23,7 +23,7 @@ import {
  *
  * A tab with views (Members: By the numbers, Directory and Compare) adds a
  * row of them under the bar at every width, and the open view's own views a
- * second group beside it (By the numbers, Votes with the president). A tab
+ * second group beside it. A tab
  * or view that draws its own toggle (Reports' This Congress, Day, Week and
  * Month: PeriodNav, since a period opens the one of the date being read)
  * adds nothing.

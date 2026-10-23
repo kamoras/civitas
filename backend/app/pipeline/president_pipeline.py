@@ -148,7 +148,7 @@ def _sync_roster(db: Session, roster, eo_data: dict) -> int:
     for entry in roster:
         try:
             p = db.query(President).filter(President.id == entry.id).first()
-            party = PARTY_CORRECTIONS.get(entry.id) or eo_entry(eo_data, entry.id, entry.name).get("party")
+            party = PARTY_CORRECTIONS.get(entry.id) or eo_entry(eo_data, entry.id, entry.name).get("party") or entry.party
             is_current = entry.term_end is None
             if p is None:
                 if not party:
@@ -456,7 +456,7 @@ async def run_president_pipeline(db: Session) -> dict:
         if approval_series.get(p.id)
         and (p.is_current or (term_days(p.term_start, p.term_end) or FULL_TERM_DAYS) < FULL_TERM_DAYS)
         and (window := window_reference(
-            approval_series[p.id], [s for pid, s in completed_series.items() if pid != p.id],
+            approval_series[p.id], {pid: s for pid, s in completed_series.items() if pid != p.id},
             [
                 (party_series[q.id], q.party, q.term_polarization)
                 for q in presidents

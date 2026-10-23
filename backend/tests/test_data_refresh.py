@@ -3,7 +3,6 @@ own script on its own cadence, gated, the last good copy kept and an alert
 opened on a failure, and a staleness alert where a person must regenerate.
 Offline: the generators here are tiny inline scripts or mocked."""
 
-import gzip
 import importlib.util
 import json
 import pathlib
@@ -14,12 +13,16 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-from app import committee_routing
+from app import scoring_revisions
+from app.api import feed as feed_api
 from app import data_refresh as dr
 from app.config import settings
 from app.election_phase import ActiveElection
 from app.error_utils import output_summary
+from app.pipeline.analyze import score_calculator, score_version
 from app.pipeline.fetch.state_candidates_common import fec_party_label
 from app.state_names import STATE_NAMES
 
@@ -242,12 +245,15 @@ def test_jurisdictions_are_reread_weekly_until_they_are_the_sitting_congresses(m
     assert not dr._jurisdictions_due(_ctx(doc={"congress": 120}, last=datetime(2027, 1, 12)))
 
 
-def test_the_routing_fit_is_refit_when_its_inputs_change(monkeypatch):
-    monkeypatch.setattr(committee_routing, "data_hash", lambda: "new-inputs")
-    assert dr._routing_due(_ctx(doc={"data_hash": "old-inputs"}))
-    assert not dr._routing_due(_ctx(doc={"data_hash": "new-inputs"}))
-    assert dr._routing_gate({"data_hash": "new-inputs", "k": 5, "threshold": 0.4}, {}) == []
-    assert dr._routing_gate({"data_hash": "old-inputs", "k": 5, "threshold": 0.4}, {})
+def test_the_routing_fit_is_refit_daily_from_the_data_under_the_acceptance_rule():
+    spec = next(f for f in dr.DATA_FILES if f.name == "committee_routing_calibration.json")
+    argv = spec.command(_ctx(spec.name))
+    assert "{in_use}" in argv and "{out}" in argv and spec.accept is dr.precision_rule_accepts
+    assert spec.due(_ctx(spec.name, last=datetime(2000, 1, 1)))
+    good = {"reference": "data", "k": 15, "threshold": 0.5, "labels": {"bill": 9, "none": 3}}
+    assert dr._routing_gate(good, {}) == []
+    assert dr._routing_gate({**good, "reference": None}, {})
+    assert dr._routing_gate({**good, "labels": {"bill": 9, "none": 0}}, {})
 
 
 # ── gates ────────────────────────────────────────────────────────────
@@ -285,19 +291,31 @@ def test_the_coverage_gate_holds_a_big_move():
 
 # ── staleness of what a person regenerates ───────────────────────────
 
-def test_a_newer_survey_is_flagged_once_it_should_be_out():
-    assert dr._ces_stale(_ctx(doc={"fielded_year": 2024}, today=date(2027, 3, 1))) is None
-    assert "2026" in dr._ces_stale(_ctx(doc={"fielded_year": 2024}, today=date(2027, 4, 2)))
-    assert dr._ces_stale(_ctx(doc={"fielded_year": 2026}, today=date(2028, 6, 1))) is None
+def test_the_ces_gate_holds_an_older_or_thinner_survey():
+    old = {"fielded_year": 2024, "members": [{}] * 500, "priors": {"x": 1}}
+    assert dr._ces_gate({"fielded_year": 2025, "members": [{}] * 480, "priors": {"x": 1}}, old) == []
+    assert dr._ces_gate({"fielded_year": 2022, "members": [{}] * 500, "priors": {"x": 1}}, old)
+    assert dr._ces_gate({"fielded_year": 2026, "members": [{}] * 100, "priors": {"x": 1}}, old)
 
 
-def test_calibrations_tied_to_a_congress_are_flagged_when_the_next_one_is_complete(monkeypatch):
+def test_the_position_weight_is_refit_once_its_newest_congress_has_ended(monkeypatch):
+    monkeypatch.setattr(settings, "CURRENT_CONGRESS", 119)
+    assert not dr._position_confidence_due(_ctx(doc={"calibrated_through": 119}))
     monkeypatch.setattr(settings, "CURRENT_CONGRESS", 120)
-    assert dr._position_confidence_stale(_ctx(doc={"calibrated_through": 119})) is None
-    assert dr._commemorative_stale(_ctx(doc={"les_spearman_118th": 0.9})) is None
-    monkeypatch.setattr(settings, "CURRENT_CONGRESS", 121)
-    assert "120th has ended" in dr._position_confidence_stale(_ctx(doc={"calibrated_through": 119}))
-    assert "119th" in dr._commemorative_stale(_ctx(doc={"les_spearman_118th": 0.9}))
+    assert dr._position_confidence_due(_ctx(doc={"calibrated_through": 119}))
+    old = dict(dr.read("position_confidence.json"))
+    assert dr._position_confidence_gate(old, old) == []
+    assert dr._position_confidence_gate({**old, "structure": "trend"}, old)
+    assert dr._position_confidence_gate({**old, "calibrated_through": old["calibrated_through"] - 1}, old)
+    spec = next(f for f in dr.DATA_FILES if f.name == "position_confidence.json")
+    assert "{in_use}" in spec.command(_ctx(spec.name)) and spec.scoring_inputs(old) == dr._position_inputs(old)
+
+
+def test_the_commemorative_gate_holds_other_prototypes():
+    old = dict(dr.read("commemorative_calibration.json"))
+    assert dr._commemorative_gate(old, old) == []
+    assert dr._commemorative_gate({**old, "prototype_hash": "x"}, old)
+    assert dr._commemorative_gate({**old, "threshold": 1.5}, old)
 
 
 def test_the_vote_grades_gate():
@@ -308,42 +326,37 @@ def test_the_vote_grades_gate():
     assert any("moved" in f for f in dr._grades_gate(doubled, good))
 
 
-def test_the_district_lean_window_goes_stale_after_the_next_presidential_election():
-    doc = {"_window": "2020+2024"}
-    assert dr._district_lean_stale(_ctx(doc=doc, today=date(2028, 12, 14))) is None
-    assert "2028" in dr._district_lean_stale(_ctx(doc=doc, today=date(2028, 12, 15)))
+def test_the_maps_gate_keeps_the_researched_cycles_and_derived_ones():
+    bundled = dr._bundled_doc(dr.MAPS_FILE)
+    good = {**bundled, "cycles": {**bundled["cycles"], "2028": {"OH": {"map": "CD121"}}}, "_derived": {"2028": "x"}}
+    assert dr._maps_gate(good, bundled) == []
+    changed = {**good, "cycles": {**good["cycles"], "2026": {}}}
+    assert any("researched" in f for f in dr._maps_gate(changed, bundled))
+    assert any("ZZ" in f for f in dr._maps_gate({**good, "cycles": {**good["cycles"], "2028": {"ZZ": {"map": "CD121"}}}}, {}))
+    assert any("not now" in f for f in dr._maps_gate({**bundled, "_derived": {}}, good))
 
 
-def test_the_maps_stated_priors_alert_once_their_election_is_certified():
-    stated = {"fits": {"0": {"halfLife": 7.0}, "7": {"halfLife": 7.0}}}
-    fitted = {"fits": {h: {"priors": {"fitted": True}} for h in ("0", "7")}}
-    ctx = lambda doc, day: _ctx("forecast_model.json", doc, today=day)  # noqa: E731
-    # Not while the map built on them is live, nor in the results window.
-    assert dr._forecast_priors_stale(ctx(stated, date(2026, 10, 30))) is None
-    assert dr._forecast_priors_stale(ctx(stated, date(2027, 1, 2))) is None
-    # From the January 3 the election they were stated for is certified.
-    assert "--fit-priors" in dr._forecast_priors_stale(ctx(stated, date(2027, 1, 3)))
-    assert dr._forecast_priors_stale(ctx(fitted, date(2027, 1, 3))) is None
+def test_the_maps_priors_are_fitted_once_their_election_is_certified(monkeypatch):
+    """From the January 3 after the election the priors were stated for, the
+    refit also fits them (kept only under the acceptance rule, inside the
+    script), and the first day it can, it runs: no alert asks anyone to."""
+    monkeypatch.setattr(dr, "utcnow", lambda: datetime(2027, 1, 3, 16))
+    spec = next(f for f in dr.DATA_FILES if f.name == "forecast_model.json")
+    assert spec.stale(_ctx(spec.name)) is None
+    for day, fitted in ((date(2026, 10, 30), False), (date(2027, 1, 2), False), (date(2027, 1, 3), True)):
+        assert ("--fit-priors" in spec.command(_ctx(spec.name, today=day))) is fitted
+    yesterday, in_use = datetime(2027, 1, 2, 16), dict(dr.read("forecast_model.json"))
+    assert dr._forecast_due(_ctx(spec.name, in_use, today=date(2027, 1, 3), last=yesterday))
+    measured = {**in_use, "priorsComparison": {}}
+    assert not dr._forecast_due(_ctx(spec.name, measured, today=date(2027, 1, 3), last=yesterday))
 
 
-def test_a_newer_maddison_release_is_found_by_search(monkeypatch):
-    class Resp:
-        def __init__(self, names):
-            self.names = names
-
-        def raise_for_status(self):
-            pass
-
-        def json(self):
-            return {"data": {"items": [{"name": n} for n in self.names]}}
-
-    doc = {"_source": "Maddison Project Database 2023 (Bolt & van Zanden 2024)"}
-    monkeypatch.setattr(dr, "_record_try", lambda n, o, r=None: None)
-    monkeypatch.setattr(dr.httpx, "get", lambda *a, **k: Resp(["Maddison Project Database 2023"]))
-    assert dr._peer_gdp_stale(_ctx("peer_gdp_per_capita.json", doc)) is None
-    monkeypatch.setattr(dr.httpx, "get", lambda *a, **k: Resp(["Maddison Project Database 2026", "x"]))
-    assert "2026 is published" in dr._peer_gdp_stale(_ctx("peer_gdp_per_capita.json", doc))
-    assert dr._peer_gdp_stale(_ctx("peer_gdp_per_capita.json", doc, last=datetime.now())) is dr.UNCHECKED
+def test_the_peer_gdp_gate_holds_a_changed_rule_or_a_shorter_series():
+    old = {"peers": ["AUS"], "release": 2023, "countries": {"AUS": {"2022": 1.0}, "USA": {"2022": 2.0}}}
+    assert dr._peer_gdp_gate({**old, "release": 2026, "countries": {"AUS": {"2025": 1}, "USA": {"2025": 2}}}, old) == []
+    assert dr._peer_gdp_gate({**old, "peers": ["AUS", "NZL"]}, old)
+    assert dr._peer_gdp_gate({**old, "countries": {"USA": {"2022": 2.0}}}, old)
+    assert dr._peer_gdp_gate({**old, "countries": {"AUS": {"2021": 1}, "USA": {"2021": 2}}}, old)
 
 
 def test_a_check_that_did_not_look_today_leaves_its_alert_as_it_is(alerts):
@@ -372,37 +385,58 @@ def test_the_agency_crosswalk_gate_refuses_a_threshold_that_separates_nothing_or
     assert dr._agency_crosswalk_gate({**old, "toptier_agencies": 20}, old)
 
 
-def test_a_newer_acs_or_onet_is_found(monkeypatch):
-    """The bundled file names ACS and O*NET releases in its _source; a
-    newer one posted is an alert, nothing new is not, and a source that
-    can't be read says nothing."""
-    monkeypatch.setattr(dr, "_record_try", lambda n, o, r=None: None)
-    with gzip.open(dr.BUNDLED / dr.OCCUPATION_FILE, "rt") as f:
-        source = json.load(f)["_source"]
-    year = int(re.search(r"ACS (\d{4})", source)[1])
-    major, minor = (int(x) for x in re.search(r"O\*NET (\d+)\.(\d+)", source).groups())
-    ctx = _ctx(dr.OCCUPATION_FILE, today=date(year + 3, 1, 1))
+def test_the_occupation_crosswalk_is_refreshed_when_a_newer_acs_or_onet_is_out(monkeypatch, db_session):
+    """Yearly, and within a week of a newer release; the publishers are asked
+    at most monthly, and one that can't be read is no newer release."""
+    doc = {"acs_year": 2024, "onet_version": "31.0"}
+    monkeypatch.setattr(dr, "SessionLocal", lambda: db_session)
+    monkeypatch.setattr(db_session, "close", lambda: None)
+    monkeypatch.setattr(dr, "utcnow", lambda: datetime(2027, 3, 1))
+    last_week = datetime(2027, 2, 20)
     monkeypatch.setattr(dr, "_url_exists", lambda url: False)
-    monkeypatch.setattr(dr, "_get_text", lambda url: f"db_{major}_{minor}_text.zip")
-    assert dr._occupation_industry_stale(ctx) is None
-    monkeypatch.setattr(dr, "_url_exists", lambda url: str(year + 1) in url)
-    assert f"ACS {year + 1}" in dr._occupation_industry_stale(ctx)
-    monkeypatch.setattr(dr, "_url_exists", lambda url: False)
-    monkeypatch.setattr(dr, "_get_text", lambda url: f"db_{major + 1}_0_text.zip db_{major}_{minor}_x")
-    assert f"O*NET {major + 1}.0" in dr._occupation_industry_stale(ctx)
+    monkeypatch.setattr(dr, "_get_text", lambda url: "db_31_0_text.zip")
+    assert not dr._occupation_due(_ctx(dr.OCCUPATION_FILE, doc, today=date(2027, 3, 1), last=last_week))
+    asked = []
+    monkeypatch.setattr(dr, "_url_exists", lambda url: asked.append(url) or "2025" in url)
+    doc2 = {**doc, "acs_year": 2023}  # a different file: asked afresh
+    assert dr._occupation_due(_ctx(dr.OCCUPATION_FILE, doc2, today=date(2027, 3, 1), last=last_week))
+    assert asked
     monkeypatch.setattr(dr, "_get_text", lambda url: None)
-    assert dr._occupation_industry_stale(ctx) is None
+    assert dr._occupation_gate({"acs_year": 2024, "occupations": {"a": {"industry": "X"}}, "titles": {"t": "a"}},
+                               {"acs_year": 2024, "occupations": {"a": {"industry": "X"}}, "titles": {"t": "a"}}) == []
+    assert dr._occupation_gate({"acs_year": 2022}, {"acs_year": 2024})
 
 
-def test_a_newer_supreme_court_database_release_is_found(monkeypatch):
-    monkeypatch.setattr(dr, "_record_try", lambda n, o, r=None: None)
-    doc = {"scdbRelease": "2026_01"}
-    monkeypatch.setattr(dr, "_get_text", lambda url: '<a href="data/2026-release-01/">2026 Release 01</a>')
-    assert dr._court_finding_stale(_ctx("court_finding.json", doc)) is None
-    monkeypatch.setattr(dr, "_get_text", lambda url: '<a href="data/2027-release-01/">2027 Release 01</a>')
-    assert "2027 Release 01" in dr._court_finding_stale(_ctx("court_finding.json", doc))
-    monkeypatch.setattr(dr, "_get_text", lambda url: None)
-    assert dr._court_finding_stale(_ctx("court_finding.json", doc)) is None
+def test_the_court_finding_gate_holds_an_older_release_or_an_impossible_interval():
+    old = {"scdbRelease": "2026_01", "estimate": 0.02, "low": -0.01, "high": 0.05, "draws": 200,
+           "firstTerm": 1937, "lastTerm": 2025, "justices": 43}
+    assert dr._court_finding_gate({**old, "scdbRelease": "2027_01", "lastTerm": 2026, "justices": 44}, old) == []
+    assert dr._court_finding_gate({**old, "scdbRelease": "2025_02"}, old)
+    assert dr._court_finding_gate({**old, "estimate": 0.2}, old)
+    assert dr._court_finding_gate({**old, "justices": 40}, old)
+
+
+def test_only_the_district_lean_is_left_on_a_staleness_check():
+    """Its next window needs the next presidential election's precinct
+    returns; its alert states that they are out, not a task."""
+    assert [f.name for f in dr.DATA_FILES if f.command is None] == ["district_lean.json"]
+    why = dr._district_lean_stale(_ctx(doc={"_window": "2020+2024"}, today=date(2028, 12, 20)))
+    assert "2028" in why and not any(w in why for w in ("rerun", "Rerun", "research", "commit", "point "))
+
+
+def test_an_installed_refit_that_moves_scoring_inputs_records_a_scoring_revision(alerts):
+    base = score_version.ALGORITHM_VERSION
+    _write_runtime("t_rev.json", {"threshold": 0.3})
+    spec = dr.DataFile("t_rev.json", command=lambda ctx: _writer({"threshold": 0.3, "note": "new measurement"}),
+                       scoring_inputs=lambda d: d.get("threshold"))
+    assert dr.refresh_one(spec, _ctx("t_rev.json", dr.read("t_rev.json"))) == "refreshed"
+    assert score_version.scoring_version() == base  # the same threshold: no revision
+    spec = dr.DataFile("t_rev.json", command=lambda ctx: _writer(
+        {"threshold": 0.4, "_change": "threshold 0.3 -> 0.4"}), scoring_inputs=lambda d: d.get("threshold"))
+    assert dr.refresh_one(spec, _ctx("t_rev.json", dr.read("t_rev.json"))) == "refreshed"
+    assert score_version.scoring_version() == f"{base}.1"
+    assert scoring_revisions.revisions()[-1]["why"] == "threshold 0.3 -> 0.4"
+    assert f"{base}.1" in alerts.send.call_args.args[0] and alerts.send.call_args.kwargs.get("condition") is None
 
 
 def test_every_generated_file_on_record_exists_and_every_command_names_a_real_script():
@@ -468,14 +502,126 @@ def test_name_casing_refresh_reads_as_many_issues_as_the_bundled_table():
     assert argv[argv.index("--year") + 1] == "2026"
 
 
-def test_a_search_calibration_alerts_on_a_kind_its_fit_never_saw(monkeypatch):
-    check = dr._search_kinds_stale("calibrate_site_search.py")
+def test_a_search_calibration_is_refit_within_a_week_of_a_kind_its_fit_never_saw(monkeypatch):
     monkeypatch.setattr(dr.site_search, "index_kinds", lambda: {"member", "bill", "nomination"})
-    assert "nomination" in check(_ctx("site_search_calibration.json", {"kinds": ["member", "bill"]}))
-    assert check(_ctx("site_search_calibration.json", {"kinds": ["member", "bill", "nomination"]})) is None
-    assert "records no kinds" in check(_ctx("site_search_calibration.json", {"params": {}}))
-    monkeypatch.setattr(dr.site_search, "index_kinds", lambda: None)
-    assert check(_ctx("site_search_calibration.json", {"kinds": []})) is None
+    eight_days = datetime(2028, 2, 22)
+    monkeypatch.setattr(dr, "utcnow", lambda: datetime(2028, 3, 1))
+    assert dr._search_due(_ctx("s.json", {"kinds": ["member", "bill"]}, last=eight_days))
+    assert not dr._search_due(_ctx("s.json", {"kinds": ["member", "bill", "nomination"]}, last=eight_days))
+    assert dr._search_due(_ctx("s.json", {"kinds": ["member", "bill", "nomination"]}, last=datetime(2028, 1, 20)))
+    for spec in (f for f in dr.DATA_FILES if f.name in ("site_search_calibration.json",
+                                                         "search_fusion_calibration.json")):
+        argv = spec.command(_ctx(spec.name))
+        assert "{in_use}" in argv and "{out}" in argv and spec.accept is dr.held_out_beats_in_use
+        assert spec.stale(_ctx(spec.name)) is None  # no alert asks anyone to rerun it
+
+
+# ── the acceptance rule ──────────────────────────────────────────────
+
+def _comparison(delta, se, **more):
+    return {"params": {"x": 2}, "_comparison": {"metric": "m", "delta": delta, "se": se, **more}}
+
+
+@pytest.mark.parametrize("candidate,why", [
+    (_comparison(0.01, 0.02), "within noise"),
+    (_comparison(0.05, 0.01, subgroups={"name": {"delta": -0.3, "se": 0.1}, "typo": {"delta": 0.2, "se": 0.1}}),
+     "loses more than one standard error on name"),
+    (_comparison(0.05, 0.01, refused=["the refit jumps wrong on 2 fit-half probes"]), "jumps wrong"),
+    ({"params": {"x": 2}}, "no held-out comparison"),
+])
+def test_a_refit_that_does_not_clear_the_rule_keeps_the_copy_in_use_on_record_without_an_alert(alerts, candidate,
+                                                                                               why):
+    _write_runtime("t_acc.json", {"params": {"x": 1}})
+    spec = dr.DataFile("t_acc.json", command=lambda ctx: _writer(candidate), accept=dr.held_out_beats_in_use)
+    outcome = dr.refresh_one(spec, _ctx("t_acc.json", dr.read("t_acc.json")))
+    assert outcome.startswith("in use:") and why in outcome
+    doc = dr.read("t_acc.json")
+    assert doc["params"] == {"x": 1}
+    assert why in doc["_refreshed"]["kept"]["why"]
+    alerts.send.assert_not_called()
+    alerts.resolve.assert_called_with("data-refresh-t-acc")
+    # Not a failure (those start "kept"): it waits its cadence, not the week's retry.
+    assert not outcome.startswith("kept")
+
+
+def test_a_refit_that_wins_by_more_than_a_standard_error_is_installed(alerts):
+    _write_runtime("t_win.json", {"params": {"x": 1}})
+    candidate = _comparison(0.05, 0.01, subgroups={"name": {"delta": -0.005, "se": 0.01}})
+    spec = dr.DataFile("t_win.json", command=lambda ctx: _writer(candidate), accept=dr.held_out_beats_in_use)
+    assert dr.refresh_one(spec, _ctx("t_win.json", dr.read("t_win.json"))) == "refreshed"
+    assert dr.read("t_win.json")["params"] == {"x": 2}
+
+
+def test_a_refit_that_reproduces_the_parameters_in_use_installs_its_new_measurements(alerts):
+    _write_runtime("t_same.json", {"params": {"x": 1}, "kinds": ["a"]})
+    candidate = {"params": {"x": 1}, "kinds": ["a", "b"], "_comparison": {"unchanged": True}}
+    spec = dr.DataFile("t_same.json", command=lambda ctx: _writer(candidate), accept=dr.held_out_beats_in_use)
+    assert dr.refresh_one(spec, _ctx("t_same.json", dr.read("t_same.json"))) == "refreshed"
+    assert dr.read("t_same.json")["kinds"] == ["a", "b"]
+
+
+def _side(passed, correct, bound, recall):
+    return {"passed": passed, "correct": correct, "precision": correct / passed if passed else None,
+            "precision_exact_lower": bound, "recall": recall}
+
+
+@pytest.mark.parametrize("comparison,installed", [
+    ({"candidate": _side(100, 90, 0.82, 0.3), "in_use": _side(80, 60, 0.64, 0.2), "recall_delta": 0.1,
+      "recall_se": 0.01}, True),
+    ({"candidate": _side(100, 70, 0.61, 0.3), "in_use": _side(80, 60, 0.64, 0.2), "recall_delta": 0.1,
+      "recall_se": 0.01}, False),
+    ({"candidate": _side(10, 9, 0.82, 0.1), "in_use": _side(80, 70, 0.80, 0.2), "recall_delta": -0.1,
+      "recall_se": 0.01}, False),
+    ({"unchanged": True}, True),
+    ({"unchanged": True, "refused": ["no threshold meets the precision rule"]}, False),
+])
+def test_a_gate_refit_from_data_labels_installs_only_under_the_precision_rule(alerts, comparison, installed):
+    _write_runtime("t_gate.json", {"threshold": 0.4})
+    candidate = {"threshold": 0.5, "_comparison": comparison}
+    spec = dr.DataFile("t_gate.json", command=lambda ctx: _writer(candidate), accept=dr.precision_rule_accepts)
+    outcome = dr.refresh_one(spec, _ctx("t_gate.json", dr.read("t_gate.json")))
+    assert (outcome == "refreshed") is installed, outcome
+    assert dr.read("t_gate.json")["threshold"] == (0.5 if installed else 0.4)
+    alerts.send.assert_not_called()
+
+
+def test_a_requested_refit_is_due_at_the_next_run(db_session):
+    with patch.object(dr, "SessionLocal", return_value=db_session), patch.object(db_session, "close"):
+        dr._record_try("t_req.json", "refreshed")
+        assert not dr._every(1)(_ctx("t_req.json", last=dr._last_try("t_req.json")[0]))
+        dr.request_refit("t_req.json", "drift")
+        assert dr._last_try("t_req.json")[0] is None
+        assert dr._every(1)(_ctx("t_req.json", last=dr._last_try("t_req.json")[0]))
+
+
+def test_the_script_is_handed_the_copy_in_use(alerts):
+    """{in_use} is a file holding the copy in use, refreshed or bundled."""
+    _write_runtime("t_inuse.json", {"params": {"x": 7}})
+    script = ("import json,sys; old=json.load(open(sys.argv[1])); "
+              "json.dump({'params': old['params'], 'seen': old['params']['x']}, open(sys.argv[2],'w'))")
+    spec = dr.DataFile("t_inuse.json", command=lambda ctx: [sys.executable, "-c", script, "{in_use}", "{out}"])
+    assert dr.refresh_one(spec, _ctx("t_inuse.json", dr.read("t_inuse.json"))) == "refreshed"
+    assert dr.read("t_inuse.json")["seen"] == 7
+
+
+def test_a_shipped_fit_supersedes_an_accepted_refit(alerts, tmp_path):
+    """A commit that ships a new fit replaces a refit installed before it,
+    and the next refit is measured against what shipped."""
+    (tmp_path / "t_sup.json").write_text(json.dumps({"params": {"x": 1}}))
+    seen = []
+
+    def command(ctx):
+        seen.append(ctx.doc.get("params"))
+        return _writer(_comparison(0.0, 0.01))
+
+    spec = dr.DataFile("t_sup.json", command=command, accept=dr.held_out_beats_in_use)
+    with patch.object(dr, "BUNDLED", tmp_path), patch.object(dr, "_record_try"), \
+         patch.object(dr, "_last_try", return_value=(None, False, None)):
+        dr.install(spec, {"params": {"x": 2}}, ["refit"])
+        (tmp_path / "t_sup.json").write_text(json.dumps({"params": {"x": 3}}))  # a commit ships x=3
+        assert dr.run_refreshes([spec])["t_sup.json"].startswith("in use:")
+    assert seen[-1] == {"x": 3}
+    assert dr.read("t_sup.json")["params"] == {"x": 3}
 
 
 def test_a_shipped_regeneration_is_refreshed_the_next_day(alerts, tmp_path):
@@ -532,6 +678,26 @@ def test_a_failed_try_is_retried_the_next_day_once_what_it_runs_changes(alerts, 
         assert tried == [1, 1]
 
 
+def test_a_refit_under_the_acceptance_rule_is_measured_the_day_after_its_code_changes(alerts, tmp_path):
+    """A ranking change ships; the search calibration is refit against it the
+    next day, not at the month's end."""
+    script = tmp_path / "fit.py"
+    script.write_text("ranker v1")
+    tried = []
+    spec = dr.DataFile("t_rank.json", command=lambda ctx: [sys.executable, str(script), "{out}"],
+                       due=lambda ctx: False, accept=dr.held_out_beats_in_use)
+    with patch.object(dr, "BACKEND", tmp_path), patch.object(dr, "utcnow", return_value=datetime(2026, 10, 20)), \
+         patch.object(dr, "refresh_one", side_effect=lambda spec, ctx: tried.append(1) or "in use: within noise"), \
+         patch.object(dr, "_record_try"):
+        fitted_with = dr.recipe(spec.command(None))
+        with patch.object(dr, "_last_try", return_value=(datetime(2026, 10, 19), False, fitted_with)):
+            dr.run_refreshes([spec])
+            assert tried == []
+            script.write_text("ranker v2")
+            dr.run_refreshes([spec])
+            assert tried == [1]
+
+
 def test_a_fix_in_a_module_the_script_imports_is_retried_the_next_day(alerts, tmp_path):
     # The script names only itself; the fix lands two imports away, in a
     # module reached by a relative import.
@@ -574,3 +740,33 @@ def test_a_try_records_the_recipe_it_ran(db_session):
     with patch.object(dr, "SessionLocal", return_value=db_session), patch.object(db_session, "close"):
         dr._record_try("x.json", "kept: crashed", "abc")
         assert dr._last_try("x.json")[1:] == (True, "abc")
+
+
+def test_state_pvi_gate_refuses_a_flipped_or_short_candidate():
+    old = json.loads((dr.BUNDLED / "state_pvi.json").read_text())
+    assert dr._state_pvi_gate(old, old) == []
+    flipped = {**old, "states": {st: -v for st, v in old["states"].items()}}
+    assert any("DC" in f for f in dr._state_pvi_gate(flipped, old))
+    assert any("moved more than 5" in f for f in dr._state_pvi_gate(flipped, old))
+    short = {**old, "states": {st: v for st, v in old["states"].items() if st != "WY"}}
+    assert dr._state_pvi_gate(short, old)
+
+
+def test_scoring_reads_the_refreshed_position_weight(monkeypatch):
+    bundled = score_calculator._position_reliability("house")
+    doc = dict(dr.read("position_confidence.json"))
+    doc["chambers"] = {c: {**v, "n0": 99.0} for c, v in doc["chambers"].items()}
+    _write_runtime("position_confidence.json", doc)
+    assert score_calculator._position_reliability("house")["n0"] == 99.0
+    pathlib.Path(dr.runtime_data_path("position_confidence.json")).unlink()
+    assert score_calculator._position_reliability("house") == bundled
+
+
+def test_the_changelog_lists_scoring_revisions_newest_first():
+    scoring_revisions.record("v9.1", "position_confidence.json", "a" * 64, "structure pooled kept")
+    scoring_revisions.record("v9.1", "commemorative_calibration.json", "b" * 64, "threshold 0.33 -> 0.31")
+    app = FastAPI()
+    app.include_router(feed_api.router, prefix="/api")
+    listed = TestClient(app).get("/api/score-revisions").json()["revisions"]
+    assert [r["version"] for r in listed] == ["v9.1.2", "v9.1.1"]
+    assert scoring_revisions.scoring_version("v9.1") == "v9.1.2" and scoring_revisions.scoring_version("v9.2") == "v9.2"

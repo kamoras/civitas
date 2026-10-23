@@ -23,7 +23,7 @@ export default function IndustryBreakdown({ industries, donors }: IndustryBreakd
 
   return (
     <div>
-      <div className="text-small text-ink-lo mb-3">
+      <div className="text-body text-ink-lo mb-3">
         Where this member&apos;s money comes from, classified by industry using AI embedding
         similarity. Click an industry to see individual donors.
       </div>

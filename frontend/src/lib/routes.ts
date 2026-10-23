@@ -138,15 +138,19 @@ export const PRESIDENT_HREF = "/executive/president";
  *  proclamations, memoranda), newest first: a redirect resolved like
  *  PRESIDENT_HREF (app/executive/orders). */
 /** Every agency's budget, largest first: a page of its own, so the
- * "Budgets" tab is never the same page as "Every agency". A static segment
- * under /agencies, so it shadows an agency slug of the same name; the
- * agency sync alerts if the Federal Register ever lists one
- * (RESERVED_SLUGS in backend/app/pipeline/fetch/agencies.py). */
-export const AGENCY_BUDGETS_HREF = "/agencies/budget";
+ * "Budgets" tab is never the same page as "Every agency". Outside
+ * /agencies on purpose: every path under it is an agency's slug, which the
+ * Federal Register names, so a static page there could shadow an agency.
+ * It was /agencies/budget until 2026-10; that address still answers with a
+ * permanent redirect while no agency holds the slug (LEGACY_BUDGETS_SLUG). */
+export const AGENCY_BUDGETS_HREF = "/executive/budgets";
+
+/** The Budgets page's old address under /agencies (app/agencies/[slug]). */
+export const LEGACY_BUDGETS_SLUG = "budget";
 
 export const EXECUTIVE_ORDERS_HREF = "/executive/orders";
 
-/** Every member of a chamber on four plain measures, side by side
+/** Every member of a chamber on five plain measures, side by side
  *  (`?chamber=senate|house`). */
 export const MEASURES_HREF = "/congress/members/measures";
 
@@ -193,18 +197,18 @@ interface Section {
  * The menus list the `tabs` only, so no section names more than five pages.
  * A tab's `views` are its other pages: a second row of the tab bar on the
  * tab's own pages (SectionTabs). A view's own `views` are a toggle on the
- * page (Day, Week and Month on the floor reports; By the numbers and Votes
- * with the president). Every view keeps its own address: a page with its
- * own path renders on the server, is linkable and sits in the sitemap, and
- * the consolidation of the menus (2026-10) needed no redirect.
+ * page (Day, Week and Month on the floor reports). Every view keeps its
+ * own address: a page with its own path renders on the server, is linkable
+ * and sits in the sitemap, and the consolidation of the menus (2026-10)
+ * needed no redirect.
  *
  * Every tab and view is a page of its own (a link with `aria-current`, not
  * an in-page ARIA tab), and none is ever dropped for the election phase: a
  * page out of its phase (the seat map from election day on) says so itself,
  * so the tab still leads somewhere that explains. The hrefs repeat
- * `ELECTION_MAP_HREF`, `REDISTRICTING_HREF`, `NOMINATIONS_HREF` and
- * `presidentSupportHref("house")` as literals because those modules import
- * this one; `routes.test.ts` holds them equal. "Week" and "Month" lead to
+ * `ELECTION_MAP_HREF`, `REDISTRICTING_HREF` and `NOMINATIONS_HREF` as
+ * literals because those modules import this one; `routes.test.ts` holds
+ * them equal. "Week" and "Month" lead to
  * the report of the last week and month Congress met (app/congress/week,
  * app/congress/month), not the calendar's, so a recess never opens on an
  * empty report.
@@ -250,22 +254,14 @@ export const SECTIONS = {
         label: "Members",
         href: MEASURES_HREF,
         views: [
+          // Votes with the president is By the numbers' fifth row; its full
+          // page (every vote and the president's position, a chamber per
+          // address) is linked from that row and sits under it here.
           {
             key: "measures",
             label: "By the numbers",
             href: MEASURES_HREF,
-            views: [
-              { key: "measures", label: "By the numbers", href: MEASURES_HREF },
-              // "Votes with the president", not "With the president": the
-              // page is how often members voted with the president's
-              // stated positions.
-              {
-                key: "president",
-                label: "Votes with the president",
-                href: "/congress/president/house",
-                match: ["/congress/president"],
-              },
-            ],
+            match: ["/congress/president"],
           },
           { key: "members", label: "Directory", title: "Members", href: MEMBERS_HREF },
           { key: "compare", label: "Compare", title: "Compare two members", href: "/compare" },

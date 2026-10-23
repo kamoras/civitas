@@ -180,8 +180,7 @@ def expected_current_congress(now=None) -> int:
     odd year starts the next one (app.time_utils.congress_in_session), not
     Jan 1 or midnight.
 
-    Readers: ops_alerts.check_current_congress_staleness (whether a pinned
-    CURRENT_CONGRESS has fallen behind), and three surfaces that want the
+    Readers: three surfaces that want the
     Congress in office rather than the scored one — api/bills.py's bill
     record route (refusing a Congress that hasn't convened),
     api/action.py's related-bill links (the Congress a bill with none
@@ -191,7 +190,7 @@ def expected_current_congress(now=None) -> int:
     midnight and noon on Jan 3 they treat the outgoing Congress as current,
     which it is. The scored windows read settings.CURRENT_CONGRESS instead
     (app.config.scoring_congress), so an archived-DB re-run stays
-    reproducible when the operator pins it.
+    reproducible when it is pinned (ARCHIVE_MODE).
     """
     from app.time_utils import congress_in_session
 

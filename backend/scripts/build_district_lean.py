@@ -116,6 +116,7 @@ import statistics
 import struct
 import sys
 import time
+import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -128,7 +129,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import build_county_district_crosswalk as cw  # noqa: E402
 import fetch_state_leg_crosswalk as sl  # noqa: E402
 import fetch_state_pvi as sp  # noqa: E402
-from app.contact import BOT_USER_AGENT  # noqa: E402  (cw put backend/ on sys.path)
+from app.contact import BOT_USER_AGENT, CONTACT_EMAIL, UNSET_MESSAGE  # noqa: E402  (cw put backend/ on sys.path)
 from app.pipeline.fetch.state_candidates_tabular import _xlsx_rows  # noqa: E402
 from app.pipeline.fetch.state_candidates_tabular import xlsx_sheet_as_first as _as_first_sheet  # noqa: E402
 
@@ -328,6 +329,16 @@ def fetch(url: str, dest: Path, md5: str | None = None) -> Path:
                     while chunk := resp.read(1 << 20):
                         fh.write(chunk)
                 break
+            except urllib.error.HTTPError as exc:
+                # maine.gov's CloudFront refuses (403) a User-Agent with no
+                # contact in it, robots.txt included, and serves the same
+                # request naming one (measured 2026-10-23): not a wall, an
+                # unset CONTACT_EMAIL. Say so instead of retrying.
+                if exc.code == 403 and not CONTACT_EMAIL:
+                    raise SystemExit(f"{url}: HTTP 403. {UNSET_MESSAGE}") from exc
+                if attempt == 3:
+                    raise
+                time.sleep(5 * (attempt + 1))
             except OSError:
                 if attempt == 3:
                     raise
@@ -1033,14 +1044,19 @@ def two_party(v) -> float:
     return v[0] / (v[0] + v[1])
 
 
+# The two elections this build's precinct inputs are (VEST 2020, MEDSL
+# 2024), earlier then later, weighted as fetch_state_pvi weights its window.
+CYCLES = ("2020", "2024")
+
+
 def lean(d20, d24, n20: float, n24: float) -> float:
-    w = sp.CYCLE_WEIGHTS
-    return -100 * (w["2020"] * (two_party(d20) - n20) + w["2024"] * (two_party(d24) - n24))
+    earlier, later = sp.WEIGHTS
+    return -100 * (earlier * (two_party(d20) - n20) + later * (two_party(d24) - n24))
 
 
 def national_shares() -> tuple[dict, float, float]:
     inputs = json.loads(STATE_PVI.read_text())["inputs"]
-    nat = {y: [sum(v["D"] for v in inputs[y].values()), sum(v["R"] for v in inputs[y].values())] for y in sp.CYCLES}
+    nat = {y: [sum(v["D"] for v in inputs[y].values()), sum(v["R"] for v in inputs[y].values())] for y in CYCLES}
     return inputs, two_party(nat["2020"]), two_party(nat["2024"])
 
 

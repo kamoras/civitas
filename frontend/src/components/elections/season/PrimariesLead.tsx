@@ -35,7 +35,7 @@ export default function PrimariesLead({
       <h2 id="season-primaries" className={`${TYPE.kicker} border-b border-white/[0.07] py-2.5`}>
         The {season.cycle} primaries
       </h2>
-      <p className="mt-3 text-small text-ink-lo">
+      <p className="mt-3 text-body text-ink-lo">
         {season.firstPrimary &&
           `They opened on ${longDate(season.firstPrimary)}, by the FEC's calendar`}
         {season.lastPrimary ? `, and run through ${longDate(season.lastPrimary)}. ` : ". "}

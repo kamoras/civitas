@@ -22,6 +22,7 @@ persisted reference, no model.
 import statistics
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import date
 
 from sqlalchemy.orm import Session
 
@@ -38,6 +39,7 @@ from app.pipeline.analyze.president_scorer import (
     term_days,
 )
 from app.pipeline.fetch.cspan_historians_survey import edition_url, stored_edition
+from app.pipeline.fetch.presidential_approval import dated_approvals, stored_approval_history
 from app.pipeline.fetch.peer_gdp import PEER_COUNTRIES
 from app.time_utils import utcnow
 
@@ -135,8 +137,9 @@ _FIGURES = [
     _Figure(
         "approval", "Average approval", "How did the public rate the term?",
         "How much of the public approved of the job the president was doing, on average.",
-        "The average of every approval poll over the term. A sitting or cut-short presidency's tick is "
-        "predecessors over the same number of days, since approval tends to fall as a term goes on.",
+        "The average of every approval poll over the term. A sitting or cut-short presidency is set beside "
+        "every other presidency over the same number of days from its first poll, since approval tends to fall "
+        "as a term goes on; presidencies polled for fewer days are left out.",
         "presidencies with approval polls (from 1945)", _APPROVAL_SOURCE,
         lambda p: p.avg_approval, lambda p: p.avg_approval is not None and _full_term(p),
         _pct, "Approval averaged {shown} during the term.", "averaged higher", "averaged lower",
@@ -145,7 +148,9 @@ _FIGURES = [
         "approvalChange", "Approval change", "How did the public rate the term?",
         "How far approval moved from the start of the term to the end.",
         "The last quarter of the term's polls minus the first quarter. The tick is what presidents who "
-        "started at the same level went on to see: the higher a term starts, the further it tends to fall.",
+        "started at the same level went on to see: the higher a term starts, the further it tends to fall. "
+        "A sitting or cut-short presidency is set beside every other presidency over the same number of days "
+        "from its first poll.",
         "presidencies with approval polls (from 1945)", _APPROVAL_SOURCE,
         lambda p: p.approval_trend, lambda p: p.approval_trend is not None and _full_term(p),
         _signed, "Approval {moved} from the start of the term to the end.",
@@ -225,6 +230,95 @@ _FIGURES = [
 ]
 
 
+# A presidency shorter than a full term is ranked among every other
+# presidency's figure over the same number of days from its first poll
+# (president_scorer.window_reference's "values"): approval falls as a term
+# goes on, so part of a term beside whole terms flatters or penalises by
+# length alone. The field of each value, and the fact worded for the window.
+_WINDOW_FIELD = {"approval": "avg", "approvalChange": "trend"}
+_WINDOW_FACT = {"approval": "Approval averaged {shown} over the term's first {days} days.",
+                "approvalChange": "Approval {moved} over the term's first {days} days."}
+
+
+def _same_window(fig: _Figure, p: President) -> tuple[dict[str, float], int] | None:
+    """Each other presidency's figure over this one's days, by id, and the
+    days; None for a full term, another figure, or a reference written
+    before the values were kept (the row then compares with full terms
+    until the next president run writes them)."""
+    if fig.key not in _WINDOW_FIELD or _full_term(p):
+        return None
+    window = _approval_reference(None, bool(p.is_current), p.id)
+    values, days = window.get("values"), window.get("days")
+    if not values or days is None:
+        return None
+    field = _WINDOW_FIELD[fig.key]
+    return {pid: v[field] for pid, v in values.items() if v.get(field) is not None}, int(days)
+
+
+# UCSB's label for a row it filled in between polls: not a reading anyone
+# took, so never a presidency's lowest or highest single poll.
+_INTERPOLATED = "interpolated"
+
+# Each presidency's polls as (date, approve %), date order, the rows UCSB
+# interpolated left out, beside the date of its first row of any kind (the
+# day a same-window figure counts from, as approval_window does).
+Polls = dict[str, tuple[date, list[tuple[date, float]]]]
+
+
+def _polls(db: Session, presidents: list[President]) -> Polls:
+    out: Polls = {}
+    for o in presidents:
+        if o.avg_approval is None:
+            continue
+        history = stored_approval_history(db, o.id) or []
+        every = dated_approvals(history)
+        if every:
+            out[o.id] = (every[0][0], dated_approvals([q for q in history if q.source != _INTERPOLATED]))
+    return out
+
+
+def _poll(reading: tuple[date, float]) -> str:
+    """"34% (Mar 2026)"."""
+    return f"{reading[1]:.0f}% ({reading[0].strftime('%b %Y')})"
+
+
+def _extremes(polls: Polls, pid: str, days: int | None) -> tuple[str, str] | None:
+    """The presidency's lowest and highest single poll, shown, over the polls
+    its figure on the row averages (its first `days` days, or the term);
+    the earliest of equal readings. None without polls."""
+    first, series = polls.get(pid, (None, []))
+    within = [r for r in series if days is None or (r[0] - first).days <= days]
+    if not within:
+        return None
+    return _poll(min(within, key=lambda r: r[1])), _poll(max(within, key=lambda r: r[1]))
+
+
+def _approval_details(p: President, pairs: list, polls: Polls, days: int | None) -> dict:
+    """The approval row's single-poll extremes: a line for the presidency
+    ("Lowest single poll 34% (Mar 2026) · highest 47% (Jan 2025)", "so far"
+    for a term under way) saying the strip ranks averages, and each dot's
+    hover detail with its years and its own extremes. Readers took "lower"
+    to mean a lower single reading; the row ranks averages."""
+    within = f" in the first {days:,} days" if days is not None else ""
+    so_far = " so far" if p.is_current else ""
+
+    def detail(o: President, when: str) -> str | None:
+        ext = _extremes(polls, o.id, days)
+        span = f"single polls{when} from {ext[0]} to {ext[1]}" if ext else None
+        return " · ".join(x for x in (term_years(o), span) if x) or None
+
+    own = _extremes(polls, p.id, days)
+    # The window is this presidency's own polled days, so its own extremes
+    # cover its whole record.
+    line = f"Lowest single poll{so_far} {own[0]} · highest{so_far} {own[1]}. " if own else ""
+    ranks = f"averages over each presidency's first {days:,} days" if days is not None else "term averages"
+    return {
+        "aside": f"{line}The strip ranks {ranks}, not single polls.",
+        "detail": detail(p, so_far),
+        "distributionDetails": [detail(o, within) for o, _ in pairs],
+    }
+
+
 def _expected(fig: _Figure, p: President, median: float | None) -> tuple[float | None, str]:
     """The tick: what presidents starting from the same level saw, where the
     reference fits one, else the peer median."""
@@ -269,12 +363,22 @@ def _measured(fig: _Figure, p: President) -> str:
             "with US incomes predicts set aside.")
 
 
-def _row(fig: _Figure, p: President, everyone: list[President]) -> dict | None:
+def _row(fig: _Figure, p: President, everyone: list[President], polls: Polls | None = None) -> dict | None:
     value = fig.value(p)
     if value is None:
         return None
-    pairs = sorted(((o, fig.value(o) if fig.key != "electionMargin" else o.election_margin)
-                    for o in everyone if o.id != p.id and fig.peer(o)), key=lambda x: x[1])
+    window = _same_window(fig, p)
+    if window:
+        by_id, days = window
+        pairs = sorted(((o, by_id[o.id]) for o in everyone if o.id != p.id and o.id in by_id),
+                       key=lambda x: x[1])
+        era = f"presidencies polled for at least {days:,} days, each over its first {days:,} days"
+        over = f" over their first {days:,} days"
+        fact = _WINDOW_FACT[fig.key]
+    else:
+        pairs = sorted(((o, fig.value(o) if fig.key != "electionMargin" else o.election_margin)
+                        for o in everyone if o.id != p.id and fig.peer(o)), key=lambda x: x[1])
+        era, over, fact, days = fig.era, "", fig.fact, None
     others = [v for _, v in pairs]
     values = sorted(others + [value])
     median = statistics.median(others) if others else None
@@ -293,7 +397,7 @@ def _row(fig: _Figure, p: President, everyone: list[President]) -> dict | None:
         "value": value, "shown": shown,
         "expected": expected, "expectedBasis": basis,
         "expectedShown": None if expected is None else _TICK[basis].format(fig.shown(expected)),
-        "peerGroup": {"label": fig.era, "n": len(others)},
+        "peerGroup": {"label": era, "n": len(others)},
         "distribution": others,
         "distributionShown": [fig.shown(v) for v in others],
         "distributionIds": [o.id for o, _ in pairs],
@@ -305,8 +409,9 @@ def _row(fig: _Figure, p: President, everyone: list[President]) -> dict | None:
         "rank": rank_shown(value, values),
         "percentile": round(pct, 1),
         "word": None if thin else peer_word(pct, gap).replace("peers", "other presidencies"),
-        "sentence": f"{fig.fact.format(shown=shown, moved=_moved(value))} {n_side:,} of the other {len(others):,} presidencies {verb}.",
+        "sentence": f"{fact.format(shown=shown, moved=_moved(value), days=f'{days or 0:,}')} {n_side:,} of the other {len(others):,} presidencies {verb}{over}.",
         "thin": thin,
+        **(_approval_details(p, pairs, polls or {}, days) if fig.key == "approval" else {}),
     }
 
 
@@ -327,7 +432,8 @@ def president_peers(db: Session, president_id: str) -> dict | None:
     if p is None:
         return None
     everyone = db.query(President).all()
-    rows = [r for r in (_row(f, p, everyone) for f in _FIGURES) if r]
+    polls = _polls(db, everyone) if p.avg_approval is not None else {}
+    rows = [r for r in (_row(f, p, everyone, polls) for f in _FIGURES) if r]
     strong = [r for r in rows if (r["word"] or "").startswith("well")]
     if strong:
         top = max(strong, key=lambda r: abs(r["percentile"] - 50))

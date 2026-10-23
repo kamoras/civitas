@@ -73,8 +73,62 @@ async function NewOnTheSite() {
               >
                 {f.title}
               </Link>
-              <p className="mt-1 text-small leading-relaxed text-ink-lo">{f.summary}</p>
+              <p className="mt-1 text-body leading-relaxed text-ink-lo">{f.summary}</p>
             </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+interface Revision {
+  version: string;
+  base: string;
+  at: string;
+  file: string;
+  why: string;
+}
+
+/**
+ * Refits of a scoring calibration the data refresh installed under its
+ * acceptance rule (GET /api/score-revisions, backend/app/scoring_revisions.py):
+ * each moves the version member scores carry ("v6.38.1") with no code change.
+ * Per request; left out when there are none or the backend can't answer.
+ */
+async function Revisions() {
+  await connection();
+  let revisions: Revision[] = [];
+  try {
+    const res = await fetch(`${BACKEND}/api/score-revisions`, { next: { revalidate: 300 } });
+    if (res.ok) revisions = ((await res.json()) as { revisions?: Revision[] }).revisions ?? [];
+  } catch {
+    revisions = [];
+  }
+  if (!revisions.length) return null;
+  return (
+    <section aria-labelledby="refits-h">
+      <h2 id="refits-h" className={TYPE.section}>
+        Refits between versions
+      </h2>
+      <p className="mt-3 text-body leading-relaxed text-ink">
+        A calibration the scores read is refit on new data by itself, and kept only when it beats
+        the one in use on data it wasn&apos;t fitted to. Each refit kept moves the version scores
+        carry, newest first.
+      </p>
+      <ul className="mt-4 divide-y divide-white/[0.07] border-y border-white/[0.07]">
+        {revisions.map((r) => (
+          <li
+            key={r.version}
+            id={r.version.toLowerCase().replace(/[^a-z0-9]+/g, "-")}
+            className="grid grid-cols-1 gap-1 py-3 sm:grid-cols-[9rem_1fr] sm:gap-4"
+          >
+            <span className="font-mono text-small text-signal-amber sm:pt-1">
+              {r.version} · <time dateTime={r.at.slice(0, 10)}>{released(r.at.slice(0, 10))}</time>
+            </span>
+            <p className="text-small leading-relaxed text-ink-lo">
+              {r.file} refit under {r.base}: {r.why}
+            </p>
           </li>
         ))}
       </ul>
@@ -198,6 +252,8 @@ export default function ChangelogPage() {
                 )}
               </dl>
             </section>
+
+            <Revisions />
 
             <section aria-labelledby="history-h">
               <h2 id="history-h" className={TYPE.section}>

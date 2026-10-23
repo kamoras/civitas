@@ -220,7 +220,7 @@ function Cell({
       </div>
       <InlineFigure shown={m.shown} />
       <Strip m={m} memberId={memberId} />
-      <figcaption id={captionId} className="text-small text-ink">
+      <figcaption id={captionId} className="text-body text-ink">
         <span className="sr-only">{m.label}: </span>
         {m.thin
           ? `Not enough record yet to compare (${m.record != null && m.key === "breaks" ? `${m.record} party-line votes` : `${m.peerGroup.n} with a figure`}).`
@@ -476,7 +476,7 @@ export default function WhereTheyStand({
             </Link>
           </div>
           <More label="How peers are chosen and what “stands out” means" bare>
-            <p className="max-w-prose text-small text-ink-lo">
+            <p className="max-w-prose text-body text-ink-lo">
               {data.standsOutKey ? data.standsOutWhy : `${data.standsOut} ${data.standsOutWhy}`}{" "}
               <Link href="/about/scores#peers" className="text-phos underline underline-offset-2">
                 How peers are chosen

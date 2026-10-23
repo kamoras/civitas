@@ -13,17 +13,27 @@ copy of its logic), run as a subprocess at low priority:
      which command, and the content's sha256);
   4. a candidate that fails, or a script that fails, keeps the last good
      copy and opens an ops alert for that file, resolved by its next good
-     refresh.
+     refresh;
+  5. a refit of a method's structure or a threshold (`accept`) is installed
+     only when, on its script's own held-out split, it beats the copy in
+     use by more than one standard error of the paired difference and no
+     subgroup the script reports loses more than one (held_out_beats_in_use).
+     Otherwise the copy in use stays and the comparison is recorded in its
+     `_refreshed.kept`: a measurement, not an alert.
 
-Files whose regeneration can't honestly be automated (a new survey's
-question ids, a model-selection refit that is a method decision, a source
-behind research-only dependencies) have no command, only a `stale` check
-that alerts when a newer version should exist, saying why a person is
-needed. The bundled copy stays in git as the pre-first-refresh fallback and
-the reproducible baseline; a refresh that moves scores is a data refresh
-within the same method (recorded in `_refreshed` and announced by an ops
+Nothing here asks a person to act. A source that moves is found by rule
+(the newest release a publisher's own listing names); a refit that can't be
+accepted keeps the copy in use with the comparison on its record. One file
+keeps a `stale` check: the computed district lean, whose next window needs
+the next presidential election's precinct returns; its alert states that
+the returns are out, not a task.
+
+The bundled copy stays in git as the pre-first-refresh fallback and the
+reproducible baseline. A refresh that moves scores within the same method
+is a data refresh (recorded in `_refreshed` and announced by an ops
 notice), not a new scoring version, exactly as the per-run population
-references are.
+references are; an accepted refit of a scoring calibration (`scoring_inputs`)
+moves the scoring version by itself (app/scoring_revisions.py).
 
 Readers call `read(name)`, which notices a rewrite from either process.
 """
@@ -48,7 +58,8 @@ from datetime import date, datetime, timedelta
 
 import httpx
 
-from app import committee_routing, site_search
+from app import precision_rule, scoring_revisions, site_search
+from app.acceptance import held_out_beats_in_use
 from app.atomic_write import runtime_data_path, write_text_atomic
 from app.config import settings
 from app.contact import BOT_USER_AGENT
@@ -56,9 +67,10 @@ from app.database import SessionLocal
 from app.election_calendar import last_certified_general
 from app.election_phase import active_election
 from app.error_utils import output_summary
-from app.file_cache import Uncached, files_stamp, read_json_preferring
+from app.file_cache import Uncached, files_stamp, read_json, read_json_preferring
 from app.forecast import model, training_polls
 from app.ops_alerts import resolve_ops_alert, send_ops_alert
+from app.pipeline.analyze import commemorative, score_version
 from app.pipeline.cache import api_cache_get, api_cache_set
 from app.state_names import STATE_NAMES
 from app.time_utils import utcnow
@@ -68,6 +80,7 @@ logger = logging.getLogger(__name__)
 BACKEND = pathlib.Path(__file__).resolve().parent.parent
 BUNDLED = BACKEND / "app" / "data"
 _STATE_TIER = "data-refresh"
+MAPS_FILE = "redrawn_congressional_maps.json"
 
 _read_cache: dict[str, tuple[object, dict]] = {}
 
@@ -132,6 +145,16 @@ class DataFile:
     # After an install (or an unchanged refresh): a finding about the files
     # in use ({name: doc}) worth an ops alert that doesn't hold them back.
     check: Callable[[dict[str, dict]], str | None] | None = None
+    # A refit of a method's structure or a threshold: (candidate, copy in
+    # use) -> None to install it, or why the copy in use is kept (recorded
+    # in its _refreshed, never an alert). Runs after the gate. See
+    # held_out_beats_in_use.
+    accept: Callable[[dict, dict], str | None] | None = None
+    # What member scoring reads from the file. A refit installed with
+    # different values moves scores under unchanged code, so it records a
+    # scoring revision (app/scoring_revisions.py): every snapshot after it
+    # carries the new version, and an ops notice says so.
+    scoring_inputs: Callable[[dict], object] | None = None
 
     @property
     def stem(self) -> str:
@@ -246,6 +269,19 @@ def _record_try(name: str, outcome: str, recipe: str | None = None) -> None:
         db.close()
 
 
+def request_refit(name: str, why: str) -> None:
+    """Make `name` due at the next run whatever its cadence: the calibration
+    drift check asks this of a gate that refits itself from data-supplied
+    labels (calibration_drift.REFITTING), so drift starts a refit rather
+    than waiting on a person."""
+    db = SessionLocal()
+    try:
+        api_cache_set(db, _STATE_TIER, name, {"triedAt": None, "outcome": f"refit requested: {why}", "recipe": None},
+                      normal_ttl_hours=24 * 365 * 5)
+    finally:
+        db.close()
+
+
 def run_command(argv: list[str], timeout_s: int) -> tuple[int | None, str]:
     """Run a generator script from backend/, at the lowest CPU priority so
     page requests never wait on it. (exit code, or None when it ran past
@@ -293,10 +329,16 @@ def failure_alert(name: str, what: str, detail: str | None, logged_at: str | Non
 def bundled_sha256(name: str) -> str | None:
     """The content hash of app/data/`name` as shipped with the code."""
     try:
-        doc = json.loads((BUNDLED / name).read_text())
-    except (OSError, ValueError):
+        doc = read_json(BUNDLED / name)
+    except OSError:
         return None
     return content_sha256(doc) if isinstance(doc, dict) else None
+
+
+def _dumps(name: str, doc: dict) -> str | bytes:
+    """A copy in use as written to the data volume: gzipped for a .gz file."""
+    text = json.dumps(doc, indent=1, ensure_ascii=False) + "\n"
+    return gzip.compress(text.encode(), mtime=0) if name.endswith(".gz") else text
 
 
 def bundled_moved(name: str, doc: dict) -> bool:
@@ -327,17 +369,48 @@ def install(spec: DataFile | str, new: dict, argv: list[str]) -> bool:
         provenance = old.get("_refreshed") or {}
         if provenance and provenance.get("bundled") != bundled:
             # Same content, but measured against the bundled copy now shipped.
-            write_text_atomic(runtime_data_path(name), json.dumps(
-                {**old, "_refreshed": {**provenance, "bundled": bundled}}, indent=1, ensure_ascii=False) + "\n")
+            write_text_atomic(runtime_data_path(name), _dumps(name, {**old, "_refreshed": {**provenance, "bundled": bundled}}))
             _read_cache.pop(name, None)
         return False
     rel = [a if not a.startswith(str(BACKEND)) else os.path.relpath(a, BACKEND) for a in argv]
     doc = {**new, "_refreshed": {"at": utcnow().isoformat(timespec="seconds"),
                                  "by": "app/data_refresh.py", "command": " ".join(rel), "sha256": sha,
                                  "bundled": bundled}}
-    write_text_atomic(runtime_data_path(name), json.dumps(doc, indent=1, ensure_ascii=False) + "\n")
+    write_text_atomic(runtime_data_path(name), _dumps(name, doc))
     _read_cache.pop(name, None)
     return True
+
+
+# The acceptance rule for a calibrated gate that refits itself from labels
+# the data supplies (AGENTS.md 3a, precision_rule.accept): the script writes
+# precision_rule.compare's comparison of the refit and the fit in use on the
+# same held-out labelled items as "_comparison", with "unchanged" when the
+# refit's parameters are the fit in use's (its reference or measurements
+# moved, the method did not) and "refused" for a reason its own rule
+# refuses it.
+def precision_rule_accepts(new: dict, old: dict) -> str | None:
+    """None to install the refit, else why the fit in use stays."""
+    c = new.get("_comparison")
+    if isinstance(c, dict) and c.get("refused"):
+        return "; ".join(str(r) for r in c["refused"])
+    if isinstance(c, dict) and c.get("unchanged"):
+        return None
+    if not isinstance(c, dict) or not {"candidate", "in_use"} <= set(c):
+        return "the refit reports no held-out comparison with the fit in use"
+    return precision_rule.accept(c)
+
+
+def record_kept(name: str, why: str, argv: list[str]) -> None:
+    """Record in the copy in use's provenance that a refit was measured and
+    not installed, and why. Its content is unchanged."""
+    doc = read(name)
+    if not doc:
+        return
+    rel = [a if not a.startswith(str(BACKEND)) else os.path.relpath(a, BACKEND) for a in argv]
+    provenance = doc.get("_refreshed") or {"bundled": bundled_sha256(name)}
+    kept = {"at": utcnow().isoformat(timespec="seconds"), "command": " ".join(rel), "why": why}
+    write_text_atomic(runtime_data_path(name), _dumps(name, {**doc, "_refreshed": {**provenance, "kept": kept}}))
+    _read_cache.pop(name, None)
 
 
 def refresh_one(spec: DataFile, ctx: Context) -> str:
@@ -350,7 +423,9 @@ def refresh_one(spec: DataFile, ctx: Context) -> str:
     out_dir.mkdir(parents=True, exist_ok=True)
     candidates = {}
     for name in (spec.name, *spec.outputs):
-        fd, candidates[name] = tempfile.mkstemp(prefix=f".{name}.", suffix=".candidate", dir=out_dir)
+        # A .gz file's candidate is written gzipped, as its name says.
+        fd, candidates[name] = tempfile.mkstemp(prefix=f".{name}.", suffix=".candidate" + (".gz" if
+                                                name.endswith(".gz") else ""), dir=out_dir)
         os.close(fd)
         os.unlink(candidates[name])
     # "{tmp}": a scratch directory for the script's downloads, removed after.
@@ -359,7 +434,11 @@ def refresh_one(spec: DataFile, ctx: Context) -> str:
     def fill(arg: str) -> str:
         for name in spec.outputs:
             arg = arg.replace("{out:%s}" % name, candidates[name])
-        return arg.replace("{out}", candidates[spec.name]).replace("{tmp}", scratch)
+        return arg.replace("{out}", candidates[spec.name]).replace("{tmp}", scratch).replace("{in_use}", in_use)
+
+    # "{in_use}": the copy in use, for a script that measures its refit against it.
+    in_use = os.path.join(scratch, "in_use.json")
+    pathlib.Path(in_use).write_text(json.dumps(ctx.doc, ensure_ascii=False))
 
     argv = [fill(a) for a in template]
     docs: dict[str, dict] = {}
@@ -382,7 +461,7 @@ def refresh_one(spec: DataFile, ctx: Context) -> str:
             unreadable = []
             for name, path in candidates.items():
                 try:
-                    docs[name] = json.loads(pathlib.Path(path).read_text())
+                    docs[name] = read_json(path)
                     if not (isinstance(docs[name], dict) and docs[name]):
                         unreadable.append(f"{name} holds no JSON object")
                 except (OSError, ValueError) as e:
@@ -397,6 +476,11 @@ def refresh_one(spec: DataFile, ctx: Context) -> str:
             pathlib.Path(path).unlink(missing_ok=True)
         shutil.rmtree(scratch, ignore_errors=True)
     new = docs.get(spec.name, {})
+    if not what and spec.accept and (why := spec.accept(new, ctx.doc)):
+        # Measured and not better: the copy in use stays, and why is on its record.
+        record_kept(spec.name, why, argv)
+        resolve_ops_alert(condition)
+        return f"in use: {why}"
     if what:
         logged_at = None
         if output.strip():
@@ -422,7 +506,18 @@ def refresh_one(spec: DataFile, ctx: Context) -> str:
                            condition=f"data-check-{spec.stem}")
         else:
             resolve_ops_alert(f"data-check-{spec.stem}")
-    if changed and spec.moves_scores:
+    if changed and spec.scoring_inputs and spec.scoring_inputs(new) != spec.scoring_inputs(ctx.doc):
+        c = new.get("_comparison") or {}
+        why = new.get("_change") or (f"{c.get('metric', 'held-out comparison')}: "
+                                     f"\u0394={float(c.get('delta', 0)):+.4f}, SE={float(c.get('se', 0)):.4f}")
+        version = scoring_revisions.record(score_version.ALGORITHM_VERSION, spec.name, content_sha256(new), why)
+        send_ops_alert(
+            f"{spec.name} refit installed: scores are now {version}",
+            f"app/data/{spec.name} was refit on new data and installed under the acceptance rule ({why}). Member scores move at the next "
+            f"run and their snapshots carry {version}; /changelog lists it.",
+            dedupe_key=f"scoring-revision-{spec.stem}-{content_sha256(new)[:12]}",
+        )
+    elif changed and spec.moves_scores:
         send_ops_alert(
             f"{spec.name} refreshed",
             f"app/data/{spec.name} was regenerated from current data and passed its gates. Scores that read "
@@ -438,14 +533,23 @@ def run_refreshes(files: list[DataFile] | None = None, *, pipeline_busy: bool = 
     outcomes: dict[str, str] = {}
     for spec in files if files is not None else DATA_FILES:
         try:
-            ctx = Context(spec.name, read(spec.name), utcnow().date(), *_last_try(spec.name))
             shipped = any(bundled_moved(n, read(n)) for n in (spec.name, *spec.outputs))
+            if shipped and spec.accept:
+                # A commit shipped a new fit: it supersedes a refit installed
+                # before it, and the next refit is measured against it.
+                for n in (spec.name, *spec.outputs):
+                    pathlib.Path(runtime_data_path(n)).unlink(missing_ok=True)
+                    _read_cache.pop(n, None)
+            ctx = Context(spec.name, read(spec.name), utcnow().date(), *_last_try(spec.name))
             template = spec.command(ctx) if spec.command else None
             # A failed try is retried the next day once what it runs has
-            # changed (a try recorded before recipes were counts as changed).
-            # Hashed only when it can matter (it reads the generator's whole
-            # import tree, about 5 s for every file).
-            current = recipe(template) if template is not None and ctx.last_failed else None
+            # changed (a try recorded before recipes were counts as changed),
+            # and so is a refit under the acceptance rule: a change to the
+            # code it fits (a ranker) is measured the next day. Hashed only
+            # when it can matter (it reads the generator's whole import
+            # tree, about 5 s for every file).
+            current = (recipe(template) if template is not None and (ctx.last_failed or spec.accept)
+                       else None)
             fixed = current is not None and current != ctx.last_recipe
             if spec.command and (spec.due(ctx) or ((shipped or fixed) and not ctx.tried_within(1))):
                 if spec.heavy and pipeline_busy:
@@ -559,6 +663,49 @@ def _calendar_gate(new: dict, old: dict) -> list[str]:
     return failures
 
 
+# Each election's maps: the cycles the bundled file researched, plus the
+# coming election's, derived from the Census Bureau's block equivalency file
+# for the Congress it seats (scripts/derive_redrawn_maps.py). Weekly while
+# the site's election is one the bundled file doesn't list and isn't held
+# yet: until the file is published that reads three directory listings; once
+# it is, a re-release (the 120th's was, 2026-10-07, after a court order) is
+# picked up within the week.
+def _maps_command(ctx: Context) -> list[str] | None:
+    election = _election()
+    return [PY, _script("derive_redrawn_maps.py"), "{out}", "--cycle", str(election.cycle), "--cache", "{tmp}"]
+
+
+def _maps_due(ctx: Context) -> bool:
+    election = _election()
+    bundled = _bundled_doc(MAPS_FILE).get("cycles") or {}
+    return election.phase == "campaign" and str(election.cycle) not in bundled and not ctx.tried_within(7)
+
+
+def _bundled_doc(name: str) -> dict:
+    try:
+        return json.loads((BUNDLED / name).read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def _maps_gate(new: dict, old: dict) -> list[str]:
+    failures = []
+    cycles = new.get("cycles") or {}
+    bundled = _bundled_doc(MAPS_FILE).get("cycles") or {}
+    if any(cycles.get(c) != e for c, e in bundled.items()):
+        failures.append("a researched cycle of the bundled file changed")
+    for c, entries in cycles.items():
+        if not c.isdigit():
+            failures.append(f"cycle {c!r} is not a year")
+        for st, e in (entries or {}).items():
+            if st not in STATE_NAMES or not re.fullmatch(r"CD\d+", str((e or {}).get("map") or "")):
+                failures.append(f"{c} {st}: {e!r}")
+    lost = sorted(set(old.get("_derived") or {}) - set(new.get("_derived") or {}) - set(bundled))
+    if lost:
+        failures.append(f"cycles derived before and not now: {lost}")
+    return failures
+
+
 def _every(days: int) -> Callable[[Context], bool]:
     return lambda ctx: not ctx.tried_within(days)
 
@@ -585,18 +732,32 @@ def _jurisdictions_gate(new: dict, old: dict) -> list[str]:
     return failures + _drift(new, old, "committees", keep=0.8)
 
 
-# The committee-routing fit: refit whenever its inputs change (the
-# jurisdictions above, or the labels in a commit) — its data_hash names them.
-def _routing_due(ctx: Context) -> bool:
-    return ctx.doc.get("data_hash") != committee_routing.data_hash() and not ctx.tried_within(7)
-
-
+# The committee-routing fit: refit daily from the labels the stored data
+# supplies (bills' committee referrals, and texts no committee handles:
+# committee_routing.labelled_texts), installed under the acceptance rule.
 def _routing_gate(new: dict, old: dict) -> list[str]:
     failures = []
-    if new.get("data_hash") != committee_routing.data_hash():
-        failures.append("the fit is not of the inputs in use")
+    if new.get("reference") != "data":
+        failures.append("the fit is not of the data-supplied labels")
     if not (0 < float(new.get("threshold") or 0) < 1) or int(new.get("k") or 0) < 1:
         failures.append(f"threshold {new.get('threshold')}, k {new.get('k')}")
+    labels = new.get("labels") or {}
+    if not labels.get("bill") or not labels.get("none"):
+        failures.append(f"labels {labels}: both kinds are needed")
+    return failures
+
+
+# The member-photo check: refit daily from the stored face shares
+# (scripts/calibrate_member_photos.py), installed under the acceptance rule
+# on the hand labels it is checked against.
+def _member_photo_gate(new: dict, old: dict) -> list[str]:
+    failures = []
+    if not 0 < float(new.get("depiction_ceiling") or 0) < 1:
+        failures.append(f"depiction_ceiling {new.get('depiction_ceiling')}")
+    if not float(new.get("margin") or 0) >= 1:
+        failures.append(f"margin {new.get('margin')}")
+    if not new.get("labels"):
+        failures.append("the hand labels it is checked against are missing")
     return failures
 
 
@@ -611,6 +772,26 @@ def _population_gate(new: dict, old: dict) -> list[str]:
     for code, value in states.items():
         if code in before and before[code] and abs(float(value) / float(before[code]) - 1) > limit:
             failures.append(f"{code} moved {float(value) / float(before[code]) - 1:+.1%}")
+    return failures
+
+
+def _state_pvi_gate(new: dict, old: dict) -> list[str]:
+    """51 jurisdictions with the counts they were computed from, DC strongly
+    Democratic (the cheapest sign-flip check), and no state moved more than
+    a new window moves one (the script's CONTINUITY_TOLERANCE, 5) from the
+    copy in use."""
+    states, before = new.get("states") or {}, old.get("states") or {}
+    failures = []
+    if set(states) != set(STATE_NAMES):
+        failures.append(f"{len(states)} jurisdictions, expected {len(STATE_NAMES)}")
+    if len(new.get("inputs") or {}) != 2:
+        failures.append("not two cycles of inputs")
+    if int(states.get("DC", 0)) > -30:
+        failures.append(f"DC at {states.get('DC')}, expected strongly Democratic")
+    moved = [f"{st} {before[st]:+d} to {v:+d}" for st, v in sorted(states.items())
+             if st in before and abs(int(v) - int(before[st])) > 5]
+    if moved:
+        failures.append(f"moved more than 5 points: {', '.join(moved)}")
     return failures
 
 
@@ -666,79 +847,67 @@ def _casing_gate(new: dict, old: dict) -> list[str]:
     return failures + _drift(new, old, "forms", keep=0.8)
 
 
-# --- staleness of the files a person has to regenerate -------------------
+# --- staleness ------------------------------------------------------------
 
-def _ces_stale(ctx: Context) -> str | None:
-    # The CES fields every even year and releases its Common Content the
-    # following spring.
-    fielded = ctx.doc.get("fielded_year")
-    year = ctx.today.year - 1 if ctx.today >= date(ctx.today.year, 4, 1) else ctx.today.year - 2
-    latest = year if year % 2 == 0 else year - 1
-    if isinstance(fielded, int) and fielded < latest:
-        return (f"the {latest} Cooperative Election Study should be out (this file is the {fielded} survey). "
-                f"Its question ids change every survey (CC24_312f...), so map them in "
-                f"scripts/fetch_ces_approval.py and rerun it; that mapping can't be derived by rule.")
-    return None
-
-
-def _bluesky_windows_stale(ctx: Context) -> str | None:
-    found = re.search(r"generated (\d{4}-\d{2}-\d{2})", str(ctx.doc.get("_source") or ""))
-    if found and ctx.today - date.fromisoformat(found[1]) > timedelta(days=365):
-        return ("the posting windows were measured over a year ago; audiences shift by season. Rerun "
-                "scripts/fetch_bluesky_activity.py (it needs websockets from scripts/requirements-research.txt, "
-                "which the image doesn't carry).")
-    return None
-
-
-def _position_confidence_stale(ctx: Context) -> str | None:
+# Constituent Alignment's position weight (scripts/calibrate_position_
+# confidence.py): refit once the newest Congress it was calibrated through
+# has ended, so its Voteview positions are complete, and monthly after until
+# the sitting Congress has full records to pair. Its structure (one curve, a
+# curve per chamber, the latest era's, a window) changes only when the
+# script's one-standard-error choice also beats the structure in use by more
+# than the paired standard error (--in-use); n0 is refitted on the new
+# pairs either way. A changed weight is a scoring revision.
+def _position_confidence_due(ctx: Context) -> bool:
     through = ctx.doc.get("calibrated_through")
-    if isinstance(through, int) and settings.CURRENT_CONGRESS - 1 > through:
-        return (f"calibrated through the {through}th Congress; the {through + 1}th has ended, so its "
-                f"Voteview positions are complete. Rerun scripts/calibrate_position_confidence.py: its "
-                f"structure choice (the one-standard-error rule) is a method decision, so the refit is reviewed, "
-                f"and a changed structure is a scoring version.")
-    return None
+    return isinstance(through, int) and settings.CURRENT_CONGRESS > through and not ctx.tried_within(30)
 
 
-def _commemorative_stale(ctx: Context) -> str | None:
-    measured = [int(m) for m in re.findall(r"les_spearman_(\d+)", json.dumps(sorted(ctx.doc)))]
-    if measured and settings.CURRENT_CONGRESS - 2 > max(measured):
-        return (f"measured against Volden & Wiseman's {max(measured)}th-Congress coding; the "
-                f"{settings.CURRENT_CONGRESS - 2}th's should be published. Rerun "
-                f"scripts/calibrate_commemorative.py (embedding model; a moved threshold is a scoring version).")
-    return None
+def _position_confidence_gate(new: dict, old: dict) -> list[str]:
+    failures = []
+    if new.get("structure") not in ("pooled", "chamber", "era", "window"):
+        failures.append(f"structure {new.get('structure')}")
+    for chamber in ("senate", "house"):
+        n0 = ((new.get("chambers") or {}).get(chamber) or {}).get("n0")
+        if not isinstance(n0, (int, float)) or n0 <= 0:
+            failures.append(f"{chamber} n0 {n0}")
+    if (new.get("calibrated_through") or 0) < (old.get("calibrated_through") or 0):
+        failures.append(f"calibrated through {new.get('calibrated_through')} against {old.get('calibrated_through')}")
+    if ((new.get("pairs") or {}).get("thin") or 0) < 0.9 * ((old.get("pairs") or {}).get("thin") or 0):
+        failures.append(f"{(new.get('pairs') or {}).get('thin')} thin pairs against {(old.get('pairs') or {}).get('thin')}")
+    for key in ("reference_votes", "uncounted_weight", "prior_until_votes"):
+        if not isinstance(new.get(key), (int, float)):
+            failures.append(f"no {key}")
+    return failures
+
+
+def _position_inputs(doc: dict) -> object:
+    return (doc.get("structure"), {c: v.get("n0") for c, v in (doc.get("chambers") or {}).items()},
+            doc.get("reference_votes"), doc.get("uncounted_weight"), doc.get("prior_until_votes"))
+
+
+# Commemorative-bill detection (scripts/calibrate_commemorative.py):
+# monthly, the newest Congress the Center for Effective Lawmaking has coded
+# (found on its data page); a Congress already measured on the prototypes
+# in use comes back unchanged at once. A moved threshold is installed only
+# under the acceptance rule (held-out Senate LES Spearman), and is a scoring
+# revision.
+def _commemorative_gate(new: dict, old: dict) -> list[str]:
+    failures = []
+    if new.get("prototype_hash") != commemorative.prototype_hash():
+        failures.append("fitted to other prototypes than the code's")
+    if not 0 < float(new.get("threshold") or 0) < 1:
+        failures.append(f"threshold {new.get('threshold')}")
+    held = ((new.get("classification") or {}).get("senate (held out)") or {}).get("members") or 0
+    if held < 30:
+        failures.append(f"{held} held-out senators")
+    return failures
 
 
 def _district_lean_stale(ctx: Context) -> str | None:
     years = [int(y) for y in re.findall(r"\d{4}", str(ctx.doc.get("_window") or ""))]
     if years and ctx.today >= date(max(years) + 4, 12, 15):
-        return (f"windowed to {ctx.doc['_window']}; the {max(years) + 4} presidential election's precinct returns "
-                f"should be published. The builder (scripts/build_district_lean.py) needs that cycle's sources "
-                f"and certified-canvass corrections researched, as state_pvi.json's do.")
-    return None
-
-
-def _peer_gdp_stale(ctx: Context) -> str | None:
-    """A newer Maddison Project release than the one on file, from
-    DataverseNL's search (monthly; None when it can't be read)."""
-    if ctx.tried_within(30):
-        return UNCHECKED
-    _record_try(ctx.name, "release check")
-    have = re.search(r"Maddison Project Database (\d{4})", str(ctx.doc.get("_source") or ""))
-    try:
-        resp = httpx.get("https://dataverse.nl/api/search", params={
-            "q": '"Maddison Project Database"', "type": "dataset", "per_page": 50,
-        }, headers={"User-Agent": BOT_USER_AGENT}, timeout=30)
-        resp.raise_for_status()
-        names = [i.get("name", "") for i in resp.json().get("data", {}).get("items", [])]
-    except Exception:
-        logger.info("Maddison release check: DataverseNL search unreadable", exc_info=True)
-        return None
-    releases = [int(y) for n in names for y in re.findall(r"Maddison Project Database (\d{4})", n)]
-    if have and releases and max(releases) > int(have[1]):
-        return (f"Maddison Project Database {max(releases)} is published (this file is {have[1]}). It is a new "
-                f"dataset with its own file id and layout: point scripts/fetch_peer_gdp.py at it and rerun "
-                f"(a new release revises history, so president Effectiveness moves).")
+        return (f"windowed to {ctx.doc['_window']}: the {max(years) + 4} presidential election's precinct returns "
+                f"should be published, and the computed lean (display only, beside Cook's) doesn't read them yet.")
     return None
 
 
@@ -790,106 +959,174 @@ def _url_exists(url: str) -> bool | None:
 
 # Occupation to industry (scripts/fetch_occupation_industry.py): the ACS
 # 1-year PUMS comes out each autumn for the year before, O*NET a few times a
-# year. The script reads the newest of each, but downloads 2.4 GB of
-# records, so this only says when a newer one is out (monthly; nothing when
-# a source can't be read). A rerun moves donors' industries, so scores.
+# year; the script reads the newest of each. Yearly, and within a week of
+# either publisher posting a newer release than the file's (checked at most
+# monthly). It streams 2.4 GB of records to scratch on the data volume, so
+# it is heavy. A new crosswalk moves donors' industries, so scores: a data
+# refresh within the method.
 OCCUPATION_FILE = "occupation_industry.json.gz"
 _PUMS_URL = "https://www2.census.gov/programs-surveys/acs/data/pums/{year}/1-Year/csv_pus.zip"
 _ONET_PAGE = "https://www.onetcenter.org/database.html"
 
 
-def _occupation_industry_stale(ctx: Context) -> str | None:
-    if ctx.tried_within(30):
-        return UNCHECKED
-    _record_try(ctx.name, "release check")
+def _occupation_newer_release(ctx: Context) -> bool:
+    """A newer ACS PUMS or O*NET than the file in use reads: asked of the
+    publishers at most monthly (the answer is kept in api_cache)."""
+    db = SessionLocal()
     try:
-        with gzip.open(BUNDLED / OCCUPATION_FILE, "rt", encoding="utf-8") as f:
-            source = str(json.load(f).get("_source") or "")
-    except (OSError, ValueError):
-        return None
-    acs, onet = re.search(r"ACS (\d{4})", source), re.search(r"O\*NET (\d+)\.(\d+)", source)
-    newer = []
-    if acs:
-        year = int(acs[1])
-        posted = [y for y in range(year + 1, ctx.today.year) if _url_exists(_PUMS_URL.format(year=y))]
-        if posted:
-            newer.append(f"the ACS {max(posted)} 1-year PUMS is posted (this file is ACS {year})")
-    page = _get_text(_ONET_PAGE) if onet else None
-    versions = {(int(a), int(b)) for a, b in re.findall(r"db_(\d+)_(\d+)_", page or "")}
-    if onet and versions and max(versions) > (int(onet[1]), int(onet[2])):
-        newest = max(versions)
-        newer.append(f"O*NET {newest[0]}.{newest[1]} is published (this file is {onet[1]}.{onet[2]})")
-    if not newer:
-        return None
-    return ("; ".join(newer) + ". Rerun scripts/fetch_occupation_industry.py --download (it reads the newest of "
-            "each; 2.4 GB of records) and commit the file: donors' industries move, so scores do.")
+        cached = api_cache_get(db, _STATE_TIER, f"{ctx.name}:newer", max_age_hours=24 * 30)
+        if cached is not None and cached.get("for") == [ctx.doc.get("acs_year"), ctx.doc.get("onet_version")]:
+            return bool(cached.get("newer"))
+        year, onet = ctx.doc.get("acs_year"), str(ctx.doc.get("onet_version") or "")
+        newer = isinstance(year, int) and any(
+            _url_exists(_PUMS_URL.format(year=y)) for y in range(year + 1, ctx.today.year))
+        have = tuple(int(x) for x in onet.split(".")) if re.fullmatch(r"\d+\.\d+", onet) else None
+        page = _get_text(_ONET_PAGE) if have else None
+        versions = {(int(a), int(b)) for a, b in re.findall(r"db_(\d+)_(\d+)_", page or "")}
+        newer = newer or bool(have and versions and max(versions) > have)
+        api_cache_set(db, _STATE_TIER, f"{ctx.name}:newer",
+                      {"for": [ctx.doc.get("acs_year"), ctx.doc.get("onet_version")], "newer": newer},
+                      normal_ttl_hours=24 * 30)
+        return newer
+    finally:
+        db.close()
 
 
-# The Court-level finding (scripts/research_justice_loyalty.py
-# --write-finding): research-only dependencies the image doesn't carry, so
-# this says when the Supreme Court Database has published a newer release
-# than the one the finding was computed on (monthly).
-_SCDB_HOME = "https://scdb.la.psu.edu/"
+def _occupation_due(ctx: Context) -> bool:
+    return not ctx.tried_within(365) or (not ctx.tried_within(7) and _occupation_newer_release(ctx))
 
 
-def _court_finding_stale(ctx: Context) -> str | None:
-    if ctx.tried_within(30):
-        return UNCHECKED
-    _record_try(ctx.name, "release check")
-    have = re.fullmatch(r"(\d{4})_(\d{2})", str(ctx.doc.get("scdbRelease") or ""))
-    page = _get_text(_SCDB_HOME) if have else None
-    releases = {(int(a), int(b)) for a, b in re.findall(r"(\d{4})[ -][Rr]elease[ -](\d{2})", page or "")}
-    if not have or not releases or max(releases) <= (int(have[1]), int(have[2])):
-        return None
-    newest = max(releases)
-    return (f"the Supreme Court Database {newest[0]} Release {newest[1]:02d} is published (the finding uses "
-            f"{have[1]} Release {have[2]}). Point SCDB_FILE and its download in scripts/research_justice_loyalty.py "
-            f"at it and rerun with --write-finding (research dependencies, scripts/requirements-research.txt).")
+def _occupation_gate(new: dict, old: dict) -> list[str]:
+    failures = []
+    if (new.get("acs_year") or 0) < (old.get("acs_year") or 0):
+        failures.append(f"ACS {new.get('acs_year')} is older than {old.get('acs_year')}")
+    for key, keep in (("occupations", 0.9), ("titles", 0.8)):
+        before, after = len(old.get(key) or {}), len(new.get(key) or {})
+        if after < keep * before:
+            failures.append(f"{after} {key} against {before} in use")
+    assigned = [o for o in (new.get("occupations") or {}).values() if o.get("industry")]
+    was = [o for o in (old.get("occupations") or {}).values() if o.get("industry")]
+    if len(assigned) < 0.8 * len(was):
+        failures.append(f"{len(assigned)} occupations assigned an industry against {len(was)}")
+    return failures + _drift(new, old, "titles", keep=0.7)
 
 
-# /environmental's grid factor is the EPA's eGRID U.S. average, published in
-# a new edition every year or so (environmental.json `grid.edition`). It is
-# typed from the edition's summary tables, so a newer edition is a person's
-# job: monthly, the EPA's summary page is read and an alert names the newer
-# edition. An unreadable page says nothing (it is checked again next month).
-_EGRID_SUMMARY = "https://www.epa.gov/egrid/summary-data"
+# /environmental's grid factor: the EPA's newest eGRID summary tables, the
+# U.S. total output CO2e rate read by the table's own headers
+# (scripts/fetch_egrid.py), monthly. The rest of the file is kept as it is.
+def _egrid_gate(new: dict, old: dict) -> list[str]:
+    grid, before = new.get("grid") or {}, old.get("grid") or {}
+    failures = []
+    year = re.fullmatch(r"eGRID(\d{4})", str(grid.get("edition") or ""))
+    was = re.fullmatch(r"eGRID(\d{4})", str(before.get("edition") or ""))
+    rate, prior = grid.get("lbCo2ePerMWh"), before.get("lbCo2ePerMWh")
+    if not year or (was and int(year[1]) < int(was[1])):
+        failures.append(f"edition {grid.get('edition')} against {before.get('edition')} in use")
+    # No grid's average has been near either bound (coal-only, about
+    # 2,200 lb/MWh; nothing but renewables, 0).
+    if not isinstance(rate, (int, float)) or not 100 <= rate <= 3000:
+        failures.append(f"U.S. rate {rate} lb/MWh")
+    elif isinstance(prior, (int, float)) and prior:
+        # One edition moves the U.S. average by a few percent a year; a
+        # revision of the same edition by less.
+        limit = 0.02 if grid.get("edition") == before.get("edition") else 0.25
+        if abs(rate / prior - 1) > limit:
+            failures.append(f"U.S. rate moved {rate / prior - 1:+.1%} ({prior} -> {rate})")
+    if {k: v for k, v in new.items() if k != "grid"} != {k: v for k, v in old.items() if k not in ("grid", "_refreshed")}:
+        failures.append("the refresh changed more than the grid")
+    return failures
 
 
-def _egrid_stale(ctx: Context) -> str | None:
-    if ctx.tried_within(30):
-        return UNCHECKED
-    _record_try(ctx.name, "edition check")
-    have = re.fullmatch(r"eGRID(\d{4})", str((ctx.doc.get("grid") or {}).get("edition") or ""))
-    page = _get_text(_EGRID_SUMMARY) if have else None
-    editions = {int(y) for y in re.findall(r"eGRID ?(20\d{2})", page or "")}
-    if not have or not editions or max(editions) <= int(have[1]):
-        return None
-    return (f"EPA has published eGRID{max(editions)} (/environmental uses {have[0]}). Update "
-            f"environmental.json's `grid` (lbCo2ePerMWh, edition, source, date) from its summary tables' "
-            f"U.S. total output emission rate: {_EGRID_SUMMARY}")
+# Peer GDP: the newest Maddison Project release DataverseNL lists, read by
+# its headers (scripts/fetch_peer_gdp.py), monthly. A new release revises
+# history, so president Effectiveness moves.
+def _peer_gdp_gate(new: dict, old: dict) -> list[str]:
+    failures = []
+    if new.get("peers") != old.get("peers"):
+        failures.append("the peers changed (they are the script's stated rule)")
+    missing = set(old.get("countries") or {}) - set(new.get("countries") or {})
+    if missing:
+        failures.append(f"missing {sorted(missing)}")
+
+    def last(doc):
+        return min((max(int(y) for y in years) for years in (doc.get("countries") or {}).values()), default=0)
+
+    if last(new) < last(old):
+        failures.append(f"ends {last(new)}, before the copy in use's {last(old)}")
+    if (new.get("release") or 0) < (old.get("release") or 0):
+        failures.append(f"release {new.get('release')} is older than {old.get('release')}")
+    return failures
+
+
+# The hours schedulable posts go out (scripts/fetch_bluesky_activity.py
+# refresh: the 36 hours Jetstream holds, every Eastern hour sampled),
+# quarterly: the audience moves with the seasons.
+def _windows_gate(new: dict, old: dict) -> list[str]:
+    samples = new.get("samplesPerEasternHour") or []
+    windows = new.get("windows") or []
+    failures = []
+    if len(samples) != 24 or not all(isinstance(n, int) and n > 0 for n in samples):
+        failures.append(f"Eastern hours sampled: {samples}")
+    if not windows or not all({"start", "end"} <= set(w) for w in windows):
+        failures.append(f"windows {windows}")
+    return failures
+
+
+# The Cooperative Election Study (scripts/fetch_ces_approval.py): the newest
+# Common Content, its approval items mapped to the survey in use's by
+# wording, monthly. Senators' Constituent Alignment reads it.
+def _ces_gate(new: dict, old: dict) -> list[str]:
+    failures = []
+    if (new.get("fielded_year") or 0) < (old.get("fielded_year") or 0):
+        failures.append(f"fielded {new.get('fielded_year')}, before the {old.get('fielded_year')} survey in use")
+    if len(new.get("members") or []) < 0.75 * len(old.get("members") or []):
+        failures.append(f"{len(new.get('members') or [])} members rated against {len(old.get('members') or [])}")
+    if not new.get("priors"):
+        failures.append("no priors")
+    return failures
+
+
+# The Court-level finding (scripts/fetch_court_finding.py, the numpy port of
+# the research script's section 8): the Supreme Court Database's newest
+# release, found by rule, with appointers from the FJC and the presidents
+# table, monthly. It is a measured estimate on new data by a fixed method,
+# not a refit.
+def _court_finding_gate(new: dict, old: dict) -> list[str]:
+    failures = []
+    if str(new.get("scdbRelease") or "") < str(old.get("scdbRelease") or ""):
+        failures.append(f"release {new.get('scdbRelease')} is older than {old.get('scdbRelease')}")
+    for key in ("firstTerm", "draws"):
+        if old.get(key) is not None and new.get(key) != old.get(key):
+            failures.append(f"{key} {new.get(key)} against {old.get(key)}")
+    for key in ("lastTerm", "justices"):
+        if (new.get(key) or 0) < (old.get(key) or 0):
+            failures.append(f"{key} {new.get(key)} against {old.get(key)}")
+    est, lo, hi = new.get("estimate"), new.get("low"), new.get("high")
+    if not all(isinstance(v, (int, float)) for v in (est, lo, hi)) or not lo <= est <= hi or not -1 < lo <= hi < 1:
+        failures.append(f"estimate {est} [{lo}, {hi}]")
+    return failures
 
 
 # Site search's ranking and its fusion with Explore (scripts/calibrate_site_
 # search.py, calibrate_search_fusion.py) are fitted on known-item probes
-# built from the index, per kind of entity. A kind the fit never saw is
-# ranked by parameters nothing measured on it, so the check alerts when the
-# index holds one (AGENTS.md §3b: "rerun it when the index gains a kind").
-# They are not refitted here: a ranking weight changes through review.
-def _search_kinds_stale(script: str) -> Callable[[Context], str | None]:
-    def check(ctx: Context) -> str | None:
-        live = site_search.index_kinds()
-        if live is None:
-            return None
-        fitted = ctx.doc.get("kinds")
-        if fitted is None:
-            return (f"it records no kinds of entity, so whether its fit covers the index's ({', '.join(sorted(live))}) "
-                    f"can't be told. Rerun scripts/{script} on the live index; it records them.")
-        unseen = sorted(live - set(fitted))
-        if unseen:
-            return (f"the index now holds {', '.join(unseen)}, which the fit never saw. Rerun scripts/{script} on "
-                    f"the live index and review the measured change (AGENTS.md §3b).")
-        return None
-    return check
+# built from the live index, per kind of entity (AGENTS.md §3b). Refit
+# monthly, and within a week when the index holds a kind the copy in use
+# never saw; each script measures its refit against the copy in use on its
+# held-out half, and the refit is installed only under the acceptance rule
+# (held_out_beats_in_use; site search also never with a wrong jump on the
+# fit half, which the script reports as a refusal).
+def _search_due(ctx: Context) -> bool:
+    live = site_search.index_kinds()
+    unseen = live is not None and not live <= set(ctx.doc.get("kinds") or ())
+    return not ctx.tried_within(7 if unseen else 30)
+
+
+def _search_gate(fields: tuple[str, ...]) -> Callable[[dict, dict], list[str]]:
+    def gate(new: dict, old: dict) -> list[str]:
+        params = new.get("params") or {}
+        missing = [f for f in fields if not isinstance(params.get(f), (int, float))]
+        return [f"params missing {', '.join(missing)}"] if missing else []
+    return gate
 
 
 # The election map's training polls (app/forecast/training_polls.py):
@@ -932,7 +1169,9 @@ def _forecast_due(ctx: Context) -> bool:
     # the next day, not at the month's end: the map hides that table.
     outdated = any(not model.calibration_current(ev.get("calibration"))
                    for ev in (ctx.doc.get("evaluation") or {}).values())
-    return ((((polls is not None and polls != fitted) or outdated) and not ctx.tried_within(1))
+    # The day the priors' election is certified, the next refit fits them.
+    unmeasured = _priors_certified(ctx.today or utcnow().date()) and "priorsComparison" not in ctx.doc
+    return ((((polls is not None and polls != fitted) or outdated or unmeasured) and not ctx.tried_within(1))
             or not ctx.tried_within(30)
             or (not ctx.tried_within(7) and _fits_behind(ctx.today)))
 
@@ -943,7 +1182,8 @@ def _forecast_command(ctx: Context) -> list[str]:
     return [PY, _script("fit_forecast_model.py"), "--cache", "{tmp}", "--polls", polls,
             "--senate-model", "{out}", "--senate-training", "{out:forecast_training.json}",
             "--house-model", "{out:forecast_house_model.json}",
-            "--house-training", "{out:forecast_house_training.json}"]
+            "--house-training", "{out:forecast_house_training.json}",
+            *(["--fit-priors"] if _priors_certified(ctx.today or utcnow().date()) else [])]
 
 
 def _cycles_fitted(doc: dict) -> set[int]:
@@ -962,23 +1202,12 @@ def _forecast_gate(new: dict, old: dict) -> list[str]:
     return failures
 
 
-def _forecast_priors_stale(ctx: Context) -> str | None:
-    """The map's stated priors (model.STATED_PRIORS: the sample-size clip and
-    reference, the house-effect shrink, the half-life grid) are to be fitted
-    once the election they were stated for is certified, and not while a
-    map built on them is live. From the January 3 after a general held
-    since model.PRIORS_STATED_ON, a fit that doesn't record fitted priors
-    for every horizon is stale."""
-    fits = (ctx.doc.get("fits") or {}).values()
-    if fits and all((f.get("priors") or {}).get("fitted") for f in fits):
-        return None
-    if last_certified_general(ctx.today) == last_certified_general(date.fromisoformat(model.PRIORS_STATED_ON)):
-        return None
-    return ("the election map's poll weighting still rests on stated priors (app/forecast/model.py: N_REF, "
-            "N_MIN, N_CAP, HOUSE_SHRINK, HALF_LIFE_GRID), and the election they were stated for has been "
-            "certified. Run scripts/fit_forecast_model.py --fit-priors, review the refit's held-out checks, "
-            "make the flag the default in _forecast_command, and update the map's method section, which "
-            "names them as stated.")
+def _priors_certified(today: date) -> bool:
+    """The election the map's stated priors were stated for
+    (model.PRIORS_STATED_ON) has been certified: from then on each refit
+    also fits the priors, kept only under the acceptance rule
+    (scripts/fit_forecast_model.py --fit-priors, `priorsComparison`)."""
+    return last_certified_general(today) != last_certified_general(date.fromisoformat(model.PRIORS_STATED_ON))
 
 
 # Familywise error rate of the forward check's alert.
@@ -997,10 +1226,10 @@ def _forward_finding(docs: dict[str, dict]) -> str | None:
     horizon in turn, so each is a claim the page makes, and Holm is never
     less powerful than Bonferroni over the same family. The horizons score
     the same races, so the correction is conservative; it errs toward
-    silence, which suits an alert a person has to act on.
+    silence.
 
     Too narrow is the harmful direction (overconfident ranges) and alerts.
-    Far too wide alerts naming the knob; a range a little wide in one
+    Far too wide alerts too; a range a little wide in one
     cycle (2024's Senate: 31 of 32 at one and two weeks out) does not, and
     the page shows the figure either way. The fit is published regardless,
     so the page's figures match its inputs."""
@@ -1023,8 +1252,7 @@ def _forward_finding(docs: dict[str, dict]) -> str | None:
         what = (f"too narrow: 80% ranges held {t['held']} of {t['n']} results ({fw['coverage80']:.0%}), "
                 f"p={t['under']:.2g} against 80%" if direction == "under" else
                 f"far too wide: 80% ranges held {t['held']} of {t['n']} ({fw['coverage80']:.0%}), "
-                f"p={t['over']:.2g} against {model.WIDE_COVERAGE:.0%}; the knob is the spread's scale factor "
-                f"(model.fit_scale, `scale` in the fit), fitted on all training cycles alike")
+                f"p={t['over']:.2g} against {model.WIDE_COVERAGE:.0%}")
         lines.append(f"{chamber} {fw['cycle']}, {h} days out (fitted on {fw['trainedOn'][0]}-{fw['trainedOn'][1]}): "
                      f"{what}")
     return ("the forward check (each chamber's newest cycle, fitted on earlier cycles only) fails at familywise "
@@ -1043,8 +1271,18 @@ DATA_FILES: list[DataFile] = [
              command=lambda ctx: [PY, _script("fetch_committee_jurisdictions.py"), "{out}"],
              due=_jurisdictions_due, gate=_jurisdictions_gate, timeout_s=900),
     DataFile("committee_routing_calibration.json",
-             command=lambda ctx: [PY, _script("calibrate_committee_routing.py"), "--output", "{out}"],
-             due=_routing_due, gate=_routing_gate, heavy=True, timeout_s=3600),
+             command=lambda ctx: [PY, _script("calibrate_committee_routing.py"), "--in-use", "{in_use}",
+                                  "--output", "{out}"],
+             due=_every(1), gate=_routing_gate, accept=precision_rule_accepts, heavy=True, timeout_s=3600),
+    DataFile("member_photo_calibration.json",
+             command=lambda ctx: [PY, _script("calibrate_member_photos.py"), "--in-use", "{in_use}",
+                                  "--output", "{out}"],
+             due=_every(1), gate=_member_photo_gate, accept=precision_rule_accepts, timeout_s=600),
+    # The two newest presidential elections an official compilation covers
+    # (MEDSL's newest Dataverse file, the FEC's compilations), found by rule:
+    # a new election's returns move the window with no edit.
+    DataFile("state_pvi.json", command=lambda ctx: [PY, _script("fetch_state_pvi.py"), "{out}"],
+             due=_every(30), gate=_state_pvi_gate, moves_scores=True, timeout_s=900),
     DataFile("state_population.json", command=lambda ctx: [PY, _script("fetch_state_population.py"), "{out}"],
              due=_every(90), gate=_population_gate, moves_scores=True, timeout_s=300),
     DataFile("bill_title_token_df.json",
@@ -1069,21 +1307,50 @@ DATA_FILES: list[DataFile] = [
     DataFile(training_polls.FILE_NAME, command=_training_polls_command, due=_training_polls_due,
              gate=training_polls.gate, timeout_s=900),
     DataFile("forecast_model.json", command=_forecast_command, due=_forecast_due, gate=_forecast_gate,
-             outputs=FORECAST_OUTPUTS, check=_forward_finding, stale=_forecast_priors_stale, heavy=True,
+             outputs=FORECAST_OUTPUTS, check=_forward_finding, heavy=True,
              timeout_s=3600),
     DataFile("eavs.json", command=lambda ctx: [PY, _script("fetch_eavs.py"), "{out}"], due=_every(30),
              gate=_eavs_gate, timeout_s=900),
     DataFile("agency_crosswalk.json", command=lambda ctx: [PY, _script("calibrate_agency_crosswalk.py"), "{out}"],
              due=_every(30), gate=_agency_crosswalk_gate, timeout_s=300),
-    DataFile(OCCUPATION_FILE, stale=_occupation_industry_stale),
-    DataFile("court_finding.json", stale=_court_finding_stale),
-    DataFile("environmental.json", stale=_egrid_stale),
-    DataFile("site_search_calibration.json", stale=_search_kinds_stale("calibrate_site_search.py")),
-    DataFile("search_fusion_calibration.json", stale=_search_kinds_stale("calibrate_search_fusion.py")),
-    DataFile("ces_member_approval.json", stale=_ces_stale),
-    DataFile("peer_gdp_per_capita.json", stale=_peer_gdp_stale),
-    DataFile("bluesky_post_windows.json", stale=_bluesky_windows_stale),
-    DataFile("position_confidence.json", stale=_position_confidence_stale),
-    DataFile("commemorative_calibration.json", stale=_commemorative_stale),
+    DataFile(OCCUPATION_FILE,
+             command=lambda ctx: [PY, _script("fetch_occupation_industry.py"), "--download", "--work", "{tmp}",
+                                  "--output", "{out}"],
+             due=_occupation_due, gate=_occupation_gate, heavy=True, moves_scores=True, timeout_s=6 * 3600),
+    DataFile("court_finding.json",
+             command=lambda ctx: [PY, _script("fetch_court_finding.py"), "{out}"],
+             due=_every(30), gate=_court_finding_gate, timeout_s=3600),
+    DataFile("environmental.json", command=lambda ctx: [PY, _script("fetch_egrid.py"), "{in_use}", "{out}"],
+             due=_every(30), gate=_egrid_gate, timeout_s=600),
+    DataFile("site_search_calibration.json",
+             command=lambda ctx: [PY, _script("calibrate_site_search.py"), "--database", settings.DATABASE_URL,
+                                  "--in-use", "{in_use}", "--output", "{out}"],
+             due=_search_due, gate=_search_gate(("direct_floor", "direct_margin", "pool", "enough")),
+             accept=held_out_beats_in_use, heavy=True, timeout_s=4 * 3600),
+    DataFile("search_fusion_calibration.json",
+             command=lambda ctx: [PY, _script("calibrate_search_fusion.py"), "--in-use", "{in_use}",
+                                  "--output", "{out}"],
+             due=_search_due, gate=_search_gate(("k", "document_weight")),
+             accept=held_out_beats_in_use, heavy=True, timeout_s=4 * 3600),
+    DataFile("ces_member_approval.json",
+             command=lambda ctx: [PY, _script("fetch_ces_approval.py"), "--in-use", "{in_use}", "--output", "{out}",
+                                  "--cache", "{tmp}"],
+             due=_every(30), gate=_ces_gate, heavy=True, moves_scores=True, timeout_s=2 * 3600),
+    DataFile("peer_gdp_per_capita.json", command=lambda ctx: [PY, _script("fetch_peer_gdp.py"), "{out}"],
+             due=_every(30), gate=_peer_gdp_gate, moves_scores=True, timeout_s=900),
+    DataFile("bluesky_post_windows.json",
+             command=lambda ctx: [PY, _script("fetch_bluesky_activity.py"), "refresh", "{out}", "{tmp}"],
+             due=_every(90), gate=_windows_gate, timeout_s=3 * 3600),
+    DataFile("position_confidence.json",
+             command=lambda ctx: [PY, _script("calibrate_position_confidence.py"), "--cache", "{tmp}",
+                                  "--in-use", "{in_use}", "--out", "{out}"],
+             due=_position_confidence_due, gate=_position_confidence_gate, scoring_inputs=_position_inputs,
+             heavy=True, timeout_s=6 * 3600),
+    DataFile("commemorative_calibration.json",
+             command=lambda ctx: [PY, _script("calibrate_commemorative.py"), "--cache", "{tmp}", "--in-use",
+                                  "{in_use}", "--output", "{out}"],
+             due=_every(30), gate=_commemorative_gate, accept=held_out_beats_in_use,
+             scoring_inputs=lambda doc: doc.get("threshold"), heavy=True, timeout_s=3 * 3600),
     DataFile("district_lean.json", stale=_district_lean_stale),
+    DataFile(MAPS_FILE, command=_maps_command, due=_maps_due, gate=_maps_gate, heavy=True, timeout_s=1800),
 ]

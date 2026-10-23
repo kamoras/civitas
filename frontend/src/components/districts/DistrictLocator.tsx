@@ -196,7 +196,7 @@ export default function DistrictLocator({
   return (
     <div className="mt-3" data-district-locator>
       {split.length > 0 && (
-        <p className="mb-2 text-small text-ink-lo">
+        <p className="mb-2 text-body text-ink-lo">
           To tell which part of {split.map((p) => p.name).join(" or ")} is yours, use your location
           or tap your part of the town on its map. Either way it is worked out on this device and
           nothing is sent.
@@ -239,7 +239,7 @@ export default function DistrictLocator({
           />
         ))}
       {((houseGov && !legislature) || officialLookup) && (
-        <p className="mt-2 text-small text-ink-min">
+        <p className="mt-2 text-body text-ink-min">
           For an exact answer from your street address,{" "}
           {houseGov && !legislature && (
             <a
@@ -470,7 +470,7 @@ function TownMap({
   if (topo === undefined) return <p className="mt-2 text-small text-ink-min">Loading the map…</p>;
   if (!view)
     return (
-      <p className="mt-2 text-small text-ink-min">
+      <p className="mt-2 text-body text-ink-min">
         No map of {label} is available on these lines. Use your location or the official lookup.
       </p>
     );
@@ -562,7 +562,7 @@ function TownMap({
             )
         )}
       </svg>
-      <figcaption className="mt-2 text-small text-ink-min">
+      <figcaption className="mt-2 text-body text-ink-min">
         {label}, drawn from the Census Bureau&apos;s district and town lines. Tap your part, or pick
         it below.
       </figcaption>

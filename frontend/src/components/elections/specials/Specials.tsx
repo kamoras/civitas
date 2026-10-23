@@ -94,7 +94,7 @@ export function SpecialItem({ s }: { s: SpecialElection }) {
         {s.note && <span className="text-ink-min"> · {s.note}</span>}
       </p>
       <SpecialCountLines s={s} />
-      {s.swing && <p className="mt-2 text-small text-ink-hi">{s.swing.sentence}</p>}
+      {s.swing && <p className="mt-2 text-body text-ink-hi">{s.swing.sentence}</p>}
       {absent && <p className="mt-1 text-small text-ink-min">{absent}</p>}
     </li>
   );
@@ -118,7 +118,7 @@ function VacancyItem({ v }: { v: SeatVacancy }) {
           </a>
         )}
       </p>
-      <p className="mt-1 text-small text-ink-min">
+      <p className="mt-1 text-body text-ink-min">
         {v.nextSpecial ? (
           <>
             Next: {v.nextSpecial.label ?? "special election"}, {longDate(v.nextSpecial.date)}.
@@ -161,7 +161,7 @@ export default function SpecialsBoardView({
           ))}
         </ul>
       ) : (
-        <p className="mt-2 text-small text-ink-lo">
+        <p className="mt-2 text-body text-ink-lo">
           Every seat in Congress is filled, by the House Clerk&apos;s and the Senate&apos;s own
           member lists.
         </p>

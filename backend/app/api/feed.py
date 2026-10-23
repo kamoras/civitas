@@ -40,6 +40,7 @@ from app.models import Agency, BroadcastPost
 from app.services.bill_record import canonical_bill_id
 from app.services.senator_service import STATE_NAMES
 from app.site_assets import icon_url, versioned_card
+from app import scoring_revisions as scoring_revisions_module
 from app import whats_new as whats_new_module
 
 router = APIRouter()
@@ -298,6 +299,17 @@ def whats_new():
         "entries": [{k: e[k] for k in ("id", "date", "title", "summary", "url")} for e in whats_new_module.entries()],
         "feed": feed_path("new"),
     }, max_age=CACHE_TTL_LIST_S)
+
+
+@router.get("/score-revisions")
+def score_revisions():
+    """Accepted refits of scoring calibrations, newest first
+    (app/scoring_revisions.py): each moved the version member scores carry
+    ("v6.38.1"). /changelog lists them beside the code's versions."""
+    return cached_json({"revisions": [
+        {k: r.get(k) for k in ("version", "base", "at", "file", "why")}
+        for r in reversed(scoring_revisions_module.revisions())
+    ]}, max_age=CACHE_TTL_LIST_S)
 
 
 # HEAD, which some feed readers send before a GET, is answered by the same

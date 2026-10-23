@@ -25,8 +25,7 @@ from app.database import get_db
 from app.election_calendar import next_election_day
 from app.election_phase import election_today, season
 from app.next_cycle import deadline_event
-from app.models import AgencyBudget, PresidentialSupport, Representative, RollCall, Senator
-from app.pipeline.analyze.presidential_support import counted_votes
+from app.models import AgencyBudget, RollCall
 from app.redistricting import overlap_file, redrawn_overlap_states
 from app.services import committee_record, congress_service
 from app.services.bill_service import get_bills_in_flight
@@ -64,7 +63,6 @@ def congress(db: Session) -> dict:
         "metThisWeek": sum(1 for c in committees if c["latest"] >= week_start) if day else None,
     }
     out["bills"] = {"inMotion": get_bills_in_flight(db, per_page=1).in_motion}
-    out["president"] = {c: _president(db, c) for c in ("house", "senate")}
     return out
 
 
@@ -79,23 +77,6 @@ def _recess(db: Session, day: date | None) -> dict | None:
     if r is None:
         return None
     return {"lastBusinessDay": r["lastBusinessDay"]}
-
-
-def _president(db: Session, chamber: str) -> dict | None:
-    """Serving members' votes on the roll calls the president took a
-    position on, the share cast on the president's side, and how many such
-    roll calls: the chamber page's members, summed (chamber_view)."""
-    model = Senator if chamber == "senate" else Representative
-    rows = db.query(PresidentialSupport.congress, PresidentialSupport.with_president, PresidentialSupport.votes).join(
-        model, model.id == PresidentialSupport.member_id,
-    ).filter(PresidentialSupport.chamber == chamber, model.is_current.is_(True)).all()
-    votes = sum(r.votes for r in rows)
-    if not votes:
-        return None
-    return {
-        "rate": round(sum(r.with_president for r in rows) / votes, 4),
-        "rollCalls": len(counted_votes(db, chamber, rows[0].congress)),
-    }
 
 
 def elections(db: Session) -> dict:

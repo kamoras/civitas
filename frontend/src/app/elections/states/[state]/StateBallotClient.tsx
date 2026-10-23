@@ -226,7 +226,7 @@ function StateLegChamberSection({
           <StateLegSeatRow key={d.district} seat={d} filter={filter} />
         ))}
         {shown.length === 0 && (
-          <p className="border border-white/[0.09] p-4 text-small text-ink-min">
+          <p className="border border-white/[0.09] p-4 text-body text-ink-min">
             No {chamber.label} seat matches “{filter}”. Try your town, your county, a
             candidate&apos;s name, or a district number.
           </p>
@@ -248,7 +248,7 @@ function StateLegislatureDetail({
   const [located, setLocated] = useState<Record<string, string | null>>({});
   return (
     <div>
-      <p className="text-small text-ink-min mb-3">
+      <p className="text-body text-ink-min mb-3">
         Each voter votes in exactly one seat per chamber. Each is listed with the places and
         counties it covers: filter by yours to find it.
       </p>
@@ -269,7 +269,7 @@ function StateLegislatureDetail({
           initialFilter={located[chamber.chamber] ?? ""}
         />
       ))}
-      <p className="mt-1 text-small text-ink-min">
+      <p className="mt-1 text-body text-ink-min">
         {ballot.statewideCoverage.ballotList
           ? "Every candidate on the state's list for the November ballot. "
           : `${PRIMARY_RESULTS_CAVEAT} This is not the full chamber. `}
@@ -292,7 +292,7 @@ function JudicialDetail({ ballot }: { ballot: StateBallot }) {
         <p className="text-small text-ink">
           No judicial contests are on {state}&apos;s {calendarDate(ballot.electionDate)} ballot.
         </p>
-        <p className="mt-2 text-small text-ink-min">
+        <p className="mt-2 text-body text-ink-min">
           Judges here are elected at the primary: a candidate who takes a majority wins the seat
           outright, so it never reaches the general election ballot. Retention questions are a
           separate ballot item and are not covered.
@@ -303,7 +303,7 @@ function JudicialDetail({ ballot }: { ballot: StateBallot }) {
 
   return (
     <div>
-      <p className="text-small text-ink-min mb-3">
+      <p className="text-body text-ink-min mb-3">
         Judges are elected here on a partisan ballot, the same as any other office.
       </p>
       {judicialRaces.map((court) => (
@@ -331,7 +331,7 @@ function JudicialDetail({ ballot }: { ballot: StateBallot }) {
           </div>
         </div>
       ))}
-      <p className="mt-1 text-small text-ink-min">
+      <p className="mt-1 text-body text-ink-min">
         {ballot.judicialCoverage.ballotList
           ? "Every candidate on the state's list for the November ballot. "
           : `${PRIMARY_RESULTS_CAVEAT} This is not the full bench. `}
@@ -399,7 +399,7 @@ function StatewideSeatGroup({ seats, lookupHref }: { seats: StatewideRace[]; loo
         )}
       </h3>
       {byDistrict && (
-        <p className="mt-1 text-small text-ink-lo">
+        <p className="mt-1 text-body text-ink-lo">
           Each voter votes in one district&apos;s seat only.{" "}
           {canFilter ? "Filter by your town to find yours, or " : "Find yours with "}
           <a href={lookupHref} target="_blank" rel="noopener noreferrer" className={INLINE_LINK}>
@@ -409,7 +409,7 @@ function StatewideSeatGroup({ seats, lookupHref }: { seats: StatewideRace[]; loo
         </p>
       )}
       {first.electedBy === "statewide" && (
-        <p className="mt-1 text-small text-ink-lo">
+        <p className="mt-1 text-body text-ink-lo">
           Every voter in the state votes for each seat; a seat&apos;s number only says which one it
           is.
         </p>
@@ -509,7 +509,7 @@ function StatewideExecutiveDetail({
         // which would claim a reading that never happened.
         <p className="mt-2 text-small text-ink-lo">{statewideCoverage.basis}</p>
       )}
-      <p className="mt-3 text-small text-ink-min">
+      <p className="mt-3 text-body text-ink-min">
         {statewideCoverage.basis && statewideRaces.length === 0
           ? "From the state's election calendar"
           : statewideCoverage.sourceName
@@ -546,11 +546,11 @@ function StateOfficesNotLoaded({
 }) {
   return (
     <div className="border border-signal-amber/40 bg-signal-amber/10 p-4">
-      <p className="text-small text-signal-amber">
+      <p className="text-body text-signal-amber">
         Civitas does not have {ballot.state}&apos;s own offices yet: its statewide offices, state
         legislature and elected judges.
       </p>
-      <p className="text-small text-ink-lo mt-2">
+      <p className="text-body text-ink-lo mt-2">
         This does <strong>not</strong> mean there are none on the ballot: those contests are read
         state by state from each state&apos;s own results, and this one is not covered yet. Use the{" "}
         <a href={lookupHref} target="_blank" rel="noopener noreferrer" className={INLINE_LINK}>
@@ -638,7 +638,7 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
       <div className="space-y-3">
         {unread && (
           <div role="status" className="border border-signal-amber/40 bg-signal-amber/10 p-3">
-            <p className="text-small text-signal-amber">
+            <p className="text-body text-signal-amber">
               Civitas has stopped reading {state}&apos;s measures automatically. The list below is
               from our last read{readDate ? `, ${readDate}` : ""}, and may be out of date: check the{" "}
               <a
@@ -658,7 +658,7 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
           // else for this ballot yet (Oklahoma's register re-dating its
           // only State Question). "Could not find the list" would be false.
           <div role="status" className="border border-signal-amber/40 bg-signal-amber/10 p-3">
-            <p className="text-small text-signal-amber">
+            <p className="text-body text-signal-amber">
               {state}&apos;s latest list no longer includes the measures below, and names none for
               this ballot yet
               {measureCoverage.lastAttemptAt
@@ -684,7 +684,7 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
         )}
         {!unread && stale && !(allRemoved && measureCoverage.status === "not_yet_covered") && (
           <div role="status" className="border border-signal-amber/40 bg-signal-amber/10 p-3">
-            <p className="text-small text-signal-amber">
+            <p className="text-body text-signal-amber">
               {measureCoverage.status === "ingest_failed"
                 ? `Our latest attempt to re-read ${state}'s measures failed`
                 : `Our latest check could not find ${state}'s published list`}
@@ -731,7 +731,7 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
         {measures.map((m) => (
           <BallotMeasureCard key={m.id} measure={m} />
         ))}
-        <p className="text-small text-ink-min">
+        <p className="text-body text-ink-min">
           {measures.length} statewide {measures.length === 1 ? "measure" : "measures"} on record
           from {sources.length ? sources.join(" and ") : "the source"}
           {readDate ? ` · last read successfully ${readDate}` : ""}. Local measures on your ballot
@@ -763,7 +763,7 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
           No statewide ballot measures are on {state}&apos;s {calendarDate(ballot.electionDate)}{" "}
           ballot.
         </p>
-        <p className="text-small text-ink-min mt-2">
+        <p className="text-body text-ink-min mt-2">
           Per {measureCoverage.sourceName || "our source"}
           {measureCoverage.checkedAt ? `, checked ${measureCoverage.checkedAt.slice(0, 10)}` : ""}.
           Your county or city may still have local measures: check the{" "}
@@ -788,12 +788,12 @@ function MeasuresSection({ ballot, lookupHref }: { ballot: StateBallot; lookupHr
         : "we have not checked this state yet.";
   return (
     <div className="border border-signal-amber/40 bg-signal-amber/10 p-4">
-      <p className="text-small text-signal-amber">
+      <p className="text-body text-signal-amber">
         {failed
           ? `Civitas does not have ${state}'s statewide ballot measures yet.`
           : `${state}'s statewide ballot measures are not yet covered.`}
       </p>
-      <p className="text-small text-ink-lo mt-2">
+      <p className="text-body text-ink-lo mt-2">
         This does <strong>not</strong> mean there are none: {why} Use the{" "}
         <a href={lookupHref} target="_blank" rel="noopener noreferrer" className={INLINE_LINK}>
           official lookup ↗
@@ -864,7 +864,7 @@ function TownDetail({
 
   return (
     <div>
-      <p className="text-small text-ink-min mb-3">
+      <p className="text-body text-ink-min mb-3">
         Optional and approximate: results are resolved against a fixed, public address in the town
         you pick (e.g. town hall), never an address you type in. If your own precinct differs from
         that address within town limits, some local races here may not match yours.
@@ -903,7 +903,7 @@ function TownDetail({
               // for. Showing those candidates with no warning would
               // misstate what's actually on the November ballot.
               <div className="border border-signal-amber/40 bg-signal-amber/10 p-3">
-                <p className="text-small text-signal-amber">
+                <p className="text-body text-signal-amber">
                   These local races are from {selected}&apos;s{" "}
                   {ballot.electionName || "most recently published ballot"}
                   {ballot.electionDate ? ` (${calendarDate(ballot.electionDate)})` : ""},{" "}
@@ -1162,7 +1162,7 @@ function HouseDetail({
               </p>
             )}
             {picked.redistricting && (
-              <p className="mt-1 text-small text-ink-lo">
+              <p className="mt-1 text-body text-ink-lo">
                 {newDistrictSentence(picked.redistricting, !resultsMode)}{" "}
                 <Link
                   href={redistrictingHref(ballot.state, `new-${picked.district ?? 0}`)}
@@ -1202,7 +1202,7 @@ function HouseDetail({
   return (
     <div>
       {newLines ? (
-        <p className="mb-3 text-small text-ink-lo">
+        <p className="mb-3 text-body text-ink-lo">
           {resultsMode ? (
             <>
               {/* "is", not "was held": results mode starts at midnight on
@@ -1250,7 +1250,7 @@ function HouseDetail({
           .
         </p>
       ) : (
-        <p className="mb-3 text-small text-ink-lo">
+        <p className="mb-3 text-body text-ink-lo">
           {resultsMode ? HOUSE_ONE_EACH_RESULTS : HOUSE_ONE_EACH} Point at the map, pick your
           county, or filter by a city, town, county, a candidate&apos;s name or a district number,
           or{" "}
@@ -1307,7 +1307,7 @@ function HouseDetail({
             }
             className="w-full min-w-0 border border-white/15 bg-surface-base px-3 py-2 font-mono text-small text-ink-hi placeholder:text-ink-min"
           />
-          <p className="mt-1.5 text-small text-ink-min">
+          <p className="mt-1.5 text-body text-ink-min">
             {/* Named, because /politicians finds today's member on the
                 sitting Congress's lines, a different map in a state that
                 redrew. */}

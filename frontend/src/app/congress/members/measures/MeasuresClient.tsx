@@ -5,6 +5,7 @@ import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import SectionTabs from "@/components/layout/SectionTabs";
 import { MEASURES_HREF } from "@/lib/routes";
+import { presidentSupportHref } from "@/lib/presidentialSupport";
 import Footer from "@/components/layout/Footer";
 import { STATE_NAMES, byStateName } from "@/lib/stateCodes";
 import type { ChamberMeasure, ChamberMeasures, ChamberMember, ChamberPoint } from "@/types/peers";
@@ -111,7 +112,8 @@ function ChamberStrip({ m, house }: { m: ChamberMeasure; house: boolean }) {
     name: p.name,
     detail: partySeat(p, house),
     shown: p.shown,
-    rank: p.rank,
+    // Votes with the president: range, expected rate and the comparison.
+    rank: p.context ?? p.rank,
     href: `/politicians/${p.id}`,
     x: at(p.value),
     y: top(i) + 3.5,
@@ -138,7 +140,18 @@ function ChamberStrip({ m, house }: { m: ChamberMeasure; house: boolean }) {
           </a>
         </p>
       </div>
-      <p className="max-w-prose text-small text-ink">{m.why}</p>
+      <p className="max-w-prose text-body text-ink">{m.why}</p>
+      {m.ruleText && <p className="mt-1 max-w-prose text-small text-ink-lo">{m.ruleText}</p>}
+      {m.key === "presidentSupport" && (
+        <p className="mt-1 text-small">
+          <Link
+            href={presidentSupportHref(house ? "house" : "senate")}
+            className="text-phos underline underline-offset-2"
+          >
+            Every vote and the president&apos;s position
+          </Link>
+        </p>
+      )}
       {/* The table below is the full text form of these strips. */}
       {wholeCounts(
         m.unit,
@@ -192,8 +205,24 @@ function ChamberStrip({ m, house }: { m: ChamberMeasure; house: boolean }) {
                 style={{ left: `${at(m.median)}%` }}
               />
             )}
+            {/* Votes with the president: each party's median in its colour,
+                labelled under the strip. */}
+            {m.partyMedians?.map((t) => (
+              <span
+                key={t.party}
+                className="absolute top-1 h-12 -translate-x-1/2 border-l-2 border-dashed"
+                style={{
+                  left: `${at(t.value)}%`,
+                  borderColor: PARTY_FILL[t.party] ?? "var(--ind-purple)",
+                }}
+              />
+            ))}
           </StripPoints>
-          <StripAxis start={m.axisStartShown} end={m.axisEndShown} />
+          <StripAxis
+            start={m.axisStartShown}
+            end={m.axisEndShown}
+            ticks={m.partyMedians?.map((t) => ({ at: at(t.value), text: t.shown }))}
+          />
         </>
       )}
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -205,7 +234,15 @@ function ChamberStrip({ m, house }: { m: ChamberMeasure; house: boolean }) {
 }
 
 type SortKey =
-  "name" | "state" | "smallGifts" | "pacMoney" | "breaks" | "billsPastCommittee" | "passed" | "law";
+  | "name"
+  | "state"
+  | "smallGifts"
+  | "pacMoney"
+  | "breaks"
+  | "billsPastCommittee"
+  | "passed"
+  | "law"
+  | "president";
 
 const COLUMNS: { key: SortKey; label: string; numeric: boolean }[] = [
   { key: "name", label: "Member", numeric: false },
@@ -216,6 +253,7 @@ const COLUMNS: { key: SortKey; label: string; numeric: boolean }[] = [
   { key: "billsPastCommittee", label: "Bills past committee", numeric: true },
   { key: "passed", label: "Passed", numeric: true },
   { key: "law", label: "Law", numeric: true },
+  { key: "president", label: "With the president / counted votes", numeric: true },
 ];
 
 /** Seat-lean bands for the House filter, from the seat's Cook PVI. The
@@ -235,6 +273,8 @@ function pct(v: number | null): string {
 
 function sortValue(m: ChamberMember, key: SortKey): string | number | null {
   if (key === "breaks") return m.partyVotes ? (m.breaks ?? 0) / m.partyVotes : null;
+  if (key === "president")
+    return m.presidentVotes ? (m.withPresident ?? 0) / m.presidentVotes : null;
   if (key === "state") return `${m.state}${String(m.district ?? 0).padStart(2, "0")}`;
   return m[key];
 }
@@ -273,7 +313,7 @@ function FactTable({ members, house }: { members: ChamberMember[]; house: boolea
       <h2 id="facts-heading" className={`${TYPE.section} border-t-[3px] border-ink-hi pt-3`}>
         Every member, the plain facts
       </h2>
-      <p className="mt-1 text-small text-ink-lo">
+      <p className="mt-1 text-body text-ink-lo">
         Alphabetical by default. Sort by any column: a sort is a fact, not a rank.
       </p>
       <div className="mt-3 flex flex-wrap gap-3">
@@ -369,6 +409,9 @@ function FactTable({ members, house }: { members: ChamberMember[]; house: boolea
                 <td className="px-3 py-1.5 text-right">{m.billsPastCommittee ?? "—"}</td>
                 <td className="px-3 py-1.5 text-right">{m.passed ?? "—"}</td>
                 <td className="px-3 py-1.5 text-right">{m.law ?? "—"}</td>
+                <td className="px-3 py-1.5 text-right">
+                  {m.presidentVotes == null ? "—" : `${m.withPresident ?? 0} / ${m.presidentVotes}`}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -382,7 +425,7 @@ const TAB_ON = "border-ink-hi bg-ink-hi text-surface-base";
 const TAB_OFF = "border-ink-hi bg-surface text-ink-hi hover:bg-white/5";
 
 /**
- * The chamber measure by measure, in place of the leaderboard: four strips
+ * The chamber measure by measure, in place of the leaderboard: five strips
  * of every member (shapes by party), each with its median and the members
  * furthest from what their seat predicts, then one table of plain facts.
  * No rank, no score and no default order by any judgment. Every figure
@@ -409,9 +452,9 @@ export default function MeasuresClient({
           <SectionTabs section="congress" active="measures" />
           <h1 className={TYPE.title}>{name} by the numbers</h1>
           <p className="mt-2 max-w-2xl text-body text-ink">
-            Four plain measures from FEC filings, roll calls and Congress.gov, every member at once.
-            No rank and no overall score: each member page shows where that member stands among
-            colleagues in the same party.
+            Five plain measures from FEC filings, roll calls, Congress.gov and the White
+            House&apos;s stated positions, every member at once. No rank and no overall score: each
+            member page shows where that member stands among colleagues in the same party.
           </p>
           <nav aria-label="Chamber" className="mt-4 flex flex-wrap">
             {(["senate", "house"] as const).map((c) => (
