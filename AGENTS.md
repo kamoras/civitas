@@ -1901,27 +1901,44 @@ wrong number on election night is worse than none:
   moved feed fails visibly, never as a quiet night and never worked around.
   A primary's contest labels are not proof of the general's: for the 14 days
   before election day a daily job reads every covered state's staged feed
-  exactly as the sync will and alerts on no general listed yet, a feed that
-  could not be read, a refused one, or a race with no contest
-  (`live_results/readiness.py`; it stores nothing and stops the day before).
+  exactly as the sync will (`live_results/readiness.py`; it stores no count
+  and stops the day before). A staged general whose contests account for
+  every race (by label, or by candidates) is ready, and its responses are
+  recorded as the state's reader self-check for the next cycle
+  (`/data/live_results_recordings/<ST>.json`). A general not staged yet is
+  not an alert: the same reader is run on the state's previous general,
+  live through the state's own index where it still lists it, else on the
+  recording replayed offline (bundled first-install recordings for IA, ID,
+  MT and RI, whose indexes no longer list a general), and passes when it
+  accounts for every House seat on file. Only a failed self-check, a
+  refused or unreadable feed, or a staged general missing a race is
+  alerted, one alert a day (condition `results-readiness`), worded as what
+  the system does next (reads again tomorrow, then every five minutes from
+  poll close). An unstaged state gets no lead-time alert before its polls
+  close: Montana's Secretary of State says its results appear after 8 p.m.
+  on election day, and `check_missing_counts` covers the hour after close.
   A reader returns None only when the state's own list or page was read and
   shows nothing on the date (a results host redirecting off itself counts);
-  a failed request raises `FeedUnreadable`, so an outage is never alerted as
-  "not staged" (North Dakota's list answered 504 on 2026-10-20 and was). Washington's House labels changed between primary and
-  general in 2026; and on 2026-10-12 New Mexico's and Montana's results hosts
-  sent their current-election page to their Secretary of State's landing page
-  (Montana's says results come "after 8:00 on November 3"), where in 2024 both
-  served the staged general a month ahead. New Mexico's general stayed
-  staged under its own id (eid=2917, 2026-10-21), found from the ids the
-  state's own results page for the year links (`general_eid_discovery`,
-  each page taken only on its own type and date); Montana's will be named
-  until its host serves the general — the honest state of the feed. The
-  check raises one alert a day listing every state not ready with its
-  reason (condition `results-readiness`), not one per state.
-- A race the state's feed stops listing mid-count (a renamed contest, one set
-  aside as impossible) keeps its last count, tagged NOT IN LATEST READ on the
-  page (`inLatestRead`), and pages someone (`sync._dropped_races`): the
-  state's other races keep its feed looking healthy, so nothing else would.
+  a failed request raises `FeedUnreadable`, so an outage is never read as
+  "not staged" (North Dakota's list answered 504 on 2026-10-20). Each
+  reader finds the general by its date in the state's own index (Clarity's
+  elections.json or the state's landing page, Enhanced Voting's
+  jurisdiction list, Tally's election list); TotalVote's no-eid page is
+  the exception, and a TotalVote state whose page stops serving the staged
+  general names its year page in `general_eid_discovery` (New Mexico's
+  general, eid=2917, 2026-10-21). Montana's host sends its default page to
+  the Secretary of State's site, which is behind a bot wall since
+  2026-10-15; its election ids are not sequential (450002570, 450002785,
+  450002928), so none is found by rule, and the sync reads the default page
+  from poll close.
+- A race the state's feed stops listing under its label mid-count (a
+  renamed contest) is placed by its candidates (`sync.place_by_candidates`:
+  the one contest the reader could not place, `StateCount.unplaced`, whose
+  candidates' surnames are exactly the stored count's, or the confirmed
+  nominees' before a first count; two names or more, one to one); specials
+  the same way. A race placed by neither keeps its last count, tagged NOT
+  IN LATEST READ on the page (`inLatestRead`), and is alerted
+  (`sync._dropped_races`) while the sync keeps rereading.
 - The reporting figure is worded as the source counts it
   (`StateCount.units_complete`, `signals.reporting_line`, frontend
   `reportingText`): "N of M precincts fully reported" where it counts units

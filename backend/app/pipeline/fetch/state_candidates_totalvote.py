@@ -439,7 +439,9 @@ def _updated_at(html: str) -> datetime | None:
     return local.replace(tzinfo=ZoneInfo(zone)).astimezone(timezone.utc).replace(tzinfo=None)
 
 
-def general_contests(html: str) -> list[ContestCount]:
+def general_contests(html: str, unplaced: list[ContestCount] | None = None) -> list[ContestCount]:
+    """Every federal contest on a results page; one whose label is no
+    federal seat goes to `unplaced` (office ""), where given."""
     tree = lxml_html.fromstring(html)
     out = []
     for wrapper in tree.xpath(f"//div[{_xpath_class('wrapper-inside')}]"):
@@ -448,7 +450,7 @@ def general_contests(html: str) -> list[ContestCount]:
             continue
         label = headers[0].text_content().strip()
         parsed = parse_office(label)
-        if parsed is None:
+        if parsed is None and unplaced is None:
             continue
         candidates = [
             (clean_display_name(n), p, v) for n, p, v in _candidate_rows(wrapper, keep_write_ins=True) if not is_not_a_person(n)
@@ -457,8 +459,8 @@ def general_contests(html: str) -> list[ContestCount]:
         reporting = total = None
         if m:
             reporting, total = (int(g.replace(",", "")) for g in m.groups())
-        out.append(ContestCount(
-            office=parsed[0], district=parsed[1], candidates=candidates,
+        (out if parsed else unplaced).append(ContestCount(
+            office=parsed[0] if parsed else "", district=parsed[1] if parsed else None, candidates=candidates,
             reporting_units=reporting, total_units=total or None,
             is_special=is_special_contest(label),
         ))
@@ -577,6 +579,7 @@ async def fetch_general_results(
     if not base_url or not queries:
         return None
     contests: list[ContestCount] = []
+    unplaced: list[ContestCount] = []
     urls = []
     stamps = []
     eid = ""
@@ -601,7 +604,7 @@ async def fetch_general_results(
             raise UntrustedCount(f"{state} results page says {message!r}")
         urls.append(url)
         stamps.append(_updated_at(html))
-        contests.extend(general_contests(html))
+        contests.extend(general_contests(html, unplaced))
     return StateCount(
         source_name=source.get("source_name") or f"{state} election results",
         page_url=urls[0],
@@ -609,6 +612,7 @@ async def fetch_general_results(
         # the module docstring) — boilerplate, not a status to relay.
         official=False,
         contests=contests,
+        unplaced=unplaced,
         # The oldest page's stamp: the count is only as fresh as its
         # stalest part.
         source_updated=min(stamps) if stamps and all(stamps) else None,
