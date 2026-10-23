@@ -20,6 +20,7 @@ from app.database import get_db
 from app.name_casing import candidate_display_name
 from app import district_lean
 from app.district_lean import lean_for as computed_lean_for
+from app.district_lines import lookup_lines
 from app.district_places import counties_on_lines_of, places_on_lines_of
 from app.office_terms import term_years
 from app.state_ballot_scope import on_november_ballot
@@ -1679,6 +1680,10 @@ def state_ballot(state: str, db: Session = Depends(get_db)):
         # representative (house.gov, a member's name) can answer for the
         # old map.
         "newDistrictLines": state in redrawn_states(cycle),
+        # The lookup folder with this ballot's House lines (the Congress the
+        # election seats; district_lines.lookup_lines), null before the
+        # cycle's maps are listed.
+        "houseLookupLines": lookup_lines(state, congress_for_election(cycle)),
         "generalRunoffs": _election_rules(state, cycle, "generalRunoffs"),
         # Contests whose primary was not primaryDate (Alabama's House
         # districts 1, 2, 6 and 7; Louisiana's House, whose primary IS

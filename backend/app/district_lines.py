@@ -44,3 +44,22 @@ def table_for_lines(congress: int, tables: Mapping[int, Mapping[str, T]]) -> dic
         if _map_in(cycles, target, state) == _map_in(cycles, base, state):
             same[key] = value
     return same
+
+
+def lookup_lines(state: str, congress: int) -> str | None:
+    """The folder of frontend/public/data/lookup/ holding `state`'s House
+    district shapes on `congress`'s lines ("congress-119"), or None when
+    that Congress's election isn't listed yet (as in table_for_lines,
+    nothing is carried into an unreviewed cycle).
+
+    The folders are named by map, not by the Congress asking: a state that
+    didn't redraw keeps the earlier Congress's folder, which holds the same
+    lines (build_district_lookup.py builds one folder per map in use). So
+    when a new Congress sits, every state that kept its map is still found
+    with nothing rebuilt; asking for congress-<N> by the sitting Congress's
+    number found no file for 41 states from the day the 120th sat."""
+    cycles = _maps()
+    year = elected_in(congress)
+    if str(year) not in cycles and year > max((int(c) for c in cycles), default=0):
+        return None
+    return f"congress-{_map_in(cycles, year, state).removeprefix('CD')}"

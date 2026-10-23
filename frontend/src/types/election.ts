@@ -656,6 +656,9 @@ export interface StateBallot {
    * (house.gov, a member's name) can answer for the old map.
    * Optional for an older backend: absent reads as false. */
   newDistrictLines?: boolean;
+  /** The lookup folder with this ballot's House lines, null before the
+   *  cycle's maps are listed (district_lines.lookup_lines). */
+  houseLookupLines?: string | null;
   /** Where November does not settle a contest by plurality (Georgia's
    * majority rule; Louisiana's House open primary, where its law makes one), with the
    * runoff's date. Optional for an older backend. */

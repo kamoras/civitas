@@ -20,7 +20,6 @@ import GeneralRunoffNotice, {
 } from "@/components/elections/GeneralRunoffNotice";
 import DistrictFinder from "@/components/elections/DistrictFinder";
 import DistrictLocator from "@/components/districts/DistrictLocator";
-import { ballotHouseLines } from "@/lib/districtAt";
 import DistrictMap from "@/components/elections/DistrictMap";
 import TownContestCard from "@/components/elections/TownContestCard";
 import FollowFeed from "@/components/shared/FollowFeed";
@@ -1341,7 +1340,7 @@ function HouseDetail({
       {houseRaces.length > 1 && (
         <DistrictLocator
           state={ballot.state}
-          lines={ballotHouseLines(ballot.cycleYear, newLines)}
+          lines={ballot.houseLookupLines ?? ""}
           houseGov={!newLines}
           linesLabel={`the ${ballot.cycleYear} election's lines`}
           districts={houseRaces.map((r) => ({ district: r.district ?? 0, places: r.places }))}

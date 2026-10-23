@@ -57,7 +57,13 @@ beforeEach(() => {
   vi.mocked(api.fetchIssueMembers).mockReset().mockResolvedValue(VT);
   vi.mocked(api.fetchHouseDistrictsByCounty)
     .mockReset()
-    .mockResolvedValue({ state: "VT", congress: 119, available: true, districts: [] });
+    .mockResolvedValue({
+      state: "VT",
+      congress: 119,
+      available: true,
+      districts: [],
+      lookupLines: "congress-119",
+    });
   vi.mocked(api.sendActionTap).mockReset();
 });
 

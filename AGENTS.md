@@ -1046,10 +1046,15 @@ What this rules in and out:
   tap are never sent, logged or stored; the House district is kept for
   the tab at most (`hooks/useYourDistrict.ts`: state, map name and
   number, in `sessionStorage`), and the legislative ones not at all. Each
-  surface reads its own map, never the other's: `congress-<N>/` (the
-  Congress in office, from the API) for who represents the reader; on the
-  ballot, the Congress its election seats where the state redrew
-  (`ballotHouseLines`), and `election-<year>/` for the legislature. The shapes are built and gated by
+  surface reads its own map, never the other's: `congress-<N>/` for who
+  represents the reader and, on the ballot, for the Congress its election
+  seats, the folder named by the API (`lookupLines`, `houseLookupLines`:
+  `district_lines.lookup_lines`). Folders are named by the map, the
+  Congress whose block file drew the lines, so a state that kept its map
+  keeps its earlier folder when a new Congress sits (until 2026-10 the
+  page asked for the sitting Congress's number, which from Jan 3, 2027
+  would have found nothing for 41 states); and `election-<year>/` for the
+  legislature. The shapes are built and gated by
   `backend/scripts/build_district_lookup.py`, which places every
   populated 2020 block's internal point in the simplified and the
   unsimplified shapes and refuses to write if simplifying costs more than
