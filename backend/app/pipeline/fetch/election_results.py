@@ -93,6 +93,12 @@ class StateCount:
     # has no order and is never compared, so only its time guards it.
     source_updated: datetime | None = None
     source_version: str | None = None
+    # Candidate contests whose label the reader could not place on a
+    # federal seat (office ""), kept with their counts so the sync can place
+    # one by its candidates instead (sync.place_by_candidates): a contest
+    # renamed mid-count (a new label format) is the same contest, with the
+    # same candidates, and dropping it left the seat's count frozen.
+    unplaced: list[ContestCount] = field(default_factory=list)
 
 
 class UntrustedCount(Exception):

@@ -333,9 +333,13 @@ class TestNotStagedIsNotUnreadable:
         # New Mexico's entry then looks for the general by id (general_eid_discovery).
         monkeypatch.setattr(totalvote, "fetch_text_with_retry", index)
         totalvote._general_eid_misses.clear()
+        monkeypatch.setattr(totalvote, "_scan_misses", {})
+        monkeypatch.setattr(totalvote, "election_today", lambda: DAY.replace(day=1))
         source = election_results.live_source(source_for_state(state))
         assert await totalvote.fetch_general_results(None, DAY, state, source) is None
-        assert asked == [False]
+        # Montana's entry then reads the host's ids upward (eid_scan); each
+        # answers 302 here, so no general is found and nothing is unreadable.
+        assert asked == [False] * (1 + (totalvote.EID_SCAN_BOUND if state == "MT" else 0))
 
     async def test_the_sync_records_an_unreadable_feed_as_unavailable_with_its_reason(self, monkeypatch):
         async def unreadable(client, state, day):

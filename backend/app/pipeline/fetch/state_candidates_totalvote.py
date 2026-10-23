@@ -99,7 +99,9 @@ only NEBRASKA is opted in:
        the page itself is scoped.
 """
 
+import json
 import logging
+import os
 import re
 import time
 from datetime import datetime, timezone
@@ -109,6 +111,8 @@ from zoneinfo import ZoneInfo
 import httpx
 from lxml import html as lxml_html
 
+from app.atomic_write import runtime_data_path, write_text_atomic
+from app.election_phase import election_today
 from app.pipeline.fetch import http_utils
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_text_with_retry
 from app.pipeline.fetch.state_candidates_common import (
@@ -439,7 +443,9 @@ def _updated_at(html: str) -> datetime | None:
     return local.replace(tzinfo=ZoneInfo(zone)).astimezone(timezone.utc).replace(tzinfo=None)
 
 
-def general_contests(html: str) -> list[ContestCount]:
+def general_contests(html: str, unplaced: list[ContestCount] | None = None) -> list[ContestCount]:
+    """Every federal contest on a results page; one whose label is no
+    federal seat goes to `unplaced` (office ""), where given."""
     tree = lxml_html.fromstring(html)
     out = []
     for wrapper in tree.xpath(f"//div[{_xpath_class('wrapper-inside')}]"):
@@ -448,7 +454,7 @@ def general_contests(html: str) -> list[ContestCount]:
             continue
         label = headers[0].text_content().strip()
         parsed = parse_office(label)
-        if parsed is None:
+        if parsed is None and unplaced is None:
             continue
         candidates = [
             (clean_display_name(n), p, v) for n, p, v in _candidate_rows(wrapper, keep_write_ins=True) if not is_not_a_person(n)
@@ -457,8 +463,8 @@ def general_contests(html: str) -> list[ContestCount]:
         reporting = total = None
         if m:
             reporting, total = (int(g.replace(",", "")) for g in m.groups())
-        out.append(ContestCount(
-            office=parsed[0], district=parsed[1], candidates=candidates,
+        (out if parsed else unplaced).append(ContestCount(
+            office=parsed[0] if parsed else "", district=parsed[1] if parsed else None, candidates=candidates,
             reporting_units=reporting, total_units=total or None,
             is_special=is_special_contest(label),
         ))
@@ -544,6 +550,109 @@ async def _discover_general_eid(
     return held[0]
 
 
+# A state whose host sends its no-eid page off the host and has no year
+# page to read ids from (Montana, 2026-10: electionresults.mt.gov's default
+# page answers 302 to sosmt.gov, behind a bot wall since 2026-10-15; the
+# host's own eid pages answer) is found by its id the other way: the host
+# numbers elections upward, so the ids above the newest one it is known to
+# serve (`eid_scan.from`, then the newest found, kept in FRONTIER_FILE) are
+# read in order, one request each (a missing id answers 302 to the host's
+# error page), stopping at the first page whose own type and date say it is
+# this general (_general_held_on, then the same trust checks as any page).
+# The bound is sized from the host's own gaps between consecutive
+# elections (see EID_SCAN_BOUND). Before election day the whole bound is
+# read once a day (the readiness check, about seven minutes at the host's
+# one request a second). From election day the sync reads every five
+# minutes and reads every state at once, so a scan there reads
+# EID_SCAN_CHUNK ids per pass, continuing where the last pass stopped and
+# starting over from the frontier once the bound is covered: no pass waits
+# on more than a minute of it.
+FRONTIER_FILE = "totalvote_eid_frontier.json"
+# Twice the widest gap Montana's host has shown between consecutive
+# elections (read 2026-10-22: 450002570 the 2024 primary, 450002785 the
+# 2024 general, 450002928 the 2026 primary; gaps 215 and 143).
+EID_SCAN_BOUND = 430
+EID_SCAN_CHUNK = 60
+_EID_SCAN_MISS_S = 24 * 3600
+_scan_misses: dict[tuple[str, str], float] = {}
+_scan_cursor: dict[tuple[str, str], int] = {}
+
+
+def _frontier(base_url: str, seed: int) -> int:
+    try:
+        with open(runtime_data_path(FRONTIER_FILE)) as f:
+            stored = json.load(f).get(base_url)
+    except (OSError, ValueError, AttributeError):
+        stored = None
+    return max(seed, stored) if isinstance(stored, int) else seed
+
+
+def _advance_frontier(base_url: str, eid: int) -> None:
+    path = runtime_data_path(FRONTIER_FILE)
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        data = {}
+    if not isinstance(data, dict) or (isinstance(data.get(base_url), int) and data[base_url] >= eid):
+        return
+    data[base_url] = eid
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        write_text_atomic(path, json.dumps(data, sort_keys=True))
+    except OSError:
+        logger.exception("Could not record %s's newest election id", base_url)
+
+
+async def _scan_general_eid(
+    client: httpx.AsyncClient, state: str, base_url: str, query: dict, scan: dict, election_day,
+) -> int | None:
+    """The id of the general held on `election_day`, read forward from the
+    newest id the host is known to serve; None when none within the bound
+    does. Every id that answers moves the frontier, so the next scan (and
+    the next cycle's) starts past it."""
+    key = (base_url, election_day.isoformat())
+    if key in _general_eids:
+        return _general_eids[key]
+    start = _frontier(base_url, int(scan["from"]))
+    if election_today() >= election_day:
+        first = _scan_cursor.get(key, start + 1)
+        if not start < first <= start + EID_SCAN_BOUND:
+            first = start + 1
+        ids = range(first, min(first + EID_SCAN_CHUNK, start + 1 + EID_SCAN_BOUND))
+    else:
+        missed = _scan_misses.get(key)
+        if missed is not None and time.monotonic() - missed < _EID_SCAN_MISS_S:
+            return None
+        ids = range(start + 1, start + 1 + EID_SCAN_BOUND)
+    newest = start
+    found = None
+    for eid in ids:
+        url = f"{base_url}/resultsSW.aspx?type={query['type']}&map={query['map']}&eid={eid}"
+        resp = await http_utils.fetch_with_retry(
+            client, _rate_limiter, "GET", url, log_label=f"{state} election {eid}", headers=BROWSER_HEADERS,
+            follow_redirects=False,
+        )
+        if resp is None:
+            raise FeedUnreadable(f"{state} results host could not be read at election id {eid}")
+        if resp.status_code != 200:
+            continue  # the host's error page: no election under this id
+        newest = eid
+        if _general_held_on(resp.text) == election_day.isoformat():
+            found = eid
+            break
+    if newest > start:
+        _advance_frontier(base_url, newest)
+    if found is None:
+        logger.info("%s: no election id in %d-%d serves the %s general", state, ids.start, ids.stop - 1,
+                    election_day)
+        _scan_misses[key] = time.monotonic()
+        _scan_cursor[key] = ids.stop
+        return None
+    _general_eids[key] = found
+    return found
+
+
 async def fetch_general_results(
     client: httpx.AsyncClient, election_day, state: str, source: dict,
 ) -> StateCount | None:
@@ -577,6 +686,7 @@ async def fetch_general_results(
     if not base_url or not queries:
         return None
     contests: list[ContestCount] = []
+    unplaced: list[ContestCount] = []
     urls = []
     stamps = []
     eid = ""
@@ -584,10 +694,13 @@ async def fetch_general_results(
         url = f"{base_url}/resultsSW.aspx?type={query['type']}&map={query['map']}"
         label = f"{state} general results {query['type']}"
         html = await _results_page(client, state, url + eid, label)
-        if html is None and not eid and source.get("general_eid_discovery"):
-            found = await _discover_general_eid(
-                client, state, base_url, query, source["general_eid_discovery"], election_day,
-            )
+        if html is None and not eid and (source.get("general_eid_discovery") or source.get("eid_scan")):
+            if source.get("general_eid_discovery"):
+                found = await _discover_general_eid(
+                    client, state, base_url, query, source["general_eid_discovery"], election_day,
+                )
+            else:
+                found = await _scan_general_eid(client, state, base_url, query, source["eid_scan"], election_day)
             if found is None:
                 return None
             eid = f"&eid={found}"
@@ -601,7 +714,7 @@ async def fetch_general_results(
             raise UntrustedCount(f"{state} results page says {message!r}")
         urls.append(url)
         stamps.append(_updated_at(html))
-        contests.extend(general_contests(html))
+        contests.extend(general_contests(html, unplaced))
     return StateCount(
         source_name=source.get("source_name") or f"{state} election results",
         page_url=urls[0],
@@ -609,6 +722,7 @@ async def fetch_general_results(
         # the module docstring) — boilerplate, not a status to relay.
         official=False,
         contests=contests,
+        unplaced=unplaced,
         # The oldest page's stamp: the count is only as fresh as its
         # stalest part.
         source_updated=min(stamps) if stamps and all(stamps) else None,

@@ -21,7 +21,7 @@ import asyncio
 import json
 import logging
 from pathlib import Path
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
 
 import httpx
@@ -584,6 +584,65 @@ def _contest_race(db: Session, cycle: int, state: str, contest: ContestCount) ->
     return db.get(Race, _race_id_for(db, cycle, state, contest.office, contest.district))
 
 
+def _surnames(names) -> frozenset[str]:
+    """Surnames of names as a feed prints them ("Jane Q. Doe")."""
+    return frozenset(s.lower() for n in names if (s := surname(n or "")))
+
+
+def _filed_surnames(names) -> frozenset[str]:
+    """The same, of names as the FEC files them ("DOE, JANE Q"): the last
+    word before the comma, which is the word a feed's name ends with."""
+    return frozenset(s.split()[-1] for n in names if (s := normalized_surname(n or "")))
+
+
+def place_by_candidates(
+    db: Session, state: str, election_day: date, unplaced: list[ContestCount], placed: set[str],
+) -> dict[str, ContestCount]:
+    """Races not placed by label this read, each given the one contest the
+    reader could not place (StateCount.unplaced) whose candidates are
+    exactly the race's: by surname, against the candidates of the race's
+    stored count where it has one (a contest renamed mid-count), else its
+    confirmed November nominees (renamed before its first count). Both sides
+    need two names or more, and a match must be one to one: a race whose
+    candidates match no contest, or several, or share their surnames with
+    another race's, is left unplaced. The contest is returned as the race's
+    office and district."""
+    if not unplaced:
+        return {}
+    races = [
+        r for r in db.query(Race).filter(
+            Race.state == state, Race.cycle_year == election_day.year, Race.office.in_(("S", "H")),
+        )
+        if r.id not in placed
+    ]
+    stored = {
+        row.race_id: row for row in db.query(RaceResult).filter(
+            RaceResult.race_id.in_([r.id for r in races]), RaceResult.election_date == election_day.isoformat(),
+        )
+    }
+    keys: dict[str, frozenset[str]] = {}
+    for race in races:
+        row = stored.get(race.id)
+        if row is not None:
+            key = _surnames(t.get("sourceName") for t in json.loads(row.tallies or "[]"))
+        else:
+            key = _filed_surnames(c.name for c in race.candidates if c.confirmed_general)
+        if len(key) >= 2:
+            keys[race.id] = key
+    contests: dict[frozenset[str], list[ContestCount]] = {}
+    for contest in unplaced:
+        if contest_is_sane(contest):
+            contests.setdefault(_surnames(n for n, _, _ in contest.candidates), []).append(contest)
+    out = {}
+    for race in races:
+        key = keys.get(race.id)
+        hits = contests.get(key, []) if key else []
+        if len(hits) == 1 and list(keys.values()).count(key) == 1:
+            logger.info("%s: %s placed by its candidates (the feed's label is no seat the reader knows)", state, race.id)
+            out[race.id] = replace(hits[0], office=race.office, district=race.district)
+    return out
+
+
 # A source stamping its count this far in the future has a broken clock or
 # is not what it says; a few minutes' skew between servers is normal.
 _FUTURE_SKEW = timedelta(hours=1)
@@ -710,7 +769,8 @@ def _apply_state(db: Session, state: str, election_day: date, read: StateRead) -
             send_ops_alert(
                 f"Live results: {state} feed refused",
                 f"{read.reason}. Refused on consecutive reads; nothing from it was stored or published, and "
-                "the page keeps the last trusted count.",
+                "the page keeps the last trusted count. The sync reads the feed again every five minutes and "
+                "stores the count once a read passes every check.",
                 dedupe_key=f"results-untrusted-{state}-{election_day.isoformat()}-{refusal_kind(read.reason)}",
             )
         return {"status": "untrusted", "reason": read.reason}
@@ -729,6 +789,8 @@ def _apply_state(db: Session, state: str, election_day: date, read: StateRead) -
         race = _contest_race(db, election_day.year, state, contest)
         if race is not None:
             by_race.setdefault(race.id, []).append(contest)
+    for race_id, contest in place_by_candidates(db, state, election_day, count.unplaced, set(by_race)).items():
+        by_race[race_id] = [contest]
     results: list[Applied] = []
     events = 0
     for race_id, contests in by_race.items():
@@ -754,7 +816,9 @@ def _apply_state(db: Session, state: str, election_day: date, read: StateRead) -
 def _dropped_races(db: Session, state: str, election_day: date, applied_ids: set[str]) -> list[str]:
     """Races with a stored count that this read of the state's feed did not
     update: the contest was renamed past the reader, dropped as impossible,
-    or now collides with another. Its last count stays stored and shown,
+    or now collides with another (a renamed contest whose candidates are
+    the race's is placed by them first, place_by_candidates). Its last
+    count stays stored and shown,
     with the time it was read and a tag saying it was not in the latest
     read (api/elections.py inLatestRead) — not presented as live — and the
     first time each set of races goes missing pages someone
@@ -777,9 +841,11 @@ def alert_dropped_races(state: str, election_day: date, dropped: list[str]) -> N
     write lock the uncommitted pass holds."""
     send_ops_alert(
         f"Live results: {state} feed no longer lists a race",
-        f"{', '.join(dropped)} had a count but {state}'s latest read did not update it. The page keeps "
-        "its last count, tagged as not in the latest read. Check the contest's label in the feed "
-        "(renamed?) and the sync log (an impossible count, or two contests mapped to one race).",
+        f"{', '.join(dropped)} had a count but {state}'s latest read did not update it: the feed no longer "
+        "lists a contest with that seat's label or with its candidates, or the count it lists is impossible "
+        "or shared by two contests. The page keeps the last count, tagged as not in the latest read, and the "
+        "sync reads the feed again every five minutes, storing the count once the feed lists it again by "
+        "label or by candidates.",
         dedupe_key=f"results-dropped-{state}-{election_day.isoformat()}-{','.join(dropped)}",
     )
 
@@ -885,8 +951,8 @@ def check_missing_counts(db: Session, election_day: date) -> list[str]:
         send_ops_alert(
             f"Live results: no count stored for {state}",
             f"{state}'s polls closed over {int(NO_COUNT_ALERT_AFTER.total_seconds() // 3600)}h ago and no race "
-            f"has a count; {how}. Check the state's results feed: blocked, moved, not published, or every "
-            "contest dropped (unparsed labels, no matching race).",
+            f"has a count; {how}. The sync reads the state's feed every five minutes and stores the count as "
+            "soon as the feed serves it, placing each contest by its label or by its candidates.",
             dedupe_key=f"results-missing-{state}-{election_day.isoformat()}",
         )
     return missing
@@ -910,7 +976,8 @@ def check_stalled_feeds(db: Session, election_day: date) -> list[str]:
             stalled.append(state)
             send_ops_alert(
                 f"Live results: {state} count has stopped moving",
-                f"No change since {latest.isoformat()}Z with units still out. Check the state's own results page.",
+                f"No change since {latest.isoformat()}Z with units still out. The sync keeps reading the feed "
+                "every five minutes and stores each change as it lands.",
                 dedupe_key=f"results-stalled-{state}-{election_day.isoformat()}",
             )
     return stalled
