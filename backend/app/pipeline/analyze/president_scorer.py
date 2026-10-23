@@ -887,7 +887,7 @@ def partisan_reference(points: list[tuple[float, dict[str, float]]]) -> dict | N
 
 
 def window_reference(
-    current: list[tuple[date, float]], completed: list[list[tuple[date, float]]],
+    current: list[tuple[date, float]], completed: dict[str, list[tuple[date, float]]],
     completed_by_party: list[tuple[list[tuple[date, dict[str, float]]], str, float]] | None = None,
 ) -> dict | None:
     """The comparison population for a presidency shorter than a full term
@@ -897,16 +897,22 @@ def window_reference(
     presidencies averaged 57.5% over their first 598 days and 51.9% over
     their full terms), so comparing part of a term with whole terms
     flatters whoever served the shorter time. A presidency shorter than the
-    window is left out rather than compared over less time."""
+    window is left out rather than compared over less time.
+
+    `completed` is each predecessor's series by presidency id; "values"
+    keeps each one's window average and trend by id, so a president's page
+    can rank the presidency among the same-window figures
+    (president_peers), not only against their mean."""
     if len(current) < 2:
         return None
     days = (current[-1][0] - current[0][0]).days
-    windows = [
-        approval_window(series, days)
-        for series in completed
+    by_id = {
+        pid: w
+        for pid, series in completed.items()
         if series and (series[-1][0] - series[0][0]).days >= days
-    ]
-    windows = [w for w in windows if w]
+        and (w := approval_window(series, days))
+    }
+    windows = list(by_id.values())
     # Each predecessor's approval by party over the same days, against the
     # polarization of their own term.
     by_party = [
@@ -921,7 +927,9 @@ def window_reference(
         "approval_trend_fit": fit_trend_on_start([(w["start"], w["trend"]) for w in windows]),
         "partisan_approval": partisan_reference(by_party),
     }
-    return {k: v for k, v in block.items() if v is not None} if len(block) > 1 else None
+    block = {k: v for k, v in block.items() if v is not None}
+    block["values"] = {pid: {"avg": round(w["avg"], 4), "trend": round(w["trend"], 4)} for pid, w in by_id.items()}
+    return block
 
 
 def _president_stat(reference: dict | None, key: str) -> tuple[float, float] | None:
