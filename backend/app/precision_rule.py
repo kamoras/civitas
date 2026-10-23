@@ -70,6 +70,23 @@ def fold_of(days: np.ndarray, folds: int) -> np.ndarray:
     return np.searchsorted(np.array(edges), days, side="right")
 
 
+def held_out_passed(scores: np.ndarray, correct: np.ndarray, days: np.ndarray, grid: list[float], folds: int,
+                    variant: str = BEST_BOUND) -> np.ndarray:
+    """Which items pass when each block of consecutive days is scored by the
+    choice made on the other blocks (none in a block whose choice misses the
+    bar): held_out's pooled passes."""
+    fold = fold_of(days, folds)
+    passed = np.zeros(len(scores), bool)
+    for f in range(folds):
+        test = fold == f
+        if not test.any() or test.all():
+            continue
+        t_meet, _ = choose(scores[~test], correct[~test], grid, variant)
+        if t_meet is not None:
+            passed[test] = scores[test] >= t_meet
+    return passed
+
+
 def held_out(scores: np.ndarray, correct: np.ndarray, days: np.ndarray, grid: list[float], folds: int,
              variant: str = BEST_BOUND) -> dict:
     """The choice made `folds` times, each on all but one block of
