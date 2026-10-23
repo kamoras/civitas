@@ -85,7 +85,12 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from fetch_state_leg_crosswalk import _FIPS  # noqa: E402  (one state table)
 
+from app.contact import CONTACT_COMMENT  # noqa: E402
 from app.pipeline.vector_store import get_similarity_model  # noqa: E402
+
+# Dataverse challenges browser-style User-Agents; one that names itself
+# without "Mozilla" is let through (as scripts/fetch_peer_gdp.py's).
+USER_AGENT = f"Civitas/1.0{CONTACT_COMMENT}"
 
 DATAVERSE = "https://dataverse.harvard.edu"
 CES_DOI = "doi:10.7910/DVN/X11EP6"
@@ -117,7 +122,7 @@ MEMBER_PARTY = {"Democratic": "D", "Republican": "R"}
 
 
 def _get(url: str) -> bytes:
-    with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "Civitas/1.0"}), timeout=300) as r:
+    with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": USER_AGENT}), timeout=300) as r:
         return r.read()
 
 
@@ -457,7 +462,7 @@ def refresh(in_use: pathlib.Path, out: pathlib.Path, cache: pathlib.Path) -> int
     items = tuple((mapping[oid], *item[1:]) for oid, item in zip(old_ids, ITEMS))
     path = cache / datafile["filename"]
     with urllib.request.urlopen(urllib.request.Request(f"{DATAVERSE}/api/access/datafile/{datafile['id']}",
-                                                       headers={"User-Agent": "Civitas/1.0"}), timeout=600) as r, \
+                                                       headers={"User-Agent": USER_AGENT}), timeout=600) as r, \
             open(path, "wb") as f:
         shutil.copyfileobj(r, f, 1 << 20)  # streamed: the 2024 file is 184 MB
     if why := plausible(_rows(path), items):

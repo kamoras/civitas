@@ -33,7 +33,6 @@ Run by app/data_refresh.py monthly (network required):
 """
 
 import datetime
-import io
 import json
 import pathlib
 import re
@@ -41,9 +40,8 @@ import sys
 import urllib.parse
 import urllib.request
 
-import openpyxl
-
 from app.contact import CONTACT_COMMENT
+from app.pipeline.fetch.state_candidates_tabular import xlsx_sheet_files, xlsx_sheet_rows
 US = "USA"  # app.pipeline.fetch.peer_gdp.US; not imported, since that module reads the file this writes
 
 # Each OECD member's date of becoming a member (its deposit of the
@@ -113,21 +111,20 @@ def release_file(version: dict) -> tuple[int, str, str, str]:
             citation)
 
 
-def per_capita_rows(book, wanted: set[str]):
-    """(country, year, GDP per person) from the sheet whose header row names
-    countrycode, year and gdppc, read by those headers."""
-    for ws in book.worksheets:
-        rows = ws.iter_rows(values_only=True)
-        for header in rows:
-            names = [str(c or "").strip().lower() for c in header]
-            if {"countrycode", "year", "gdppc"} <= set(names):
-                code, year, gdppc = (names.index(n) for n in ("countrycode", "year", "gdppc"))
-                for row in rows:
-                    if row[code] in wanted and row[year] is not None and row[gdppc]:
-                        yield row[code], int(row[year]), float(row[gdppc])
-                return
-            if any(names):
-                break  # a sheet whose first row isn't the header is another table
+def per_capita_rows(body: bytes, wanted: set[str]):
+    """(country, year, GDP per person) from the sheet whose first row names
+    countrycode, year and gdppc, read by those headers (standard library)."""
+    for sheet in (xlsx_sheet_files(body) or {}).values():
+        rows = xlsx_sheet_rows(body, sheet) or []
+        names = [c.strip().lower() for c in rows[0]] if rows else []
+        if not {"countrycode", "year", "gdppc"} <= set(names):
+            continue
+        code, year, gdppc = (names.index(n) for n in ("countrycode", "year", "gdppc"))
+        for row in rows[1:]:
+            cells = row + [""] * (len(names) - len(row))
+            if cells[code] in wanted and cells[year] and cells[gdppc]:
+                yield cells[code], int(float(cells[year])), float(cells[gdppc])
+        return
     raise SystemExit("no sheet names countrycode, year and gdppc")
 
 
@@ -139,11 +136,10 @@ def main() -> None:
     body = _get(f"{DATAVERSE}/api/access/datafile/{file_id}")
     if not body.startswith(b"PK"):
         raise SystemExit(f"datafile {file_id} did not return the spreadsheet: {body[:120]!r}")
-    book = openpyxl.load_workbook(io.BytesIO(body), read_only=True)
     peers = peer_countries()
     wanted = {US, *peers}
     countries: dict[str, dict[str, float]] = {}
-    for code, y, gdppc in per_capita_rows(book, wanted):
+    for code, y, gdppc in per_capita_rows(body, wanted):
         if y >= FIRST_YEAR:
             countries.setdefault(code, {})[str(y)] = gdppc
     # The release's last year is the last one every economy has.

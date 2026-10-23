@@ -840,7 +840,9 @@ def _egrid_gate(new: dict, old: dict) -> list[str]:
     rate, prior = grid.get("lbCo2ePerMWh"), before.get("lbCo2ePerMWh")
     if not year or (was and int(year[1]) < int(was[1])):
         failures.append(f"edition {grid.get('edition')} against {before.get('edition')} in use")
-    if not isinstance(rate, (int, float)) or not 200 <= rate <= 2000:
+    # No grid's average has been near either bound (coal-only, about
+    # 2,200 lb/MWh; nothing but renewables, 0).
+    if not isinstance(rate, (int, float)) or not 100 <= rate <= 3000:
         failures.append(f"U.S. rate {rate} lb/MWh")
     elif isinstance(prior, (int, float)) and prior:
         # One edition moves the U.S. average by a few percent a year; a
@@ -902,10 +904,11 @@ def _ces_gate(new: dict, old: dict) -> list[str]:
     return failures
 
 
-# The Court-level finding (scripts/research_justice_loyalty.py
-# --finding-only): the Supreme Court Database's newest release, found by
-# rule, with appointers from the FJC and the presidents table, monthly. It
-# is a measured estimate on new data by a fixed method, not a refit.
+# The Court-level finding (scripts/fetch_court_finding.py, the numpy port of
+# the research script's section 8): the Supreme Court Database's newest
+# release, found by rule, with appointers from the FJC and the presidents
+# table, monthly. It is a measured estimate on new data by a fixed method,
+# not a refit.
 def _court_finding_gate(new: dict, old: dict) -> list[str]:
     failures = []
     if str(new.get("scdbRelease") or "") < str(old.get("scdbRelease") or ""):
@@ -985,7 +988,7 @@ def _forecast_due(ctx: Context) -> bool:
     outdated = any(not model.calibration_current(ev.get("calibration"))
                    for ev in (ctx.doc.get("evaluation") or {}).values())
     # The day the priors' election is certified, the next refit fits them.
-    unmeasured = _priors_certified(ctx.today) and "priorsComparison" not in ctx.doc
+    unmeasured = _priors_certified(ctx.today or utcnow().date()) and "priorsComparison" not in ctx.doc
     return ((((polls is not None and polls != fitted) or outdated or unmeasured) and not ctx.tried_within(1))
             or not ctx.tried_within(30)
             or (not ctx.tried_within(7) and _fits_behind(ctx.today)))
@@ -998,7 +1001,7 @@ def _forecast_command(ctx: Context) -> list[str]:
             "--senate-model", "{out}", "--senate-training", "{out:forecast_training.json}",
             "--house-model", "{out:forecast_house_model.json}",
             "--house-training", "{out:forecast_house_training.json}",
-            *(["--fit-priors"] if _priors_certified(ctx.today) else [])]
+            *(["--fit-priors"] if _priors_certified(ctx.today or utcnow().date()) else [])]
 
 
 def _cycles_fitted(doc: dict) -> set[int]:
@@ -1120,9 +1123,8 @@ DATA_FILES: list[DataFile] = [
              due=_every(30), gate=_agency_crosswalk_gate, timeout_s=300),
     DataFile(OCCUPATION_FILE, stale=_occupation_industry_stale),
     DataFile("court_finding.json",
-             command=lambda ctx: [PY, _script("research_justice_loyalty.py"), "--cache", "{tmp}", "--finding-only",
-                                  "--write-finding", "{out}"],
-             due=_every(30), gate=_court_finding_gate, heavy=True, timeout_s=2 * 3600),
+             command=lambda ctx: [PY, _script("fetch_court_finding.py"), "{out}"],
+             due=_every(30), gate=_court_finding_gate, timeout_s=3600),
     DataFile("environmental.json", command=lambda ctx: [PY, _script("fetch_egrid.py"), "{in_use}", "{out}"],
              due=_every(30), gate=_egrid_gate, timeout_s=600),
     DataFile("site_search_calibration.json",

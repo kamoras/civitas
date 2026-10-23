@@ -45,23 +45,27 @@ MACHINES = ("aarch64", "x86_64")
 DIRECT = {
     "alembic", "apscheduler", "atproto", "certifi", "cryptography", "cssselect", "defusedxml",
     "diff-cover", "fastapi", "httptools", "httpx", "huggingface-hub", "lxml", "mcp", "numpy",
-    "opencv-python-headless", "openpyxl",
-    "packaging", "pandas", "pdfplumber", "pillow", "playwright", "pydantic", "pypdfium2",
+    "opencv-python-headless",
+    "packaging", "pdfplumber", "pillow", "playwright", "pydantic", "pypdfium2",
     "pydantic-settings", "pytesseract", "pytest", "pytest-asyncio",
     "pytest-cov", "pytest-xdist", "pyyaml", "requests", "scikit-learn", "scipy",
-    "sentence-transformers", "sqlalchemy", "sqlite-vec", "starlette", "statsmodels",
+    "sentence-transformers", "sqlalchemy", "sqlite-vec", "starlette",
     "tokenizers", "torch", "uvicorn", "uvloop", "watchfiles", "websockets", "xlrd",
 }
-# The research scripts' own imports beyond DIRECT (time-machine: frozen_clock_plugin.py;
+# The research scripts' own imports beyond DIRECT (openpyxl: pandas loads it
+# by name in read_excel for .xlsx; time-machine: frozen_clock_plugin.py;
 # pyproj: build_district_lean.py; fonttools and brotli, which reads woff2:
 # fetch_site_fonts.py's Open Graph fonts).
 RESEARCH_DIRECT = {
     "brotli",
     "fonttools",
     "onnxruntime",
+    "openpyxl",
+    "pandas",
     "pyproj",
     "pyreadr",
     "rdata",
+    "statsmodels",
     "time-machine",
 }
 
@@ -176,7 +180,7 @@ def test_research_pins_only_add_to_the_app_pins():
 
 def test_research_pins_are_exactly_the_research_tree():
     try:
-        md.distribution("rdata")  # research-only (pandas is requirements.txt's)
+        md.distribution("pandas")
     except md.PackageNotFoundError:
         pytest.skip("research dependencies not installed (the Research deps CI job installs them)")
     _assert_tree_matches(
@@ -265,7 +269,7 @@ def test_every_app_import_is_a_direct_dependency():
 
 def test_every_script_import_is_declared():
     try:
-        md.distribution("rdata")  # research-only (pandas is requirements.txt's)
+        md.distribution("pandas")
     except md.PackageNotFoundError:
         pytest.skip("research dependencies not installed (the Research deps CI job installs them)")
     undeclared = {

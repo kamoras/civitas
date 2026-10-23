@@ -623,15 +623,47 @@ def _xlsx_rows(payload: bytes, skip: int = 0) -> list[dict] | None:
     column the header never named is dropped, never misread as the next
     named column's value.
     """
+    rows = xlsx_sheet_rows(payload)
+    if rows is None:
+        logger.warning("Results download was not a readable xlsx workbook")
+        return None
+    rows = rows[skip:]
+    if not rows:
+        return None
+    header = rows[0]
+    return [dict(zip(header, r[:len(header)] + [""] * (len(header) - len(r)))) for r in rows[1:]]
+
+
+def xlsx_sheet_files(payload: bytes) -> dict[str, str] | None:
+    """{worksheet name as the workbook shows it: its file ("sheet3")}, from
+    xl/workbook.xml and its relationships; None when unreadable."""
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(payload))
+        book = ET.fromstring(archive.read("xl/workbook.xml"))
+        rels = ET.fromstring(archive.read("xl/_rels/workbook.xml.rels"))
+    except (zipfile.BadZipFile, KeyError, ET.ParseError):
+        return None
+    target = {r.get("Id"): r.get("Target", "") for r in rels}
+    out = {}
+    for s in book.iter(f"{_XL_NS}sheet"):
+        rid = s.get("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id")
+        out[s.get("name")] = target.get(rid, "").rsplit("/", 1)[-1].removesuffix(".xml")
+    return out
+
+
+def xlsx_sheet_rows(payload: bytes, sheet: str = "sheet1") -> list[list[str]] | None:
+    """Every row of one worksheet (its file, "sheet1"), as text cells
+    placed by each cell's own reference, each row as wide as its last
+    cell; None when unreadable. See _xlsx_rows for how a cell's text is
+    read."""
     try:
         archive = zipfile.ZipFile(io.BytesIO(payload))
         shared = [
             "".join(t.text or "" for t in si.iter(f"{_XL_NS}t"))
             for si in ET.fromstring(archive.read("xl/sharedStrings.xml"))
         ] if "xl/sharedStrings.xml" in archive.namelist() else []
-        sheet = ET.fromstring(archive.read("xl/worksheets/sheet1.xml"))
+        sheet_xml = ET.fromstring(archive.read(f"xl/worksheets/{sheet}.xml"))
     except (zipfile.BadZipFile, KeyError, ET.ParseError):
-        logger.warning("Results download was not a readable xlsx workbook")
         return None
 
     def cell(c) -> str:
@@ -656,15 +688,8 @@ def _xlsx_rows(payload: bytes, skip: int = 0) -> list[dict] | None:
             by_col[_col_index(ref)] = cell(c)
         return by_col
 
-    sparse_rows = [sparse_row(row) for row in sheet.iter(f"{_XL_NS}row")]
-    if skip:
-        sparse_rows = sparse_rows[skip:]
-    if not sparse_rows:
-        return None
-    width = max(sparse_rows[0], default=-1) + 1
-    rows = [[r.get(i, "") for i in range(width)] for r in sparse_rows]
-    header = rows[0]
-    return [dict(zip(header, r)) for r in rows[1:]]
+    sparse_rows = [sparse_row(row) for row in sheet_xml.iter(f"{_XL_NS}row")]
+    return [[r.get(i, "") for i in range(max(r, default=-1) + 1)] for r in sparse_rows]
 
 
 class _TableReader(HTMLParser):

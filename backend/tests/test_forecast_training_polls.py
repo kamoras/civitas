@@ -333,10 +333,10 @@ def test_ranges_too_narrow_alert_after_the_correction():
         "32 results (56%), p=0.002 against 80%. The refit is published and the map shows these figures.")
 
 
-def test_ranges_far_too_wide_alert_naming_the_knob():
+def test_ranges_far_too_wide_alert():
     finding = dr._forward_finding(_forward_docs(("House", 0, 384, 386, 2022)))
     assert "House 2022, 0 days out" in finding and "far too wide: 80% ranges held 384 of 386 (99%)" in finding
-    assert "the knob is the spread's scale factor (model.fit_scale, `scale` in the fit)" in finding
+    assert "far too wide" in finding and "knob" not in finding
 
 
 def test_a_borderline_miss_survives_one_test_but_not_the_family():

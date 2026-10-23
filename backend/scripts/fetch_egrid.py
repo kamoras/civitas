@@ -15,7 +15,6 @@ Run by app/data_refresh.py monthly:
 
 from __future__ import annotations
 
-import io
 import json
 import pathlib
 import re
@@ -23,12 +22,11 @@ import sys
 import urllib.parse
 import urllib.request
 
-import openpyxl
-
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from app.contact import BOT_USER_AGENT  # noqa: E402
+from app.pipeline.fetch.state_candidates_tabular import xlsx_sheet_files, xlsx_sheet_rows  # noqa: E402
 
 SUMMARY_PAGE = "https://www.epa.gov/egrid/summary-data"
 
@@ -51,30 +49,45 @@ def _norm(cell) -> str:
     return str(cell or "").replace("₂", "2").replace(" ", "").lower()
 
 
-def us_rate(book) -> tuple[float, int]:
-    """(the U.S. total output CO2e rate in lb/MWh, the edition's year)."""
+def _number(cell: str) -> float | None:
+    try:
+        return float(cell)
+    except (TypeError, ValueError):
+        return None
+
+
+def us_rate(sheets: dict[str, list[list[str]]]) -> tuple[float, int]:
+    """(the U.S. total output CO2e rate in lb/MWh, the edition's year) from
+    the workbook's sheets ({name: rows}), read with the standard library."""
     edition = None
-    for ws in book.worksheets:
-        for row in ws.iter_rows(max_row=3, values_only=True):
+    for rows in sheets.values():
+        for row in rows[:3]:
             for cell in row:
-                found = re.search(r"eGRID ?(?:Summary Tables )?(\d{4})", str(cell or ""))
+                found = re.search(r"eGRID ?(?:Summary Tables )?(\d{4})", cell or "")
                 if found and edition is None:
                     edition = int(found[1])
-    for ws in book.worksheets:
+    for rows in sheets.values():
         col = None
-        for row in ws.iter_rows(values_only=True):
-            cells = list(row)
+        for cells in rows:
             if col is None:
                 # The first CO2e column is the total output rate's (the
                 # non-baseload rates follow it under their own heading).
                 col = next((i for i, c in enumerate(cells) if _norm(c) == "co2e"), None)
                 continue
             first = next((c for c in cells if c not in (None, "")), None)
-            if str(first).strip() == "U.S." and col is not None and isinstance(cells[col], (int, float)):
+            value = _number(cells[col]) if col < len(cells) else None
+            if str(first).strip() == "U.S." and value is not None:
                 if edition is None:
                     raise SystemExit("the workbook names no eGRID edition")
-                return float(cells[col]), edition
+                return value, edition
     raise SystemExit("no U.S. total output CO2e rate in the workbook")
+
+
+def workbook_sheets(body: bytes) -> dict[str, list[list[str]]]:
+    files = xlsx_sheet_files(body)
+    if not files:
+        raise SystemExit("the workbook could not be read")
+    return {name: xlsx_sheet_rows(body, f) or [] for name, f in files.items()}
 
 
 def main() -> None:
@@ -83,7 +96,7 @@ def main() -> None:
     body = _get(url)
     if not body.startswith(b"PK"):
         raise SystemExit(f"{url} did not return a workbook")
-    rate, year = us_rate(openpyxl.load_workbook(io.BytesIO(body), read_only=True, data_only=True))
+    rate, year = us_rate(workbook_sheets(body))
     rev = re.search(r"rev(\d+)", url, flags=re.I)
     posted = re.search(r"/(\d{4}-\d{2})/", url)
     doc = json.loads(pathlib.Path(in_use).read_text())

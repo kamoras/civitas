@@ -139,7 +139,7 @@ def test_the_egrid_gate_takes_a_new_edition_and_holds_a_jump_or_other_edits():
     old = dr.read("environmental.json")
     grid = {**old["grid"], "edition": "eGRID2024", "lbCo2ePerMWh": old["grid"]["lbCo2ePerMWh"] * 0.95}
     assert dr._egrid_gate({**old, "grid": grid}, old) == []
-    assert dr._egrid_gate({**old, "grid": {**grid, "lbCo2ePerMWh": 100}}, old)
+    assert dr._egrid_gate({**old, "grid": {**grid, "lbCo2ePerMWh": 50}}, old)
     assert dr._egrid_gate({**old, "grid": {**grid, "edition": "eGRID2021"}}, old)
     assert dr._egrid_gate({**old, "grid": {**old["grid"], "lbCo2ePerMWh": old["grid"]["lbCo2ePerMWh"] * 1.1}}, old)
     assert dr._egrid_gate({**old, "grid": grid, "assumedWatts": {}}, old)

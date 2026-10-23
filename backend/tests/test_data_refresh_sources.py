@@ -4,11 +4,12 @@ synthetic workbooks, questionnaires and listings."""
 
 import importlib.util
 import io
+import zipfile
+from xml.sax.saxutils import escape
 from datetime import datetime
 from pathlib import Path
 
 import numpy as np
-import openpyxl
 
 from app.acceptance import held_out_beats_in_use
 
@@ -22,16 +23,41 @@ def _script(name: str):
     return mod
 
 
-def _book(sheets: dict[str, list[list]]):
-    wb = openpyxl.Workbook()
-    wb.remove(wb.active)
-    for title, rows in sheets.items():
-        ws = wb.create_sheet(title)
-        for row in rows:
-            ws.append(row)
+def _col(i: int) -> str:
+    out = ""
+    i += 1
+    while i:
+        i, rem = divmod(i - 1, 26)
+        out = chr(65 + rem) + out
+    return out
+
+
+def _cell(ref: str, value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, (int, float)):
+        return f'<c r="{ref}"><v>{value}</v></c>'
+    return f'<c r="{ref}" t="inlineStr"><is><t>{escape(str(value))}</t></is></c>'
+
+
+def _book(sheets: dict[str, list[list]]) -> bytes:
+    """A real .xlsx with several named sheets, built with the standard library."""
+    ns = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
+    rel = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
     buf = io.BytesIO()
-    wb.save(buf)
-    return openpyxl.load_workbook(io.BytesIO(buf.getvalue()), read_only=True, data_only=True)
+    with zipfile.ZipFile(buf, "w") as z:
+        entries, rels = [], []
+        for n, (title, rows) in enumerate(sheets.items(), start=1):
+            entries.append(f'<sheet name="{escape(title)}" sheetId="{n}" r:id="rId{n}"/>')
+            rels.append(f'<Relationship Id="rId{n}" Type="{rel}/worksheet" Target="worksheets/sheet{n}.xml"/>')
+            body = "".join(f'<row r="{r + 1}">' + "".join(_cell(f"{_col(c)}{r + 1}", v) for c, v in enumerate(row))
+                           + "</row>" for r, row in enumerate(rows))
+            z.writestr(f"xl/worksheets/sheet{n}.xml", f"<worksheet {ns}><sheetData>{body}</sheetData></worksheet>")
+        z.writestr("xl/workbook.xml", f'<workbook {ns} xmlns:r="{rel}"><sheets>{"".join(entries)}</sheets></workbook>')
+        z.writestr("xl/_rels/workbook.xml.rels",
+                   '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                   + "".join(rels) + "</Relationships>")
+    return buf.getvalue()
 
 
 def test_egrid_reads_the_us_total_output_co2e_rate_by_its_headers():
@@ -46,7 +72,7 @@ def test_egrid_reads_the_us_total_output_co2e_rate_by_its_headers():
             ["U.S.", None, 650.0, 0.05, 0.007, 652.4, 1100.0, 1105.0],
         ],
     })
-    assert egrid.us_rate(book) == (652.4, 2031)
+    assert egrid.us_rate(egrid.workbook_sheets(book)) == (652.4, 2031)
     page = '<a href="/system/files/documents/2032-06/summary_tables_rev1.xlsx">eGRID 2031 Summary Tables (xlsx)</a>'
     assert egrid.workbook_url(page) == "https://www.epa.gov/system/files/documents/2032-06/summary_tables_rev1.xlsx"
 
