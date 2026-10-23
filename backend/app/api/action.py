@@ -507,6 +507,7 @@ def _build_issue_response(
                 c = a["committee"]
                 committee = CommitteeContactSchema(
                     code=c["code"], name=c["name"], chamber=c["chamber"], url=a.get("url"),
+                    likely=c.get("likely", True) is not False,
                     **leaders.get(c["name"], {}),
                 )
             action_items.append(
