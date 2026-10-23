@@ -47,24 +47,25 @@ No document linked for `year` raises NotYetPublished (not yet covered):
 the Bureau posts it only once a proposal is certified, so its absence is
 "nothing to read yet", not a failure and never "none".
 
-A document that WAS read and is no longer linked (the Bureau takes it down
-when its last proposal is struck) is decided by rule, with no operator.
-Every successful read records the document (RECORDING, on the data volume).
-When the link is gone, the reader first proves itself on that recording
-(the same extraction and parser, run again: its self-check), and the
-landing page must still be the current one, linking the Bureau's own
-November candidate listing for `year`. Both holding, the landing page no
-longer linking the document is the Bureau's own word that nothing it read
-is still certified: every recorded proposal is returned as removed, as a
-source that reports a measure struck is (Florida's "Removed"). A failing
-self-check is a failure (None, alerted); with no recording for `year`
-(never read) it is still not yet published.
+A document that WAS read and is no longer linked on the landing page is
+looked for again by rule (RECORDING keeps every successful read):
 
-Origin is read only from the title's own words — "initiated law" /
-"initiated amendment" / "initiative" means a citizen petition, a
-"legislat..." word means legislature-referred; the constitutional
-convention question (which the constitution itself puts on the ballot
-every 16 years) says neither and is left None.
+- On the Bureau's other election pages linked from the landing page (one
+  level, under /sos/elections, at most _RELINK_PAGES), any PDF link whose
+  text names `year`, November and ballot question(s) or proposal(s) is a
+  candidate. A candidate counts only when the same parser reads it whole
+  and it shares a proposal (number and title) with the recorded document.
+  Found, it is read as tonight's document and recorded: a proposal it no
+  longer carries is the Bureau's own document saying it is gone, and the
+  pipeline marks it removed. A proposal is never marked removed on a
+  missing link alone.
+- Not found, the reader runs its self-check (the recorded document through
+  the same extraction and parser). Passing, it raises DocumentNotLinked:
+  the measures on file stay current, credited to the recorded document
+  and its read, and the pipeline alerts only after RELINK_WINDOW_DAYS.
+  Failing, it is a failure (None, alerted).
+
+With no recording for `year` (never read), it is still not yet published.
 """
 
 import base64
@@ -80,9 +81,10 @@ import pdfplumber
 from lxml import html as lxml_html
 
 from app.atomic_write import runtime_data_path, write_text_atomic
-from app.pipeline.fetch.ballot_measure_text import NotYetPublished, join_lines
+from app.pipeline.fetch.ballot_measure_text import DocumentNotLinked, NotYetPublished, join_lines
 from app.pipeline.fetch.http_utils import BROWSER_HEADERS, fetch_bytes_with_retry, fetch_text_with_retry
 from app.pipeline.rate_limiter import RateLimiter
+from app.time_utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -98,10 +100,11 @@ HEADERS = {
 _rate_limiter = RateLimiter(rps=1.0)
 
 RECORDING = "mi_ballot_questions_{year}.json"
-# The Bureau's November candidate listing on the landing page
-# (mi-boe.entellitrak.com ... electionType=GEN&electionYear=<year>, read
-# 2026-10-22): its link marks the page as the current election's.
-_GENERAL_LISTING_RE = r"electionType=GEN&(?:amp;)?electionYear={year}\b"
+# The Bureau's pages a missing document is looked for on, and the candidate
+# PDFs opened: the landing page links some forty election pages, and the
+# document has only ever been linked from one or two of them.
+_RELINK_PAGES = 40
+_RELINK_CANDIDATES = 4
 
 _PROPOSAL_RE = re.compile(r"^Proposal\s+(\d{4}-\d+)$")
 _YES_BOX_RE = re.compile(r"^\[\s*\]\s*Yes$")
@@ -244,27 +247,100 @@ def _recorded(year: int) -> tuple[str, bytes] | None:
         return None
 
 
-def _taken_down(landing_html: str, year: int) -> list[tuple[dict, str]] | None:
-    """The recorded document's proposals, each marked removed, when the
-    page is the current election's and the reader still reads the
-    recording whole; None (a failure) when it doesn't. Raises
-    NotYetPublished when nothing was ever recorded for `year`."""
+def _unlinked_since(year: int) -> str:
+    """The date the document was first missed, kept with its recording."""
+    path = runtime_data_path(RECORDING.format(year=year))
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return utcnow().date().isoformat()
+    if not data.get("unlinked_since"):
+        data["unlinked_since"] = utcnow().date().isoformat()
+        try:
+            write_text_atomic(path, json.dumps(data))
+        except OSError:
+            logger.exception("Could not note when Michigan's %d document went unlinked", year)
+    return data["unlinked_since"]
+
+
+def _same_document(found: list[dict], recorded: list[dict]) -> bool:
+    """Whether a candidate is this election's document: it shares a
+    proposal, by number and title, with the recorded one."""
+    seen = {(p["number"], p["title"]) for p in recorded}
+    return any((p["number"], p["title"]) in seen for p in found)
+
+
+def _relink_pages(landing_html: str) -> list[str]:
+    tree = lxml_html.fromstring(landing_html)
+    pages = []
+    for a in tree.xpath("//a[@href]"):
+        url = urljoin(LANDING_URL, a.get("href")).split("#")[0]
+        if url.startswith(LANDING_URL + "/") and ".pdf" not in url.lower() and url not in pages:
+            pages.append(url)
+    return pages[:_RELINK_PAGES]
+
+
+def _candidate_links(page_html: str, page_url: str, year: int) -> list[str]:
+    tree = lxml_html.fromstring(page_html)
+    found = []
+    for a in tree.xpath("//a[@href]"):
+        text = " ".join(a.text_content().split()).lower()
+        href = a.get("href")
+        if (".pdf" in href.lower() and str(year) in text and "november" in text
+                and ("ballot question" in text or "proposal" in text)):
+            url = urljoin(page_url, href)
+            if url not in found:
+                found.append(url)
+    return found
+
+
+async def _refind(client: httpx.AsyncClient, landing_html: str, year: int, recorded: list[dict]):
+    """(url, raw, parsed) of the document found again on the Bureau's
+    other election pages, or None."""
+    for page in _relink_pages(landing_html):
+        html = await fetch_text_with_retry(client, _rate_limiter, page, "MI elections page", headers=HEADERS)
+        if html is None:
+            continue
+        for url in _candidate_links(html, page, year)[:_RELINK_CANDIDATES]:
+            raw = await fetch_bytes_with_retry(client, _rate_limiter, url, "MI ballot questions candidate",
+                                               headers=HEADERS)
+            if raw is None:
+                continue
+            try:
+                parsed = parse_lines(pdf_lines(raw), year)
+            except Exception:
+                continue
+            if parsed and _same_document(parsed, recorded):
+                return url, raw, parsed
+    return None
+
+
+async def _not_linked(client: httpx.AsyncClient, landing_html: str, year: int) -> list[tuple[dict, str]] | None:
+    """The landing page no longer links `year`'s document: see the module
+    docstring for the rule."""
     recorded = _recorded(year)
-    if recorded is None or not re.search(_GENERAL_LISTING_RE.format(year=year), landing_html):
+    if recorded is None:
         raise NotYetPublished(
             f"Michigan's '{year} November ballot questions' document", deadline_applies=False,
         )
     url, raw = recorded
     try:
-        parsed = parse_lines(pdf_lines(raw), year)
+        recorded_parsed = parse_lines(pdf_lines(raw), year)
     except Exception:
         logger.exception("MI self-check: the recorded %d document no longer parses", year)
-        parsed = None
-    if not parsed:
+        recorded_parsed = None
+    if not recorded_parsed:
         logger.warning("MI %d: document no longer linked, and the reader fails on its recording", year)
         return None
-    logger.info("MI %d: document no longer linked; its %d proposal(s) read as removed", year, len(parsed))
-    return [({**p, "removed": True}, url) for p in parsed]
+    found = await _refind(client, landing_html, year, recorded_parsed)
+    if found is not None:
+        new_url, new_raw, parsed = found
+        logger.info("MI %d: ballot questions document found again at %s", year, new_url)
+        _record(year, new_url, new_raw)
+        return [(p, new_url) for p in parsed]
+    raise DocumentNotLinked(f"Michigan's '{year} November ballot questions' document ({url})",
+                            since=_unlinked_since(year))
 
 
 async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dict, str]] | None:
@@ -279,7 +355,7 @@ async def fetch_measures(client: httpx.AsyncClient, year: int) -> list[tuple[dic
             # Never read: the Bureau posts this document only once
             # something is certified, so not yet covered. Read before and
             # taken down: decided by rule (_taken_down).
-            return _taken_down(landing_html, year)
+            return await _not_linked(client, landing_html, year)
         logger.warning("MI: more than one '%d November ballot questions' PDF link on the landing page", year)
         return None
     raw = await fetch_bytes_with_retry(client, _rate_limiter, pdf_url, "MI ballot questions PDF", headers=HEADERS)

@@ -107,44 +107,66 @@ async def test_no_document_linked_yet_is_not_yet_published(monkeypatch):
     assert await mi.fetch_measures(None, 2026) is None
 
 
-# The landing page as served 2026-10-22, cut to the Bureau's November
-# candidate listing link, with the ballot-questions link taken down.
-_TAKEN_DOWN = (
-    "<html><body><a href='https://mi-boe.entellitrak.com/etk-mi-boe-prod/page.request.do?"
-    "page=page.miboePublicReport&amp;electionType=GEN&amp;electionYear=2026'>2026 November General "
-    "Candidate Listing</a></body></html>"
-)
+# The landing page with the ballot-questions link gone, linking one of the
+# Bureau's other election pages (as the real page links some forty).
+_UNLINKED = "<html><body><a href='/sos/elections/ballot-access'>Ballot access</a></body></html>"
+_MOVED_TO = "https://www.michigan.gov/sos/-/media/Elections/2026-Nov-Ballot-Questions-rev2.pdf"
+_OTHER_PAGE = (f"<html><body><a href='{_MOVED_TO}'>2026 November ballot questions (PDF)</a></body></html>")
 
 
-async def test_a_document_taken_down_after_it_was_read_reads_as_removed(monkeypatch):
-    """The Bureau takes the document down when its last proposal is struck.
-    With the reader passing its self-check on the recorded document and the
-    page still the current election's, every recorded proposal is removed:
-    decided by rule, no operator."""
-    async def landing(*a, **kw):
-        return _TAKEN_DOWN
+def _site(monkeypatch, pages: dict, documents: dict):
+    async def text(client, rl, url, label, **kw):
+        return pages.get(url)
 
-    monkeypatch.setattr(mi, "fetch_text_with_retry", landing)
-    monkeypatch.setattr(mi, "pdf_lines", lambda raw: _pages())
-    mi._record(2026, "https://www.michigan.gov/sos/doc.pdf", b"%PDF-recorded")
+    async def raw(client, rl, url, label, **kw):
+        return documents.get(url)
+
+    monkeypatch.setattr(mi, "fetch_text_with_retry", text)
+    monkeypatch.setattr(mi, "fetch_bytes_with_retry", raw)
+
+
+def _lines_by_document(monkeypatch, by_raw: dict):
+    monkeypatch.setattr(mi, "pdf_lines", lambda raw: by_raw[raw])
+
+
+async def test_a_moved_document_is_found_again_and_its_proposals_stay_current(monkeypatch):
+    """A renamed or moved file: the link leaves the landing page, the
+    document is found on another of the Bureau's pages, matched to the
+    recorded proposals, and read under its new address; nothing removed."""
+    _site(monkeypatch, {mi.LANDING_URL: _UNLINKED, mi.LANDING_URL + "/ballot-access": _OTHER_PAGE},
+          {_MOVED_TO: b"moved"})
+    _lines_by_document(monkeypatch, {b"recorded": _pages(), b"moved": _pages()})
+    mi._record(2026, "https://www.michigan.gov/sos/old.pdf", b"recorded")
     pairs = await mi.fetch_measures(None, 2026)
-    assert [(p["number"], p["removed"], url) for p, url in pairs] == [
-        ("2026-1", True, "https://www.michigan.gov/sos/doc.pdf"),
-        ("2026-2", True, "https://www.michigan.gov/sos/doc.pdf"),
+    assert [(p["number"], p.get("removed", False), url) for p, url in pairs] == [
+        ("2026-1", False, _MOVED_TO), ("2026-2", False, _MOVED_TO),
     ]
-    # A reader that no longer reads its recording is a failure, not "none".
-    monkeypatch.setattr(mi, "pdf_lines", lambda raw: [])
-    assert await mi.fetch_measures(None, 2026) is None
+    assert mi._recorded(2026)[0] == _MOVED_TO
 
 
-async def test_a_page_that_is_not_the_current_elections_decides_nothing(monkeypatch):
-    from app.pipeline.fetch.ballot_measure_text import NotYetPublished
+async def test_a_found_document_without_a_proposal_is_the_bureaus_word_it_is_gone(monkeypatch):
+    _site(monkeypatch, {mi.LANDING_URL: _UNLINKED, mi.LANDING_URL + "/ballot-access": _OTHER_PAGE},
+          {_MOVED_TO: b"moved"})
+    one_only = [page for page in _pages() if any("2026-1" in text for text, _ in page)]
+    _lines_by_document(monkeypatch, {b"recorded": _pages(), b"moved": one_only})
+    mi._record(2026, "https://www.michigan.gov/sos/old.pdf", b"recorded")
+    pairs = await mi.fetch_measures(None, 2026)
+    # Proposal 2026-2 is absent from the Bureau's own document: the
+    # pipeline's reconcile marks it removed, as it would any unseen row.
+    assert [p["number"] for p, _ in pairs] == ["2026-1"]
 
-    async def landing(*a, **kw):
-        return "<html><body>maintenance</body></html>"
 
-    monkeypatch.setattr(mi, "fetch_text_with_retry", landing)
-    monkeypatch.setattr(mi, "pdf_lines", lambda raw: _pages())
-    mi._record(2026, "https://www.michigan.gov/sos/doc.pdf", b"%PDF-recorded")
-    with pytest.raises(NotYetPublished):
+async def test_not_found_again_the_last_read_stands_and_a_broken_reader_fails(monkeypatch):
+    from app.pipeline.fetch.ballot_measure_text import DocumentNotLinked
+
+    _site(monkeypatch, {mi.LANDING_URL: _UNLINKED, mi.LANDING_URL + "/ballot-access": "<html></html>"}, {})
+    _lines_by_document(monkeypatch, {b"recorded": _pages()})
+    mi._record(2026, "https://www.michigan.gov/sos/old.pdf", b"recorded")
+    with pytest.raises(DocumentNotLinked) as unlinked:
         await mi.fetch_measures(None, 2026)
+    first = unlinked.value.since
+    with pytest.raises(DocumentNotLinked) as again:
+        await mi.fetch_measures(None, 2026)
+    assert again.value.since == first  # dated from the first miss
+    _lines_by_document(monkeypatch, {b"recorded": []})
+    assert await mi.fetch_measures(None, 2026) is None
