@@ -24,7 +24,7 @@ industry. This file says which industry a job is in, from data:
   the Census industry labels first and measured unfit for it (2026-10-01):
   "Computer Systems Design And Related Services" came out HEALTHCARE, 13
   occupations landed in GUNS, and 51 of 265 labels got no industry.
-- O*NET 29.3 (US Department of Labor, CC BY 4.0) titles, alternate titles and
+- O*NET (US Department of Labor, CC BY 4.0) titles, alternate (job) titles and
   sample reported titles, each with its O*NET-SOC code, give the spellings an
   occupation goes by ("CPA", "Realtor", "RN"), so a donor's occupation string
   is matched exactly where it can be.
@@ -246,14 +246,19 @@ def titles(onet: pathlib.Path, occ: dict[str, dict]) -> dict[str, str]:
     """Normalized title -> SOCP, from O*NET's titles."""
     codes = set(occ)
     candidates: dict[str, set[str]] = defaultdict(set)
+    # Each file by the names O*NET has given it: 31.0 renamed "Alternate
+    # Titles" (Alternate Title, Short Title) to "Job Titles" (Job Title,
+    # Short Title), the same list under a new name.
     files = {
-        "Occupation Data.txt": ("O*NET-SOC Code", ["Title"]),
-        "Alternate Titles.txt": ("O*NET-SOC Code", ["Alternate Title", "Short Title"]),
-        "Sample of Reported Titles.txt": ("O*NET-SOC Code", ["Reported Job Title"]),
+        ("Occupation Data.txt",): ("O*NET-SOC Code", ["Title"]),
+        ("Alternate Titles.txt", "Job Titles.txt"): ("O*NET-SOC Code", ["Alternate Title", "Job Title", "Short Title"]),
+        ("Sample of Reported Titles.txt",): ("O*NET-SOC Code", ["Reported Job Title"]),
     }
     with zipfile.ZipFile(onet) as z:
-        for fname, (code_col, title_cols) in files.items():
-            member = next(n for n in z.namelist() if n.endswith(fname))
+        for fnames, (code_col, title_cols) in files.items():
+            member = next((n for n in z.namelist() if n.endswith(fnames)), None)
+            if member is None:
+                raise SystemExit(f"O*NET database has no {' or '.join(fnames)}")
             reader = csv.DictReader(io.TextIOWrapper(z.open(member), encoding="utf-8"), delimiter="\t")
             for row in reader:
                 socp = socp_for(row[code_col].replace("-", "")[:6], codes)

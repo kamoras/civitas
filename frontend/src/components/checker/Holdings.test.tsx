@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { olderApi } from "@/lib/olderApi";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import axe from "axe-core";
 import Holdings from "./Holdings";
 import type { HoldingCategory, Holdings as HoldingsData } from "@/types/senator";
 
@@ -207,6 +208,76 @@ describe("Holdings", () => {
       "2 assets · not charted · 1 none at year end · 1 no value stated"
     );
     expect(other).toHaveTextContent("—");
+  });
+
+  const scannedReport = (scan: Partial<NonNullable<HoldingsData["scan"]>>) =>
+    holdings({
+      parsed: false,
+      unreadableReason: "scanned",
+      asOfDate: null,
+      categories: [],
+      holdings: [],
+      holdingsCount: 0,
+      total: 0,
+      scan: {
+        filingId: "9116162",
+        pages: 3,
+        pageSizes: [
+          [2200, 1700],
+          [2200, 1700],
+          [1700, 2200],
+        ],
+        pageUrlPrefix: "/api/disclosure-scans/9116162/",
+        fetchedFrom: "https://example.com/report",
+        fetchedAt: "2026-10-22",
+        failedAt: null,
+        title: "Jane Doe's 2025 annual report",
+        ...scan,
+      },
+    });
+
+  it("shows a scanned filing page by page from this site, with alt text and the official link", async () => {
+    fetchSenatorHoldings.mockResolvedValue(scannedReport({}));
+    render(
+      <main>
+        <Holdings memberId="S1" />
+      </main>
+    );
+    expect(
+      await screen.findByText(/The filing as filed: a scanned paper form, shown as filed/)
+    ).toBeInTheDocument();
+    const page = screen.getByRole("img", {
+      name: "Page 1 of 3 of Jane Doe's 2025 annual report, scanned as filed",
+    });
+    expect(page).toHaveAttribute("src", "/api/disclosure-scans/9116162/1.webp");
+    expect(screen.getByRole("status")).toHaveTextContent("Page 1 of 3");
+    expect(screen.getByRole("button", { name: /Previous page/ })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: /Next page/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Next page/ }));
+    expect(screen.getByRole("img", { name: /^Page 3 of 3/ })).toHaveAttribute(
+      "src",
+      "/api/disclosure-scans/9116162/3.webp"
+    );
+    expect(screen.getByRole("button", { name: /Next page/ })).toBeDisabled();
+    expect(screen.getByRole("link", { name: "Open full size" })).toHaveAttribute(
+      "href",
+      "/api/disclosure-scans/9116162/3.webp"
+    );
+    expect(screen.getAllByRole("link", { name: /View filing/ }).length).toBeGreaterThan(0);
+    const r = await axe.run(document.body, { rules: { "color-contrast": { enabled: false } } });
+    expect(r.violations.map((v) => v.id)).toEqual([]);
+  });
+
+  it("says when a scan's pages couldn't be loaded, never an empty viewer", async () => {
+    fetchSenatorHoldings.mockResolvedValue(
+      scannedReport({ pages: 0, pageSizes: [], fetchedAt: null, failedAt: "2026-10-21" })
+    );
+    render(<Holdings memberId="S1" />);
+    expect(
+      await screen.findByText(/page images couldn't be loaded \(last tried 2026-10-21\)/)
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /View filing/ })).toBeInTheDocument();
   });
 
   it("describes an unreadable electronic report as such, not as a paper filing", async () => {

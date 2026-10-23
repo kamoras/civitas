@@ -21,10 +21,12 @@ import {
  * select that navigates on change moves a reader to another page when they
  * only meant to look at the list (WCAG 3.2.2), and links keep their URLs.
  *
- * A tab with views (Reports: Floor and Members) adds a segmented row of them
- * under the bar at every width, and the open view's own views a second group
- * beside it (By the numbers, Votes with the president). A view that draws
- * its own toggle (the floor's Day, Week and Month: PeriodNav) adds nothing.
+ * A tab with views (Members: By the numbers, Directory and Compare) adds a
+ * row of them under the bar at every width, and the open view's own views a
+ * second group beside it (By the numbers, Votes with the president). A tab
+ * or view that draws its own toggle (Reports' This Congress, Day, Week and
+ * Month: PeriodNav, since a period opens the one of the date being read)
+ * adds nothing.
  * `active` is any page's key: the deepest page with it is marked "page",
  * the tab and view above it "true". */
 export default function SectionTabs<S extends SectionKey>({
@@ -97,7 +99,7 @@ export default function SectionTabs<S extends SectionKey>({
         </span>
         {tabs.map((t) => link(t, "-mb-px border-b-2 text-small"))}
       </div>
-      {current?.views && (
+      {current?.views && !current.ownToggle && (
         <div className="mt-2 flex flex-wrap items-center gap-x-6 gap-y-2" data-section-views="">
           <ViewGroup
             label={`${current.label} pages`}

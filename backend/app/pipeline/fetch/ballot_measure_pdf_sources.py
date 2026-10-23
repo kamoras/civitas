@@ -1,7 +1,7 @@
 """The hand-verified state -> ballot-measure-PDF directory that powers
 direct ballot-measure ingestion (see ballot_measures_pdf.py).
 
-Same volume/bundled dual-path read as ballot_pdf_sources.py/
+Same volume/bundled dual-path read as
 town_directory.py: app/data/ is COPY'd into the Docker image and is NOT
 writable at runtime.
 """
