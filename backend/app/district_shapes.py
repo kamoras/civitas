@@ -19,7 +19,9 @@ earlier Congress's folder (district_lines.lookup_lines).
 
 from __future__ import annotations
 
+import os
 import pathlib
+import re
 
 from app import census_lines, data_refresh
 from app.atomic_write import runtime_data_path
@@ -82,19 +84,28 @@ def district_map_url(state: str, congress: int) -> str | None:
     return None
 
 
+# What a build's directory and file names can be (build_district_shapes.py
+# names a build by its UTC time; the files are lookup/<folder>/<ST>[.kind]
+# .json and cd/<ST>.json): the route accepts nothing else.
+BUILD_RE = re.compile(r"\d{8}T\d{6}Z")
+PATH_RE = re.compile(r"(lookup/(congress-\d{1,3}|election-\d{4})/[A-Z]{2}(\.(towns|legislature))?|cd/[A-Z]{2})\.json")
+
+
 def root() -> pathlib.Path:
     return pathlib.Path(runtime_data_path(ROOT_NAME))
 
 
 def served_file(build: str, path: str) -> pathlib.Path | None:
     """The file of the refresh's build in use at `path` ("lookup/congress-
-    121/TX.json", "cd/TX.json"), or None: only the build the manifest in
-    use names, only .json, and never outside its directory."""
-    doc = data_refresh.read(FILE)
-    if not build or build != doc.get("dir") or not path.endswith(".json"):
+    121/TX.json", "cd/TX.json"), or None: only names of the shapes' own
+    form, only the build the manifest in use names, checked again on the
+    resolved path, so no request can name a file outside that build."""
+    if not BUILD_RE.fullmatch(build or "") or not PATH_RE.fullmatch(path or ""):
         return None
-    base = (root() / build).resolve()
-    target = (base / path).resolve()
-    if base not in target.parents or not target.is_file():
+    if build != data_refresh.read(FILE).get("dir"):
         return None
-    return target
+    base = os.path.realpath(root() / build)
+    target = os.path.realpath(os.path.join(base, path))
+    if not target.startswith(base + os.sep) or not os.path.isfile(target):
+        return None
+    return pathlib.Path(target)

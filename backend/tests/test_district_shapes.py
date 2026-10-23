@@ -82,14 +82,23 @@ def client():
     return TestClient(app)
 
 
+def test_only_names_of_the_shapes_own_form_are_served(built):
+    assert district_shapes.served_file(BUILD, "lookup/congress-121/NY.json") is not None
+    for build, path in ((BUILD, "lookup/../district_shapes.json"), (BUILD, "/etc/passwd"),
+                        ("../x", "cd/NY.json"), (BUILD, "lookup/congress-121/ny.json")):
+        assert district_shapes.served_file(build, path) is None, (build, path)
+
+
 def test_the_route_serves_only_the_build_in_use_and_nothing_outside_it(built, client):
     ok = client.get(f"/api/district-shapes/{BUILD}/lookup/congress-121/NY.json")
     assert ok.status_code == 200 and "immutable" in ok.headers["cache-control"]
     for path in ("/api/district-shapes/20270101T000000Z/lookup/congress-121/NY.json",
                  f"/api/district-shapes/{BUILD}/lookup/congress-121/PA.json",
                  f"/api/district-shapes/{BUILD}/../district_shapes.json",
-                 f"/api/district-shapes/{BUILD}/lookup/%2e%2e/%2e%2e/secret.json"):
-        assert client.get(path).status_code == 404, path
+                 f"/api/district-shapes/{BUILD}/lookup/%2e%2e/%2e%2e/secret.json",
+                 f"/api/district-shapes/{BUILD}/lookup/congress-121/NY.txt",
+                 "/api/district-shapes/..%2f..%2fetc/passwd"):
+        assert client.get(path).status_code in (404, 422), path
 
 
 def test_the_refresh_builds_shapes_only_for_a_map_none_holds(freeze_utcnow, monkeypatch, maps):
