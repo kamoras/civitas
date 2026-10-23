@@ -602,6 +602,26 @@ def test_a_failed_try_is_retried_the_next_day_once_what_it_runs_changes(alerts, 
         assert tried == [1, 1]
 
 
+def test_a_refit_under_the_acceptance_rule_is_measured_the_day_after_its_code_changes(alerts, tmp_path):
+    """A ranking change ships; the search calibration is refit against it the
+    next day, not at the month's end."""
+    script = tmp_path / "fit.py"
+    script.write_text("ranker v1")
+    tried = []
+    spec = dr.DataFile("t_rank.json", command=lambda ctx: [sys.executable, str(script), "{out}"],
+                       due=lambda ctx: False, accept=dr.held_out_beats_in_use)
+    with patch.object(dr, "BACKEND", tmp_path), patch.object(dr, "utcnow", return_value=datetime(2026, 10, 20)), \
+         patch.object(dr, "refresh_one", side_effect=lambda spec, ctx: tried.append(1) or "in use: within noise"), \
+         patch.object(dr, "_record_try"):
+        fitted_with = dr.recipe(spec.command(None))
+        with patch.object(dr, "_last_try", return_value=(datetime(2026, 10, 19), False, fitted_with)):
+            dr.run_refreshes([spec])
+            assert tried == []
+            script.write_text("ranker v2")
+            dr.run_refreshes([spec])
+            assert tried == [1]
+
+
 def test_a_fix_in_a_module_the_script_imports_is_retried_the_next_day(alerts, tmp_path):
     # The script names only itself; the fix lands two imports away, in a
     # module reached by a relative import.

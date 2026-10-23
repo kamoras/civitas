@@ -514,10 +514,13 @@ def run_refreshes(files: list[DataFile] | None = None, *, pipeline_busy: bool = 
             ctx = Context(spec.name, read(spec.name), utcnow().date(), *_last_try(spec.name))
             template = spec.command(ctx) if spec.command else None
             # A failed try is retried the next day once what it runs has
-            # changed (a try recorded before recipes were counts as changed).
-            # Hashed only when it can matter (it reads the generator's whole
-            # import tree, about 5 s for every file).
-            current = recipe(template) if template is not None and ctx.last_failed else None
+            # changed (a try recorded before recipes were counts as changed),
+            # and so is a refit under the acceptance rule: a change to the
+            # code it fits (a ranker) is measured the next day. Hashed only
+            # when it can matter (it reads the generator's whole import
+            # tree, about 5 s for every file).
+            current = (recipe(template) if template is not None and (ctx.last_failed or spec.accept)
+                       else None)
             fixed = current is not None and current != ctx.last_recipe
             if spec.command and (spec.due(ctx) or ((shipped or fixed) and not ctx.tried_within(1))):
                 if spec.heavy and pipeline_busy:

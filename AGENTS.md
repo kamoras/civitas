@@ -414,17 +414,25 @@ The correct pattern, established by `_district_pvi()` /
    backend files it names, the generator script included, and every `app`
    or `scripts` module those import, transitively), since that change is
    usually the fix. A script the job runs takes an output path and reads no `/data` copy of
-   its own output. Files a script can't regenerate unattended — a new
-   survey whose question ids change, a model-selection refit that is a
-   method decision, a source behind research-only dependencies, a source
-   that needs hand-researched corrections — get a `stale` check instead,
-   which alerts (`data-stale-<file>`) when a newer version should exist and
-   says what a person has to do. A refresh that moves scores is a data
-   refresh within the same method (announced by an ops notice and recorded
-   in `_refreshed`), not a new `ALGORITHM_VERSION`; a refit that changes a
-   method's structure or a classifier's threshold is a version change and
-   goes through review, which is why those calibrations alert rather than
-   refit themselves.
+   its own output. A refresh that moves scores is a data refresh within
+   the same method (announced by an ops notice and recorded in
+   `_refreshed`), not a new `ALGORITHM_VERSION`.
+
+   A refit that changes a method's structure or a threshold refits itself
+   too, under an acceptance rule instead of a review (`DataFile.accept`,
+   `held_out_beats_in_use`): the script measures its refit and the copy in
+   use (handed to it as `{in_use}`) on its own held-out split and writes
+   the paired comparison into the candidate (`_comparison`); the refit is
+   installed only when it beats the copy in use by more than one standard
+   error of the paired difference and no subgroup the script reports loses
+   more than one standard error, and never when the script's own rule
+   refuses it (`refused`). Otherwise the copy in use stays and the
+   comparison is recorded in its `_refreshed.kept` ("refit within noise,
+   Δ=…, SE=…"): a measurement, never an alert. Such a refit also runs the
+   day after the code it fits changes (its `recipe`), and a fit shipped in
+   a commit supersedes a refit installed before it and is what the next
+   refit is measured against. The search calibrations are the first
+   (§3b).
 
    `district_pvi.json` is fetched by the pipeline, not only by the
    script, but from **pinned** sources (2026-09):
@@ -619,8 +627,11 @@ counted in memory and written after each hourly refresh), and a nightly
 check compares the gate's pass rate over the last four weeks with its own
 first four weeks under the calibration in use, alerting
 (`calibration-drift-<gate>`) when it has moved by 15 points or more and far
-outside sampling noise: the cue to label a fresh sample and refit. A new
-calibrated gate is added to `calibration_drift.GATES` and observes its
+outside sampling noise. The alert states the measured shift and asks
+nothing of anyone: hand labels can't be drawn by rule, which is why a gate
+takes a data-supplied label wherever one exists (the relevance gate's
+publisher labels) and records each one that turns up for its next refit. A
+new calibrated gate is added to `calibration_drift.GATES` and observes its
 decisions.
 
 ### 3b. Search ranking is measured, not asserted
@@ -664,7 +675,16 @@ weights and its "straight to the page" thresholds are fitted by
 the index (half the entities fit, half reported) and read from
 `app/data/site_search_calibration.json`. A wrong jump is worse than a
 results page: the thresholds allow no wrong jump in any probe type on the
-fit half. Rerun it when the index gains a kind or aliases.
+fit half. A jump is wrong when it lands anywhere but the probe's own page;
+an ambiguous query's other pages have probes of their own, so a jump on it
+is still refused. (Until 2026-10-23 any jump on an ambiguous probe counted
+as wrong, Record speeches titled "Illinois" or "ICE" made those names
+ambiguous, and a refit turned direct navigation off, #1248.) The pipeline
+refits it on the live index monthly, within a week of the index gaining a
+kind, and the day after the ranking code changes, under §3a's acceptance
+rule: per held-out probe, the reciprocal rank of its page plus 1 for a
+right jump, macro over probe types, and no type may lose more than a
+standard error.
 
 The `/search` results page is one list: site search's matches and Explore's
 hybrid document ranking fused by rank (`site_search.fuse`), since the two
@@ -677,8 +697,8 @@ lose more than a standard error to buy document recall. The Documents
 filter is the hybrid ranker's own UI (`/api/explore`), and
 `frontend/src/app/search/page.test.tsx` fails if either surface stops asking
 it, so the semantic channel can't be dropped by a "simplification" onto
-title matching. Rerun the fusion calibration after either harness's ranker
-changes. When it was introduced (2026-10-20, on a production copy),
+title matching. The pipeline refits the fusion the same way, under the
+same rule on held-out MRR at 10. When it was introduced (2026-10-20, on a production copy),
 `evaluate_explore_search.py`'s table was identical before and after (the
 hybrid ranker did not change: ALL hybrid MRR 0.610, R@20 0.916), and
 through `/search` the site-search probe types held at MRR 0.990 while the
